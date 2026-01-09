@@ -858,6 +858,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.setup_forwarders",
         "schedule": timedelta(minutes=5),
     },
+    "ocpp_meter_value_purge": {
+        "task": "apps.ocpp.tasks.purge_meter_values",
+        "schedule": crontab(minute=0, hour=3),
+    },
     "web_request_sampling": {
         "task": "apps.content.tasks.run_scheduled_web_samplers",
         "schedule": timedelta(minutes=1),
