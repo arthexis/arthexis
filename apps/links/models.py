@@ -12,7 +12,7 @@ import qrcode
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-from django.db import models
+from django.db import IntegrityError, models
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
@@ -213,13 +213,18 @@ class QRRedirect(Entity):
             )
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            slug = _generate_qr_slug()
-            while type(self).objects.filter(slug=slug).exists():
-                slug = _generate_qr_slug()
-            self.slug = slug
         self.target_url = (self.target_url or "").strip()
-        super().save(*args, **kwargs)
+        if self.slug or self.pk is not None:
+            super().save(*args, **kwargs)
+            return
+        for _ in range(5):
+            self.slug = _generate_qr_slug()
+            try:
+                super().save(*args, **kwargs)
+                return
+            except IntegrityError:
+                self.pk = None
+        raise IntegrityError("Failed to generate a unique slug after multiple attempts.")
 
     def redirect_path(self) -> str:
         return reverse("links:qr-redirect", args=[self.slug])

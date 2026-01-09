@@ -69,10 +69,11 @@ def qr_redirect_public_view(request: HttpRequest, slug: str) -> HttpResponse:
     except ValueError:
         return HttpResponseBadRequest("Invalid redirect target.")
 
-    sidebar_qs = QRRedirect.objects.filter(is_public=True)
     if request.user.is_staff:
         sidebar_qs = QRRedirect.objects.all()
-    sidebar_entries = sidebar_qs.order_by("title", "slug")
+    else:
+        sidebar_qs = QRRedirect.objects.filter(is_public=True)
+    sidebar_entries = sidebar_qs.order_by("title", "slug").only("slug", "title", "pk")
 
     qr_url = request.build_absolute_uri(qr_entry.redirect_path())
     qr_data_uri = f"data:image/png;base64,{_encode_qr_image(qr_url)}"
