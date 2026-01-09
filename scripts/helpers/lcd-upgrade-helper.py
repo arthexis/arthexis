@@ -58,24 +58,40 @@ def _changes_detected(snapshot: dict[Path, float | None]) -> bool:
     return False
 
 
-def _display_loop(base_dir: Path, snapshot: dict[Path, float | None]) -> None:
+def _init_lcd():
     try:
         from apps.screens.lcd import CharLCD1602, LCDUnavailableError
     except Exception:
-        CharLCD1602 = None  # type: ignore
-        LCDUnavailableError = Exception  # type: ignore
+        return None
 
-    lcd = None
-    line = MESSAGE_LINE.ljust(CharLCD1602.columns if CharLCD1602 else 16)[: (CharLCD1602.columns if CharLCD1602 else 16)]
+    if CharLCD1602 is None:
+        return None
 
-    if CharLCD1602 is not None:
-        try:
-            lcd = CharLCD1602()
-            lcd.init_lcd()
-        except LCDUnavailableError:
-            lcd = None
-        except Exception:
-            lcd = None
+    try:
+        lcd = CharLCD1602()
+        lcd.init_lcd()
+        lcd.reset()
+    except LCDUnavailableError:
+        return None
+    except Exception:
+        return None
+
+    return lcd
+
+
+def _lcd_columns(default: int = 16) -> int:
+    try:
+        from apps.screens.lcd import CharLCD1602
+    except Exception:
+        return default
+
+    return getattr(CharLCD1602, "columns", default)
+
+
+def _display_loop(base_dir: Path, snapshot: dict[Path, float | None]) -> None:
+    lcd = _init_lcd()
+    columns = _lcd_columns()
+    line = MESSAGE_LINE.ljust(columns)[:columns]
 
     fallback_path = base_dir / "work" / "lcd-upgrade-helper.txt"
     fallback_path.parent.mkdir(parents=True, exist_ok=True)
