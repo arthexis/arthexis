@@ -43,7 +43,10 @@ def ap_mode_enabled(*, timeout: int | float = 5) -> bool:
     for line in result.stdout.splitlines():
         if not line:
             continue
-        name, conn_type = line.split(":", 1)
+        try:
+            name, conn_type = line.split(":", 1)
+        except ValueError:
+            continue
         if conn_type.strip() == "802-11-wireless":
             wifi_names.append(name)
 
