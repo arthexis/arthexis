@@ -681,17 +681,11 @@ pip install --upgrade pip
 arthexis_timing_end "pip_bootstrap"
 
 arthexis_timing_start "requirements_install"
+env_refresh_args=(--force-refresh --deps-only)
 if [ "$CHANNEL" = "unstable" ]; then
-    ./env-refresh.sh --force-refresh --deps-only --latest
-else
-    ./env-refresh.sh --force-refresh --deps-only
+    env_refresh_args+=(--latest)
 fi
-REQ_FILE="requirements.txt"
-MD5_FILE="$LOCK_DIR/requirements.md5"
-if [ -f "$REQ_FILE" ]; then
-    NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
-    echo "$NEW_HASH" > "$MD5_FILE"
-fi
+./env-refresh.sh "${env_refresh_args[@]}"
 arthexis_timing_end "requirements_install" "refreshed"
 
 
