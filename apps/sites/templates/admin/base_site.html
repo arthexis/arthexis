@@ -954,6 +954,44 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     color: var(--button-fg);
 }
 
+.favorite-list-form .favorite-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 9.5rem;
+    padding: 0.625rem 0.9375rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1rem;
+}
+
+.favorite-list-form a.favorite-action {
+    background: var(--button-bg, #79aec8);
+    color: var(--button-fg, #ffffff);
+    text-decoration: none;
+}
+
+.favorite-list-form a.favorite-action:hover,
+.favorite-list-form a.favorite-action:focus {
+    background: var(--button-hover-bg, #609ab6);
+    color: var(--button-fg, #ffffff);
+}
+
+.favorite-list-form .favorite-action--danger {
+    background: var(--delete-button-bg, #ba2121);
+    color: var(--button-fg, #ffffff);
+}
+
+.favorite-list-form .favorite-action--danger:hover,
+.favorite-list-form .favorite-action--danger:focus {
+    background: var(--delete-button-hover-bg, #a41515);
+    color: var(--button-fg, #ffffff);
+}
+
 /* Keep dual-selector widgets oriented left-to-right */
 .selector {
     flex-direction: row;
