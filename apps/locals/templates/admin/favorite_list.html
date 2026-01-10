@@ -27,7 +27,7 @@
         </td>
         <td><input type="checkbox" name="user_data" value="{{ fav.pk }}" {% if fav.user_data %}checked{% endif %}></td>
         <td>
-          <a href="{% url 'admin:favorite_delete' fav.pk %}" class="favorite-action favorite-action--danger">
+          <a href="{% url 'admin:favorite_delete' fav.pk %}" class="button favorite-action favorite-action--danger">
             {% translate "Remove" %}
           </a>
         </td>
@@ -37,7 +37,7 @@
   </table>
   <div class="submit-row favorites-actions">
     <input type="submit" value="{% translate 'Save' %}" class="default favorite-action">
-    <a href="{% url 'admin:favorite_clear' %}" class="favorite-action favorite-action--danger">
+    <a href="{% url 'admin:favorite_clear' %}" class="button favorite-action favorite-action--danger">
       {% translate "Remove all favorites" %}
     </a>
   </div>
