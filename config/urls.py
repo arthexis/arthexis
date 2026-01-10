@@ -146,11 +146,7 @@ urlpatterns = [
 urlpatterns += autodiscovered_urlpatterns()
 
 if settings.DEBUG:
-    try:
-        import debug_toolbar
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        pass
-    else:
+    if settings.HAS_DEBUG_TOOLBAR:
         urlpatterns = [
             path(
                 "__debug__/",

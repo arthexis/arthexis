@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import contextlib
+import importlib.util
 import ipaddress
 import os
 import socket
@@ -82,6 +83,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 _debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
 DEBUG = _env_bool("DEBUG", _debugpy_attached)
+HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 
 def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
@@ -488,13 +490,8 @@ INSTALLED_APPS = [
 
 INSTALLED_APPS = _dedupe_app_labels(INSTALLED_APPS)
 
-if DEBUG:
-    try:
-        import debug_toolbar  # type: ignore
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        pass
-    else:
-        INSTALLED_APPS += ["debug_toolbar"]
+if HAS_DEBUG_TOOLBAR:
+    INSTALLED_APPS += ["debug_toolbar"]
 
 SITE_ID = 1
 
@@ -547,29 +544,22 @@ MIDDLEWARE = [
 
 ANALYTICS_EXCLUDED_URL_PREFIXES = ("/__debug__", "/healthz", "/status")
 
-if DEBUG:
-    try:
-        import debug_toolbar  # type: ignore
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        pass
-    else:
-        MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-        INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0"]
+if HAS_DEBUG_TOOLBAR:
+    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0"]
 
+    def _show_toolbar(_: HttpRequest) -> bool:
+        """Always show the toolbar when running in DEBUG mode.
 
-        def _show_toolbar(_: HttpRequest) -> bool:
-            """Always show the toolbar when running in DEBUG mode.
+        Docker and remote development environments can present requests from
+        gateway addresses that fall outside ``INTERNAL_IPS``. Returning
+        ``True`` here ensures the toolbar is available whenever the debug
+        flag is enabled.
+        """
 
-            Docker and remote development environments can present requests from
-            gateway addresses that fall outside ``INTERNAL_IPS``. Returning
-            ``True`` here ensures the toolbar is available whenever the debug
-            flag is enabled.
-            """
+        return True
 
-            return True
-
-
-        DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": _show_toolbar}
+    DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": _show_toolbar}
 
 CSRF_FAILURE_VIEW = "apps.sites.views.csrf_failure"
 
