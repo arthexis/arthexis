@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import contextlib
+import importlib.util
 import ipaddress
 import os
 import socket
@@ -82,14 +83,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 _debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
 DEBUG = _env_bool("DEBUG", _debugpy_attached)
-_has_debug_toolbar = False
-if DEBUG:
-    try:
-        import debug_toolbar  # type: ignore
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        pass
-    else:
-        _has_debug_toolbar = True
+HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 
 def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
@@ -496,7 +490,7 @@ INSTALLED_APPS = [
 
 INSTALLED_APPS = _dedupe_app_labels(INSTALLED_APPS)
 
-if _has_debug_toolbar:
+if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS += ["debug_toolbar"]
 
 SITE_ID = 1
@@ -550,7 +544,7 @@ MIDDLEWARE = [
 
 ANALYTICS_EXCLUDED_URL_PREFIXES = ("/__debug__", "/healthz", "/status")
 
-if _has_debug_toolbar:
+if HAS_DEBUG_TOOLBAR:
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
     INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0"]
 
