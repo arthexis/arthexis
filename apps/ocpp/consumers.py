@@ -25,6 +25,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from asgiref.sync import sync_to_async
 from apps.rates.mixins import RateLimitedConsumerMixin
+from apps.rates.models import RateLimit
 from config.offline import requires_network
 
 from . import store
@@ -545,7 +546,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             await existing.close()
         should_enforce_rate_limit = True
         if replacing_existing and getattr(existing, "client_ip", None) == self.client_ip:
-            should_enforce_rate_limit = False
+            should_enforce_rate_limit = await self._has_rate_limit_rule()
         if should_enforce_rate_limit and not await self.enforce_rate_limit():
             store.add_log(
                 self.store_key,
@@ -564,6 +565,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
         )
         return True
+
+    async def _has_rate_limit_rule(self) -> bool:
+        def _resolve_rule() -> bool:
+            return (
+                RateLimit.for_target(
+                    self.get_rate_limit_target(), scope_key=self.rate_limit_scope
+                )
+                is not None
+            )
+
+        return await database_sync_to_async(_resolve_rule)()
 
     async def _ensure_charger_record(
         self, existing_charger: Charger | None
