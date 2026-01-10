@@ -4,7 +4,7 @@
 {% block content %}
 <h1>{% translate "Favorites" %}</h1>
 {% if favorites %}
-<form method="post">
+<form method="post" class="favorite-list-form">
   {% csrf_token %}
   <table class="listing">
     <thead>
@@ -26,16 +26,22 @@
           <input type="number" id="id_priority_{{ fav.pk }}" name="priority_{{ fav.pk }}" value="{{ fav.priority }}">
         </td>
         <td><input type="checkbox" name="user_data" value="{{ fav.pk }}" {% if fav.user_data %}checked{% endif %}></td>
-        <td><a href="{% url 'admin:favorite_delete' fav.pk %}">{% translate "Remove" %}</a></td>
+        <td>
+          <a href="{% url 'admin:favorite_delete' fav.pk %}" class="button favorite-action favorite-action--danger">
+            {% translate "Remove" %}
+          </a>
+        </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  <div class="submit-row">
-    <input type="submit" value="{% translate 'Save' %}" class="default">
+  <div class="submit-row favorites-actions">
+    <input type="submit" value="{% translate 'Save' %}" class="default favorite-action">
+    <a href="{% url 'admin:favorite_clear' %}" class="button favorite-action favorite-action--danger">
+      {% translate "Remove all favorites" %}
+    </a>
   </div>
 </form>
-<p><a href="{% url 'admin:favorite_clear' %}">{% translate "Remove all favorites" %}</a></p>
 {% else %}
 <p>{% translate "No favorites." %}</p>
 {% endif %}
