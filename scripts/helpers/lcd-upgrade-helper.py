@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -88,6 +90,58 @@ def _lcd_columns(default: int = 16) -> int:
     return getattr(CharLCD1602, "columns", default)
 
 
+def _lcd_service_active(base_dir: Path) -> bool:
+    service_name = None
+    service_lock = base_dir / ".locks" / "service.lck"
+    if service_lock.exists():
+        try:
+            service_name = service_lock.read_text(encoding="utf-8").strip()
+        except OSError:
+            service_name = None
+
+    systemctl = shutil.which("systemctl")
+    if systemctl and service_name:
+        result = subprocess.run(
+            [systemctl, "is-active", f"lcd-{service_name}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if result.returncode == 0:
+            return True
+
+    pgrep = shutil.which("pgrep")
+    if not pgrep:
+        return False
+
+    for pattern in ("python -m apps.screens.lcd_screen", "apps/screens/lcd_screen.py"):
+        result = subprocess.run(
+            [pgrep, "-f", pattern],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if result.returncode == 0:
+            return True
+
+    return False
+
+
+def _write_upgrade_lock(base_dir: Path, message: str) -> None:
+    try:
+        from apps.screens.startup_notifications import render_lcd_lock_file
+    except Exception:
+        return
+
+    lock_dir = base_dir / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_dir / "lcd-high"
+    try:
+        lock_file.write_text(render_lcd_lock_file(subject=message, body=""), encoding="utf-8")
+    except Exception:
+        return
+
+
 def _display_loop(base_dir: Path, snapshot: dict[Path, float | None]) -> None:
     lcd = _init_lcd()
     columns = _lcd_columns()
@@ -97,6 +151,12 @@ def _display_loop(base_dir: Path, snapshot: dict[Path, float | None]) -> None:
     fallback_path.parent.mkdir(parents=True, exist_ok=True)
 
     while True:
+        if _lcd_service_active(base_dir):
+            lcd = None
+            _write_upgrade_lock(base_dir, MESSAGE_LINE)
+        elif lcd is None:
+            lcd = _init_lcd()
+
         try:
             if lcd is not None:
                 lcd.write(0, 0, line)
