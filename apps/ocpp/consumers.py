@@ -25,6 +25,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from asgiref.sync import sync_to_async
 from apps.rates.mixins import RateLimitedConsumerMixin
+from apps.rates.models import RateLimit
 from config.offline import requires_network
 
 from . import store
@@ -85,6 +86,8 @@ logger = logging.getLogger(__name__)
 OCPP_VERSION_16 = "ocpp1.6"
 OCPP_VERSION_201 = "ocpp2.0.1"
 OCPP_VERSION_21 = "ocpp2.1"
+OCPP_CONNECT_RATE_LIMIT_FALLBACK = 1
+OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS = 2
 
 
 # Query parameter keys that may contain the charge point serial. Keys are
@@ -241,8 +244,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     consumption_update_interval = 300
     rate_limit_target = Charger
     rate_limit_scope = "ocpp-connect"
-    rate_limit_fallback = store.MAX_CONNECTIONS_PER_IP
-    rate_limit_window = 60
+    rate_limit_fallback = OCPP_CONNECT_RATE_LIMIT_FALLBACK
+    rate_limit_window = OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS
 
     def _client_ip_is_local(self) -> bool:
         parsed = _parse_ip(getattr(self, "client_ip", None))
@@ -537,10 +540,14 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         """Accept the websocket connection after rate limits are enforced."""
 
         existing = store.connections.get(self.store_key)
+        replacing_existing = existing is not None
         if existing is not None:
             store.release_ip_connection(getattr(existing, "client_ip", None), existing)
             await existing.close()
-        if not await self.enforce_rate_limit():
+        should_enforce_rate_limit = True
+        if replacing_existing and getattr(existing, "client_ip", None) == self.client_ip:
+            should_enforce_rate_limit = await self._has_rate_limit_rule()
+        if should_enforce_rate_limit and not await self.enforce_rate_limit():
             store.add_log(
                 self.store_key,
                 f"Rejected connection from {self.client_ip or 'unknown'}: rate limit exceeded",
@@ -558,6 +565,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
         )
         return True
+
+    async def _has_rate_limit_rule(self) -> bool:
+        def _resolve_rule() -> bool:
+            return (
+                RateLimit.for_target(
+                    self.get_rate_limit_target(), scope_key=self.rate_limit_scope
+                )
+                is not None
+            )
+
+        return await database_sync_to_async(_resolve_rule)()
 
     async def _ensure_charger_record(
         self, existing_charger: Charger | None

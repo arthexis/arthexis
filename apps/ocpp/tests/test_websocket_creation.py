@@ -190,6 +190,35 @@ def test_ocpp_websocket_rate_limit_enforced():
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_ocpp_websocket_rate_limit_window_expires():
+    async def run_scenario():
+        first = WebsocketCommunicator(application, "/CP-RATE-WINDOW-1")
+        first.scope["client"] = ("8.8.8.8", 1000)
+        connected, _ = await first.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is True
+
+        second = WebsocketCommunicator(application, "/CP-RATE-WINDOW-2")
+        second.scope["client"] = ("8.8.8.8", 1001)
+        connected, _ = await second.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is False
+        await second.disconnect()
+
+        await asyncio.sleep(consumers.OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS + 0.1)
+
+        third = WebsocketCommunicator(application, "/CP-RATE-WINDOW-3")
+        third.scope["client"] = ("8.8.8.8", 1002)
+        connected, _ = await third.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is True
+
+        await third.disconnect()
+        await first.disconnect()
+
+    cache.clear()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
     async def run_scenario():
         serial = "CP-LOCAL-BYPASS"
