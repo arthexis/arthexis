@@ -76,7 +76,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "relation",
         "trusted",
         "version_display",
-        "last_seen",
+        "last_updated",
         "visit_link",
     )
     search_fields = (
@@ -727,9 +727,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 node.role = desired_role
                 changed.append("role")
 
-        node.last_seen = timezone.now()
-        if "last_seen" not in changed:
-            changed.append("last_seen")
+        node.last_updated = timezone.now()
+        if "last_updated" not in changed:
+            changed.append("last_updated")
         node.save(update_fields=changed)
         return changed
 

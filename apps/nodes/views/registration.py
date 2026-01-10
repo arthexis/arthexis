@@ -229,7 +229,7 @@ def node_list(request):
             "ipv4_address": node.ipv4_address,
             "ipv6_address": node.ipv6_address,
             "port": node.port,
-            "last_seen": node.last_seen,
+            "last_updated": node.last_updated,
             "features": list(node.features.values_list("slug", flat=True)),
             "installed_version": node.installed_version,
             "installed_revision": node.installed_revision,
@@ -698,11 +698,11 @@ def _update_features(node: Node, features, *, allow_update: bool):
     node.update_manual_features(feature_list)
 
 
-def _refresh_last_seen(node: Node, update_fields: list[str]):
+def _refresh_last_updated(node: Node, update_fields: list[str]):
     timestamp = timezone.now()
-    node.last_seen = timestamp
-    if "last_seen" not in update_fields:
-        update_fields.append("last_seen")
+    node.last_updated = timestamp
+    if "last_updated" not in update_fields:
+        update_fields.append("last_updated")
 
 
 def _log_registration_event(
@@ -801,10 +801,10 @@ def _update_existing_node(
         node.base_site = base_site
         update_fields.append("base_site")
 
-    _refresh_last_seen(node, update_fields)
+    _refresh_last_updated(node, update_fields)
 
     if update_fields:
-        # ``auto_now`` fields such as ``last_seen`` are not updated when
+        # ``auto_now`` fields such as ``last_updated`` are not updated when
         # ``update_fields`` is provided unless they are explicitly included.
         # Ensure the heartbeat timestamp is always refreshed so remote syncs
         # reflect the latest contact time even when no other fields changed.

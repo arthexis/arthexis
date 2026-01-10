@@ -206,7 +206,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         choices=Relation.choices,
         default=Relation.PEER,
     )
-    last_seen = models.DateTimeField(auto_now=True, verbose_name=_("Last updated"))
+    last_updated = models.DateTimeField(auto_now=True, verbose_name=_("Last updated"))
     public_endpoint = models.SlugField(blank=True, unique=True)
     uuid = models.UUIDField(
         default=uuid.uuid4,
