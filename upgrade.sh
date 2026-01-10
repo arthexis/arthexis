@@ -170,16 +170,16 @@ compute_requirements_checksum() {
       printf '%s\n' "${file##*/}"
       cat "$file"
     done
-  ) | md5sum | awk '{print $1}'
+  ) | sha256sum | awk '{print $1}'
 }
 
 collect_requirement_files REQUIREMENT_FILES
-REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
 REQUIREMENTS_HASH=""
 STORED_REQ_HASH=""
 if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
   REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
-  [ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
+  [ -f "$REQ_HASH_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_HASH_FILE")
 fi
 DEPENDENCY_REFRESH_REQUIRED=0
 if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]; then
@@ -810,7 +810,7 @@ cleanup_non_terminal_git_state() {
 
 install_requirements_if_changed() {
   local req_file="$BASE_DIR/requirements.txt"
-  local md5_file="$LOCK_DIR/requirements.md5"
+  local hash_file="$LOCK_DIR/requirements.sha256"
   local venv_python="$BASE_DIR/.venv/bin/python"
   local new_hash=""
   local stored_hash=""
@@ -827,9 +827,9 @@ install_requirements_if_changed() {
 
   local python_bin="$venv_python"
 
-  new_hash=$(md5sum "$req_file" | awk '{print $1}')
-  if [ -f "$md5_file" ]; then
-    stored_hash=$(cat "$md5_file")
+  new_hash=$(sha256sum "$req_file" | awk '{print $1}')
+  if [ -f "$hash_file" ]; then
+    stored_hash=$(cat "$hash_file")
   fi
 
   if [ "$new_hash" != "$stored_hash" ]; then
@@ -838,7 +838,7 @@ install_requirements_if_changed() {
     else
       "$python_bin" -m pip install -r "$req_file"
     fi
-    echo "$new_hash" > "$md5_file"
+    echo "$new_hash" > "$hash_file"
   else
     echo "Requirements unchanged. Skipping installation."
   fi
@@ -1793,7 +1793,7 @@ if [ $VENV_PRESENT -eq 1 ]; then
     arthexis_timing_end "pip_bootstrap"
   fi
   # env-refresh.sh is responsible for syncing requirements and updating the
-  # requirements.md5 lock file; avoid duplicating that work here.
+  # requirements.sha256 lock file; avoid duplicating that work here.
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
     if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
       echo "Warning: failed to broadcast upgrade Net Message" >&2

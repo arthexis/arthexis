@@ -152,6 +152,7 @@ clean_previous_installation_state() {
     rm -f "$LOCK_DIR"/*.lck "$LOCK_DIR"/*.lock "$LOCK_DIR"/*.tmp "$LOCK_DIR"/service.lck
     rm -f "$SYSTEMD_UNITS_LOCK"
     rm -f "$LOCK_DIR/requirements.md5" \
+          "$LOCK_DIR/requirements.sha256" \
           "$LOCK_DIR/migrations.md5" \
           "$LOCK_DIR/fixtures.md5" \
           "$BASE_DIR/redis.env" \
@@ -663,10 +664,34 @@ if [ "$ENABLE_CONTROL" != true ]; then
 fi
 
 
+collect_requirement_files() {
+    local -n out_array="$1"
+
+    mapfile -t out_array < <(find "$BASE_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
+}
+
+compute_requirements_checksum() {
+    local -a files=("$@")
+
+    if [ ${#files[@]} -eq 0 ]; then
+        echo ""
+        return 0
+    fi
+
+    (
+        for file in "${files[@]}"; do
+            printf '%s\n' "${file##*/}"
+            cat "$file"
+        done
+    ) | sha256sum | awk '{print $1}'
+}
+
 arthexis_timing_start "virtualenv_setup"
 # Create virtual environment if missing
+NEW_VENV=false
 if [ ! -d .venv ]; then
     python3 -m venv .venv
+    NEW_VENV=true
     arthexis_timing_end "virtualenv_setup" "created"
 else
     arthexis_timing_end "virtualenv_setup" "existing"
@@ -677,8 +702,37 @@ echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
 source .venv/bin/activate
 arthexis_timing_start "pip_bootstrap"
-pip install --upgrade pip
-arthexis_timing_end "pip_bootstrap"
+REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
+PIP_VERSION_MARKER="$LOCK_DIR/pip.version"
+STORED_REQ_HASH=""
+if [ -f "$REQ_HASH_FILE" ]; then
+    STORED_REQ_HASH="$(cat "$REQ_HASH_FILE")"
+fi
+REQUIREMENT_FILES=()
+collect_requirement_files REQUIREMENT_FILES
+CURRENT_REQ_HASH="$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")"
+
+PIP_UPGRADE=false
+if [ "$NEW_VENV" = true ] || [ "$CLEAN" = true ]; then
+    PIP_UPGRADE=true
+elif [ -n "$CURRENT_REQ_HASH" ] && [ "$CURRENT_REQ_HASH" != "$STORED_REQ_HASH" ]; then
+    PIP_UPGRADE=true
+    CURRENT_PIP_VERSION="$(python -c 'import pip; print(pip.__version__)' 2>/dev/null)"
+    if [ -n "$CURRENT_PIP_VERSION" ] && [ -f "$PIP_VERSION_MARKER" ]; then
+        STORED_PIP_VERSION="$(cat "$PIP_VERSION_MARKER")"
+        if [ "$CURRENT_PIP_VERSION" = "$STORED_PIP_VERSION" ]; then
+            PIP_UPGRADE=false
+        fi
+    fi
+fi
+
+if [ "$PIP_UPGRADE" = true ]; then
+    pip install --upgrade pip
+    python -c 'import pip; print(pip.__version__)' 2>/dev/null > "$PIP_VERSION_MARKER" || true
+    arthexis_timing_end "pip_bootstrap"
+else
+    arthexis_timing_record "pip_bootstrap" 0 "skipped"
+fi
 
 arthexis_timing_start "requirements_install"
 env_refresh_args=(--force-refresh --deps-only)

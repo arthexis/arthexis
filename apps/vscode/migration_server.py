@@ -21,7 +21,7 @@ import psutil
 BASE_DIR = Path(__file__).resolve().parents[2]
 LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
-REQUIREMENTS_HASH_FILE = LOCK_DIR / "requirements.md5"
+REQUIREMENTS_HASH_FILE = LOCK_DIR / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 
 if importlib.util.find_spec("apps.core.notifications"):
@@ -332,9 +332,9 @@ def stop_django_server(process: subprocess.Popen | multiprocessing.Process | Non
 
 
 def _hash_file(path: Path) -> str:
-    """Return the md5 hash of *path*."""
+    """Return the sha256 hash of *path*."""
 
-    digest = hashlib.md5(usedforsecurity=False)
+    digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8192), b""):
             digest.update(chunk)

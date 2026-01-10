@@ -158,7 +158,7 @@ compute_file_checksum() {
     return 0
   fi
 
-  md5sum "$file" | awk '{print $1}'
+  sha256sum "$file" | awk '{print $1}'
 }
 
 compute_requirements_checksum() {
@@ -174,7 +174,7 @@ compute_requirements_checksum() {
       printf '%s\n' "${file##*/}"
       cat "$file"
     done
-  ) | md5sum | awk '{print $1}'
+  ) | sha256sum | awk '{print $1}'
 }
 
 install_watch_upgrade_helper() {
@@ -237,11 +237,11 @@ fi
 
 REQ_SCAN_START_MS=$(now_ms)
 collect_requirement_files REQUIREMENT_FILES
-REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
 REQ_HASH_MANIFEST="$LOCK_DIR/requirements.hashes"
 REQ_TIMESTAMP_FILE="$LOCK_DIR/requirements.install-ts"
 STORED_REQ_HASH=""
-[ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
+[ -f "$REQ_HASH_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_HASH_FILE")
 REQUIREMENTS_HASH=""
 if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
   REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
@@ -353,7 +353,7 @@ else
   done
   echo "Timing: pip installation block took $(elapsed_ms "$PIP_SECTION_START_MS")ms"
   if [ -n "$REQUIREMENTS_HASH" ]; then
-    echo "$REQUIREMENTS_HASH" > "$REQ_MD5_FILE"
+    echo "$REQUIREMENTS_HASH" > "$REQ_HASH_FILE"
   fi
   if [ ${#CURRENT_REQ_HASHES[@]} -gt 0 ]; then
     : >"$REQ_HASH_MANIFEST"
