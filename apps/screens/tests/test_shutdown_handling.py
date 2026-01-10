@@ -7,6 +7,10 @@ import pytest
 from apps.screens import lcd_screen
 
 
+def _signal(name: str, fallback: signal.Signals) -> signal.Signals:
+    return getattr(signal, name, fallback)
+
+
 @pytest.fixture(autouse=True)
 def reset_shutdown_flag():
     lcd_screen._reset_shutdown_flag()
@@ -48,7 +52,7 @@ def test_handle_shutdown_blanks_display_when_flag_set():
 
 
 def test_handle_shutdown_with_no_lcd_is_quiet():
-    lcd_screen._request_shutdown(signal.SIGHUP, None)
+    lcd_screen._request_shutdown(_signal("SIGHUP", signal.SIGTERM), None)
 
     should_exit = lcd_screen._handle_shutdown_request(None)
 
@@ -73,11 +77,11 @@ def test_blank_display_swallows_lcd_errors(monkeypatch):
 def test_pause_flag_can_be_requested_and_resumed():
     assert lcd_screen._pause_requested() is False
 
-    lcd_screen._request_pause(signal.SIGUSR1, None)
+    lcd_screen._request_pause(_signal("SIGUSR1", signal.SIGTERM), None)
 
     assert lcd_screen._pause_requested() is True
 
-    lcd_screen._request_resume(signal.SIGUSR2, None)
+    lcd_screen._request_resume(_signal("SIGUSR2", signal.SIGTERM), None)
 
     assert lcd_screen._pause_requested() is False
 
@@ -95,7 +99,7 @@ def test_handle_pause_blanks_and_releases_display():
             self.writes.append((col, row, text))
 
     lcd = FakeLCD()
-    lcd_screen._request_pause(signal.SIGUSR1, None)
+    lcd_screen._request_pause(_signal("SIGUSR1", signal.SIGTERM), None)
 
     paused_lcd, paused = lcd_screen._handle_pause_request(lcd)
 

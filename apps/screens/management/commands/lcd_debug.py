@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import platform
-import resource
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +17,11 @@ from apps.screens.startup_notifications import (
     LCD_LOW_LOCK_FILE,
     LCD_RUNTIME_LOCK_FILE,
 )
+
+if os.name == "nt":
+    resource = None
+else:
+    import resource
 
 
 DEFAULT_OUTFILE = Path("work") / "lcd-debug.txt"
@@ -178,6 +182,11 @@ class Command(BaseCommand):
         return lines
 
     def _memory_section(self) -> list[str]:
+        if resource is None:
+            return [
+                "Memory and resource usage:",
+                "- resource module unavailable on this platform",
+            ]
         usage = resource.getrusage(resource.RUSAGE_SELF)
         return [
             "Memory and resource usage:",

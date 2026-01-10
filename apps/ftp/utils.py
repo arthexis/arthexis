@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Iterable
 
@@ -59,6 +61,15 @@ def build_user_mounts(
 ) -> tuple[dict[str, UserMount], list[str]]:
     """Build per-user mount directories and return the computed plan."""
 
+    def _create_link(alias: Path, target: Path) -> None:
+        try:
+            alias.symlink_to(target, target_is_directory=target.is_dir())
+        except OSError as exc:
+            if os.name != "nt" or getattr(exc, "winerror", None) != 1314:
+                raise
+            command = f'mklink /J "{alias}" "{target}"'
+            subprocess.run(["cmd", "/c", command], check=True)
+
     user_mounts: dict[str, UserMount] = {}
     warnings: list[str] = []
     mount_root.mkdir(parents=True, exist_ok=True)
@@ -105,7 +116,7 @@ def build_user_mounts(
                     shutil.rmtree(alias)
                 else:
                     alias.unlink()
-            alias.symlink_to(binding.target)
+            _create_link(alias, binding.target)
         mount.permissions = _merge_permissions(rights)
 
     return user_mounts, warnings

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import time
 from typing import Callable
 
 from django.core.cache import cache
@@ -40,15 +41,32 @@ class RateLimiter:
         if self.fallback_limit is None:
             return True
         cache_key = f"rate-limit:fallback:{self.scope_key}:{identifier}"
-        added = cache.add(cache_key, 1, timeout=self.fallback_window)
-        if added:
-            return True
-        try:
-            current = cache.incr(cache_key)
-        except ValueError:
-            cache.set(cache_key, 1, timeout=self.fallback_window)
-            return True
-        return current <= self.fallback_limit
+        now = time.time()
+        payload = cache.get(cache_key)
+        count = 0
+        started_at = now
+
+        if isinstance(payload, dict):
+            count = int(payload.get("count", 0))
+            started_at = float(payload.get("started_at", now))
+            if self.fallback_window > 0 and now - started_at >= self.fallback_window:
+                count = 0
+                started_at = now
+        elif payload is not None:
+            try:
+                count = int(payload)
+                started_at = now
+            except (TypeError, ValueError):
+                count = 0
+                started_at = now
+
+        count += 1
+        cache.set(
+            cache_key,
+            {"count": count, "started_at": started_at},
+            timeout=self.fallback_window,
+        )
+        return count <= self.fallback_limit
 
     def is_allowed(self, identifier: str | None = None) -> bool:
         """Return whether the identifier is within the configured rate limit."""
