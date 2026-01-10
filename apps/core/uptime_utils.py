@@ -22,36 +22,42 @@ def ap_mode_enabled(*, timeout: int | float = 5) -> bool:
     if not nmcli_path:
         return False
 
-    try:
-        result = subprocess.run(
-            [
-                nmcli_path,
-                "-t",
-                "-f",
-                "TYPE,802-11-wireless.mode",
-                "connection",
-                "show",
-                "--active",
-            ],
+    def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [nmcli_path, "-t", *args],
             capture_output=True,
             text=True,
             check=False,
             timeout=timeout,
         )
+
+    try:
+        result = _run(["-f", "NAME,TYPE", "connection", "show", "--active"])
     except Exception:
         return False
 
     if result.returncode != 0:
         return False
 
+    wifi_names: list[str] = []
     for line in result.stdout.splitlines():
         if not line:
             continue
-        parts = line.strip().split(":", 1)
-        if len(parts) != 2:
+        name, conn_type = line.split(":", 1)
+        if conn_type.strip() == "802-11-wireless":
+            wifi_names.append(name)
+
+    for name in wifi_names:
+        try:
+            mode_result = _run(
+                ["-g", "802-11-wireless.mode", "connection", "show", name]
+            )
+        except Exception:
             continue
-        conn_type, mode = parts
-        if conn_type.lower() in {"wifi", "802-11-wireless"} and mode.strip() == "ap":
+        if mode_result.returncode != 0:
+            continue
+        modes = {value.strip() for value in mode_result.stdout.splitlines()}
+        if "ap" in modes:
             return True
 
     return False
