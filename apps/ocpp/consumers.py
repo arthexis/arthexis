@@ -241,8 +241,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     consumption_update_interval = 300
     rate_limit_target = Charger
     rate_limit_scope = "ocpp-connect"
-    rate_limit_fallback = store.MAX_CONNECTIONS_PER_IP
-    rate_limit_window = 60
+    rate_limit_fallback = 1
+    rate_limit_window = 2
 
     def _client_ip_is_local(self) -> bool:
         parsed = _parse_ip(getattr(self, "client_ip", None))
