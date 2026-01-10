@@ -680,24 +680,19 @@ arthexis_timing_start "pip_bootstrap"
 pip install --upgrade pip
 arthexis_timing_end "pip_bootstrap"
 
+arthexis_timing_start "requirements_install"
+if [ "$CHANNEL" = "unstable" ]; then
+    ./env-refresh.sh --force-refresh --deps-only --latest
+else
+    ./env-refresh.sh --force-refresh --deps-only
+fi
 REQ_FILE="requirements.txt"
 MD5_FILE="$LOCK_DIR/requirements.md5"
-NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
-STORED_HASH=""
-[ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
-arthexis_timing_start "requirements_install"
-if [ "$NEW_HASH" != "$STORED_HASH" ]; then
-    if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
-        python "$PIP_INSTALL_HELPER" -r "$REQ_FILE"
-    else
-        pip install -r "$REQ_FILE"
-    fi
+if [ -f "$REQ_FILE" ]; then
+    NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
     echo "$NEW_HASH" > "$MD5_FILE"
-    arthexis_timing_end "requirements_install" "installed"
-else
-    echo "Requirements unchanged. Skipping installation."
-    arthexis_timing_end "requirements_install" "skipped"
 fi
+arthexis_timing_end "requirements_install" "refreshed"
 
 
 if [ "$ENABLE_CONTROL" = true ]; then

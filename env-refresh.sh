@@ -74,6 +74,7 @@ FORCE_REQUIREMENTS_INSTALL=0
 LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
 PIP_FRESHNESS_MINUTES=0
+DEPS_ONLY=0
 
 LATEST=0
 CLEAN=0
@@ -94,6 +95,10 @@ while [[ $# -gt 0 ]]; do
     --pip-freshness-minutes)
       PIP_FRESHNESS_MINUTES="$2"
       shift 2
+      ;;
+    --deps-only)
+      DEPS_ONLY=1
+      shift
       ;;
     *)
       break
@@ -358,6 +363,11 @@ else
     done
   fi
   date +%s > "$REQ_TIMESTAMP_FILE"
+fi
+
+if [ "$DEPS_ONLY" -eq 1 ]; then
+  echo "Dependency refresh complete; skipping env-refresh database updates."
+  exit 0
 fi
 
 install_watch_upgrade_helper || echo "watch-upgrade helper setup failed unexpectedly; delegated auto-upgrades may be unavailable"
