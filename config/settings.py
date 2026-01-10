@@ -15,7 +15,6 @@ import importlib.util
 import ipaddress
 import os
 import socket
-import sys
 from pathlib import Path
 from apps.loggers import build_logging_settings
 from django.utils.translation import gettext_lazy as _
