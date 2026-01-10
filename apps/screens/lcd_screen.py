@@ -359,6 +359,15 @@ def _select_low_payload(
     return LockPayload(subject, body, DEFAULT_SCROLL_MS)
 
 
+def _apply_low_payload_fallback(payload: LockPayload) -> LockPayload:
+    return _select_low_payload(
+        payload,
+        frame_cycle=GAP_ANIMATION_CYCLE,
+        base_dir=BASE_DIR,
+        scroll_ms=GAP_ANIMATION_SCROLL_MS,
+    )
+
+
 def _lcd_clock_enabled() -> bool:
     raw = (os.getenv("DISABLE_LCD_CLOCK") or "").strip().lower()
     return raw not in {"1", "true", "yes", "on"}
@@ -941,12 +950,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         low_mtime = 0.0
                         low_available = False
 
-                    low_payload = _select_low_payload(
-                        low_payload,
-                        frame_cycle=GAP_ANIMATION_CYCLE,
-                        base_dir=BASE_DIR,
-                        scroll_ms=GAP_ANIMATION_SCROLL_MS,
-                    )
+                    low_payload = _apply_low_payload_fallback(low_payload)
                     low_available = _payload_has_text(low_payload)
 
                     previous_order = state_order
@@ -1044,6 +1048,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     # Prepare the following state in advance for predictable timing.
                     high_payload = _read_lock_file(HIGH_LOCK_FILE)
                     low_payload = _read_lock_file(LOW_LOCK_FILE)
+                    low_payload = _apply_low_payload_fallback(low_payload)
                     next_index = (state_index + 1) % len(state_order)
                     next_payload = _payload_for_state(next_index)
                     next_display_state = _prepare_display_state(
