@@ -1044,6 +1044,12 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     # Prepare the following state in advance for predictable timing.
                     high_payload = _read_lock_file(HIGH_LOCK_FILE)
                     low_payload = _read_lock_file(LOW_LOCK_FILE)
+                    low_payload = _select_low_payload(
+                        low_payload,
+                        frame_cycle=GAP_ANIMATION_CYCLE,
+                        base_dir=BASE_DIR,
+                        scroll_ms=GAP_ANIMATION_SCROLL_MS,
+                    )
                     next_index = (state_index + 1) % len(state_order)
                     next_payload = _payload_for_state(next_index)
                     next_display_state = _prepare_display_state(
