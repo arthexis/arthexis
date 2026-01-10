@@ -8,6 +8,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+from apps.audio.models import AudioSample
 from apps.content.models import (
     ContentClassification,
     ContentClassifier,
@@ -52,7 +53,7 @@ class ContentClassificationInline(admin.TabularInline):
 @admin.register(ContentSample)
 class ContentSampleAdmin(EntityModelAdmin):
     list_display = ("name", "kind", "node", "user", "created_at")
-    readonly_fields = ("created_at", "name", "user", "image_preview")
+    readonly_fields = ("created_at", "name", "user", "image_preview", "audio_preview")
     inlines = (ContentClassificationInline,)
     list_filter = ("kind", "classifications__tag")
     change_form_template = "admin/content/contentsample/change_form.html"
@@ -158,16 +159,20 @@ class ContentSampleAdmin(EntityModelAdmin):
             encoded,
         )
 
-    def _get_sample_preview(self, obj):
-        if not obj or obj.kind != ContentSample.IMAGE or not obj.path:
-            return None
-        file_path = Path(obj.path)
-        if not file_path.is_absolute():
-            file_path = settings.LOG_DIR / file_path
-        if not file_path.exists():
-            return None
-        with file_path.open("rb") as f:
-            return base64.b64encode(f.read()).decode("ascii")
+    @admin.display(description="Audio")
+    def audio_preview(self, obj):
+        if not obj or obj.kind != ContentSample.AUDIO or not obj.path:
+            return ""
+        audio_sample = obj.audio_samples.order_by("-captured_at", "-id").first()
+        if not audio_sample:
+            return "Audio metadata not available"
+        data_uri = audio_sample.get_data_uri()
+        if not data_uri:
+            return "File not found"
+        return format_html(
+            '<audio controls style="width:100%%;" src="{}"></audio>',
+            data_uri,
+        )
 
 
 class WebRequestStepInline(admin.TabularInline):
