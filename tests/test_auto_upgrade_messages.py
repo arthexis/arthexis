@@ -27,29 +27,18 @@ def test_send_auto_upgrade_check_message(monkeypatch):
     assert sent[0]["body"] == "APPLIED-SUCCESSF CLEAN"
 
 
-def test_resolve_auto_upgrade_change_tag_for_version_change():
-    assert (
-        tasks._resolve_auto_upgrade_change_tag("1.0", "2.0", "aaa", "aaa")
-        == "2.0"
-    )
+def test_resolve_auto_upgrade_change_tag_cases():
+    cases = [
+        ("1.0", "2.0", "aaa", "aaa", "2.0"),
+        ("1.0", "1.0", "abc", "1234567", "234567"),
+        ("1.0", "1.0", "aaa", "aaa", "CLEAN"),
+        ("1.0", None, "aaa", "aaa", "-"),
+    ]
 
-
-def test_resolve_auto_upgrade_change_tag_for_revision_change():
-    assert (
-        tasks._resolve_auto_upgrade_change_tag("1.0", "1.0", "abc", "1234567")
-        == "234567"
-    )
-
-
-def test_resolve_auto_upgrade_change_tag_for_no_change():
-    assert (
-        tasks._resolve_auto_upgrade_change_tag("1.0", "1.0", "aaa", "aaa")
-        == "CLEAN"
-    )
-
-
-def test_resolve_auto_upgrade_change_tag_for_none_version():
-    assert (
-        tasks._resolve_auto_upgrade_change_tag("1.0", None, "aaa", "aaa")
-        == "-"
-    )
+    for current_version, target_version, current_rev, target_rev, expected in cases:
+        assert (
+            tasks._resolve_auto_upgrade_change_tag(
+                current_version, target_version, current_rev, target_rev
+            )
+            == expected
+        )
