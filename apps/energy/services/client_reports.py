@@ -76,12 +76,11 @@ def create_client_report(
     owner=None,
     created_by=None,
     recipients: Iterable[str] | None = None,
-    disable_emails: bool = False,
     chargers: Iterable[Any] | None = None,
     language: str | None = None,
     title: str | None = None,
     recurrence: str | None = None,
-    send_emails: bool | None = None,
+    send_emails: bool = True,
     store_local_copy: bool = False,
 ) -> ClientReportResult:
     start_date, end_date = resolve_client_report_window(
@@ -93,6 +92,7 @@ def create_client_report(
     )
     charger_list = list(chargers or [])
     recipient_list = list(recipients or [])
+    disable_emails = not send_emails
     report = ClientReport.generate(
         start_date,
         end_date,
@@ -108,8 +108,6 @@ def create_client_report(
         report.store_local_copy()
 
     delivered_recipients: list[str] = []
-    if send_emails is None:
-        send_emails = not disable_emails
     if send_emails and recipient_list:
         delivered_recipients = report.send_delivery(
             to=recipient_list,

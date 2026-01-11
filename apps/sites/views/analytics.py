@@ -327,7 +327,6 @@ def _generate_client_report_response(
         owner=owner,
         created_by=request.user if request.user.is_authenticated else None,
         recipients=recipients,
-        disable_emails=disable_emails,
         chargers=chargers,
         language=language,
         title=title,
