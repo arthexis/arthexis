@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from apps.core.admin import OwnableAdminMixin
+
 from .models import FTPFolder, FTPServer
 
 
@@ -11,16 +13,16 @@ class FTPServerAdmin(admin.ModelAdmin):
 
 
 @admin.register(FTPFolder)
-class FTPFolderAdmin(admin.ModelAdmin):
+class FTPFolderAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "node",
         "enabled",
-        "owner",
-        "security_group",
+        "user",
+        "group",
         "owner_permission",
         "group_permission",
     )
     list_filter = ("enabled", "owner_permission", "group_permission")
-    search_fields = ("name", "path", "node__hostname", "owner__username")
-    autocomplete_fields = ("node", "owner", "security_group")
+    search_fields = ("name", "path", "node__hostname", "user__username")
+    autocomplete_fields = ("node", "user", "group")

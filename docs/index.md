@@ -7,3 +7,4 @@ This site aggregates operator guides, architecture notes, and development refere
 - [Auto-Upgrade Flow](auto-upgrade.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)
+- [Recipes](recipes.md)

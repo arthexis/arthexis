@@ -5,6 +5,8 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityAllManager, EntityManager
+from apps.media.models import MediaFile
+from apps.media.utils import ensure_media_bucket
 from apps.odoo.models import OdooProduct as CoreOdooProduct
 
 from .constants import (
@@ -39,8 +41,13 @@ class TaskCategory(Entity):
         blank=True,
         help_text=_("Optional details supporting Markdown formatting."),
     )
-    image = models.ImageField(
-        _("Image"), upload_to="workgroup/task_categories/", blank=True
+    image_media = models.ForeignKey(
+        MediaFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_category_images",
+        verbose_name=_("Image"),
     )
     cost = models.DecimalField(
         _("Cost"),
@@ -120,3 +127,23 @@ class TaskCategory(Entity):
         return self.get_availability_display()
 
     availability_label.short_description = _("Availability")  # type: ignore[attr-defined]
+
+    @property
+    def image_file(self):
+        if self.image_media and self.image_media.file:
+            return self.image_media.file
+        return None
+
+
+TASK_CATEGORY_BUCKET_SLUG = "tasks-category-images"
+TASK_CATEGORY_ALLOWED_PATTERNS = "\n".join(["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"])
+
+
+def get_task_category_bucket():
+    return ensure_media_bucket(
+        slug=TASK_CATEGORY_BUCKET_SLUG,
+        name=_("Task Category Images"),
+        allowed_patterns=TASK_CATEGORY_ALLOWED_PATTERNS,
+        max_bytes=2 * 1024 * 1024,
+        expires_at=None,
+    )

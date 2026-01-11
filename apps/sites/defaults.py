@@ -37,6 +37,7 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "protocols": "Protocol helpers and shared interfaces.",
     "rates": "Rates, pricing and tariff helpers.",
     "rfid": "RFID tag scanning and notifications.",
+    "recipes": "Scriptable recipes for reusable actions and validations.",
     "repos": "Repository management and release helpers.",
     "screens": "UI screen definitions and templates.",
     "sigils": "Sigil handling and certificate helpers.",

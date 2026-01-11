@@ -199,14 +199,14 @@ def nav_links(request):
 
     valid_modules.sort(key=lambda m: (m.priority, m.menu_label.lower()))
 
-    if current_module and current_module.favicon:
-        favicon_url = current_module.favicon.url
+    if current_module and current_module.favicon_url:
+        favicon_url = current_module.favicon_url
     else:
         favicon_url = None
         if site:
             try:
-                if site.badge.favicon:
-                    favicon_url = site.badge.favicon.url
+                if site.badge.favicon_url:
+                    favicon_url = site.badge.favicon_url
             except Exception:
                 pass
         if not favicon_url:

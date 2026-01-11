@@ -14,6 +14,8 @@ from django.utils.translation import gettext_lazy as _
 from PIL import Image, ImageDraw, ImageFont
 
 from apps.base.models import Entity
+from apps.media.models import MediaFile
+from apps.media.utils import ensure_media_bucket
 
 __all__ = ["CardFace"]
 
@@ -24,6 +26,9 @@ _FONT_ROOTS = (
     Path("/usr/local/share/fonts"),
     Path.home() / ".fonts",
 )
+
+CARD_FACE_BUCKET_SLUG = "cards-cardface-backgrounds"
+CARD_FACE_ALLOWED_PATTERNS = "\n".join(["*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff"])
 
 
 @lru_cache(maxsize=1)
@@ -48,7 +53,14 @@ class CardFace(Entity):
     SIGIL_PATTERN = re.compile(r"\[([^\[\]]+)\]")
 
     name = models.CharField(max_length=128)
-    background = models.ImageField(upload_to="cards/faces/backgrounds/")
+    background_media = models.ForeignKey(
+        MediaFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cardface_backgrounds",
+        verbose_name=_("Background"),
+    )
 
     overlay_one_text = models.TextField(blank=True, default="", help_text=_("Primary overlay text."))
     overlay_one_font = models.CharField(max_length=255, blank=True, default="")
@@ -149,13 +161,13 @@ class CardFace(Entity):
                 counterpart.save(update_fields=["fixed_back"])
 
     def _validate_background(self):
-        if not self.background:
-            raise ValidationError({"background": _("A background image is required.")})
-        file: File = self.background.file  # type: ignore[attr-defined]
+        file = self.background_file
+        if not file:
+            raise ValidationError({"background_media": _("A background image is required.")})
         if file.size and file.size > self.BACKGROUND_MAX_BYTES:
             raise ValidationError(
                 {
-                    "background": _(
+                    "background_media": _(
                         "Background image exceeds the maximum printable size of %(size)s bytes."
                     )
                     % {"size": self.BACKGROUND_MAX_BYTES}
@@ -171,7 +183,7 @@ class CardFace(Entity):
                 if mode not in self.ALLOWED_MODES:
                     raise ValidationError(
                         {
-                            "background": _(
+                            "background_media": _(
                                 "Background must be monochrome or CMYK (current mode: %(mode)s)."
                             )
                             % {"mode": mode}
@@ -180,7 +192,35 @@ class CardFace(Entity):
         except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
-            raise ValidationError({"background": _(f"Invalid background image: {exc}")}) from exc
+            raise ValidationError({"background_media": _(f"Invalid background image: {exc}")}) from exc
+
+    @classmethod
+    def validate_background_file(cls, file: File):
+        if not file:
+            raise ValidationError(_("A background image is required."))
+        if file.size and file.size > cls.BACKGROUND_MAX_BYTES:
+            raise ValidationError(
+                _(
+                    "Background image exceeds the maximum printable size of %(size)s bytes."
+                )
+                % {"size": cls.BACKGROUND_MAX_BYTES}
+            )
+        try:
+            file.seek(0)
+            with Image.open(file) as image:
+                image.verify()
+            file.seek(0)
+            with Image.open(file) as image:
+                mode = image.mode
+                if mode not in cls.ALLOWED_MODES:
+                    raise ValidationError(
+                        _(
+                            "Background must be monochrome or CMYK (current mode: %(mode)s)."
+                        )
+                        % {"mode": mode}
+                    )
+        finally:
+            file.seek(0)
 
     def _load_font(self, path: str, size: int):
         if path:
@@ -202,10 +242,11 @@ class CardFace(Entity):
         overlay_one_position: tuple[int, int],
         overlay_two_position: tuple[int, int],
     ) -> str:
-        if not self.background:
+        file = self.background_file
+        if not file:
             return ""
-        self.background.file.seek(0)  # type: ignore[attr-defined]
-        with Image.open(self.background) as base:
+        file.seek(0)
+        with Image.open(file) as base:
             canvas = base.convert("RGBA")
             draw = ImageDraw.Draw(canvas)
             if overlay_one_text:
@@ -217,3 +258,19 @@ class CardFace(Entity):
             buffer = BytesIO()
             canvas.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    @property
+    def background_file(self) -> File | None:
+        if self.background_media and self.background_media.file:
+            return self.background_media.file  # type: ignore[return-value]
+        return None
+
+
+def get_cardface_bucket():
+    return ensure_media_bucket(
+        slug=CARD_FACE_BUCKET_SLUG,
+        name=_("Card Face Backgrounds"),
+        allowed_patterns=CARD_FACE_ALLOWED_PATTERNS,
+        max_bytes=CardFace.BACKGROUND_MAX_BYTES,
+        expires_at=None,
+    )

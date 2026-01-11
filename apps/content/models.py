@@ -7,6 +7,7 @@ from django.db import models
 from django.db.models import Q
 
 from apps.core.entity import Entity, TransactionUUIDMixin
+from apps.core.models import Ownable
 
 
 class ContentSample(TransactionUUIDMixin, Entity):
@@ -111,26 +112,14 @@ class ContentClassification(Entity):
         return f"{self.sample} → {self.tag}"
 
 
-class WebRequestSampler(Entity):
+class WebRequestSampler(Ownable):
     """Sequence of cURL requests that collect web sampling data."""
+
+    owner_required = False
 
     slug = models.SlugField(max_length=100, unique=True)
     label = models.CharField(max_length=150)
     description = models.TextField(blank=True)
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="owned_web_request_samplers",
-    )
-    security_group = models.ForeignKey(
-        "groups.SecurityGroup",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="web_request_samplers",
-    )
     sampling_period_minutes = models.PositiveIntegerField(
         null=True,
         blank=True,

@@ -788,9 +788,9 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def qr_link(self, obj):
         from django.utils.html import format_html
 
-        if obj.reference and obj.reference.image:
+        if obj.reference and obj.reference.image_url:
             return format_html(
-                '<a href="{}" target="_blank">qr</a>', obj.reference.image.url
+                '<a href="{}" target="_blank">qr</a>', obj.reference.image_url
             )
         return ""
 
@@ -2218,5 +2218,4 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             start = timezone.make_aware(start, timezone.get_current_timezone())
         end = start + timedelta(days=1)
         return start, end
-
 

@@ -8,6 +8,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+from apps.core.models import Ownable
 
 
 class FTPServer(Entity):
@@ -70,8 +71,10 @@ class FTPServer(Entity):
             return None
 
 
-class FTPFolder(Entity):
+class FTPFolder(Ownable):
     """Folder exposed via the embedded FTP server."""
+
+    owner_required = False
 
     class Permission(models.TextChoices):
         READ_ONLY = "read", _("Read-only")
@@ -97,20 +100,6 @@ class FTPFolder(Entity):
     name = models.CharField(max_length=100)
     path = models.CharField(max_length=500)
     enabled = models.BooleanField(default=False)
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        related_name="owned_ftp_folders",
-        null=True,
-        blank=True,
-    )
-    security_group = models.ForeignKey(
-        "groups.SecurityGroup",
-        on_delete=models.SET_NULL,
-        related_name="ftp_folders",
-        null=True,
-        blank=True,
-    )
     owner_permission = models.CharField(
         max_length=10,
         choices=Permission.choices,
@@ -141,4 +130,3 @@ class FTPFolder(Entity):
     def build_link_name(self) -> str:
         base = slugify(self.name) or "folder"
         return f"{base}-{self.pk}" if self.pk else base
-

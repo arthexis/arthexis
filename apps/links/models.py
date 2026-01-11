@@ -13,6 +13,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager, TransactionUUIDMixin
 from apps.leads.models import Lead
+from apps.media.models import MediaFile
+from apps.media.utils import create_media_file, ensure_media_bucket
 
 
 def _generate_qr_slug() -> str:
@@ -48,8 +50,22 @@ class Reference(TransactionUUIDMixin, Entity):
     )
     alt_text = models.CharField("Title / Alt Text", max_length=500)
     value = models.TextField(blank=True)
-    file = models.FileField(upload_to="refs/", blank=True)
-    image = models.ImageField(upload_to="refs/qr/", blank=True)
+    file_media = models.ForeignKey(
+        MediaFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reference_files",
+        verbose_name=_("File"),
+    )
+    image_media = models.ForeignKey(
+        MediaFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reference_images",
+        verbose_name=_("Image"),
+    )
     uses = models.PositiveIntegerField(default=0)
     method = models.CharField(max_length=50, default="qr")
     validated_url_at = models.DateTimeField(
@@ -110,6 +126,28 @@ class Reference(TransactionUUIDMixin, Entity):
 
     objects = ReferenceManager()
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).all_objects.get(pk=self.pk)
+            if original.transaction_uuid != self.transaction_uuid:
+                raise ValidationError(
+                    {"transaction_uuid": "Cannot modify transaction UUID"}
+                )
+        if not self.image_media and self.value:
+            qr = qrcode.QRCode(box_size=10, border=4)
+            qr.add_data(self.value)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
+            filename = hashlib.sha256(self.value.encode()).hexdigest()[:16] + ".png"
+            bucket = get_reference_qr_bucket()
+            upload = ContentFile(buffer.getvalue(), name=filename)
+            self.image_media = create_media_file(
+                bucket=bucket, uploaded_file=upload, content_type="image/png"
+            )
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.alt_text
 
@@ -127,6 +165,70 @@ class Reference(TransactionUUIDMixin, Entity):
         db_table = "core_reference"
         verbose_name = _("Reference")
         verbose_name_plural = _("References")
+
+    @property
+    def image_file(self):
+        if self.image_media and self.image_media.file:
+            return self.image_media.file
+        return None
+
+    @property
+    def image_url(self) -> str:
+        file = self.image_file
+        return file.url if file else ""
+
+    @property
+    def image(self):
+        return self.image_file
+
+    @property
+    def file_file(self):
+        if self.file_media and self.file_media.file:
+            return self.file_media.file
+        return None
+
+
+REFERENCE_FILE_BUCKET_SLUG = "links-reference-files"
+REFERENCE_FILE_ALLOWED_PATTERNS = "\n".join(
+    [
+        "*.pdf",
+        "*.txt",
+        "*.csv",
+        "*.md",
+        "*.doc",
+        "*.docx",
+        "*.xls",
+        "*.xlsx",
+        "*.ppt",
+        "*.pptx",
+        "*.zip",
+        "*.png",
+        "*.jpg",
+        "*.jpeg",
+    ]
+)
+REFERENCE_QR_BUCKET_SLUG = "links-reference-qr"
+REFERENCE_QR_ALLOWED_PATTERNS = "\n".join(["*.png"])
+
+
+def get_reference_file_bucket():
+    return ensure_media_bucket(
+        slug=REFERENCE_FILE_BUCKET_SLUG,
+        name=_("Reference Files"),
+        allowed_patterns=REFERENCE_FILE_ALLOWED_PATTERNS,
+        max_bytes=10 * 1024 * 1024,
+        expires_at=None,
+    )
+
+
+def get_reference_qr_bucket():
+    return ensure_media_bucket(
+        slug=REFERENCE_QR_BUCKET_SLUG,
+        name=_("Reference QR Images"),
+        allowed_patterns=REFERENCE_QR_ALLOWED_PATTERNS,
+        max_bytes=512 * 1024,
+        expires_at=None,
+    )
 
 
 class ExperienceReference(Reference):

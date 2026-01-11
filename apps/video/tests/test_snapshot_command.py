@@ -4,10 +4,15 @@ from unittest.mock import patch
 
 import pytest
 from django.core.management import CommandError, call_command
+
+pytestmark = pytest.mark.integration
+
+
 def _mock_feature(is_enabled: bool = True):
     return SimpleNamespace(is_enabled=is_enabled)
 
 
+@patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.save_screenshot")
 @patch("apps.video.management.commands.snapshot.capture_rpi_snapshot")
 @patch("apps.video.management.commands.snapshot.VideoDevice")
@@ -21,6 +26,7 @@ def test_snapshot_command_success(
     video_device_mock,
     capture_mock,
     save_mock,
+    test_server_mock,
     capsys,
 ):
     node_instance = object()
@@ -42,6 +48,7 @@ def test_snapshot_command_success(
     assert result == "/tmp/snapshot.jpg"
 
 
+@patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.has_rpi_camera_stack", return_value=False)
 @patch("apps.video.management.commands.snapshot.save_screenshot")
 @patch("apps.video.management.commands.snapshot.capture_rpi_snapshot")
@@ -57,6 +64,7 @@ def test_snapshot_command_enables_feature_and_refreshes_devices(
     capture_mock,
     save_mock,
     stack_mock,
+    test_server_mock,
     capsys,
 ):
     node_instance = object()
@@ -79,16 +87,20 @@ def test_snapshot_command_enables_feature_and_refreshes_devices(
     assert result == "/tmp/snapshot2.jpg"
 
 
+@patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.Node")
-def test_snapshot_command_errors_without_node(node_mock):
+def test_snapshot_command_errors_without_node(node_mock, test_server_mock):
     node_mock.get_local.return_value = None
     with pytest.raises(CommandError):
         call_command("snapshot")
 
 
+@patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.Node")
 @patch("apps.video.management.commands.snapshot.NodeFeature")
-def test_snapshot_command_errors_without_feature(node_feature_mock, node_mock):
+def test_snapshot_command_errors_without_feature(
+    node_feature_mock, node_mock, test_server_mock
+):
     node_mock.get_local.return_value = object()
     node_feature_mock.DoesNotExist = Exception
     node_feature_mock.objects.get.side_effect = node_feature_mock.DoesNotExist()
@@ -97,6 +109,7 @@ def test_snapshot_command_errors_without_feature(node_feature_mock, node_mock):
         call_command("snapshot")
 
 
+@patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.Node")
 @patch("apps.video.management.commands.snapshot.NodeFeature")
 @patch("apps.video.management.commands.snapshot.VideoDevice")
@@ -110,6 +123,7 @@ def test_snapshot_command_errors_without_devices(
     video_device_mock,
     node_feature_mock,
     node_mock,
+    test_server_mock,
 ):
     node_instance = object()
     node_mock.get_local.return_value = node_instance
@@ -122,3 +136,9 @@ def test_snapshot_command_errors_without_devices(
 
     capture_mock.assert_not_called()
     save_mock.assert_not_called()
+
+
+@patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=False)
+def test_snapshot_command_requires_test_server(test_server_mock):
+    with pytest.raises(CommandError):
+        call_command("snapshot")

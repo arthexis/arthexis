@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.credentials.forms import SSHAccountAdminForm
 from apps.credentials.models import SSHAccount
 
 from ..models import NodeFeatureAssignment
@@ -13,10 +14,13 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
 
 class SSHAccountInline(admin.StackedInline):
     model = SSHAccount
+    form = SSHAccountAdminForm
     extra = 0
     fields = (
         "username",
         "password",
-        "private_key",
-        "public_key",
+        "private_key_media",
+        "private_key_upload",
+        "public_key_media",
+        "public_key_upload",
     )

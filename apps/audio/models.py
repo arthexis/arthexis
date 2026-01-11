@@ -15,6 +15,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 from apps.content.models import ContentSample
+from apps.nodes.device_sync import sync_detected_devices
 
 logger = logging.getLogger(__name__)
 
@@ -97,34 +98,17 @@ class RecordingDevice(Entity):
         """
 
         detected = cls.parse_devices(pcm_path=pcm_path)
-        created = 0
-        updated = 0
-        existing = {
-            device.identifier: device for device in cls.objects.filter(node=node)
-        }
-        seen: set[str] = set()
-        for device in detected:
-            seen.add(device.identifier)
-            obj = existing.get(device.identifier)
-            defaults = {
+        return sync_detected_devices(
+            model_cls=cls,
+            node=node,
+            detected=detected,
+            identifier_getter=lambda device: device.identifier,
+            defaults_getter=lambda device: {
                 "description": device.description,
                 "capture_channels": device.capture_channels,
                 "raw_info": device.raw_info,
-            }
-            if obj is None:
-                cls.objects.create(node=node, identifier=device.identifier, **defaults)
-                created += 1
-            else:
-                dirty = False
-                for field, value in defaults.items():
-                    if getattr(obj, field) != value:
-                        setattr(obj, field, value)
-                        dirty = True
-                if dirty:
-                    obj.save(update_fields=list(defaults.keys()))
-                    updated += 1
-        cls.objects.filter(node=node).exclude(identifier__in=seen).delete()
-        return created, updated
+            },
+        )
 
     @classmethod
     def has_recording_device(cls, *, pcm_path: Path = PCM_PATH) -> bool:

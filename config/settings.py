@@ -461,6 +461,7 @@ LOCAL_APPS = [
     "apps.nginx",
     "apps.cards",
     "apps.tasks",
+    "apps.recipes",
     "apps.tests",
     "apps.teams",
     "apps.logbook",
