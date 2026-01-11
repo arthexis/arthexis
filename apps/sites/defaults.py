@@ -28,7 +28,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "locale": "Localization helpers and translations.",
     "locals": "Local environment helpers and overrides.",
     "maps": "Geospatial utilities and map views.",
-    "mcp": "Model Context Protocol server configuration and endpoints.",
     "media": "Media storage and asset management.",
     "meta": "Metadata helpers and system insights.",
     "nmcli": "Network manager CLI integrations.",
