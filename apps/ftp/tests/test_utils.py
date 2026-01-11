@@ -24,6 +24,13 @@ class BuildUserMountsTests(TestCase):
         self.group = SecurityGroup.objects.create(name="Operators")
         self.member.groups.add(self.group)
 
+    def _assert_is_link(self, link_path: Path) -> None:
+        if os.name == "nt":
+            self.assertTrue(link_path.exists())
+            self.assertTrue(link_path.is_dir())
+        else:
+            self.assertTrue(link_path.is_symlink())
+
     def test_builds_mounts_with_permissions(self):
         with TemporaryDirectory() as tmpdir:
             folder_path = Path(tmpdir) / "data"
@@ -49,20 +56,12 @@ class BuildUserMountsTests(TestCase):
             owner_mount = mounts[self.owner.username]
             owner_link = owner_mount.home / folder.build_link_name()
             self.assertTrue(owner_mount.permissions.startswith("elr"))
-            if os.name == "nt":
-                self.assertTrue(owner_link.exists())
-                self.assertTrue(owner_link.is_dir())
-            else:
-                self.assertTrue(owner_link.is_symlink())
+            self._assert_is_link(owner_link)
             self.assertEqual(owner_link.resolve(), folder_path.resolve())
 
             member_mount = mounts[self.member.username]
             member_link = member_mount.home / folder.build_link_name()
-            if os.name == "nt":
-                self.assertTrue(member_link.exists())
-                self.assertTrue(member_link.is_dir())
-            else:
-                self.assertTrue(member_link.is_symlink())
+            self._assert_is_link(member_link)
             self.assertEqual(member_link.resolve(), folder_path.resolve())
             self.assertNotIn("w", member_mount.permissions)
 

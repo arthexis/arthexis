@@ -17,15 +17,21 @@ def _detect_bash_path_style() -> str:
         _BASH_PATH_STYLE = "posix"
         return _BASH_PATH_STYLE
 
+    style = "msys"
     try:
-        if subprocess.run(
-            ["bash", "-lc", "test -d /mnt/c"], check=False
-        ).returncode == 0:
-            _BASH_PATH_STYLE = "wsl"
-        else:
-            _BASH_PATH_STYLE = "msys"
+        if (
+            subprocess.run(
+                ["bash", "-lc", "test -d /mnt/c"],
+                check=False,
+                capture_output=True,
+            ).returncode
+            == 0
+        ):
+            style = "wsl"
     except FileNotFoundError:
-        _BASH_PATH_STYLE = "msys"
+        pass
+
+    _BASH_PATH_STYLE = style
 
     return _BASH_PATH_STYLE
 
