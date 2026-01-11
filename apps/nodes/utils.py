@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from apps.content import utils as content_utils
@@ -37,7 +38,7 @@ def capture_and_save_screenshot(
     *,
     width: int | None = None,
     height: int | None = None,
-    logger=None,
+    logger: logging.Logger | None = None,
     log_capture_errors: bool = False,
 ):
     """Backward-compatible wrapper for :func:`apps.content.utils.capture_and_save_screenshot`."""
