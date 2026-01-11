@@ -349,7 +349,11 @@ def _select_low_payload(
     on_label = _format_on_label(_availability_seconds(base_dir, now=now_value)) or "?h?m?s"
     subject_parts = [f"UP {uptime_label}"]
     if _ap_mode_enabled():
-        subject_parts.append("AP")
+        ap_client_count = _ap_client_count()
+        if ap_client_count is None:
+            subject_parts.append("AP")
+        else:
+            subject_parts.append(f"AP{ap_client_count}")
     subject = " ".join(subject_parts).strip()
     interface_label = _internet_interface_label()
     body_parts = [f"ON {on_label}"]
@@ -451,6 +455,10 @@ def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
 
 def _ap_mode_enabled() -> bool:
     return uptime_utils.ap_mode_enabled()
+
+
+def _ap_client_count() -> int | None:
+    return uptime_utils.ap_client_count()
 
 
 def _internet_interface_label() -> str:

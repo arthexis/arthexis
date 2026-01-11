@@ -66,6 +66,34 @@ def ap_mode_enabled(*, timeout: int | float = 5) -> bool:
     return False
 
 
+def ap_client_count(
+    *, interface: str = "wlan0", timeout: int | float = 2
+) -> int | None:
+    iw_path = shutil.which("iw")
+    if not iw_path:
+        return None
+
+    try:
+        result = subprocess.run(
+            [iw_path, "dev", interface, "station", "dump"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    count = 0
+    for line in result.stdout.splitlines():
+        if line.startswith("Station "):
+            count += 1
+    return count
+
+
 def internet_interface_label(
     *, route_target: str = INTERNET_ROUTE_TARGET, timeout: int | float = 2
 ) -> str:

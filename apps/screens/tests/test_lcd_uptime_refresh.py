@@ -75,3 +75,25 @@ def test_install_date_lock_created_when_missing(tmp_path):
     install_lock = lock_dir / lcd_screen.INSTALL_DATE_LOCK_NAME
     assert install_lock.exists()
     assert install_lock.read_text(encoding="utf-8").strip() == now.isoformat()
+
+
+def test_select_low_payload_includes_ap_client_count(tmp_path, monkeypatch):
+    base_dir = tmp_path
+    lock_dir = base_dir / ".locks"
+    lock_dir.mkdir()
+
+    started_at = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    now = started_at + timedelta(minutes=5)
+    lock_path = lock_dir / lcd_screen.SUITE_UPTIME_LOCK_NAME
+    lock_path.write_text(json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8")
+    os.utime(lock_path, (now.timestamp(), now.timestamp()))
+    install_lock = lock_dir / lcd_screen.INSTALL_DATE_LOCK_NAME
+    install_lock.write_text((started_at - timedelta(hours=1)).isoformat(), encoding="utf-8")
+
+    monkeypatch.setattr(lcd_screen, "_ap_mode_enabled", lambda: True)
+    monkeypatch.setattr(lcd_screen, "_ap_client_count", lambda: 3)
+
+    payload = lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
+    selected = lcd_screen._select_low_payload(payload, base_dir=base_dir, now=now)
+
+    assert selected.line1 == "UP 0d0h5m AP3"
