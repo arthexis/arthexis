@@ -167,10 +167,10 @@ def model_admin_actions(context, app_label, model_name):
     request = context.get("request")
     cache_key = (app_label, model_name)
     if request is not None:
-        action_cache = getattr(request, "_dashboard_action_cache", None)
-        if action_cache is None:
-            action_cache = {}
-            setattr(request, "_dashboard_action_cache", action_cache)
+        try:
+            action_cache = request._dashboard_action_cache
+        except AttributeError:
+            action_cache = request._dashboard_action_cache = {}
         cached_actions = action_cache.get(cache_key)
         if cached_actions is not None:
             return cached_actions
