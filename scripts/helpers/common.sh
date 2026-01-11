@@ -22,3 +22,19 @@ normalize_path() {
 
   printf '%s' "$raw"
 }
+
+arthexis_python_bin() {
+  local python_bin=""
+
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin="python3"
+  elif command -v python >/dev/null 2>&1; then
+    python_bin="python"
+  fi
+
+  if [ -z "$python_bin" ]; then
+    return 1
+  fi
+
+  printf '%s' "$python_bin"
+}
