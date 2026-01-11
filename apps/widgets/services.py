@@ -179,8 +179,8 @@ def _zone_cache_version(zone_slug: str) -> int:
     key = CACHE_VERSION_KEY.format(zone_slug=zone_slug)
     version = cache.get(key)
     if version is None:
-        version = 1
-        cache.set(key, version)
+        cache.add(key, 1, timeout=None)
+        version = cache.get(key, 1)
     return int(version)
 
 
