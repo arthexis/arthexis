@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
 
+arthexis_find_python() {
+  local candidate
+  local candidates=("${ARTHEXIS_PYTHON_BIN:-}" python python3 py python.exe)
+
+  for candidate in "${candidates[@]}"; do
+    if [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 arthexis_staticfiles_snapshot_check() {
   local md5_file="$1"
   local meta_file="$2"
+  local python_bin
 
   if [ ! -f "$md5_file" ] || [ ! -f "$meta_file" ]; then
     return 4
   fi
 
-  python - "$md5_file" "$meta_file" <<'PY'
+  if ! python_bin=$(arthexis_find_python); then
+    echo "Python interpreter not found for staticfiles snapshot" >&2
+    return 2
+  fi
+
+  "$python_bin" - "$md5_file" "$meta_file" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -102,6 +122,7 @@ arthexis_staticfiles_compute_hash() {
   local hash_args=()
   local metadata_tmp="${meta_file}.tmp"
   local md5_tmp="${md5_file}.tmp"
+  local python_bin
 
   arthexis_staticfiles_clear_staged_lock
 
@@ -109,7 +130,12 @@ arthexis_staticfiles_compute_hash() {
     hash_args+=(--ignore-cache)
   fi
 
-  if ! hash_output=$(python "$hash_script" --metadata-output "$metadata_tmp" "${hash_args[@]}"); then
+  if ! python_bin=$(arthexis_find_python); then
+    echo "Python interpreter not found for staticfiles hash" >&2
+    return 2
+  fi
+
+  if ! hash_output=$("$python_bin" "$hash_script" --metadata-output "$metadata_tmp" "${hash_args[@]}"); then
     rm -f "$metadata_tmp"
     return 2
   fi

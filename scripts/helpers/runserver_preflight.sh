@@ -2,15 +2,35 @@
 
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 
+arthexis_find_python() {
+  local candidate
+  local candidates=("${ARTHEXIS_PYTHON_BIN:-}" python python3 py python.exe)
+
+  for candidate in "${candidates[@]}"; do
+    if [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 compute_migration_fingerprint() {
   local base_dir
-  base_dir="${1:-$BASE_DIR}"
+  base_dir="${1:-${BASE_DIR:-$PWD}}"
   if [ -z "$base_dir" ]; then
     echo "" >&2
     return 1
   fi
 
-  python - "$base_dir" <<'PY'
+  local python_bin
+  if ! python_bin=$(arthexis_find_python); then
+    echo "Python interpreter not found for migration fingerprinting" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
 import hashlib
 import pathlib
 import sys
@@ -34,6 +54,12 @@ run_runserver_preflight() {
     return 0
   fi
 
+  local python_bin
+  if ! python_bin=$(arthexis_find_python); then
+    echo "Python interpreter not found for migration preflight" >&2
+    return 1
+  fi
+
   local fingerprint
   if ! fingerprint=$(compute_migration_fingerprint); then
     echo "Failed to compute migration fingerprint" >&2
@@ -49,7 +75,7 @@ run_runserver_preflight() {
 
   if [ "$stored_fingerprint" = "$fingerprint" ] && [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then
     echo "Migrations unchanged since last successful preflight; verifying database state..."
-    if python manage.py migrate --check; then
+    if "$python_bin" manage.py migrate --check; then
       echo "Database matches cached migrations fingerprint; skipping migration checks."
       echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
       RUNSERVER_PREFLIGHT_DONE=true
@@ -62,10 +88,10 @@ run_runserver_preflight() {
   fi
 
   echo "Inspecting migrations before runserver..."
-  if migration_plan=$(python manage.py showmigrations --plan); then
+  if migration_plan=$("$python_bin" manage.py showmigrations --plan); then
     if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
       echo "Applying pending migrations..."
-      python manage.py migrate --noinput
+      "$python_bin" manage.py migrate --noinput
     else
       echo "No pending migrations detected; skipping migrate."
     fi
@@ -75,7 +101,7 @@ run_runserver_preflight() {
   fi
 
   echo "Running Django migration check once before runserver..."
-  python manage.py migrate --check
+  "$python_bin" manage.py migrate --check
 
   echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
   RUNSERVER_PREFLIGHT_DONE=true
