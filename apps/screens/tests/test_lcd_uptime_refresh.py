@@ -97,3 +97,7 @@ def test_select_low_payload_includes_ap_client_count(tmp_path, monkeypatch):
     selected = lcd_screen._select_low_payload(payload, base_dir=base_dir, now=now)
 
     assert selected.line1 == "UP 0d0h5m AP3"
+
+
+def test_format_on_label_keeps_large_minute_values():
+    assert lcd_screen._format_on_label(100 * 60) == "100m0s"
