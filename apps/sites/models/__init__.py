@@ -5,7 +5,7 @@ ensure_site_fields()
 
 from .landing import Landing, LandingManager
 from .landing_lead import LandingLead
-from .site_badge import SiteBadge
+from .site_badge import SiteBadge, get_site_badge_favicon_bucket
 from .site_proxy import SiteProxy
 from .site_template import SiteTemplate, SiteTemplateManager
 from .user_story import UserStory
@@ -20,6 +20,7 @@ __all__ = [
     "LandingLead",
     "LandingManager",
     "SiteBadge",
+    "get_site_badge_favicon_bucket",
     "SiteProxy",
     "SiteTemplate",
     "SiteTemplateManager",

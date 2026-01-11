@@ -5,13 +5,47 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.maps.models import Location
-from apps.tasks.models import ManualTaskRequest, TaskCategory
+from apps.media.models import MediaFile
+from apps.media.utils import create_media_file
+from apps.tasks.models import ManualTaskRequest, TaskCategory, get_task_category_bucket
 
 
 class TaskCategoryAdminForm(forms.ModelForm):
+    image_upload = forms.ImageField(
+        required=False,
+        label=_("Image upload"),
+        help_text=_("Upload an image to represent this task category."),
+    )
+
     class Meta:
         model = TaskCategory
         fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        bucket = get_task_category_bucket()
+        self.fields["image_media"].queryset = MediaFile.objects.filter(bucket=bucket)
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        upload = self.cleaned_data.get("image_upload")
+        if upload:
+            bucket = get_task_category_bucket()
+            instance.image_media = create_media_file(bucket=bucket, uploaded_file=upload)
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+    def clean_image_upload(self):
+        upload = self.cleaned_data.get("image_upload")
+        if upload:
+            bucket = get_task_category_bucket()
+            if not bucket.allows_filename(upload.name):
+                raise forms.ValidationError(_("File type is not allowed."))
+            if not bucket.allows_size(upload.size):
+                raise forms.ValidationError(_("File exceeds the allowed size."))
+        return upload
 
 
 class MaintenanceRequestForm(forms.ModelForm):

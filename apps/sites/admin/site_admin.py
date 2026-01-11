@@ -1,6 +1,7 @@
 import ipaddress
 from pathlib import Path
 
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
@@ -14,17 +15,70 @@ from django.conf import settings
 
 from apps.locals.user_data import EntityModelAdmin
 
-from ..models import SiteBadge, SiteTemplate, SiteProxy
+from apps.media.models import MediaFile
+from apps.media.utils import create_media_file
+from ..models import SiteBadge, SiteTemplate, SiteProxy, get_site_badge_favicon_bucket
 from ..site_config import ensure_site_fields
 from .filters import ManagedSiteListFilter, RequireHttpsListFilter
 from .forms import SiteForm, SiteTemplateAdminForm
 
 
+class SiteBadgeInlineForm(forms.ModelForm):
+    favicon_upload = forms.ImageField(
+        required=False,
+        label=_("Favicon upload"),
+        help_text=_("Upload a site-specific favicon."),
+    )
+
+    class Meta:
+        model = SiteBadge
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        bucket = get_site_badge_favicon_bucket()
+        self.fields["favicon_media"].queryset = MediaFile.objects.filter(bucket=bucket)
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        upload = self.cleaned_data.get("favicon_upload")
+        if upload:
+            bucket = get_site_badge_favicon_bucket()
+            instance.favicon_media = create_media_file(bucket=bucket, uploaded_file=upload)
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+    def clean_favicon_upload(self):
+        upload = self.cleaned_data.get("favicon_upload")
+        if upload:
+            bucket = get_site_badge_favicon_bucket()
+            if not bucket.allows_filename(upload.name):
+                raise forms.ValidationError(_("File type is not allowed."))
+            if not bucket.allows_size(upload.size):
+                raise forms.ValidationError(_("File exceeds the allowed size."))
+        return upload
+
+
 class SiteBadgeInline(admin.StackedInline):
     model = SiteBadge
+    form = SiteBadgeInlineForm
     can_delete = False
     extra = 0
-    fields = ("favicon", "landing_override")
+    fields = ("favicon_media", "favicon_upload", "favicon_metadata", "landing_override")
+    readonly_fields = ("favicon_metadata",)
+
+    @admin.display(description=_("Favicon metadata"))
+    def favicon_metadata(self, obj):
+        media = getattr(obj, "favicon_media", None)
+        if not media:
+            return _("No favicon uploaded")
+        return _("%(name)s (%(type)s, %(size)s bytes)") % {
+            "name": media.original_name or media.file.name,
+            "type": media.content_type or _("unknown"),
+            "size": media.size,
+        }
 
 
 ensure_site_fields()

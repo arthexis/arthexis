@@ -28,8 +28,9 @@ class TaskCategoryAdmin(EntityModelAdmin):
     search_fields = ("name", "description")
     raw_id_fields = ("requestor_group", "assigned_group", "manager")
     filter_horizontal = ("odoo_products",)
+    readonly_fields = ("image_metadata",)
     fieldsets = (
-        (None, {"fields": ("name", "description", "image")}),
+        (None, {"fields": ("name", "description", "image_media", "image_upload", "image_metadata")}),
         (
             _("Fulfillment"),
             {
@@ -46,6 +47,17 @@ class TaskCategoryAdmin(EntityModelAdmin):
             {"fields": ("requestor_group", "assigned_group", "manager")},
         ),
     )
+
+    @admin.display(description=_("Image metadata"))
+    def image_metadata(self, obj: TaskCategory) -> str:
+        media = getattr(obj, "image_media", None)
+        if not media:
+            return _("No image uploaded")
+        return _("%(name)s (%(type)s, %(size)s bytes)") % {
+            "name": media.original_name or media.file.name,
+            "type": media.content_type or _("unknown"),
+            "size": media.size,
+        }
 
 
 @admin.register(ManualTaskRequest)
