@@ -96,7 +96,7 @@ def test_preview_view_blocks_https_without_certificate(monkeypatch, admin_client
 
 @pytest.mark.django_db
 def test_preview_default_view_creates_default(admin_client, settings):
-    settings.ALLOWED_HOSTS = ["admin.example.com"]
+    settings.ALLOWED_HOSTS = ["admin.example.com", "testserver"]
 
     url = reverse("admin:nginx_siteconfiguration_preview_default")
     response = admin_client.get(url)
