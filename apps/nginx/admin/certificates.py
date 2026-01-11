@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
-from apps.nginx.config_utils import default_certificate_domain, slugify
+from apps.nginx.config_utils import default_certificate_domain_from_settings, slugify
 from apps.nginx.models import SiteConfiguration
 
 
@@ -157,8 +157,7 @@ class CertificateGenerationMixin:
         ]
 
     def _get_default_certificate_domain(self) -> str:
-        hosts = getattr(settings, "ALLOWED_HOSTS", []) or []
-        return default_certificate_domain(hosts)
+        return default_certificate_domain_from_settings(settings)
 
     def _certificate_type_choices(self) -> tuple[tuple[str, str], ...]:
         return (

@@ -8,6 +8,8 @@ import textwrap
 from pathlib import Path
 from typing import Iterable
 
+from django.conf import settings
+
 DEFAULT_CERT_DIR = Path("/etc/letsencrypt/live/arthexis.com")
 CERTIFICATE_PATH = DEFAULT_CERT_DIR / "fullchain.pem"
 CERTIFICATE_KEY_PATH = DEFAULT_CERT_DIR / "privkey.pem"
@@ -53,6 +55,11 @@ def default_certificate_domain(hosts: Iterable[str]) -> str:
         return candidates[0]
 
     return "localhost"
+
+
+def default_certificate_domain_from_settings(settings_obj=settings) -> str:
+    hosts = getattr(settings_obj, "ALLOWED_HOSTS", []) or []
+    return default_certificate_domain(hosts)
 
 
 WEBSOCKET_MAP_DIRECTIVE = "map $http_upgrade $connection_upgrade {"
