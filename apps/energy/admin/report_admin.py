@@ -11,6 +11,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+from apps.emails.utils import normalize_recipients
 from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp.models import Charger
 
@@ -179,11 +180,7 @@ class ClientReportAdmin(EntityModelAdmin):
             chargers = form.cleaned_data.get("chargers")
             selected_chargers = chargers if chargers is not None else Charger.objects.none()
             recipients_raw = form.cleaned_data.get("email_recipients") or ""
-            recipients = [
-                email.strip()
-                for email in recipients_raw.split(",")
-                if email.strip()
-            ]
+            recipients = normalize_recipients(recipients_raw)
             disable_emails = form.cleaned_data.get("disable_emails")
             title = form.cleaned_data.get("title")
             language = form.cleaned_data.get("language")

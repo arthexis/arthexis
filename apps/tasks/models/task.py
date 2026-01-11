@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import is_celery_enabled
 from apps.core.entity import Entity
 from apps.emails import mailer
+from apps.emails.utils import normalize_recipients
 from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.odoo.models import OdooProduct as CoreOdooProduct
 from apps.users.models import User as CoreUser
@@ -207,10 +208,7 @@ class ManualTaskRequest(Entity):
         if not group or not group.pk:
             return
         queryset = group.user_set.filter(is_active=True).exclude(email="")
-        for email in queryset.values_list("email", flat=True):
-            normalized = (email or "").strip()
-            if normalized:
-                yield normalized
+        yield from normalize_recipients(queryset.values_list("email", flat=True))
 
     def _iter_node_admin_emails(self) -> Iterator[str]:
         node = self.node
