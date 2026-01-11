@@ -1,20 +1,6 @@
 #!/usr/bin/env bash
 
-normalize_path() {
-  local raw="$1"
-  if [ -z "$raw" ]; then
-    return 1
-  fi
-  if command -v wslpath >/dev/null 2>&1; then
-    case "$raw" in
-      [A-Za-z]:\\*|[A-Za-z]:/*)
-        wslpath -u "$raw"
-        return 0
-        ;;
-    esac
-  fi
-  printf '%s' "$raw"
-}
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 arthexis_staticfiles_snapshot_check() {
   local md5_file
