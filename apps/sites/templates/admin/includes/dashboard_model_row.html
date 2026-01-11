@@ -22,15 +22,16 @@
           {% endif %}
         </span>
         {% if show_model_badges|default:True %}
-          {% dashboard_model_status model_app_label model.object_name as model_status %}
-          {% if model_status %}
-            <span class="dashboard-model-status{% if not model_status.success %} dashboard-model-status--failure{% endif %}" data-model-status-loader>
-              {% if model_status.icon %}
-                <span class="dashboard-model-status__icon">{{ model_status.icon }}</span>
-              {% endif %}
-              <span class="dashboard-model-status__message">{{ model_status.message }}</span>
-            </span>
-          {% endif %}
+          {% with model_status=model_statuses|get_status:ct_id %}
+            {% if model_status %}
+              <span class="dashboard-model-status{% if not model_status.success %} dashboard-model-status--failure{% endif %}" data-model-status-loader>
+                {% if model_status.icon %}
+                  <span class="dashboard-model-status__icon">{{ model_status.icon }}</span>
+                {% endif %}
+                <span class="dashboard-model-status__message">{{ model_status.message }}</span>
+              </span>
+            {% endif %}
+          {% endwith %}
         {% endif %}
       </span>
     </span>

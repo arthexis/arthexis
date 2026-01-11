@@ -5,7 +5,9 @@ import logging
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import models
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.db.models import Q
+from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -109,6 +111,52 @@ class WidgetProfile(Entity):
         if not matches:
             return False
         return any(profile.is_enabled for profile in matches)
+
+
+def _invalidate_zone_for_widget(widget: Widget | None) -> None:
+    if not widget or not widget.zone_id:
+        return
+    from apps.widgets.services import invalidate_zone_cache
+
+    invalidate_zone_cache(widget.zone.slug)
+
+
+@receiver(post_save, sender=Widget)
+def _invalidate_widget_cache_on_save(sender, instance: Widget, **_kwargs) -> None:
+    _invalidate_zone_for_widget(instance)
+    original_zone_id = getattr(instance, "_original_zone_id", None)
+    if original_zone_id and original_zone_id != instance.zone_id:
+        from apps.widgets.services import invalidate_zone_cache
+
+        old_zone_slug = WidgetZone.objects.filter(pk=original_zone_id).values_list("slug", flat=True).first()
+        if old_zone_slug:
+            invalidate_zone_cache(old_zone_slug)
+
+
+@receiver(post_delete, sender=Widget)
+def _invalidate_widget_cache_on_delete(sender, instance: Widget, **_kwargs) -> None:
+    _invalidate_zone_for_widget(instance)
+
+
+@receiver(pre_save, sender=Widget)
+def _track_widget_zone_change(sender, instance: Widget, **_kwargs) -> None:
+    if not instance.pk:
+        instance._original_zone_id = None
+        return
+    original_zone_id = Widget.objects.filter(pk=instance.pk).values_list("zone_id", flat=True).first()
+    instance._original_zone_id = original_zone_id
+
+
+@receiver(post_save, sender=WidgetProfile)
+def _invalidate_widget_cache_on_profile_save(sender, instance: WidgetProfile, **_kwargs) -> None:
+    widget = Widget.objects.select_related("zone").filter(pk=instance.widget_id).first()
+    _invalidate_zone_for_widget(widget)
+
+
+@receiver(post_delete, sender=WidgetProfile)
+def _invalidate_widget_cache_on_profile_delete(sender, instance: WidgetProfile, **_kwargs) -> None:
+    widget = Widget.objects.select_related("zone").filter(pk=instance.widget_id).first()
+    _invalidate_zone_for_widget(widget)
 
 
 __all__ = ["WidgetZone", "Widget", "WidgetProfile"]

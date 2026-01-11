@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from apps.docs import rendering
 
 
+@pytest.mark.integration
 def test_render_csv_document_pads_rows_and_columns():
     html, toc = rendering.render_csv_document("header1,header2\nvalue1\nvalue2,extra,columns")
 
@@ -19,6 +22,7 @@ def test_render_plain_text_document_escapes_html():
     assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in html
 
 
+@pytest.mark.integration
 def test_render_document_file_selects_renderer(tmp_path):
     markdown_file = tmp_path / "README.md"
     markdown_file.write_text("# Title", encoding="utf-8")
@@ -45,6 +49,7 @@ def test_render_document_file_selects_renderer(tmp_path):
     assert "reader-code-viewer" in html
 
 
+@pytest.mark.integration
 def test_split_html_sections_splits_after_heading():
     html = "<h1>Title</h1><p>Intro</p><h2>Section</h2><p>Body</p>"
 

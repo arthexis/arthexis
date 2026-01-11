@@ -265,6 +265,7 @@ def _render_favorites(
     return render_to_string(
         "admin/includes/dashboard_favorites_module.html",
         {
+            "app_list": app_list,
             "favorite_entries": entries,
             "show_changelinks": show_changelinks,
             "show_model_badges": show_model_badges,
