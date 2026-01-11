@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 
+normalize_path() {
+  local raw="$1"
+  if [ -z "$raw" ]; then
+    return 1
+  fi
+  if command -v wslpath >/dev/null 2>&1; then
+    case "$raw" in
+      [A-Za-z]:\\*|[A-Za-z]:/*)
+        wslpath -u "$raw"
+        return 0
+        ;;
+    esac
+  fi
+  printf '%s' "$raw"
+}
+
 arthexis_staticfiles_snapshot_check() {
-  local md5_file="$1"
-  local meta_file="$2"
+  local md5_file
+  local meta_file
+  md5_file="$(normalize_path "$1")"
+  meta_file="$(normalize_path "$2")"
 
   if [ ! -f "$md5_file" ] || [ ! -f "$meta_file" ]; then
     return 4
@@ -78,8 +96,10 @@ arthexis_staticfiles_clear_staged_lock() {
 }
 
 arthexis_staticfiles_commit_staged_lock() {
-  local md5_file="$1"
-  local meta_file="$2"
+  local md5_file
+  local meta_file
+  md5_file="$(normalize_path "$1")"
+  meta_file="$(normalize_path "$2")"
   local md5_tmp="${ARTHEXIS_STATICFILES_MD5_TMP:-${md5_file}.tmp}"
   local meta_tmp="${ARTHEXIS_STATICFILES_META_TMP:-${meta_file}.tmp}"
 
@@ -95,10 +115,13 @@ arthexis_staticfiles_commit_staged_lock() {
 }
 
 arthexis_staticfiles_compute_hash() {
-  local md5_file="$1"
-  local meta_file="$2"
+  local md5_file
+  local meta_file
+  md5_file="$(normalize_path "$1")"
+  meta_file="$(normalize_path "$2")"
   local force_collectstatic="$3"
   local hash_script="${STATICFILES_HASH_SCRIPT:-scripts/staticfiles_md5.py}"
+  hash_script="$(normalize_path "$hash_script")"
   local hash_args=()
   local metadata_tmp="${meta_file}.tmp"
   local md5_tmp="${md5_file}.tmp"
@@ -126,8 +149,10 @@ arthexis_staticfiles_compute_hash() {
 }
 
 arthexis_prepare_staticfiles_hash() {
-  local md5_file="$1"
-  local meta_file="$2"
+  local md5_file
+  local meta_file
+  md5_file="$(normalize_path "$1")"
+  meta_file="$(normalize_path "$2")"
   local force_collectstatic="$3"
   local hash_value=""
 
