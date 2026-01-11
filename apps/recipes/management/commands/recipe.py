@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from django.core.management import BaseCommand, CommandError
+from django.db.models import Q
 
 from apps.recipes.models import Recipe
 from apps.recipes.utils import parse_recipe_arguments, serialize_recipe_result
@@ -21,15 +22,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         identifier = options["recipe"]
-        recipe = Recipe.objects.filter(slug=identifier).first()
-
-        if recipe is None:
-            try:
-                parsed_uuid = uuid.UUID(identifier)
-            except (TypeError, ValueError):
-                parsed_uuid = None
-            if parsed_uuid:
-                recipe = Recipe.objects.filter(uuid=parsed_uuid).first()
+        uuid_query = Q()
+        try:
+            uuid_query = Q(uuid=uuid.UUID(identifier))
+        except (TypeError, ValueError):
+            pass
+        recipe = Recipe.objects.filter(Q(slug=identifier) | uuid_query).first()
 
         if recipe is None:
             raise CommandError(f"Recipe not found: {identifier}")

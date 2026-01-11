@@ -66,6 +66,7 @@ class Recipe(Ownable):
 
     def resolve_script(self, *args: Any, **kwargs: Any) -> str:
         resolved = resolve_arg_sigils(self.script or "", args, kwargs)
+        # Local import to avoid circular dependency with the sigils app.
         from apps.sigils.sigil_resolver import resolve_sigils
 
         return resolve_sigils(resolved, current=self)
@@ -74,18 +75,50 @@ class Recipe(Ownable):
         resolved_script = self.resolve_script(*args, **kwargs)
         result_key = (self.result_variable or "result").strip() or "result"
 
+        safe_builtins = {
+            "abs": abs,
+            "all": all,
+            "any": any,
+            "bool": bool,
+            "dict": dict,
+            "float": float,
+            "int": int,
+            "len": len,
+            "list": list,
+            "max": max,
+            "min": min,
+            "print": print,
+            "range": range,
+            "repr": repr,
+            "set": set,
+            "str": str,
+            "sum": sum,
+            "tuple": tuple,
+        }
         exec_globals: dict[str, Any] = {
-            "__builtins__": __builtins__,
+            "__builtins__": safe_builtins,
             "args": args,
             "kwargs": kwargs,
             "recipe": self,
         }
         exec_locals: dict[str, Any] = {}
-        exec(resolved_script, exec_globals, exec_locals)
+        try:
+            exec(resolved_script, exec_globals, exec_locals)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Error executing recipe '{self.slug}': {exc}"
+            ) from exc
 
-        result = exec_locals.get(result_key, exec_globals.get(result_key))
-        if result is None and result_key != "result":
-            result = exec_locals.get("result", exec_globals.get("result"))
+        if result_key in exec_locals:
+            result = exec_locals[result_key]
+        elif result_key in exec_globals:
+            result = exec_globals[result_key]
+        elif result_key != "result" and "result" in exec_locals:
+            result = exec_locals["result"]
+        elif result_key != "result" and "result" in exec_globals:
+            result = exec_globals["result"]
+        else:
+            result = None
 
         return RecipeExecutionResult(
             result=result,
