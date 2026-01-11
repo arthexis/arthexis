@@ -44,10 +44,10 @@ def _merge_permissions(*levels: Iterable[str]) -> str:
 
 def _collect_user_permissions(folder: FTPFolder) -> dict[object, str]:
     permissions: dict[object, str] = {}
-    if folder.owner_id and folder.owner:
-        permissions[folder.owner] = _rights_for_level(folder.owner_permission)
-    if folder.security_group_id and folder.security_group:
-        for member in folder.security_group.user_set.all():
+    if folder.user_id and folder.user:
+        permissions[folder.user] = _rights_for_level(folder.owner_permission)
+    if folder.group_id and folder.group:
+        for member in folder.group.user_set.all():
             merged = _merge_permissions(
                 permissions.get(member, ""),
                 _rights_for_level(folder.group_permission),

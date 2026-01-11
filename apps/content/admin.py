@@ -20,6 +20,7 @@ from apps.content.models import (
     WebSampleAttachment,
 )
 from apps.locals.user_data import EntityModelAdmin
+from apps.core.admin import OwnableAdminMixin
 from apps.nodes.models import Node
 from apps.nodes.utils import capture_screenshot, save_screenshot
 from apps.video.models import VideoDevice
@@ -189,17 +190,17 @@ class WebRequestStepInline(admin.TabularInline):
 
 
 @admin.register(WebRequestSampler)
-class WebRequestSamplerAdmin(EntityModelAdmin):
+class WebRequestSamplerAdmin(OwnableAdminMixin, EntityModelAdmin):
     list_display = (
         "label",
         "slug",
         "sampling_period_minutes",
         "last_sampled_at",
-        "owner",
-        "security_group",
+        "user",
+        "group",
     )
     search_fields = ("label", "slug", "description")
-    list_filter = ("sampling_period_minutes", "owner", "security_group")
+    list_filter = ("sampling_period_minutes", "user", "group")
     actions = ("execute_selected_samplers",)
     inlines = (WebRequestStepInline,)
 

@@ -262,10 +262,10 @@ def schedule_pending_samplers(now=None) -> list[int]:
         threshold = sampler.last_sampled_at or (now - timedelta(minutes=period))
         if threshold + timedelta(minutes=period) > now:
             continue
-        runner = sampler.owner
-        if runner is None and sampler.security_group_id:
+        runner = sampler.user
+        if runner is None and sampler.group_id:
             runner = (
-                sampler.security_group.user_set.filter(is_active=True)
+                sampler.group.user_set.filter(is_active=True)
                 .order_by("id")
                 .first()
             )

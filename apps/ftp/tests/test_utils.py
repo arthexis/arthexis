@@ -32,8 +32,8 @@ class BuildUserMountsTests(TestCase):
                 name="Data",
                 path=str(folder_path),
                 enabled=True,
-                owner=self.owner,
-                security_group=self.group,
+                user=self.owner,
+                group=self.group,
                 owner_permission=FTPFolder.Permission.FULL_CONTROL,
                 group_permission=FTPFolder.Permission.READ_ONLY,
             )
@@ -63,7 +63,7 @@ class BuildUserMountsTests(TestCase):
                 name="Missing",
                 path=str(Path(tmpdir) / "missing"),
                 enabled=True,
-                owner=self.owner,
+                user=self.owner,
             )
             mounts, warnings = build_user_mounts(
                 FTPFolder.objects.all(), Path(tmpdir) / "mounts"
