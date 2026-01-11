@@ -2,19 +2,7 @@
 
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 
-arthexis_find_python() {
-  local candidate
-  local candidates=("${ARTHEXIS_PYTHON_BIN:-}" python python3 py python.exe)
-
-  for candidate in "${candidates[@]}"; do
-    if [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1; then
-      printf '%s' "$candidate"
-      return 0
-    fi
-  done
-
-  return 1
-}
+source "$(dirname "$0")/common.sh"
 
 compute_migration_fingerprint() {
   local base_dir
