@@ -32,7 +32,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from django.db import DatabaseError
 
 from config.request_utils import is_https_request
-from apps.celery.utils import is_celery_enabled
+from apps.celery.utils import enqueue_task, is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
@@ -2140,25 +2140,35 @@ def _system_changelog_report_data_view(request):
 def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
     """Return ``True`` when the upgrade check was queued asynchronously."""
 
+    def _run_sync_upgrade_check(channel_override: str | None = None) -> None:
+        """Run the upgrade check synchronously with optional channel override."""
+
+        if channel_override:
+            check_github_updates(channel_override=channel_override)
+        else:
+            check_github_updates()
+
     broker_url = str(getattr(settings, "CELERY_BROKER_URL", "")).strip()
     if not broker_url or broker_url.startswith("memory://"):
-        if channel_override:
-            check_github_updates(channel_override=channel_override)
-        else:
-            check_github_updates()
+        _run_sync_upgrade_check(channel_override)
         return False
 
-    try:
-        if channel_override:
-            check_github_updates.delay(channel_override=channel_override)
-        else:
-            check_github_updates.delay()
-    except Exception:
-        logger.exception("Failed to enqueue upgrade check; running synchronously instead")
-        if channel_override:
-            check_github_updates(channel_override=channel_override)
-        else:
-            check_github_updates()
+    if not is_celery_enabled():
+        _run_sync_upgrade_check(channel_override)
+        return False
+
+    if channel_override:
+        queued = enqueue_task(
+            check_github_updates, channel_override=channel_override, require_enabled=False
+        )
+    else:
+        queued = enqueue_task(check_github_updates, require_enabled=False)
+
+    if not queued:
+        logger.warning(
+            "Failed to enqueue upgrade check; running synchronously instead"
+        )
+        _run_sync_upgrade_check(channel_override)
         return False
     return True
 

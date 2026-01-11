@@ -9,7 +9,8 @@ from django.apps import AppConfig
 from django.conf import settings
 from django.core.signals import got_request_exception
 
-from apps.repos.tasks import report_exception_to_github
+from apps.celery.utils import enqueue_task
+from apps.tasks.tasks import report_exception_to_github
 
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def _configure_github_issue_reporting():
                 "traceback": "".join(tb_exc.format()),
             }
 
-            report_exception_to_github.delay(payload)
+            enqueue_task(report_exception_to_github, payload)
         except Exception:  # pragma: no cover - defensive
             logger.exception("Failed to queue GitHub issue from request exception")
 
