@@ -32,7 +32,7 @@ def _public_site_script() -> str:
         from django.utils import timezone
 
         from apps.nodes.models import Node
-        from apps.nodes.utils import save_screenshot
+        from apps.content.utils import save_screenshot
 
         timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
         filename = (
@@ -83,7 +83,7 @@ def _admin_site_script() -> str:
         from selenium.webdriver.support.ui import WebDriverWait
 
         from apps.nodes.models import Node
-        from apps.nodes.utils import save_screenshot
+        from apps.content.utils import save_screenshot
 
         browser.set_window_size(1280, 720)
         browser.get(admin_url)

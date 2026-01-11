@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.nodes.models import NodeFeature
 from .utils import capture_rpi_snapshot
-from apps.nodes.utils import save_screenshot
+from apps.content.utils import save_screenshot
 
 logger = logging.getLogger(__name__)
 

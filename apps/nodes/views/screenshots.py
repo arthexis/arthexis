@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from utils.api import api_login_required
 
 from ..models import Node
-from ..utils import capture_screenshot, save_screenshot
+from apps.content.utils import capture_screenshot, save_screenshot
 
 
 @api_login_required

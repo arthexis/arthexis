@@ -13,7 +13,7 @@ from django_object_actions import DjangoObjectActions
 from apps.core.admin.mixins import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.nodes.utils import save_screenshot
+from apps.content.utils import save_screenshot
 
 from .models import MjpegStream, VideoDevice, VideoRecording, VideoSnapshot, YoutubeChannel
 from .utils import (

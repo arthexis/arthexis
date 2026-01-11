@@ -17,7 +17,7 @@ from apps.content.models import ContentSample
 from apps.base.models import Entity
 from apps.core.models.ownable import Ownable
 from apps.nodes.device_sync import sync_detected_devices
-from apps.nodes.utils import save_screenshot
+from apps.content.utils import save_screenshot
 from .utils import (
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,

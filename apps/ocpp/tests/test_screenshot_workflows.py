@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.nodes.utils import save_screenshot
+from apps.content.utils import save_screenshot
 from apps.ocpp.models import Charger, MeterValue, Transaction
 
 
