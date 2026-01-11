@@ -85,7 +85,11 @@ def _build_ct_id_map(app_list):
     if not model_lookup:
         return {}
 
-    ct_map = ContentType.objects.get_for_models(*model_lookup.keys())
+    ct_map = ContentType.objects.get_for_models(
+        *model_lookup.keys(),
+        for_concrete_models=False,
+        for_proxy_models=True,
+    )
     return {
         model_lookup[model_class]: ct.id
         for model_class, ct in ct_map.items()
@@ -171,7 +175,8 @@ def _favorite_entries(app_list, favorites_map, ct_id_map=None):
 
     entries = []
     seen_ct_ids = set()
-    ct_id_map = ct_id_map or _build_ct_id_map(app_list)
+    if ct_id_map is None:
+        ct_id_map = _build_ct_id_map(app_list)
 
     for app, app_label, model_name, _model_class, model in _iter_app_models(app_list):
         ct_id = ct_id_map.get((app_label, model_name))
