@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Mapping, MutableMapping, Set
 from django.conf import settings
 from django.db import transaction
 from django.db.utils import IntegrityError
+
+logger = logging.getLogger(__name__)
 
 
 def celery_lock_path(base_dir: Path | str | None = None) -> Path:
@@ -65,6 +68,48 @@ def resolve_celery_shutdown_timeout(
         return parsed
 
     return float(default)
+
+
+def _task_label(task) -> str:
+    name = getattr(task, "name", None)
+    if name:
+        return str(name)
+    return getattr(task, "__name__", str(task))
+
+
+def enqueue_task(task, *args, require_enabled: bool = True, **kwargs) -> bool:
+    """Queue a Celery task and return ``True`` when it is enqueued."""
+
+    if require_enabled and not is_celery_enabled():
+        return False
+
+    try:
+        task.delay(*args, **kwargs)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to enqueue task %s", _task_label(task))
+        return False
+    return True
+
+
+def schedule_task(
+    task,
+    *,
+    args: tuple | list | None = None,
+    kwargs: dict | None = None,
+    require_enabled: bool = True,
+    **options,
+) -> bool:
+    """Queue a Celery task via ``apply_async`` and return ``True`` when enqueued."""
+
+    if require_enabled and not is_celery_enabled():
+        return False
+
+    try:
+        task.apply_async(args=args or (), kwargs=kwargs or {}, **options)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to enqueue task %s", _task_label(task))
+        return False
+    return True
 
 
 def slugify_task_name(name: str) -> str:

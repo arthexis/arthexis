@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from apps.summary.tasks import _write_lcd_frames
+from apps.tasks.tasks import _write_lcd_frames
 from apps.summary.services import render_lcd_payload
 
 

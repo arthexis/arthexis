@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q, Prefetch
 from django.utils import timezone
 
-from apps.celery.utils import is_celery_enabled
+from apps.celery.utils import enqueue_task, is_celery_enabled
 from apps.emails import mailer
 from apps.nodes.models import Node
 from apps.protocols.decorators import protocol_call
@@ -323,7 +323,7 @@ def schedule_daily_firmware_snapshot_requests() -> int:
     for charger_pk in charger_ids:
         if charger_pk in recorded or charger_pk in pending:
             continue
-        request_charge_point_firmware.delay(charger_pk)
+        enqueue_task(request_charge_point_firmware, charger_pk, require_enabled=False)
         scheduled += 1
 
     if scheduled:
@@ -353,7 +353,7 @@ def schedule_daily_charge_point_configuration_checks() -> int:
 
     scheduled = 0
     for charger_pk in charger_ids:
-        check_charge_point_configuration.delay(charger_pk)
+        enqueue_task(check_charge_point_configuration, charger_pk, require_enabled=False)
         scheduled += 1
     logger.info(
         "Scheduled configuration checks for %s charge point(s)", scheduled
@@ -474,10 +474,12 @@ def schedule_power_projection_requests(
 
     scheduled = 0
     for charger_pk in charger_ids:
-        request_power_projection.delay(
+        enqueue_task(
+            request_power_projection,
             charger_pk,
             duration_seconds=duration_seconds,
             charging_rate_unit=charging_rate_unit,
+            require_enabled=False,
         )
         scheduled += 1
 
