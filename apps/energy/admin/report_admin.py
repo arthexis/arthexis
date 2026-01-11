@@ -15,6 +15,7 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp.models import Charger
 
 from ..models import ClientReport, ClientReportSchedule
+from ..services.client_reports import create_client_report
 
 
 class ClientReportRecurrencyFilter(admin.SimpleListFilter):
@@ -169,15 +170,10 @@ class ClientReportAdmin(EntityModelAdmin):
         form = self.ClientReportForm(request.POST or None)
         selected_chargers = Charger.objects.none()
         if form.is_bound and form.is_valid():
-            start_date, end_date = ClientReport.resolve_period(
-                form.cleaned_data.get("period"),
-                form.cleaned_data.get("start_date"),
-                form.cleaned_data.get("end_date"),
-                form.cleaned_data.get("week"),
-                form.cleaned_data.get("month"),
-            )
             chargers = form.cleaned_data.get("chargers")
-            selected_chargers = chargers if chargers is not None else Charger.objects.none()
+            selected_chargers = (
+                chargers if chargers is not None else Charger.objects.none()
+            )
             recipients_raw = form.cleaned_data.get("email_recipients") or ""
             recipients = [
                 email.strip()
@@ -188,34 +184,33 @@ class ClientReportAdmin(EntityModelAdmin):
             title = form.cleaned_data.get("title")
             language = form.cleaned_data.get("language")
             owner = request.user if request.user.is_authenticated else None
-            report = ClientReport.generate(
+            recurrence = form.cleaned_data.get("recurrence")
+            result = create_client_report(
+                period=form.cleaned_data.get("period"),
+                start_date=form.cleaned_data.get("start_date"),
+                end_date=form.cleaned_data.get("end_date"),
+                week=form.cleaned_data.get("week"),
+                month=form.cleaned_data.get("month"),
                 owner=owner,
-                title=title,
-                start_date=start_date,
-                end_date=end_date,
-                chargers=chargers,
+                created_by=request.user if request.user.is_authenticated else None,
                 recipients=recipients,
                 disable_emails=disable_emails,
+                chargers=chargers,
                 language=language,
-                outbox=ClientReport.resolve_outbox_for_owner(owner),
-                reply_to=ClientReport.resolve_reply_to_for_owner(owner),
+                title=title,
+                recurrence=recurrence,
+                send_emails=not disable_emails,
             )
-            report_rows = report.rows_for_display
-            recurrence = form.cleaned_data.get("recurrence")
-            if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
-                schedule = ClientReportSchedule.objects.create(
-                    owner=owner,
-                    created_by=request.user if request.user.is_authenticated else None,
-                    periodicity=recurrence,
-                    email_recipients=recipients,
-                    disable_emails=disable_emails,
-                    language=language,
-                    title=title,
+            report = result.report
+            report_rows = result.rows
+            schedule = result.schedule
+            if result.delivered_recipients:
+                self.message_user(
+                    request,
+                    "Consumer report emailed to the selected recipients.",
+                    messages.SUCCESS,
                 )
-                if chargers:
-                    schedule.chargers.set(chargers)
-                report.schedule = schedule
-                report.save(update_fields=["schedule"])
+            if schedule:
                 self.message_user(
                     request,
                     "Consumer report schedule created; future reports will be generated automatically.",
@@ -229,7 +224,6 @@ class ClientReportAdmin(EntityModelAdmin):
                 )
                 redirect_url = f"{reverse('admin:core_clientreport_generate')}?download={report.pk}"
                 return HttpResponseRedirect(redirect_url)
-            report_rows = report.rows_for_display
             report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
         else:
             report_summary_rows = None

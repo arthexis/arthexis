@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from apps.energy.models import ClientReport, ClientReportSchedule
+from apps.energy.services.client_reports import create_client_report
 from apps.ocpp.models import Charger
 
 
@@ -316,35 +317,39 @@ def _generate_client_report_response(
     chargers = list(form.cleaned_data.get("chargers") or [])
     language = form.cleaned_data.get("language")
     title = form.cleaned_data.get("title")
-
-    report = ClientReport.generate(
-        form.cleaned_data["start"],
-        form.cleaned_data["end"],
+    recurrence = form.cleaned_data.get("recurrence")
+    result = create_client_report(
+        period=form.cleaned_data.get("period"),
+        start_date=form.cleaned_data.get("start"),
+        end_date=form.cleaned_data.get("end"),
+        week=form.cleaned_data.get("week"),
+        month=form.cleaned_data.get("month"),
         owner=owner,
+        created_by=request.user if request.user.is_authenticated else None,
         recipients=recipients,
         disable_emails=disable_emails,
         chargers=chargers,
         language=language,
         title=title,
+        recurrence=recurrence,
+        send_emails=enable_emails,
+        store_local_copy=True,
     )
-    report.store_local_copy()
-    if chargers:
-        report.chargers.set(chargers)
+    report = result.report
+    schedule = result.schedule
 
-    if enable_emails and recipients:
-        _deliver_client_report_email(request, report, owner, recipients)
-
-    schedule = _maybe_create_client_report_schedule(
-        request,
-        report,
-        owner,
-        form.cleaned_data.get("recurrence"),
-        recipients,
-        disable_emails,
-        language,
-        title,
-        chargers,
-    )
+    if result.delivered_recipients:
+        messages.success(
+            request,
+            _("Consumer report emailed to the selected recipients."),
+        )
+    if schedule:
+        messages.success(
+            request,
+            _(
+                "Consumer report schedule created; future reports will be generated automatically."
+            ),
+        )
 
     if disable_emails:
         messages.success(
@@ -358,7 +363,7 @@ def _generate_client_report_response(
             response=HttpResponseRedirect(redirect_url),
         )
 
-    report_rows = report.rows_for_display
+    report_rows = result.rows
     report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
     return _ClientReportPostResult(
         report=report,
@@ -373,63 +378,6 @@ def _resolve_client_report_owner(request, form: "ClientReportForm"):
     if not owner and request.user.is_authenticated:
         return request.user
     return owner
-
-
-def _deliver_client_report_email(
-    request,
-    report: ClientReport,
-    owner,
-    recipients: list[str],
-) -> None:
-    delivered = report.send_delivery(
-        to=recipients,
-        cc=[],
-        outbox=ClientReport.resolve_outbox_for_owner(owner),
-        reply_to=ClientReport.resolve_reply_to_for_owner(owner),
-    )
-    if delivered:
-        report.recipients = delivered
-        report.save(update_fields=["recipients"])
-        messages.success(
-            request,
-            _("Consumer report emailed to the selected recipients."),
-        )
-
-
-def _maybe_create_client_report_schedule(
-    request,
-    report: ClientReport,
-    owner,
-    recurrence,
-    recipients,
-    disable_emails: bool,
-    language,
-    title,
-    chargers: list[Any],
-) -> ClientReportSchedule | None:
-    if not recurrence or recurrence == ClientReportSchedule.PERIODICITY_NONE:
-        return None
-
-    schedule = ClientReportSchedule.objects.create(
-        owner=owner,
-        created_by=request.user if request.user.is_authenticated else None,
-        periodicity=recurrence,
-        email_recipients=recipients,
-        disable_emails=disable_emails,
-        language=language,
-        title=title,
-    )
-    if chargers:
-        schedule.chargers.set(chargers)
-    report.schedule = schedule
-    report.save(update_fields=["schedule"])
-    messages.success(
-        request,
-        _(
-            "Consumer report schedule created; future reports will be generated automatically."
-        ),
-    )
-    return schedule
 
 
 @login_required
