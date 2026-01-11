@@ -5,6 +5,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 arthexis_staticfiles_snapshot_check() {
   local md5_file
   local meta_file
+  local python_bin
   md5_file="$(normalize_path "$1")"
   meta_file="$(normalize_path "$2")"
 
@@ -12,7 +13,12 @@ arthexis_staticfiles_snapshot_check() {
     return 4
   fi
 
-  python - "$md5_file" "$meta_file" <<'PY'
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 2
+  fi
+
+  "$python_bin" - "$md5_file" "$meta_file" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -103,6 +109,7 @@ arthexis_staticfiles_commit_staged_lock() {
 arthexis_staticfiles_compute_hash() {
   local md5_file
   local meta_file
+  local python_bin
   md5_file="$(normalize_path "$1")"
   meta_file="$(normalize_path "$2")"
   local force_collectstatic="$3"
@@ -118,7 +125,12 @@ arthexis_staticfiles_compute_hash() {
     hash_args+=(--ignore-cache)
   fi
 
-  if ! hash_output=$(python "$hash_script" --metadata-output "$metadata_tmp" "${hash_args[@]}"); then
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 2
+  fi
+
+  if ! hash_output=$("$python_bin" "$hash_script" --metadata-output "$metadata_tmp" "${hash_args[@]}"); then
     rm -f "$metadata_tmp"
     return 2
   fi

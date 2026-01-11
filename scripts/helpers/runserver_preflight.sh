@@ -10,6 +10,7 @@ MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 
 compute_migration_fingerprint() {
   local base_dir
+  local python_bin
   base_dir="${1:-${BASE_DIR:-$(pwd)}}"
   base_dir="$(normalize_path "$base_dir")"
   if [ -z "$base_dir" ]; then
@@ -17,7 +18,12 @@ compute_migration_fingerprint() {
     return 1
   fi
 
-  python - "$base_dir" <<'PY'
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
 import hashlib
 import pathlib
 import sys
@@ -41,6 +47,12 @@ run_runserver_preflight() {
     return 0
   fi
 
+  local python_bin
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
   local fingerprint
   if ! fingerprint=$(compute_migration_fingerprint); then
     echo "Failed to compute migration fingerprint" >&2
@@ -56,7 +68,7 @@ run_runserver_preflight() {
 
   if [ "$stored_fingerprint" = "$fingerprint" ] && [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then
     echo "Migrations unchanged since last successful preflight; verifying database state..."
-    if python manage.py migrate --check; then
+    if "$python_bin" manage.py migrate --check; then
       echo "Database matches cached migrations fingerprint; skipping migration checks."
       echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
       RUNSERVER_PREFLIGHT_DONE=true
@@ -69,10 +81,10 @@ run_runserver_preflight() {
   fi
 
   echo "Inspecting migrations before runserver..."
-  if migration_plan=$(python manage.py showmigrations --plan); then
+  if migration_plan=$("$python_bin" manage.py showmigrations --plan); then
     if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
       echo "Applying pending migrations..."
-      python manage.py migrate --noinput
+      "$python_bin" manage.py migrate --noinput
     else
       echo "No pending migrations detected; skipping migrate."
     fi
@@ -82,7 +94,7 @@ run_runserver_preflight() {
   fi
 
   echo "Running Django migration check once before runserver..."
-  python manage.py migrate --check
+  "$python_bin" manage.py migrate --check
 
   echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
   RUNSERVER_PREFLIGHT_DONE=true
