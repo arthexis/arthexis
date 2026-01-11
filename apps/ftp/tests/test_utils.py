@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -48,12 +49,20 @@ class BuildUserMountsTests(TestCase):
             owner_mount = mounts[self.owner.username]
             owner_link = owner_mount.home / folder.build_link_name()
             self.assertTrue(owner_mount.permissions.startswith("elr"))
-            self.assertTrue(owner_link.is_symlink())
+            if os.name == "nt":
+                self.assertTrue(owner_link.exists())
+                self.assertTrue(owner_link.is_dir())
+            else:
+                self.assertTrue(owner_link.is_symlink())
             self.assertEqual(owner_link.resolve(), folder_path.resolve())
 
             member_mount = mounts[self.member.username]
             member_link = member_mount.home / folder.build_link_name()
-            self.assertTrue(member_link.is_symlink())
+            if os.name == "nt":
+                self.assertTrue(member_link.exists())
+                self.assertTrue(member_link.is_dir())
+            else:
+                self.assertTrue(member_link.is_symlink())
             self.assertEqual(member_link.resolve(), folder_path.resolve())
             self.assertNotIn("w", member_mount.permissions)
 
