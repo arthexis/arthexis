@@ -15,6 +15,8 @@ from utils.api import api_login_required
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
+from apps.ocpp.messages import build_request
+
 from .. import store
 from ..models import (
     CPFirmware,
@@ -45,6 +47,27 @@ from .common import (
 )
 
 
+def _build_action_call(
+    context: ActionContext,
+    *,
+    ocpp_action: str,
+    payload: dict[str, object],
+    message_id: str,
+    expected_statuses: set[str] | None,
+    log_key: str | None = None,
+    ocpp_version: str | None = None,
+) -> ActionCall:
+    version = ocpp_version or str(getattr(context.ws, "ocpp_version", "") or "") or "ocpp1.6"
+    request_model = build_request(ocpp_action, ocpp_version=version, payload=payload)
+    return ActionCall(
+        request=request_model,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+    )
+
+
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetConfiguration")
 def _handle_get_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     payload: dict[str, object] = {}
@@ -69,11 +92,11 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
     message_id = uuid.uuid4().hex
     ocpp_action = "GetConfiguration"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "GetConfiguration", payload])
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
+    return _build_action_call(
+        context,
         ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
         expected_statuses=expected_statuses,
     )
 
@@ -119,7 +142,16 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
     message_id = uuid.uuid4().hex
     ocpp_action = "ReserveNow"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "ReserveNow", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+        ocpp_version=ocpp_version or "ocpp1.6",
+    )
+    msg = action_call.serialize()
     store.add_log(
         log_key,
         f"ReserveNow request: reservation={reservation.pk}, expiry={expiry.isoformat()}",
@@ -174,13 +206,7 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
             "updated_on",
         ]
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "RemoteStopTransaction")
@@ -197,7 +223,15 @@ def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | A
         payload = {"transactionId": str(tx_identifier)}
         ocpp_action = "RequestStopTransaction"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+        ocpp_version=ocpp_version or "ocpp1.6",
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -210,12 +244,7 @@ def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | A
             "requested_at": timezone.now(),
         },
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "RemoteStartTransaction")
@@ -258,7 +287,15 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
         payload["chargingProfile"] = data["chargingProfile"]
     message_id = uuid.uuid4().hex
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+        ocpp_version=ocpp_version or "ocpp1.6",
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -271,12 +308,7 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
             "requested_at": timezone.now(),
         },
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RequestStartTransaction")
@@ -325,7 +357,14 @@ def _handle_request_start_transaction(
     message_id = uuid.uuid4().hex
     ocpp_action = "RequestStartTransaction"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     requested_at = timezone.now()
     metadata = {
@@ -340,12 +379,7 @@ def _handle_request_start_transaction(
     }
     store.register_pending_call(message_id, metadata)
     store.register_transaction_request(message_id, metadata)
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RequestStopTransaction")
@@ -366,7 +400,14 @@ def _handle_request_stop_transaction(
     message_id = uuid.uuid4().hex
     ocpp_action = "RequestStopTransaction"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     connector_id = context.connector_value
     if tx_obj is not None:
@@ -382,12 +423,7 @@ def _handle_request_stop_transaction(
     }
     store.register_pending_call(message_id, metadata)
     store.register_transaction_request(message_id, metadata)
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetTransactionStatus")
@@ -404,7 +440,14 @@ def _handle_get_transaction_status(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetTransactionStatus"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -423,12 +466,7 @@ def _handle_get_transaction_status(
         log_key=context.log_key,
         message="GetTransactionStatus request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetDiagnostics")
@@ -465,7 +503,14 @@ def _handle_get_diagnostics(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetDiagnostics"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     store.register_pending_call(
@@ -485,13 +530,7 @@ def _handle_get_diagnostics(
         log_key=log_key,
         message="GetDiagnostics request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
@@ -524,7 +563,15 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
         payload = {"operationalStatus": availability_type}
         if connector_payload not in (None, ""):
             payload["evseId"] = connector_payload
-    msg = json.dumps([2, message_id, "ChangeAvailability", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+        ocpp_version=ocpp_version or "ocpp1.6",
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     requested_at = timezone.now()
     store.register_pending_call(
@@ -548,12 +595,7 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
         Charger.objects.filter(pk=context.charger.pk).update(**updates)
         for field, value in updates.items():
             setattr(context.charger, field, value)
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeConfiguration")
@@ -580,7 +622,14 @@ def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResp
     message_id = uuid.uuid4().hex
     ocpp_action = "ChangeConfiguration"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "ChangeConfiguration", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     requested_at = timezone.now()
     store.register_pending_call(
@@ -612,12 +661,7 @@ def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResp
             _("Requested configuration change for %(key)s") % {"key": key_value}
         )
     store.add_log(context.log_key, change_message, log_type="charger")
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
@@ -626,7 +670,14 @@ def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | A
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearCache"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "ClearCache", {}])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload={},
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -638,12 +689,7 @@ def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | A
             "requested_at": timezone.now(),
         },
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLog")
@@ -677,7 +723,14 @@ def _handle_get_log(context: ActionContext, data: dict) -> JsonResponse | Action
     elif "remoteLocation" in data and data["remoteLocation"] not in (None, ""):
         payload["remoteLocation"] = str(data.get("remoteLocation"))
 
-    message = json.dumps([2, message_id, "GetLog", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action="GetLog",
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=CALL_EXPECTED_STATUSES.get("GetLog"),
+    )
+    message = action_call.serialize()
     async_to_sync(context.ws.send)(message)
 
     log_key = context.log_key
@@ -702,13 +755,7 @@ def _handle_get_log(context: ActionContext, data: dict) -> JsonResponse | Action
         message="GetLog request timed out",
     )
 
-    return ActionCall(
-        msg=message,
-        message_id=message_id,
-        ocpp_action="GetLog",
-        expected_statuses=CALL_EXPECTED_STATUSES.get("GetLog"),
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
@@ -733,7 +780,14 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
     ocpp_action = "CancelReservation"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     payload = {"reservationId": reservation.pk}
-    msg = json.dumps([2, message_id, "CancelReservation", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     store.add_log(
         log_key,
         f"CancelReservation request: reservation={reservation.pk}",
@@ -768,13 +822,7 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
             "updated_on",
         ]
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
@@ -797,7 +845,14 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
     message_id = uuid.uuid4().hex
     ocpp_action = "UnlockConnector"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "UnlockConnector", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = store.identity_key(context.cid, connector_value)
     requested_at = timezone.now()
@@ -817,13 +872,7 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
         log_key=log_key,
         message="UnlockConnector request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
@@ -847,7 +896,14 @@ def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | 
     message_id = uuid.uuid4().hex
     ocpp_action = "DataTransfer"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "DataTransfer", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     record = DataTransferMessage.objects.create(
         charger=context.charger,
         connector_id=context.connector_value,
@@ -869,12 +925,7 @@ def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | 
             "log_key": context.log_key,
         },
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "Reset")
@@ -890,7 +941,14 @@ def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionC
     message_id = uuid.uuid4().hex
     ocpp_action = "Reset"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "Reset", {"type": "Soft"}])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload={"type": "Soft"},
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -902,12 +960,7 @@ def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionC
             "requested_at": timezone.now(),
         },
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
@@ -945,7 +998,14 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
     message_id = uuid.uuid4().hex
     ocpp_action = "TriggerMessage"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "TriggerMessage", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -959,12 +1019,7 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
             "requested_at": timezone.now(),
         },
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
@@ -1000,7 +1055,14 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
     message_id = uuid.uuid4().hex
     ocpp_action = "SendLocalList"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "SendLocalList", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     requested_at = timezone.now()
     store.register_pending_call(
@@ -1021,12 +1083,7 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
         log_key=context.log_key,
         message="SendLocalList request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
@@ -1035,7 +1092,14 @@ def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonR
     message_id = uuid.uuid4().hex
     ocpp_action = "GetLocalListVersion"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "GetLocalListVersion", {}])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload={},
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -1053,12 +1117,7 @@ def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonR
         log_key=context.log_key,
         message="GetLocalListVersion request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetCompositeSchedule")
@@ -1107,7 +1166,14 @@ def _handle_get_composite_schedule(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetCompositeSchedule"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
 
     log_key = context.log_key
@@ -1133,13 +1199,7 @@ def _handle_get_composite_schedule(
         ),
     )
 
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware")
@@ -1239,7 +1299,14 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
 
     ocpp_action = "UpdateFirmware"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "UpdateFirmware", payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -1257,13 +1324,7 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
         log_key=context.log_key,
         message="UpdateFirmware request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=context.log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware")
@@ -1347,7 +1408,14 @@ def _handle_publish_firmware(context: ActionContext, data: dict) -> JsonResponse
 
     ocpp_action = "PublishFirmware"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -1365,13 +1433,7 @@ def _handle_publish_firmware(context: ActionContext, data: dict) -> JsonResponse
         log_key=context.log_key,
         message="PublishFirmware request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=context.log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware")
@@ -1407,7 +1469,14 @@ def _handle_unpublish_firmware(context: ActionContext, data: dict) -> JsonRespon
     message_id = uuid.uuid4().hex
     ocpp_action = "UnpublishFirmware"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -1425,13 +1494,7 @@ def _handle_unpublish_firmware(context: ActionContext, data: dict) -> JsonRespon
         log_key=context.log_key,
         message="UnpublishFirmware request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=context.log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
@@ -1479,7 +1542,14 @@ def _handle_set_charging_profile(
     message_id = uuid.uuid4().hex
     ocpp_action = "SetChargingProfile"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     store.register_pending_call(
@@ -1499,13 +1569,7 @@ def _handle_set_charging_profile(
         log_key=log_key,
         message="SetChargingProfile request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
@@ -1600,7 +1664,14 @@ def _handle_clear_charging_profile(
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearChargingProfile"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     store.register_pending_call(
@@ -1622,13 +1693,7 @@ def _handle_clear_charging_profile(
         log_key=log_key,
         message="ClearChargingProfile request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "InstallCertificate")
@@ -1643,7 +1708,14 @@ def _handle_install_certificate(context: ActionContext, data: dict) -> JsonRespo
     message_id = uuid.uuid4().hex
     ocpp_action = "InstallCertificate"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     requested_at = timezone.now()
@@ -1679,13 +1751,7 @@ def _handle_install_certificate(context: ActionContext, data: dict) -> JsonRespo
         log_key=log_key,
         message="InstallCertificate request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DeleteCertificate")
@@ -1700,7 +1766,14 @@ def _handle_delete_certificate(context: ActionContext, data: dict) -> JsonRespon
     message_id = uuid.uuid4().hex
     ocpp_action = "DeleteCertificate"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     requested_at = timezone.now()
@@ -1739,13 +1812,7 @@ def _handle_delete_certificate(context: ActionContext, data: dict) -> JsonRespon
         log_key=log_key,
         message="DeleteCertificate request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CertificateSigned")
@@ -1760,7 +1827,14 @@ def _handle_certificate_signed(context: ActionContext, data: dict) -> JsonRespon
     message_id = uuid.uuid4().hex
     ocpp_action = "CertificateSigned"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     requested_at = timezone.now()
@@ -1800,13 +1874,7 @@ def _handle_certificate_signed(context: ActionContext, data: dict) -> JsonRespon
         log_key=log_key,
         message="CertificateSigned request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetInstalledCertificateIds")
@@ -1820,7 +1888,14 @@ def _handle_get_installed_certificate_ids(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetInstalledCertificateIds"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     log_key = context.log_key
     requested_at = timezone.now()
@@ -1848,13 +1923,7 @@ def _handle_get_installed_certificate_ids(
         log_key=log_key,
         message="GetInstalledCertificateIds request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-        log_key=log_key,
-    )
+    return action_call
 
 
 def _build_component_variable_payload(entry: dict) -> tuple[dict[str, object], str | None]:
@@ -1942,7 +2011,14 @@ def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | 
     message_id = uuid.uuid4().hex
     ocpp_action = "GetVariables"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -1960,12 +2036,7 @@ def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | 
         log_key=context.log_key,
         message="GetVariables request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetVariables")
@@ -1989,7 +2060,14 @@ def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | 
     message_id = uuid.uuid4().hex
     ocpp_action = "SetVariables"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2008,12 +2086,7 @@ def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | 
         log_key=context.log_key,
         message="SetVariables request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearDisplayMessage")
@@ -2029,7 +2102,14 @@ def _handle_clear_display_message(
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearDisplayMessage"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2048,12 +2128,7 @@ def _handle_clear_display_message(
         log_key=context.log_key,
         message="ClearDisplayMessage request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CustomerInformation")
@@ -2139,7 +2214,14 @@ def _handle_customer_information(
     message_id = uuid.uuid4().hex
     ocpp_action = "CustomerInformation"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     charger = context.charger or _get_or_create_charger(context.cid, context.connector_value)
     if charger is None:
@@ -2168,12 +2250,7 @@ def _handle_customer_information(
         log_key=context.log_key,
         message="CustomerInformation request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetBaseReport")
@@ -2192,7 +2269,14 @@ def _handle_get_base_report(context: ActionContext, data: dict) -> JsonResponse 
     message_id = uuid.uuid4().hex
     ocpp_action = "GetBaseReport"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2211,12 +2295,7 @@ def _handle_get_base_report(context: ActionContext, data: dict) -> JsonResponse 
         log_key=context.log_key,
         message="GetBaseReport request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetChargingProfiles")
@@ -2270,7 +2349,14 @@ def _handle_get_charging_profiles(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetChargingProfiles"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2289,12 +2375,7 @@ def _handle_get_charging_profiles(
         log_key=context.log_key,
         message="GetChargingProfiles request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetDisplayMessages")
@@ -2338,7 +2419,14 @@ def _handle_get_display_messages(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetDisplayMessages"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2357,12 +2445,7 @@ def _handle_get_display_messages(
         log_key=context.log_key,
         message="GetDisplayMessages request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetReport")
@@ -2398,7 +2481,14 @@ def _handle_get_report(context: ActionContext, data: dict) -> JsonResponse | Act
     message_id = uuid.uuid4().hex
     ocpp_action = "GetReport"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2417,12 +2507,7 @@ def _handle_get_report(context: ActionContext, data: dict) -> JsonResponse | Act
         log_key=context.log_key,
         message="GetReport request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetDisplayMessage")
@@ -2495,7 +2580,14 @@ def _handle_set_display_message(
     message_id = uuid.uuid4().hex
     ocpp_action = "SetDisplayMessage"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2514,12 +2606,7 @@ def _handle_set_display_message(
         log_key=context.log_key,
         message="SetDisplayMessage request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetNetworkProfile")
@@ -2556,7 +2643,14 @@ def _handle_set_network_profile(
     )
     ocpp_action = "SetNetworkProfile"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2575,12 +2669,7 @@ def _handle_set_network_profile(
         log_key=context.log_key,
         message="SetNetworkProfile request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetMonitoringBase")
@@ -2594,7 +2683,14 @@ def _handle_set_monitoring_base(
     message_id = uuid.uuid4().hex
     ocpp_action = "SetMonitoringBase"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2613,12 +2709,7 @@ def _handle_set_monitoring_base(
         log_key=context.log_key,
         message="SetMonitoringBase request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetMonitoringLevel")
@@ -2634,7 +2725,14 @@ def _handle_set_monitoring_level(
     message_id = uuid.uuid4().hex
     ocpp_action = "SetMonitoringLevel"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2653,12 +2751,7 @@ def _handle_set_monitoring_level(
         log_key=context.log_key,
         message="SetMonitoringLevel request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetVariableMonitoring")
@@ -2687,7 +2780,14 @@ def _handle_set_variable_monitoring(
     message_id = uuid.uuid4().hex
     ocpp_action = "SetVariableMonitoring"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2706,12 +2806,7 @@ def _handle_set_variable_monitoring(
         log_key=context.log_key,
         message="SetVariableMonitoring request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearVariableMonitoring")
@@ -2737,7 +2832,14 @@ def _handle_clear_variable_monitoring(
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearVariableMonitoring"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2756,12 +2858,7 @@ def _handle_clear_variable_monitoring(
         log_key=context.log_key,
         message="ClearVariableMonitoring request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetMonitoringReport")
@@ -2792,7 +2889,14 @@ def _handle_get_monitoring_report(
     message_id = uuid.uuid4().hex
     ocpp_action = "GetMonitoringReport"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, ocpp_action, payload])
+    action_call = _build_action_call(
+        context,
+        ocpp_action=ocpp_action,
+        payload=payload,
+        message_id=message_id,
+        expected_statuses=expected_statuses,
+    )
+    msg = action_call.serialize()
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
@@ -2820,12 +2924,7 @@ def _handle_get_monitoring_report(
         log_key=context.log_key,
         message="GetMonitoringReport request timed out",
     )
-    return ActionCall(
-        msg=msg,
-        message_id=message_id,
-        ocpp_action=ocpp_action,
-        expected_statuses=expected_statuses,
-    )
+    return action_call
 
 
 ACTION_HANDLERS = {
@@ -2904,7 +3003,7 @@ def dispatch_action(request, cid, connector=None):
         return result
     message_id = result.message_id
     ocpp_action = result.ocpp_action
-    msg = result.msg
+    msg = result.serialize()
     log_for_action = result.log_key or log_key
     store.add_log(log_for_action, f"< {msg}", log_type="charger")
     expected_statuses = result.expected_statuses or CALL_EXPECTED_STATUSES.get(

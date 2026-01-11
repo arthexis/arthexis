@@ -10,6 +10,7 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.ocpp import consumers, store, call_error_handlers, call_result_handlers
+from apps.ocpp.messages import build_request
 from apps.flows.models import Transition
 from apps.ocpp.views import actions
 from apps.ocpp.views.common import ActionContext
@@ -107,6 +108,10 @@ def _reset_pending_calls() -> None:
     store._pending_call_handles.clear()
 
 
+def _request(action: str, payload: dict, *, version: str = consumers.OCPP_VERSION_201):
+    return build_request(action, ocpp_version=version, payload=payload)
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_handle_clear_charging_profile_result_updates_profile():
@@ -201,6 +206,7 @@ async def test_set_monitoring_base_result_clears_pending_call_from_action():
     class DummyWebSocket:
         def __init__(self):
             self.sent: list[str] = []
+            self.ocpp_version = consumers.OCPP_VERSION_201
 
         async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
             self.sent.append(message)
@@ -239,6 +245,7 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
     class DummyWebSocket:
         def __init__(self):
             self.sent: list[str] = []
+            self.ocpp_version = consumers.OCPP_VERSION_201
 
         async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
             self.sent.append(message)
@@ -410,16 +417,22 @@ async def test_handle_clear_charging_profile_error_records_failure():
 async def test_cleared_charging_limit_logs_payload():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     calls = getattr(consumer._handle_cleared_charging_limit_action, "__protocol_calls__", set())
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
     assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
 
+    request = _request(
+        "ClearedChargingLimit",
+        {"evseId": 1, "chargingLimitSource": "EMS"},
+        version=consumers.OCPP_VERSION_201,
+    )
     result = await consumer._handle_cleared_charging_limit_action(
-        {"evseId": 1, "chargingLimitSource": "EMS"}, "msg-1", "", ""
+        request, "msg-1", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     entries = list(store.logs["charger"][consumer.store_key])
     assert any("ClearedChargingLimit" in entry for entry in entries)
     assert any("evseId" in entry for entry in entries)
@@ -434,14 +447,16 @@ async def test_cleared_charging_limit_persists_event():
     consumer.store_key = "CP-202"
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {"evseId": 3, "chargingLimitSource": "EMS"}
 
+    request = _request("ClearedChargingLimit", payload)
     result = await consumer._handle_cleared_charging_limit_action(
-        payload, "msg-2", "", ""
+        request, "msg-2", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     event = await database_sync_to_async(ClearedChargingLimitEvent.objects.get)(
         charger=charger
     )
@@ -462,6 +477,7 @@ async def test_notify_charging_limit_persists_payload():
     consumer.charger = charger
     consumer.aggregate_charger = None
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {
         "chargingLimit": {"chargingLimitSource": "EMS", "isGridCritical": True},
@@ -475,11 +491,12 @@ async def test_notify_charging_limit_persists_payload():
         "evseId": 5,
     }
 
+    request = _request("NotifyChargingLimit", payload)
     result = await consumer._handle_notify_charging_limit_action(
-        payload, "msg-3", "", ""
+        request, "msg-3", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     updated = await database_sync_to_async(Charger.objects.get)(pk=charger.pk)
     assert updated.last_charging_limit.get("evseId") == 5
     assert updated.last_charging_limit_source == "EMS"
@@ -504,6 +521,7 @@ async def test_notify_report_persists_inventory_snapshot():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {
         "requestId": 7,
@@ -520,9 +538,10 @@ async def test_notify_report_persists_inventory_snapshot():
         ],
     }
 
-    result = await consumer._handle_notify_report_action(payload, "msg-2", "", "")
+    request = _request("NotifyReport", payload)
+    result = await consumer._handle_notify_report_action(request, "msg-2", "", "")
 
-    assert result == {}
+    assert result.payload == {}
     snapshot = await database_sync_to_async(DeviceInventorySnapshot.objects.get)(
         charger=charger
     )
@@ -561,20 +580,22 @@ async def test_publish_firmware_status_updates_deployment():
     consumer.store_key = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     download_ts = parse_datetime("2024-01-01T00:00:00Z")
     published_ts = parse_datetime("2024-01-01T02:00:00Z")
 
-    await consumer._handle_publish_firmware_status_notification_action(
+    request = _request(
+        "PublishFirmwareStatusNotification",
         {
             "status": "Downloading",
             "requestId": deployment.pk,
             "statusInfo": "starting",
             "timestamp": download_ts.isoformat().replace("+00:00", "Z"),
         },
-        "msg-1",
-        "",
-        "",
+    )
+    await consumer._handle_publish_firmware_status_notification_action(
+        request, "msg-1", "", ""
     )
 
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
@@ -584,16 +605,17 @@ async def test_publish_firmware_status_updates_deployment():
     assert deployment.status_info == "starting"
     assert deployment.completed_at is None
 
-    await consumer._handle_publish_firmware_status_notification_action(
+    request = _request(
+        "PublishFirmwareStatusNotification",
         {
             "status": "Downloaded",
             "requestId": deployment.pk,
             "statusInfo": "ready",
             "timestamp": download_ts.isoformat().replace("+00:00", "Z"),
         },
-        "msg-1",
-        "",
-        "",
+    )
+    await consumer._handle_publish_firmware_status_notification_action(
+        request, "msg-1", "", ""
     )
 
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
@@ -602,15 +624,16 @@ async def test_publish_firmware_status_updates_deployment():
     assert deployment.status == "Downloaded"
     assert deployment.downloaded_at == download_ts
 
-    await consumer._handle_publish_firmware_status_notification_action(
+    request = _request(
+        "PublishFirmwareStatusNotification",
         {
             "status": "Published",
             "requestId": deployment.pk,
             "timestamp": published_ts.isoformat().replace("+00:00", "Z"),
         },
-        "msg-1",
-        "",
-        "",
+    )
+    await consumer._handle_publish_firmware_status_notification_action(
+        request, "msg-1", "", ""
     )
 
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
@@ -627,12 +650,14 @@ async def test_notify_report_requires_mandatory_fields():
     consumer.store_key = "INV-MISSING"
     consumer.charger_id = "INV-MISSING"
     consumer.connector_value = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {"requestId": 8, "reportData": "invalid"}
 
-    result = await consumer._handle_notify_report_action(payload, "msg-3", "", "")
+    request = _request("NotifyReport", payload)
+    result = await consumer._handle_notify_report_action(request, "msg-3", "", "")
 
-    assert result == {}
+    assert result.payload == {}
     assert await database_sync_to_async(DeviceInventorySnapshot.objects.count)() == 0
     entries = list(store.logs["charger"].get(consumer.store_key, []))
     assert any("missing generatedAt" in entry for entry in entries)
@@ -655,6 +680,7 @@ async def test_cost_updated_persists_and_forwards():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_21
 
     payload = {
         "transactionId": "TX-1",
@@ -663,9 +689,10 @@ async def test_cost_updated_persists_and_forwards():
         "timestamp": "2024-01-01T00:00:00Z",
     }
 
-    result = await consumer._handle_cost_updated_action(payload, "msg-cost", "", "")
+    request = _request("CostUpdated", payload, version=consumers.OCPP_VERSION_21)
+    result = await consumer._handle_cost_updated_action(request, "msg-cost", "", "")
 
-    assert result == {}
+    assert result.payload == {}
     cost_update = await database_sync_to_async(CostUpdate.objects.get)(
         charger=charger
     )
@@ -689,12 +716,14 @@ async def test_cost_updated_rejects_invalid_payload():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_21
 
-    result = await consumer._handle_cost_updated_action(
-        {"totalCost": "bad"}, "msg-invalid", "", ""
+    request = _request(
+        "CostUpdated", {"totalCost": "bad"}, version=consumers.OCPP_VERSION_21
     )
+    result = await consumer._handle_cost_updated_action(request, "msg-invalid", "", "")
 
-    assert result == {}
+    assert result.payload == {}
     exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
     assert not await database_sync_to_async(exists.exists)()
     assert not store.billing_updates
@@ -705,17 +734,19 @@ async def test_transaction_event_registered_for_ocpp201():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
     consumer.charger_id = "CP-201"
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     async def fake_assign(connector):
         consumer.connector_value = connector
 
     consumer._assign_connector = AsyncMock(side_effect=fake_assign)
 
+    request = _request("TransactionEvent", {"eventType": "Other", "evse": {"id": 5}})
     result = await consumer._handle_transaction_event_action(
-        {"eventType": "Other", "evse": {"id": 5}}, "msg-3", "", ""
+        request, "msg-3", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     consumer._assign_connector.assert_awaited()
     calls = getattr(consumer._handle_transaction_event_action, "__protocol_calls__", set())
     assert (
@@ -733,6 +764,7 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     consumer.store_key = "CERT-1"
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     def fake_sign(**kwargs):
         return "EXI-RESPONSE"
@@ -742,12 +774,13 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     )
 
     payload = {"certificateType": "V2G", "exiRequest": "CSRDATA"}
+    request = _request("Get15118EVCertificate", payload)
     result = await consumer._handle_get_15118_ev_certificate_action(
-        payload, "msg-1", "", ""
+        request, "msg-1", "", ""
     )
 
-    assert result["status"] == "Accepted"
-    assert result["exiResponse"] == "EXI-RESPONSE"
+    assert result.payload["status"] == "Accepted"
+    assert result.payload["exiResponse"] == "EXI-RESPONSE"
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_15118
     assert request.csr == "CSRDATA"
@@ -771,13 +804,15 @@ async def test_get_certificate_status_persists_check():
     consumer.store_key = "CERT-2"
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {"certificateHashData": hash_data}
+    request = _request("GetCertificateStatus", payload)
     result = await consumer._handle_get_certificate_status_action(
-        payload, "msg-2", "", "",
+        request, "msg-2", "", "",
     )
 
-    assert result["status"] == "Accepted"
+    assert result.payload["status"] == "Accepted"
     status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
         charger=charger
     )
@@ -793,13 +828,15 @@ async def test_get_certificate_status_handles_missing_certificate():
     consumer.store_key = "CERT-4"
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    request = _request("GetCertificateStatus", payload)
     result = await consumer._handle_get_certificate_status_action(
-        payload, "msg-3", "", "",
+        request, "msg-3", "", "",
     )
 
-    assert result["status"] == "Failed"
+    assert result.payload["status"] == "Failed"
     status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
         charger=charger
     )
@@ -815,6 +852,7 @@ async def test_sign_certificate_validates_csr(monkeypatch):
     consumer.store_key = "CERT-3"
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     called = False
 
@@ -828,11 +866,12 @@ async def test_sign_certificate_validates_csr(monkeypatch):
     )
 
     payload = {"csr": "   ", "certificateType": "V2G"}
+    request = _request("SignCertificate", payload)
     result = await consumer._handle_sign_certificate_action(
-        payload, "msg-3", "", ""
+        request, "msg-3", "", ""
     )
 
-    assert result["status"] == "Rejected"
+    assert result.payload["status"] == "Rejected"
     assert called is False
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.status == CertificateRequest.STATUS_REJECTED
@@ -847,6 +886,7 @@ async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
     consumer.store_key = "CERT-4"
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     sent: list[str] = []
 
@@ -863,11 +903,12 @@ async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
     )
 
     payload = {"csr": "CSR-123", "certificateType": "V2G"}
+    request = _request("SignCertificate", payload)
     result = await consumer._handle_sign_certificate_action(
-        payload, "msg-4", "", ""
+        request, "msg-4", "", ""
     )
 
-    assert result["status"] == "Accepted"
+    assert result.payload["status"] == "Accepted"
 
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_SIGN
@@ -895,6 +936,7 @@ async def test_notify_monitoring_report_persists_data():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {
         "requestId": 42,
@@ -918,11 +960,12 @@ async def test_notify_monitoring_report_persists_data():
         ],
     }
 
+    request = _request("NotifyMonitoringReport", payload)
     result = await consumer._handle_notify_monitoring_report_action(
-        payload, "msg-5", "", ""
+        request, "msg-5", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     exists = await database_sync_to_async(
         MonitoringReport.objects.filter(charger=charger, request_id=42).exists
     )()
@@ -948,6 +991,7 @@ async def test_notify_monitoring_report_records_analytics():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {
         "requestId": 99,
@@ -973,11 +1017,12 @@ async def test_notify_monitoring_report_records_analytics():
         ],
     }
 
+    request = _request("NotifyMonitoringReport", payload)
     result = await consumer._handle_notify_monitoring_report_action(
-        payload, "msg-analytics", "", ""
+        request, "msg-analytics", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert len(store.monitoring_reports) == 1
     record = store.monitoring_reports[-1]
     assert record["charger_id"] == "MON-2"
@@ -1010,13 +1055,15 @@ async def test_notify_customer_information_persists_chunks():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {"requestId": 7, "data": "chunk-data", "tbc": False}
+    request = _request("NotifyCustomerInformation", payload)
     result = await consumer._handle_notify_customer_information_action(
-        payload, "msg-7", "", ""
+        request, "msg-7", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     request = await database_sync_to_async(CustomerInformationRequest.objects.get)(
         pk=existing.pk
     )
@@ -1039,13 +1086,15 @@ async def test_notify_customer_information_routes_to_customer_care_workflow():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {"requestId": 11, "data": "acknowledged", "tbc": True}
+    request = _request("NotifyCustomerInformation", payload)
     result = await consumer._handle_notify_customer_information_action(
-        payload, "msg-11", "", ""
+        request, "msg-11", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     entries = list(store.logs["charger"].get(consumer.store_key, []))
     assert any("NotifyCustomerInformation" in entry for entry in entries)
     transition = await database_sync_to_async(Transition.objects.get)(
@@ -1060,12 +1109,16 @@ async def test_notify_customer_information_routes_to_customer_care_workflow():
 async def test_notify_customer_information_rejects_non_dict_payload():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INFO-BAD"
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
-    result = await consumer._handle_notify_customer_information_action([], "msg-bad", "", "")
+    request = _request("NotifyCustomerInformation", {"requestId": None, "data": ""})
+    result = await consumer._handle_notify_customer_information_action(
+        request, "msg-bad", "", ""
+    )
 
-    assert result == {}
+    assert result.payload == {}
     entries = list(store.logs["charger"].get(consumer.store_key, []))
-    assert any("invalid payload" in entry for entry in entries)
+    assert any("missing requestId or data" in entry for entry in entries)
 
 
 @pytest.mark.anyio
@@ -1077,6 +1130,7 @@ async def test_notify_display_messages_persists_messages():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {
         "requestId": 9,
@@ -1094,11 +1148,12 @@ async def test_notify_display_messages_persists_messages():
             }
         ],
     }
+    request = _request("NotifyDisplayMessages", payload)
     result = await consumer._handle_notify_display_messages_action(
-        payload, "msg-9", "", ""
+        request, "msg-9", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     notification = await database_sync_to_async(
         DisplayMessageNotification.objects.get
     )(charger=charger, request_id=9)
@@ -1122,6 +1177,7 @@ async def test_notify_display_messages_updates_compliance_report():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     payload = {
         "requestId": 10,
@@ -1136,7 +1192,8 @@ async def test_notify_display_messages_updates_compliance_report():
         ],
     }
 
-    await consumer._handle_notify_display_messages_action(payload, "msg-10", "", "")
+    request = _request("NotifyDisplayMessages", payload)
+    await consumer._handle_notify_display_messages_action(request, "msg-10", "", "")
 
     reports = store.display_message_compliance.get(charger.charger_id)
     assert reports is not None
@@ -1181,6 +1238,7 @@ async def test_transaction_event_updates_request_status(monkeypatch):
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     async def fake_assign(connector):
         consumer.connector_value = connector
@@ -1210,13 +1268,15 @@ async def test_transaction_event_updates_request_status(monkeypatch):
         "transactionInfo": {"transactionId": "TX-201"},
     }
 
-    await consumer._handle_transaction_event_action(payload, "msg-evt-1", "", "")
+    request = _request("TransactionEvent", payload)
+    await consumer._handle_transaction_event_action(request, "msg-evt-1", "", "")
 
     assert store.transaction_requests["msg-req-2"]["status"] == "started"
     assert store.transaction_requests["msg-req-2"]["transaction_id"] == "TX-201"
 
     payload["eventType"] = "Ended"
-    await consumer._handle_transaction_event_action(payload, "msg-evt-2", "", "")
+    request = _request("TransactionEvent", payload)
+    await consumer._handle_transaction_event_action(request, "msg-evt-2", "", "")
 
     assert store.transaction_requests["msg-req-2"]["status"] == "completed"
 
@@ -1230,6 +1290,7 @@ async def test_transaction_event_started_notifies_and_persists():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     async def fake_assign(connector):
         consumer.connector_value = connector
@@ -1246,7 +1307,8 @@ async def test_transaction_event_started_notifies_and_persists():
         "transactionInfo": {"transactionId": "TX-TE-1", "meterStart": 5},
     }
 
-    await consumer._handle_transaction_event_action(payload, "msg-evt-start", "", "")
+    request = _request("TransactionEvent", payload)
+    await consumer._handle_transaction_event_action(request, "msg-evt-start", "", "")
 
     tx_obj = await database_sync_to_async(Transaction.objects.get)(charger=charger)
     assert tx_obj.ocpp_transaction_id == "TX-TE-1"
@@ -1270,6 +1332,7 @@ async def test_transaction_event_updated_notifies_existing_transaction():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     async def fake_assign(connector):
         consumer.connector_value = connector
@@ -1294,7 +1357,8 @@ async def test_transaction_event_updated_notifies_existing_transaction():
         "transactionInfo": {"transactionId": "TX-TE-2"},
     }
 
-    await consumer._handle_transaction_event_action(payload, "msg-evt-update", "", "")
+    request = _request("TransactionEvent", payload)
+    await consumer._handle_transaction_event_action(request, "msg-evt-update", "", "")
 
     refreshed = await database_sync_to_async(Transaction.objects.get)(pk=tx_obj.pk)
     assert refreshed.ocpp_transaction_id == "TX-TE-2"
@@ -1316,6 +1380,7 @@ async def test_transaction_event_ended_updates_and_notifies():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     async def fake_assign(connector):
         consumer.connector_value = connector
@@ -1344,7 +1409,8 @@ async def test_transaction_event_ended_updates_and_notifies():
         "transactionInfo": {"transactionId": "TX-TE-3", "meterStop": 50},
     }
 
-    await consumer._handle_transaction_event_action(payload, "msg-evt-end", "", "")
+    request = _request("TransactionEvent", payload)
+    await consumer._handle_transaction_event_action(request, "msg-evt-end", "", "")
 
     refreshed = await database_sync_to_async(Transaction.objects.get)(pk=tx_obj.pk)
     assert refreshed.meter_stop == 50
@@ -1365,6 +1431,7 @@ async def test_notify_ev_charging_needs_records_requirements(monkeypatch):
     consumer.store_key = store.identity_key("NEEDS-1", 1)
     consumer.charger_id = "NEEDS-1"
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     recorded: list[dict[str, object]] = []
 
@@ -1385,11 +1452,12 @@ async def test_notify_ev_charging_needs_records_requirements(monkeypatch):
         },
     }
 
+    request = _request("NotifyEVChargingNeeds", payload)
     result = await consumer._handle_notify_ev_charging_needs_action(
-        payload, "needs-1", "", ""
+        request, "needs-1", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert recorded
     entry = recorded[0]
     assert entry["charger_id"] == "NEEDS-1"
@@ -1405,6 +1473,7 @@ async def test_notify_ev_charging_needs_requires_fields(monkeypatch):
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "NEEDS-2"
     consumer.charger_id = "NEEDS-2"
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     called = False
 
@@ -1416,11 +1485,12 @@ async def test_notify_ev_charging_needs_requires_fields(monkeypatch):
 
     payload = {"chargingNeeds": {"acChargingParameters": {"energyAmount": 5000}}}
 
+    request = _request("NotifyEVChargingNeeds", payload)
     result = await consumer._handle_notify_ev_charging_needs_action(
-        payload, "needs-2", "", ""
+        request, "needs-2", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert called is False
 
 
@@ -1430,6 +1500,7 @@ async def test_notify_ev_charging_schedule_records_schedule(monkeypatch):
     consumer.store_key = store.identity_key("SCHED-1", 1)
     consumer.charger_id = "SCHED-1"
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     recorded: list[dict[str, object]] = []
     forwarded: list[dict[str, object]] = []
@@ -1461,11 +1532,12 @@ async def test_notify_ev_charging_schedule_records_schedule(monkeypatch):
         },
     }
 
+    request = _request("NotifyEVChargingSchedule", payload)
     result = await consumer._handle_notify_ev_charging_schedule_action(
-        payload, "sched-1", "", ""
+        request, "sched-1", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert recorded
     entry = recorded[0]
     assert entry["charger_id"] == "SCHED-1"
@@ -1490,6 +1562,7 @@ async def test_notify_ev_charging_schedule_requires_fields(monkeypatch):
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "SCHED-2"
     consumer.charger_id = "SCHED-2"
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     recorded = False
     forwarded = False
@@ -1505,11 +1578,14 @@ async def test_notify_ev_charging_schedule_requires_fields(monkeypatch):
     monkeypatch.setattr(store, "record_ev_charging_schedule", _record)
     monkeypatch.setattr(store, "forward_ev_charging_schedule", _forward)
 
+    request = _request(
+        "NotifyEVChargingSchedule", {"timebase": "2024-01-01T00:00:00Z"}
+    )
     result = await consumer._handle_notify_ev_charging_schedule_action(
-        {"timebase": "2024-01-01T00:00:00Z"}, "sched-2", "", ""
+        request, "sched-2", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert recorded is False
     assert forwarded is False
 
@@ -1541,6 +1617,7 @@ async def test_report_charging_profiles_matches_local_state(monkeypatch):
     consumer.aggregate_charger = None
     consumer.connector_value = charger.connector_id
     consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     logs: list[str] = []
     monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
@@ -1552,11 +1629,12 @@ async def test_report_charging_profiles_matches_local_state(monkeypatch):
         "tbc": False,
     }
 
+    request = _request("ReportChargingProfiles", payload)
     result = await consumer._handle_report_charging_profiles_action(
-        payload, "msg-rcp-1", "", ""
+        request, "msg-rcp-1", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert logs == []
 
 
@@ -1587,6 +1665,7 @@ async def test_report_charging_profiles_flags_mismatch(monkeypatch):
     consumer.aggregate_charger = None
     consumer.connector_value = charger.connector_id
     consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     logs: list[str] = []
     monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
@@ -1601,11 +1680,12 @@ async def test_report_charging_profiles_flags_mismatch(monkeypatch):
         "tbc": False,
     }
 
+    request = _request("ReportChargingProfiles", payload)
     result = await consumer._handle_report_charging_profiles_action(
-        payload, "msg-rcp-2", "", ""
+        request, "msg-rcp-2", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert any("stack level expected" in entry for entry in logs)
 
 
@@ -1650,6 +1730,7 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
     consumer.aggregate_charger = None
     consumer.connector_value = charger.connector_id
     consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     logs: list[str] = []
     monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
@@ -1661,11 +1742,12 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
         "tbc": False,
     }
 
+    request = _request("ReportChargingProfiles", payload)
     result = await consumer._handle_report_charging_profiles_action(
-        payload, "msg-rcp-3", "", ""
+        request, "msg-rcp-3", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     assert any("ReportChargingProfiles missing" in entry for entry in logs)
     assert any("3" in entry for entry in logs)
 
@@ -1676,6 +1758,7 @@ async def test_notify_event_forwards_observability_payload(monkeypatch):
     consumer.store_key = store.identity_key("OBS-1", 1)
     consumer.charger_id = "OBS-1"
     consumer.connector_value = 1
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     forwarded: list[dict[str, object]] = []
 
@@ -1713,9 +1796,10 @@ async def test_notify_event_forwards_observability_payload(monkeypatch):
         ],
     }
 
-    result = await consumer._handle_notify_event_action(payload, "evt-msg-1", "", "")
+    request = _request("NotifyEvent", payload)
+    result = await consumer._handle_notify_event_action(request, "evt-msg-1", "", "")
 
-    assert result == {}
+    assert result.payload == {}
     assert forwarded
     event = forwarded[0]
     assert event["charger_id"] == "OBS-1"
@@ -1747,6 +1831,7 @@ async def test_notify_event_requires_event_data(monkeypatch):
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "OBS-2"
     consumer.charger_id = "OBS-2"
+    consumer.ocpp_version = consumers.OCPP_VERSION_201
 
     forwarded: list[dict[str, object]] = []
 
@@ -1756,9 +1841,10 @@ async def test_notify_event_requires_event_data(monkeypatch):
         lambda payload: forwarded.append(payload),
     )
 
-    result = await consumer._handle_notify_event_action({"seqNo": 1}, "evt-msg-2", "", "")
+    request = _request("NotifyEvent", {"seqNo": 1})
+    result = await consumer._handle_notify_event_action(request, "evt-msg-2", "", "")
 
-    assert result == {}
+    assert result.payload == {}
     assert forwarded == []
 
 
@@ -1787,17 +1873,21 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
     consumer.charger = charger
     consumer.aggregate_charger = None
     consumer.connector_value = charger.connector_id
+    consumer.ocpp_version = consumers.OCPP_VERSION_21
 
     payload = {
         "reservationId": reservation.pk,
         "reservationUpdateStatus": status,
     }
 
+    request = _request(
+        "ReservationStatusUpdate", payload, version=consumers.OCPP_VERSION_21
+    )
     result = await consumer._handle_reservation_status_update_action(
-        payload, "resv-msg-1", "", ""
+        request, "resv-msg-1", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     updated = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
     assert updated.evcs_status == status
     assert updated.evcs_confirmed is confirmed
@@ -1837,17 +1927,21 @@ async def test_reservation_status_update_ignored_for_other_connector():
     consumer.charger = other
     consumer.aggregate_charger = None
     consumer.connector_value = other.connector_id
+    consumer.ocpp_version = consumers.OCPP_VERSION_21
 
     payload = {
         "reservationId": reservation.pk,
         "reservationUpdateStatus": "Accepted",
     }
 
+    request = _request(
+        "ReservationStatusUpdate", payload, version=consumers.OCPP_VERSION_21
+    )
     result = await consumer._handle_reservation_status_update_action(
-        payload, "resv-msg-2", "", ""
+        request, "resv-msg-2", "", ""
     )
 
-    assert result == {}
+    assert result.payload == {}
     updated = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
     assert updated.evcs_status == ""
     assert updated.evcs_confirmed is False

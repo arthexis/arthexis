@@ -44,6 +44,8 @@ from apps.locale.models import Language
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
+from apps.ocpp.messages import OcppRequest, encode_call
+
 from apps.sites.utils import landing
 from apps.cards.models import RFID as CoreRFID
 
@@ -173,11 +175,17 @@ def _clear_stale_statuses_for_view() -> None:
 
 @dataclass
 class ActionCall:
-    msg: str
+    request: OcppRequest
     message_id: str
     ocpp_action: str
     expected_statuses: set[str] | None = None
     log_key: str | None = None
+
+    def as_message(self) -> list[object]:
+        return encode_call(self.request, message_id=self.message_id)
+
+    def serialize(self) -> str:
+        return json.dumps(self.as_message())
 
 
 @dataclass

@@ -33,6 +33,13 @@ from .forwarder import forwarder
 from .status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from .call_error_handlers import dispatch_call_error
 from .call_result_handlers import dispatch_call_result
+from .messages import (
+    MessageDecodeError,
+    MessageValidationError,
+    build_response,
+    decode_call,
+    encode_call_result,
+)
 from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
 from .models import (
@@ -176,7 +183,7 @@ def _resolve_client_ip(scope: dict) -> str | None:
     return fallback
 
 
-def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
+def _extract_vehicle_identifier(payload) -> tuple[str, str]:
     """Return normalized VID and VIN values from an OCPP message payload."""
 
     raw_vid = payload.get("vid")
@@ -1045,9 +1052,10 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if updated_fields:
             reference.save(update_fields=updated_fields)
 
-    async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
+    async def _store_meter_values(self, payload, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterValue rows."""
-        connector_raw = payload.get("connectorId")
+        payload_data = payload if isinstance(payload, dict) else {}
+        connector_raw = payload_data.get("connectorId")
         connector_value = None
         if connector_raw is not None:
             try:
@@ -1055,7 +1063,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             except (TypeError, ValueError):
                 connector_value = None
         await self._assign_connector(connector_value)
-        tx_id = payload.get("transactionId")
+        tx_id = payload_data.get("transactionId")
         tx_obj = None
         if tx_id is not None:
             tx_obj = store.transactions.get(self.store_key)
@@ -1078,7 +1086,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
 
         await self._ensure_ocpp_transaction_identifier(tx_obj, str(tx_id) if tx_id else None)
         await self._process_meter_value_entries(
-            payload.get("meterValue"), connector_value, tx_obj
+            payload_data.get("meterValue"), connector_value, tx_obj
         )
 
     async def _process_meter_value_entries(
@@ -1564,12 +1572,10 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             error_details=details,
         )
 
-    async def _handle_data_transfer(
-        self, message_id: str, payload: dict | None
-    ) -> dict[str, object]:
-        payload = payload if isinstance(payload, dict) else {}
-        vendor_id = str(payload.get("vendorId") or "").strip()
-        vendor_message_id = payload.get("messageId")
+    async def _handle_data_transfer(self, message_id: str, payload) -> dict[str, object]:
+        payload_data = payload.payload
+        vendor_id = str(payload_data.get("vendorId") or "").strip()
+        vendor_message_id = payload_data.get("messageId")
         if vendor_message_id is None:
             vendor_message_id_text = ""
         elif isinstance(vendor_message_id, str):
@@ -1603,7 +1609,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             ocpp_message_id=message_id,
             vendor_id=vendor_id,
             message_id=vendor_message_id_text,
-            payload=payload or {},
+            payload=payload_data or {},
             status="Pending",
         )
 
@@ -1616,7 +1622,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         handler = self._resolve_data_transfer_handler(vendor_id) if vendor_id else None
         if handler:
             try:
-                result = handler(message, payload)
+                result = handler(message, payload_data)
                 if inspect.isawaitable(result):
                     result = await result
             except Exception as exc:  # pragma: no cover - defensive guard
@@ -1840,7 +1846,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return
         message_type = msg[0]
         if message_type == 2:
-            await self._handle_call_message(msg, raw, text_data)
+            await self._handle_call_message(raw, text_data)
         elif message_type == 3:
             msg_id = msg[1] if len(msg) > 1 else ""
             payload = msg[2] if len(msg) > 2 else {}
@@ -1867,12 +1873,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return None
         return msg
 
-    async def _handle_call_message(self, msg, raw, text_data):
-        msg_id, action = msg[1], msg[2]
-        payload = msg[3] if len(msg) > 3 else {}
-        connector_hint = payload.get("connectorId") if isinstance(payload, dict) else None
+    async def _handle_call_message(self, raw, text_data):
+        try:
+            decoded = decode_call(raw, ocpp_version=self.ocpp_version)
+        except MessageDecodeError as exc:
+            store.add_log(
+                self.store_key,
+                f"Rejected invalid OCPP call: {exc}",
+                log_type="charger",
+            )
+            return
+        msg_id = decoded.message_id
+        action = decoded.action
+        request = decoded.request
+        connector_hint = request.get("connectorId")
         self._log_triggered_follow_up(action, connector_hint)
-        await self._assign_connector(payload.get("connectorId"))
+        await self._assign_connector(connector_hint)
         action_handlers = {
             "BootNotification": self._handle_boot_notification_action,
             "DataTransfer": self._handle_data_transfer_action,
@@ -1904,15 +1920,26 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "GetCertificateStatus": self._handle_get_certificate_status_action,
             "SignCertificate": self._handle_sign_certificate_action,
         }
-        reply_payload = {}
+        response_model = build_response(
+            action, ocpp_version=self.ocpp_version, payload={}
+        )
         handler = action_handlers.get(action)
         if handler:
-            reply_payload = await handler(payload, msg_id, raw, text_data)
-        response = [3, msg_id, reply_payload]
-        await self.send(json.dumps(response))
-        store.add_log(
-            self.store_key, f"< {json.dumps(response)}", log_type="charger"
-        )
+            response_model = await handler(request, msg_id, raw, text_data)
+        response_model.message_id = msg_id
+        response_model.ocpp_version = self.ocpp_version
+        try:
+            response = encode_call_result(response_model)
+        except MessageValidationError as exc:
+            store.add_log(
+                self.store_key,
+                f"Invalid response for {action}: {exc}",
+                log_type="charger",
+            )
+            return
+        response_json = json.dumps(response)
+        await self.send(response_json)
+        store.add_log(self.store_key, f"< {response_json}", log_type="charger")
         await self._forward_charge_point_message(action, raw)
 
     def _log_triggered_follow_up(self, action: str, connector_hint):
@@ -1941,16 +1968,25 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
-        return {
+        return build_response(
+            "BootNotification",
+            ocpp_version=self.ocpp_version,
+            payload={
             "currentTime": current_time,
             "interval": 300,
             "status": "Accepted",
-        }
+            },
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
-        return await self._handle_data_transfer(msg_id, payload)
+        response_payload = await self._handle_data_transfer(msg_id, payload)
+        return build_response(
+            "DataTransfer",
+            ocpp_version=self.ocpp_version,
+            payload=response_payload,
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
@@ -1964,7 +2000,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         await database_sync_to_async(
             Charger.objects.filter(charger_id=self.charger_id).update
         )(last_heartbeat=now)
-        return reply_payload
+        return build_response(
+            "Heartbeat",
+            ocpp_version=self.ocpp_version,
+            payload=reply_payload,
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
@@ -2037,7 +2077,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 store.stop_session_lock()
         store.add_log(
             self.store_key,
-            f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
+            f"StatusNotification processed: {json.dumps(payload.payload, sort_keys=True)}",
             log_type="charger",
         )
         availability_state = Charger.availability_state_from_status(status)
@@ -2045,7 +2085,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             await self._update_availability_state(
                 availability_state, status_timestamp, self.connector_value
             )
-        return {}
+        return build_response(
+            "StatusNotification",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize")
@@ -2069,17 +2113,25 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         else:
             await self._ensure_rfid_seen(id_tag)
             status = "Accepted"
-        return {"idTagInfo": {"status": status}}
+        return build_response(
+            "Authorize",
+            ocpp_version=self.ocpp_version,
+            payload={"idTagInfo": {"status": status}},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
     async def _handle_meter_values_action(self, payload, msg_id, raw, text_data):
         await self._store_meter_values(payload, text_data)
-        self.charger.last_meter_values = payload
+        self.charger.last_meter_values = payload.payload
         await database_sync_to_async(
             Charger.objects.filter(pk=self.charger.pk).update
-        )(last_meter_values=payload)
-        return {}
+        )(last_meter_values=payload.payload)
+        return build_response(
+            "MeterValues",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call(
         "ocpp201",
@@ -2094,7 +2146,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         evse_id_value = payload_data.get("evseId")
         try:
             evse_id = int(evse_id_value) if evse_id_value is not None else None
@@ -2144,12 +2196,16 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             )
 
         await database_sync_to_async(_persist_cleared_limit)()
-        return {}
+        return build_response(
+            "ClearedChargingLimit",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     async def _handle_notify_report_action(self, payload, msg_id, raw, text_data):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
         report_data = payload_data.get("reportData")
         request_id_value = payload_data.get("requestId")
@@ -2172,14 +2228,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "NotifyReport ignored: missing generatedAt",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "NotifyReport",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
         if not isinstance(report_data, (list, tuple)):
             store.add_log(
                 self.store_key,
                 "NotifyReport ignored: missing reportData",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "NotifyReport",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         def _persist_report() -> None:
             charger = None
@@ -2252,15 +2316,20 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "NotifyReport" + (": " + ", ".join(details) if details else ""),
             log_type="charger",
         )
-        return {}
+        return build_response(
+            "NotifyReport",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     def _log_ocpp201_notification(self, label: str, payload) -> None:
         message = label
-        if payload:
+        payload_data = payload.payload if hasattr(payload, "payload") else payload
+        if payload_data:
             try:
-                payload_text = json.dumps(payload, separators=(",", ":"))
+                payload_text = json.dumps(payload_data, separators=(",", ":"))
             except (TypeError, ValueError):
-                payload_text = str(payload)
+                payload_text = str(payload_data)
             if payload_text and payload_text != "{}":
                 message += f": {payload_text}"
         store.add_log(self.store_key, message, log_type="charger")
@@ -2268,7 +2337,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
         self._log_ocpp201_notification("CostUpdated", payload)
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         transaction_reference = str(payload_data.get("transactionId") or "").strip()
         total_cost_raw = payload_data.get("totalCost")
         currency_value = str(payload_data.get("currency") or "").strip()
@@ -2284,7 +2353,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "CostUpdated ignored: invalid totalCost",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "CostUpdated",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         if not transaction_reference:
             store.add_log(
@@ -2292,7 +2365,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "CostUpdated ignored: missing transactionId",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "CostUpdated",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         tx_obj = store.transactions.get(self.store_key)
         if tx_obj is None and transaction_reference:
@@ -2338,7 +2415,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     "reported_at": reported_at,
                 }
             )
-        return {}
+        return build_response(
+            "CostUpdated",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call(
         "ocpp21",
@@ -2349,7 +2430,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         self, payload, msg_id, raw, text_data
     ):
         self._log_ocpp201_notification("ReservationStatusUpdate", payload)
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         reservation_value = payload_data.get("reservationId")
         try:
             reservation_pk = int(reservation_value) if reservation_value is not None else None
@@ -2408,13 +2489,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 }
             )
 
-        return {}
+        return build_response(
+            "ReservationStatusUpdate",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     async def _handle_notify_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         charging_limit = payload_data.get("chargingLimit")
         if not isinstance(charging_limit, dict):
             charging_limit = {}
@@ -2490,7 +2575,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 setattr(target, field, value)
 
         await database_sync_to_async(_persist_limit)()
-        return {}
+        return build_response(
+            "NotifyChargingLimit",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call(
         "ocpp201",
@@ -2500,15 +2589,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_customer_information_action(
         self, payload, msg_id, raw, text_data
     ):
-        if not isinstance(payload, dict):
-            store.add_log(
-                self.store_key,
-                "NotifyCustomerInformation: invalid payload received",
-                log_type="charger",
-            )
-            return {}
-
-        payload_data = payload
+        payload_data = payload.payload
         request_id_value = payload_data.get("requestId")
         data_value = payload_data.get("data")
         tbc_value = payload_data.get("tbc")
@@ -2526,7 +2607,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "NotifyCustomerInformation: missing requestId or data",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "NotifyCustomerInformation",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         log_details = [f"requestId={request_id}", f"tbc={tbc}"]
         log_details.append(f"data={data_text}")
@@ -2593,7 +2678,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             )
 
         await database_sync_to_async(_persist_customer_information)()
-        return {}
+        return build_response(
+            "NotifyCustomerInformation",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     def _route_customer_care_acknowledgement(
         self,
@@ -2632,7 +2721,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_display_messages_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         request_id_value = payload_data.get("requestId")
         tbc_value = payload_data.get("tbc")
         try:
@@ -2752,13 +2841,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             messages=compliance_messages,
             received_at=received_at,
         )
-        return {}
+        return build_response(
+            "NotifyDisplayMessages",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
     async def _handle_notify_ev_charging_needs_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         evse_id_value = payload_data.get("evseId")
         charging_needs = payload_data.get("chargingNeeds")
 
@@ -2773,7 +2866,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "NotifyEVChargingNeeds: missing evseId or chargingNeeds",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "NotifyEVChargingNeeds",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         def _parse_energy(value: object | None) -> int | None:
             try:
@@ -2815,13 +2912,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             charging_needs=charging_needs,
             received_at=received_at,
         )
-        return {}
+        return build_response(
+            "NotifyEVChargingNeeds",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")
     async def _handle_notify_ev_charging_schedule_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         evse_id_value = payload_data.get("evseId")
         charging_schedule = payload_data.get("chargingSchedule")
         timebase = _parse_ocpp_timestamp(payload_data.get("timebase"))
@@ -2837,7 +2938,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "NotifyEVChargingSchedule: missing evseId or chargingSchedule",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "NotifyEVChargingSchedule",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         def _parse_int(value: object | None) -> int | None:
             try:
@@ -2918,11 +3023,15 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             received_at=received_at,
         )
         store.forward_ev_charging_schedule(record)
-        return {}
+        return build_response(
+            "NotifyEVChargingSchedule",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
     async def _handle_notify_event_action(self, payload, msg_id, raw, text_data):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         event_entries = payload_data.get("eventData")
 
         generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
@@ -2946,7 +3055,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
 
         if not isinstance(event_entries, (list, tuple)):
             store.add_log(self.store_key, "NotifyEvent: missing eventData", log_type="charger")
-            return {}
+            return build_response(
+                "NotifyEvent",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         forwarded = 0
         for entry in event_entries:
@@ -3005,13 +3118,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "NotifyEvent" + (": " + ", ".join(details) if details else ""),
             log_type="charger",
         )
-        return {}
+        return build_response(
+            "NotifyEvent",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport")
     async def _handle_notify_monitoring_report_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         request_id_value = payload_data.get("requestId")
         seq_no_value = payload_data.get("seqNo")
         generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
@@ -3179,7 +3296,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if request_id is not None and not tbc:
             store.pop_monitoring_report_request(request_id)
         self._log_ocpp201_notification("NotifyMonitoringReport", payload)
-        return {}
+        return build_response(
+            "NotifyMonitoringReport",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call(
         "ocpp201",
@@ -3226,18 +3347,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 status_value,
                 status_info,
                 timestamp_value,
-                response=payload,
+                response=payload.payload,
             )
 
         await database_sync_to_async(_persist_status)()
         self._log_ocpp201_notification("PublishFirmwareStatusNotification", payload)
-        return {}
+        return build_response(
+            "PublishFirmwareStatusNotification",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     async def _handle_report_charging_profiles_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        payload_data = payload.payload
         request_id_value = payload_data.get("requestId")
         evse_value = payload_data.get("evseId")
         charging_profile = payload_data.get("chargingProfile")
@@ -3262,7 +3387,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 "ReportChargingProfiles: missing chargingProfile payload",
                 log_type="charger",
             )
-            return {}
+            return build_response(
+                "ReportChargingProfiles",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         def _normalize_schedule(data: dict | None) -> dict[str, object]:
             if not isinstance(data, dict):
@@ -3545,7 +3674,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
 
         await database_sync_to_async(_reconcile_profiles)()
         self._log_ocpp201_notification("ReportChargingProfiles", payload)
-        return {}
+        return build_response(
+            "ReportChargingProfiles",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
     async def _handle_security_event_notification_action(
@@ -3592,11 +3725,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 sequence_number = None
             snapshot: dict[str, object]
             try:
-                snapshot = json.loads(json.dumps(payload, ensure_ascii=False))
+                snapshot = json.loads(json.dumps(payload.payload, ensure_ascii=False))
             except (TypeError, ValueError):
                 snapshot = {
                     str(key): (str(value) if value is not None else None)
-                    for key, value in payload.items()
+                    for key, value in payload.payload.items()
                 }
             SecurityEvent.objects.create(
                 charger=target,
@@ -3614,7 +3747,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if trigger_value:
             log_message += f", trigger={trigger_value}"
         store.add_log(self.store_key, log_message, log_type="charger")
-        return {}
+        return build_response(
+            "SecurityEventNotification",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
@@ -3693,7 +3830,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     signed_certificate=exi_response,
                     status=request_status,
                     status_info=status_info,
-                    request_payload=payload,
+                    request_payload=payload.payload,
                     response_payload=response_payload,
                     responded_at=responded_at,
                 )
@@ -3713,7 +3850,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             f"Get15118EVCertificate request processed (status={status_value}).",
             log_type="charger",
         )
-        return response_payload
+        return build_response(
+            "Get15118EVCertificate",
+            ocpp_version=self.ocpp_version,
+            payload=response_payload,
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
@@ -3758,7 +3899,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                         else CertificateStatusCheck.STATUS_REJECTED
                     ),
                     status_info=status_info,
-                    request_payload=payload,
+                    request_payload=payload.payload,
                     response_payload=response_payload,
                     responded_at=timezone.now(),
                 )
@@ -3776,7 +3917,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             f"GetCertificateStatus request received (status={status_value}).",
             log_type="charger",
         )
-        return result.get("response")
+        return build_response(
+            "GetCertificateStatus",
+            ocpp_version=self.ocpp_version,
+            payload=result.get("response") or {},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
@@ -3852,7 +3997,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     signed_certificate=signed_certificate,
                     status=request_status,
                     status_info=status_info,
-                    request_payload=payload,
+                    request_payload=payload.payload,
                     response_payload=response_payload,
                     responded_at=responded_at,
                 )
@@ -3889,7 +4034,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             f"SignCertificate request processed (status={status_value}).",
             log_type="charger",
         )
-        return response_payload
+        return build_response(
+            "SignCertificate",
+            ocpp_version=self.ocpp_version,
+            payload=response_payload,
+        )
 
     async def _dispatch_certificate_signed(
         self,
@@ -4006,7 +4155,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             aggregate_key = store.identity_key(self.charger_id, None)
             if aggregate_key != self.store_key:
                 store.add_log(aggregate_key, log_message, log_type="charger")
-        return {}
+        return build_response(
+            "DiagnosticsStatusNotification",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     async def _handle_log_status_notification_action(
@@ -4055,7 +4208,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     request.save(update_fields=["requested_at"])
             updates: dict[str, object] = {
                 "last_status_at": timestamp_value,
-                "last_status_payload": payload,
+                "last_status_payload": payload.payload,
             }
             if status_value:
                 updates["status"] = status_value
@@ -4073,7 +4226,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             if updates.get("filename"):
                 request.filename = str(updates["filename"])
             request.last_status_at = timestamp_value
-            request.last_status_payload = payload
+            request.last_status_payload = payload.payload
             if updates.get("log_type"):
                 request.log_type = str(updates["log_type"])
             return request.session_key or ""
@@ -4093,7 +4246,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "idle",
         }:
             store.finalize_log_capture(session_capture)
-        return {}
+        return build_response(
+            "LogStatusNotification",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
     async def _handle_transaction_event_action(
@@ -4199,14 +4356,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     account=account,
                     transaction=tx_obj,
                 )
-                return {"idTokenInfo": {"status": "Accepted"}}
+                return build_response(
+                    "TransactionEvent",
+                    ocpp_version=self.ocpp_version,
+                    payload={"idTokenInfo": {"status": "Accepted"}},
+                )
 
             await self._record_rfid_attempt(
                 rfid=id_tag or "",
                 status=RFIDSessionAttempt.Status.REJECTED,
                 account=account,
             )
-            return {"idTokenInfo": {"status": "Invalid"}}
+            return build_response(
+                "TransactionEvent",
+                ocpp_version=self.ocpp_version,
+                payload={"idTokenInfo": {"status": "Invalid"}},
+            )
 
         if event_type == "ended":
             tx_obj = store.transactions.pop(self.store_key, None)
@@ -4263,7 +4428,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             )
             store.end_session_log(self.store_key)
             store.stop_session_lock()
-            return {}
+            return build_response(
+                "TransactionEvent",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
         if event_type == "updated":
             tx_obj = store.transactions.get(self.store_key)
@@ -4291,9 +4460,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 payload.get("meterValue"), connector_value, tx_obj
             )
             _record_transaction_event(tx_obj)
-            return {}
+            return build_response(
+                "TransactionEvent",
+                ocpp_version=self.ocpp_version,
+                payload={},
+            )
 
-        return {}
+        return build_response(
+            "TransactionEvent",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
     async def _handle_start_transaction_action(
@@ -4351,16 +4528,24 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 account=account,
                 transaction=tx_obj,
             )
-            return {
-                "transactionId": tx_obj.pk,
-                "idTagInfo": {"status": "Accepted"},
-            }
+            return build_response(
+                "StartTransaction",
+                ocpp_version=self.ocpp_version,
+                payload={
+                    "transactionId": tx_obj.pk,
+                    "idTagInfo": {"status": "Accepted"},
+                },
+            )
         await self._record_rfid_attempt(
             rfid=id_tag or "",
             status=RFIDSessionAttempt.Status.REJECTED,
             account=account,
         )
-        return {"idTagInfo": {"status": "Invalid"}}
+        return build_response(
+            "StartTransaction",
+            ocpp_version=self.ocpp_version,
+            payload={"idTagInfo": {"status": "Invalid"}},
+        )
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
     async def _handle_stop_transaction_action(
@@ -4401,7 +4586,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         await self._cancel_consumption_message()
         store.end_session_log(self.store_key)
         store.stop_session_lock()
-        return {"idTagInfo": {"status": "Accepted"}}
+        return build_response(
+            "StopTransaction",
+            ocpp_version=self.ocpp_version,
+            payload={"idTagInfo": {"status": "Accepted"}},
+        )
 
     @protocol_call(
         "ocpp201",
@@ -4433,10 +4622,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if timestamp_value is None:
             timestamp_value = timezone.now()
         await self._update_firmware_state(status, status_info, timestamp_value)
+        payload_snapshot = payload.payload
         store.add_log(
             self.store_key,
             "FirmwareStatusNotification: "
-            + json.dumps(payload, separators=(",", ":")),
+            + json.dumps(payload_snapshot, separators=(",", ":")),
             log_type="charger",
         )
         if self.aggregate_charger and self.aggregate_charger.connector_id is None:
@@ -4447,7 +4637,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 store.add_log(
                     aggregate_key,
                     "FirmwareStatusNotification: "
-                    + json.dumps(payload, separators=(",", ":")),
+                    + json.dumps(payload_snapshot, separators=(",", ":")),
                     log_type="charger",
                 )
-        return {}
+        return build_response(
+            "FirmwareStatusNotification",
+            ocpp_version=self.ocpp_version,
+            payload={},
+        )
