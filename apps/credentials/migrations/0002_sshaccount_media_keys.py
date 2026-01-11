@@ -1,33 +1,9 @@
-from pathlib import Path
-
 from django.db import migrations, models
 
+from apps.media.migrations_utils import copy_to_media
 
 SSH_KEY_BUCKET_SLUG = "credentials-ssh-keys"
 SSH_KEY_ALLOWED_PATTERNS = "\n".join(["id_*", "*.pem", "*.pub", "*.key", "*.ppk"])
-
-
-def _copy_to_media(bucket, media_model, old_file):
-    if not old_file:
-        return None
-    filename = Path(old_file.name).name
-    old_file.open("rb")
-    try:
-        media_file = media_model(
-            bucket=bucket,
-            original_name=filename,
-            content_type=getattr(old_file, "content_type", "") or "",
-            size=getattr(old_file, "size", 0) or 0,
-        )
-        media_file.file.save(filename, old_file, save=False)
-        media_file.save()
-    finally:
-        old_file.close()
-    try:
-        old_file.delete(save=False)
-    except Exception:
-        pass
-    return media_file
 
 
 def migrate_ssh_keys(apps, schema_editor):
@@ -47,13 +23,13 @@ def migrate_ssh_keys(apps, schema_editor):
 
     for account in SSHAccount.objects.exclude(private_key=""):
         old_file = getattr(account, "private_key", None)
-        media_file = _copy_to_media(bucket, MediaFile, old_file)
+        media_file = copy_to_media(bucket, MediaFile, old_file)
         if media_file:
             SSHAccount.objects.filter(pk=account.pk).update(private_key_media=media_file)
 
     for account in SSHAccount.objects.exclude(public_key=""):
         old_file = getattr(account, "public_key", None)
-        media_file = _copy_to_media(bucket, MediaFile, old_file)
+        media_file = copy_to_media(bucket, MediaFile, old_file)
         if media_file:
             SSHAccount.objects.filter(pk=account.pk).update(public_key_media=media_file)
 

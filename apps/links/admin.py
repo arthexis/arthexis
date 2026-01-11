@@ -8,6 +8,7 @@ from django.http import Http404
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.locals.user_data import EntityModelAdmin
@@ -24,8 +25,8 @@ from .models import (
 
 
 class ReferenceAdminForm(forms.ModelForm):
-    file_upload = forms.FileField(required=False, label="File upload")
-    image_upload = forms.ImageField(required=False, label="Image upload")
+    file_upload = forms.FileField(required=False, label=_("File upload"))
+    image_upload = forms.ImageField(required=False, label=_("Image upload"))
 
     class Meta:
         model = Reference
@@ -33,21 +34,43 @@ class ReferenceAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        file_bucket = get_reference_file_bucket()
-        qr_bucket = get_reference_qr_bucket()
-        self.fields["file_media"].queryset = MediaFile.objects.filter(bucket=file_bucket)
-        self.fields["image_media"].queryset = MediaFile.objects.filter(bucket=qr_bucket)
+        self.fields["file_media"].queryset = MediaFile.objects.filter(
+            bucket=self._get_file_bucket()
+        )
+        self.fields["image_media"].queryset = MediaFile.objects.filter(
+            bucket=self._get_qr_bucket()
+        )
+
+    def _get_file_bucket(self):
+        if not hasattr(self, "_file_bucket"):
+            self._file_bucket = get_reference_file_bucket()
+        return self._file_bucket
+
+    def _get_qr_bucket(self):
+        if not hasattr(self, "_qr_bucket"):
+            self._qr_bucket = get_reference_qr_bucket()
+        return self._qr_bucket
+
+    def _clean_upload(self, upload, bucket):
+        if upload:
+            if not bucket.allows_filename(upload.name):
+                raise forms.ValidationError(_("File type is not allowed."))
+            if not bucket.allows_size(upload.size):
+                raise forms.ValidationError(_("File exceeds the allowed size."))
+        return upload
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         file_upload = self.cleaned_data.get("file_upload")
         if file_upload:
-            bucket = get_reference_file_bucket()
-            instance.file_media = create_media_file(bucket=bucket, uploaded_file=file_upload)
+            instance.file_media = create_media_file(
+                bucket=self._get_file_bucket(), uploaded_file=file_upload
+            )
         image_upload = self.cleaned_data.get("image_upload")
         if image_upload:
-            bucket = get_reference_qr_bucket()
-            instance.image_media = create_media_file(bucket=bucket, uploaded_file=image_upload)
+            instance.image_media = create_media_file(
+                bucket=self._get_qr_bucket(), uploaded_file=image_upload
+            )
         if commit:
             instance.save()
             self.save_m2m()
@@ -55,23 +78,11 @@ class ReferenceAdminForm(forms.ModelForm):
 
     def clean_file_upload(self):
         upload = self.cleaned_data.get("file_upload")
-        if upload:
-            bucket = get_reference_file_bucket()
-            if not bucket.allows_filename(upload.name):
-                raise forms.ValidationError("File type is not allowed.")
-            if not bucket.allows_size(upload.size):
-                raise forms.ValidationError("File exceeds the allowed size.")
-        return upload
+        return self._clean_upload(upload, self._get_file_bucket())
 
     def clean_image_upload(self):
         upload = self.cleaned_data.get("image_upload")
-        if upload:
-            bucket = get_reference_qr_bucket()
-            if not bucket.allows_filename(upload.name):
-                raise forms.ValidationError("File type is not allowed.")
-            if not bucket.allows_size(upload.size):
-                raise forms.ValidationError("File exceeds the allowed size.")
-        return upload
+        return self._clean_upload(upload, self._get_qr_bucket())
 
 
 @admin.register(ExperienceReference)
@@ -230,19 +241,27 @@ class ReferenceAdmin(EntityModelAdmin):
 
     qr_code.short_description = "QR Code"
 
-    @admin.display(description="File metadata")
+    @admin.display(description=_("File metadata"))
     def file_metadata(self, obj):
         media = getattr(obj, "file_media", None)
         if not media:
-            return "No file uploaded"
-        return f"{media.original_name or media.file.name} ({media.content_type or 'unknown'}, {media.size} bytes)"
+            return _("No file uploaded")
+        return _("%(name)s (%(type)s, %(size)s bytes)") % {
+            "name": media.original_name or media.file.name,
+            "type": media.content_type or _("unknown"),
+            "size": media.size,
+        }
 
-    @admin.display(description="Image metadata")
+    @admin.display(description=_("Image metadata"))
     def image_metadata(self, obj):
         media = getattr(obj, "image_media", None)
         if not media:
-            return "No image uploaded"
-        return f"{media.original_name or media.file.name} ({media.content_type or 'unknown'}, {media.size} bytes)"
+            return _("No image uploaded")
+        return _("%(name)s (%(type)s, %(size)s bytes)") % {
+            "name": media.original_name or media.file.name,
+            "type": media.content_type or _("unknown"),
+            "size": media.size,
+        }
 
 
 @admin.register(QRRedirect)
