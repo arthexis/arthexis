@@ -756,8 +756,21 @@ fi
 
 # Apply database migrations for a ready-to-run schema.
 arthexis_timing_start "django_migrate"
-python manage.py migrate --noinput
-arthexis_timing_end "django_migrate"
+if python manage.py migrate --check; then
+    arthexis_timing_record "django_migrate" 0 "skipped"
+else
+    if migration_plan=$(python manage.py showmigrations --plan); then
+        if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
+            python manage.py migrate --noinput
+            arthexis_timing_end "django_migrate"
+        else
+            arthexis_timing_record "django_migrate" 0 "skipped"
+        fi
+    else
+        echo "Failed to inspect migrations" >&2
+        exit 1
+    fi
+fi
 
 # Load personal user data fixtures if present
 if ls data/*.json >/dev/null 2>&1; then
