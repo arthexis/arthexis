@@ -1,7 +1,6 @@
-from pathlib import Path
-
 from django.db import migrations, models
 
+from apps.media.migrations_utils import copy_to_media
 
 REFERENCE_FILE_BUCKET_SLUG = "links-reference-files"
 REFERENCE_FILE_ALLOWED_PATTERNS = "\n".join(
@@ -24,29 +23,6 @@ REFERENCE_FILE_ALLOWED_PATTERNS = "\n".join(
 )
 REFERENCE_QR_BUCKET_SLUG = "links-reference-qr"
 REFERENCE_QR_ALLOWED_PATTERNS = "\n".join(["*.png"])
-
-
-def _copy_to_media(bucket, media_model, old_file):
-    if not old_file:
-        return None
-    filename = Path(old_file.name).name
-    old_file.open("rb")
-    try:
-        media_file = media_model(
-            bucket=bucket,
-            original_name=filename,
-            content_type=getattr(old_file, "content_type", "") or "",
-            size=getattr(old_file, "size", 0) or 0,
-        )
-        media_file.file.save(filename, old_file, save=False)
-        media_file.save()
-    finally:
-        old_file.close()
-    try:
-        old_file.delete(save=False)
-    except Exception:
-        pass
-    return media_file
 
 
 def migrate_reference_files(apps, schema_editor):
@@ -75,13 +51,13 @@ def migrate_reference_files(apps, schema_editor):
 
     for reference in Reference.objects.exclude(file=""):
         old_file = getattr(reference, "file", None)
-        media_file = _copy_to_media(file_bucket, MediaFile, old_file)
+        media_file = copy_to_media(file_bucket, MediaFile, old_file)
         if media_file:
             Reference.objects.filter(pk=reference.pk).update(file_media=media_file)
 
     for reference in Reference.objects.exclude(image=""):
         old_file = getattr(reference, "image", None)
-        media_file = _copy_to_media(qr_bucket, MediaFile, old_file)
+        media_file = copy_to_media(qr_bucket, MediaFile, old_file)
         if media_file:
             Reference.objects.filter(pk=reference.pk).update(image_media=media_file)
 

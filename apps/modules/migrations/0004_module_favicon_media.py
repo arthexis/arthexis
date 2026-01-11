@@ -1,33 +1,9 @@
-from pathlib import Path
-
 from django.db import migrations, models
 
+from apps.media.migrations_utils import copy_to_media
 
 MODULE_FAVICON_BUCKET_SLUG = "modules-favicons"
 MODULE_FAVICON_ALLOWED_PATTERNS = "\n".join(["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"])
-
-
-def _copy_to_media(bucket, media_model, old_file):
-    if not old_file:
-        return None
-    filename = Path(old_file.name).name
-    old_file.open("rb")
-    try:
-        media_file = media_model(
-            bucket=bucket,
-            original_name=filename,
-            content_type=getattr(old_file, "content_type", "") or "",
-            size=getattr(old_file, "size", 0) or 0,
-        )
-        media_file.file.save(filename, old_file, save=False)
-        media_file.save()
-    finally:
-        old_file.close()
-    try:
-        old_file.delete(save=False)
-    except Exception:
-        pass
-    return media_file
 
 
 def migrate_module_favicons(apps, schema_editor):
@@ -47,7 +23,7 @@ def migrate_module_favicons(apps, schema_editor):
 
     for module in Module.objects.exclude(favicon=""):
         old_file = getattr(module, "favicon", None)
-        media_file = _copy_to_media(bucket, MediaFile, old_file)
+        media_file = copy_to_media(bucket, MediaFile, old_file)
         if media_file:
             Module.objects.filter(pk=module.pk).update(favicon_media=media_file)
 

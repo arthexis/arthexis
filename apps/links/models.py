@@ -190,6 +190,10 @@ class Reference(Entity):
         return file.url if file else ""
 
     @property
+    def image(self):
+        return self.image_file
+
+    @property
     def file_file(self):
         if self.file_media and self.file_media.file:
             return self.file_media.file
