@@ -104,7 +104,7 @@ def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any
     extra_context = extra_context or {}
 
     try:
-        widgets = (
+        widgets = list(
             Widget.objects.select_related("zone")
             .prefetch_related("profiles__user", "profiles__group")
             .filter(
