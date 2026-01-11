@@ -180,7 +180,7 @@ class ClientReportAdmin(EntityModelAdmin):
             disable_emails = form.cleaned_data.get("disable_emails")
             title = form.cleaned_data.get("title")
             language = form.cleaned_data.get("language")
-            owner = request.user if request.user.is_authenticated else None
+            user = request.user if request.user.is_authenticated else None
             recurrence = form.cleaned_data.get("recurrence")
             result = create_client_report(
                 period=form.cleaned_data.get("period"),
@@ -188,10 +188,9 @@ class ClientReportAdmin(EntityModelAdmin):
                 end_date=form.cleaned_data.get("end_date"),
                 week=form.cleaned_data.get("week"),
                 month=form.cleaned_data.get("month"),
-                owner=owner,
-                created_by=request.user if request.user.is_authenticated else None,
+                owner=user,
+                created_by=user,
                 recipients=recipients,
-                disable_emails=disable_emails,
                 chargers=chargers,
                 language=language,
                 title=title,
