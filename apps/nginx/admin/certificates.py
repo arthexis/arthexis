@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ipaddress
 from pathlib import Path
 
 from django.conf import settings
@@ -10,7 +9,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
-from apps.nginx.config_utils import slugify
+from apps.nginx.config_utils import default_certificate_domain, slugify
 from apps.nginx.models import SiteConfiguration
 
 
@@ -159,34 +158,7 @@ class CertificateGenerationMixin:
 
     def _get_default_certificate_domain(self) -> str:
         hosts = getattr(settings, "ALLOWED_HOSTS", []) or []
-        candidates: list[str] = []
-        for host in hosts:
-            normalized = str(host or "").strip()
-            if not normalized or normalized.startswith("."):
-                continue
-            if "/" in normalized:
-                continue
-            if normalized.startswith("[") and "]" in normalized:
-                normalized = normalized.split("]", 1)[0].lstrip("[")
-            elif ":" in normalized and normalized.count(":") == 1:
-                normalized = normalized.rsplit(":", 1)[0]
-            if not normalized:
-                continue
-            try:
-                ipaddress.ip_address(normalized)
-            except ValueError:
-                candidates.append(normalized)
-            else:
-                continue
-
-        for candidate in candidates:
-            if "." in candidate:
-                return candidate
-
-        if candidates:
-            return candidates[0]
-
-        return "localhost"
+        return default_certificate_domain(hosts)
 
     def _certificate_type_choices(self) -> tuple[tuple[str, str], ...]:
         return (
@@ -209,4 +181,3 @@ class CertificateGenerationMixin:
     @admin.action(description=_("Generate certificates"))
     def generate_certificates(self, request, queryset):
         self._generate_certificates(request, queryset)
-

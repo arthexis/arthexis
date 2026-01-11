@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import re
 import subprocess
 import tempfile
@@ -21,6 +22,37 @@ def slugify(domain: str) -> str:
 
     slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")
     return slug or "site"
+
+
+def default_certificate_domain(hosts: Iterable[str]) -> str:
+    candidates: list[str] = []
+    for host in hosts or []:
+        normalized = str(host or "").strip()
+        if not normalized or normalized.startswith("."):
+            continue
+        if "/" in normalized:
+            continue
+        if normalized.startswith("[") and "]" in normalized:
+            normalized = normalized.split("]", 1)[0].lstrip("[")
+        elif ":" in normalized and normalized.count(":") == 1:
+            normalized = normalized.rsplit(":", 1)[0]
+        if not normalized:
+            continue
+        try:
+            ipaddress.ip_address(normalized)
+        except ValueError:
+            candidates.append(normalized)
+        else:
+            continue
+
+    for candidate in candidates:
+        if "." in candidate:
+            return candidate
+
+    if candidates:
+        return candidates[0]
+
+    return "localhost"
 
 
 WEBSOCKET_MAP_DIRECTIVE = "map $http_upgrade $connection_upgrade {"
