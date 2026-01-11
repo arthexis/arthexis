@@ -348,6 +348,83 @@ def dashboard_model_status(app_label: str, model_name: str) -> dict | None:
 
 
 @register.simple_tag
+def dashboard_model_status_map(app_list) -> dict[int, dict]:
+    """Return dashboard rule status for models in the admin app list."""
+
+    if not app_list:
+        return {}
+
+    model_classes = []
+
+    for app in app_list:
+        if isinstance(app, dict):
+            app_label = app.get("app_label")
+            models = app.get("models", [])
+        else:
+            app_label = getattr(app, "app_label", None)
+            models = getattr(app, "models", None)
+
+        if not models:
+            continue
+
+        for model in models:
+            if isinstance(model, dict):
+                model_class = model.get("model")
+                model_app_label = model.get("app_label")
+                object_name = model.get("object_name")
+            else:
+                model_class = getattr(model, "model", None)
+                model_app_label = getattr(model, "app_label", None)
+                object_name = getattr(model, "object_name", None)
+
+            resolved_app_label = model_app_label or app_label
+            if model_class is None and resolved_app_label and object_name:
+                try:
+                    model_class = apps.get_model(resolved_app_label, object_name)
+                except LookupError:
+                    model_class = None
+
+            if model_class is not None:
+                model_classes.append(model_class)
+
+    if not model_classes:
+        return {}
+
+    content_type_map = ContentType.objects.get_for_models(
+        *model_classes, for_concrete_models=False
+    )
+    content_types = list(content_type_map.values())
+    if not content_types:
+        return {}
+
+    rules = DashboardRule.objects.select_related("content_type").filter(
+        content_type__in=content_types
+    )
+    status_map = {}
+    for rule in rules:
+        content_type = rule.content_type
+        try:
+            status_map[content_type.id] = DashboardRule.get_cached_value(
+                content_type, rule.evaluate
+            )
+        except Exception:
+            logger.exception(
+                "Unable to evaluate dashboard rule for %s", content_type
+            )
+
+    return status_map
+
+
+@register.filter
+def get_status(status_map, content_type_id):
+    """Return a cached dashboard status dict from a status map."""
+
+    if not status_map or not content_type_id:
+        return None
+    return status_map.get(content_type_id)
+
+
+@register.simple_tag
 def optional_url(viewname: str, *args, **kwargs) -> str:
     """Return ``reverse(viewname)`` or an empty string when missing."""
 
