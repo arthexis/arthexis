@@ -1,8 +1,10 @@
 import copy
 import logging
+import uuid
 
 from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.dispatch import Signal
 
@@ -175,11 +177,40 @@ class Entity(models.Model):
             super().delete(using=using, keep_parents=keep_parents)
 
 
+class TransactionUUIDMixin(models.Model):
+    """Provide a transaction UUID that cannot be modified after creation."""
+
+    transaction_uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=True,
+        db_index=True,
+        verbose_name="Transaction UUID",
+    )
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            manager = getattr(type(self), "all_objects", type(self).objects)
+            original = (
+                manager.filter(pk=self.pk)
+                .values_list("transaction_uuid", flat=True)
+                .first()
+            )
+            if original is not None and original != self.transaction_uuid:
+                raise ValidationError(
+                    {"transaction_uuid": "Cannot modify transaction UUID"}
+                )
+        super().save(*args, **kwargs)
+
+
 __all__ = [
     "Entity",
     "EntityAllManager",
     "EntityManager",
     "EntityQuerySet",
     "EntityUserManager",
+    "TransactionUUIDMixin",
     "user_data_flag_updated",
 ]

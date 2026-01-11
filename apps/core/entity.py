@@ -4,6 +4,7 @@ from apps.base.models import (
     EntityManager,
     EntityQuerySet,
     EntityUserManager,
+    TransactionUUIDMixin,
     user_data_flag_updated,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "EntityManager",
     "EntityQuerySet",
     "EntityUserManager",
+    "TransactionUUIDMixin",
     "user_data_flag_updated",
 ]

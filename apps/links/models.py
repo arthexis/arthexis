@@ -2,22 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
-import uuid
-from io import BytesIO
 from urllib.parse import urlparse
 
-import qrcode
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.core.files.base import ContentFile
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.entity import Entity, EntityManager
+from apps.core.entity import Entity, EntityManager, TransactionUUIDMixin
 from apps.leads.models import Lead
 
 
@@ -39,7 +33,7 @@ class ReferenceManager(EntityManager):
         return self.get(alt_text=alt_text)
 
 
-class Reference(Entity):
+class Reference(TransactionUUIDMixin, Entity):
     """Store a piece of reference content which can be text or an image."""
 
     TEXT = "text"
@@ -90,12 +84,6 @@ class Reference(Entity):
         default=FOOTER_PUBLIC,
         verbose_name="Footer Visibility",
     )
-    transaction_uuid = models.UUIDField(
-        default=uuid.uuid4,
-        editable=True,
-        db_index=True,
-        verbose_name="Transaction UUID",
-    )
     created = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -121,24 +109,6 @@ class Reference(Entity):
     )
 
     objects = ReferenceManager()
-
-    def save(self, *args, **kwargs):
-        if self.pk:
-            original = type(self).all_objects.get(pk=self.pk)
-            if original.transaction_uuid != self.transaction_uuid:
-                raise ValidationError(
-                    {"transaction_uuid": "Cannot modify transaction UUID"}
-                )
-        if not self.image and self.value:
-            qr = qrcode.QRCode(box_size=10, border=4)
-            qr.add_data(self.value)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            buffer = BytesIO()
-            img.save(buffer, format="PNG")
-            filename = hashlib.sha256(self.value.encode()).hexdigest()[:16] + ".png"
-            self.image.save(filename, ContentFile(buffer.getvalue()), save=False)
-        super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.alt_text

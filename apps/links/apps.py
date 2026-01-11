@@ -15,6 +15,8 @@ class LinksConfig(AppConfig):
     label = "links"
 
     def ready(self):  # pragma: no cover - import for side effects
+        from . import signals  # noqa: F401
+
         if not is_celery_enabled():
             return
 

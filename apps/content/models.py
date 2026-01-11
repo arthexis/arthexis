@@ -3,14 +3,13 @@ from __future__ import annotations
 import uuid
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
-from apps.core.entity import Entity
+from apps.core.entity import Entity, TransactionUUIDMixin
 
 
-class ContentSample(Entity):
+class ContentSample(TransactionUUIDMixin, Entity):
     """Collected content such as text snippets or screenshots."""
 
     TEXT = "TEXT"
@@ -24,12 +23,6 @@ class ContentSample(Entity):
     path = models.CharField(max_length=255, blank=True)
     method = models.CharField(max_length=10, default="", blank=True)
     hash = models.CharField(max_length=64, blank=True)
-    transaction_uuid = models.UUIDField(
-        default=uuid.uuid4,
-        editable=True,
-        db_index=True,
-        verbose_name="transaction UUID",
-    )
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -50,19 +43,6 @@ class ContentSample(Entity):
             )
         ]
         db_table = "nodes_contentsample"
-
-    def save(self, *args, **kwargs):
-        if self.pk:
-            original = type(self).all_objects.get(pk=self.pk)
-            if original.transaction_uuid != self.transaction_uuid:
-                raise ValidationError(
-                    {"transaction_uuid": "Cannot modify transaction UUID"}
-                )
-        if self.node_id is None:
-            from apps.nodes.models import Node
-
-            self.node = Node.get_local()
-        super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return str(self.name)
