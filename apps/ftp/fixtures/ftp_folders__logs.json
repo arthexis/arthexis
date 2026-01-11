@@ -7,8 +7,8 @@
       "name": "Logs Directory",
       "path": "logs",
       "enabled": false,
-      "owner": null,
-      "security_group": null,
+      "user": null,
+      "group": null,
       "owner_permission": "admin",
       "group_permission": "read",
       "node": null
