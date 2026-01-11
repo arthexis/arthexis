@@ -2,6 +2,7 @@ import ast
 import inspect
 import logging
 import textwrap
+import weakref
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -25,6 +26,7 @@ from apps.counters.models import DashboardRule
 register = template.Library()
 
 logger = logging.getLogger(__name__)
+_USES_QUERYSET_CACHE = weakref.WeakKeyDictionary()
 
 
 @register.simple_tag
@@ -164,6 +166,15 @@ def model_admin_actions(context, app_label, model_name):
     keys so templates can render them as links.
     """
     request = context.get("request")
+    cache_key = (app_label, model_name)
+    if request is not None:
+        action_cache = getattr(request, "_dashboard_action_cache", None)
+        if action_cache is None:
+            action_cache = {}
+            setattr(request, "_dashboard_action_cache", action_cache)
+        cached_actions = action_cache.get(cache_key)
+        if cached_actions is not None:
+            return cached_actions
     try:
         model = apps.get_model(app_label, model_name)
     except LookupError:
@@ -174,13 +185,18 @@ def model_admin_actions(context, app_label, model_name):
 
     def uses_queryset(func):
         func = inspect.unwrap(func)
+        cached = _USES_QUERYSET_CACHE.get(func)
+        if cached is not None:
+            return cached
         try:
             source = textwrap.dedent(inspect.getsource(func))
         except (OSError, TypeError):
+            _USES_QUERYSET_CACHE[func] = True
             return True
         try:
             tree = ast.parse(source)
         except SyntaxError:
+            _USES_QUERYSET_CACHE[func] = True
             return True
         func_node = next(
             (
@@ -191,6 +207,7 @@ def model_admin_actions(context, app_label, model_name):
             None,
         )
         if func_node is None:
+            _USES_QUERYSET_CACHE[func] = True
             return True
 
         class Finder(ast.NodeVisitor):
@@ -206,6 +223,7 @@ def model_admin_actions(context, app_label, model_name):
             if finder.found:
                 break
             finder.visit(node)
+        _USES_QUERYSET_CACHE[func] = finder.found
         return finder.found
 
     actions = []
@@ -309,6 +327,8 @@ def model_admin_actions(context, app_label, model_name):
                         url = reverse(base + "changelist") + f"?action={action_name}"
             add_action(action_name, func, label, url)
 
+    if request is not None:
+        action_cache[cache_key] = actions
     return actions
 
 
