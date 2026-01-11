@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Callable, Iterable, TypeVar
+from typing import TYPE_CHECKING, Callable, Iterable, TypeVar
 
 from django.db import models
+
+if TYPE_CHECKING:
+    from apps.nodes.models import Node
 
 ModelType = TypeVar("ModelType", bound=models.Model)
 DetectedType = TypeVar("DetectedType")
@@ -11,7 +14,7 @@ DetectedType = TypeVar("DetectedType")
 def sync_detected_devices(
     *,
     model_cls: type[ModelType],
-    node,
+    node: "Node",
     detected: Iterable[DetectedType],
     identifier_getter: Callable[[DetectedType], str],
     defaults_getter: Callable[[DetectedType], dict[str, object]],
@@ -38,20 +41,17 @@ def sync_detected_devices(
             model_cls.objects.create(node=node, **create_kwargs)
             created += 1
         else:
-            dirty = False
+            update_fields: list[str] = []
             for field, value in defaults.items():
                 if getattr(obj, field) != value:
                     setattr(obj, field, value)
-                    dirty = True
-            if dirty:
-                obj.save(update_fields=list(defaults.keys()))
+                    update_fields.append(field)
+            if update_fields:
+                obj.save(update_fields=update_fields)
                 updated += 1
 
-    if seen:
-        model_cls.objects.filter(node=node).exclude(
-            **{f"{identifier_field}__in": seen}
-        ).delete()
-    else:
-        model_cls.objects.filter(node=node).delete()
+    model_cls.objects.filter(node=node).exclude(
+        **{f"{identifier_field}__in": seen}
+    ).delete()
 
     return created, updated
