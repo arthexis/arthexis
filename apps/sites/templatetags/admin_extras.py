@@ -3,6 +3,7 @@ import inspect
 import logging
 import textwrap
 from pathlib import Path
+from typing import Any, Iterable
 
 from django import template
 from django.apps import apps
@@ -347,16 +348,15 @@ def dashboard_model_status(app_label: str, model_name: str) -> dict | None:
         return None
 
 
-@register.simple_tag
-def dashboard_model_status_map(app_list) -> dict[int, dict]:
-    """Return dashboard rule status for models in the admin app list."""
+def _iter_model_classes(
+    app_list_to_scan: list[Any],
+) -> Iterable[type[Model]]:
+    """Yield model classes from a Django admin app_list."""
 
-    if not app_list:
-        return {}
+    if not app_list_to_scan:
+        return
 
-    model_classes = []
-
-    for app in app_list:
+    for app in app_list_to_scan:
         if isinstance(app, dict):
             app_label = app.get("app_label")
             models = app.get("models", [])
@@ -385,7 +385,14 @@ def dashboard_model_status_map(app_list) -> dict[int, dict]:
                     model_class = None
 
             if model_class is not None:
-                model_classes.append(model_class)
+                yield model_class
+
+
+@register.simple_tag
+def dashboard_model_status_map(app_list: list[Any]) -> dict[int, dict]:
+    """Return dashboard rule status for models in the admin app list."""
+
+    model_classes = list(_iter_model_classes(app_list))
 
     if not model_classes:
         return {}
@@ -416,7 +423,10 @@ def dashboard_model_status_map(app_list) -> dict[int, dict]:
 
 
 @register.filter
-def get_status(status_map, content_type_id):
+def get_status(
+    status_map: dict[int, dict],
+    content_type_id: int | None,
+) -> dict | None:
     """Return a cached dashboard status dict from a status map."""
 
     if not status_map or not content_type_id:
