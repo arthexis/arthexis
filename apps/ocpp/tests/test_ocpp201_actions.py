@@ -15,6 +15,11 @@ from apps.ocpp.views import actions
 from apps.ocpp.views.common import ActionContext, ActionCall
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 class DummyWebSocket:
     def __init__(self):

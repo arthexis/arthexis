@@ -6,6 +6,11 @@ import pytest
 
 from apps.screens import lcd_screen
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 def _signal(name: str, fallback: signal.Signals) -> signal.Signals:
     return getattr(signal, name, fallback)

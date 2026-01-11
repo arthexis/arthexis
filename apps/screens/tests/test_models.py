@@ -1,9 +1,15 @@
 from datetime import timedelta
 
+import pytest
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.screens.models import CharacterScreen, PixelScreen
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 class DeviceScreenTests(TestCase):

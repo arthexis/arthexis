@@ -4,7 +4,7 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 import django
 import pytest
@@ -53,6 +53,65 @@ from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
 COLLECTED_RESULTS: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"logs": []})
 DB_BLOCKER = None
 
+
+def _normalize_marker_value(value: str) -> str:
+    return value.strip().lower()
+
+
+def _parse_csv_env(value: str | None) -> Set[str] | None:
+    if not value:
+        return None
+    return {_normalize_marker_value(item) for item in value.split(",") if item.strip()}
+
+
+def _truthy_env(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_skip_for_role(item: pytest.Item, role_filter: str | None, role_only: bool) -> str | None:
+    role_marks = [
+        _normalize_marker_value(mark.args[0])
+        for mark in item.iter_markers("role")
+        if mark.args and isinstance(mark.args[0], str)
+    ]
+    if role_filter:
+        normalized_role = _normalize_marker_value(role_filter)
+        if role_marks and normalized_role not in role_marks:
+            return f"role '{role_filter}' not in {sorted(set(role_marks))}"
+    if role_only and not role_marks:
+        return "role-specific run requested"
+    return None
+
+
+def _should_skip_for_features(item: pytest.Item, enabled_features: Set[str] | None) -> str | None:
+    if enabled_features is None:
+        return None
+    feature_marks = [
+        _normalize_marker_value(mark.args[0])
+        for mark in item.iter_markers("feature")
+        if mark.args and isinstance(mark.args[0], str)
+    ]
+    if feature_marks and not set(feature_marks).issubset(enabled_features):
+        return f"features {sorted(set(feature_marks))} not in {sorted(enabled_features)}"
+    return None
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    role_filter = os.environ.get("NODE_ROLE")
+    role_only = _truthy_env(os.environ.get("NODE_ROLE_ONLY"))
+    enabled_features = _parse_csv_env(os.environ.get("NODE_FEATURES"))
+
+    for item in items:
+        role_skip_reason = _should_skip_for_role(item, role_filter, role_only)
+        if role_skip_reason:
+            item.add_marker(pytest.mark.skip(reason=role_skip_reason))
+            continue
+
+        feature_skip_reason = _should_skip_for_features(item, enabled_features)
+        if feature_skip_reason:
+            item.add_marker(pytest.mark.skip(reason=feature_skip_reason))
 
 def _append_log(report: pytest.TestReport, entry: Dict[str, Any]) -> None:
     log_parts: List[str] = []

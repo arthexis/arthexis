@@ -3,12 +3,18 @@ from pathlib import Path
 from tempfile import mkdtemp
 from unittest.mock import MagicMock, patch
 
+import pytest
 from django.db.utils import OperationalError
 from django.test import TransactionTestCase
 from django.utils import timezone
 
 from apps.ocpp import status_resets
 from apps.ocpp.models import Charger
+
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 class StatusResetTests(TransactionTestCase):

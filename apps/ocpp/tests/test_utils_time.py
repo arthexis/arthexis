@@ -6,6 +6,11 @@ from django.utils import timezone
 
 from apps.ocpp.utils import _parse_ocpp_timestamp
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 @pytest.mark.parametrize("value", [None, "", 0])
 def test_parse_ocpp_timestamp_returns_none_for_empty_values(value):

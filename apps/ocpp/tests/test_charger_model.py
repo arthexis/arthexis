@@ -8,7 +8,11 @@ from apps.ocpp.models import Charger
 from apps.nodes.models import Node
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 def test_last_seen_prefers_status_timestamp():

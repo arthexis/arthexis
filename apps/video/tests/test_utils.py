@@ -6,6 +6,11 @@ import pytest
 
 from apps.video import utils
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 def test_has_rpi_camera_stack_with_ffmpeg(monkeypatch):
     monkeypatch.setattr(utils, "has_rpicam_binaries", lambda: False)

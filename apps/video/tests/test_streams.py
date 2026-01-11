@@ -6,6 +6,11 @@ from django.urls import reverse
 from apps.nodes.models import Node
 from apps.video.models import MjpegStream, VideoDevice
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.fixture
 def video_device(db):

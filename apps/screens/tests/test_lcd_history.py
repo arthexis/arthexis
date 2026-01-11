@@ -1,11 +1,18 @@
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from apps.screens.history import (
     LCDHistoryRecorder,
     load_history_entries,
     select_entry_for_timestamp,
 )
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 def test_history_recorder_rotates_between_days(tmp_path):

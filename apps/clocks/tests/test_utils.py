@@ -1,4 +1,11 @@
+import pytest
+
 from apps.clocks.utils import discover_clock_devices, parse_i2cdetect_addresses
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 def test_parse_i2cdetect_addresses_parses_hex_grid():

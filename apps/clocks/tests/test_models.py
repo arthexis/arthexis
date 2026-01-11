@@ -4,6 +4,11 @@ from apps.clocks.models import ClockDevice
 from apps.nodes.models import Node
 from django.urls import reverse
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.mark.django_db
 def test_refresh_from_system_creates_and_updates_devices():

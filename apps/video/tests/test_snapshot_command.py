@@ -5,7 +5,11 @@ from unittest.mock import patch
 import pytest
 from django.core.management import CommandError, call_command
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 def _mock_feature(is_enabled: bool = True):

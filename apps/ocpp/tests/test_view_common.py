@@ -5,6 +5,11 @@ from django.utils import timezone
 
 from apps.ocpp.views import common
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 class _ChargerWithoutHelper:
     def __init__(self, *, status_ts=None, heartbeat=None, raise_attr=False):

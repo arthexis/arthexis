@@ -1,7 +1,13 @@
 import json
 from pathlib import Path
 
+import pytest
 from django.core.management import call_command
+
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 def test_ocpp16_coverage_matches_fixture(tmp_path):

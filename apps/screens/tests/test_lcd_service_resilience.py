@@ -7,7 +7,14 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from apps.screens import lcd_screen
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 def test_base_dir_resolution_avoids_django(monkeypatch, tmp_path):

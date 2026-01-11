@@ -12,6 +12,11 @@ from apps.ocpp.forwarder import Forwarder, ForwardingSession
 from apps.ocpp.models import CPForwarder, Charger
 from apps.nodes.models import Node
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 @pytest.fixture
 def forwarder_instance():

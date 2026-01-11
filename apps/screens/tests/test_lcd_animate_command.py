@@ -10,6 +10,11 @@ from django.test import override_settings
 from apps.screens.lcd import LCDUnavailableError
 from apps.screens.models import LCDAnimation
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.mark.django_db
 def test_lists_available_animations(capsys):

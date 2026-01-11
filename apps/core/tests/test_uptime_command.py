@@ -12,6 +12,11 @@ from django.utils import timezone
 
 from apps.core.management.commands import uptime as uptime_command
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 def _write_lock(lock_dir: Path, started_at: datetime) -> Path:
     lock_dir.mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,11 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.mark.django_db
 def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):

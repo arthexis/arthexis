@@ -11,7 +11,11 @@ from apps.nodes.utils import save_screenshot
 from apps.ocpp.models import Charger, MeterValue, Transaction
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 def _make_fake_screenshot(path: Path, label: str) -> None:

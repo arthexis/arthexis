@@ -20,7 +20,11 @@ from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
 from config.asgi import application
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 CONNECT_TIMEOUT = 5
 

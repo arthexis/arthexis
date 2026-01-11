@@ -41,6 +41,11 @@ from apps.protocols.models import ProtocolCall as ProtocolCallModel
 from apps.maps.models import Location
 from django.utils.dateparse import parse_datetime
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 @pytest.fixture
 def anyio_backend():

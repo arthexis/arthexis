@@ -135,6 +135,8 @@ def test_net_message_notifies_during_upgrade(monkeypatch, settings, tmp_path):
     assert calls["kwargs"]["channel_num"] == 0
 
 
+@pytest.mark.role("Terminal")
+@pytest.mark.role("Control")
 @pytest.mark.django_db
 def test_net_message_propagate_uses_lcd_channel(monkeypatch):
     calls: dict[str, object] = {}

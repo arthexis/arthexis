@@ -9,7 +9,11 @@ from django.test.client import RequestFactory
 from apps.ocpp.admin import ChargerAdmin
 from apps.ocpp.models import Charger, Variable, MonitoringRule, MonitoringReport
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 def test_charger_admin_changelist_accessible(client):

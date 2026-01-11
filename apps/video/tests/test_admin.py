@@ -7,6 +7,11 @@ from apps.nodes.models import Node, NodeFeature
 from apps.video import admin as video_admin
 from apps.video.models import VideoDevice, VideoSnapshot
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.mark.django_db
 def test_take_snapshot_discovers_device_and_redirects(

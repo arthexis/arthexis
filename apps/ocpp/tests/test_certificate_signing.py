@@ -2,6 +2,11 @@ import pytest
 
 from apps.ocpp.services import certificate_signing
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 def test_sign_certificate_request_handles_non_mapping_error(settings, monkeypatch):
     settings.CERTIFICATE_SIGNING_URL = "http://signer"

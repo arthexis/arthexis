@@ -12,7 +12,11 @@ from django.test.utils import override_settings
 from apps.ocpp import store
 from config.asgi import application
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 class FakeRedis:

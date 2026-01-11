@@ -10,6 +10,11 @@ from django.utils import timezone
 
 from apps.nodes import tasks
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 class DummyCache:
     def __init__(self) -> None:

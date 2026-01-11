@@ -2,6 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import pytest
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -15,6 +16,11 @@ from apps.screens.startup_notifications import (
     read_lcd_lock_file,
     render_lcd_lock_file,
 )
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 class LCDStartupNotificationTests(TestCase):

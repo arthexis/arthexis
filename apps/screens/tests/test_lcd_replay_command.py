@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
 from apps.screens.history import LCDHistoryRecorder
 from apps.screens.management.commands import lcd_replay
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 class StubWriter:

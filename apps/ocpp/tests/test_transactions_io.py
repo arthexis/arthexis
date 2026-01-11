@@ -8,6 +8,11 @@ from apps.ocpp.models import Charger, Transaction, MeterValue
 from apps.ocpp.transactions_io import export_transactions, import_transactions
 from apps.ocpp.network import sync_transactions_payload
 
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
+
 
 @pytest.fixture
 

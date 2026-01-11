@@ -1,9 +1,15 @@
 import json
 from pathlib import Path
 
+import pytest
 from django.core.management import call_command
 
 from apps.ocpp.management.commands.coverage_ocpp16 import _implemented_cp_to_csms
+
+pytestmark = [
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 def test_notify_display_messages_in_cp_to_csms_coverage():

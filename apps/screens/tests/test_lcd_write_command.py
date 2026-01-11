@@ -15,6 +15,11 @@ from apps.screens.startup_notifications import (
     read_lcd_lock_file,
 )
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.fixture()
 def temp_base_dir(tmp_path: Path) -> Path:

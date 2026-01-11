@@ -6,7 +6,11 @@ from apps.ocpp.evcs import _start_simulator, get_simulator_state
 from apps.ocpp.views import simulator as simulator_view
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Watchtower"),
+]
 
 
 @pytest.fixture(autouse=True)

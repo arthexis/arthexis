@@ -9,6 +9,11 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 class FakeLCD:
     def __init__(self, *args, **kwargs) -> None:

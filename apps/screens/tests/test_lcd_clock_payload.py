@@ -7,6 +7,11 @@ import pytest
 
 from apps.screens import lcd_screen
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
+
 
 @pytest.mark.parametrize(
     "use_fahrenheit,expected_suffix",

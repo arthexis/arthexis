@@ -1,7 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from apps.summary.tasks import _write_lcd_frames
 from apps.summary.services import render_lcd_payload
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+]
 
 
 def test_write_lcd_frames_updates_lock_file(tmp_path):
