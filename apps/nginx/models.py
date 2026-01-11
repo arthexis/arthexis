@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.nginx import services
-from apps.nginx.config_utils import default_certificate_domain
+from apps.nginx.config_utils import default_certificate_domain_from_settings
 
 
 def _read_lock(lock_dir: Path, name: str, fallback: str) -> str:
@@ -180,7 +180,7 @@ class SiteConfiguration(models.Model):
             "role": _read_lock(lock_dir, "role.lck", "Terminal"),
             "port": _read_int_lock(lock_dir, "backend_port.lck", 8888),
         }
-        default_name = default_certificate_domain(getattr(settings, "ALLOWED_HOSTS", []))
+        default_name = default_certificate_domain_from_settings(settings)
 
         if default_name != "default":
             cls.objects.get_or_create(name="default", defaults=defaults)
