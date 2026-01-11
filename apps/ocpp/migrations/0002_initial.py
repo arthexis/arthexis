@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("cards", "0002_initial"),
-        ("energy", "0003_initial"),
+        ("energy", "0001_initial"),
         ("groups", "0002_initial"),
         ("links", "0002_initial"),
         ("maps", "0002_initial"),
