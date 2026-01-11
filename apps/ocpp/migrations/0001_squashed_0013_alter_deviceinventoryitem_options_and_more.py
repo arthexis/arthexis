@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
 
     replaces = [('ocpp', '0001_initial'), ('ocpp', '0002_initial'), ('ocpp', '0003_charger_configuration_check_enabled_and_more'), ('ocpp', '0004_remove_rfid_proxy'), ('ocpp', '0005_certificateoperation_certificaterequest_and_more'), ('ocpp', '0006_monitoringreport_variable_monitoringrule_and_more'), ('ocpp', '0007_customer_information_display_messages'), ('ocpp', '0008_forwarder_defaults_and_exports'), ('ocpp', '0009_costupdate'), ('ocpp', '0009_clearedcharginglimitevent'), ('ocpp', '0010_merge_0009_clearedcharginglimitevent_0009_costupdate'), ('ocpp', '0010_charger_last_charging_limit_and_more'), ('ocpp', '0011_merge_20260103_1323'), ('ocpp', '0012_device_inventory_snapshot'), ('ocpp', '0013_alter_deviceinventoryitem_options_and_more')]
 
-    initial = True
+    initial = False
 
     dependencies = [
         ('cards', '0002_initial'),

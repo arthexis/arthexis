@@ -91,7 +91,7 @@ class Migration(migrations.Migration):
         ("nodes", "0011_netmessage_expires_at"),
     ]
 
-    initial = True
+    initial = False
 
     dependencies = [
         ("chats", "0003_initial"),
