@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -21,35 +20,6 @@ class ChatAvatar(Ownable):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
-
-    def clean(self):
-        super().clean()
-        owners = [field for field in ("user", "group") if getattr(self, f"{field}_id")]
-        if len(owners) > 1:
-            raise ValidationError(
-                {
-                    field: _("Select either a user or a security group, not both.")
-                    for field in owners
-                }
-            )
-        if not owners:
-            raise ValidationError(
-                _("Avatars must be assigned to a user or a security group."),
-            )
-
-    @property
-    def owner(self):
-        return self.user if self.user_id else self.group
-
-    def owner_display(self) -> str:
-        owner = self.owner
-        if owner is None:
-            return ""
-        if hasattr(owner, "get_username"):
-            return owner.get_username()
-        if hasattr(owner, "name"):
-            return owner.name
-        return str(owner)
 
     def is_available(self) -> bool:
         if not self.is_enabled:
