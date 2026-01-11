@@ -49,7 +49,17 @@
     {% include "admin/dashboard_app_list.html" with app_list=app_list %}
     </div>
     <div class="dashboard-side" id="recent-boxes">
-      {% render_widgets 'sidebar' %}
+      <div
+        id="admin-dashboard-widgets"
+        hx-get="{% url 'widgets:zone' 'sidebar' %}"
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      >
+        <p>{% translate "Loading widgets..." %}</p>
+        <noscript>
+          {% render_widgets 'sidebar' %}
+        </noscript>
+      </div>
   </div>
 </div>
 {% endblock %}

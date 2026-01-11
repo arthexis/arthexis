@@ -5,7 +5,9 @@ import logging
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import models
+from django.db.models.signals import post_delete, post_save
 from django.db.models import Q
+from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -109,6 +111,34 @@ class WidgetProfile(Entity):
         if not matches:
             return False
         return any(profile.is_enabled for profile in matches)
+
+
+def _invalidate_zone_for_widget(widget: Widget | None) -> None:
+    if not widget or not widget.zone_id:
+        return
+    from apps.widgets.services import invalidate_zone_cache
+
+    invalidate_zone_cache(widget.zone.slug)
+
+
+@receiver(post_save, sender=Widget)
+def _invalidate_widget_cache_on_save(sender, instance: Widget, **_kwargs) -> None:
+    _invalidate_zone_for_widget(instance)
+
+
+@receiver(post_delete, sender=Widget)
+def _invalidate_widget_cache_on_delete(sender, instance: Widget, **_kwargs) -> None:
+    _invalidate_zone_for_widget(instance)
+
+
+@receiver(post_save, sender=WidgetProfile)
+def _invalidate_widget_cache_on_profile_save(sender, instance: WidgetProfile, **_kwargs) -> None:
+    _invalidate_zone_for_widget(instance.widget)
+
+
+@receiver(post_delete, sender=WidgetProfile)
+def _invalidate_widget_cache_on_profile_delete(sender, instance: WidgetProfile, **_kwargs) -> None:
+    _invalidate_zone_for_widget(instance.widget)
 
 
 __all__ = ["WidgetZone", "Widget", "WidgetProfile"]
