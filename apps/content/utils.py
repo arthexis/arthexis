@@ -214,7 +214,12 @@ def capture_and_save_screenshot(
         if local:
             path = capture_local_screenshot()
         else:
-            path = capture_screenshot(target_url, width=width, height=height)
+            screenshot_kwargs = {}
+            if width is not None:
+                screenshot_kwargs["width"] = width
+            if height is not None:
+                screenshot_kwargs["height"] = height
+            path = capture_screenshot(target_url, **screenshot_kwargs)
     except Exception as exc:
         if log_capture_errors and logger is not None:
             logger.error("Screenshot capture failed: %s", exc)
