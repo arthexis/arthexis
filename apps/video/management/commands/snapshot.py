@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
@@ -16,6 +18,11 @@ class Command(BaseCommand):
     help = "Capture a snapshot from the default camera and print the file path."
 
     def handle(self, *args, **options) -> str:
+        if not _is_test_server_active():
+            raise CommandError(
+                "Snapshot capture is only available when running in the Test Server."
+            )
+
         node = Node.get_local()
         if node is None:
             raise CommandError("No local node is registered; cannot take a snapshot.")
@@ -65,3 +72,12 @@ class Command(BaseCommand):
         saved_path = Path(sample.path).as_posix()
         self.stdout.write(self.style.SUCCESS(f"Snapshot saved to {saved_path}"))
         return saved_path
+
+
+def _is_test_server_active() -> bool:
+    """Return ``True`` when the VS Code test server is running outside CI."""
+
+    if os.environ.get("CI"):
+        return False
+    lock_file = Path(settings.BASE_DIR) / ".locks" / "test_server.json"
+    return lock_file.exists()
