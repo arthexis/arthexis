@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.utils import bash_path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "staticfiles.sh"
@@ -75,16 +76,6 @@ print(metadata["hash"])
     return script_path
 
 
-def _bash_path(path: Path) -> str:
-    posix_path = path.as_posix()
-    if os.name != "nt":
-        return posix_path
-    if len(posix_path) > 1 and posix_path[1] == ":":
-        drive = posix_path[0].lower()
-        return f"/{drive}{posix_path[2:]}"
-    return posix_path
-
-
 def _run_static_hash(base_dir: Path, hash_script: Path, *, force: bool = False) -> dict:
     lock_dir = base_dir / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
@@ -109,12 +100,12 @@ def _run_static_hash(base_dir: Path, hash_script: Path, *, force: bool = False) 
     command = "\n".join(
         [
             "set -e",
-            f"cd '{_bash_path(base_dir)}'",
-            f"source '{_bash_path(HELPER_PATH)}'",
+            f"cd '{bash_path(base_dir)}'",
+            f"source '{bash_path(HELPER_PATH)}'",
             'STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"',
             'STATIC_META_FILE="$LOCK_DIR/staticfiles.meta"',
             f'hash_value=$(arthexis_prepare_staticfiles_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" {force_flag})',
-            f'printf "%s" "$hash_value" > "{_bash_path(hash_output_path)}"',
+            f'printf "%s" "$hash_value" > "{bash_path(hash_output_path)}"',
         ]
     )
 

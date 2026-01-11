@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.utils import bash_path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "runserver_preflight.sh"
@@ -60,16 +61,6 @@ def _write_migration(base_dir: Path, contents: str = "# initial migration\n") ->
     return migration_file
 
 
-def _bash_path(path: Path) -> str:
-    posix_path = path.as_posix()
-    if os.name != "nt":
-        return posix_path
-    if len(posix_path) > 1 and posix_path[1] == ":":
-        drive = posix_path[0].lower()
-        return f"/{drive}{posix_path[2:]}"
-    return posix_path
-
-
 def _run_preflight(
     base_dir: Path,
     plan_output: str = "[ ] demo 0001_initial",
@@ -114,11 +105,11 @@ def _run_preflight(
             "\n".join(
                 [
                     "set -e",
-                    f"cd '{_bash_path(base_dir)}'",
+                    f"cd '{bash_path(base_dir)}'",
                     "RUNSERVER_EXTRA_ARGS=()",
-                    f"source '{_bash_path(HELPER_PATH)}'",
+                    f"source '{bash_path(HELPER_PATH)}'",
                     "run_runserver_preflight",
-                    f"printf '%s\\n' \"${{RUNSERVER_EXTRA_ARGS[@]}}\" > '{_bash_path(extra_args_log)}'",
+                    f"printf '%s\\n' \"${{RUNSERVER_EXTRA_ARGS[@]}}\" > '{bash_path(extra_args_log)}'",
                 ]
             ),
         ],

@@ -67,8 +67,9 @@ def build_user_mounts(
         except OSError as exc:
             if os.name != "nt" or getattr(exc, "winerror", None) != 1314:
                 raise
-            command = f'mklink /J "{alias}" "{target}"'
-            subprocess.run(["cmd", "/c", command], check=True)
+            subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(alias), str(target)], check=True
+            )
 
     user_mounts: dict[str, UserMount] = {}
     warnings: list[str] = []
