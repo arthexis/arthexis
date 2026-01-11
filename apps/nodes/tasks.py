@@ -28,7 +28,7 @@ from apps.screens.startup_notifications import (
     render_lcd_lock_file,
 )
 from .models import NetMessage, Node, NodeRole, PendingNetMessage
-from .utils import capture_and_save_screenshot
+from apps.content.utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
 

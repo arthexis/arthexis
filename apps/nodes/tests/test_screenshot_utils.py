@@ -2,12 +2,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from apps.nodes.utils import capture_and_save_screenshot
+from apps.content.utils import capture_and_save_screenshot
 
 
-@patch("apps.nodes.utils.save_screenshot")
-@patch("apps.nodes.utils.capture_screenshot")
-@patch("apps.nodes.utils.Node")
+@patch("apps.content.utils.save_screenshot")
+@patch("apps.content.utils.capture_screenshot")
+@patch("apps.nodes.models.Node")
 def test_capture_and_save_screenshot_builds_default_url(
     node_mock, capture_mock, save_mock
 ):
@@ -27,9 +27,9 @@ def test_capture_and_save_screenshot_builds_default_url(
     assert result == Path("/tmp/test.png")
 
 
-@patch("apps.nodes.utils.Node")
-@patch("apps.nodes.utils.save_screenshot")
-@patch("apps.nodes.utils.capture_screenshot", side_effect=RuntimeError("boom"))
+@patch("apps.nodes.models.Node")
+@patch("apps.content.utils.save_screenshot")
+@patch("apps.content.utils.capture_screenshot", side_effect=RuntimeError("boom"))
 def test_capture_and_save_screenshot_logs_and_suppresses_errors(
     capture_mock, save_mock, node_mock
 ):

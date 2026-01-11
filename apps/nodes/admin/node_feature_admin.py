@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.locals.user_data import EntityModelAdmin
 
 from ..models import Node, NodeFeature
-from ..utils import capture_screenshot, save_screenshot
+from apps.content.utils import capture_screenshot, save_screenshot
 from .actions import check_features_for_eligibility, enable_selected_features
 from .forms import NodeFeatureAdminForm
 from .reports_admin import CeleryReportAdminMixin

@@ -22,7 +22,7 @@ from apps.content.models import (
 from apps.locals.user_data import EntityModelAdmin
 from apps.core.admin import OwnableAdminMixin
 from apps.nodes.models import Node
-from apps.nodes.utils import capture_screenshot, save_screenshot
+from apps.content.utils import capture_screenshot, save_screenshot
 from apps.video.models import VideoDevice
 from apps.video.utils import (
     DEFAULT_CAMERA_RESOLUTION,

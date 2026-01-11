@@ -20,7 +20,7 @@ from apps.core.system import _systemd_unit_status
 from apps.ocpp.models import CPForwarder, Charger
 
 from ..models import NetMessage, Node
-from ..utils import capture_screenshot, save_screenshot
+from apps.content.utils import capture_screenshot, save_screenshot
 from .forms import DownloadFirmwareForm, SendNetMessageForm
 
 

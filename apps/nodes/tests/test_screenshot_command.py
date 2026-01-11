@@ -1,5 +1,4 @@
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -20,11 +19,7 @@ def test_screenshot_command_with_url(helper_mock, capsys):
 
 
 @patch("apps.nodes.management.commands.screenshot.capture_and_save_screenshot")
-@patch("apps.nodes.utils.Node")
-def test_screenshot_command_default_url(node_mock, helper_mock):
-    node_mock.get_local.return_value = SimpleNamespace(
-        get_preferred_scheme=lambda: "https"
-    )
+def test_screenshot_command_default_url(helper_mock):
     helper_mock.return_value = Path("/tmp/test.png")
 
     call_command("screenshot")

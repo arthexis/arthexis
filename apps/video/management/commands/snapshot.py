@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.nodes.utils import save_screenshot
+from apps.content.utils import save_screenshot
 from apps.video.models import VideoDevice
 from apps.video.utils import capture_rpi_snapshot, has_rpi_camera_stack
 

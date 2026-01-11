@@ -5,7 +5,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.nodes.utils import capture_and_save_screenshot
+from apps.content.utils import capture_and_save_screenshot
 
 
 class Command(BaseCommand):
