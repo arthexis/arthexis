@@ -7,7 +7,7 @@ SITE_BADGE_FAVICON_ALLOWED_PATTERNS = "\n".join(["*.png", "*.ico", "*.svg", "*.j
 
 
 def migrate_sitebadge_favicons(apps, schema_editor):
-    SiteBadge = apps.get_model("sites", "SiteBadge")
+    SiteBadge = apps.get_model("pages", "SiteBadge")
     MediaBucket = apps.get_model("media", "MediaBucket")
     MediaFile = apps.get_model("media", "MediaFile")
 
@@ -31,7 +31,7 @@ def migrate_sitebadge_favicons(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("media", "0001_initial"),
-        ("sites", "0005_viewhistory_exception_name"),
+        ("pages", "0005_viewhistory_exception_name"),
     ]
 
     operations = [
