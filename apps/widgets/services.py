@@ -103,17 +103,21 @@ def _visible(widget: Widget, user) -> bool:
 def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> list[RenderedWidget]:
     extra_context = extra_context or {}
 
-    widgets = (
-        Widget.objects.select_related("zone")
-        .prefetch_related("profiles__user", "profiles__group")
-        .filter(
-            zone__slug=zone_slug,
-            is_enabled=True,
-            is_deleted=False,
-            zone__is_deleted=False,
+    try:
+        widgets = (
+            Widget.objects.select_related("zone")
+            .prefetch_related("profiles__user", "profiles__group")
+            .filter(
+                zone__slug=zone_slug,
+                is_enabled=True,
+                is_deleted=False,
+                zone__is_deleted=False,
+            )
+            .order_by("priority", "pk")
         )
-        .order_by("priority", "pk")
-    )
+    except (OperationalError, ProgrammingError):  # pragma: no cover - database not ready
+        logger.debug("Widgets tables unavailable; skipping render", exc_info=True)
+        return []
 
     rendered: list[RenderedWidget] = []
     for widget in widgets:
