@@ -205,3 +205,4 @@ def save_screenshot(
         content=content,
         duplicate_log_context="screenshot content",
     )
+
