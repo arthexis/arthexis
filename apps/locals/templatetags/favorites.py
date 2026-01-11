@@ -1,3 +1,5 @@
+import inspect
+
 from django import template
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
@@ -85,11 +87,12 @@ def _build_ct_id_map(app_list):
     if not model_lookup:
         return {}
 
-    ct_map = ContentType.objects.get_for_models(
-        *model_lookup.keys(),
-        for_concrete_models=False,
-        for_proxy_models=True,
-    )
+    get_for_models = ContentType.objects.get_for_models
+    kwargs = {"for_concrete_models": False}
+    if "for_proxy_models" in inspect.signature(get_for_models).parameters:
+        kwargs["for_proxy_models"] = True
+
+    ct_map = get_for_models(*model_lookup.keys(), **kwargs)
     return {
         model_lookup[model_class]: ct.id
         for model_class, ct in ct_map.items()
