@@ -346,7 +346,7 @@ def _select_low_payload(
     _install_date(base_dir, now=now_value)
     uptime_secs = _uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
-    on_label = _format_on_label(_availability_seconds(base_dir, now=now_value)) or "?h?m?s"
+    on_label = _format_on_label(_availability_seconds(base_dir, now=now_value)) or "?m?s"
     subject_parts = [f"UP {uptime_label}"]
     if _ap_mode_enabled():
         ap_client_count = _ap_client_count()
