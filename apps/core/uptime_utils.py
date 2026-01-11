@@ -81,17 +81,13 @@ def ap_client_count(
             check=False,
             timeout=timeout,
         )
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return None
 
     if result.returncode != 0:
         return None
 
-    count = 0
-    for line in result.stdout.splitlines():
-        if line.startswith("Station "):
-            count += 1
-    return count
+    return sum(1 for line in result.stdout.splitlines() if line.startswith("Station "))
 
 
 def internet_interface_label(
