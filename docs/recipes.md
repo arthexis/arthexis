@@ -67,3 +67,9 @@ result = {
 
 The recipe result is read from the configured result variable (default `result`) and returned from
 `execute()` as `execution.result`.
+
+## Security considerations
+
+**Warning:** Recipes are executed as Python code on the server. Granting users permission to
+create or edit recipes is equivalent to giving them shell access. Only highly trusted
+administrators should have these permissions.
