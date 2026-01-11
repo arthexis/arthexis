@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
+from django.core.cache import cache
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.template.loader import render_to_string
@@ -12,6 +14,10 @@ from .models import Widget, WidgetProfile, WidgetZone
 from .registry import WidgetDefinition, get_registered_widget, iter_registered_widgets
 
 logger = logging.getLogger(__name__)
+
+CACHE_TTL_SECONDS = 30
+CACHE_VERSION_KEY = "widgets:zone:{zone_slug}:version"
+CACHE_RENDER_KEY = "widgets:zone:{zone_slug}:render:{identity}:{context}:{version}"
 
 
 @dataclass(slots=True)
@@ -96,7 +102,6 @@ def _visible(widget: Widget, user) -> bool:
 
 def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> list[RenderedWidget]:
     extra_context = extra_context or {}
-    sync_registered_widgets()
 
     widgets = (
         Widget.objects.select_related("zone")
@@ -131,8 +136,67 @@ def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any
 
 
 def render_zone_html(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> str:
+    extra_context = extra_context or {}
+    identity = _cache_identity(getattr(request, "user", None))
+    context_key = _cache_context(extra_context)
+    version = _zone_cache_version(zone_slug)
+    cache_key = CACHE_RENDER_KEY.format(
+        zone_slug=zone_slug,
+        identity=identity,
+        context=context_key,
+        version=version,
+    )
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     widgets = render_zone_widgets(request=request, zone_slug=zone_slug, extra_context=extra_context)
-    return "".join(widget.html for widget in widgets)
+    html = "".join(widget.html for widget in widgets)
+    cache.set(cache_key, html, CACHE_TTL_SECONDS)
+    return html
 
 
-__all__ = ["RenderedWidget", "render_zone_html", "render_zone_widgets", "sync_registered_widgets"]
+def _cache_identity(user) -> str:
+    if user and getattr(user, "is_authenticated", False):
+        return f"user:{user.id}"
+    role = getattr(user, "role", None)
+    if role:
+        return f"role:{role}"
+    return "anonymous"
+
+
+def _cache_context(extra_context: dict[str, Any]) -> str:
+    app = extra_context.get("app") if extra_context else None
+    if app is not None:
+        app_label = getattr(app, "label", None)
+        if app_label:
+            return f"app:{app_label}"
+        return f"app:{app}"
+    return "default"
+
+
+def _zone_cache_version(zone_slug: str) -> int:
+    key = CACHE_VERSION_KEY.format(zone_slug=zone_slug)
+    version = cache.get(key)
+    if version is None:
+        version = 1
+        cache.set(key, version)
+    return int(version)
+
+
+def invalidate_zone_cache(zone_slug: str) -> None:
+    key = CACHE_VERSION_KEY.format(zone_slug=zone_slug)
+    try:
+        cache.incr(key)
+    except (ValueError, NotImplementedError):
+        cache.set(key, int(time.time()))
+    logger.debug("Invalidated widget cache for zone %s", zone_slug)
+
+
+__all__ = [
+    "RenderedWidget",
+    "invalidate_zone_cache",
+    "render_zone_html",
+    "render_zone_widgets",
+    "sync_registered_widgets",
+]
