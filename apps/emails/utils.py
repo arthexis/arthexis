@@ -71,15 +71,14 @@ def resolve_recipient_fallbacks(
     if owner_list:
         return owner_list, cc
 
-    admin_email = (
+    admin_emails = list(
         get_user_model()
         .objects.filter(is_superuser=True, is_active=True)
         .exclude(email="")
         .values_list("email", flat=True)
-        .first()
     )
-    if admin_email:
-        return normalize_recipients([admin_email], validator=validator), cc
+    if admin_emails:
+        return normalize_recipients(admin_emails, validator=validator), cc
 
     fallback = (settings.DEFAULT_FROM_EMAIL or "").strip()
     if fallback:
