@@ -3,8 +3,8 @@
 The script polls ``.locks/lcd-high`` and ``.locks/lcd-low`` for payload
 text and writes it to the attached LCD1602 display. The screen rotates
 every 10 seconds across three states in a fixed order: High, Low, and
-Time/Temp. Each row scrolls independently when it exceeds 16 characters;
-shorter rows remain static.
+Time/Temp. By default, rows are truncated to the 16x2 display; scrolling
+is only enabled when a payload specifies a positive scroll interval.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ logger = logging.getLogger(__name__)
 LOCK_DIR = BASE_DIR / ".locks"
 HIGH_LOCK_FILE = LOCK_DIR / LCD_HIGH_LOCK_FILE
 LOW_LOCK_FILE = LOCK_DIR / LCD_LOW_LOCK_FILE
-DEFAULT_SCROLL_MS = 1000
+DEFAULT_SCROLL_MS = 0
 MIN_SCROLL_MS = 50
 SCROLL_PADDING = 3
 DEFAULT_FALLBACK_SCROLL_SEC = 0.5
@@ -592,9 +592,8 @@ def _availability_seconds(
 def _format_on_label(seconds: int | None) -> str | None:
     if seconds is None or seconds < 0:
         return None
-    hours, remainder = divmod(seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-    return f"{hours}h{minutes}m{secs}s"
+    minutes_total, secs = divmod(seconds, 60)
+    return f"{minutes_total}m{secs}s"
 
 
 def _refresh_uptime_payload(
@@ -771,21 +770,28 @@ def _display(
 
 
 def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplayState:
-    scroll_sec = max(scroll_ms, MIN_SCROLL_MS) / 1000.0
-    text1 = line1[:64]
-    text2 = line2[:64]
-    pad1 = (
-        text1 + " " * SCROLL_PADDING
-        if len(text1) > LCD_COLUMNS
-        else text1.ljust(LCD_COLUMNS)
-    )
-    pad2 = (
-        text2 + " " * SCROLL_PADDING
-        if len(text2) > LCD_COLUMNS
-        else text2.ljust(LCD_COLUMNS)
-    )
-    steps1 = max(len(pad1) - (LCD_COLUMNS - 1), 1)
-    steps2 = max(len(pad2) - (LCD_COLUMNS - 1), 1)
+    if scroll_ms > 0:
+        scroll_sec = max(scroll_ms, MIN_SCROLL_MS) / 1000.0
+        text1 = line1[:64]
+        text2 = line2[:64]
+        pad1 = (
+            text1 + " " * SCROLL_PADDING
+            if len(text1) > LCD_COLUMNS
+            else text1.ljust(LCD_COLUMNS)
+        )
+        pad2 = (
+            text2 + " " * SCROLL_PADDING
+            if len(text2) > LCD_COLUMNS
+            else text2.ljust(LCD_COLUMNS)
+        )
+        steps1 = max(len(pad1) - (LCD_COLUMNS - 1), 1)
+        steps2 = max(len(pad2) - (LCD_COLUMNS - 1), 1)
+    else:
+        scroll_sec = DEFAULT_FALLBACK_SCROLL_SEC
+        pad1 = line1[:LCD_COLUMNS].ljust(LCD_COLUMNS)
+        pad2 = line2[:LCD_COLUMNS].ljust(LCD_COLUMNS)
+        steps1 = 1
+        steps2 = 1
     cycle = math.lcm(steps1, steps2)
     return DisplayState(
         pad1,

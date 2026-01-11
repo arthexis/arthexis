@@ -22,7 +22,7 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
     os.utime(lock_path, (now.timestamp(), now.timestamp()))
     uptime_payload = lcd_screen.LockPayload(
         "UP 0d0h0m AP",
-        "ON 0h0m0s eth0",
+        "ON 0m0s eth0",
         lcd_screen.DEFAULT_SCROLL_MS,
     )
 
@@ -31,7 +31,7 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
     )
 
     assert refreshed.line1 == "UP 0d1h2m AP"
-    assert refreshed.line2 == "ON 0h0m0s eth0"
+    assert refreshed.line2 == "ON 0m0s eth0"
 
 
 def test_refresh_uptime_payload_passes_through_non_uptime_payload(tmp_path):
