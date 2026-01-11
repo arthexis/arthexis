@@ -1,5 +1,27 @@
 #!/usr/bin/env bash
 
+arthexis__resolve_python() {
+  if [ -n "${ARTHEXIS_PYTHON_BIN:-}" ]; then
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    ARTHEXIS_PYTHON_BIN="python3"
+    ARTHEXIS_PYTHON_ARGS=""
+  elif command -v python >/dev/null 2>&1; then
+    ARTHEXIS_PYTHON_BIN="python"
+    ARTHEXIS_PYTHON_ARGS=""
+  elif command -v py >/dev/null 2>&1; then
+    ARTHEXIS_PYTHON_BIN="py"
+    ARTHEXIS_PYTHON_ARGS="-3"
+  else
+    echo "Python is required to compute static files hashes." >&2
+    return 1
+  fi
+
+  return 0
+}
+
 arthexis_staticfiles_snapshot_check() {
   local md5_file="$1"
   local meta_file="$2"
@@ -8,7 +30,16 @@ arthexis_staticfiles_snapshot_check() {
     return 4
   fi
 
-  python - "$md5_file" "$meta_file" <<'PY'
+  local python_cmd=()
+  if ! arthexis__resolve_python; then
+    return 1
+  fi
+  python_cmd=("$ARTHEXIS_PYTHON_BIN")
+  if [ -n "${ARTHEXIS_PYTHON_ARGS:-}" ]; then
+    python_cmd+=("$ARTHEXIS_PYTHON_ARGS")
+  fi
+
+  "${python_cmd[@]}" - "$md5_file" "$meta_file" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -109,7 +140,16 @@ arthexis_staticfiles_compute_hash() {
     hash_args+=(--ignore-cache)
   fi
 
-  if ! hash_output=$(python "$hash_script" --metadata-output "$metadata_tmp" "${hash_args[@]}"); then
+  local python_cmd=()
+  if ! arthexis__resolve_python; then
+    return 1
+  fi
+  python_cmd=("$ARTHEXIS_PYTHON_BIN")
+  if [ -n "${ARTHEXIS_PYTHON_ARGS:-}" ]; then
+    python_cmd+=("$ARTHEXIS_PYTHON_ARGS")
+  fi
+
+  if ! hash_output=$("${python_cmd[@]}" "$hash_script" --metadata-output "$metadata_tmp" "${hash_args[@]}"); then
     rm -f "$metadata_tmp"
     return 2
   fi
@@ -160,3 +200,9 @@ arthexis_prepare_staticfiles_hash() {
   printf '%s' "$hash_value"
   return 0
 }
+
+export -f arthexis_staticfiles_snapshot_check
+export -f arthexis_staticfiles_clear_staged_lock
+export -f arthexis_staticfiles_commit_staged_lock
+export -f arthexis_staticfiles_compute_hash
+export -f arthexis_prepare_staticfiles_hash
