@@ -3,6 +3,14 @@ from django.db import migrations, models
 from django.db.models import Q
 
 
+def remove_conflicting_webrequestsampler_owners(apps, schema_editor):
+    web_request_sampler = apps.get_model("content", "WebRequestSampler")
+    web_request_sampler.objects.filter(
+        user__isnull=False,
+        group__isnull=False,
+    ).update(group=None)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("content", "0004_webrequestsampler_webrequeststep_websample_and_more"),
@@ -26,7 +34,7 @@ class Migration(migrations.Migration):
                 blank=True,
                 help_text="User that owns this object.",
                 null=True,
-                on_delete=models.CASCADE,
+                on_delete=models.SET_NULL,
                 related_name="+",
                 to=settings.AUTH_USER_MODEL,
             ),
@@ -38,10 +46,14 @@ class Migration(migrations.Migration):
                 blank=True,
                 help_text="Security group that owns this object.",
                 null=True,
-                on_delete=models.CASCADE,
+                on_delete=models.SET_NULL,
                 related_name="+",
                 to="groups.securitygroup",
             ),
+        ),
+        migrations.RunPython(
+            code=remove_conflicting_webrequestsampler_owners,
+            reverse_code=migrations.RunPython.noop,
         ),
         migrations.AddConstraint(
             model_name="webrequestsampler",
