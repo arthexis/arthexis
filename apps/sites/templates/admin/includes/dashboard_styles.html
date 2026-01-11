@@ -26,6 +26,7 @@
         border-radius: 6px;
         background: var(--darkened-bg);
         color: var(--body-fg);
+        --net-message-text-color: #3f3f3f;
         min-height: 2.25rem;
         box-sizing: border-box;
     }
@@ -60,7 +61,7 @@
         white-space: pre-wrap;
         word-break: break-word;
         flex: 1 1 auto;
-        color: #3f3f3f;
+        color: var(--net-message-text-color, #3f3f3f);
     }
     .admin-home-net-message__content--empty {
         color: var(--body-quiet-color);
@@ -97,8 +98,8 @@
         font-weight: 600;
         text-decoration: underline;
     }
-    [data-theme="dark"] .admin-home-net-message__content {
-        color: #ffffff;
+    [data-theme="dark"] .admin-home-net-message {
+        --net-message-text-color: #ffffff;
     }
     [data-theme="dark"] .admin-dashboard-warning {
         border-color: rgba(240, 129, 15, 0.5);
