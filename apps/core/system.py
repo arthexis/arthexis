@@ -2140,19 +2140,21 @@ def _system_changelog_report_data_view(request):
 def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
     """Return ``True`` when the upgrade check was queued asynchronously."""
 
-    broker_url = str(getattr(settings, "CELERY_BROKER_URL", "")).strip()
-    if not broker_url or broker_url.startswith("memory://"):
+    def _run_sync_upgrade_check(channel_override: str | None = None) -> None:
+        """Run the upgrade check synchronously with optional channel override."""
+
         if channel_override:
             check_github_updates(channel_override=channel_override)
         else:
             check_github_updates()
+
+    broker_url = str(getattr(settings, "CELERY_BROKER_URL", "")).strip()
+    if not broker_url or broker_url.startswith("memory://"):
+        _run_sync_upgrade_check(channel_override)
         return False
 
     if not is_celery_enabled():
-        if channel_override:
-            check_github_updates(channel_override=channel_override)
-        else:
-            check_github_updates()
+        _run_sync_upgrade_check(channel_override)
         return False
 
     if channel_override:
@@ -2166,10 +2168,7 @@ def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
         logger.warning(
             "Failed to enqueue upgrade check; running synchronously instead"
         )
-        if channel_override:
-            check_github_updates(channel_override=channel_override)
-        else:
-            check_github_updates()
+        _run_sync_upgrade_check(channel_override)
         return False
     return True
 
