@@ -5,10 +5,11 @@ from apps.celery.utils import (
     normalize_periodic_task_name,
     periodic_task_name_variants,
 )
+from apps.tasks.tasks import validate_reference_links
 
 
 REFERENCE_VALIDATION_TASK_NAME = "reference-url-validation"
-REFERENCE_VALIDATION_TASK_PATH = "apps.links.tasks.validate_reference_links"
+REFERENCE_VALIDATION_TASK_PATH = validate_reference_links.name
 
 
 def ensure_reference_validation_task(sender=None, **kwargs) -> None:

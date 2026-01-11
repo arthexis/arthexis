@@ -8,10 +8,10 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinVal
 from django.db import models
 from django.utils.translation import gettext, gettext_lazy as _, get_language_info
 
-from apps.celery.utils import is_celery_enabled
+from apps.celery.utils import enqueue_task, is_celery_enabled
 from apps.leads.models import Lead
 from apps.repos import github
-from apps.sites.tasks import create_user_story_github_issue
+from apps.tasks.tasks import create_user_story_github_issue
 
 logger = logging.getLogger(__name__)
 
@@ -178,10 +178,10 @@ class UserStory(Lead):
         return is_celery_enabled()
 
     def enqueue_github_issue_creation(self) -> None:
-        try:
-            create_user_story_github_issue.delay(self.pk)
-        except Exception:  # pragma: no cover - logging only
-            logger.exception(
+        if not enqueue_task(
+            create_user_story_github_issue, self.pk, require_enabled=False
+        ):  # pragma: no cover - logging only
+            logger.warning(
                 "Failed to enqueue GitHub issue creation for user story %s", self.pk
             )
 
