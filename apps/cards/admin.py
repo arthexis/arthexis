@@ -4,17 +4,30 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.forms import CardFacePreviewForm
+from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm
 from apps.cards.models import CardFace, RFID
 from apps.core.admin import RFIDAdmin
 
 
 @admin.register(CardFace)
 class CardFaceAdmin(admin.ModelAdmin):
+    form = CardFaceAdminForm
     list_display = ("name", "fixed_back", "preview_action")
-    readonly_fields = ("preview_action",)
+    readonly_fields = ("preview_action", "background_metadata")
     fieldsets = (
-        (None, {"fields": ("name", "background", "fixed_back", "preview_action")}),
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "background_media",
+                    "background_upload",
+                    "background_metadata",
+                    "fixed_back",
+                    "preview_action",
+                )
+            },
+        ),
         (
             _("Overlay 1"),
             {
@@ -138,6 +151,17 @@ class CardFaceAdmin(admin.ModelAdmin):
             "preview_image": preview,
         }
         return TemplateResponse(request, "cards/admin/cardface_preview.html", context)
+
+    @admin.display(description=_("Background metadata"))
+    def background_metadata(self, obj: CardFace) -> str:
+        media = getattr(obj, "background_media", None)
+        if not media:
+            return _("No background uploaded")
+        return _("%(name)s (%(type)s, %(size)s bytes)") % {
+            "name": media.original_name or media.file.name,
+            "type": media.content_type or _("unknown"),
+            "size": media.size,
+        }
 
 
 admin.site.register(RFID, RFIDAdmin)

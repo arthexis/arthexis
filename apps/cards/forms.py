@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from django import forms
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.models import CardFace
+from apps.cards.models import CardFace, get_cardface_bucket
+from apps.media.models import MediaFile
+from apps.media.utils import create_media_file
 
 
 class CardFacePreviewForm(forms.Form):
@@ -45,3 +48,47 @@ class CardFacePreviewForm(forms.Form):
             if value is not None:
                 overrides[token.lower()] = value
         return overrides
+
+
+class CardFaceAdminForm(forms.ModelForm):
+    background_upload = forms.ImageField(
+        required=False,
+        label=_("Background upload"),
+        help_text=_("Upload a printable background image for this card face."),
+    )
+
+    class Meta:
+        model = CardFace
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        bucket = get_cardface_bucket()
+        self.fields["background_media"].queryset = MediaFile.objects.filter(bucket=bucket)
+
+    def clean(self):
+        cleaned = super().clean()
+        background_media = cleaned.get("background_media")
+        background_upload = cleaned.get("background_upload")
+        if not background_media and not background_upload:
+            raise ValidationError({"background_media": _("A background image is required.")})
+        if background_upload:
+            bucket = get_cardface_bucket()
+            if not bucket.allows_filename(background_upload.name):
+                raise ValidationError({"background_upload": _("File type is not allowed.")})
+            if not bucket.allows_size(background_upload.size):
+                raise ValidationError({"background_upload": _("File exceeds the allowed size.")})
+            CardFace.validate_background_file(background_upload)
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        upload = self.cleaned_data.get("background_upload")
+        if upload:
+            bucket = get_cardface_bucket()
+            media_file = create_media_file(bucket=bucket, uploaded_file=upload)
+            instance.background_media = media_file
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance

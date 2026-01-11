@@ -2,7 +2,8 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from apps.credentials.models import SSHAccount
+from apps.credentials.models import SSHAccount, get_ssh_key_bucket
+from apps.media.models import MediaFile
 from apps.nodes.models import Node
 
 
@@ -35,10 +36,20 @@ def test_private_key_upload_path_uses_node_directory(settings, tmp_path):
     key_file = SimpleUploadedFile(
         "id_rsa", b"test-key", content_type="application/octet-stream"
     )
+    bucket = get_ssh_key_bucket()
+    media_file = MediaFile.objects.create(
+        bucket=bucket,
+        file=key_file,
+        original_name=key_file.name,
+        content_type=key_file.content_type,
+        size=key_file.size,
+    )
     account = SSHAccount.objects.create(
         node=node,
         username="root",
-        private_key=key_file,
+        private_key_media=media_file,
     )
 
-    assert account.private_key.name.startswith(f"ssh_accounts/{node.pk}/id_rsa")
+    assert account.private_key_media.file.name.startswith(
+        f"protocols/buckets/{bucket.slug}/id_rsa"
+    )

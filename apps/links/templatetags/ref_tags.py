@@ -141,7 +141,7 @@ def ref_img(value, size=200, alt=None):
     ref.save()
     return format_html(
         '<img src="{}" width="{}" height="{}" alt="{}" />',
-        ref.image.url,
+        ref.image_url,
         size,
         size,
         ref.alt_text,

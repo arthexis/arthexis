@@ -1,6 +1,7 @@
 import json
 import uuid
 
+from django import forms
 from django.contrib import admin
 from django.http import JsonResponse
 from django.http import Http404
@@ -10,11 +11,72 @@ from django.utils.html import format_html
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.locals.user_data import EntityModelAdmin
-from .models import ExperienceReference, QRRedirect, QRRedirectLead, Reference
+from apps.media.models import MediaFile
+from apps.media.utils import create_media_file
+from .models import (
+    ExperienceReference,
+    QRRedirect,
+    QRRedirectLead,
+    Reference,
+    get_reference_file_bucket,
+    get_reference_qr_bucket,
+)
+
+
+class ReferenceAdminForm(forms.ModelForm):
+    file_upload = forms.FileField(required=False, label="File upload")
+    image_upload = forms.ImageField(required=False, label="Image upload")
+
+    class Meta:
+        model = Reference
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        file_bucket = get_reference_file_bucket()
+        qr_bucket = get_reference_qr_bucket()
+        self.fields["file_media"].queryset = MediaFile.objects.filter(bucket=file_bucket)
+        self.fields["image_media"].queryset = MediaFile.objects.filter(bucket=qr_bucket)
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        file_upload = self.cleaned_data.get("file_upload")
+        if file_upload:
+            bucket = get_reference_file_bucket()
+            instance.file_media = create_media_file(bucket=bucket, uploaded_file=file_upload)
+        image_upload = self.cleaned_data.get("image_upload")
+        if image_upload:
+            bucket = get_reference_qr_bucket()
+            instance.image_media = create_media_file(bucket=bucket, uploaded_file=image_upload)
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+    def clean_file_upload(self):
+        upload = self.cleaned_data.get("file_upload")
+        if upload:
+            bucket = get_reference_file_bucket()
+            if not bucket.allows_filename(upload.name):
+                raise forms.ValidationError("File type is not allowed.")
+            if not bucket.allows_size(upload.size):
+                raise forms.ValidationError("File exceeds the allowed size.")
+        return upload
+
+    def clean_image_upload(self):
+        upload = self.cleaned_data.get("image_upload")
+        if upload:
+            bucket = get_reference_qr_bucket()
+            if not bucket.allows_filename(upload.name):
+                raise forms.ValidationError("File type is not allowed.")
+            if not bucket.allows_size(upload.size):
+                raise forms.ValidationError("File exceeds the allowed size.")
+        return upload
 
 
 @admin.register(ExperienceReference)
 class ReferenceAdmin(EntityModelAdmin):
+    form = ReferenceAdminForm
     list_display = (
         "alt_text",
         "content_type",
@@ -34,12 +96,16 @@ class ReferenceAdmin(EntityModelAdmin):
         "author",
         "validated_url_at",
         "validation_status",
+        "file_metadata",
+        "image_metadata",
     )
     fields = (
         "alt_text",
         "content_type",
         "value",
-        "file",
+        "file_media",
+        "file_upload",
+        "file_metadata",
         "method",
         "validation_status",
         "validated_url_at",
@@ -53,6 +119,9 @@ class ReferenceAdmin(EntityModelAdmin):
         "author",
         "uses",
         "qr_code",
+        "image_media",
+        "image_upload",
+        "image_metadata",
     )
     filter_horizontal = ("roles", "features", "sites")
 
@@ -151,15 +220,29 @@ class ReferenceAdmin(EntityModelAdmin):
         )
 
     def qr_code(self, obj):
-        if obj.image:
+        if obj.image_url:
             return format_html(
                 '<img src="{}" alt="{}" style="height:200px;"/>',
-                obj.image.url,
+                obj.image_url,
                 obj.alt_text,
             )
         return ""
 
     qr_code.short_description = "QR Code"
+
+    @admin.display(description="File metadata")
+    def file_metadata(self, obj):
+        media = getattr(obj, "file_media", None)
+        if not media:
+            return "No file uploaded"
+        return f"{media.original_name or media.file.name} ({media.content_type or 'unknown'}, {media.size} bytes)"
+
+    @admin.display(description="Image metadata")
+    def image_metadata(self, obj):
+        media = getattr(obj, "image_media", None)
+        if not media:
+            return "No image uploaded"
+        return f"{media.original_name or media.file.name} ({media.content_type or 'unknown'}, {media.size} bytes)"
 
 
 @admin.register(QRRedirect)

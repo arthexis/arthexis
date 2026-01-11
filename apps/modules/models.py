@@ -7,6 +7,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.groups.models import SecurityGroup
+from apps.media.models import MediaFile
+from apps.media.utils import ensure_media_bucket
 from apps.nodes.models import NodeRole
 
 
@@ -44,7 +46,14 @@ class Module(Entity):
         help_text="Lower values appear first in navigation pills.",
     )
     is_default = models.BooleanField(default=False)
-    favicon = models.ImageField(upload_to="modules/favicons/", blank=True)
+    favicon_media = models.ForeignKey(
+        MediaFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="module_favicons",
+        verbose_name=_("Favicon"),
+    )
     security_group = models.ForeignKey(
         SecurityGroup,
         on_delete=models.SET_NULL,
@@ -111,5 +120,29 @@ class Module(Entity):
         self.path = self.normalize_path(base_path)
         super().save(*args, **kwargs)
 
+    @property
+    def favicon_file(self):
+        if self.favicon_media and self.favicon_media.file:
+            return self.favicon_media.file
+        return None
+
+    @property
+    def favicon_url(self) -> str:
+        file = self.favicon_file
+        return file.url if file else ""
+
 
 __all__ = ["Module", "ModuleManager"]
+
+MODULE_FAVICON_BUCKET_SLUG = "modules-favicons"
+MODULE_FAVICON_ALLOWED_PATTERNS = "\n".join(["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"])
+
+
+def get_module_favicon_bucket():
+    return ensure_media_bucket(
+        slug=MODULE_FAVICON_BUCKET_SLUG,
+        name=_("Module Favicons"),
+        allowed_patterns=MODULE_FAVICON_ALLOWED_PATTERNS,
+        max_bytes=512 * 1024,
+        expires_at=None,
+    )
