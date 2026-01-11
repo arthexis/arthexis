@@ -186,23 +186,27 @@ class TransactionUUIDMixin(models.Model):
         db_index=True,
         verbose_name="Transaction UUID",
     )
+    _original_transaction_uuid = None
 
     class Meta:
         abstract = True
 
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._original_transaction_uuid = instance.transaction_uuid
+        return instance
+
     def save(self, *args, **kwargs):
-        if self.pk:
-            manager = getattr(type(self), "all_objects", type(self).objects)
-            original = (
-                manager.filter(pk=self.pk)
-                .values_list("transaction_uuid", flat=True)
-                .first()
-            )
-            if original is not None and original != self.transaction_uuid:
+        is_new = self._state.adding
+        if not is_new and self._original_transaction_uuid is not None:
+            if self.transaction_uuid != self._original_transaction_uuid:
                 raise ValidationError(
                     {"transaction_uuid": "Cannot modify transaction UUID"}
                 )
         super().save(*args, **kwargs)
+        if is_new:
+            self._original_transaction_uuid = self.transaction_uuid
 
 
 __all__ = [

@@ -12,9 +12,13 @@ from apps.links.models import Reference
 
 
 @receiver(pre_save, sender=Reference)
-def ensure_reference_qr_image(sender, instance: Reference, **_: object) -> None:
+def ensure_reference_qr_image(
+    sender, instance: Reference, raw: bool = False, **_: object
+) -> None:
     """Generate the QR image for references when missing."""
 
+    if raw:
+        return
     if instance.image or not instance.value:
         return
 
