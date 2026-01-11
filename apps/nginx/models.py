@@ -181,23 +181,9 @@ class SiteConfiguration(models.Model):
             "port": _read_int_lock(lock_dir, "backend_port.lck", 8888),
         }
         default_name = default_certificate_domain(getattr(settings, "ALLOWED_HOSTS", []))
-        if not default_name:
-            default_name = "default"
-
-        try:
-            return cls.objects.get(name=default_name)
-        except cls.DoesNotExist:
-            pass
 
         if default_name != "default":
-            try:
-                legacy = cls.objects.get(name="default")
-            except cls.DoesNotExist:
-                legacy = None
-            if legacy:
-                legacy.name = default_name
-                legacy.save(update_fields=["name"])
-                return legacy
+            cls.objects.get_or_create(name="default", defaults=defaults)
 
         obj, _created = cls.objects.get_or_create(name=default_name, defaults=defaults)
         return obj
