@@ -171,7 +171,8 @@ def _favorite_entries(app_list, favorites_map, ct_id_map=None):
 
     entries = []
     seen_ct_ids = set()
-    ct_id_map = ct_id_map or _build_ct_id_map(app_list)
+    if ct_id_map is None:
+        ct_id_map = _build_ct_id_map(app_list)
 
     for app, app_label, model_name, _model_class, model in _iter_app_models(app_list):
         ct_id = ct_id_map.get((app_label, model_name))
