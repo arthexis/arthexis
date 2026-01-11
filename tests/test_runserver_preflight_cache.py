@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.utils import bash_path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "runserver_preflight.sh"
@@ -104,11 +105,11 @@ def _run_preflight(
             "\n".join(
                 [
                     "set -e",
-                    f"cd '{base_dir}'",
+                    f"cd '{bash_path(base_dir)}'",
                     "RUNSERVER_EXTRA_ARGS=()",
-                    f"source '{HELPER_PATH}'",
+                    f"source '{bash_path(HELPER_PATH)}'",
                     "run_runserver_preflight",
-                    f"printf '%s\\n' \"${{RUNSERVER_EXTRA_ARGS[@]}}\" > '{extra_args_log}'",
+                    f"printf '%s\\n' \"${{RUNSERVER_EXTRA_ARGS[@]}}\" > '{bash_path(extra_args_log)}'",
                 ]
             ),
         ],

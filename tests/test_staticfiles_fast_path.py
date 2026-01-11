@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.utils import bash_path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "staticfiles.sh"
@@ -99,12 +100,12 @@ def _run_static_hash(base_dir: Path, hash_script: Path, *, force: bool = False) 
     command = "\n".join(
         [
             "set -e",
-            f"cd '{base_dir}'",
-            f"source '{HELPER_PATH}'",
+            f"cd '{bash_path(base_dir)}'",
+            f"source '{bash_path(HELPER_PATH)}'",
             'STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"',
             'STATIC_META_FILE="$LOCK_DIR/staticfiles.meta"',
             f'hash_value=$(arthexis_prepare_staticfiles_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" {force_flag})',
-            f'printf "%s" "$hash_value" > "{hash_output_path}"',
+            f'printf "%s" "$hash_value" > "{bash_path(hash_output_path)}"',
         ]
     )
 

@@ -52,11 +52,11 @@ class Command(BaseCommand):
                 )
                 path_str = path.as_posix() if path else ""
                 self.stdout.write(path_str)
-                last_path = Path(path_str) if path_str else None
+                last_path = path
                 if frequency is None:
                     break
                 time.sleep(frequency)
         except KeyboardInterrupt:
             self.stdout.write(self.style.WARNING("Stopping screenshot capture"))
 
-        return str(last_path) if last_path else ""
+        return last_path.as_posix() if last_path else ""
