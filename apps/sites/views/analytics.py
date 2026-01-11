@@ -1,6 +1,5 @@
 import calendar
 import datetime
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -10,13 +9,13 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.core.validators import EmailValidator
 from django.http import FileResponse, Http404, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
+from apps.emails.utils import normalize_recipients
 from apps.energy.models import ClientReport, ClientReportSchedule
 from apps.ocpp.models import Charger
 
@@ -166,22 +165,7 @@ class ClientReportForm(forms.Form):
 
     def clean_destinations(self):
         raw = self.cleaned_data.get("destinations", "")
-        if not raw:
-            return []
-        validator = EmailValidator()
-        seen: set[str] = set()
-        emails: list[str] = []
-        for part in re.split(r"[\s,]+", raw):
-            candidate = part.strip()
-            if not candidate:
-                continue
-            validator(candidate)
-            key = candidate.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            emails.append(candidate)
-        return emails
+        return normalize_recipients(raw, validate=True)
 
     def clean_title(self):
         title = self.cleaned_data.get("title")

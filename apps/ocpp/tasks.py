@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from apps.celery.utils import enqueue_task, is_celery_enabled
 from apps.emails import mailer
+from apps.emails.utils import resolve_recipient_fallbacks
 from apps.nodes.models import Node
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -553,18 +554,8 @@ def _resolve_report_window() -> tuple[datetime, datetime, date]:
 
 def _session_report_recipients() -> list[str]:
     """Return the list of recipients for the daily session report."""
-
-    User = get_user_model()
-    recipients = list(
-        User.objects.filter(is_superuser=True)
-        .exclude(email="")
-        .values_list("email", flat=True)
-    )
-    if recipients:
-        return recipients
-
-    fallback = getattr(settings, "DEFAULT_FROM_EMAIL", "").strip()
-    return [fallback] if fallback else []
+    recipients, _ = resolve_recipient_fallbacks([], owner=None)
+    return recipients
 
 
 def _format_duration(delta: timedelta | None) -> str:

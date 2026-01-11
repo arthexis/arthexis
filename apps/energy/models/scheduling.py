@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.utils.translation import gettext
 
 from apps.celery.utils import normalize_periodic_task_name
+from apps.emails.utils import resolve_recipient_fallbacks
 from apps.core.entity import Entity
 from apps.locale.language import (
     default_report_language,
@@ -315,50 +316,11 @@ class ClientReportSchedule(Entity):
 
     def resolve_recipients(self):
         """Return (to, cc) email lists respecting owner fallbacks."""
-
-        from django.contrib.auth import get_user_model
-
-        to: list[str] = []
-        cc: list[str] = []
-        seen: set[str] = set()
-
-        for email in self.email_recipients:
-            normalized = (email or "").strip()
-            if not normalized:
-                continue
-            if normalized.lower() in seen:
-                continue
-            to.append(normalized)
-            seen.add(normalized.lower())
-
-        owner_email = None
-        if self.owner and self.owner.email:
-            candidate = self.owner.email.strip()
-            if candidate:
-                owner_email = candidate
-
-        if to:
-            if owner_email and owner_email.lower() not in seen:
-                cc.append(owner_email)
-        else:
-            if owner_email:
-                to.append(owner_email)
-                seen.add(owner_email.lower())
-            else:
-                admin_email = (
-                    get_user_model()
-                    .objects.filter(is_superuser=True, is_active=True)
-                    .exclude(email="")
-                    .values_list("email", flat=True)
-                    .first()
-                )
-                if admin_email:
-                    to.append(admin_email)
-                    seen.add(admin_email.lower())
-                elif settings.DEFAULT_FROM_EMAIL:
-                    to.append(settings.DEFAULT_FROM_EMAIL)
-
-        return to, cc
+        return resolve_recipient_fallbacks(
+            self.email_recipients,
+            owner=self.owner,
+            include_owner_cc=True,
+        )
 
     def resolve_reply_to(self) -> list[str]:
         from .reporting import ClientReport
