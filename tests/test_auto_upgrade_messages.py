@@ -27,18 +27,21 @@ def test_send_auto_upgrade_check_message(monkeypatch):
     assert sent[0]["body"] == "APPLIED-SUCCESSF CLEAN"
 
 
-def test_resolve_auto_upgrade_change_tag_cases():
-    cases = [
-        ("1.0", "2.0", "aaa", "aaa", "2.0"),
-        ("1.0", "1.0", "abc", "1234567", "234567"),
-        ("1.0", "1.0", "aaa", "aaa", "CLEAN"),
-        ("1.0", None, "aaa", "aaa", "-"),
-    ]
-
-    for current_version, target_version, current_rev, target_rev, expected in cases:
-        assert (
-            tasks._resolve_auto_upgrade_change_tag(
-                current_version, target_version, current_rev, target_rev
-            )
-            == expected
+@pytest.mark.parametrize(
+    "current_version, target_version, current_rev, target_rev, expected",
+    [
+        pytest.param("1.0", "2.0", "aaa", "aaa", "2.0", id="version-change"),
+        pytest.param("1.0", "1.0", "abc", "1234567", "234567", id="revision-change"),
+        pytest.param("1.0", "1.0", "aaa", "aaa", "CLEAN", id="no-change"),
+        pytest.param("1.0", None, "aaa", "aaa", "-", id="missing-version"),
+    ],
+)
+def test_resolve_auto_upgrade_change_tag_cases(
+    current_version, target_version, current_rev, target_rev, expected
+):
+    assert (
+        tasks._resolve_auto_upgrade_change_tag(
+            current_version, target_version, current_rev, target_rev
         )
+        == expected
+    )
