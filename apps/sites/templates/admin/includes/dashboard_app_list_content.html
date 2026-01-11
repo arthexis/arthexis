@@ -2,9 +2,10 @@
 
 {% if app_list %}
   {% favorite_map as favorites_map %}
+  {% favorite_ct_id_map app_list as ct_id_map %}
   {% if show_favorites is not False %}
     {% with show_model_badges=False %}
-      {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
+      {% cached_dashboard_favorites app_list favorites_map ct_id_map as favorites_block %}
       {{ favorites_block }}
     {% endwith %}
   {% endif %}
@@ -37,7 +38,7 @@
         {% for model in app.models %}
           {% model_app_label model app.app_label as model_app_label %}
           {% with model_name=model.object_name|lower %}
-            {% favorite_ct_id model_app_label model.object_name as ct_id %}
+            {% favorite_ct_id_from_map ct_id_map model_app_label model_name as ct_id %}
             {% favorite_from_map favorites_map ct_id as fav %}
             {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id=model_app_label|add:"-"|add:model_name show_model_badges=show_model_badges %}
           {% endwith %}

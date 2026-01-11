@@ -30,6 +30,80 @@ def favorite_ct_id(app_label, model_name):
 _FAVORITES_RENDER_CONTEXT_KEY = "pages:favorites_map"
 
 
+def _iter_app_models(app_list):
+    for app in app_list:
+        if isinstance(app, dict):
+            app_label = app.get("app_label")
+            models = app.get("models", [])
+        else:
+            app_label = getattr(app, "app_label", None)
+            models = getattr(app, "models", None)
+
+        if not app_label or not models:
+            continue
+
+        for model in models:
+            if isinstance(model, dict):
+                object_name = model.get("object_name")
+                model_app_label = model.get("app_label")
+                model_class = model.get("model")
+            else:
+                object_name = getattr(model, "object_name", None)
+                model_app_label = getattr(model, "app_label", None)
+                model_class = getattr(model, "model", None)
+
+            if not object_name:
+                continue
+
+            resolved_app_label = (
+                model_app_label
+                or getattr(getattr(model_class, "_meta", None), "app_label", None)
+                or app_label
+            )
+            if not resolved_app_label:
+                continue
+
+            if model_class is None:
+                try:
+                    model_class = apps.get_model(resolved_app_label, object_name)
+                except LookupError:
+                    model_class = None
+
+            yield app, resolved_app_label, object_name.lower(), model_class, model
+
+
+def _build_ct_id_map(app_list):
+    if not app_list:
+        return {}
+
+    model_lookup = {}
+    for _app, app_label, model_name, model_class, _model in _iter_app_models(app_list):
+        if model_class is None:
+            continue
+        model_lookup[model_class] = (app_label, model_name)
+
+    if not model_lookup:
+        return {}
+
+    ct_map = ContentType.objects.get_for_models(*model_lookup.keys())
+    return {
+        model_lookup[model_class]: ct.id
+        for model_class, ct in ct_map.items()
+    }
+
+
+@register.simple_tag
+def favorite_ct_id_map(app_list):
+    return _build_ct_id_map(app_list)
+
+
+@register.simple_tag
+def favorite_ct_id_from_map(ct_id_map, app_label, model_name):
+    if not ct_id_map or not app_label or not model_name:
+        return None
+    return ct_id_map.get((app_label, model_name))
+
+
 def _get_favorites_map(context):
     render_context = getattr(context, "render_context", None)
     if render_context is not None and _FAVORITES_RENDER_CONTEXT_KEY in render_context:
@@ -88,73 +162,36 @@ def model_app_label(model, default=None):
 
 @register.simple_tag
 def favorite_entries(app_list, favorites_map):
+    return _favorite_entries(app_list, favorites_map)
+
+
+def _favorite_entries(app_list, favorites_map, ct_id_map=None):
     if not app_list or not favorites_map:
         return []
 
     entries = []
     seen_ct_ids = set()
-    ct_cache = {}
+    ct_id_map = ct_id_map or _build_ct_id_map(app_list)
 
-    for app in app_list:
-        if isinstance(app, dict):
-            app_label = app.get("app_label")
-            models = app.get("models", [])
-        else:
-            app_label = getattr(app, "app_label", None)
-            models = getattr(app, "models", None)
-
-        if not app_label or not models:
+    for app, app_label, model_name, _model_class, model in _iter_app_models(app_list):
+        ct_id = ct_id_map.get((app_label, model_name))
+        if not ct_id:
             continue
 
-        for model in models:
-            if isinstance(model, dict):
-                object_name = model.get("object_name")
-                model_app_label = model.get("app_label")
-                model_class = model.get("model")
-            else:
-                object_name = getattr(model, "object_name", None)
-                model_app_label = getattr(model, "app_label", None)
-                model_class = getattr(model, "model", None)
-            if not object_name:
-                continue
+        favorite = favorites_map.get(ct_id)
+        if not favorite:
+            continue
 
-            resolved_app_label = (
-                model_app_label
-                or getattr(getattr(model_class, "_meta", None), "app_label", None)
-                or app_label
-            )
-            cache_key = (resolved_app_label, object_name)
-            if cache_key in ct_cache:
-                ct_id = ct_cache[cache_key]
-            else:
-                if model_class is None:
-                    try:
-                        model_class = apps.get_model(resolved_app_label, object_name)
-                    except LookupError:
-                        model_class = None
-                if model_class is None:
-                    ct_id = None
-                else:
-                    ct_id = ContentType.objects.get_for_model(model_class).id
-                ct_cache[cache_key] = ct_id
+        if ct_id in seen_ct_ids:
+            continue
 
-            if not ct_id:
-                continue
-
-            favorite = favorites_map.get(ct_id)
-            if not favorite:
-                continue
-
-            if ct_id in seen_ct_ids:
-                continue
-
-            seen_ct_ids.add(ct_id)
-            entries.append({
-                "app": app,
-                "model": model,
-                "favorite": favorite,
-                "ct_id": ct_id,
-            })
+        seen_ct_ids.add(ct_id)
+        entries.append({
+            "app": app,
+            "model": model,
+            "favorite": favorite,
+            "ct_id": ct_id,
+        })
 
     entries.sort(key=lambda entry: (entry["favorite"].priority, entry["favorite"].pk))
 
@@ -162,12 +199,14 @@ def favorite_entries(app_list, favorites_map):
 
 
 @register.simple_tag(takes_context=True)
-def cached_dashboard_favorites(context, app_list, favorites_map=None):
+def cached_dashboard_favorites(context, app_list, favorites_map=None, ct_id_map=None):
     request = context.get("request")
     user = getattr(request, "user", None)
 
     if favorites_map is None:
         favorites_map = _get_favorites_map(context)
+    if ct_id_map is None:
+        ct_id_map = _build_ct_id_map(app_list)
 
     if not app_list or not user or not user.is_authenticated:
         return ""
@@ -182,6 +221,7 @@ def cached_dashboard_favorites(context, app_list, favorites_map=None):
         builder=lambda: _render_favorites(
             app_list,
             favorites_map,
+            ct_id_map,
             show_changelinks,
             show_model_badges,
             request,
@@ -196,6 +236,7 @@ def cached_dashboard_favorites(context, app_list, favorites_map=None):
             builder=lambda: _render_favorites(
                 app_list,
                 favorites_map,
+                ct_id_map,
                 show_changelinks,
                 show_model_badges,
                 request,
@@ -209,8 +250,15 @@ def cached_dashboard_favorites(context, app_list, favorites_map=None):
     return mark_safe(cached)
 
 
-def _render_favorites(app_list, favorites_map, show_changelinks, show_model_badges, request):
-    entries = favorite_entries(app_list, favorites_map)
+def _render_favorites(
+    app_list,
+    favorites_map,
+    ct_id_map,
+    show_changelinks,
+    show_model_badges,
+    request,
+):
+    entries = _favorite_entries(app_list, favorites_map, ct_id_map)
     if not entries:
         return ""
 
