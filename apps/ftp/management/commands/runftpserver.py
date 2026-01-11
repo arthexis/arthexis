@@ -77,7 +77,7 @@ class Command(BaseCommand):
         server.serve_forever()
 
     def _eligible_folders(self, node):
-        folders = FTPFolder.objects.filter(enabled=True).select_related("owner", "security_group")
+        folders = FTPFolder.objects.filter(enabled=True).select_related("user", "group")
         if node:
             folders = folders.filter(models.Q(node=node) | models.Q(node__isnull=True))
         else:
