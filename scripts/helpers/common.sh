@@ -24,17 +24,27 @@ normalize_path() {
 }
 
 arthexis_python_bin() {
-  local python_bin=""
-
-  if command -v python3 >/dev/null 2>&1; then
-    python_bin="python3"
-  elif command -v python >/dev/null 2>&1; then
-    python_bin="python"
+  if [ -n "${_arthexis_python_bin_cached-}" ]; then
+    if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
+      return 1
+    fi
+    printf '%s' "$_arthexis_python_bin_cached"
+    return 0
   fi
 
-  if [ -z "$python_bin" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    _arthexis_python_bin_cached="python3"
+  elif command -v python >/dev/null 2>&1; then
+    if python -c 'import sys; raise SystemExit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1; then
+      _arthexis_python_bin_cached="python"
+    else
+      _arthexis_python_bin_cached="not_found"
+      return 1
+    fi
+  else
+    _arthexis_python_bin_cached="not_found"
     return 1
   fi
 
-  printf '%s' "$python_bin"
+  printf '%s' "$_arthexis_python_bin_cached"
 }
