@@ -109,14 +109,31 @@ def get_latest_commits(
     if limit < 1:
         return tuple()
 
+    cache_key = _latest_commits_cache_key(limit, exclude_prefixes)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     commits: list[ChangelogCommit] = []
-    for commit in _gather_commits("HEAD"):
-        if _summary_is_excluded(commit.summary, exclude_prefixes):
-            continue
-        commits.append(commit)
-        if len(commits) >= limit:
+    batch_size = max(limit * 4, 10)
+    skip = 0
+    for _ in range(5):
+        batch = list(_gather_commits("HEAD", max_count=batch_size, skip=skip))
+        if not batch:
             break
-    return tuple(commits)
+        for commit in batch:
+            if _summary_is_excluded(commit.summary, exclude_prefixes):
+                continue
+            commits.append(commit)
+            if len(commits) >= limit:
+                break
+        if len(commits) >= limit or len(batch) < batch_size:
+            break
+        skip += len(batch)
+
+    latest_commits = tuple(commits[:limit])
+    cache.set(cache_key, latest_commits, timeout=_CACHE_TIMEOUT_SECONDS)
+    return latest_commits
 
 
 def _load_sections() -> tuple[ChangelogSection, ...]:
@@ -199,13 +216,25 @@ def _resolve_version_for_commit(sha: str) -> str | None:
     return version or None
 
 
-def _gather_commits(range_spec: str) -> Iterable[ChangelogCommit]:
+def _gather_commits(
+    range_spec: str,
+    *,
+    max_count: int | None = None,
+    skip: int = 0,
+) -> Iterable[ChangelogCommit]:
     try:
+        log_args = [
+            "log",
+            "--no-merges",
+            "--format=%H%x1f%ct%x1f%an%x1f%s%x1e",
+        ]
+        if max_count:
+            log_args.extend(["--max-count", str(max_count)])
+        if skip:
+            log_args.extend(["--skip", str(skip)])
         output = _run_git(
             [
-                "log",
-                "--no-merges",
-                "--format=%H%x1f%ct%x1f%an%x1f%s%x1e",
+                *log_args,
                 range_spec,
             ]
         )
@@ -255,16 +284,17 @@ def _cache_key() -> str:
     return f"{_CACHE_KEY_PREFIX}:{revision_hash}"
 
 
+def _latest_commits_cache_key(limit: int, prefixes: Sequence[str]) -> str:
+    prefix_key = ",".join(prefix.strip().lower() for prefix in prefixes if prefix.strip())
+    return f"{_cache_key()}:latest:{limit}:{prefix_key}"
+
+
 def _summary_is_excluded(summary: str, prefixes: Sequence[str]) -> bool:
     normalized = summary.strip().lower()
     if not normalized:
         return False
     for prefix in prefixes:
         key = prefix.strip().lower()
-        if not key:
-            continue
-        if normalized == key:
-            return True
-        if normalized.startswith((f"{key}:", f"{key}(", f"{key} ")):
+        if key and (normalized == key or normalized.startswith((f"{key}:", f"{key}(", f"{key} "))):
             return True
     return False
