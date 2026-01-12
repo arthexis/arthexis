@@ -162,6 +162,12 @@ class CharLCD1602:
 
     columns = 16
     rows = 2
+    # Common backpack addresses:
+    # - PCF8574:     0x27
+    # - PCF8574A:    often 0x3F, but some boards show up as 0x3E
+    PCF8574_ADDRESS = 0x27
+    PCF8574A_ADDRESS = 0x3F
+    PCF8574A_ALT_ADDRESS = 0x3E
 
     def __init__(
         self,
@@ -174,13 +180,7 @@ class CharLCD1602:
             raise LCDUnavailableError(SMBUS_HINT)
         self.bus = bus or _BusWrapper(1)
         self.BLEN = 1
-        # Common backpack addresses:
-        # - PCF8574:     0x27
-        # - PCF8574A:    often 0x3F, but some boards show up as 0x3E
-        self.PCF8574_address = 0x27
-        self.PCF8574A_address = 0x3F
-        self.PCF8574A_alt_address = 0x3E
-        self.LCD_ADDR = self.PCF8574_address
+        self.LCD_ADDR = self.PCF8574_ADDRESS
         self.timings = timings or LCDTimings.from_configuration(base_dir=base_dir)
 
     def _write_word(self, addr: int, data: int) -> None:
@@ -245,17 +245,18 @@ class CharLCD1602:
                 found = self.i2c_scan()
             except Exception:  # pragma: no cover - i2c detection issues
                 found = []
-            if "3e" in found or "3E" in found:
-                self.LCD_ADDR = self.PCF8574A_alt_address
-            elif "3f" in found or "3F" in found:
-                self.LCD_ADDR = self.PCF8574A_address
+            found_lower = {token.lower() for token in found}
+            if "3f" in found_lower:
+                self.LCD_ADDR = self.PCF8574A_ADDRESS
+            elif "3e" in found_lower:
+                self.LCD_ADDR = self.PCF8574A_ALT_ADDRESS
             else:
                 # Default to the common PCF8574 address (0x27) when detection
                 # fails or returns no recognised addresses. This mirrors the
                 # behaviour prior to introducing automatic address detection and
                 # prevents the display from remaining uninitialised on systems
                 # without ``i2c-tools``.
-                self.LCD_ADDR = self.PCF8574_address
+                self.LCD_ADDR = self.PCF8574_ADDRESS
         else:
             self.LCD_ADDR = addr
 
