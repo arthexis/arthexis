@@ -74,7 +74,7 @@ def _default_config_locations() -> list[Path]:
 
     This includes the process home directory (``Path.home()``) and the corresponding
     ``/home/<user>`` paths for the logged-in user (when different), mirroring where
-    Odoo typically stores configuration files.
+    Odoo typically stores configuration files without scanning unrelated home trees.
     """
 
     home = Path.home()
@@ -92,10 +92,6 @@ def _default_config_locations() -> list[Path]:
         candidates.extend(
             [user_home / ".odoorc", user_home / ".config/odoo/odoo.conf", user_home]
         )
-
-    home_root = Path("/home")
-    if home_root.exists():
-        candidates.append(home_root)
 
     return candidates
 
