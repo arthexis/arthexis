@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import logging
-from functools import lru_cache
-from pathlib import Path
-from io import BytesIO
-from zipfile import ZipFile
 import json
+import logging
+import tempfile
+from functools import lru_cache
+from io import BytesIO
+from pathlib import Path
+from zipfile import ZipFile
 
 from django.apps import apps
 from django.conf import settings
@@ -339,34 +340,41 @@ def _mark_fixture_user_data(path: Path) -> None:
         model.all_objects.filter(pk=pk).update(is_user_data=True)
 
 
-def _fixture_targets_installed_apps(data) -> bool:
-    """Return ``True`` when *data* only targets installed apps and models."""
+def _fixture_entry_targets_installed_apps(obj) -> bool:
+    """Return ``True`` when *obj* targets an installed app and model."""
 
-    if not isinstance(data, list):
+    if not isinstance(obj, dict):
         return True
 
-    labels = {
-        obj.get("model")
-        for obj in data
-        if isinstance(obj, dict) and obj.get("model")
-    }
+    label = obj.get("model")
+    if not isinstance(label, str):
+        return True
+    if "." not in label:
+        return True
 
-    for label in labels:
-        if not isinstance(label, str):
-            continue
-        if "." not in label:
-            continue
-        app_label, model_name = label.split(".", 1)
-        if not app_label or not model_name:
-            continue
-        if app_label not in apps.app_configs and not apps.is_installed(app_label):
-            return False
-        try:
-            apps.get_model(label)
-        except LookupError:
-            return False
+    app_label, model_name = label.split(".", 1)
+    if not app_label or not model_name:
+        return True
+    if app_label not in apps.app_configs and not apps.is_installed(app_label):
+        return False
+    try:
+        apps.get_model(label)
+    except LookupError:
+        return False
 
     return True
+
+
+def _filter_fixture_entries(data: object) -> tuple[object, bool]:
+    """Return filtered fixture data and whether anything was removed."""
+
+    if not isinstance(data, list):
+        return data, False
+
+    filtered = [
+        obj for obj in data if _fixture_entry_targets_installed_apps(obj)
+    ]
+    return filtered, len(filtered) != len(data)
 
 
 def _load_fixture(
@@ -388,18 +396,28 @@ def _load_fixture(
         # underlying error just as before.
         pass
 
+    temp_path = None
     if text is not None:
         try:
             data = json.loads(text)
         except Exception:
             data = None
         else:
-            if isinstance(data, list):
-                if not data:
-                    path.unlink(missing_ok=True)
+            filtered, filtered_out = _filter_fixture_entries(data)
+            if isinstance(filtered, list):
+                if not filtered:
+                    if not data:
+                        path.unlink(missing_ok=True)
                     return False
-                if not _fixture_targets_installed_apps(data):
-                    return False
+                if filtered_out:
+                    temp_file = tempfile.NamedTemporaryFile(
+                        mode="w",
+                        suffix=path.suffix,
+                        delete=False,
+                    )
+                    json.dump(filtered, temp_file)
+                    temp_file.close()
+                    temp_path = Path(temp_file.name)
 
     try:
         verbosity_level = max(0, int(verbosity))
@@ -409,12 +427,15 @@ def _load_fixture(
     try:
         call_command(
             "load_user_data",
-            str(path),
+            str(temp_path or path),
             ignorenonexistent=True,
             verbosity=verbosity_level,
         )
     except Exception:
         return False
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
     if mark_user_data:
         _mark_fixture_user_data(path)
