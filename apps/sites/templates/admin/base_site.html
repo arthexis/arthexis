@@ -63,6 +63,10 @@
           return;
         }
 
+        if (window.htmx && document.readyState !== 'loading') {
+          window.htmx.process(document.body);
+        }
+
         if (afterLoad) {
           afterLoad();
         }
