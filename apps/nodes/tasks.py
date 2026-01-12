@@ -181,11 +181,10 @@ def _availability_seconds(base_dir: Path) -> int | None:
 
 def _format_duration_hms(seconds: int | None) -> str:
     if seconds is None or seconds < 0:
-        return "?h?m?s"
+        return "?m?s"
 
-    hours, remainder = divmod(seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-    return f"{hours}h{minutes}m{secs}s"
+    minutes, secs = divmod(seconds, 60)
+    return f"{minutes}m{secs}s"
 
 
 def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
