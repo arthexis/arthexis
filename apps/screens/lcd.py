@@ -188,6 +188,9 @@ class LCDController(Protocol):
     def write_frame(self, line1: str, line2: str, retries: int = 1) -> None:
         ...
 
+    def i2c_scan(self) -> list[str]:
+        ...
+
 
 def scan_i2c_addresses() -> list[str]:  # pragma: no cover - requires hardware
     """Return a list of detected I2C addresses using ``i2cdetect``."""
@@ -212,6 +215,9 @@ class AiP31068LCD1602:
     columns = 16
     rows = 2
     AIP31068_ADDRESS = 0x3E
+    _DISPLAY_CONTROL = 0x04
+    _DISPLAY_MODE = 0x02
+    _FUNCTION = 0x08
 
     def __init__(
         self,
@@ -223,10 +229,6 @@ class AiP31068LCD1602:
             raise LCDUnavailableError(SMBUS_HINT)
         self.bus = bus or _BusWrapper(1)
         self.address = address or self.AIP31068_ADDRESS
-
-        self._display_control = 0x04
-        self._display_mode = 0x02
-        self._function = 0x08
 
     def _send_command(self, cmd: int) -> None:
         self.bus.write_byte_data(self.address, 0x80, cmd & 0xFF)
@@ -240,17 +242,17 @@ class AiP31068LCD1602:
         if addr is not None:
             self.address = addr
         time.sleep(0.05)
-        self._send_command(0x20 | self._function)
+        self._send_command(0x20 | self._FUNCTION)
         time.sleep(0.005)
-        self._send_command(0x20 | self._function)
+        self._send_command(0x20 | self._FUNCTION)
         time.sleep(0.005)
-        self._send_command(0x20 | self._function)
+        self._send_command(0x20 | self._FUNCTION)
         self._send_command(0x08)
         time.sleep(0.005)
         self.clear()
-        self._send_command(0x04 | self._display_mode)
+        self._send_command(0x04 | self._DISPLAY_MODE)
         time.sleep(0.005)
-        self._send_command(0x08 | self._display_control)
+        self._send_command(0x08 | self._DISPLAY_CONTROL)
         time.sleep(0.005)
 
     def clear(self) -> None:
@@ -294,6 +296,9 @@ class AiP31068LCD1602:
         for ch in padded:
             self._send_data(ord(ch))
 
+    def i2c_scan(self) -> list[str]:  # pragma: no cover - requires hardware
+        return scan_i2c_addresses()
+
 
 def _normalize_driver_preference(preference: str | None = None) -> str:
     raw = (preference or os.getenv("LCD_DRIVER") or os.getenv("LCD_I2C_DRIVER") or "auto").strip()
@@ -314,6 +319,8 @@ def _resolve_driver(
     if {"27", "3f"} & tokens:
         return "pcf8574"
     if "3e" in tokens:
+        if tokens == {"3e"}:
+            return "pcf8574"
         return "aip31068"
     return "pcf8574"
 
@@ -346,7 +353,6 @@ def prepare_lcd_controller(
     )
     try:
         lcd.init_lcd()
-        lcd.reset()
     except Exception:
         if driver_preference == "auto":
             fallback = "pcf8574" if resolved == "aip31068" else "aip31068"
@@ -356,7 +362,6 @@ def prepare_lcd_controller(
                 addresses=addresses,
             )
             lcd.init_lcd()
-            lcd.reset()
             return lcd
         raise
     return lcd
