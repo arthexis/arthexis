@@ -55,10 +55,7 @@
         hx-trigger="load"
         hx-swap="innerHTML"
       >
-        <p>{% translate "Loading widgets..." %}</p>
-        <noscript>
-          {% render_widgets 'sidebar' %}
-        </noscript>
+        {% render_widgets 'sidebar' %}
       </div>
   </div>
 </div>
