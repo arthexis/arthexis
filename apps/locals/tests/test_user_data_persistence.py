@@ -101,3 +101,36 @@ def test_user_data_applied_after_seed_fixture(tmp_path):
     assert updated.custom_label == "User label"
     assert updated.is_user_data is True
     assert updated.is_seed_data is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_user_data_fixture_skips_unknown_models(tmp_path):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="alice", password="password", data_path=str(tmp_path)
+    )
+    content_type = ContentType.objects.get_for_model(Favorite)
+
+    fixture_path = user_data._data_dir(user) / "locals_favorite_123.json"
+    fixture_payload = [
+        {"model": "missing.model", "pk": 9999, "fields": {}},
+        {
+            "model": "locals.favorite",
+            "pk": 123,
+            "fields": {
+                "user": user.pk,
+                "content_type": content_type.pk,
+                "custom_label": "Example",
+                "user_data": True,
+                "priority": 1,
+                "is_user_data": True,
+            },
+        },
+    ]
+    fixture_path.write_text(json.dumps(fixture_payload))
+
+    user_data.load_user_fixtures(user)
+
+    restored = Favorite.objects.get(pk=123)
+    assert restored.custom_label == "Example"
+    assert restored.is_user_data is True
