@@ -47,7 +47,7 @@ def test_uptime_command_reports_lcd_format(monkeypatch, settings, tmp_path):
 
     output = stdout.getvalue()
     assert "UP 0d2h5m" in output
-    assert "ON 0h1m0s NA" in output
+    assert "ON 1m0s NA" in output
     assert "Uptime lock status: OK" in output
 
 
