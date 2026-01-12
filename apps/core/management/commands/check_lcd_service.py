@@ -10,7 +10,7 @@ from django.core.management.base import BaseCommand
 
 from apps.core.notifications import notify
 from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
-from apps.screens.lcd import CharLCD1602, LCDUnavailableError
+from apps.screens.lcd import LCDUnavailableError, prepare_lcd_controller
 
 
 class Command(BaseCommand):
@@ -74,8 +74,7 @@ class Command(BaseCommand):
 
         # I2C bus check --------------------------------------------------
         try:
-            lcd = CharLCD1602()
-            lcd.init_lcd()
+            prepare_lcd_controller(base_dir=base_dir)
             self.stdout.write(
                 self.style.SUCCESS("I2C communication with LCD succeeded")
             )

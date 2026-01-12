@@ -46,10 +46,13 @@ def test_plays_animation_to_work_file(monkeypatch, tmp_path: Path):
         frame_interval_ms=0,
     )
 
-    def _fail_init():
+    def _fail_init(*args, **kwargs):
         raise LCDUnavailableError("no lcd")
 
-    monkeypatch.setattr("apps.screens.management.commands.lcd_animate.CharLCD1602", _fail_init)
+    monkeypatch.setattr(
+        "apps.screens.management.commands.lcd_animate.prepare_lcd_controller",
+        _fail_init,
+    )
 
     with override_settings(BASE_DIR=tmp_path):
         call_command("lcd_animate", "demo", loops=1, interval=0)

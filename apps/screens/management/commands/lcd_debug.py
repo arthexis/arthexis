@@ -9,7 +9,11 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from apps.screens.lcd import LCDTimings, LCDUnavailableError, CharLCD1602
+from apps.screens.lcd import (
+    LCDTimings,
+    LCDUnavailableError,
+    prepare_lcd_controller,
+)
 from apps.screens.lcd_screen import LOG_FILE, WORK_FILE
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
@@ -299,7 +303,7 @@ class Command(BaseCommand):
             lines.append("- skipped (LCD_SKIP_PROBE is set)")
             return lines
         try:
-            lcd = CharLCD1602()
+            lcd = prepare_lcd_controller(base_dir=base_dir)
         except LCDUnavailableError as exc:
             lines.append(f"- lcd init failed: {exc}")
             return lines

@@ -6,7 +6,12 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.screens.lcd import CharLCD1602, LCDTimings, LCDUnavailableError
+from apps.screens.lcd import (
+    LCDController,
+    LCDTimings,
+    LCDUnavailableError,
+    prepare_lcd_controller,
+)
 
 
 class Command(BaseCommand):
@@ -112,12 +117,9 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"{action_ed} {lcd_unit}"))
 
-    def _initialize_lcd(self, base_dir: Path) -> CharLCD1602 | None:
+    def _initialize_lcd(self, base_dir: Path) -> LCDController | None:
         try:
-            lcd = CharLCD1602(base_dir=base_dir)
-            lcd.init_lcd()
-            lcd.reset()
-            return lcd
+            return prepare_lcd_controller(base_dir=base_dir, preference="pcf8574")
         except LCDUnavailableError as exc:
             self.stdout.write(
                 self.style.WARNING(f"LCD unavailable ({exc}); skipping hardware preview")
@@ -128,7 +130,7 @@ class Command(BaseCommand):
             )
         return None
 
-    def _show_preview(self, lcd: CharLCD1602, timings: LCDTimings, *, label: str) -> None:
+    def _show_preview(self, lcd: LCDController, timings: LCDTimings, *, label: str) -> None:
         self.stdout.write(label)
         lcd.timings = timings
         lcd.clear()

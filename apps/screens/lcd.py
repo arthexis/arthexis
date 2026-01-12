@@ -13,6 +13,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable, Protocol
 
 try:  # pragma: no cover - hardware dependent
     import smbus  # type: ignore
@@ -46,6 +47,15 @@ class _BusWrapper:
             raise LCDUnavailableError(SMBUS_HINT)
         bus = smbus.SMBus(self.channel)
         bus.write_byte(addr, data)
+        bus.close()
+
+    def write_byte_data(
+        self, addr: int, cmd: int, data: int
+    ) -> None:  # pragma: no cover - thin wrapper
+        if smbus is None:
+            raise LCDUnavailableError(SMBUS_HINT)
+        bus = smbus.SMBus(self.channel)
+        bus.write_byte_data(addr, cmd, data)
         bus.close()
 
 
@@ -157,6 +167,201 @@ class LCDTimings:
         return "\n".join(lines)
 
 
+class LCDController(Protocol):
+    """Interface for LCD controllers used by the screen service."""
+
+    columns: int
+    rows: int
+
+    def init_lcd(self, addr: int | None = None, bl: int = 1) -> None:
+        ...
+
+    def clear(self) -> None:
+        ...
+
+    def reset(self) -> None:
+        ...
+
+    def write(self, x: int, y: int, s: str) -> None:
+        ...
+
+    def write_frame(self, line1: str, line2: str, retries: int = 1) -> None:
+        ...
+
+
+def scan_i2c_addresses() -> list[str]:  # pragma: no cover - requires hardware
+    """Return a list of detected I2C addresses using ``i2cdetect``."""
+
+    try:
+        output = subprocess.check_output(["i2cdetect", "-y", "1"], text=True)
+    except Exception:  # pragma: no cover - depends on environment
+        return []
+
+    addresses: list[str] = []
+    for line in output.splitlines()[1:]:
+        parts = line.split()
+        for token in parts[1:]:
+            if token != "--":
+                addresses.append(token)
+    return addresses
+
+
+class AiP31068LCD1602:
+    """Driver for Waveshare LCD1602 modules using the AiP31068L controller."""
+
+    columns = 16
+    rows = 2
+    AIP31068_ADDRESS = 0x3E
+
+    def __init__(
+        self,
+        bus: _BusWrapper | None = None,
+        *,
+        address: int | None = None,
+    ) -> None:
+        if smbus is None:  # pragma: no cover - hardware dependent
+            raise LCDUnavailableError(SMBUS_HINT)
+        self.bus = bus or _BusWrapper(1)
+        self.address = address or self.AIP31068_ADDRESS
+
+        self._display_control = 0x04
+        self._display_mode = 0x02
+        self._function = 0x08
+
+    def _send_command(self, cmd: int) -> None:
+        self.bus.write_byte_data(self.address, 0x80, cmd & 0xFF)
+        time.sleep(0.002)
+
+    def _send_data(self, data: int) -> None:
+        self.bus.write_byte_data(self.address, 0x40, data & 0xFF)
+        time.sleep(0.001)
+
+    def init_lcd(self, addr: int | None = None, bl: int = 1) -> None:
+        if addr is not None:
+            self.address = addr
+        time.sleep(0.05)
+        self._send_command(0x20 | self._function)
+        time.sleep(0.005)
+        self._send_command(0x20 | self._function)
+        time.sleep(0.005)
+        self._send_command(0x20 | self._function)
+        self._send_command(0x08)
+        time.sleep(0.005)
+        self.clear()
+        self._send_command(0x04 | self._display_mode)
+        time.sleep(0.005)
+        self._send_command(0x08 | self._display_control)
+        time.sleep(0.005)
+
+    def clear(self) -> None:
+        self._send_command(0x01)
+        time.sleep(0.005)
+
+    def reset(self) -> None:
+        self.init_lcd(addr=self.address, bl=1)
+
+    def write(self, x: int, y: int, s: str) -> None:
+        x = max(0, min(self.columns - 1, int(x)))
+        y = max(0, min(self.rows - 1, int(y)))
+        text = str(s)[: self.columns - x]
+        addr = 0x80 + 0x40 * y + x
+        self._send_command(addr)
+        for ch in text:
+            self._send_data(ord(ch))
+
+    def write_frame(self, line1: str, line2: str, retries: int = 1) -> None:
+        last_error: Exception | None = None
+        for _ in range(retries + 1):
+            try:
+                self._write_row(0, line1)
+                self._write_row(1, line2)
+                self._send_command(0x02)
+                return
+            except Exception as exc:  # pragma: no cover - hardware dependent
+                last_error = exc
+                time.sleep(0.002)
+                try:
+                    self.reset()
+                except Exception:
+                    pass
+        if last_error:
+            raise last_error
+
+    def _write_row(self, row: int, text: str) -> None:
+        padded = str(text)[: self.columns].ljust(self.columns)
+        addr = 0x80 + 0x40 * max(0, min(self.rows - 1, int(row)))
+        self._send_command(addr)
+        for ch in padded:
+            self._send_data(ord(ch))
+
+
+def _normalize_driver_preference(preference: str | None = None) -> str:
+    raw = (preference or os.getenv("LCD_DRIVER") or os.getenv("LCD_I2C_DRIVER") or "auto").strip()
+    return raw.lower() or "auto"
+
+
+def _resolve_driver(
+    preference: str, *, addresses: Iterable[str] | None = None
+) -> str:
+    if preference in {"aip31068", "waveshare", "aip"}:
+        return "aip31068"
+    if preference in {"pcf8574", "pcf8574a", "pcf"}:
+        return "pcf8574"
+    if preference != "auto":
+        return "pcf8574"
+
+    tokens = {addr.lower() for addr in (addresses or [])}
+    if {"27", "3f"} & tokens:
+        return "pcf8574"
+    if "3e" in tokens:
+        return "aip31068"
+    return "pcf8574"
+
+
+def create_lcd_controller(
+    *,
+    preference: str | None = None,
+    base_dir: Path | None = None,
+    addresses: Iterable[str] | None = None,
+) -> LCDController:
+    driver_preference = _normalize_driver_preference(preference)
+    resolved = _resolve_driver(driver_preference, addresses=addresses)
+    if resolved == "aip31068":
+        return AiP31068LCD1602()
+    return CharLCD1602(base_dir=base_dir)
+
+
+def prepare_lcd_controller(
+    *,
+    preference: str | None = None,
+    base_dir: Path | None = None,
+) -> LCDController:
+    driver_preference = _normalize_driver_preference(preference)
+    addresses = scan_i2c_addresses()
+    resolved = _resolve_driver(driver_preference, addresses=addresses)
+    lcd = create_lcd_controller(
+        preference=resolved,
+        base_dir=base_dir,
+        addresses=addresses,
+    )
+    try:
+        lcd.init_lcd()
+        lcd.reset()
+    except Exception:
+        if driver_preference == "auto":
+            fallback = "pcf8574" if resolved == "aip31068" else "aip31068"
+            lcd = create_lcd_controller(
+                preference=fallback,
+                base_dir=base_dir,
+                addresses=addresses,
+            )
+            lcd.init_lcd()
+            lcd.reset()
+            return lcd
+        raise
+    return lcd
+
+
 class CharLCD1602:
     """Minimal driver for PCF8574/PCF8574A I2C backpack (LCD1602)."""
 
@@ -225,18 +430,7 @@ class CharLCD1602:
         list so callers can fall back to a sensible default address.
         """
 
-        try:
-            output = subprocess.check_output(["i2cdetect", "-y", "1"], text=True)
-        except Exception:  # pragma: no cover - depends on environment
-            return []
-
-        addresses: list[str] = []
-        for line in output.splitlines()[1:]:
-            parts = line.split()
-            for token in parts[1:]:
-                if token != "--":
-                    addresses.append(token)
-        return addresses
+        return scan_i2c_addresses()
 
     def init_lcd(self, addr: int | None = None, bl: int = 1) -> None:
         self.BLEN = 1 if bl else 0
