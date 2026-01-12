@@ -350,11 +350,11 @@ def _fixture_entry_targets_installed_apps(obj) -> bool:
     if not isinstance(label, str):
         return True
     if "." not in label:
-        return True
+        return False
 
     app_label, model_name = label.split(".", 1)
     if not app_label or not model_name:
-        return True
+        return False
     if app_label not in apps.app_configs and not apps.is_installed(app_label):
         return False
     try:
@@ -397,34 +397,34 @@ def _load_fixture(
         pass
 
     temp_path = None
-    if text is not None:
+    try:
+        if text is not None:
+            try:
+                data = json.loads(text)
+            except Exception:
+                data = None
+            else:
+                filtered, filtered_out = _filter_fixture_entries(data)
+                if isinstance(filtered, list):
+                    if not filtered:
+                        if not data:
+                            path.unlink(missing_ok=True)
+                        return False
+                    if filtered_out:
+                        temp_file = tempfile.NamedTemporaryFile(
+                            mode="w",
+                            suffix=path.suffix,
+                            delete=False,
+                        )
+                        json.dump(filtered, temp_file)
+                        temp_file.close()
+                        temp_path = Path(temp_file.name)
+
         try:
-            data = json.loads(text)
-        except Exception:
-            data = None
-        else:
-            filtered, filtered_out = _filter_fixture_entries(data)
-            if isinstance(filtered, list):
-                if not filtered:
-                    if not data:
-                        path.unlink(missing_ok=True)
-                    return False
-                if filtered_out:
-                    temp_file = tempfile.NamedTemporaryFile(
-                        mode="w",
-                        suffix=path.suffix,
-                        delete=False,
-                    )
-                    json.dump(filtered, temp_file)
-                    temp_file.close()
-                    temp_path = Path(temp_file.name)
+            verbosity_level = max(0, int(verbosity))
+        except (TypeError, ValueError):
+            verbosity_level = 0
 
-    try:
-        verbosity_level = max(0, int(verbosity))
-    except (TypeError, ValueError):
-        verbosity_level = 0
-
-    try:
         call_command(
             "load_user_data",
             str(temp_path or path),
