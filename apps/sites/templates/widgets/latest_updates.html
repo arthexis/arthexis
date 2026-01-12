@@ -1,0 +1,14 @@
+{% load i18n %}
+<div class="module" id="latest-updates-widget">
+  <h2>{% translate "Latest Updates" %}</h2>
+  <ul class="actionlist">
+    {% for commit in commits %}
+      <li>{{ commit.summary }}</li>
+    {% empty %}
+      <li class="quiet">{% translate "No recent updates." %}</li>
+    {% endfor %}
+  </ul>
+  <p class="chart-link">
+    <a href="{% url 'admin:system-changelog-report' %}">{% translate "See more" %}</a>
+  </p>
+</div>

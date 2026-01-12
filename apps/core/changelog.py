@@ -101,6 +101,24 @@ def get_page(page: int, per_page: int, *, offset: int = _INITIAL_SECTION_COUNT) 
     return ChangelogPage(chunk, next_page, has_more)
 
 
+def get_latest_commits(
+    limit: int = 3,
+    *,
+    exclude_prefixes: Sequence[str] = ("chore", "mm"),
+) -> tuple[ChangelogCommit, ...]:
+    if limit < 1:
+        return tuple()
+
+    commits: list[ChangelogCommit] = []
+    for commit in _gather_commits("HEAD"):
+        if _summary_is_excluded(commit.summary, exclude_prefixes):
+            continue
+        commits.append(commit)
+        if len(commits) >= limit:
+            break
+    return tuple(commits)
+
+
 def _load_sections() -> tuple[ChangelogSection, ...]:
     cache_key = _cache_key()
     cached = cache.get(cache_key)
@@ -235,3 +253,18 @@ def _run_git(args: Sequence[str]) -> str:
 def _cache_key() -> str:
     revision_hash = revision.get_revision() or "unknown"
     return f"{_CACHE_KEY_PREFIX}:{revision_hash}"
+
+
+def _summary_is_excluded(summary: str, prefixes: Sequence[str]) -> bool:
+    normalized = summary.strip().lower()
+    if not normalized:
+        return False
+    for prefix in prefixes:
+        key = prefix.strip().lower()
+        if not key:
+            continue
+        if normalized == key:
+            return True
+        if normalized.startswith((f"{key}:", f"{key}(", f"{key} ")):
+            return True
+    return False
