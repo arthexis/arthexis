@@ -87,7 +87,7 @@ def test_send_startup_net_message_writes_boot_status(
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0] == "UP 0d0h0m"
-    assert low_lines[1] == "ON 0h0m30s NA"
+    assert low_lines[1] == "ON 0m30s NA"
 
 
 @pytest.mark.django_db
@@ -128,7 +128,7 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0].startswith("UP ")
-    assert low_lines[1] == "ON 0h1m0s NA"
+    assert low_lines[1] == "ON 1m0s NA"
 
 
 @pytest.mark.django_db
@@ -163,7 +163,7 @@ def test_boot_message_uses_system_boot_time(monkeypatch, settings, tmp_path):
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0] == "UP 0d0h2m"
-    assert low_lines[1] == "ON ?h?m?s NA"
+    assert low_lines[1] == "ON ?m?s NA"
 
 
 @pytest.mark.django_db
@@ -257,4 +257,4 @@ def test_lcd_boot_message_avoids_database(
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0] == "UP 0d0h0m"
-    assert low_lines[1] == "ON 0h0m30s NA"
+    assert low_lines[1] == "ON 0m30s NA"
