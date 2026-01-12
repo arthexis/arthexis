@@ -63,7 +63,7 @@
           return;
         }
 
-        if (window.htmx && document.readyState !== 'loading') {
+        if (document.readyState !== 'loading') {
           window.htmx.process(document.body);
         }
 
