@@ -67,7 +67,12 @@ if not any(
     root_logger.addHandler(file_handler)
 root_logger.setLevel(logging.DEBUG)
 
-from apps.screens.lcd import CharLCD1602, LCDUnavailableError
+from apps.screens.lcd import (
+    CharLCD1602,
+    LCDController,
+    LCDUnavailableError,
+    prepare_lcd_controller,
+)
 from apps.screens.animations import AnimationLoadError, default_tree_frames
 from apps.screens.history import LCDHistoryRecorder
 from apps.screens.startup_notifications import (
@@ -189,7 +194,7 @@ class LCDFrameWriter:
 
     def __init__(
         self,
-        lcd: CharLCD1602 | None,
+        lcd: LCDController | None,
         *,
         work_file: Path = WORK_FILE,
         history_recorder: LCDHistoryRecorder | None = None,
@@ -727,7 +732,7 @@ def _reset_pause_flag() -> None:
     _PAUSE_REQUESTED = False
 
 
-def _blank_display(lcd: CharLCD1602 | None) -> None:
+def _blank_display(lcd: LCDController | None) -> None:
     """Clear the LCD and write empty lines to leave a known state."""
 
     if lcd is None:
@@ -742,7 +747,7 @@ def _blank_display(lcd: CharLCD1602 | None) -> None:
         logger.debug("Failed to blank LCD during shutdown", exc_info=True)
 
 
-def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
+def _handle_shutdown_request(lcd: LCDController | None) -> bool:
     """Blank the display and signal the loop to exit when shutting down."""
 
     if not _shutdown_requested():
@@ -752,7 +757,7 @@ def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
     return True
 
 
-def _handle_pause_request(lcd: CharLCD1602 | None) -> tuple[CharLCD1602 | None, bool]:
+def _handle_pause_request(lcd: LCDController | None) -> tuple[LCDController | None, bool]:
     """Blank the display when pausing so other processes start cleanly."""
 
     if not _pause_requested():
@@ -763,7 +768,7 @@ def _handle_pause_request(lcd: CharLCD1602 | None) -> tuple[CharLCD1602 | None, 
 
 
 def _display(
-    lcd: CharLCD1602 | None, line1: str, line2: str, scroll_ms: int
+    lcd: LCDController | None, line1: str, line2: str, scroll_ms: int
 ) -> None:
     state = _prepare_display_state(line1, line2, scroll_ms)
     _advance_display(state, LCDFrameWriter(lcd))
@@ -881,9 +886,8 @@ def _clear_low_lock_file(
         logger.debug("Unable to clear low LCD lock file", exc_info=True)
 
 
-def _initialize_lcd(reset: bool = True) -> CharLCD1602:
-    lcd = CharLCD1602()
-    lcd.init_lcd()
+def _initialize_lcd(reset: bool = True) -> LCDController:
+    lcd = prepare_lcd_controller()
     if reset:
         lcd.reset()
     return lcd

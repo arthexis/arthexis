@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.screens.animations import AnimationLoadError, load_frames_from_animation
-from apps.screens.lcd import CharLCD1602, LCDUnavailableError
+from apps.screens.lcd import LCDUnavailableError, prepare_lcd_controller
 from apps.screens.lcd_screen import LCDFrameWriter
 from apps.screens.models import LCDAnimation
 
@@ -79,9 +79,7 @@ class Command(BaseCommand):
 
     def _setup_writer(self, base_dir: Path) -> LCDFrameWriter:
         try:
-            lcd = CharLCD1602()
-            lcd.init_lcd()
-            lcd.reset()
+            lcd = prepare_lcd_controller(base_dir=base_dir)
         except LCDUnavailableError as exc:
             work_dir = Path(base_dir) / "work"
             work_dir.mkdir(parents=True, exist_ok=True)
