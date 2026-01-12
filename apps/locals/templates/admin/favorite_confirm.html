@@ -33,7 +33,7 @@
   <div class="submit-row">
     <input type="submit" value="{% translate 'Save' %}" class="default">
     {% if favorite %}
-      <button type="submit" name="remove" value="1" class="deletelink">{% translate "Remove" %}</button>
+      <input type="submit" name="remove" value="{% translate 'Remove' %}" class="button favorite-action favorite-action--danger">
     {% endif %}
     {% url 'admin:index' as admin_index %}
     <a href="{{ next|default:admin_index }}">{% translate "Cancel" %}</a>
