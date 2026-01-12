@@ -27,11 +27,27 @@ from config.offline import requires_network, network_available
 
 
 DEFAULT_PACKAGE_MODULES = [
-    "core",
+    "apps.core",
+    "apps.awg",
+    "apps.aws",
+    "apps.links",
+    "apps.nodes",
+    "apps.ocpp",
+    "apps.ftp",
+    "apps.sites",
+    "apps.protocols",
+    "apps.repos",
+    "apps.sigils",
+    "apps.selenium",
+    "apps.teams",
+    "apps.vehicle",
+    "apps.locale",
+    "apps.docs",
+    "apps.wikis",
+    "apps.widgets",
+    "apps.release",
+    "apps.sensors",
     "config",
-    "nodes",
-    "ocpp",
-    "pages",
 ]
 
 
@@ -607,7 +623,7 @@ def run_tests(
 
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
     setuptools_config = {
-        "packages": list(package.packages),
+        "packages": {"find": {"where": ["."]}},
         "include-package-data": True,
         "package-data": {pkg: ["**/*"] for pkg in package.packages},
     }
