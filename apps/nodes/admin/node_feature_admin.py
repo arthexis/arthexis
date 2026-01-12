@@ -20,6 +20,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         "display",
         "slug",
         "default_roles",
+        "control_mode",
         "is_enabled_display",
         "available_actions",
     )
@@ -35,6 +36,10 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
     def default_roles(self, obj):
         roles = [role.name for role in obj.roles.all()]
         return ", ".join(roles) if roles else "—"
+
+    @admin.display(description="Control")
+    def control_mode(self, obj):
+        return "Manual" if obj.slug in Node.MANUAL_FEATURE_SLUGS else "Auto"
 
     @admin.display(description="Is Enabled", boolean=True, ordering="is_enabled")
     def is_enabled_display(self, obj):
