@@ -16,6 +16,7 @@ nav:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - Release Install Checks: release-install-checks.md
       - Runserver Log Duplication: runserver-log-duplication.md
+      - LCD Screen Hardware: lcd-screen-hardware.md
       - DS3231 RTC Wiring: ds3231-rtc-wiring.md
       - LLM LCD Log Summary: llm-summary.md
   - Development:

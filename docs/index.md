@@ -5,6 +5,7 @@ This site aggregates operator guides, architecture notes, and development refere
 ## Quick links
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [Auto-Upgrade Flow](auto-upgrade.md)
+- [LCD Screen Hardware](lcd-screen-hardware.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)
 - [Recipes](recipes.md)
