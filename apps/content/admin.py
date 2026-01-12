@@ -59,6 +59,22 @@ class ContentSampleAdmin(EntityModelAdmin):
     list_filter = ("kind", "classifications__tag")
     change_form_template = "admin/content/contentsample/change_form.html"
 
+    @staticmethod
+    def _resolve_sample_path(sample: ContentSample) -> Path:
+        file_path = Path(sample.path)
+        if not file_path.is_absolute():
+            file_path = settings.LOG_DIR / file_path
+        return file_path
+
+    def _get_sample_preview(self, obj: ContentSample | None) -> str | None:
+        if not obj or obj.kind != ContentSample.IMAGE or not obj.path:
+            return None
+        file_path = self._resolve_sample_path(obj)
+        if not file_path.exists():
+            return None
+        encoded = base64.b64encode(file_path.read_bytes())
+        return encoded.decode("ascii")
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
