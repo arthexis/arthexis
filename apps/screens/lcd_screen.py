@@ -886,11 +886,8 @@ def _clear_low_lock_file(
         logger.debug("Unable to clear low LCD lock file", exc_info=True)
 
 
-def _initialize_lcd(reset: bool = True) -> LCDController:
-    lcd = prepare_lcd_controller()
-    if reset:
-        lcd.reset()
-    return lcd
+def _initialize_lcd() -> LCDController:
+    return prepare_lcd_controller()
 
 
 def main() -> None:  # pragma: no cover - hardware dependent
