@@ -26,29 +26,13 @@ except Exception:  # pragma: no cover - fallback when missing
 from config.offline import requires_network, network_available
 
 
-DEFAULT_PACKAGE_MODULES = [
-    "apps.core",
-    "apps.awg",
-    "apps.aws",
-    "apps.links",
-    "apps.nodes",
-    "apps.ocpp",
-    "apps.ftp",
-    "apps.sites",
-    "apps.protocols",
-    "apps.repos",
-    "apps.sigils",
-    "apps.selenium",
-    "apps.teams",
-    "apps.vehicle",
-    "apps.locale",
-    "apps.docs",
-    "apps.wikis",
-    "apps.widgets",
-    "apps.release",
-    "apps.sensors",
-    "config",
-]
+def _get_default_packages() -> list[str]:
+    from setuptools import find_packages
+
+    return find_packages(include=["apps.*", "config"])
+
+
+DEFAULT_PACKAGE_MODULES = _get_default_packages()
 
 
 @dataclass
