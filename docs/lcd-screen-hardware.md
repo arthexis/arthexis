@@ -15,12 +15,14 @@ force a specific driver or timing calibration when needed.
 ## Driver selection rules
 
 By default the LCD service scans the I²C bus and selects a driver automatically.
-The logic is:
+The logic is evaluated in the following order:
 
-- If the bus reports `0x27` or `0x3F`, use the PCF8574 driver.
-- If the bus reports `0x3E` *and* other addresses, prefer the AiP31068 driver.
-- If the bus reports only `0x3E`, default to the PCF8574 driver (many backpacks
-  report `0x3E` in that configuration).
+1. If the bus reports `0x27` or `0x3F`, use the PCF8574 driver.
+2. If the bus reports `0x3E` *and* other addresses (but not `0x27` or `0x3F`),
+   prefer the AiP31068 driver.
+3. If the bus reports only `0x3E`, default to the PCF8574 driver (many backpacks
+   report `0x3E` in that configuration).
+4. If no recognized addresses are found, fall back to the PCF8574 driver.
 
 To override automatic detection, set `LCD_DRIVER` (or `LCD_I2C_DRIVER`) to one of
 `pcf8574` or `aip31068` before starting the service.

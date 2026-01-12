@@ -13,9 +13,22 @@ def test_resolve_driver_auto_prefers_aip_when_multiple_addresses():
     assert lcd._resolve_driver("auto", addresses=["3e", "20"]) == "aip31068"
 
 
-def test_resolve_driver_honors_explicit_preference():
-    assert lcd._resolve_driver("aip31068", addresses=["27"]) == "aip31068"
-    assert lcd._resolve_driver("pcf8574", addresses=["3e"]) == "pcf8574"
+@pytest.mark.parametrize(
+    ("preference", "addresses", "expected_driver"),
+    [
+        ("aip31068", ["27"], "aip31068"),
+        ("pcf8574", ["3e", "20"], "pcf8574"),
+    ],
+)
+def test_resolve_driver_honors_explicit_preference(
+    preference,
+    addresses,
+    expected_driver,
+):
+    assert lcd._resolve_driver(preference, addresses=addresses) == expected_driver
+
+
+def test_resolve_driver_defaults_to_pcf_for_unknown_preference():
     assert lcd._resolve_driver("unknown", addresses=["3e"]) == "pcf8574"
 
 
