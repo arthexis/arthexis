@@ -15,6 +15,9 @@ from .reports_admin import CeleryReportAdminMixin
 
 @admin.register(NodeFeature)
 class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
+    CONTROL_MODE_MANUAL = "Manual"
+    CONTROL_MODE_AUTO = "Auto"
+
     form = NodeFeatureAdminForm
     list_display = (
         "display",
@@ -39,7 +42,11 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
 
     @admin.display(description="Control")
     def control_mode(self, obj):
-        return "Manual" if obj.slug in Node.MANUAL_FEATURE_SLUGS else "Auto"
+        return (
+            self.CONTROL_MODE_MANUAL
+            if obj.slug in Node.MANUAL_FEATURE_SLUGS
+            else self.CONTROL_MODE_AUTO
+        )
 
     @admin.display(description="Is Enabled", boolean=True, ordering="is_enabled")
     def is_enabled_display(self, obj):
