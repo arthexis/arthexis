@@ -6,6 +6,9 @@ from apps.core import changelog
 from apps.widgets import register_widget
 from apps.widgets.models import WidgetZone
 
+LATEST_UPDATES_COMMIT_LIMIT = 3
+LATEST_UPDATES_ORDER = 40
+
 
 @register_widget(
     slug="public-site-traffic",
@@ -24,8 +27,8 @@ def public_site_traffic_widget(**_kwargs):
     zone=WidgetZone.ZONE_SIDEBAR,
     template_name="widgets/latest_updates.html",
     description=_("Recent commit summaries from the changelog"),
-    order=40,
+    order=LATEST_UPDATES_ORDER,
 )
 def latest_updates_widget(**_kwargs):
-    commits = changelog.get_latest_commits(limit=3)
+    commits = changelog.get_latest_commits(limit=LATEST_UPDATES_COMMIT_LIMIT)
     return {"commits": commits}
