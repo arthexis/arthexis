@@ -17,6 +17,7 @@ from pathlib import Path
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    lcd_feature_enabled,
     render_lcd_lock_file,
 )
 
@@ -173,6 +174,10 @@ class NotificationManager:
         either case the function returns ``True`` so callers do not keep
         retrying in a loop when only the fallback is available.
         """
+
+        if not lcd_feature_enabled(self.lock_dir):
+            self._gui_display(subject, body)
+            return True
 
         try:
             self._write_lock_file(
