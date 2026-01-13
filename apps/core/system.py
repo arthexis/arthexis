@@ -69,6 +69,14 @@ STARTUP_REPORT_LOG_NAME = "startup-report.log"
 STARTUP_REPORT_DEFAULT_LIMIT = 50
 STARTUP_CLOCK_DRIFT_THRESHOLD = timedelta(minutes=5)
 
+REVISION_STATUS_CURRENT = "current"
+REVISION_STATUS_OUTDATED = "outdated"
+REVISION_STATUS_ERROR = "error"
+REVISION_STATUS_UNKNOWN = "unknown"
+REVISION_STATE_OK = "ok"
+REVISION_STATE_WARNING = "warning"
+REVISION_STATE_ERROR = "error"
+
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
     "stable": {"override": "stable", "label": _("Stable")},
@@ -497,21 +505,21 @@ def _prepare_revision_info(
 
     if local_revision and origin_revision:
         if local_revision == origin_revision:
-            details["revision_status"] = "current"
+            details["revision_status"] = REVISION_STATUS_CURRENT
             details["revision_status_label"] = str(_("Up to date"))
-            details["revision_status_state"] = "ok"
+            details["revision_status_state"] = REVISION_STATE_OK
         else:
-            details["revision_status"] = "outdated"
+            details["revision_status"] = REVISION_STATUS_OUTDATED
             details["revision_status_label"] = str(_("Update available"))
-            details["revision_status_state"] = "warning"
+            details["revision_status_state"] = REVISION_STATE_WARNING
     elif origin_revision_error:
-        details["revision_status"] = "error"
+        details["revision_status"] = REVISION_STATUS_ERROR
         details["revision_status_label"] = str(_("Revision check failed"))
-        details["revision_status_state"] = "error"
-    elif local_revision or origin_revision:
-        details["revision_status"] = "unknown"
+        details["revision_status_state"] = REVISION_STATE_ERROR
+    else:
+        details["revision_status"] = REVISION_STATUS_UNKNOWN
         details["revision_status_label"] = str(_("Revision status unavailable"))
-        details["revision_status_state"] = "warning"
+        details["revision_status_state"] = REVISION_STATE_WARNING
 
     return details
 
