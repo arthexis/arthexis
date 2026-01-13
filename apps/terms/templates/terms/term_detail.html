@@ -1,0 +1,58 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ term.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <h1 class="mb-3">{{ term.title }}</h1>
+      {% if term.summary %}
+        <p class="text-muted">{{ term.summary }}</p>
+      {% endif %}
+      <div class="markdown-body" id="reader-content">
+        {{ content|safe }}
+      </div>
+      <hr class="my-4">
+      <form method="post" enctype="multipart/form-data" class="vstack gap-3">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="form-check">
+          {{ form.accept }}
+          <label class="form-check-label" for="{{ form.accept.id_for_label }}">
+            {{ form.accept.label }}
+          </label>
+          {{ form.accept.errors }}
+        </div>
+        {% if form.document %}
+          <div>
+            <label class="form-label" for="{{ form.document.id_for_label }}">
+              {{ form.document.label }}
+            </label>
+            {{ form.document }}
+            {{ form.document.errors }}
+          </div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">{% trans "Accept" %}</button>
+      </form>
+    </div>
+    <div class="col-lg-4">
+      <div class="card reader-sidebar">
+        <div class="card-body">
+          <h4 class="card-title">{% trans "Contents" %}</h4>
+          <nav class="toc">{{ toc|safe }}</nav>
+        </div>
+      </div>
+      {% if qr_image_url %}
+        <div class="card reader-qr-card mt-4">
+          <div class="card-header">{% trans "QR Reference" %}</div>
+          <div class="card-body">
+            <img src="{{ qr_image_url }}" alt="{% trans 'QR code' %}" class="img-fluid" />
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

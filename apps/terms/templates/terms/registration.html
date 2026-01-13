@@ -1,0 +1,79 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Registration" %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <h1 class="mb-3">{% trans "Register" %}</h1>
+      <p class="text-muted">{{ generic_terms }}</p>
+      <form method="post" enctype="multipart/form-data" class="vstack gap-3">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div>
+          <label class="form-label" for="{{ form.username.id_for_label }}">{% trans "Username" %}</label>
+          {{ form.username }}
+          {{ form.username.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.email.id_for_label }}">{% trans "Email" %}</label>
+          {{ form.email }}
+          {{ form.email.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.password.id_for_label }}">{% trans "Password" %}</label>
+          {{ form.password }}
+          {{ form.password.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.confirm_password.id_for_label }}">{% trans "Confirm password" %}</label>
+          {{ form.confirm_password }}
+          {{ form.confirm_password.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.photo.id_for_label }}">{{ form.photo.label }}</label>
+          {{ form.photo }}
+          {{ form.photo.errors }}
+        </div>
+        <hr>
+        <div class="vstack gap-3">
+          {% for config in term_fields %}
+            {% with term=config.term %}
+            <div class="border rounded p-3">
+              <div class="d-flex align-items-start justify-content-between gap-2">
+                <div>
+                  <h5 class="mb-1">{{ term.title }}</h5>
+                  {% if term.summary %}<p class="text-muted mb-2">{{ term.summary }}</p>{% endif %}
+                </div>
+                <a href="{{ term.get_absolute_url }}" class="btn btn-outline-primary btn-sm">
+                  {% trans "View" %}
+                </a>
+              </div>
+              <div class="form-check">
+                {{ form[config.accept_field] }}
+                <label class="form-check-label" for="{{ form[config.accept_field].id_for_label }}">
+                  {{ form[config.accept_field].label }}
+                </label>
+                {{ form[config.accept_field].errors }}
+              </div>
+              {% if config.document_field %}
+                <div class="mt-2">
+                  <label class="form-label" for="{{ form[config.document_field].id_for_label }}">
+                    {{ form[config.document_field].label }}
+                  </label>
+                  {{ form[config.document_field] }}
+                  {{ form[config.document_field].errors }}
+                </div>
+              {% endif %}
+            </div>
+            {% endwith %}
+          {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-primary">{% trans "Submit registration" %}</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
