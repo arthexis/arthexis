@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from .forms import TermAcceptanceForm
@@ -21,7 +22,7 @@ def record_acceptance(
     form = TermAcceptanceForm(term, data=data, files=files)
     form.is_valid()
     if form.errors:
-        raise ValueError(form.errors)
+        raise ValidationError(form.errors)
     with transaction.atomic():
         return form.save(
             user=user,

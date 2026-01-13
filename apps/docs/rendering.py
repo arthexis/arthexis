@@ -4,12 +4,71 @@ import re
 from html import escape
 from pathlib import Path
 
+import bleach
 import markdown
 
 from apps.docs import assets
 
 
 MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists"]
+
+_ALLOWED_MARKDOWN_TAGS = set(bleach.sanitizer.ALLOWED_TAGS) | {
+    "blockquote",
+    "code",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "img",
+    "p",
+    "pre",
+    "span",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+}
+_ALLOWED_MARKDOWN_ATTRIBUTES = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": ["href", "title", "rel"],
+    "code": ["class"],
+    "div": ["class"],
+    "h1": ["id", "class"],
+    "h2": ["id", "class"],
+    "h3": ["id", "class"],
+    "h4": ["id", "class"],
+    "h5": ["id", "class"],
+    "h6": ["id", "class"],
+    "img": ["src", "alt", "title", "loading"],
+    "p": ["class"],
+    "pre": ["class"],
+    "span": ["class"],
+    "table": ["class"],
+    "tbody": ["class"],
+    "td": ["class", "colspan", "rowspan"],
+    "tfoot": ["class"],
+    "th": ["class", "colspan", "rowspan", "scope"],
+    "thead": ["class"],
+    "tr": ["class"],
+}
+_ALLOWED_MARKDOWN_PROTOCOLS = set(bleach.sanitizer.ALLOWED_PROTOCOLS)
+
+
+def _sanitize_html(html: str) -> str:
+    return bleach.clean(
+        html,
+        tags=_ALLOWED_MARKDOWN_TAGS,
+        attributes=_ALLOWED_MARKDOWN_ATTRIBUTES,
+        protocols=_ALLOWED_MARKDOWN_PROTOCOLS,
+        strip=True,
+    )
 
 MARKDOWN_FILE_EXTENSIONS = {".md", ".markdown"}
 PLAINTEXT_FILE_EXTENSIONS = {".txt", ".text"}
@@ -23,8 +82,10 @@ def render_markdown_with_toc(text: str) -> tuple[str, str]:
     html = md.convert(text)
     html = assets.rewrite_markdown_asset_links(html)
     html = assets.strip_http_subresources(html)
+    html = _sanitize_html(html)
     toc_html = md.toc
     toc_html = strip_toc_wrapper(toc_html)
+    toc_html = _sanitize_html(toc_html)
     return html, toc_html
 
 
@@ -142,4 +203,3 @@ def split_html_sections(html: str, keep_sections: int) -> tuple[str, str]:
 
     split_index = heading_matches[keep_sections].start()
     return html[:split_index], html[split_index:]
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
+from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
@@ -79,14 +80,7 @@ def registration(request: HttpRequest) -> HttpResponse:
         raise Http404
     form = RegistrationForm(terms, data=request.POST or None, files=request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        user = form.save_user()
-        photo_media = form.save_photo()
-        submission = RegistrationSubmission.objects.create(
-            user=user,
-            photo_media=photo_media,
-        )
-        ip_address = _get_client_ip(request)
-        user_agent = request.META.get("HTTP_USER_AGENT", "")
+        acceptance_forms = []
         for term in terms:
             acceptance_form = TermAcceptanceForm(
                 term,
@@ -113,12 +107,23 @@ def registration(request: HttpRequest) -> HttpResponse:
                         ),
                     },
                 )
-            acceptance_form.save(
+            acceptance_forms.append(acceptance_form)
+        with transaction.atomic():
+            user = form.save_user()
+            photo_media = form.save_photo()
+            submission = RegistrationSubmission.objects.create(
                 user=user,
-                submission=submission,
-                ip_address=ip_address,
-                user_agent=user_agent,
+                photo_media=photo_media,
             )
+            ip_address = _get_client_ip(request)
+            user_agent = request.META.get("HTTP_USER_AGENT", "")
+            for acceptance_form in acceptance_forms:
+                acceptance_form.save(
+                    user=user,
+                    submission=submission,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
         messages.success(
             request,
             _("Thanks for registering! Your account is pending approval."),
