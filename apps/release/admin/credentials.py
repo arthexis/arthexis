@@ -140,7 +140,7 @@ class ReleaseManagerAdmin(
                 self.message_user(request, f"{manager}: {error}", messages.ERROR)
         if pypi_creds:
             self._test_pypi_credentials(request, manager, pypi_creds)
-        if git_creds or manager.github_token:
+        if git_creds:
             self._test_github_credentials(request, manager, git_creds)
 
     def _test_pypi_credentials(self, request, manager, creds):
@@ -200,14 +200,11 @@ class ReleaseManagerAdmin(
 
     def _test_github_credentials(self, request, manager, git_creds):
         url = "https://api.github.com/user"
-        auth_label = "token"
+        auth_label = (
+            "token" if git_creds.username == "x-access-token" else "username/password"
+        )
         headers = {}
-        auth = None
-        if manager.github_token:
-            headers["Authorization"] = f"token {manager.github_token}"
-        elif git_creds:
-            auth_label = "username/password"
-            auth = (git_creds.username, git_creds.password)
+        auth = (git_creds.username, git_creds.password)
         resp = None
         try:
             resp = requests.get(
