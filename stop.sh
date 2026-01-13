@@ -183,6 +183,12 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       arthexis_stop_embedded_lcd_processes "$LOCK_DIR"
     fi
 
+    RFID_SERVICE="rfid-$SERVICE_NAME"
+    if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ] || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${RFID_SERVICE}.service"; then
+      $SUDO systemctl stop "$RFID_SERVICE" || true
+      $SUDO systemctl status "$RFID_SERVICE" --no-pager || true
+    fi
+
     exit 0
   fi
 fi

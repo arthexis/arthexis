@@ -54,6 +54,7 @@ from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_cou
 from apps.core.uptime_constants import SUITE_UPTIME_LOCK_MAX_AGE, SUITE_UPTIME_LOCK_NAME
 from apps.nginx.renderers import generate_primary_config
 from apps.screens.startup_notifications import lcd_feature_enabled
+from apps.cards.rfid_service import rfid_service_enabled
 from apps.core.systemctl import _systemctl_command
 from utils import revision
 from apps.core import changelog
@@ -1894,6 +1895,7 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
                 f"celery-{service_name}.service": str(_("Celery worker")),
                 f"celery-beat-{service_name}.service": str(_("Celery beat")),
                 f"lcd-{service_name}.service": str(_("LCD screen")),
+                f"rfid-{service_name}.service": str(_("RFID scanner service")),
             }
             label = base_label_map.get(unit_name.strip())
 
@@ -1916,6 +1918,11 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
 
     if lcd_feature_enabled(lock_dir):
         _add_unit(f"lcd-{service_name}", label=str(_("LCD screen")))
+    if rfid_service_enabled(lock_dir):
+        _add_unit(
+            f"rfid-{service_name}",
+            label=str(_("RFID scanner service")),
+        )
 
     return service_units
 

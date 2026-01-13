@@ -39,6 +39,7 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | `--unstable` / `--latest` / `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the selected channel: unstable follows mainline revisions every 15 minutes; latest polls mainline revisions every hour; stable polls releases every 24 hours.【F:install.sh†L251-L259】【F:core/auto_upgrade.py†L10-L20】 |
 | `--celery` | Forces Celery worker support even when the chosen role would normally skip it. The installer writes `.locks/celery.lck` so later scripts manage the worker lifecycle.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
 | `--lcd-screen` / `--no-lcd-screen` | Controls LCD support. `--lcd-screen` installs required I²C packages (if missing) and records the feature lock, while `--no-lcd-screen` removes the lock so the display stays off.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
+| `--rfid-service` / `--no-rfid-service` | Controls the always-on RFID scanner service. Enable it to install the `rfid-<service>` systemd unit, or disable it to remove the unit and lock file on role changes.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L678-L689】 |
 | `--clean` | Deletes an existing SQLite database after first backing it up with a timestamp that includes the git revision. Use this when reinstalling on a development machine and you do not need existing data.【F:install.sh†L61-L120】 |
 | `--start` / `--no-start` | Runs (or skips) `start.sh` after installation completes so services come up automatically when desired.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L611-L613】 |
 | `--satellite`, `--terminal`, `--control`, `--watchtower` | High-level presets that bundle multiple flags and dependency checks for each node role. See [Role presets](#12-role-presets). |
@@ -86,7 +87,7 @@ Available options:
 
 ### 2.2 Stopping services on Linux
 
-`stop.sh` complements `start.sh` by reversing the launch process. If a systemd service was registered it stops that unit (plus any Celery or LCD companions), showing `systemctl status` after each action for quick diagnostics.【F:stop.sh†L18-L48】 When running without systemd it:
+`stop.sh` complements `start.sh` by reversing the launch process. If a systemd service was registered it stops that unit (plus any Celery, LCD, and RFID companions), showing `systemctl status` after each action for quick diagnostics.【F:stop.sh†L18-L48】【F:stop.sh†L155-L173】 When running without systemd it:
 
 - Activates the virtual environment when present for Python access.【F:stop.sh†L53-L57】
 - Accepts an optional port or the `--all` flag. Without arguments it stops only the `runserver` instance bound to the default port; `--all` terminates every matching `manage.py runserver` process.【F:stop.sh†L59-L79】
@@ -143,12 +144,13 @@ Windows nodes reuse Add/Remove Programs, so only the Linux script is provided.
 
 ### 4.1 Uninstall flags and prompts
 
-`uninstall.sh` offers two optional flags:
+`uninstall.sh` offers optional flags:
 
 | Flag | Purpose |
 | --- | --- |
 | `--service NAME` | Overrides the service name recorded during installation. When omitted the script falls back to the value stored in `.locks/service.lck`, if present.【F:uninstall.sh†L12-L45】 |
 | `--no-warn` | Skips the confirmation prompt shown before deleting SQLite databases. Use cautiously in automation where no interactive approval is possible.【F:uninstall.sh†L17-L37】 |
+| `--rfid-service` / `--no-rfid-service` | Controls whether the RFID systemd unit and lock file are removed alongside the rest of the stack (defaults to removing it).【F:uninstall.sh†L19-L60】【F:uninstall.sh†L240-L252】 |
 
 The script always asks for confirmation before proceeding because the server will stop and local data may be removed.【F:uninstall.sh†L47-L60】
 
@@ -156,7 +158,7 @@ The script always asks for confirmation before proceeding because the server wil
 
 During removal the script:
 
-1. Stops and disables any recorded systemd service, along with linked LCD and Celery units, then clears the associated lock files.【F:uninstall.sh†L61-L109】
+1. Stops and disables any recorded systemd service, along with linked LCD, RFID, and Celery units, then clears the associated lock files.【F:uninstall.sh†L61-L122】【F:uninstall.sh†L235-L252】
 2. Stops historical Wi-Fi watchdog services (`wlan1-refresh`, `wlan1-device-refresh`, `wifi-watchdog`) when they exist so nothing keeps touching network interfaces after the uninstall.【F:uninstall.sh†L110-L121】
 3. Terminates any remaining `manage.py runserver` or Celery processes.【F:uninstall.sh†L122-L127】
 4. Deletes `db.sqlite3`, removes the entire `.locks/` directory, and clears the cached requirements hash so future installs start cleanly.【F:uninstall.sh†L129-L142】

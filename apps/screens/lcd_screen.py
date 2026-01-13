@@ -100,6 +100,9 @@ GAP_ANIMATION_SCROLL_MS = 600
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 INSTALL_DATE_LOCK_NAME = "install_date.lck"
+EVENT_LOCK_GLOB = "lcd-event-*.lck"
+EVENT_LOCK_PREFIX = "lcd-event-"
+EVENT_DEFAULT_DURATION_SECONDS = 30
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -690,7 +693,7 @@ def _clock_payload(
 
 
 _SHUTDOWN_REQUESTED = False
-_PAUSE_REQUESTED = False
+_EVENT_INTERRUPT_REQUESTED = False
 
 
 def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
@@ -709,27 +712,20 @@ def _reset_shutdown_flag() -> None:
     _SHUTDOWN_REQUESTED = False
 
 
-def _request_pause(signum, frame) -> None:  # pragma: no cover - signal handler
-    """Pause LCD updates so another process can take over."""
+def _request_event_interrupt(signum, frame) -> None:  # pragma: no cover - signal handler
+    """Interrupt the LCD cycle to show event lock files immediately."""
 
-    global _PAUSE_REQUESTED
-    _PAUSE_REQUESTED = True
-
-
-def _request_resume(signum, frame) -> None:  # pragma: no cover - signal handler
-    """Resume LCD updates after a pause."""
-
-    global _PAUSE_REQUESTED
-    _PAUSE_REQUESTED = False
+    global _EVENT_INTERRUPT_REQUESTED
+    _EVENT_INTERRUPT_REQUESTED = True
 
 
-def _pause_requested() -> bool:
-    return _PAUSE_REQUESTED
+def _event_interrupt_requested() -> bool:
+    return _EVENT_INTERRUPT_REQUESTED
 
 
-def _reset_pause_flag() -> None:
-    global _PAUSE_REQUESTED
-    _PAUSE_REQUESTED = False
+def _reset_event_interrupt_flag() -> None:
+    global _EVENT_INTERRUPT_REQUESTED
+    _EVENT_INTERRUPT_REQUESTED = False
 
 
 def _blank_display(lcd: LCDController | None) -> None:
@@ -757,14 +753,50 @@ def _handle_shutdown_request(lcd: LCDController | None) -> bool:
     return True
 
 
-def _handle_pause_request(lcd: LCDController | None) -> tuple[LCDController | None, bool]:
-    """Blank the display when pausing so other processes start cleanly."""
+def _event_lock_files(lock_dir: Path = LOCK_DIR) -> list[Path]:
+    return sorted(
+        (Path(path) for path in glob(str(lock_dir / EVENT_LOCK_GLOB))),
+        key=_event_lock_sort_key,
+    )
 
-    if not _pause_requested():
-        return lcd, False
 
-    _blank_display(lcd)
-    return None, True
+def _event_lock_sort_key(path: Path) -> tuple[int, str]:
+    name = path.name
+    if name.startswith(EVENT_LOCK_PREFIX) and name.endswith(".lck"):
+        suffix = name[len(EVENT_LOCK_PREFIX) : -4]
+        if suffix.isdigit():
+            return int(suffix), name
+    return 10**9, name
+
+
+def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[LockPayload, datetime]:
+    try:
+        lines = lock_file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        raise
+    except OSError:
+        logger.debug("Failed to read event lock file: %s", lock_file, exc_info=True)
+        raise
+
+    subject = lines[0][:64] if lines else ""
+    body = lines[1][:64] if len(lines) > 1 else ""
+    expires_at: datetime | None = None
+    if len(lines) > 2:
+        raw = lines[2].strip()
+        if raw:
+            if raw.isdigit():
+                expires_at = now + timedelta(seconds=int(raw))
+            else:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=datetime_timezone.utc)
+                    expires_at = parsed.astimezone(datetime_timezone.utc)
+                except ValueError:
+                    expires_at = None
+    if expires_at is None:
+        expires_at = now + timedelta(seconds=EVENT_DEFAULT_DURATION_SECONDS)
+    return LockPayload(subject, body, DEFAULT_SCROLL_MS), expires_at
 
 
 def _display(
@@ -894,6 +926,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     display_state: DisplayState | None = None
     next_display_state: DisplayState | None = None
+    event_state: DisplayState | None = None
+    event_deadline: datetime | None = None
+    event_lock_file: Path | None = None
     high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
     low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
     high_mtime = 0.0
@@ -907,15 +942,12 @@ def main() -> None:  # pragma: no cover - hardware dependent
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
     frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
-    paused = False
-
     _clear_low_lock_file()
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
     signal.signal(signal.SIGHUP, _request_shutdown)
-    signal.signal(signal.SIGUSR1, _request_pause)
-    signal.signal(signal.SIGUSR2, _request_resume)
+    signal.signal(signal.SIGUSR1, _request_event_interrupt)
 
     try:
         try:
@@ -931,16 +963,121 @@ def main() -> None:  # pragma: no cover - hardware dependent
             if _handle_shutdown_request(lcd):
                 break
 
-            lcd, paused = _handle_pause_request(lcd)
-            if paused:
-                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
-                display_state = None
-                next_display_state = None
-                time.sleep(0.1)
-                continue
-
             try:
                 now = time.monotonic()
+                now_dt = datetime.now(datetime_timezone.utc)
+
+                if _event_interrupt_requested():
+                    _reset_event_interrupt_flag()
+                    for candidate in _event_lock_files():
+                        try:
+                            payload, expires_at = _parse_event_lock_file(
+                                candidate, now_dt
+                            )
+                        except FileNotFoundError:
+                            continue
+                        except OSError:
+                            continue
+                        if expires_at <= now_dt:
+                            try:
+                                candidate.unlink()
+                            except OSError:
+                                logger.debug(
+                                    "Failed to remove expired event lock: %s",
+                                    candidate,
+                                    exc_info=True,
+                                )
+                            continue
+                        event_state = _prepare_display_state(
+                            payload.line1, payload.line2, payload.scroll_ms
+                        )
+                        event_deadline = expires_at
+                        event_lock_file = candidate
+                        break
+
+                if event_state is not None and event_deadline is not None:
+                    if now_dt >= event_deadline:
+                        if event_lock_file:
+                            try:
+                                event_lock_file.unlink()
+                            except OSError:
+                                logger.debug(
+                                    "Failed to remove event lock file: %s",
+                                    event_lock_file,
+                                    exc_info=True,
+                                )
+                        next_event_loaded = False
+                        for candidate in _event_lock_files():
+                            try:
+                                payload, expires_at = _parse_event_lock_file(
+                                    candidate, now_dt
+                                )
+                            except FileNotFoundError:
+                                continue
+                            except OSError:
+                                continue
+                            if expires_at <= now_dt:
+                                try:
+                                    candidate.unlink()
+                                except OSError:
+                                    logger.debug(
+                                        "Failed to remove expired event lock: %s",
+                                        candidate,
+                                        exc_info=True,
+                                    )
+                                continue
+                            event_state = _prepare_display_state(
+                                payload.line1, payload.line2, payload.scroll_ms
+                            )
+                            event_deadline = expires_at
+                            event_lock_file = candidate
+                            next_event_loaded = True
+                            break
+                        if next_event_loaded:
+                            continue
+                        event_state = None
+                        event_deadline = None
+                        event_lock_file = None
+                        if state_order:
+                            state_index = (state_index + 1) % len(state_order)
+                        display_state = None
+                        next_display_state = None
+                        rotation_deadline = 0.0
+                        continue
+
+                    if lcd is None:
+                        lcd = _initialize_lcd()
+                        frame_writer = LCDFrameWriter(
+                            lcd, history_recorder=history_recorder
+                        )
+                        health.record_success()
+
+                    scroll_scheduler.sleep_until_ready()
+                    frame_timestamp = datetime.now(datetime_timezone.utc)
+                    event_state, write_success = _advance_display(
+                        event_state,
+                        frame_writer,
+                        label="event",
+                        timestamp=frame_timestamp,
+                    )
+                    if write_success:
+                        health.record_success()
+                        if lcd and watchdog.tick():
+                            lcd.reset()
+                            watchdog.reset()
+                    else:
+                        if lcd is not None and frame_writer.lcd is None:
+                            lcd = None
+                            frame_writer = LCDFrameWriter(
+                                None, history_recorder=history_recorder
+                            )
+                        delay = health.record_failure()
+                        time.sleep(delay)
+                    scroll_scheduler.advance(
+                        (event_state.scroll_sec if event_state else 0)
+                        or DEFAULT_FALLBACK_SCROLL_SEC
+                    )
+                    continue
 
                 if display_state is None or now >= rotation_deadline:
                     high_available = True
@@ -1093,7 +1230,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     finally:
         _blank_display(lcd)
         _reset_shutdown_flag()
-        _reset_pause_flag()
+        _reset_event_interrupt_flag()
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry point

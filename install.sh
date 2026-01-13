@@ -46,6 +46,8 @@ SERVICE_MANAGEMENT_MODE_FLAG=false
 START_FLAG=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
+ENABLE_RFID_SERVICE=false
+DISABLE_RFID_SERVICE=false
 CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
@@ -60,7 +62,7 @@ MIGRATOR_SERVICE_NAME=""
 SIDECAR_RECORDS=()
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--ap-watchdog] [--clean] [--start|--no-start] [--repair] [--secondary NAME] [--migrator NAME]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--ap-watchdog] [--clean] [--start|--no-start] [--repair] [--secondary NAME] [--migrator NAME]" >&2
     exit 1
 }
 
@@ -76,7 +78,7 @@ fi
 stop_existing_units_for_repair() {
     local service_name="$1"
 
-    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN"
+    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE"
 }
 
 clean_previous_installation_state() {
@@ -106,7 +108,7 @@ clean_previous_installation_state() {
     fi
 
     if [ -n "$service_name" ]; then
-        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true
+        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.timer"
     fi
@@ -168,7 +170,7 @@ reset_service_units_for_repair() {
         return 0
     fi
 
-    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN"
+    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE"
 
     if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
         while IFS= read -r recorded_unit; do
@@ -451,6 +453,16 @@ while [[ $# -gt 0 ]]; do
             DISABLE_LCD_SCREEN=true
             shift
             ;;
+        --rfid-service)
+            ENABLE_RFID_SERVICE=true
+            DISABLE_RFID_SERVICE=false
+            shift
+            ;;
+        --no-rfid-service)
+            ENABLE_RFID_SERVICE=false
+            DISABLE_RFID_SERVICE=true
+            shift
+            ;;
         --ap-watchdog)
             ENABLE_AP_WATCHDOG=true
             shift
@@ -561,6 +573,10 @@ if [ "$REPAIR" = true ]; then
         ENABLE_LCD_SCREEN=true
         DISABLE_LCD_SCREEN=false
     fi
+    if [ "$ENABLE_RFID_SERVICE" = false ] && [ -f "$LOCK_DIR_PATH/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
+        ENABLE_RFID_SERVICE=true
+        DISABLE_RFID_SERVICE=false
+    fi
     if [ "$ENABLE_CONTROL" = false ] && [ -f "$LOCK_DIR_PATH/control.lck" ]; then
         ENABLE_CONTROL=true
     fi
@@ -649,6 +665,13 @@ if [ "$ENABLE_LCD_SCREEN" = true ]; then
 else
     rm -f "$LCD_LOCK"
     arthexis_disable_lcd_feature_flag "$LOCK_DIR"
+fi
+
+RFID_SERVICE_LOCK="$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
+if [ "$ENABLE_RFID_SERVICE" = true ]; then
+    touch "$RFID_SERVICE_LOCK"
+elif [ "$DISABLE_RFID_SERVICE" = true ]; then
+    rm -f "$RFID_SERVICE_LOCK"
 fi
 
 CONTROL_LOCK="$LOCK_DIR/control.lck"
@@ -811,6 +834,7 @@ fi
 
 if [ -n "$SERVICE" ]; then
     LCD_SERVICE="lcd-$SERVICE"
+    RFID_SERVICE="rfid-$SERVICE"
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         if [ "$DISABLE_LCD_SCREEN" = true ]; then
             if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
@@ -828,8 +852,26 @@ if [ -n "$SERVICE" ]; then
         else
             arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         fi
+
+        if [ "$DISABLE_RFID_SERVICE" = true ]; then
+            if systemctl list-unit-files | grep -Fq "${RFID_SERVICE}.service"; then
+                sudo systemctl stop "$RFID_SERVICE" || true
+                sudo systemctl disable "$RFID_SERVICE" || true
+                RFID_SERVICE_FILE="/etc/systemd/system/${RFID_SERVICE}.service"
+                if [ -f "$RFID_SERVICE_FILE" ]; then
+                    sudo rm "$RFID_SERVICE_FILE"
+                fi
+                sudo systemctl daemon-reload
+            fi
+            arthexis_remove_systemd_unit_record "$LOCK_DIR" "${RFID_SERVICE}.service"
+        elif [ "$ENABLE_RFID_SERVICE" = true ]; then
+            arthexis_install_rfid_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+        else
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
+        fi
     else
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
     fi
 fi
 
