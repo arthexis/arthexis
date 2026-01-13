@@ -10,8 +10,13 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import shutil
+import signal
+import subprocess
 import sys
 import threading
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
 from apps.screens.startup_notifications import (
@@ -27,6 +32,7 @@ except Exception:  # pragma: no cover - plyer may not be installed
     plyer_notification = None
 
 logger = logging.getLogger(__name__)
+EVENT_LOCK_PATTERN = re.compile(r"^lcd-event-(\\d+)\\.lck$")
 
 
 def get_base_dir() -> Path:
@@ -157,6 +163,34 @@ class NotificationManager:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(payload, encoding="utf-8")
 
+    def _next_event_id(self) -> int:
+        existing_ids: set[int] = set()
+        if self.lock_dir.exists():
+            for path in self.lock_dir.iterdir():
+                match = EVENT_LOCK_PATTERN.match(path.name)
+                if match:
+                    try:
+                        existing_ids.add(int(match.group(1)))
+                    except ValueError:
+                        continue
+        candidate = 0
+        while candidate in existing_ids:
+            candidate += 1
+        return candidate
+
+    def _event_lock_file(self, event_id: int | None = None) -> Path:
+        event_num = self._next_event_id() if event_id is None else max(event_id, 0)
+        return self.lock_dir / f"lcd-event-{event_num}.lck"
+
+    def _signal_lcd_service(self) -> None:
+        pid = _lcd_service_pid(self.lock_dir)
+        if pid is None:
+            return
+        try:
+            os.kill(pid, signal.SIGUSR1)
+        except Exception:
+            logger.debug("Unable to signal LCD service", exc_info=True)
+
     def send(
         self,
         subject: str,
@@ -193,6 +227,60 @@ class NotificationManager:
             logger.warning("LCD lock file write failed: %s", exc)
             self._gui_display(subject, body)
             return True
+
+    def send_event(
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        duration: int = 30,
+        event_id: int | None = None,
+        expires_at=None,
+    ) -> bool:
+        """Write an LCD event lock file and signal the LCD service."""
+
+        if not lcd_feature_enabled(self.lock_dir):
+            self._gui_display(subject, body)
+            return True
+
+        if expires_at is None:
+            expires_at = datetime.now(datetime_timezone.utc) + timedelta(seconds=duration)
+        payload = render_lcd_lock_file(subject=subject[:64], body=body[:64], expires_at=expires_at)
+        target = self._event_lock_file(event_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            target.write_text(payload, encoding="utf-8")
+            self._signal_lcd_service()
+            return True
+        except Exception as exc:  # pragma: no cover - filesystem dependent
+            logger.warning("LCD event lock file write failed: %s", exc)
+            self._gui_display(subject, body)
+            return True
+
+    def send_event_async(
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        duration: int = 30,
+        event_id: int | None = None,
+        expires_at=None,
+    ) -> None:
+        """Dispatch :meth:`send_event` on a background thread."""
+
+        def _send() -> None:
+            try:
+                self.send_event(
+                    subject,
+                    body,
+                    duration=duration,
+                    event_id=event_id,
+                    expires_at=expires_at,
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_send, daemon=True).start()
 
     def send_async(
         self,
@@ -278,4 +366,83 @@ def notify_async(
         expires_at=expires_at,
         channel_type=channel_type,
         channel_num=channel_num,
+    )
+
+
+def _lcd_service_pid(lock_dir: Path) -> int | None:
+    pid_file = lock_dir / "lcd.pid"
+    if pid_file.exists():
+        try:
+            value = int(pid_file.read_text(encoding="utf-8").strip())
+            if value > 1:
+                return value
+        except Exception:
+            return None
+
+    service_lock = lock_dir / "service.lck"
+    if not service_lock.exists():
+        return None
+    try:
+        service_name = service_lock.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None
+    if not service_name:
+        return None
+    unit_name = f"lcd-{service_name}.service"
+    if not shutil.which("systemctl"):
+        return None
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", unit_name, "--property=MainPID", "--value"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return None
+    pid_text = (result.stdout or "").strip()
+    if not pid_text:
+        return None
+    try:
+        pid_value = int(pid_text)
+        return pid_value if pid_value > 1 else None
+    except ValueError:
+        return None
+
+
+def notify_event(
+    subject: str,
+    body: str = "",
+    *,
+    duration: int = 30,
+    event_id: int | None = None,
+    expires_at=None,
+) -> bool:
+    """Send an event notification to the LCD service."""
+
+    return manager.send_event(
+        subject=subject,
+        body=body,
+        duration=duration,
+        event_id=event_id,
+        expires_at=expires_at,
+    )
+
+
+def notify_event_async(
+    subject: str,
+    body: str = "",
+    *,
+    duration: int = 30,
+    event_id: int | None = None,
+    expires_at=None,
+) -> None:
+    """Send an event notification asynchronously."""
+
+    manager.send_event_async(
+        subject=subject,
+        body=body,
+        duration=duration,
+        event_id=event_id,
+        expires_at=expires_at,
     )

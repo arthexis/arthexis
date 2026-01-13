@@ -447,6 +447,8 @@
     scannerReady: '{{ _("Scanner ready")|escapejs }}',
     scannerReadyNetwork: '{{ _("Scanner ready (network)")|escapejs }}',
     scannerReadyLocal: '{{ _("Scanner ready (local)")|escapejs }}',
+    scannerReadyService: '{{ _("Scanner ready (service)")|escapejs }}',
+    scannerReadyOnDemand: '{{ _("Scanner ready (on-demand)")|escapejs }}',
     additionalLocalReady: '{{ _("Local scanner also ready")|escapejs }}',
     networkReadyAfterLocal: '{{ _("Network scanner ready after local setup")|escapejs }}',
     localDisconnected: '{{ _("Local scanner disconnected")|escapejs }}',
@@ -1064,6 +1066,10 @@
     if(!data.rfid){
       if(typeof data.status === 'string' && data.status){
         statusEl.textContent = data.status;
+      } else if(data.service_mode){
+        statusEl.textContent = data.service_mode === 'service'
+          ? text.scannerReadyService
+          : text.scannerReadyOnDemand;
       }
       return;
     }

@@ -21,9 +21,10 @@ TARGET_MIGRATOR=""
 FULL_UNINSTALL=0
 PRIMARY_ONLY=0
 REMOVE_AP_WATCHDOG=0
+REMOVE_RFID_SERVICE=1
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--no-warn] [--secondary NAME] [--migrator NAME] [--ap-watchdog] [--full] [--primary]" >&2
+    echo "Usage: $0 [--service NAME] [--no-warn] [--secondary NAME] [--migrator NAME] [--ap-watchdog] [--rfid-service|--no-rfid-service] [--full] [--primary]" >&2
     exit 1
 }
 
@@ -126,6 +127,14 @@ while [[ $# -gt 0 ]]; do
             REMOVE_AP_WATCHDOG=1
             shift
             ;;
+        --rfid-service)
+            REMOVE_RFID_SERVICE=1
+            shift
+            ;;
+        --no-rfid-service)
+            REMOVE_RFID_SERVICE=0
+            shift
+            ;;
         --primary)
             PRIMARY_ONLY=1
             shift
@@ -168,7 +177,7 @@ fi
 if [ -z "$SERVICE" ] && [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
     for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
         case "$unit" in
-            *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service)
+            *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service|rfid-*.service)
                 continue
                 ;;
         esac
@@ -244,6 +253,13 @@ if [ -n "$SERVICE" ]; then
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         rm -f "$LOCK_DIR/lcd_screen.lck"
         arthexis_disable_lcd_feature_flag "$LOCK_DIR"
+    fi
+    if [ "$REMOVE_RFID_SERVICE" -eq 1 ]; then
+        RFID_SERVICE="rfid-$SERVICE"
+        if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ] || printf '%s\n' "${RECORDED_SYSTEMD_UNITS[@]}" | grep -Fxq "${RFID_SERVICE}.service"; then
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
+            rm -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
+        fi
     fi
 
     if [ -f "$LOCK_DIR/celery.lck" ]; then
