@@ -43,7 +43,7 @@ To remove long-lived PyPI API tokens from the release workflow, we can delegate 
 2. **Split release into two phases**:
    - Keep the current release UI/headless workflow through step 6 for approvals, metadata, and artifact generation.
    - Export the built artifacts (wheel/sdist) as a workflow artifact and trigger a GitHub Actions `publish` workflow that performs the upload with OIDC.
-3. **Create a release publish workflow** that:
+3. **Create a release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Has `permissions: id-token: write` and `contents: read`.
    - Downloads the build artifacts from the release process.
    - Uses `pypa/gh-action-pypi-publish` with `skip-existing: false` and no API token configured, relying on OIDC instead.
@@ -51,6 +51,12 @@ To remove long-lived PyPI API tokens from the release workflow, we can delegate 
    - Requiring the workflow to be manually dispatched (or triggered by a protected tag) after approval.
    - Using GitHub environment protection rules (required reviewers) to enforce human approval before the publish job runs.
 5. **Capture published URLs and logs** by pulling the resulting upload metadata back into the release fixtures (mirroring today’s step 7), ensuring traceability remains intact.
+
+### Implementation notes
+
+- The new `publish.yml` workflow is designed to build from a release tag and publish to PyPI or Test PyPI using OIDC.
+- Configure the PyPI trusted publisher to match the repository, workflow path, and tag patterns (for example, `v*`).
+- Use the `pypi` environment in GitHub with required reviewers to preserve release manager sign-off before the job publishes.
 
 ### Advantages
 
