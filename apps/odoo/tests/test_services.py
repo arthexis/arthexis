@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from apps.odoo import services
 from apps.odoo.models import OdooDeployment
 from apps.odoo.services import discover_odoo_configs, sync_odoo_deployments
 
@@ -119,3 +122,30 @@ def test_discover_odoo_configs_searches_home_tree(monkeypatch, tmp_path):
     assert errors == []
     assert [entry.path for entry in discovered] == [nested_config]
     assert discovered[0].base_path == nested_config.parent
+
+
+def test_default_config_locations_excludes_home_root(monkeypatch):
+    fake_home = Path("/home/demo")
+
+    monkeypatch.setattr("apps.odoo.services.Path.home", lambda: fake_home)
+    monkeypatch.setattr("apps.odoo.services.os.getuid", lambda: 1000)
+
+    if services.pwd is None:
+        monkeypatch.setattr(
+            "apps.odoo.services.pwd",
+            SimpleNamespace(getpwuid=lambda _: SimpleNamespace(pw_name="demo")),
+        )
+    else:
+        monkeypatch.setattr(
+            "apps.odoo.services.pwd.getpwuid",
+            lambda _: SimpleNamespace(pw_name="demo"),
+        )
+
+    locations = services._default_config_locations()
+
+    assert Path("/home") not in locations
+    assert locations == [
+        fake_home / ".odoorc",
+        fake_home / ".config/odoo/odoo.conf",
+        fake_home,
+    ]
