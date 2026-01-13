@@ -32,3 +32,33 @@ flowchart TD
 - The same step sequence is executed by the headless scheduler through `run_headless_publish`, which builds a `NodeWorkflow` from `PUBLISH_STEPS` and writes progress logs under `LOG_DIR`.
 - Dry-run mode exercises build and publish commands against Test PyPI, restoring `VERSION` and `pyproject.toml` afterward to avoid polluting the working tree.
 - Repository hygiene safeguards (dirty checks, syncs against `origin/main`, and build stale detection) ensure releases restart when source changes appear mid-run.
+
+## Proposal: adopt PyPI Trusted Publishers (OIDC)
+
+To remove long-lived PyPI API tokens from the release workflow, we can delegate publishing to GitHub Actions using PyPI Trusted Publishers (OIDC). This preserves the current release manager approvals while shifting the final publish step to an audited, short-lived credential flow.
+
+### Suggested workflow changes
+
+1. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. This ties the project to the repository, workflow file path, and branch or tag protection rules.
+2. **Split release into two phases**:
+   - Keep the current release UI/headless workflow through step 6 for approvals, metadata, and artifact generation.
+   - Export the built artifacts (wheel/sdist) as a workflow artifact and trigger a GitHub Actions `publish` workflow that performs the upload with OIDC.
+3. **Create a release publish workflow** that:
+   - Has `permissions: id-token: write` and `contents: read`.
+   - Downloads the build artifacts from the release process.
+   - Uses `pypa/gh-action-pypi-publish` with `skip-existing: false` and no API token configured, relying on OIDC instead.
+4. **Gate publishing with release manager approval** by:
+   - Requiring the workflow to be manually dispatched (or triggered by a protected tag) after approval.
+   - Using GitHub environment protection rules (required reviewers) to enforce human approval before the publish job runs.
+5. **Capture published URLs and logs** by pulling the resulting upload metadata back into the release fixtures (mirroring today’s step 7), ensuring traceability remains intact.
+
+### Advantages
+
+- **Credential-free publishing**: no API tokens stored in secrets, reducing rotation and leak risk.
+- **Auditable, short-lived credentials**: PyPI only trusts GitHub’s OIDC token for the workflow + repository.
+- **Clear separation of duties**: release management remains in the UI; publishing is automated and policy-controlled.
+
+### Next steps
+
+- Identify the release workflow entry point (tag or manual dispatch) and align it with the PyPI trusted publisher settings.
+- Prototype the GitHub Actions publish workflow against Test PyPI, then switch the trusted publisher to production once validated.
