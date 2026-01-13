@@ -1159,7 +1159,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
             if _lcd_clock_enabled():
                 use_fahrenheit = clock_cycle % 2 == 0
                 line1, line2, speed, _ = _clock_payload(
-                    datetime.now(), use_fahrenheit=use_fahrenheit
+                    now_dt.astimezone(), use_fahrenheit=use_fahrenheit
                 )
                 clock_cycle += 1
                 return LockPayload(line1, line2, speed)
