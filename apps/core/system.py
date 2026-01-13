@@ -458,6 +458,9 @@ def _prepare_revision_info(
         "origin_revision_error": "",
         "revision_checked_at": None,
         "revision_checked_label": "",
+        "revision_status": "",
+        "revision_status_label": "",
+        "revision_status_state": "",
         "ci_status": "",
     }
 
@@ -487,6 +490,28 @@ def _prepare_revision_info(
         details["revision_checked_label"] = _format_timestamp(parsed_checked_at)
     elif checked_value:
         details["revision_checked_label"] = str(checked_value)
+
+    local_revision = details["local_revision"]
+    origin_revision = details["origin_revision"]
+    origin_revision_error = details["origin_revision_error"]
+
+    if local_revision and origin_revision:
+        if local_revision == origin_revision:
+            details["revision_status"] = "current"
+            details["revision_status_label"] = str(_("Up to date"))
+            details["revision_status_state"] = "ok"
+        else:
+            details["revision_status"] = "outdated"
+            details["revision_status_label"] = str(_("Update available"))
+            details["revision_status_state"] = "warning"
+    elif origin_revision_error:
+        details["revision_status"] = "error"
+        details["revision_status_label"] = str(_("Revision check failed"))
+        details["revision_status_state"] = "error"
+    elif local_revision or origin_revision:
+        details["revision_status"] = "unknown"
+        details["revision_status_label"] = str(_("Revision status unavailable"))
+        details["revision_status_state"] = "warning"
 
     return details
 

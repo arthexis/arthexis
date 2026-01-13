@@ -258,8 +258,18 @@
       <div class="upgrade-summary-card">
         <h4>{% trans "Current channel" %}</h4>
         <p class="upgrade-summary-value"><code>{{ report.settings.channel }}</code></p>
+        {% if report.settings.revision_status_label %}
+          <p class="upgrade-summary-value">
+            <span class="upgrade-status-chip state-{{ report.settings.revision_status_state }}">
+              {{ report.settings.revision_status_label }}
+            </span>
+          </p>
+        {% endif %}
         {% if report.settings.raw_mode and report.settings.raw_mode|lower != report.settings.channel %}
           <p class="help">{% blocktrans %}Legacy mode value: {{ report.settings.raw_mode }}{% endblocktrans %}</p>
+        {% endif %}
+        {% if report.settings.revision_checked_label %}
+          <p class="help">{% blocktrans %}Revision last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
         {% endif %}
       </div>
       <div class="upgrade-summary-card">
