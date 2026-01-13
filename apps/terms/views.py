@@ -52,8 +52,6 @@ def term_detail(request: HttpRequest, slug: str) -> HttpResponse:
     term = get_object_or_404(Term, slug=slug)
     if term.category == Term.Category.DRAFT and not request.user.is_staff:
         raise Http404
-    if term.category == Term.Category.REGISTRATION and not request.user.is_staff:
-        raise Http404
     _require_security_group(request, term)
 
     if request.method == "POST":
