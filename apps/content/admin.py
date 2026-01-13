@@ -4,7 +4,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import admin, messages
 from django.shortcuts import redirect
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
@@ -72,7 +72,10 @@ class ContentSampleAdmin(EntityModelAdmin):
         file_path = self._resolve_sample_path(obj)
         if not file_path.exists():
             return None
-        encoded = base64.b64encode(file_path.read_bytes())
+        try:
+            encoded = base64.b64encode(file_path.read_bytes())
+        except OSError:
+            return None
         return encoded.decode("ascii")
 
     def get_urls(self):
@@ -141,14 +144,32 @@ class ContentSampleAdmin(EntityModelAdmin):
             )
             return redirect("..")
 
+        try:
+            change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
+        except NoReverseMatch:  # pragma: no cover - admin URL always registered
+            self.message_user(
+                request,
+                _("Snapshot saved to %(path)s") % {"path": sample.path},
+                messages.SUCCESS,
+            )
+            self.message_user(
+                request,
+                _("Snapshot saved but the admin page could not be resolved."),
+                level=messages.WARNING,
+            )
+            return redirect("..")
+
         self.message_user(
             request,
-            _("Snapshot saved to %(path)s") % {"path": sample.path},
+            format_html(
+                '{} <a href="{}">{}</a>',
+                _("Snapshot saved."),
+                change_url,
+                _("View sample"),
+            ),
             messages.SUCCESS,
         )
-        return redirect(
-            reverse("admin:content_contentsample_change", args=[sample.pk])
-        )
+        return redirect(change_url)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}

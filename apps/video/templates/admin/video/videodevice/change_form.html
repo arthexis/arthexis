@@ -32,14 +32,12 @@
           {% endif %}
         </div>
         <div>
-          <button
-            type="submit"
-            name="_action"
-            value="refresh_snapshot"
-            class="button"
-          >
-            {% trans "Take Snapshot" %}
-          </button>
+          <form method="post" action="{% url 'admin:video_videodevice_actions' pk=original.pk tool='refresh_snapshot' %}">
+            {% csrf_token %}
+            <button type="submit" class="button">
+              {% trans "Take Snapshot" %}
+            </button>
+          </form>
         </div>
       </div>
       <div class="form-row">
