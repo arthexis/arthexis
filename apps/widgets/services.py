@@ -100,34 +100,28 @@ def _visible(widget: Widget, user) -> bool:
         return False
 
 
+def _zone_widgets_queryset(zone_slug: str):
+    return (
+        Widget.objects.select_related("zone")
+        .prefetch_related("profiles__user", "profiles__group")
+        .filter(
+            zone__slug=zone_slug,
+            is_enabled=True,
+            is_deleted=False,
+            zone__is_deleted=False,
+        )
+        .order_by("priority", "pk")
+    )
+
+
 def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> list[RenderedWidget]:
     extra_context = extra_context or {}
 
     try:
-        widgets = list(
-            Widget.objects.select_related("zone")
-            .prefetch_related("profiles__user", "profiles__group")
-            .filter(
-                zone__slug=zone_slug,
-                is_enabled=True,
-                is_deleted=False,
-                zone__is_deleted=False,
-            )
-            .order_by("priority", "pk")
-        )
-        if not widgets:
+        widgets = list(_zone_widgets_queryset(zone_slug))
+        if not widgets and not Widget.objects.filter(zone__slug=zone_slug).exists():
             sync_registered_widgets()
-            widgets = list(
-                Widget.objects.select_related("zone")
-                .prefetch_related("profiles__user", "profiles__group")
-                .filter(
-                    zone__slug=zone_slug,
-                    is_enabled=True,
-                    is_deleted=False,
-                    zone__is_deleted=False,
-                )
-                .order_by("priority", "pk")
-            )
+            widgets = list(_zone_widgets_queryset(zone_slug))
     except (OperationalError, ProgrammingError):  # pragma: no cover - database not ready
         logger.debug("Widgets tables unavailable; skipping render", exc_info=True)
         return []

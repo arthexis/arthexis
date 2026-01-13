@@ -8,6 +8,7 @@ from django.test import RequestFactory
 from apps.widgets import register_widget
 from apps.widgets.models import Widget, WidgetProfile, WidgetZone
 from apps.widgets.registry import iter_registered_widgets
+from apps.widgets import services
 from apps.widgets.services import render_zone_widgets, sync_registered_widgets
 
 pytestmark = pytest.mark.django_db
@@ -91,3 +92,48 @@ def test_render_zone_widgets_respects_profiles():
     WidgetProfile.objects.create(widget=widget, group=group, is_enabled=True)
     rendered = render_zone_widgets(request=request, zone_slug=WidgetZone.ZONE_SIDEBAR)
     assert rendered and "visible" in rendered[0].html
+
+
+def test_render_zone_widgets_syncs_when_zone_empty():
+    request = RequestFactory().get("/")
+
+    @register_widget(
+        slug="sample",
+        name="Sample",
+        zone=WidgetZone.ZONE_SIDEBAR,
+        template_name="widgets/tests/sample.html",
+    )
+    def _render(**kwargs):
+        return {"message": "seeded"}
+
+    assert not Widget.objects.filter(zone__slug=WidgetZone.ZONE_SIDEBAR).exists()
+
+    rendered = render_zone_widgets(request=request, zone_slug=WidgetZone.ZONE_SIDEBAR)
+
+    assert rendered and "seeded" in rendered[0].html
+    assert Widget.objects.filter(zone__slug=WidgetZone.ZONE_SIDEBAR).exists()
+
+
+def test_render_zone_widgets_skips_sync_when_zone_has_widgets(monkeypatch):
+    request = RequestFactory().get("/")
+
+    @register_widget(
+        slug="sample",
+        name="Sample",
+        zone=WidgetZone.ZONE_SIDEBAR,
+        template_name="widgets/tests/sample.html",
+    )
+    def _render(**kwargs):
+        return {"message": "ignored"}
+
+    sync_registered_widgets()
+    Widget.objects.update(is_enabled=False)
+    called = {"value": False}
+
+    def _sync():
+        called["value"] = True
+
+    monkeypatch.setattr(services, "sync_registered_widgets", _sync)
+
+    assert render_zone_widgets(request=request, zone_slug=WidgetZone.ZONE_SIDEBAR) == []
+    assert called["value"] is False
