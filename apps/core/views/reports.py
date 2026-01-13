@@ -1612,12 +1612,9 @@ def release_progress(request, pk: int, action: str):
                 "admin:release_releasemanager_change", args=[manager.pk]
             )
         except NoReverseMatch:
-            release_manager_admin_url = None
-    pypi_credentials_missing = True
-    github_credentials_missing = True
-    if manager:
-        pypi_credentials_missing = manager.to_credentials() is None
-        github_credentials_missing = manager.to_git_credentials() is None
+            pass
+    pypi_credentials_missing = not manager or manager.to_credentials() is None
+    github_credentials_missing = not manager or manager.to_git_credentials() is None
 
     fixtures_summary = ctx.get("fixtures")
     if (
