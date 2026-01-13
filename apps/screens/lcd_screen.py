@@ -922,6 +922,33 @@ def _initialize_lcd() -> LCDController:
     return prepare_lcd_controller()
 
 
+def _load_next_event(
+    now_dt: datetime,
+) -> tuple[DisplayState | None, datetime | None, Path | None]:
+    for candidate in _event_lock_files():
+        try:
+            payload, expires_at = _parse_event_lock_file(candidate, now_dt)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+        if expires_at <= now_dt:
+            try:
+                candidate.unlink()
+            except OSError:
+                logger.debug(
+                    "Failed to remove expired event lock: %s",
+                    candidate,
+                    exc_info=True,
+                )
+            continue
+        event_state = _prepare_display_state(
+            payload.line1, payload.line2, payload.scroll_ms
+        )
+        return event_state, expires_at, candidate
+    return None, None, None
+
+
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     display_state: DisplayState | None = None
@@ -969,31 +996,21 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                 if _event_interrupt_requested():
                     _reset_event_interrupt_flag()
-                    for candidate in _event_lock_files():
-                        try:
-                            payload, expires_at = _parse_event_lock_file(
-                                candidate, now_dt
-                            )
-                        except FileNotFoundError:
-                            continue
-                        except OSError:
-                            continue
-                        if expires_at <= now_dt:
-                            try:
-                                candidate.unlink()
-                            except OSError:
-                                logger.debug(
-                                    "Failed to remove expired event lock: %s",
-                                    candidate,
-                                    exc_info=True,
-                                )
-                            continue
-                        event_state = _prepare_display_state(
-                            payload.line1, payload.line2, payload.scroll_ms
-                        )
-                        event_deadline = expires_at
-                        event_lock_file = candidate
-                        break
+                    (
+                        event_state,
+                        event_deadline,
+                        event_lock_file,
+                    ) = _load_next_event(now_dt)
+                elif event_state is None:
+                    (
+                        pending_state,
+                        pending_deadline,
+                        pending_lock_file,
+                    ) = _load_next_event(now_dt)
+                    if pending_state is not None:
+                        event_state = pending_state
+                        event_deadline = pending_deadline
+                        event_lock_file = pending_lock_file
 
                 if event_state is not None and event_deadline is not None:
                     if now_dt >= event_deadline:
@@ -1006,34 +1023,12 @@ def main() -> None:  # pragma: no cover - hardware dependent
                                     event_lock_file,
                                     exc_info=True,
                                 )
-                        next_event_loaded = False
-                        for candidate in _event_lock_files():
-                            try:
-                                payload, expires_at = _parse_event_lock_file(
-                                    candidate, now_dt
-                                )
-                            except FileNotFoundError:
-                                continue
-                            except OSError:
-                                continue
-                            if expires_at <= now_dt:
-                                try:
-                                    candidate.unlink()
-                                except OSError:
-                                    logger.debug(
-                                        "Failed to remove expired event lock: %s",
-                                        candidate,
-                                        exc_info=True,
-                                    )
-                                continue
-                            event_state = _prepare_display_state(
-                                payload.line1, payload.line2, payload.scroll_ms
-                            )
-                            event_deadline = expires_at
-                            event_lock_file = candidate
-                            next_event_loaded = True
-                            break
-                        if next_event_loaded:
+                        (
+                            event_state,
+                            event_deadline,
+                            event_lock_file,
+                        ) = _load_next_event(now_dt)
+                        if event_state is not None:
                             continue
                         event_state = None
                         event_deadline = None
