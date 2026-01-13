@@ -467,6 +467,7 @@ LOCAL_APPS = [
     "apps.nmcli",
     "apps.wikis",
     "apps.totp",
+    "apps.terms",
 ]
 
 INSTALLED_APPS = [
