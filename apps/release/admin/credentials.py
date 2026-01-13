@@ -125,17 +125,34 @@ class ReleaseManagerAdmin(
     has_pypi_credentials.short_description = "PyPI"
 
     def _test_credentials(self, request, manager):
-        creds = manager.to_credentials()
-        if not creds:
-            self.message_user(request, f"{manager} has no credentials", messages.ERROR)
-            return
+        pypi_creds = manager.to_credentials()
+        git_creds = manager.to_git_credentials()
+        has_github_fields = bool(
+            manager.github_token or manager.git_username or manager.git_password
+        )
+        errors = []
+        if not pypi_creds:
+            errors.append("PyPI credentials missing (token or username/password)")
+        if has_github_fields and not git_creds:
+            errors.append("GitHub credentials incomplete (missing username or token)")
+        if errors:
+            for error in errors:
+                self.message_user(request, f"{manager}: {error}", messages.ERROR)
+        if pypi_creds:
+            self._test_pypi_credentials(request, manager, pypi_creds)
+        if git_creds or manager.github_token:
+            self._test_github_credentials(request, manager, git_creds)
+
+    def _test_pypi_credentials(self, request, manager, creds):
         env_url = os.environ.get("PYPI_REPOSITORY_URL", "").strip()
         url = env_url or "https://upload.pypi.org/legacy/"
+        uses_token = bool(creds.token)
         auth = (
             ("__token__", creds.token)
-            if creds.token
+            if uses_token
             else (creds.username, creds.password)
         )
+        auth_label = "token" if uses_token else "username/password"
         resp = None
         try:
             resp = requests.post(
@@ -149,25 +166,84 @@ class ReleaseManagerAdmin(
             if status in {401, 403}:
                 self.message_user(
                     request,
-                    f"{manager} credentials invalid ({status})",
+                    f"{manager} PyPI {auth_label} invalid ({status})",
                     messages.ERROR,
                 )
             elif status <= 400:
                 suffix = f" ({status})" if status != 200 else ""
                 self.message_user(
                     request,
-                    f"{manager} credentials valid{suffix}",
+                    f"{manager} PyPI {auth_label} valid{suffix}",
                     messages.SUCCESS,
                 )
             else:
                 self.message_user(
                     request,
-                    f"{manager} credentials check returned unexpected status {status}",
+                    (
+                        f"{manager} PyPI {auth_label} check returned status "
+                        f"{status} for {url}"
+                    ),
                     messages.ERROR,
                 )
         except Exception as exc:  # pragma: no cover - admin feedback
             self.message_user(
-                request, f"{manager} credentials check failed: {exc}", messages.ERROR
+                request,
+                f"{manager} PyPI {auth_label} check failed: {exc}",
+                messages.ERROR,
+            )
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
+
+    def _test_github_credentials(self, request, manager, git_creds):
+        url = "https://api.github.com/user"
+        auth_label = "token"
+        headers = {}
+        auth = None
+        if manager.github_token:
+            headers["Authorization"] = f"token {manager.github_token}"
+        elif git_creds:
+            auth_label = "username/password"
+            auth = (git_creds.username, git_creds.password)
+        resp = None
+        try:
+            resp = requests.get(
+                url,
+                headers=headers,
+                auth=auth,
+                timeout=10,
+                allow_redirects=False,
+            )
+            status = resp.status_code
+            if status in {401, 403}:
+                self.message_user(
+                    request,
+                    f"{manager} GitHub {auth_label} invalid ({status})",
+                    messages.ERROR,
+                )
+            elif 200 <= status < 300:
+                self.message_user(
+                    request,
+                    f"{manager} GitHub {auth_label} valid ({status})",
+                    messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    (
+                        f"{manager} GitHub {auth_label} check returned status "
+                        f"{status} for {url}"
+                    ),
+                    messages.ERROR,
+                )
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(
+                request,
+                f"{manager} GitHub {auth_label} check failed: {exc}",
+                messages.ERROR,
             )
         finally:
             if resp is not None:
