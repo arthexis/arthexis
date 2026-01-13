@@ -115,6 +115,19 @@ def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any
             )
             .order_by("priority", "pk")
         )
+        if not widgets:
+            sync_registered_widgets()
+            widgets = list(
+                Widget.objects.select_related("zone")
+                .prefetch_related("profiles__user", "profiles__group")
+                .filter(
+                    zone__slug=zone_slug,
+                    is_enabled=True,
+                    is_deleted=False,
+                    zone__is_deleted=False,
+                )
+                .order_by("priority", "pk")
+            )
     except (OperationalError, ProgrammingError):  # pragma: no cover - database not ready
         logger.debug("Widgets tables unavailable; skipping render", exc_info=True)
         return []
