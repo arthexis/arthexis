@@ -39,17 +39,13 @@ class TermAcceptanceForm(forms.Form):
         term = self.term
         if not term.requires_document:
             return document
-        if not document:
-            raise ValidationError(_("This document is required."))
-        if term.required_document_patterns and not matches_patterns(
-            getattr(document, "name", ""), term.required_document_patterns
-        ):
-            raise ValidationError(_("This file type is not allowed."))
-        size = getattr(document, "size", 0) or 0
-        if term.required_document_min_bytes and size < term.required_document_min_bytes:
-            raise ValidationError(_("This file is too small."))
-        if term.required_document_max_bytes and size > term.required_document_max_bytes:
-            raise ValidationError(_("This file is too large."))
+        errors = _validate_term_document(
+            term,
+            document,
+            required_message=_("This document is required."),
+        )
+        if errors:
+            raise ValidationError(errors)
         return document
 
     def save(self, *, user=None, submission=None, ip_address="", user_agent=""):
@@ -130,17 +126,13 @@ class RegistrationForm(forms.Form):
             if not config.document_field:
                 continue
             document = self.cleaned_data.get(config.document_field)
-            if not document:
-                raise ValidationError(_("A required document is missing."))
-            if term.required_document_patterns and not matches_patterns(
-                getattr(document, "name", ""), term.required_document_patterns
-            ):
-                raise ValidationError(_("This file type is not allowed."))
-            size = getattr(document, "size", 0) or 0
-            if term.required_document_min_bytes and size < term.required_document_min_bytes:
-                raise ValidationError(_("This file is too small."))
-            if term.required_document_max_bytes and size > term.required_document_max_bytes:
-                raise ValidationError(_("This file is too large."))
+            errors = _validate_term_document(
+                term,
+                document,
+                required_message=_("A required document is missing."),
+            )
+            for message in errors:
+                self.add_error(config.document_field, message)
 
     def save_photo(self):
         photo_file = self.cleaned_data.get("photo")
@@ -163,3 +155,24 @@ class RegistrationForm(forms.Form):
         if field_name in self.fields:
             return self.cleaned_data.get(field_name)
         return None
+
+
+def _validate_term_document(
+    term: Term,
+    document,
+    *,
+    required_message: str,
+) -> list[str]:
+    if not document:
+        return [required_message]
+    errors = []
+    if term.required_document_patterns and not matches_patterns(
+        getattr(document, "name", ""), term.required_document_patterns
+    ):
+        errors.append(_("This file type is not allowed."))
+    size = getattr(document, "size", 0) or 0
+    if term.required_document_min_bytes and size < term.required_document_min_bytes:
+        errors.append(_("This file is too small."))
+    if term.required_document_max_bytes and size > term.required_document_max_bytes:
+        errors.append(_("This file is too large."))
+    return errors
