@@ -39,14 +39,14 @@ To remove long-lived PyPI API tokens from the release workflow, we can delegate 
 
 ### Suggested workflow changes
 
-1. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. This ties the project to the repository, workflow file path, and branch or tag protection rules.
+1. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. Capture the required configuration fields (GitHub owner, repository name, workflow filename such as `publish.yml`, and the optional GitHub environment name if using environment protection rules). This ties the project to the repository, workflow file path, and branch or tag protection rules.
 2. **Split release into two phases**:
    - Keep the current release UI/headless workflow through step 6 for approvals, metadata, and artifact generation.
-   - Export the built artifacts (wheel/sdist) as a workflow artifact and trigger a GitHub Actions `publish` workflow that performs the upload with OIDC.
+   - Export the built artifacts (wheel/sdist) as a workflow artifact and trigger a GitHub Actions `publish` workflow that performs the upload with OIDC (for example, using a `workflow_run` trigger from the artifact-generation workflow to avoid a PAT-backed `workflow_dispatch` call).
 3. **Create a release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Has `permissions: id-token: write` and `contents: read`.
    - Downloads the build artifacts from the release process.
-   - Uses `pypa/gh-action-pypi-publish` with `skip-existing: false` and no API token configured, relying on OIDC instead.
+   - Uses a pinned `pypa/gh-action-pypi-publish` version (for example, `pypa/gh-action-pypi-publish@v1.8.11`) with `skip-existing: false` and no API token configured, relying on OIDC instead.
 4. **Gate publishing with release manager approval** by:
    - Requiring the workflow to be manually dispatched (or triggered by a protected tag) after approval.
    - Using GitHub environment protection rules (required reviewers) to enforce human approval before the publish job runs.
