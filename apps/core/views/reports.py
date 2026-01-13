@@ -1605,19 +1605,19 @@ def release_progress(request, pk: int, action: str):
     )
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
     release_manager_owner = manager.owner_display() if manager else ""
-    user_opts = request.user._meta
-    admin_user_url_names = [
-        f"admin:{user_opts.app_label}_{user_opts.model_name}_change",
-        "admin:teams_user_change",
-        "admin:core_user_change",
-    ]
-    current_user_admin_url = None
-    for admin_url_name in admin_user_url_names:
+    release_manager_admin_url = None
+    if manager:
         try:
-            current_user_admin_url = reverse(admin_url_name, args=[request.user.pk])
-            break
+            release_manager_admin_url = reverse(
+                "admin:release_releasemanager_change", args=[manager.pk]
+            )
         except NoReverseMatch:
-            continue
+            release_manager_admin_url = None
+    pypi_credentials_missing = True
+    github_credentials_missing = True
+    if manager:
+        pypi_credentials_missing = manager.to_credentials() is None
+        github_credentials_missing = manager.to_git_credentials() is None
 
     fixtures_summary = ctx.get("fixtures")
     if (
@@ -1655,7 +1655,9 @@ def release_progress(request, pk: int, action: str):
         "approval_credentials_ready": approval_credentials_ready,
         "release_manager_owner": release_manager_owner,
         "has_release_manager": bool(manager),
-        "current_user_admin_url": current_user_admin_url,
+        "release_manager_admin_url": release_manager_admin_url,
+        "pypi_credentials_missing": pypi_credentials_missing,
+        "github_credentials_missing": github_credentials_missing,
         "is_running": is_running,
         "resume_available": resume_available,
         "can_resume": can_resume,

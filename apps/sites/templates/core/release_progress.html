@@ -229,14 +229,23 @@
       {% else %}
       <h2>{% trans 'Publishing credentials required' %}</h2>
       {% if has_release_manager %}
-      <p>{% blocktrans trimmed with owner=release_manager_owner %}{{ owner }} must configure PyPI publishing credentials before this step can continue.{% endblocktrans %}</p>
+      <p>{% blocktrans trimmed with owner=release_manager_owner %}{{ owner }} must configure publishing credentials before this step can continue.{% endblocktrans %}</p>
       {% else %}
-      <p>{% trans 'Assign a release manager with PyPI publishing credentials before this step can continue.' %}</p>
+      <p>{% trans 'Assign a release manager with publishing credentials before this step can continue.' %}</p>
       {% endif %}
-      <p>{% blocktrans trimmed with profile_url=current_user_admin_url %}Add a PyPI token or PyPI username and password in your <a href="{{ profile_url }}" target="_blank" rel="noopener">user profile</a> under the Release Manager section.{% endblocktrans %}</p>
+      {% if release_manager_admin_url %}
+      <p>{% blocktrans trimmed with profile_url=release_manager_admin_url %}Add the missing credentials in the <a href="{{ profile_url }}" target="_blank" rel="noopener">Release Manager admin profile</a>.{% endblocktrans %}</p>
+      {% else %}
+      <p>{% trans 'Add the missing credentials in the Release Manager admin profile.' %}</p>
+      {% endif %}
       <ul class="approval-requirements">
+        {% if pypi_credentials_missing %}
         <li>{% trans 'PyPI token (recommended)' %}</li>
         <li>{% trans 'or PyPI username and password' %}</li>
+        {% endif %}
+        {% if github_credentials_missing %}
+        <li>{% trans 'GitHub token (or git username and password/token for pushes)' %}</li>
+        {% endif %}
       </ul>
       {% endif %}
     </div>
@@ -311,4 +320,3 @@
   })();
 </script>
 {% endblock %}
-
