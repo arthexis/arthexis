@@ -1,10 +1,13 @@
 """Standalone LCD screen updater with predictable rotations.
 
-The script polls ``.locks/lcd-high`` and ``.locks/lcd-low`` for payload
-text and writes it to the attached LCD1602 display. The screen rotates
-every 10 seconds across three states in a fixed order: High, Low, and
-Time/Temp. By default, rows are truncated to the 16x2 display; scrolling
-is only enabled when a payload specifies a positive scroll interval.
+The script polls ``.locks/lcd-high`` and ``.locks/lcd-low`` (plus numbered
+variants like ``lcd-low-1``) for payload text and writes it to the attached
+LCD1602 display. The screen rotates every 10 seconds across three states in
+a fixed order: High, Low, and Time/Temp. ``clock`` and ``uptime`` lock files
+override the automatic time/uptime payloads, and ``lcd-channels.lck`` can
+reorder the channel rotation. By default, rows are truncated to the 16x2
+display; scrolling is only enabled when a payload specifies a positive
+scroll interval.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import os
 import random
 import signal
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from glob import glob
@@ -76,8 +80,11 @@ from apps.screens.lcd import (
 from apps.screens.animations import AnimationLoadError, default_tree_frames
 from apps.screens.history import LCDHistoryRecorder
 from apps.screens.startup_notifications import (
+    LCD_CHANNELS_LOCK_FILE,
+    LCD_CLOCK_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    LCD_UPTIME_LOCK_FILE,
     read_lcd_lock_file,
 )
 from apps.core import uptime_utils
@@ -86,6 +93,9 @@ logger = logging.getLogger(__name__)
 LOCK_DIR = BASE_DIR / ".locks"
 HIGH_LOCK_FILE = LOCK_DIR / LCD_HIGH_LOCK_FILE
 LOW_LOCK_FILE = LOCK_DIR / LCD_LOW_LOCK_FILE
+CLOCK_LOCK_NAME = LCD_CLOCK_LOCK_FILE
+UPTIME_LOCK_NAME = LCD_UPTIME_LOCK_FILE
+CHANNEL_ORDER_LOCK_NAME = LCD_CHANNELS_LOCK_FILE
 DEFAULT_SCROLL_MS = 0
 MIN_SCROLL_MS = 50
 SCROLL_PADDING = 3
@@ -174,6 +184,20 @@ class DisplayState(NamedTuple):
 
 
 _NON_ASCII_CACHE: set[str] = set()
+
+
+@dataclass
+class ChannelCycle:
+    payloads: list[LockPayload]
+    signature: tuple[tuple[int, float], ...]
+    index: int = 0
+
+    def next_payload(self) -> LockPayload | None:
+        if not self.payloads:
+            return None
+        payload = self.payloads[self.index % len(self.payloads)]
+        self.index = (self.index + 1) % len(self.payloads)
+        return payload
 
 
 def _non_ascii_positions(text: str) -> list[str]:
@@ -305,6 +329,55 @@ class ScrollScheduler:
         self.next_deadline = max(self.next_deadline + interval, now + interval)
 
 
+def _channel_lock_entries(lock_dir: Path, base_name: str) -> list[tuple[int, Path, float]]:
+    entries: list[tuple[int, Path, float]] = []
+    if not lock_dir.exists():
+        return entries
+    prefix = f"{base_name}-"
+    for path in lock_dir.iterdir():
+        name = path.name
+        if name == base_name:
+            num = 0
+        elif name.startswith(prefix):
+            suffix = name[len(prefix) :]
+            if not suffix.isdigit():
+                continue
+            num = int(suffix)
+        else:
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        entries.append((num, path, mtime))
+    entries.sort(key=lambda item: item[0])
+    return entries
+
+
+def _read_lock_payload(lock_file: Path, *, now: datetime) -> LockPayload | None:
+    payload = read_lcd_lock_file(lock_file)
+    if payload is None:
+        return None
+    if payload.expires_at and payload.expires_at <= now:
+        try:
+            lock_file.unlink()
+        except OSError:
+            logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
+        return None
+    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+
+
+def _load_channel_payloads(
+    entries: list[tuple[int, Path, float]], *, now: datetime
+) -> list[LockPayload]:
+    payloads: list[LockPayload] = []
+    for _, path, _ in entries:
+        payload = _read_lock_payload(path, now=now)
+        if payload is not None:
+            payloads.append(payload)
+    return payloads
+
+
 def _read_lock_file(lock_file: Path) -> LockPayload:
     payload = read_lcd_lock_file(lock_file)
     if payload is None:
@@ -378,6 +451,51 @@ def _apply_low_payload_fallback(payload: LockPayload) -> LockPayload:
         base_dir=BASE_DIR,
         scroll_ms=GAP_ANIMATION_SCROLL_MS,
     )
+
+
+CHANNEL_BASE_NAMES = {
+    "high": LCD_HIGH_LOCK_FILE,
+    "low": LCD_LOW_LOCK_FILE,
+    "clock": CLOCK_LOCK_NAME,
+    "uptime": UPTIME_LOCK_NAME,
+}
+
+
+def _parse_channel_order(text: str) -> list[str]:
+    channels: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0]
+        if not line.strip():
+            continue
+        for token in line.replace(",", " ").split():
+            normalized = token.strip().lower()
+            if not normalized:
+                continue
+            channels.append(normalized)
+    return channels
+
+
+def _load_channel_order(lock_dir: Path = LOCK_DIR) -> list[str] | None:
+    path = lock_dir / CHANNEL_ORDER_LOCK_NAME
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.debug("Unable to read LCD channel order lock file", exc_info=True)
+        return None
+
+    requested = _parse_channel_order(raw)
+    if not requested:
+        return None
+
+    order: list[str] = []
+    for name in requested:
+        if name not in CHANNEL_BASE_NAMES:
+            logger.debug("Skipping unknown LCD channel '%s' in channel order lock", name)
+            continue
+        order.append(name)
+    return order or None
 
 
 def _lcd_clock_enabled() -> bool:
@@ -956,10 +1074,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
     event_state: DisplayState | None = None
     event_deadline: datetime | None = None
     event_lock_file: Path | None = None
-    high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-    low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-    high_mtime = 0.0
-    low_mtime = 0.0
     rotation_deadline = 0.0
     scroll_scheduler = ScrollScheduler()
     state_order = ("high", "low", "clock")
@@ -968,6 +1082,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     clock_cycle = 0
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
+    channel_states: dict[str, ChannelCycle] = {}
     frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
     _clear_low_lock_file()
 
@@ -975,6 +1090,80 @@ def main() -> None:  # pragma: no cover - hardware dependent
     signal.signal(signal.SIGINT, _request_shutdown)
     signal.signal(signal.SIGHUP, _request_shutdown)
     signal.signal(signal.SIGUSR1, _request_event_interrupt)
+
+    def _load_channel_states(
+        now_dt: datetime,
+    ) -> tuple[dict[str, ChannelCycle], dict[str, bool]]:
+        channel_info: dict[str, ChannelCycle] = {}
+        channel_text: dict[str, bool] = {}
+        for label, base_name in CHANNEL_BASE_NAMES.items():
+            entries = _channel_lock_entries(LOCK_DIR, base_name)
+            signature = tuple((num, mtime) for num, _, mtime in entries)
+            existing = channel_states.get(label)
+            if existing is None or existing.signature != signature:
+                payloads = _load_channel_payloads(entries, now=now_dt)
+                existing = ChannelCycle(payloads=payloads, signature=signature)
+            channel_states[label] = existing
+            channel_info[label] = existing
+            channel_text[label] = any(
+                _payload_has_text(payload) for payload in existing.payloads
+            )
+        return channel_info, channel_text
+
+    def _payload_for_state(
+        state_order: tuple[str, ...],
+        index: int,
+        channel_info: dict[str, ChannelCycle],
+        channel_text: dict[str, bool],
+        now_dt: datetime,
+        *,
+        advance: bool = True,
+    ) -> LockPayload:
+        nonlocal clock_cycle
+        state_label = state_order[index]
+        channel_state = channel_info.get(state_label)
+        if state_label == "high" and channel_state:
+            payload = (
+                channel_state.next_payload()
+                if advance
+                else channel_state.payloads[0]
+                if channel_state.payloads
+                else None
+            )
+            return payload or LockPayload("", "", DEFAULT_SCROLL_MS)
+        if state_label in {"low", "uptime"} and channel_state:
+            payload = (
+                channel_state.next_payload()
+                if advance
+                else channel_state.payloads[0]
+                if channel_state.payloads
+                else None
+            )
+            if payload and channel_text[state_label]:
+                return _refresh_uptime_payload(payload)
+            return _select_low_payload(
+                LockPayload("", "", DEFAULT_SCROLL_MS),
+                base_dir=BASE_DIR,
+                now=now_dt,
+            )
+        if state_label == "clock":
+            if channel_state and channel_text[state_label]:
+                payload = (
+                    channel_state.next_payload()
+                    if advance
+                    else channel_state.payloads[0]
+                    if channel_state.payloads
+                    else None
+                )
+                return payload or LockPayload("", "", DEFAULT_SCROLL_MS)
+            if _lcd_clock_enabled():
+                use_fahrenheit = clock_cycle % 2 == 0
+                line1, line2, speed, _ = _clock_payload(
+                    datetime.now(), use_fahrenheit=use_fahrenheit
+                )
+                clock_cycle += 1
+                return LockPayload(line1, line2, speed)
+        return LockPayload("", "", DEFAULT_SCROLL_MS)
 
     try:
         try:
@@ -1075,36 +1264,39 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     continue
 
                 if display_state is None or now >= rotation_deadline:
-                    high_available = True
-                    try:
-                        high_stat = HIGH_LOCK_FILE.stat()
-                        if high_stat.st_mtime != high_mtime:
-                            high_payload = _read_lock_file(HIGH_LOCK_FILE)
-                            high_mtime = high_stat.st_mtime
-                    except OSError:
-                        high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        high_mtime = 0.0
-                        high_available = False
+                    channel_info, channel_text = _load_channel_states(now_dt)
 
-                    low_available = True
-                    try:
-                        low_stat = LOW_LOCK_FILE.stat()
-                        if low_stat.st_mtime != low_mtime:
-                            low_payload = _read_lock_file(LOW_LOCK_FILE)
-                            low_mtime = low_stat.st_mtime
-                    except OSError:
-                        low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        low_mtime = 0.0
-                        low_available = False
+                    configured_order = _load_channel_order(LOCK_DIR)
 
-                    low_payload = _apply_low_payload_fallback(low_payload)
-                    low_available = _payload_has_text(low_payload)
+                    def _channel_available(label: str) -> bool:
+                        if label == "high":
+                            return bool(channel_info[label].signature)
+                        if label == "clock":
+                            return channel_text[label] or _lcd_clock_enabled()
+                        if label in {"low", "uptime"}:
+                            return True
+                        return False
 
                     previous_order = state_order
-                    if high_available:
-                        state_order = ("high", "low", "clock") if low_available else ("high", "clock")
+                    if configured_order:
+                        state_order = tuple(
+                            label
+                            for label in configured_order
+                            if _channel_available(label)
+                        )
+                        if not state_order:
+                            state_order = ("clock",)
                     else:
-                        state_order = ("low", "clock") if low_available else ("clock",)
+                        high_available = _channel_available("high")
+                        low_available = _channel_available("low")
+                        if high_available:
+                            state_order = (
+                                ("high", "low", "clock")
+                                if low_available
+                                else ("high", "clock")
+                            )
+                        else:
+                            state_order = ("low", "clock") if low_available else ("clock",)
 
                     if previous_order and 0 <= state_index < len(previous_order):
                         current_label = previous_order[state_index]
@@ -1115,23 +1307,13 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     else:
                         state_index = 0
 
-                    def _payload_for_state(index: int) -> LockPayload:
-                        nonlocal clock_cycle
-                        state_label = state_order[index]
-                        if state_label == "high":
-                            return high_payload
-                        if state_label == "low":
-                            return _refresh_uptime_payload(low_payload)
-                        if _lcd_clock_enabled():
-                            use_fahrenheit = clock_cycle % 2 == 0
-                            line1, line2, speed, _ = _clock_payload(
-                                datetime.now(), use_fahrenheit=use_fahrenheit
-                            )
-                            clock_cycle += 1
-                            return LockPayload(line1, line2, speed)
-                        return LockPayload("", "", DEFAULT_SCROLL_MS)
-
-                    current_payload = _payload_for_state(state_index)
+                    current_payload = _payload_for_state(
+                        state_order,
+                        state_index,
+                        channel_info,
+                        channel_text,
+                        now_dt,
+                    )
                     _warn_on_non_ascii_payload(current_payload, state_order[state_index])
                     display_state = _prepare_display_state(
                         current_payload.line1,
@@ -1140,14 +1322,25 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     )
                     rotation_deadline = now + ROTATION_SECONDS
 
-                    next_index = (state_index + 1) % len(state_order)
-                    next_payload = _payload_for_state(next_index)
-                    _warn_on_non_ascii_payload(next_payload, state_order[next_index])
-                    next_display_state = _prepare_display_state(
-                        next_payload.line1,
-                        next_payload.line2,
-                        next_payload.scroll_ms,
-                    )
+                    if len(state_order) > 1:
+                        next_index = (state_index + 1) % len(state_order)
+                        next_payload = _payload_for_state(
+                            state_order,
+                            next_index,
+                            channel_info,
+                            channel_text,
+                            now_dt,
+                        )
+                        _warn_on_non_ascii_payload(
+                            next_payload, state_order[next_index]
+                        )
+                        next_display_state = _prepare_display_state(
+                            next_payload.line1,
+                            next_payload.line2,
+                            next_payload.scroll_ms,
+                        )
+                    else:
+                        next_display_state = None
 
                 if lcd is None:
                     lcd = _initialize_lcd()
@@ -1189,20 +1382,41 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     scroll_scheduler.sleep_until_ready()
 
                 if time.monotonic() >= rotation_deadline:
-                    state_index = (state_index + 1) % len(state_order)
-                    display_state = next_display_state
+                    if state_order:
+                        state_index = (state_index + 1) % len(state_order)
+                    if len(state_order) > 1:
+                        display_state = next_display_state
 
-                    # Prepare the following state in advance for predictable timing.
-                    high_payload = _read_lock_file(HIGH_LOCK_FILE)
-                    low_payload = _read_lock_file(LOW_LOCK_FILE)
-                    low_payload = _apply_low_payload_fallback(low_payload)
-                    next_index = (state_index + 1) % len(state_order)
-                    next_payload = _payload_for_state(next_index)
-                    next_display_state = _prepare_display_state(
-                        next_payload.line1,
-                        next_payload.line2,
-                        next_payload.scroll_ms,
-                    )
+                        # Prepare the following state in advance for predictable timing.
+                        channel_info, channel_text = _load_channel_states(now_dt)
+                        next_index = (state_index + 1) % len(state_order)
+                        next_payload = _payload_for_state(
+                            state_order,
+                            next_index,
+                            channel_info,
+                            channel_text,
+                            now_dt,
+                        )
+                        next_display_state = _prepare_display_state(
+                            next_payload.line1,
+                            next_payload.line2,
+                            next_payload.scroll_ms,
+                        )
+                    else:
+                        channel_info, channel_text = _load_channel_states(now_dt)
+                        current_payload = _payload_for_state(
+                            state_order,
+                            state_index,
+                            channel_info,
+                            channel_text,
+                            now_dt,
+                        )
+                        display_state = _prepare_display_state(
+                            current_payload.line1,
+                            current_payload.line2,
+                            current_payload.scroll_ms,
+                        )
+                        next_display_state = None
                     rotation_deadline = time.monotonic() + ROTATION_SECONDS
             except LCDUnavailableError as exc:
                 logger.warning("LCD unavailable: %s", exc)

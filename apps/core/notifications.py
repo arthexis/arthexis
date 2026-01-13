@@ -20,8 +20,10 @@ from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
 from apps.screens.startup_notifications import (
+    LCD_CLOCK_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    LCD_UPTIME_LOCK_FILE,
     lcd_feature_enabled,
     render_lcd_lock_file,
 )
@@ -73,6 +75,8 @@ class NotificationManager:
     DEFAULT_CHANNEL_FILES: dict[str, str] = {
         "low": LCD_LOW_LOCK_FILE,
         "high": LCD_HIGH_LOCK_FILE,
+        "clock": LCD_CLOCK_LOCK_FILE,
+        "uptime": LCD_UPTIME_LOCK_FILE,
     }
 
     def __init__(
@@ -115,14 +119,8 @@ class NotificationManager:
         filename = self.DEFAULT_CHANNEL_FILES.get(
             normalized_type, f"lcd-{normalized_type}"
         )
-
-        if normalized_num != 0 and filename in self.DEFAULT_CHANNEL_FILES.values():
-            logger.debug(
-                "LCD channel numbers are not supported; using %s for %s (%s)",
-                filename,
-                normalized_type,
-                normalized_num,
-            )
+        if normalized_num != 0:
+            filename = f"{filename}-{normalized_num}"
         return self.lock_dir / filename
 
     def _target_lock_file(

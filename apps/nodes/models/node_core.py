@@ -959,7 +959,7 @@ class NetMessage(Entity):
         max_length=20,
         blank=True,
         default="low",
-        help_text="LCD channel type for local display (for example low or high).",
+        help_text="LCD channel type for local display (for example low, high, clock, or uptime).",
     )
     lcd_channel_num = models.PositiveSmallIntegerField(
         default=0,

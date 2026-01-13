@@ -31,7 +31,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--channel-type",
             default=None,
-            help="LCD channel type to target (e.g. low, high, custom)",
+            help="LCD channel type to target (e.g. low, high, clock, uptime, custom)",
         )
         parser.add_argument(
             "--channel-num",
