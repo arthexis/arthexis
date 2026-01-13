@@ -2,35 +2,42 @@
 
 from django.db import migrations
 
+from apps.app.models import DEFAULT_MODEL_WIKI_URLS
 
-WIKI_URL = "https://en.wikipedia.org/wiki/Open_Charge_Point_Protocol"
+
+APP_NAME = "ocpp"
+MODEL_LABEL = "ocpp.Charger"
+WIKI_URL = DEFAULT_MODEL_WIKI_URLS.get((APP_NAME, MODEL_LABEL))
+
+
+def _get_ocpp_application(apps):
+    Application = apps.get_model("app", "Application")
+
+    try:
+        return Application.objects.get(name=APP_NAME)
+    except Application.DoesNotExist:
+        return None
 
 
 def set_ocpp_wiki_url(apps, schema_editor):
-    Application = apps.get_model("app", "Application")
     ApplicationModel = apps.get_model("app", "ApplicationModel")
-
-    try:
-        application = Application.objects.get(name="ocpp")
-    except Application.DoesNotExist:
+    application = _get_ocpp_application(apps)
+    if not application or not WIKI_URL:
         return
 
     ApplicationModel.objects.filter(
-        application=application, label__iexact="ocpp.Charger"
+        application=application, label__iexact=MODEL_LABEL
     ).update(wiki_url=WIKI_URL)
 
 
 def unset_ocpp_wiki_url(apps, schema_editor):
-    Application = apps.get_model("app", "Application")
     ApplicationModel = apps.get_model("app", "ApplicationModel")
-
-    try:
-        application = Application.objects.get(name="ocpp")
-    except Application.DoesNotExist:
+    application = _get_ocpp_application(apps)
+    if not application or not WIKI_URL:
         return
 
     ApplicationModel.objects.filter(
-        application=application, label__iexact="ocpp.Charger", wiki_url=WIKI_URL
+        application=application, label__iexact=MODEL_LABEL, wiki_url=WIKI_URL
     ).update(wiki_url="")
 
 
