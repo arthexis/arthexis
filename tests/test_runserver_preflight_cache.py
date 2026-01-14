@@ -94,12 +94,14 @@ def _run_preflight(
         status_file.write_text("\n".join(migrate_check_sequence))
 
     env_exports = {
-        ENV_BASE_DIR: str(base_dir),
-        ENV_LOCK_DIR: str(lock_dir),
-        ENV_COMMAND_LOG: str(command_log),
+        ENV_BASE_DIR: bash_path(base_dir),
+        ENV_LOCK_DIR: bash_path(lock_dir),
+        ENV_COMMAND_LOG: bash_path(command_log),
         ENV_SHOWMIGRATIONS_PLAN: plan_output,
         ENV_MIGRATE_CHECK_STATUS: migrate_check_status,
-        ENV_MIGRATE_CHECK_STATUS_FILE: str(status_file) if status_file else "",
+        ENV_MIGRATE_CHECK_STATUS_FILE: (
+            bash_path(status_file) if status_file else ""
+        ),
         ENV_RUNSERVER_PREFLIGHT_FORCE_REFRESH: "true" if force_refresh else "false",
     }
     export_lines = [
