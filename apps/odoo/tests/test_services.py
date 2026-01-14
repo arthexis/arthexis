@@ -128,7 +128,7 @@ def test_default_config_locations_excludes_home_root(monkeypatch):
     fake_home = Path("/home/demo")
 
     monkeypatch.setattr("apps.odoo.services.Path.home", lambda: fake_home)
-    monkeypatch.setattr("apps.odoo.services.os.getuid", lambda: 1000)
+    monkeypatch.setattr("apps.odoo.services._get_uid", lambda: 1000)
 
     if services.pwd is None:
         monkeypatch.setattr(
