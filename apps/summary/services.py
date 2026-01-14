@@ -55,6 +55,10 @@ def _resolve_model_path(config: LLMSummaryConfig) -> Path:
     return DEFAULT_MODEL_DIR
 
 
+def resolve_model_path(config: LLMSummaryConfig) -> Path:
+    return _resolve_model_path(config)
+
+
 def ensure_local_model(config: LLMSummaryConfig) -> Path:
     model_dir = _resolve_model_path(config)
     model_dir.mkdir(parents=True, exist_ok=True)
