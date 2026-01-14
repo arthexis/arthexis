@@ -8,6 +8,8 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
+from apps.screens.management.commands.lcd_plan import Command
+
 
 @pytest.fixture()
 def temp_base_dir(tmp_path: Path) -> Path:
@@ -19,8 +21,6 @@ def test_lcd_plan_includes_high_and_low(monkeypatch, temp_base_dir: Path) -> Non
     (temp_base_dir / ".locks" / "lcd-high").write_text("HIGH\nMSG\n", encoding="utf-8")
     (temp_base_dir / ".locks" / "lcd-low").write_text("LOW\nNOTE\n", encoding="utf-8")
     fixed_now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-    from apps.screens.management.commands.lcd_plan import Command
 
     monkeypatch.setattr(Command, "_now", lambda self: fixed_now)
 
@@ -41,8 +41,6 @@ def test_lcd_plan_prioritizes_event(monkeypatch, temp_base_dir: Path) -> None:
         "EVENT\nNOW\n5\n", encoding="utf-8"
     )
     fixed_now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-    from apps.screens.management.commands.lcd_plan import Command
 
     monkeypatch.setattr(Command, "_now", lambda self: fixed_now)
 

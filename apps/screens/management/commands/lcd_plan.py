@@ -63,8 +63,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        duration = max(1, int(options.get("seconds") or 60))
-        interactive = bool(options.get("interactive"))
+        duration = options["seconds"]
+        interactive = options["interactive"]
         base_dir = Path(settings.BASE_DIR)
         start_dt = self._now()
 
@@ -164,8 +164,9 @@ class Command(BaseCommand):
                 )
             if lcd_screen._lcd_clock_enabled():
                 use_fahrenheit = clock_cycle % 2 == 0
+                local_now = now_dt.astimezone() if now_dt.tzinfo else now_dt
                 line1, line2, speed, _ = lcd_screen._clock_payload(
-                    now_dt, use_fahrenheit=use_fahrenheit
+                    local_now, use_fahrenheit=use_fahrenheit
                 )
                 return lcd_screen.LockPayload(line1, line2, speed), clock_cycle + 1
             return lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS), clock_cycle
@@ -177,6 +178,38 @@ class Command(BaseCommand):
             if high_available:
                 return ("high", "low", "clock") if low_available else ("high", "clock")
             return ("low", "clock") if low_available else ("clock",)
+
+        def load_payloads(
+            now_dt: datetime,
+        ) -> tuple[lcd_screen.LockPayload, lcd_screen.LockPayload, bool, bool]:
+            high_available = high_lock_file.exists()
+            low_available = low_lock_file.exists()
+            high_payload = (
+                read_lock_payload(high_lock_file, now_dt)
+                if high_available
+                else lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
+            )
+            low_payload = (
+                read_lock_payload(low_lock_file, now_dt)
+                if low_available
+                else lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
+            )
+            low_payload = low_payload_fallback(low_payload, now_dt)
+            low_available = lcd_screen._payload_has_text(low_payload)
+            return high_payload, low_payload, high_available, low_available
+
+        def refresh_state_order(high_available: bool, low_available: bool) -> None:
+            nonlocal state_order, state_index
+            previous_order = state_order
+            state_order = compute_state_order(high_available, low_available)
+            if previous_order and 0 <= state_index < len(previous_order):
+                current_label = previous_order[state_index]
+                if current_label in state_order:
+                    state_index = state_order.index(current_label)
+                else:
+                    state_index = 0
+            else:
+                state_index = 0
 
         writer = PlanFrameWriter()
         clock_cycle = 0
@@ -197,11 +230,18 @@ class Command(BaseCommand):
                 if now_dt >= event_deadline:
                     event_state = None
                     event_deadline = None
-                    if state_order:
-                        state_index = (state_index + 1) % len(state_order)
-                    display_state = None
-                    next_display_state = None
-                    rotation_deadline = 0.0
+                    payload, expires_at = load_next_event(now_dt)
+                    if payload is not None and expires_at is not None:
+                        event_state = lcd_screen._prepare_display_state(
+                            payload.line1, payload.line2, payload.scroll_ms
+                        )
+                        event_deadline = expires_at
+                    else:
+                        if state_order:
+                            state_index = (state_index + 1) % len(state_order)
+                        display_state = None
+                        next_display_state = None
+                        rotation_deadline = 0.0
 
             if event_state is None and event_deadline is None:
                 payload, expires_at = load_next_event(now_dt)
@@ -213,34 +253,8 @@ class Command(BaseCommand):
 
             if event_state is None:
                 if display_state is None or current_offset >= rotation_deadline:
-                    high_available = False
-                    low_available = False
-                    try:
-                        high_lock_file.stat()
-                        high_available = True
-                    except OSError:
-                        high_available = False
-                    try:
-                        low_lock_file.stat()
-                        low_available = True
-                    except OSError:
-                        low_available = False
-
-                    high_payload = (
-                        read_lock_payload(high_lock_file, now_dt)
-                        if high_available
-                        else lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
-                    )
-                    low_payload = (
-                        read_lock_payload(low_lock_file, now_dt)
-                        if low_available
-                        else lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
-                    )
-                    low_payload = low_payload_fallback(low_payload, now_dt)
-                    low_available = lcd_screen._payload_has_text(low_payload)
-                    state_order = compute_state_order(high_available, low_available)
-                    if state_order and state_index >= len(state_order):
-                        state_index = 0
+                    high_payload, low_payload, high_available, low_available = load_payloads(now_dt)
+                    refresh_state_order(high_available, low_available)
 
                     current_payload, clock_cycle = payload_for_state(
                         state_index,
@@ -317,9 +331,7 @@ class Command(BaseCommand):
                 if state_order:
                     state_index = (state_index + 1) % len(state_order)
                 display_state = next_display_state
-                high_payload = read_lock_payload(high_lock_file, now_dt)
-                low_payload = read_lock_payload(low_lock_file, now_dt)
-                low_payload = low_payload_fallback(low_payload, now_dt)
+                high_payload, low_payload, _, _ = load_payloads(now_dt)
                 next_index = (state_index + 1) % len(state_order) if state_order else 0
                 next_payload, clock_cycle = payload_for_state(
                     next_index,
