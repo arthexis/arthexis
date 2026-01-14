@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.contrib import admin, messages
 from django.contrib.humanize.templatetags.humanize import naturaltime
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -111,16 +111,17 @@ class SiteConfigurationViewMixin:
         if request.method == "POST":
             if not self.has_change_permission(request):
                 raise PermissionDenied
+            should_redirect = False
             if "update_subdomains" in request.POST:
                 subdomain_form = ManagedSubdomainForm(request.POST)
                 if subdomain_form.is_valid():
                     self._apply_subdomains(request, queryset, subdomain_form)
-                    redirect_url = reverse("admin:nginx_siteconfiguration_preview")
-                    if ids_param:
-                        redirect_url = f"{redirect_url}?ids={ids_param}"
-                    return self._http_redirect(redirect_url)
+                    should_redirect = True
             else:
                 self._apply_configurations(request, queryset, ids_param)
+                should_redirect = True
+
+            if should_redirect:
                 redirect_url = reverse("admin:nginx_siteconfiguration_preview")
                 if ids_param:
                     redirect_url = f"{redirect_url}?ids={ids_param}"
@@ -148,15 +149,17 @@ class SiteConfigurationViewMixin:
         if request.method == "POST":
             if not self.has_change_permission(request):
                 raise PermissionDenied
+            should_redirect = False
             if "update_subdomains" in request.POST:
                 subdomain_form = ManagedSubdomainForm(request.POST)
                 if subdomain_form.is_valid():
                     self._apply_subdomains(request, queryset, subdomain_form)
-                    return self._http_redirect(
-                        reverse("admin:nginx_siteconfiguration_preview_default")
-                    )
+                    should_redirect = True
             else:
                 self._apply_configurations(request, queryset, ids_param)
+                should_redirect = True
+
+            if should_redirect:
                 return self._http_redirect(
                     reverse("admin:nginx_siteconfiguration_preview_default")
                 )
@@ -308,7 +311,11 @@ class SiteConfigurationViewMixin:
             if config.managed_subdomains == managed_subdomains:
                 continue
             config.managed_subdomains = managed_subdomains
-            config.full_clean()
+            try:
+                config.full_clean()
+            except ValidationError as exc:
+                self.message_user(request, f"Error updating {config}: {exc}", messages.ERROR)
+                continue
             config.save(update_fields=["managed_subdomains"])
             updated = True
         if updated:
