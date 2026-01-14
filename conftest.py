@@ -91,6 +91,19 @@ def _capture_db_blocker(django_db_blocker: Any) -> None:
     DB_BLOCKER = django_db_blocker
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_fixture_sigil_roots(
+    django_db_setup: Any, django_db_blocker: Any
+) -> None:
+    from apps.sigils.loader import load_fixture_sigil_roots
+    from apps.sigils.models import SigilRoot
+
+    with django_db_blocker.unblock():
+        if SigilRoot.objects.using("default").filter(prefix__in=["SITE", "NODE"]).exists():
+            return
+        load_fixture_sigil_roots(using="default")
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Any:
     outcome = yield
