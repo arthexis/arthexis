@@ -18,8 +18,10 @@ set COMMAND=%COMMAND:-=_%
 shift
 set COMMANDS=
 for /f "usebackq delims=" %%A in (`%VENV%\Scripts\python.exe manage.py help --commands`) do (
-    for %%B in (%%A) do (
-        set COMMANDS=!COMMANDS! %%B
+    echo "%%A" | findstr /B /C:"[" >nul || (
+        for %%B in (%%A) do (
+            set COMMANDS=!COMMANDS! %%B
+        )
     )
 )
 set FOUND=
@@ -30,11 +32,10 @@ if not defined FOUND (
     set PREFIX_MATCHES=
     set CONTAINS_MATCHES=
     for %%C in (!COMMANDS!) do (
-        echo %%C | findstr /I /B /C:"%COMMAND%" >nul && set PREFIX_MATCHES=!PREFIX_MATCHES! %%C
-    )
-    for %%C in (!COMMANDS!) do (
-        echo %%C | findstr /I /C:"%COMMAND%" >nul && (
-            echo %%C | findstr /I /B /C:"%COMMAND%" >nul || set CONTAINS_MATCHES=!CONTAINS_MATCHES! %%C
+        echo %%C | findstr /I /B /C:"%COMMAND%" >nul && (
+            set PREFIX_MATCHES=!PREFIX_MATCHES! %%C
+        ) || (
+            echo %%C | findstr /I /C:"%COMMAND%" >nul && set CONTAINS_MATCHES=!CONTAINS_MATCHES! %%C
         )
     )
     echo No exact match for "%COMMAND_RAW%".
