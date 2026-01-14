@@ -107,14 +107,16 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             model_choice = form.cleaned_data["model_choice"]
             model_command = (form.cleaned_data.get("model_command") or "").strip()
             if model_choice == LLMSummaryWizardForm.MODEL_DEFAULT:
-                config.model_path = str(DEFAULT_MODEL_DIR)
+                config.model_path = ""
             else:
                 config.model_path = form.cleaned_data.get("model_path", "").strip()
             config.model_command = model_command
             if form.cleaned_data.get("install_model"):
-                ensure_local_model(config)
+                model_dir = ensure_local_model(config)
+                if model_choice == LLMSummaryWizardForm.MODEL_DEFAULT:
+                    config.model_path = ""
                 installed_message = _("Model directory is ready at %(path)s.") % {
-                    "path": config.model_path,
+                    "path": str(model_dir),
                 }
                 messages.success(request, installed_message)
             config.save(
