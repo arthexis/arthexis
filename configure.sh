@@ -670,8 +670,6 @@ else
 fi
 if [ "$ENABLE_RFID_SERVICE" = true ]; then
     touch "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
-else
-    rm -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
 fi
 
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
