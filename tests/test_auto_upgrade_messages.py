@@ -14,7 +14,16 @@ def test_send_auto_upgrade_check_message(monkeypatch):
     fixed_now = timezone.make_aware(datetime(2024, 1, 1, 12, 34))
     monkeypatch.setattr(tasks.timezone, "now", lambda: fixed_now)
 
-    def fake_broadcast(cls, subject, body, reach=None, seen=None, attachments=None):
+    def fake_broadcast(
+        cls,
+        subject,
+        body,
+        reach=None,
+        seen=None,
+        attachments=None,
+        lcd_channel_type=None,
+        lcd_channel_num=None,
+    ):
         sent.append({"subject": subject, "body": body})
 
     from apps.nodes.models.node_core import NetMessage
