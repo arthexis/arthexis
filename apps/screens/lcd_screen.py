@@ -378,6 +378,21 @@ def _load_channel_payloads(
     return payloads
 
 
+def _load_low_channel_payloads(
+    entries: list[tuple[int, Path, float]], *, now: datetime
+) -> tuple[list[LockPayload], bool]:
+    payloads: list[LockPayload] = []
+    has_base_payload = False
+    for num, path, _ in entries:
+        payload = _read_lock_payload(path, now=now)
+        if payload is None:
+            continue
+        if num == 0:
+            has_base_payload = True
+        payloads.append(payload)
+    return payloads, has_base_payload
+
+
 def _read_lock_file(lock_file: Path) -> LockPayload:
     payload = read_lcd_lock_file(lock_file)
     if payload is None:
@@ -1102,14 +1117,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
             signature = tuple((num, mtime) for num, _, mtime in entries)
             payloads: list[LockPayload] = []
             if label == "low":
-                has_base_payload = False
-                for num, path, _ in entries:
-                    payload = _read_lock_payload(path, now=now_dt)
-                    if payload is None:
-                        continue
-                    if num == 0:
-                        has_base_payload = True
-                    payloads.append(payload)
+                payloads, has_base_payload = _load_low_channel_payloads(
+                    entries, now=now_dt
+                )
                 if not has_base_payload:
                     payloads.insert(0, LockPayload("", "", DEFAULT_SCROLL_MS))
                     signature = ((0, -1.0),) + signature
