@@ -35,6 +35,11 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         qs = super().get_queryset(request)
         return qs.prefetch_related("roles")
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.slug == "llm-summary":
+            self._report_prereq_checks(request, obj)
+
     @admin.display(description="Default Roles")
     def default_roles(self, obj):
         roles = [role.name for role in obj.roles.all()]
@@ -146,3 +151,10 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             )
             return redirect("..")
         return redirect(change_url)
+
+    def _report_prereq_checks(self, request, feature):
+        from ..feature_checks import feature_checks
+
+        result = feature_checks.run(feature, node=Node.get_local())
+        if result:
+            self.message_user(request, result.message, level=result.level)

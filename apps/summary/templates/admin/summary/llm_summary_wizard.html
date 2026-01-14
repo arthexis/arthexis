@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="content">
+    <h1>{% trans "LLM Summary Model Wizard" %}</h1>
+
+    <p>
+      {% blocktrans %}
+        Use this wizard to configure where the LCD summary model lives and to
+        create the model directory if needed.
+      {% endblocktrans %}
+    </p>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <fieldset class="module aligned">
+        {% for field in form %}
+          <div class="form-row{% if field.errors %} errors{% endif %}">
+            {{ field.errors }}
+            <div>
+              <label{% if field.field.required %} class="required"{% endif %} for="{{ field.id_for_label }}">
+                {{ field.label }}
+              </label>
+              {{ field }}
+              {% if field.help_text %}
+                <div class="help">{{ field.help_text }}</div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </fieldset>
+
+      <fieldset class="module">
+        <h2>{% trans "Current configuration" %}</h2>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Resolved model path" %}:</strong> {{ resolved_path }}
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Last install timestamp" %}:</strong>
+            {{ config.installed_at|default:_("Not installed yet") }}
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Save and install' %}" class="default">
+        <a href="{{ change_url }}" class="button">{% trans "Back to config" %}</a>
+        <a href="{{ changelist_url }}" class="button">{% trans "Back to list" %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

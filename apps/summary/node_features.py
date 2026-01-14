@@ -42,4 +42,17 @@ def setup_node_feature(slug: str, *, node: "Node") -> bool | None:
     return check_node_feature(slug, node=node)
 
 
-__all__ = ["check_node_feature", "setup_node_feature"]
+def get_llm_summary_prereq_state(
+    *, base_dir: Path, base_path: Path
+) -> dict[str, bool]:
+    return {
+        "lcd_enabled": lcd_feature_enabled_for_paths(base_dir, base_path),
+        "celery_enabled": _celery_lock_enabled(base_dir, base_path),
+    }
+
+
+__all__ = [
+    "check_node_feature",
+    "get_llm_summary_prereq_state",
+    "setup_node_feature",
+]

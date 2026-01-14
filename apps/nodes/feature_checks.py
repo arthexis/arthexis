@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from django.contrib import messages
+from django.conf import settings
 from apps.audio.utils import has_audio_capture_device
 from apps.clocks.utils import has_clock_device
 
@@ -184,6 +186,57 @@ def _default_feature_check(
         False,
         f"{feature.display} is not enabled on {target.hostname}.",
         messages.WARNING,
+    )
+
+
+@feature_checks.register("llm-summary")
+def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
+    from .models import Node
+    from apps.summary.node_features import get_llm_summary_prereq_state
+    from apps.summary.services import get_summary_config, resolve_model_path
+
+    target: Optional["Node"] = node or Node.get_local()
+    if target is None:
+        return FeatureCheckResult(
+            False,
+            f"No local node is registered; cannot verify {feature.display}.",
+            messages.WARNING,
+        )
+
+    base_dir = Path(settings.BASE_DIR)
+    base_path = target.get_base_path()
+    prereqs = get_llm_summary_prereq_state(
+        base_dir=base_dir, base_path=base_path
+    )
+    config = get_summary_config()
+    model_path = resolve_model_path(config)
+    model_path_exists = model_path.exists()
+    model_command = (
+        config.model_command
+        or getattr(settings, "LLM_SUMMARY_COMMAND", "")
+        or None
+    )
+
+    details = [
+        f"LCD lock: {'ok' if prereqs['lcd_enabled'] else 'missing'}",
+        f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
+        f"Config active: {'yes' if config.is_active else 'no'}",
+        f"Model path: {model_path} ({'found' if model_path_exists else 'missing'})",
+        "Model command: "
+        + (model_command if model_command else "unset (fallback summarizer)"),
+    ]
+
+    success = (
+        prereqs["lcd_enabled"] and prereqs["celery_enabled"] and config.is_active
+    )
+    if success and model_path_exists:
+        level = messages.SUCCESS
+    else:
+        level = messages.WARNING
+    return FeatureCheckResult(
+        success,
+        f"{feature.display} prerequisites checked: " + "; ".join(details),
+        level,
     )
 
 
