@@ -1353,7 +1353,7 @@ def _build_auto_upgrade_report(
     # so fall back to the most recent log entry for display purposes.
     used_log_last_run = False
     entries = log_info.get("entries") or []
-    last_log_entry = entries[0] if entries else None
+    last_log_entry = next(iter(entries), None)
     last_log_timestamp_raw = None
     if last_log_entry:
         last_log_timestamp_raw = last_log_entry.get("timestamp_raw")
