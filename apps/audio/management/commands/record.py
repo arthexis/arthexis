@@ -64,8 +64,11 @@ class Command(BaseCommand):
 
         sample_rate = options["sample_rate"]
         channels = options["channels"]
+        preferred_device = RecordingDevice.preferred_device()
         path = self._record_until_keypress(
-            sample_rate=sample_rate, channels=channels
+            sample_rate=sample_rate,
+            channels=channels,
+            device_identifier=preferred_device.identifier if preferred_device else None,
         )
 
         sample = save_audio_sample(
@@ -81,7 +84,13 @@ class Command(BaseCommand):
         self.stdout.write(saved_path)
         return saved_path
 
-    def _record_until_keypress(self, *, sample_rate: int, channels: int) -> Path:
+    def _record_until_keypress(
+        self,
+        *,
+        sample_rate: int,
+        channels: int,
+        device_identifier: str | None = None,
+    ) -> Path:
         tool_path = shutil.which("arecord")
         if not tool_path:
             raise CommandError("arecord is not available; cannot record audio.")
@@ -89,17 +98,28 @@ class Command(BaseCommand):
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         filename = AUDIO_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}-{uuid.uuid4().hex}.wav"
 
+        alsa_device = (
+            RecordingDevice.identifier_to_alsa_device(device_identifier)
+            if device_identifier
+            else None
+        )
         command = [
             tool_path,
             "-q",
-            "-f",
-            "S16_LE",
-            "-r",
-            str(sample_rate),
-            "-c",
-            str(channels),
-            str(filename),
         ]
+        if alsa_device:
+            command.extend(["-D", alsa_device])
+        command.extend(
+            [
+                "-f",
+                "S16_LE",
+                "-r",
+                str(sample_rate),
+                "-c",
+                str(channels),
+                str(filename),
+            ]
+        )
 
         self.stdout.write(self.style.NOTICE("Press Enter to stop recording."))
         process = subprocess.Popen(
