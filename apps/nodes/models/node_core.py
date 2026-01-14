@@ -27,6 +27,8 @@ from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.dispatch import Signal, receiver
 from django.utils import timezone
+
+from apps.core.notifications import LcdChannel
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -958,7 +960,7 @@ class NetMessage(Entity):
     lcd_channel_type = models.CharField(
         max_length=20,
         blank=True,
-        default="low",
+        default=LcdChannel.LOW.value,
         help_text="LCD channel type for local display (for example low, high, clock, or uptime).",
     )
     lcd_channel_num = models.PositiveSmallIntegerField(
@@ -1151,7 +1153,9 @@ class NetMessage(Entity):
     def normalize_lcd_channel(
         channel_type: object | None, channel_num: object | None
     ) -> tuple[str, int]:
-        normalized_type = (str(channel_type or "low").strip() or "low").lower()
+        normalized_type = (
+            str(channel_type or LcdChannel.LOW.value).strip() or LcdChannel.LOW.value
+        ).lower()
         try:
             normalized_num = int(channel_num) if channel_num is not None else 0
         except (TypeError, ValueError):

@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta, timezone as datetime_timezone
+from enum import Enum
 from pathlib import Path
 
 from apps.screens.startup_notifications import (
@@ -35,6 +36,13 @@ except Exception:  # pragma: no cover - plyer may not be installed
 
 logger = logging.getLogger(__name__)
 EVENT_LOCK_PATTERN = re.compile(r"^lcd-event-(\\d+)\\.lck$")
+
+
+class LcdChannel(str, Enum):
+    HIGH = "high"
+    LOW = "low"
+    CLOCK = "clock"
+    UPTIME = "uptime"
 
 
 def get_base_dir() -> Path:
@@ -73,10 +81,10 @@ class NotificationManager:
     """Write notifications to a lock file or fall back to GUI/log output."""
 
     DEFAULT_CHANNEL_FILES: dict[str, str] = {
-        "low": LCD_LOW_LOCK_FILE,
-        "high": LCD_HIGH_LOCK_FILE,
-        "clock": LCD_CLOCK_LOCK_FILE,
-        "uptime": LCD_UPTIME_LOCK_FILE,
+        LcdChannel.LOW.value: LCD_LOW_LOCK_FILE,
+        LcdChannel.HIGH.value: LCD_HIGH_LOCK_FILE,
+        LcdChannel.CLOCK.value: LCD_CLOCK_LOCK_FILE,
+        LcdChannel.UPTIME.value: LCD_UPTIME_LOCK_FILE,
     }
 
     def __init__(
@@ -92,9 +100,10 @@ class NotificationManager:
 
     @staticmethod
     def _normalize_channel_type(channel_type: str | None, *, sticky: bool = False) -> str:
-        normalized = (channel_type or ("high" if sticky else "low")).strip().lower()
+        default_type = LcdChannel.HIGH.value if sticky else LcdChannel.LOW.value
+        normalized = (channel_type or default_type).strip().lower()
         if not normalized:
-            return "low"
+            return LcdChannel.LOW.value
         return normalized
 
     @staticmethod

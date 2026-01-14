@@ -31,6 +31,7 @@ from apps.core.auto_upgrade import (
     append_auto_upgrade_log,
     auto_upgrade_base_dir,
 )
+from apps.core.notifications import LcdChannel
 from apps.core.systemctl import _systemctl_command
 from apps.release import release_workflow
 from django.conf import settings
@@ -48,7 +49,7 @@ AUTO_UPGRADE_RECENCY_LOCK_NAME = "auto_upgrade_last_run.lck"
 STABLE_AUTO_UPGRADE_START = datetime_time(hour=19, minute=30)
 STABLE_AUTO_UPGRADE_END = datetime_time(hour=5, minute=30)
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
-AUTO_UPGRADE_LCD_CHANNEL_TYPE = "high"
+AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
 AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 
 _NETWORK_FAILURE_PATTERNS = (
