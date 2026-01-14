@@ -14,19 +14,28 @@ class ThermometerAdmin(admin.ModelAdmin):
 
     @admin.action(description="Sample selected thermometers")
     def sample_selected_thermometers(self, request, queryset):
-        reading = read_w1_temperature()
-        if reading is None:
+        updated_count = 0
+        failed_names = []
+        for thermometer in queryset:
+            device_path = f"/sys/bus/w1/devices/{thermometer.slug}/temperature"
+            reading = read_w1_temperature(paths=[device_path])
+            if reading is None:
+                failed_names.append(thermometer.name)
+                continue
+            thermometer.last_reading = reading
+            thermometer.last_read_at = timezone.now()
+            thermometer.save(update_fields=["last_reading", "last_read_at"])
+            updated_count += 1
+        if updated_count:
             self.message_user(
                 request,
-                "No thermometer reading available.",
-                level=messages.WARNING,
-            )
-            return
-        sampled_at = timezone.now()
-        updated = queryset.update(last_reading=reading, last_read_at=sampled_at)
-        if updated:
-            self.message_user(
-                request,
-                f"Sampled {updated} thermometer(s).",
+                f"Sampled {updated_count} thermometer(s).",
                 level=messages.SUCCESS,
+            )
+        if failed_names:
+            self.message_user(
+                request,
+                "Failed to sample the following thermometers: "
+                f"{', '.join(failed_names)}.",
+                level=messages.WARNING,
             )
