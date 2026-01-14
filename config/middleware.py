@@ -4,6 +4,7 @@ from http import HTTPStatus
 from django.conf import settings
 from django.core.exceptions import DisallowedHost
 from django.http import HttpResponsePermanentRedirect
+from django.http.request import split_domain_port
 from django.urls import Resolver404, resolve
 
 from apps.core.analytics import record_request_event
@@ -99,7 +100,8 @@ class CrossOriginOpenerPolicyMiddleware:
             host = request.get_host()
         except DisallowedHost:  # pragma: no cover - defensive guard
             host = request.META.get("HTTP_HOST", "")
-        host = host.split(":", 1)[0].lower()
+        host, _ = split_domain_port(host)
+        host = (host or "").lower()
         return host in self.trusted_hosts
 
 
