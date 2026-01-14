@@ -34,8 +34,6 @@ def _detect_bash_path_style() -> str:
             pwd = pwd_result.stdout.strip()
             if pwd.startswith("/mnt/"):
                 style = "wsl"
-            elif len(pwd) >= 3 and pwd[0] == "/" and pwd[2] == "/":
-                style = "msys"
     except FileNotFoundError:
         pass
 

@@ -85,18 +85,19 @@ def _run_static_hash(base_dir: Path, hash_script: Path, *, force: bool = False) 
 
     hash_output_path = base_dir / "hash_output.txt"
     hash_log_path = base_dir / "hash.log"
+    native_base_dir = base_dir.as_posix() if os.name == "nt" else str(base_dir)
+    native_lock_dir = lock_dir.as_posix() if os.name == "nt" else str(lock_dir)
+    native_hash_script = hash_script.as_posix() if os.name == "nt" else str(hash_script)
+    native_hash_log = hash_log_path.as_posix() if os.name == "nt" else str(hash_log_path)
     bash_base_dir = bash_path(base_dir)
-    bash_lock_dir = bash_path(lock_dir)
-    bash_hash_script = bash_path(hash_script)
-    bash_hash_log = bash_path(hash_log_path)
 
     env = os.environ.copy()
     env.update(
         {
-            "BASE_DIR": bash_base_dir,
-            "LOCK_DIR": bash_lock_dir,
-            "STATICFILES_HASH_SCRIPT": bash_hash_script,
-            "HASH_LOG": bash_hash_log,
+            "BASE_DIR": native_base_dir,
+            "LOCK_DIR": native_lock_dir,
+            "STATICFILES_HASH_SCRIPT": native_hash_script,
+            "HASH_LOG": native_hash_log,
         }
     )
 
