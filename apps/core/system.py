@@ -255,6 +255,27 @@ def _build_next_run_timestamp(schedule, reference: datetime, now: datetime) -> s
     return _format_timestamp(next_run)
 
 
+def _format_next_run_from_reference(
+    reference: datetime | None, *, interval_minutes: int
+) -> str:
+    """Return a formatted next-run time using a known interval."""
+
+    if reference is None:
+        return ""
+
+    normalized = reference
+    try:
+        if timezone.is_naive(normalized):
+            normalized = timezone.make_aware(
+                normalized, timezone.get_current_timezone()
+            )
+    except Exception:
+        normalized = reference
+
+    next_run = normalized + timedelta(minutes=interval_minutes)
+    return _format_timestamp(next_run)
+
+
 def _predict_auto_upgrade_next_run(task) -> str:
     """Return a display-ready next-run timestamp for *task*."""
 
@@ -579,10 +600,13 @@ def _load_auto_upgrade_log_entries(
             timestamp_display = _format_timestamp(timestamp)
         else:
             timestamp_display = timestamp_str
-        entries.append({
-            "timestamp": timestamp_display,
-            "message": message,
-        })
+        entries.append(
+            {
+                "timestamp": timestamp_display,
+                "timestamp_raw": timestamp,
+                "message": message,
+            }
+        )
 
     result["entries"] = entries
     return result
@@ -1323,14 +1347,28 @@ def _build_auto_upgrade_report(
     # ``last_run_at`` may be empty when Celery Beat has not executed the
     # periodic task yet or when inline task execution bypasses the scheduler,
     # so fall back to the most recent log entry for display purposes.
-    if not schedule_info.get("last_run_at") and log_info.get("entries"):
-        last_log_entry = log_info["entries"][0]
+    used_log_last_run = False
+    last_log_entry = log_info.get("entries", [None])[0]
+    last_log_timestamp_raw = None
+    if last_log_entry:
+        last_log_timestamp_raw = last_log_entry.get("timestamp_raw")
+    if not schedule_info.get("last_run_at") and last_log_entry:
         if last_log_entry.get("timestamp"):
             schedule_info["last_run_at"] = last_log_entry["timestamp"]
+            used_log_last_run = True
 
     if fast_lane_enabled and not schedule_info.get("description"):
         schedule_info["description"] = _(
             "Fast Lane enabled: upgrade checks run hourly."
+        )
+    if (
+        fast_lane_enabled
+        and used_log_last_run
+        and last_log_timestamp_raw is not None
+    ):
+        schedule_info["next_run"] = _format_next_run_from_reference(
+            last_log_timestamp_raw,
+            interval_minutes=AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
         )
 
     raw_mode_value = str(mode_info.get("mode", "stable"))
