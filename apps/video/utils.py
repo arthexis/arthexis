@@ -5,7 +5,7 @@ import stat
 import subprocess
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -139,7 +139,7 @@ def capture_rpi_snapshot(
     """Capture a snapshot using the Raspberry Pi camera stack."""
 
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow()
+    timestamp = datetime.now(timezone.utc)
     unique_suffix = uuid.uuid4().hex
     filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.jpg"
     acquired = _CAMERA_LOCK.acquire(timeout=timeout)
