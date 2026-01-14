@@ -7,10 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-# Windows does not provide os.getuid; define a harmless fallback for config discovery.
-if not hasattr(os, "getuid"):  # pragma: no cover - Windows fallback
-    os.getuid = lambda: 0  # type: ignore[assignment]
-
 from django.utils import timezone
 
 from .models import OdooDeployment
@@ -34,6 +30,12 @@ class DiscoveredOdooConfig:
 
 class OdooConfigError(RuntimeError):
     """Raised when an odoo configuration file cannot be read."""
+
+
+def _get_uid() -> int:
+    """Return the current user's UID, with a fallback for Windows."""
+
+    return getattr(os, "getuid", lambda: 0)()
 
 
 def _walk_for_configs(root: Path) -> Iterable[Path]:
@@ -88,7 +90,7 @@ def _default_config_locations() -> list[Path]:
     user_home = None
     if pwd is not None:
         try:
-            user_home = Path("/home") / pwd.getpwuid(os.getuid()).pw_name
+            user_home = Path("/home") / pwd.getpwuid(_get_uid()).pw_name
         except Exception:  # pragma: no cover - fallback for platforms without ``pwd``
             user_home = None
 
