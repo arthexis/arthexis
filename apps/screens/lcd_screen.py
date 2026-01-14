@@ -1098,9 +1098,23 @@ def main() -> None:  # pragma: no cover - hardware dependent
         channel_text: dict[str, bool] = {}
         for label, base_name in CHANNEL_BASE_NAMES.items():
             entries = _channel_lock_entries(LOCK_DIR, base_name)
-            signature = tuple((num, mtime) for num, _, mtime in entries)
             existing = channel_states.get(label)
-            payloads = _load_channel_payloads(entries, now=now_dt)
+            signature = tuple((num, mtime) for num, _, mtime in entries)
+            payloads: list[LockPayload] = []
+            if label == "low":
+                has_base_payload = False
+                for num, path, _ in entries:
+                    payload = _read_lock_payload(path, now=now_dt)
+                    if payload is None:
+                        continue
+                    if num == 0:
+                        has_base_payload = True
+                    payloads.append(payload)
+                if not has_base_payload:
+                    payloads.insert(0, LockPayload("", "", DEFAULT_SCROLL_MS))
+                    signature = ((0, -1.0),) + signature
+            else:
+                payloads = _load_channel_payloads(entries, now=now_dt)
             if (
                 existing is None
                 or existing.signature != signature
@@ -1150,7 +1164,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 if channel_state.payloads
                 else None
             )
-            if payload and channel_text[state_label]:
+            if payload and _payload_has_text(payload):
                 return _refresh_uptime_payload(payload)
             return _select_low_payload(
                 LockPayload("", "", DEFAULT_SCROLL_MS),
