@@ -14,8 +14,23 @@ def test_send_auto_upgrade_check_message(monkeypatch):
     fixed_now = timezone.make_aware(datetime(2024, 1, 1, 12, 34))
     monkeypatch.setattr(tasks.timezone, "now", lambda: fixed_now)
 
-    def fake_broadcast(cls, subject, body, reach=None, seen=None, attachments=None):
-        sent.append({"subject": subject, "body": body})
+    def fake_broadcast(
+        cls,
+        subject,
+        body,
+        reach=None,
+        seen=None,
+        attachments=None,
+        **kwargs,
+    ):
+        sent.append(
+            {
+                "subject": subject,
+                "body": body,
+                "lcd_channel_type": kwargs.get("lcd_channel_type"),
+                "lcd_channel_num": kwargs.get("lcd_channel_num"),
+            }
+        )
 
     from apps.nodes.models.node_core import NetMessage
 
@@ -25,6 +40,8 @@ def test_send_auto_upgrade_check_message(monkeypatch):
 
     assert sent[0]["subject"] == "UP-CHECK 12:34"
     assert sent[0]["body"] == "APPLIED-SUCCESSF CLEAN"
+    assert sent[0]["lcd_channel_type"] == "low"
+    assert sent[0]["lcd_channel_num"] == 1
 
 
 @pytest.mark.parametrize(
