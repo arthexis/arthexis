@@ -19,22 +19,39 @@ AUDIO_DIR = settings.LOG_DIR / "audio"
 
 
 def record_microphone_sample(
-    duration_seconds: int = 6, *, sample_rate: int = 16_000, channels: int = 1
+    duration_seconds: int = 6,
+    *,
+    sample_rate: int = 16_000,
+    channels: int = 1,
+    device_identifier: str | None = None,
+    pcm_path: Path = PCM_PATH,
 ) -> Path:
     """Record audio from the default microphone and return the saved path."""
 
     tool_path = shutil.which("arecord")
     if not tool_path:
         raise RuntimeError("arecord is not available")
+    if device_identifier is None:
+        preferred_device = RecordingDevice.preferred_device(pcm_path=pcm_path)
+        device_identifier = preferred_device.identifier if preferred_device else None
+    alsa_device = (
+        RecordingDevice.identifier_to_alsa_device(device_identifier)
+        if device_identifier
+        else None
+    )
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow()
     unique_suffix = uuid.uuid4().hex
     filename = AUDIO_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.wav"
     try:
-        result = subprocess.run(
+        command = [
+            tool_path,
+            "-q",
+        ]
+        if alsa_device:
+            command.extend(["-D", alsa_device])
+        command.extend(
             [
-                tool_path,
-                "-q",
                 "-f",
                 "S16_LE",
                 "-r",
@@ -44,7 +61,10 @@ def record_microphone_sample(
                 "-d",
                 str(duration_seconds),
                 str(filename),
-            ],
+            ]
+        )
+        result = subprocess.run(
+            command,
             capture_output=True,
             text=True,
             check=False,

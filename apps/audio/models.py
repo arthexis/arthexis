@@ -88,6 +88,30 @@ class RecordingDevice(Entity):
             )
         return devices
 
+    @staticmethod
+    def _is_usb_device(device: DetectedRecordingDevice) -> bool:
+        descriptor = f"{device.description} {device.raw_info}".lower()
+        return "usb" in descriptor
+
+    @staticmethod
+    def identifier_to_alsa_device(identifier: str) -> str | None:
+        match = re.match(r"(?P<card>\d+)-(?P<device>\d+)$", identifier)
+        if not match:
+            return None
+        card = int(match.group("card"))
+        device = int(match.group("device"))
+        return f"plughw:{card},{device}"
+
+    @classmethod
+    def preferred_device(
+        cls, *, pcm_path: Path = PCM_PATH
+    ) -> DetectedRecordingDevice | None:
+        devices = cls.parse_devices(pcm_path=pcm_path)
+        if not devices:
+            return None
+        usb_devices = [device for device in devices if cls._is_usb_device(device)]
+        return usb_devices[0] if usb_devices else devices[0]
+
     @classmethod
     def refresh_from_system(
         cls, *, node, pcm_path: Path = PCM_PATH
