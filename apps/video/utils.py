@@ -224,7 +224,7 @@ def record_rpi_video(duration_seconds: int = 5, timeout: int = 15) -> Path:
         raise RuntimeError("rpicam-vid is not available")
 
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow()
+    timestamp = datetime.now(timezone.utc)
     unique_suffix = uuid.uuid4().hex
     filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.mp4"
 
