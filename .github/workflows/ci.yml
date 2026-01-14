@@ -135,6 +135,8 @@ jobs:
   slow-tests:
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true') }}
     runs-on: ubuntu-latest
+    env:
+      RUN_SLOW_TESTS: '1'
     steps:
       - uses: actions/checkout@v6
         with:
