@@ -269,7 +269,11 @@ def _format_next_run_from_reference(
             normalized = timezone.make_aware(
                 normalized, timezone.get_current_timezone()
             )
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Failed to make timestamp aware in _format_next_run_from_reference: %s",
+            exc,
+        )
         normalized = reference
 
     next_run = normalized + timedelta(minutes=interval_minutes)
@@ -1348,7 +1352,8 @@ def _build_auto_upgrade_report(
     # periodic task yet or when inline task execution bypasses the scheduler,
     # so fall back to the most recent log entry for display purposes.
     used_log_last_run = False
-    last_log_entry = log_info.get("entries", [None])[0]
+    entries = log_info.get("entries") or []
+    last_log_entry = entries[0] if entries else None
     last_log_timestamp_raw = None
     if last_log_entry:
         last_log_timestamp_raw = last_log_entry.get("timestamp_raw")
@@ -1365,6 +1370,7 @@ def _build_auto_upgrade_report(
         fast_lane_enabled
         and used_log_last_run
         and last_log_timestamp_raw is not None
+        and schedule_info.get("enabled")
     ):
         schedule_info["next_run"] = _format_next_run_from_reference(
             last_log_timestamp_raw,
