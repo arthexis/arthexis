@@ -529,6 +529,7 @@ MIDDLEWARE = [
     "config.middleware.ActiveAppMiddleware",
     "config.middleware.SiteHttpsRedirectMiddleware",
     "config.middleware.ContentSecurityPolicyMiddleware",
+    "config.middleware.CrossOriginOpenerPolicyMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "apps.sites.middleware.LanguagePreferenceMiddleware",
     "django.middleware.common.CommonMiddleware",

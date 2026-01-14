@@ -77,6 +77,32 @@ class ContentSecurityPolicyMiddleware:
         return response
 
 
+class CrossOriginOpenerPolicyMiddleware:
+    """Strip COOP headers on non-trustworthy HTTP origins."""
+
+    header_name = "Cross-Origin-Opener-Policy"
+    trusted_hosts = {"localhost", "127.0.0.1", "::1"}
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if self.header_name in response and not self._is_trustworthy(request):
+            del response[self.header_name]
+        return response
+
+    def _is_trustworthy(self, request) -> bool:
+        if _is_https_request(request):
+            return True
+        try:
+            host = request.get_host()
+        except DisallowedHost:  # pragma: no cover - defensive guard
+            host = request.META.get("HTTP_HOST", "")
+        host = host.split(":", 1)[0].lower()
+        return host in self.trusted_hosts
+
+
 class UsageAnalyticsMiddleware:
     """Record request-level usage events for reporting."""
 
