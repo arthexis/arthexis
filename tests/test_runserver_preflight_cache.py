@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import textwrap
 from pathlib import Path
@@ -79,24 +80,23 @@ def _run_preflight(
     if extra_args_log.exists():
         extra_args_log.unlink()
 
-    env = os.environ.copy()
-
     status_file = None
     if migrate_check_sequence:
         status_file = base_dir / "migrate_check_statuses.txt"
         status_file.write_text("\n".join(migrate_check_sequence))
 
-    env.update(
-        {
-            "BASE_DIR": str(base_dir),
-            "LOCK_DIR": str(lock_dir),
-            "COMMAND_LOG": str(command_log),
-            "SHOWMIGRATIONS_PLAN": plan_output,
-            "MIGRATE_CHECK_STATUS": migrate_check_status,
-            "MIGRATE_CHECK_STATUS_FILE": str(status_file) if status_file else "",
-            "RUNSERVER_PREFLIGHT_FORCE_REFRESH": "true" if force_refresh else "false",
-        }
-    )
+    env_exports = {
+        "BASE_DIR": str(base_dir),
+        "LOCK_DIR": str(lock_dir),
+        "COMMAND_LOG": str(command_log),
+        "SHOWMIGRATIONS_PLAN": plan_output,
+        "MIGRATE_CHECK_STATUS": migrate_check_status,
+        "MIGRATE_CHECK_STATUS_FILE": str(status_file) if status_file else "",
+        "RUNSERVER_PREFLIGHT_FORCE_REFRESH": "true" if force_refresh else "false",
+    }
+    export_lines = [
+        f"export {name}={shlex.quote(value)}" for name, value in env_exports.items()
+    ]
 
     subprocess.run(
         [
@@ -105,6 +105,7 @@ def _run_preflight(
             "\n".join(
                 [
                     "set -e",
+                    *export_lines,
                     f"cd '{bash_path(base_dir)}'",
                     "RUNSERVER_EXTRA_ARGS=()",
                     f"source '{bash_path(HELPER_PATH)}'",
@@ -114,7 +115,6 @@ def _run_preflight(
             ),
         ],
         check=True,
-        env=env,
     )
 
     fingerprint_path = lock_dir / "migrations.sha"
