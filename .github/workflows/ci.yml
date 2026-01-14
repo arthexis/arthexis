@@ -69,7 +69,7 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow"
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration"
   upgrade:
     runs-on: ubuntu-latest
     steps:
@@ -131,7 +131,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow"
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration"
   slow-tests:
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true') }}
     runs-on: ubuntu-latest
@@ -164,4 +164,4 @@ jobs:
       - name: Run slow tests
         run: |
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "slow"
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "slow or integration"
