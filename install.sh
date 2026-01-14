@@ -611,6 +611,8 @@ elif [ -f "$DB_FILE" ]; then
     # Allow callers to purge or reuse an existing database depending on the mode requested.
     if [ "$REPAIR" = true ]; then
         echo "Repair mode: reusing existing database at $DB_FILE."
+    elif [ "$UPGRADE" = true ]; then
+        echo "Upgrade mode: reusing existing database at $DB_FILE."
     else
         echo "Database file $DB_FILE exists. Use --clean to remove it before installing." >&2
         exit 1

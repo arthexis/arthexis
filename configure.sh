@@ -20,6 +20,7 @@ PORT=""
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 ENABLE_CONTROL=false
+ENABLE_RFID_SERVICE=false
 REQUIRES_REDIS=false
 UPGRADE_CHANNEL=""
 CHECK=false
@@ -31,11 +32,12 @@ SKIP_SERVICE_RESTART=false
 REPAIR_AUTO_UPGRADE_CHANNEL=""
 FAILOVER_ROLE=""
 AP_WATCHDOG_MODE=""
+RFID_SERVICE_MODE=""
 
 LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--ap-watchdog|--no-ap-watchdog] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--ap-watchdog|--no-ap-watchdog] [--rfid-service|--no-rfid-service] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
     exit 1
 }
 
@@ -43,6 +45,33 @@ write_debug_env() {
     cat > "$BASE_DIR/debug.env" <<EOF
 DEBUG=$1
 EOF
+}
+
+apply_rfid_service_setting() {
+    local mode="$1"
+    local lock_dir="$2"
+    local base_dir="$3"
+    local service_name="$4"
+
+    if [ -z "$mode" ]; then
+        return 0
+    fi
+
+    mkdir -p "$lock_dir"
+    if [ "$mode" = "enable" ]; then
+        touch "$lock_dir/$ARTHEXIS_RFID_SERVICE_LOCK"
+        if [ -n "$service_name" ] && arthexis_using_systemd_mode "$lock_dir"; then
+            arthexis_install_rfid_service_unit "$base_dir" "$lock_dir" "$service_name"
+            arthexis_start_systemd_unit_if_present "rfid-${service_name}.service"
+        fi
+        echo "RFID scanner service enabled."
+    else
+        rm -f "$lock_dir/$ARTHEXIS_RFID_SERVICE_LOCK"
+        if [ -n "$service_name" ]; then
+            arthexis_remove_systemd_unit_if_present "$lock_dir" "rfid-${service_name}.service"
+        fi
+        echo "RFID scanner service disabled."
+    fi
 }
 
 reset_role_features() {
@@ -342,6 +371,22 @@ while [[ $# -gt 0 ]]; do
             AP_WATCHDOG_MODE="disable"
             shift
             ;;
+        --rfid-service)
+            if [ "$RFID_SERVICE_MODE" = "disable" ]; then
+                echo "Cannot combine --rfid-service with --no-rfid-service" >&2
+                usage
+            fi
+            RFID_SERVICE_MODE="enable"
+            shift
+            ;;
+        --no-rfid-service)
+            if [ "$RFID_SERVICE_MODE" = "enable" ]; then
+                echo "Cannot combine --rfid-service with --no-rfid-service" >&2
+                usage
+            fi
+            RFID_SERVICE_MODE="disable"
+            shift
+            ;;
         --satellite)
             NODE_ROLE="Satellite"
             ENABLE_CELERY=true
@@ -398,7 +443,8 @@ fi
 
 if [ "$REPAIR" = true ]; then
     if [ "$CHECK" = true ] || [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || \
-       [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ]; then
+       [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || \
+       [ -n "$RFID_SERVICE_MODE" ]; then
         echo "--repair cannot be combined with other options" >&2
         usage
     fi
@@ -457,7 +503,7 @@ fi
 
 if [ "$CHECK" = true ]; then
     if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
-       [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ]; then
+       [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || [ -n "$RFID_SERVICE_MODE" ]; then
         echo "--check cannot be combined with other options" >&2
         usage
     fi
@@ -516,6 +562,14 @@ if [ -n "$DEBUG_MODE" ]; then
     fi
     write_debug_env "$DEBUG_VALUE"
     echo "$DEBUG_MESSAGE"
+fi
+
+if [ -n "$RFID_SERVICE_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
+        SERVICE=$(cat "$LOCK_DIR/service.lck")
+    fi
+    apply_rfid_service_setting "$RFID_SERVICE_MODE" "$LOCK_DIR" "$BASE_DIR" "$SERVICE"
 fi
 
 if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
@@ -588,7 +642,12 @@ if [ "$SKIP_SERVICE_RESTART" != true ] && [ -n "$SERVICE" ] && systemctl list-un
     fi
 fi
 
-for lock_name in celery.lck lcd_screen.lck control.lck role.lck service.lck; do
+EXISTING_RFID_SERVICE=false
+if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
+    EXISTING_RFID_SERVICE=true
+fi
+
+for lock_name in celery.lck lcd_screen.lck control.lck role.lck service.lck "$ARTHEXIS_RFID_SERVICE_LOCK"; do
     rm -f "$LOCK_DIR/$lock_name"
 done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
@@ -602,11 +661,31 @@ fi
 if [ "$ENABLE_CONTROL" = true ]; then
     touch "$LOCK_DIR/control.lck"
 fi
+if [ "$RFID_SERVICE_MODE" = "enable" ]; then
+    ENABLE_RFID_SERVICE=true
+elif [ "$RFID_SERVICE_MODE" = "disable" ]; then
+    ENABLE_RFID_SERVICE=false
+else
+    ENABLE_RFID_SERVICE="$EXISTING_RFID_SERVICE"
+fi
+if [ "$ENABLE_RFID_SERVICE" = true ]; then
+    touch "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
+else
+    rm -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
+fi
 
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
+fi
+
+if [ -n "$SERVICE" ] && arthexis_using_systemd_mode "$LOCK_DIR"; then
+    if [ "$ENABLE_RFID_SERVICE" = true ]; then
+        arthexis_install_rfid_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+    else
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "rfid-${SERVICE}.service"
+    fi
 fi
 
 
@@ -646,6 +725,9 @@ if [ "$SERVICE_ACTIVE" = true ]; then
     fi
     if [ "$ENABLE_LCD_SCREEN" = true ]; then
         sudo systemctl start "lcd-$SERVICE" || true
+    fi
+    if [ "$ENABLE_RFID_SERVICE" = true ]; then
+        arthexis_start_systemd_unit_if_present "rfid-$SERVICE.service"
     fi
 fi
 
