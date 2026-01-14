@@ -114,7 +114,7 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             if form.cleaned_data.get("install_model"):
                 ensure_local_model(config)
                 installed_message = _("Model directory is ready at %(path)s.") % {
-                    "path": config.model_path or str(DEFAULT_MODEL_DIR),
+                    "path": config.model_path,
                 }
                 messages.success(request, installed_message)
             config.save(
