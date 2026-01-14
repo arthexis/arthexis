@@ -49,7 +49,8 @@ COMMAND_LIST="$(
   python manage.py help --commands "$celery_flag" \
     | tr '\t' ' ' \
     | tr ' ' '\n' \
-    | sed '/^$/d'
+    | sed '/^$/d' \
+    | grep -v '^\[.*]'
 )"
 
 if ! printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" '($0 == cmd) { found = 1 } END { exit (found ? 0 : 1) }'; then
@@ -64,10 +65,10 @@ if ! printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" '($0 == cmd) { found 
   if [ -n "$MATCHES_PREFIX" ] || [ -n "$MATCHES_CONTAINS" ]; then
     echo "Possible commands:" >&2
     if [ -n "$MATCHES_PREFIX" ]; then
-      printf '  %s\n' $MATCHES_PREFIX >&2
+      printf '%s\n' "$MATCHES_PREFIX" | sed 's/^/  /' >&2
     fi
     if [ -n "$MATCHES_CONTAINS" ]; then
-      printf '  %s\n' $MATCHES_CONTAINS >&2
+      printf '%s\n' "$MATCHES_CONTAINS" | sed 's/^/  /' >&2
     fi
   else
     echo "Run '$0' with no arguments to see available commands." >&2
