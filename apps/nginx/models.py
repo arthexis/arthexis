@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from django.conf import settings
@@ -11,6 +12,32 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.nginx import services
 from apps.nginx.config_utils import default_certificate_domain_from_settings
+
+
+SUBDOMAIN_PREFIX_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def parse_subdomain_prefixes(raw: str, *, strict: bool = True) -> list[str]:
+    prefixes: list[str] = []
+    seen: set[str] = set()
+    invalid: list[str] = []
+    for token in re.split(r"[,\s]+", raw or ""):
+        candidate = token.strip().lower()
+        if not candidate:
+            continue
+        if "." in candidate or not SUBDOMAIN_PREFIX_RE.match(candidate):
+            invalid.append(candidate)
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        prefixes.append(candidate)
+    if invalid and strict:
+        raise ValidationError(
+            _("Invalid subdomain prefixes: %(invalid)s"),
+            params={"invalid": ", ".join(sorted(invalid))},
+        )
+    return prefixes
 
 
 def _read_lock(lock_dir: Path, name: str, fallback: str) -> str:
@@ -77,6 +104,14 @@ class SiteConfiguration(models.Model):
         default=True,
         help_text=_("Enable websocket proxy directives for external EVCS traffic."),
     )
+    managed_subdomains = models.TextField(
+        blank=True,
+        default="",
+        help_text=_(
+            "Comma-separated subdomain prefixes to include for each managed site "
+            "(for example: api, admin, status)."
+        ),
+    )
     include_ipv6 = models.BooleanField(default=False)
     expected_path = models.CharField(
         max_length=255,
@@ -121,8 +156,12 @@ class SiteConfiguration(models.Model):
             return None
         return services.get_secondary_instance(self.secondary_instance)
 
+    def get_subdomain_prefixes(self) -> list[str]:
+        return parse_subdomain_prefixes(self.managed_subdomains, strict=False)
+
     def clean(self):
         super().clean()
+        parse_subdomain_prefixes(self.managed_subdomains)
         if not self.secondary_instance:
             return
         try:
@@ -154,6 +193,7 @@ class SiteConfiguration(models.Model):
                 destination=self.expected_destination,
                 site_config_path=self.staged_site_config,
                 site_destination=self.site_destination_path,
+                subdomain_prefixes=self.get_subdomain_prefixes(),
                 reload=reload,
                 secondary_instance=secondary_instance,
             )

@@ -220,6 +220,7 @@ def apply_nginx_configuration(
     destination: Path | None = None,
     site_config_path: Path | None = None,
     site_destination: Path | None = None,
+    subdomain_prefixes: list[str] | None = None,
     reload: bool = True,
     secondary_instance: SecondaryInstance | None = None,
     sudo: str = "sudo",
@@ -273,6 +274,7 @@ def apply_nginx_configuration(
                 https_enabled=https_enabled,
                 external_websockets=external_websockets,
                 proxy_target=proxy_target,
+                subdomain_prefixes=subdomain_prefixes,
                 sudo=sudo,
             )
         except ValueError as exc:

@@ -63,6 +63,7 @@ class Command(BaseCommand):
                 config.port,
                 https_enabled=config.protocol == "https",
                 external_websockets=config.external_websockets,
+                subdomain_prefixes=config.get_subdomain_prefixes(),
             )
         except ValueError as exc:
             files.append(

@@ -32,6 +32,23 @@
         <p class="help">{% trans 'Apply the selected configurations and reload nginx.' %}</p>
       </form>
 
+      <form method="post" class="submit-row">
+        {% csrf_token %}
+        <input type="hidden" name="ids" value="{{ ids_param }}" />
+        <div class="field-box">
+          {{ subdomain_form.managed_subdomains.label_tag }}
+          {{ subdomain_form.managed_subdomains }}
+          {% if subdomain_form.managed_subdomains.errors %}
+            <div class="errors">{{ subdomain_form.managed_subdomains.errors }}</div>
+          {% endif %}
+        </div>
+        {% if subdomain_mixed %}
+          <p class="help">{% trans "Selected configurations currently have different subdomain prefixes; updating will overwrite them." %}</p>
+        {% endif %}
+        <input type="submit" name="update_subdomains" value="{% trans 'Update subdomains' %}" />
+        <p class="help">{{ subdomain_form.managed_subdomains.help_text }}</p>
+      </form>
+
       <form method="post" class="submit-row" action="{{ generate_certificates_url }}">
         {% csrf_token %}
         <input type="hidden" name="ids" value="{{ ids_param }}" />
