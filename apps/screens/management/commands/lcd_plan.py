@@ -214,7 +214,7 @@ class Command(BaseCommand):
         writer = PlanFrameWriter()
         clock_cycle = 0
         state_index = 0
-        state_order: tuple[str, ...] = ("clock",)
+        state_order: tuple[str, ...] = ("high", "low", "clock")
         display_state: lcd_screen.DisplayState | None = None
         next_display_state: lcd_screen.DisplayState | None = None
         rotation_deadline = 0.0
