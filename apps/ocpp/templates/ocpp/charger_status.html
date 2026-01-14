@@ -230,25 +230,6 @@
       {% elif not past_session %}
       <p>{% trans "No active transaction" %}</p>
       {% endif %}
-      {% if can_remote_start %}
-      <div class="card border-success mt-3">
-        <div class="card-body">
-          <h2 class="h5 mb-2">{% trans "Remote start" %}</h2>
-          <p class="text-muted small mb-3">{% trans "Authorize a remote charging session by entering the driver's RFID or tag value." %}</p>
-          <form id="remote-start-form" class="row gy-2 align-items-end" action="{{ action_url }}" method="post" data-connector-id="{{ charger.connector_id }}">
-            <div class="col-sm-auto">
-              <label class="form-label" for="remote-start-idtag">{% trans "RFID or Tag" %}</label>
-              <input type="text" id="remote-start-idtag" class="form-control" required autocomplete="off" />
-            </div>
-            <div class="col-sm-auto">
-              <button type="submit" class="btn btn-primary">{% trans "Start Charging" %}</button>
-            </div>
-          </form>
-          <div id="remote-start-feedback" class="mt-2 small text-muted" aria-live="polite"></div>
-        </div>
-      </div>
-      {{ remote_start_messages|json_script:"remote-start-i18n" }}
-      {% endif %}
     </div>
     <div class="col-md-8">
       {% if show_chart %}
