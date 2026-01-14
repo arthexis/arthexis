@@ -41,7 +41,38 @@ if [ $# -eq 0 ]; then
   exit 1
 fi
 
-COMMAND="${1//-/_}"
+COMMAND_RAW="$1"
+COMMAND="${COMMAND_RAW//-/_}"
 shift
+
+COMMAND_LIST="$(
+  python manage.py help --commands "$celery_flag" \
+    | tr '\t' ' ' \
+    | tr ' ' '\n' \
+    | sed '/^$/d'
+)"
+
+if ! printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" '($0 == cmd) { found = 1 } END { exit (found ? 0 : 1) }'; then
+  MATCHES_PREFIX="$(
+    printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" 'index($0, cmd) == 1'
+  )"
+  MATCHES_CONTAINS="$(
+    printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" 'index($0, cmd) > 0 && index($0, cmd) != 1'
+  )"
+
+  echo "No exact match for '$COMMAND_RAW'." >&2
+  if [ -n "$MATCHES_PREFIX" ] || [ -n "$MATCHES_CONTAINS" ]; then
+    echo "Possible commands:" >&2
+    if [ -n "$MATCHES_PREFIX" ]; then
+      printf '  %s\n' $MATCHES_PREFIX >&2
+    fi
+    if [ -n "$MATCHES_CONTAINS" ]; then
+      printf '  %s\n' $MATCHES_CONTAINS >&2
+    fi
+  else
+    echo "Run '$0' with no arguments to see available commands." >&2
+  fi
+  exit 1
+fi
 
 python manage.py "$COMMAND" "$@" "$celery_flag"
