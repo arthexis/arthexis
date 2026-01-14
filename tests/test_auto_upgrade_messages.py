@@ -6,6 +6,7 @@ import pytest
 from django.utils import timezone
 
 from apps.core import tasks
+from apps.core.notifications import LcdChannel
 
 
 @pytest.mark.django_db
@@ -40,7 +41,7 @@ def test_send_auto_upgrade_check_message(monkeypatch):
 
     assert sent[0]["subject"] == "UP-CHECK 12:34"
     assert sent[0]["body"] == "APPLIED-SUCCESSF CLEAN"
-    assert sent[0]["lcd_channel_type"] == "low"
+    assert sent[0]["lcd_channel_type"] == LcdChannel.HIGH.value
     assert sent[0]["lcd_channel_num"] == 1
 
 
