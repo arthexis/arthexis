@@ -203,7 +203,7 @@ def _build_in_sanitized_tree(base_dir: Path, *, generate_wheels: bool) -> None:
     with tempfile.TemporaryDirectory(prefix="arthexis-build-") as temp_dir:
         staging_root = Path(temp_dir)
         _export_tracked_files(base_dir, staging_root)
-        with contextlib.chdir(staging_root):
+        with _temporary_working_directory(staging_root):
             build_cmd = [sys.executable, "-m", "build", "--sdist"]
             if generate_wheels:
                 build_cmd.append("--wheel")
@@ -215,6 +215,16 @@ def _build_in_sanitized_tree(base_dir: Path, *, generate_wheels: bool) -> None:
         if destination_dist.exists():
             shutil.rmtree(destination_dist)
         shutil.copytree(built_dist, destination_dist)
+
+
+@contextlib.contextmanager
+def _temporary_working_directory(path: Path) -> "contextlib.AbstractContextManager[None]":
+    current_dir = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(current_dir)
 
 
 _RETRYABLE_TWINE_ERRORS = (
