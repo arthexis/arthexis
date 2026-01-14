@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -15,28 +14,37 @@ HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "runserver_preflight.sh"
 
 pytestmark = pytest.mark.slow
 
+ENV_BASE_DIR = "BASE_DIR"
+ENV_LOCK_DIR = "LOCK_DIR"
+ENV_COMMAND_LOG = "COMMAND_LOG"
+ENV_SHOWMIGRATIONS_PLAN = "SHOWMIGRATIONS_PLAN"
+ENV_MIGRATE_CHECK_STATUS = "MIGRATE_CHECK_STATUS"
+ENV_MIGRATE_CHECK_STATUS_FILE = "MIGRATE_CHECK_STATUS_FILE"
+ENV_RUNSERVER_PREFLIGHT_FORCE_REFRESH = "RUNSERVER_PREFLIGHT_FORCE_REFRESH"
+ENV_MIGRATE_STATUS = "MIGRATE_STATUS"
+
 
 def _write_manage_stub(base_dir: Path) -> None:
     manage_py = base_dir / "manage.py"
     manage_py.write_text(
-        """#!/usr/bin/env python
+        f"""#!/usr/bin/env python
 import os
 import pathlib
 import sys
 
-log_path = pathlib.Path(os.environ['COMMAND_LOG'])
+log_path = pathlib.Path(os.environ['{ENV_COMMAND_LOG}'])
 log_path.parent.mkdir(parents=True, exist_ok=True)
 with log_path.open('a', encoding='utf-8') as log:
     log.write(' '.join(sys.argv[1:]) + '\\n')
 
-plan_output = os.environ.get('SHOWMIGRATIONS_PLAN', '[ ] demo 0001_initial')
+plan_output = os.environ.get('{ENV_SHOWMIGRATIONS_PLAN}', '[ ] demo 0001_initial')
 if sys.argv[1] == 'showmigrations':
     print(plan_output)
 elif sys.argv[1] == 'migrate':
     exit_code = 0
     if '--check' in sys.argv:
-        status = os.environ.get('MIGRATE_CHECK_STATUS', '0')
-        status_file = os.environ.get('MIGRATE_CHECK_STATUS_FILE')
+        status = os.environ.get('{ENV_MIGRATE_CHECK_STATUS}', '0')
+        status_file = os.environ.get('{ENV_MIGRATE_CHECK_STATUS_FILE}')
         if status_file:
             path = pathlib.Path(status_file)
             if path.exists():
@@ -46,7 +54,7 @@ elif sys.argv[1] == 'migrate':
                     path.write_text('\\n'.join(statuses[1:]))
         exit_code = int(status)
     else:
-        exit_code = int(os.environ.get('MIGRATE_STATUS', '0'))
+        exit_code = int(os.environ.get('{ENV_MIGRATE_STATUS}', '0'))
     sys.exit(exit_code)
 sys.exit(0)
 """
@@ -86,13 +94,13 @@ def _run_preflight(
         status_file.write_text("\n".join(migrate_check_sequence))
 
     env_exports = {
-        "BASE_DIR": str(base_dir),
-        "LOCK_DIR": str(lock_dir),
-        "COMMAND_LOG": str(command_log),
-        "SHOWMIGRATIONS_PLAN": plan_output,
-        "MIGRATE_CHECK_STATUS": migrate_check_status,
-        "MIGRATE_CHECK_STATUS_FILE": str(status_file) if status_file else "",
-        "RUNSERVER_PREFLIGHT_FORCE_REFRESH": "true" if force_refresh else "false",
+        ENV_BASE_DIR: str(base_dir),
+        ENV_LOCK_DIR: str(lock_dir),
+        ENV_COMMAND_LOG: str(command_log),
+        ENV_SHOWMIGRATIONS_PLAN: plan_output,
+        ENV_MIGRATE_CHECK_STATUS: migrate_check_status,
+        ENV_MIGRATE_CHECK_STATUS_FILE: str(status_file) if status_file else "",
+        ENV_RUNSERVER_PREFLIGHT_FORCE_REFRESH: "true" if force_refresh else "false",
     }
     export_lines = [
         f"export {name}={shlex.quote(value)}" for name, value in env_exports.items()
