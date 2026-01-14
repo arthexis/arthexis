@@ -93,15 +93,20 @@ def _run_preflight(
         status_file = base_dir / "migrate_check_statuses.txt"
         status_file.write_text("\n".join(migrate_check_sequence))
 
+    def _env_path_for_python(path: Path | None) -> str:
+        if not path:
+            return ""
+        if os.name == "nt":
+            return str(path)
+        return bash_path(path)
+
     env_exports = {
         ENV_BASE_DIR: bash_path(base_dir),
         ENV_LOCK_DIR: bash_path(lock_dir),
-        ENV_COMMAND_LOG: bash_path(command_log),
+        ENV_COMMAND_LOG: _env_path_for_python(command_log),
         ENV_SHOWMIGRATIONS_PLAN: plan_output,
         ENV_MIGRATE_CHECK_STATUS: migrate_check_status,
-        ENV_MIGRATE_CHECK_STATUS_FILE: (
-            bash_path(status_file) if status_file else ""
-        ),
+        ENV_MIGRATE_CHECK_STATUS_FILE: _env_path_for_python(status_file),
         ENV_RUNSERVER_PREFLIGHT_FORCE_REFRESH: "true" if force_refresh else "false",
     }
     export_lines = [
