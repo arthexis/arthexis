@@ -11,6 +11,10 @@
   const VERSION_LABEL = "{{ version_label|escapejs }}";
   const REVISION_LABEL = "{{ revision_label|escapejs }}";
   const CHECK_INTERVAL = 120000;
+  const REMOTE_CHECK_INTERVAL = 600000;
+  const STORAGE_KEY = "version-check-state-v1";
+  const LOCK_KEY = "version-check-lock-v1";
+  const LOCK_TTL = 15000;
   if (!CHECK_URL) {
     return;
   }
@@ -80,6 +84,73 @@
     let bannerElement;
     let detailsElement;
 
+    function readStoredState() {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          return null;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          return null;
+        }
+        return {
+          version: typeof parsed.version === "string" ? parsed.version : "",
+          revision: typeof parsed.revision === "string" ? parsed.revision : "",
+          checkedAt: typeof parsed.checkedAt === "number" ? parsed.checkedAt : 0,
+        };
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function writeStoredState(info) {
+      try {
+        const payload = {
+          version: info.version || "",
+          revision: info.revision || "",
+          checkedAt: Date.now(),
+        };
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (error) {
+        // Ignore storage errors (private mode, quota, etc).
+      }
+    }
+
+    function shouldSkipRemoteFetch() {
+      const stored = readStoredState();
+      if (!stored) {
+        return false;
+      }
+      const age = Date.now() - stored.checkedAt;
+      if (age < REMOTE_CHECK_INTERVAL) {
+        if (stored.version !== currentVersion || stored.revision !== currentRevision) {
+          currentVersion = stored.version;
+          currentRevision = stored.revision;
+          updateBanner({ version: stored.version, revision: stored.revision });
+        }
+        return true;
+      }
+      return false;
+    }
+
+    function acquireLock() {
+      try {
+        const now = Date.now();
+        const raw = window.localStorage.getItem(LOCK_KEY);
+        if (raw) {
+          const lock = JSON.parse(raw);
+          if (lock && typeof lock.timestamp === "number" && now - lock.timestamp < LOCK_TTL) {
+            return false;
+          }
+        }
+        window.localStorage.setItem(LOCK_KEY, JSON.stringify({ timestamp: now }));
+        return true;
+      } catch (error) {
+        return true;
+      }
+    }
+
     function shortRevision(value) {
       return value ? value.slice(0, 7) : "";
     }
@@ -138,6 +209,15 @@
     }
 
     async function fetchInfo() {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      if (shouldSkipRemoteFetch()) {
+        return;
+      }
+      if (!acquireLock()) {
+        return;
+      }
       try {
         const response = await fetch(CHECK_URL, {
           credentials: "same-origin",
@@ -149,6 +229,7 @@
         const data = await response.json();
         const version = typeof data.version === "string" ? data.version : "";
         const revision = typeof data.revision === "string" ? data.revision : "";
+        writeStoredState({ version, revision });
         if (currentVersion === null && currentRevision === null) {
           currentVersion = version;
           currentRevision = revision;
@@ -164,8 +245,35 @@
       }
     }
 
+    const stored = readStoredState();
+    if (stored) {
+      currentVersion = stored.version;
+      currentRevision = stored.revision;
+    }
+
     fetchInfo();
     window.setInterval(fetchInfo, CHECK_INTERVAL);
+
+    window.addEventListener("storage", function (event) {
+      if (event.key !== STORAGE_KEY) {
+        return;
+      }
+      const updated = readStoredState();
+      if (!updated) {
+        return;
+      }
+      if (updated.version !== currentVersion || updated.revision !== currentRevision) {
+        currentVersion = updated.version;
+        currentRevision = updated.revision;
+        updateBanner({ version: updated.version, revision: updated.revision });
+      }
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") {
+        fetchInfo();
+      }
+    });
   }
 
   if (document.readyState === "loading") {
