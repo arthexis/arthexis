@@ -24,7 +24,14 @@ def test_send_auto_upgrade_check_message(monkeypatch):
         lcd_channel_type=None,
         lcd_channel_num=None,
     ):
-        sent.append({"subject": subject, "body": body})
+        sent.append(
+            {
+                "subject": subject,
+                "body": body,
+                "lcd_channel_type": lcd_channel_type,
+                "lcd_channel_num": lcd_channel_num,
+            }
+        )
 
     from apps.nodes.models.node_core import NetMessage
 
@@ -34,6 +41,8 @@ def test_send_auto_upgrade_check_message(monkeypatch):
 
     assert sent[0]["subject"] == "UP-CHECK 12:34"
     assert sent[0]["body"] == "APPLIED-SUCCESSF CLEAN"
+    assert sent[0]["lcd_channel_type"] == tasks.AUTO_UPGRADE_LCD_CHANNEL_TYPE
+    assert sent[0]["lcd_channel_num"] == tasks.AUTO_UPGRADE_LCD_CHANNEL_NUM
 
 
 @pytest.mark.parametrize(
