@@ -122,7 +122,7 @@
         }
         canvas.hidden = false;
         const context = canvas.getContext('2d');
-        new Chart(context, {
+        const chart = new Chart(context, {
           type: 'line',
           data: {
             labels: data.labels,
@@ -154,6 +154,7 @@
             },
           },
         });
+        canvas.chart = chart;
       })
       .catch(() => {
         canvas.hidden = true;
@@ -178,6 +179,15 @@
     const target = event.detail?.target;
     if (target && target.querySelector('#viewhistory-mini-chart')) {
       initializeMiniTrafficChart();
+    }
+  });
+
+  document.body.addEventListener('htmx:beforeSwap', (event) => {
+    const target = event.detail?.target;
+    const canvas = target?.querySelector('#viewhistory-mini-chart');
+    if (canvas && canvas.chart) {
+      canvas.chart.destroy();
+      delete canvas.chart;
     }
   });
 </script>
