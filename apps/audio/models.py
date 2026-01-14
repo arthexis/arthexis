@@ -34,6 +34,8 @@ class DetectedRecordingDevice:
 class RecordingDevice(Entity):
     """Detected recording device available to a node."""
 
+    _ALSA_IDENTIFIER_RE = re.compile(r"(?P<card>\d+)-(?P<device>\d+)$")
+
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.CASCADE, related_name="recording_devices"
     )
@@ -95,7 +97,7 @@ class RecordingDevice(Entity):
 
     @staticmethod
     def identifier_to_alsa_device(identifier: str) -> str | None:
-        match = re.match(r"(?P<card>\d+)-(?P<device>\d+)$", identifier)
+        match = RecordingDevice._ALSA_IDENTIFIER_RE.match(identifier)
         if not match:
             return None
         card = int(match.group("card"))
