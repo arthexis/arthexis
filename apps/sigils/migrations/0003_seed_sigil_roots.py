@@ -34,9 +34,10 @@ def seed_sigil_roots(apps, schema_editor):
     SigilRoot = apps.get_model("sigils", "SigilRoot")
     ContentType = apps.get_model("contenttypes", "ContentType")
     manager = getattr(SigilRoot, "all_objects", SigilRoot._base_manager)
-
-    if manager.exists():
-        return
+    protected_prefixes = {"ENV", "CONF", "SYS", "REQ"}
+    existing_protected = set(
+        manager.filter(prefix__in=protected_prefixes).values_list("prefix", flat=True)
+    )
 
     fixtures_dir = Path(__file__).resolve().parent.parent / "fixtures"
 
@@ -44,6 +45,8 @@ def seed_sigil_roots(apps, schema_editor):
         prefix = fields.get("prefix")
         context_type = fields.get("context_type")
         if not prefix or not context_type:
+            continue
+        if prefix in existing_protected:
             continue
 
         content_type = fields.get("content_type")
