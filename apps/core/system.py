@@ -1366,11 +1366,15 @@ def _build_auto_upgrade_report(
         schedule_info["description"] = _(
             "Fast Lane enabled: upgrade checks run hourly."
         )
+    schedule_disabled = schedule_info.get("enabled") is False
+    if schedule_info.get("next_run") == str(_("Disabled")):
+        schedule_disabled = True
+
     if (
         fast_lane_enabled
         and used_log_last_run
         and last_log_timestamp_raw is not None
-        and schedule_info.get("enabled")
+        and not schedule_disabled
     ):
         schedule_info["next_run"] = _format_next_run_from_reference(
             last_log_timestamp_raw,
