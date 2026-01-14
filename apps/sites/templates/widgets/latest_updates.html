@@ -1,9 +1,12 @@
 {% load i18n %}
 <div class="module" id="latest-updates-widget">
   <h2>{% translate "Latest Updates" %}</h2>
-  <ul class="actionlist">
+  <ul class="actionlist latest-updates-list">
     {% for commit in commits %}
-      <li>{{ commit.summary }}</li>
+      <li class="latest-updates-item">
+        <span class="latest-updates-summary">{{ commit.summary }}</span>
+        <span class="latest-updates-timestamp">{{ commit.authored_at|date:"M j, H:i" }}</span>
+      </li>
     {% empty %}
       <li class="quiet">{% translate "No recent updates." %}</li>
     {% endfor %}
