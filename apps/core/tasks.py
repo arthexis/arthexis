@@ -48,6 +48,8 @@ AUTO_UPGRADE_RECENCY_LOCK_NAME = "auto_upgrade_last_run.lck"
 STABLE_AUTO_UPGRADE_START = datetime_time(hour=19, minute=30)
 STABLE_AUTO_UPGRADE_END = datetime_time(hour=5, minute=30)
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
+AUTO_UPGRADE_LCD_CHANNEL_TYPE = "low"
+AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 
 _NETWORK_FAILURE_PATTERNS = (
     "could not resolve host",
@@ -1517,7 +1519,12 @@ def _broadcast_upgrade_start_message(
     body = f"{previous_revision} - {next_revision}"
 
     try:
-        NetMessage.broadcast(subject=subject, body=body)
+        NetMessage.broadcast(
+            subject=subject,
+            body=body,
+            lcd_channel_type=AUTO_UPGRADE_LCD_CHANNEL_TYPE,
+            lcd_channel_num=AUTO_UPGRADE_LCD_CHANNEL_NUM,
+        )
     except Exception:
         logger.warning(
             "Failed to broadcast auto-upgrade start Net Message", exc_info=True
@@ -1543,7 +1550,12 @@ def _send_auto_upgrade_failure_message(base_dir: Path, reason: str, failure_coun
     body = f"{reason} x{failure_count}"
 
     try:
-        NetMessage.broadcast(subject=subject, body=body)
+        NetMessage.broadcast(
+            subject=subject,
+            body=body,
+            lcd_channel_type=AUTO_UPGRADE_LCD_CHANNEL_TYPE,
+            lcd_channel_num=AUTO_UPGRADE_LCD_CHANNEL_NUM,
+        )
     except Exception:
         logger.warning(
             "Failed to broadcast auto-upgrade failure Net Message", exc_info=True
@@ -1570,7 +1582,12 @@ def _send_auto_upgrade_check_message(status: str, change_tag: str) -> None:
     subject = f"UP-CHECK {timestamp}"
 
     try:
-        NetMessage.broadcast(subject=subject, body=f"{status[:16]} {change_tag}")
+        NetMessage.broadcast(
+            subject=subject,
+            body=f"{status[:16]} {change_tag}",
+            lcd_channel_type=AUTO_UPGRADE_LCD_CHANNEL_TYPE,
+            lcd_channel_num=AUTO_UPGRADE_LCD_CHANNEL_NUM,
+        )
     except Exception:
         logger.warning(
             "Failed to broadcast auto-upgrade check Net Message", exc_info=True

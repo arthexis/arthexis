@@ -202,10 +202,11 @@ def availability_seconds(
     *,
     now: datetime | None = None,
 ) -> int | None:
-    candidates = [
+    durations = [
         duration_from_lock(base_dir, STARTUP_DURATION_LOCK_NAME),
         duration_from_lock(base_dir, UPGRADE_DURATION_LOCK_NAME),
-        boot_delay_seconds(base_dir, parse_start_timestamp, now=now),
     ]
-    valid = [value for value in candidates if value is not None]
-    return max(valid) if valid else None
+    valid_durations = [value for value in durations if value is not None]
+    if valid_durations:
+        return max(valid_durations)
+    return boot_delay_seconds(base_dir, parse_start_timestamp, now=now)
