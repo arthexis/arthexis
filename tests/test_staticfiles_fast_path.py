@@ -85,14 +85,18 @@ def _run_static_hash(base_dir: Path, hash_script: Path, *, force: bool = False) 
 
     hash_output_path = base_dir / "hash_output.txt"
     hash_log_path = base_dir / "hash.log"
+    bash_base_dir = bash_path(base_dir)
+    bash_lock_dir = bash_path(lock_dir)
+    bash_hash_script = bash_path(hash_script)
+    bash_hash_log = bash_path(hash_log_path)
 
     env = os.environ.copy()
     env.update(
         {
-            "BASE_DIR": str(base_dir),
-            "LOCK_DIR": str(lock_dir),
-            "STATICFILES_HASH_SCRIPT": str(hash_script),
-            "HASH_LOG": str(hash_log_path),
+            "BASE_DIR": bash_base_dir,
+            "LOCK_DIR": bash_lock_dir,
+            "STATICFILES_HASH_SCRIPT": bash_hash_script,
+            "HASH_LOG": bash_hash_log,
         }
     )
 
@@ -100,7 +104,7 @@ def _run_static_hash(base_dir: Path, hash_script: Path, *, force: bool = False) 
     command = "\n".join(
         [
             "set -e",
-            f"cd '{bash_path(base_dir)}'",
+            f"cd '{bash_base_dir}'",
             f"helper_path='{bash_path(HELPER_PATH)}'",
             '[ -f "$helper_path" ] || { echo "Error: Staticfiles helper not found at $helper_path" >&2; exit 1; }',
             '[ -r "$helper_path" ] || { echo "Error: Staticfiles helper not readable at $helper_path" >&2; exit 1; }',

@@ -13,21 +13,29 @@ def _detect_bash_path_style() -> str:
     if _BASH_PATH_STYLE is not None:
         return _BASH_PATH_STYLE
 
+    override = os.environ.get("ARTHEXIS_BASH_PATH_STYLE")
+    if override:
+        _BASH_PATH_STYLE = override
+        return _BASH_PATH_STYLE
+
     if os.name != "nt":
         _BASH_PATH_STYLE = "posix"
         return _BASH_PATH_STYLE
 
     style = "msys"
     try:
-        if (
-            subprocess.run(
-                ["bash", "-lc", "test -d /mnt/c"],
-                check=False,
-                capture_output=True,
-            ).returncode
-            == 0
-        ):
-            style = "wsl"
+        pwd_result = subprocess.run(
+            ["bash", "-lc", "pwd"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if pwd_result.returncode == 0:
+            pwd = pwd_result.stdout.strip()
+            if pwd.startswith("/mnt/"):
+                style = "wsl"
+            elif len(pwd) >= 3 and pwd[0] == "/" and pwd[2] == "/":
+                style = "msys"
     except FileNotFoundError:
         pass
 
