@@ -11,7 +11,8 @@
   const initializeMiniTrafficChart = () => {
     const canvas = document.getElementById('viewhistory-mini-chart');
     const emptyLabel = document.getElementById('viewhistory-mini-empty');
-    if (!canvas) return;
+    if (!canvas || canvas.dataset.chartInitialized === 'true') return;
+    canvas.dataset.chartInitialized = 'true';
 
     const chartJsUrl = "{% static 'core/vendor/chart.umd.min.js' %}";
 
@@ -163,5 +164,20 @@
       });
   };
 
-  document.addEventListener('DOMContentLoaded', initializeMiniTrafficChart);
+  const scheduleMiniTrafficChart = () => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeMiniTrafficChart, { once: true });
+    } else {
+      initializeMiniTrafficChart();
+    }
+  };
+
+  scheduleMiniTrafficChart();
+
+  document.body.addEventListener('htmx:afterSwap', (event) => {
+    const target = event.detail?.target;
+    if (target && target.querySelector('#viewhistory-mini-chart')) {
+      initializeMiniTrafficChart();
+    }
+  });
 </script>

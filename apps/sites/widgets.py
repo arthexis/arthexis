@@ -6,7 +6,7 @@ from apps.core import changelog
 from apps.widgets import register_widget
 from apps.widgets.models import WidgetZone
 
-LATEST_UPDATES_COMMIT_LIMIT = 3
+LATEST_UPDATES_COMMIT_LIMIT = 4
 LATEST_UPDATES_ORDER = 40
 
 
