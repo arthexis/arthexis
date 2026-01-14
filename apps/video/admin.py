@@ -192,7 +192,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         self._capture_snapshot_for_device(
             request, obj, auto_enable=True, link_duplicates=True
         )
-        return redirect(".")
+        return redirect(reverse("admin:video_videodevice_change", args=[obj.pk]))
 
     @admin.action(description=_("Reload camera resolution defaults"))
     def reload_camera_defaults(self, request, queryset):
