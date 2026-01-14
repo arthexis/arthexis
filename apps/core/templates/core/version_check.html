@@ -117,21 +117,25 @@
       }
     }
 
+    function syncWithStoredState(stored) {
+      if (!stored) {
+        return;
+      }
+      if (stored.version !== currentVersion || stored.revision !== currentRevision) {
+        currentVersion = stored.version;
+        currentRevision = stored.revision;
+        updateBanner({ version: stored.version, revision: stored.revision });
+      }
+    }
+
     function shouldSkipRemoteFetch() {
       const stored = readStoredState();
       if (!stored) {
         return false;
       }
+      syncWithStoredState(stored);
       const age = Date.now() - stored.checkedAt;
-      if (age < REMOTE_CHECK_INTERVAL) {
-        if (stored.version !== currentVersion || stored.revision !== currentRevision) {
-          currentVersion = stored.version;
-          currentRevision = stored.revision;
-          updateBanner({ version: stored.version, revision: stored.revision });
-        }
-        return true;
-      }
-      return false;
+      return age < REMOTE_CHECK_INTERVAL;
     }
 
     function acquireLock() {
@@ -258,15 +262,7 @@
       if (event.key !== STORAGE_KEY) {
         return;
       }
-      const updated = readStoredState();
-      if (!updated) {
-        return;
-      }
-      if (updated.version !== currentVersion || updated.revision !== currentRevision) {
-        currentVersion = updated.version;
-        currentRevision = updated.revision;
-        updateBanner({ version: updated.version, revision: updated.revision });
-      }
+      syncWithStoredState(readStoredState());
     });
 
     document.addEventListener("visibilitychange", function () {
