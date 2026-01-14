@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.nginx import services
 from apps.nginx.config_utils import slugify
+from apps.nginx.forms import ManagedSubdomainForm
 from apps.nginx.renderers import generate_primary_config, generate_site_entries_content
 
 
@@ -105,21 +106,33 @@ class SiteConfigurationViewMixin:
 
         ids_param, _pk_values, queryset = self._get_selection_from_request(request)
         missing_certificates = self._find_missing_certificates(queryset)
+        subdomain_form, subdomain_mixed = self._build_subdomain_form(queryset)
 
         if request.method == "POST":
             if not self.has_change_permission(request):
                 raise PermissionDenied
-            self._apply_configurations(request, queryset, ids_param)
-            redirect_url = reverse("admin:nginx_siteconfiguration_preview")
-            if ids_param:
-                redirect_url = f"{redirect_url}?ids={ids_param}"
-            return self._http_redirect(redirect_url)
+            if "update_subdomains" in request.POST:
+                subdomain_form = ManagedSubdomainForm(request.POST)
+                if subdomain_form.is_valid():
+                    self._apply_subdomains(request, queryset, subdomain_form)
+                    redirect_url = reverse("admin:nginx_siteconfiguration_preview")
+                    if ids_param:
+                        redirect_url = f"{redirect_url}?ids={ids_param}"
+                    return self._http_redirect(redirect_url)
+            else:
+                self._apply_configurations(request, queryset, ids_param)
+                redirect_url = reverse("admin:nginx_siteconfiguration_preview")
+                if ids_param:
+                    redirect_url = f"{redirect_url}?ids={ids_param}"
+                return self._http_redirect(redirect_url)
 
         return self._render_preview(
             request,
             queryset=queryset,
             ids_param=ids_param,
             missing_certificates=missing_certificates,
+            subdomain_form=subdomain_form,
+            subdomain_mixed=subdomain_mixed,
         )
 
     def preview_default_view(self, request: HttpRequest):
@@ -130,20 +143,31 @@ class SiteConfigurationViewMixin:
         queryset = self.get_queryset(request).filter(pk=default_config.pk)
         ids_param = str(default_config.pk)
         missing_certificates = self._find_missing_certificates(queryset)
+        subdomain_form, subdomain_mixed = self._build_subdomain_form(queryset)
 
         if request.method == "POST":
             if not self.has_change_permission(request):
                 raise PermissionDenied
-            self._apply_configurations(request, queryset, ids_param)
-            return self._http_redirect(
-                reverse("admin:nginx_siteconfiguration_preview_default")
-            )
+            if "update_subdomains" in request.POST:
+                subdomain_form = ManagedSubdomainForm(request.POST)
+                if subdomain_form.is_valid():
+                    self._apply_subdomains(request, queryset, subdomain_form)
+                    return self._http_redirect(
+                        reverse("admin:nginx_siteconfiguration_preview_default")
+                    )
+            else:
+                self._apply_configurations(request, queryset, ids_param)
+                return self._http_redirect(
+                    reverse("admin:nginx_siteconfiguration_preview_default")
+                )
 
         return self._render_preview(
             request,
             queryset=queryset,
             ids_param=ids_param,
             missing_certificates=missing_certificates,
+            subdomain_form=subdomain_form,
+            subdomain_mixed=subdomain_mixed,
         )
 
     def _render_preview(
@@ -153,6 +177,8 @@ class SiteConfigurationViewMixin:
         queryset,
         ids_param: str,
         missing_certificates,
+        subdomain_form,
+        subdomain_mixed: bool,
     ):
         config_previews = [
             {
@@ -176,6 +202,8 @@ class SiteConfigurationViewMixin:
             ),
             "certificate_type_choices": self._certificate_type_choices(),
             "default_certificate_type": self.default_certificate_type,
+            "subdomain_form": subdomain_form,
+            "subdomain_mixed": subdomain_mixed,
         }
 
         return TemplateResponse(
@@ -239,6 +267,7 @@ class SiteConfigurationViewMixin:
                 https_enabled=config.protocol == "https",
                 external_websockets=config.external_websockets,
                 proxy_target=proxy_target,
+                subdomain_prefixes=config.get_subdomain_prefixes(),
             )
         except ValueError as exc:
             files.append(
@@ -259,6 +288,41 @@ class SiteConfigurationViewMixin:
             )
 
         return files
+
+    def _build_subdomain_form(self, queryset):
+        values = [value or "" for value in queryset.values_list("managed_subdomains", flat=True)]
+        unique_values = set(values)
+        if len(unique_values) == 1:
+            initial = unique_values.pop()
+            mixed = False
+        else:
+            initial = ""
+            mixed = bool(values)
+        form = ManagedSubdomainForm(initial={"managed_subdomains": initial})
+        return form, mixed
+
+    def _apply_subdomains(self, request, queryset, form: ManagedSubdomainForm) -> None:
+        managed_subdomains = form.cleaned_data["managed_subdomains"]
+        updated = False
+        for config in queryset:
+            if config.managed_subdomains == managed_subdomains:
+                continue
+            config.managed_subdomains = managed_subdomains
+            config.full_clean()
+            config.save(update_fields=["managed_subdomains"])
+            updated = True
+        if updated:
+            self.message_user(
+                request,
+                _("Managed subdomain prefixes updated for selected configurations."),
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("Managed subdomain prefixes already match the selected configurations."),
+                messages.INFO,
+            )
 
     def _build_file_preview(self, *, label: str, path: Path, content: str) -> dict:
         status = self._get_file_status(path, content)
@@ -324,4 +388,3 @@ class SiteConfigurationViewMixin:
             return config.resolve_secondary_instance(), None
         except services.SecondaryInstanceError as exc:
             return None, str(exc)
-

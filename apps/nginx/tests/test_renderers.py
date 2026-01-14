@@ -103,6 +103,21 @@ def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
     assert "proxy_pass http://arthexis-blue" in content
 
 
+def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
+    staging = tmp_path / "sites.json"
+    staging.write_text('[{"domain": "example.com", "require_https": false}]', encoding="utf-8")
+
+    content = generate_site_entries_content(
+        staging,
+        "public",
+        8080,
+        https_enabled=True,
+        subdomain_prefixes=["api", "admin"],
+    )
+
+    assert "server_name example.com api.example.com admin.example.com;" in content
+
+
 def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(config_utils, "SSL_OPTIONS_PATH", tmp_path / "missing-options.conf")
     monkeypatch.setattr(config_utils, "BUNDLED_SSL_OPTIONS_PATH", tmp_path / "missing-bundled-options.conf")
