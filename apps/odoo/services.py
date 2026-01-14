@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+# Windows does not provide os.getuid; define a harmless fallback for config discovery.
+if not hasattr(os, "getuid"):  # pragma: no cover - Windows fallback
+    os.getuid = lambda: 0  # type: ignore[assignment]
+
 from django.utils import timezone
 
 from .models import OdooDeployment
