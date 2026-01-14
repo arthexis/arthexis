@@ -1100,9 +1100,20 @@ def main() -> None:  # pragma: no cover - hardware dependent
             entries = _channel_lock_entries(LOCK_DIR, base_name)
             signature = tuple((num, mtime) for num, _, mtime in entries)
             existing = channel_states.get(label)
-            if existing is None or existing.signature != signature:
-                payloads = _load_channel_payloads(entries, now=now_dt)
-                existing = ChannelCycle(payloads=payloads, signature=signature)
+            payloads = _load_channel_payloads(entries, now=now_dt)
+            if (
+                existing is None
+                or existing.signature != signature
+                or payloads != existing.payloads
+            ):
+                next_index = 0
+                if existing and payloads:
+                    next_index = existing.index % len(payloads)
+                existing = ChannelCycle(
+                    payloads=payloads,
+                    signature=signature,
+                    index=next_index,
+                )
             channel_states[label] = existing
             channel_info[label] = existing
             channel_text[label] = any(
