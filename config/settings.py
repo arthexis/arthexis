@@ -33,6 +33,7 @@ import django.utils.encoding as encoding
 from apps.celery.utils import resolve_celery_shutdown_timeout
 from config.whitenoise import add_headers as whitenoise_add_headers
 from config.request_utils import is_https_request
+from utils.env import env_bool
 
 from config.settings_helpers import (
     discover_local_ip_addresses,
@@ -67,21 +68,8 @@ if NODE_ROLE is None:
     role_lock = BASE_DIR / ".locks" / "role.lck"
     NODE_ROLE = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
 _debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
-DEBUG = _env_bool("DEBUG", _debugpy_attached)
+DEBUG = env_bool("DEBUG", _debugpy_attached)
 HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 
@@ -102,11 +90,11 @@ def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
 
 # Disable NetMessage propagation when running maintenance commands that should
 # avoid contacting remote peers.
-NET_MESSAGE_DISABLE_PROPAGATION = _env_bool(
+NET_MESSAGE_DISABLE_PROPAGATION = env_bool(
     "NET_MESSAGE_DISABLE_PROPAGATION", False
 )
 
-ENABLE_USAGE_ANALYTICS = _env_bool("ENABLE_USAGE_ANALYTICS", False)
+ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -611,10 +599,12 @@ else:
     CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 OCPP_PENDING_CALL_TTL = int(os.environ.get("OCPP_PENDING_CALL_TTL", "1800") or 1800)
-OCPP_ASYNC_LOGGING = _env_bool("OCPP_ASYNC_LOGGING", bool(CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL))
+OCPP_ASYNC_LOGGING = env_bool(
+    "OCPP_ASYNC_LOGGING", bool(CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL)
+)
 
-PAGES_CHAT_ENABLED = _env_bool("PAGES_CHAT_ENABLED", True)
-PAGES_CHAT_NOTIFY_STAFF = _env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
+PAGES_CHAT_ENABLED = env_bool("PAGES_CHAT_ENABLED", True)
+PAGES_CHAT_NOTIFY_STAFF = env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
 try:
     PAGES_CHAT_IDLE_ESCALATE_SECONDS = int(
         os.environ.get("PAGES_CHAT_IDLE_ESCALATE_SECONDS", "300")
