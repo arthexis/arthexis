@@ -30,6 +30,7 @@ DEFAULT_SERVICE_PORT = int(os.environ.get("RFID_SERVICE_PORT", "29801"))
 DEFAULT_SCAN_TIMEOUT = float(os.environ.get("RFID_SERVICE_SCAN_TIMEOUT", "0.3"))
 DEFAULT_QUEUE_MAX = int(os.environ.get("RFID_SERVICE_QUEUE_MAX", "50"))
 DEFAULT_EVENT_DURATION = int(os.environ.get("RFID_EVENT_DURATION", "30"))
+RFID_SCAN_LOCK_FILE = "rfid-scan.lck"
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ class RFIDServiceState:
                 if result.get("error") or result.get("rfid"):
                     self.queue.put(result)
                     self._notify_lcd_event(result)
+                    write_rfid_scan_lock(result)
         finally:
             stop_reader()
             logger.info("RFID service worker stopped")
@@ -130,7 +132,10 @@ class RFIDServiceState:
         rfid_value = str(result.get("rfid", "")).strip()
         color = str(result.get("color", "")).strip()
         body = " ".join(part for part in (rfid_value, color) if part)
-        notify_event_async(subject, body, duration=DEFAULT_EVENT_DURATION)
+        notify_event_async(
+            subject, body, duration=DEFAULT_EVENT_DURATION, event_id=0
+        )
+
 
     def status(self) -> ServiceStatus:
         queue_depth, _last_scan, last_scan_at = self.queue.status()
@@ -241,6 +246,29 @@ class RFIDServiceRunner:
 def get_lock_dir(base_dir: Path | None = None) -> Path:
     base_dir = base_dir or Path(settings.BASE_DIR)
     return Path(base_dir) / ".locks"
+
+
+def rfid_scan_lock_path(base_dir: Path | None = None) -> Path:
+    return get_lock_dir(base_dir) / RFID_SCAN_LOCK_FILE
+
+
+def write_rfid_scan_lock(result: dict[str, Any], base_dir: Path | None = None) -> None:
+    rfid_value = str(result.get("rfid", "")).strip()
+    if not rfid_value:
+        return
+    lock_path = rfid_scan_lock_path(base_dir)
+    payload = {
+        "rfid": rfid_value,
+        "label_id": result.get("label_id"),
+        "allowed": result.get("allowed"),
+        "color": result.get("color"),
+        "scanned_at": datetime.now(datetime_timezone.utc).isoformat(),
+    }
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(json.dumps(payload), encoding="utf-8")
+    except Exception:  # pragma: no cover - filesystem dependent
+        logger.debug("Unable to write RFID scan lock file", exc_info=True)
 
 
 def rfid_service_lock_path(base_dir: Path | None = None) -> Path:
