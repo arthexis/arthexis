@@ -5,6 +5,7 @@ This site aggregates operator guides, architecture notes, and development refere
 ## Quick links
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [Auto-Upgrade Flow](auto-upgrade.md)
+- [Suite Services Report](suite-services-report.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)

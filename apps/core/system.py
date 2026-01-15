@@ -1927,7 +1927,48 @@ def _gather_info() -> dict:
     return info
 
 
-def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
+SERVICE_REPORT_DEFINITIONS = (
+    {
+        "key": "suite",
+        "label": _("Suite service"),
+        "unit_template": "{service}.service",
+        "docs": "services/suite-service.md",
+    },
+    {
+        "key": "celery-worker",
+        "label": _("Celery worker"),
+        "unit_template": "celery-{service}.service",
+        "docs": "services/celery-worker.md",
+    },
+    {
+        "key": "celery-beat",
+        "label": _("Celery beat"),
+        "unit_template": "celery-beat-{service}.service",
+        "docs": "services/celery-beat.md",
+    },
+    {
+        "key": "lcd-screen",
+        "label": _("LCD screen"),
+        "unit_template": "lcd-{service}.service",
+        "docs": "services/lcd-screen.md",
+    },
+    {
+        "key": "rfid-service",
+        "label": _("RFID scanner service"),
+        "unit_template": "rfid-{service}.service",
+        "docs": "services/rfid-scanner-service.md",
+    },
+)
+
+
+def _service_docs_url(doc: str) -> str:
+    try:
+        return reverse("docs:docs-document", args=[doc])
+    except NoReverseMatch:
+        return ""
+
+
+def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
     """Return service units configured for this instance."""
 
     lock_dir = base_dir / ".locks"
@@ -1944,65 +1985,89 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
     except OSError:
         systemd_units = []
 
-    service_units: list[dict[str, str]] = []
+    service_units: list[dict[str, object]] = []
     seen_units: set[str] = set()
 
-    def _add_unit(unit_name: str, *, label: str | None = None) -> None:
+    def _normalize_unit(unit_name: str) -> tuple[str, str]:
         normalized = unit_name.strip()
-        if not normalized or normalized in seen_units:
-            return
-
-        seen_units.add(normalized)
         unit_display = normalized
         unit = normalized
         if normalized.endswith(".service"):
             unit = normalized.removesuffix(".service")
         else:
             unit_display = f"{normalized}.service"
+        return unit, unit_display
 
+    def _add_unit(
+        unit_name: str,
+        *,
+        label: str | None = None,
+        configured: bool = True,
+        docs_url: str = "",
+    ) -> None:
+        normalized = unit_name.strip()
+        if not normalized or normalized in seen_units:
+            return
+
+        unit, unit_display = _normalize_unit(normalized)
+        seen_units.add(normalized)
         service_units.append(
             {
                 "label": label or normalized,
                 "unit": unit,
                 "unit_display": unit_display,
+                "configured": configured,
+                "docs_url": docs_url,
             }
         )
 
-    for unit_name in systemd_units:
-        label = None
-        if service_name:
-            base_label_map = {
-                f"{service_name}.service": str(_("Suite service")),
-                f"celery-{service_name}.service": str(_("Celery worker")),
-                f"celery-beat-{service_name}.service": str(_("Celery beat")),
-                f"lcd-{service_name}.service": str(_("LCD screen")),
-                f"rfid-{service_name}.service": str(_("RFID scanner service")),
-            }
-            label = base_label_map.get(unit_name.strip())
+    service_name_placeholder = service_name or "SERVICE_NAME"
+    celery_enabled = is_celery_enabled(lock_dir / "celery.lck")
+    lcd_enabled = lcd_feature_enabled(lock_dir)
+    rfid_enabled = rfid_service_enabled(lock_dir)
 
-        _add_unit(unit_name, label=label)
+    for spec in SERVICE_REPORT_DEFINITIONS:
+        unit_name = spec["unit_template"].format(service=service_name_placeholder)
+        if spec["key"] == "suite":
+            configured = bool(service_name)
+        elif spec["key"] in {"celery-worker", "celery-beat"}:
+            configured = bool(service_name) and celery_enabled
+        elif spec["key"] == "lcd-screen":
+            configured = bool(service_name) and lcd_enabled
+        elif spec["key"] == "rfid-service":
+            configured = bool(service_name) and rfid_enabled
+        else:
+            configured = False
 
-    if service_units:
-        return service_units
-
-    if not service_name:
-        return []
-
-    _add_unit(service_name, label=str(_("Suite service")))
-
-    if is_celery_enabled(lock_dir / "celery.lck"):
-        for prefix, label in [
-            ("celery", _("Celery worker")),
-            ("celery-beat", _("Celery beat")),
-        ]:
-            _add_unit(f"{prefix}-{service_name}", label=str(label))
-
-    if lcd_feature_enabled(lock_dir):
-        _add_unit(f"lcd-{service_name}", label=str(_("LCD screen")))
-    if rfid_service_enabled(lock_dir):
         _add_unit(
-            f"rfid-{service_name}",
-            label=str(_("RFID scanner service")),
+            unit_name,
+            label=str(spec["label"]),
+            configured=configured,
+            docs_url=_service_docs_url(spec["docs"]),
+        )
+
+    base_label_map: dict[str, str] = {}
+    docs_url_map: dict[str, str] = {}
+    if service_name:
+        base_label_map = {
+            f"{service_name}.service": str(_("Suite service")),
+            f"celery-{service_name}.service": str(_("Celery worker")),
+            f"celery-beat-{service_name}.service": str(_("Celery beat")),
+            f"lcd-{service_name}.service": str(_("LCD screen")),
+            f"rfid-{service_name}.service": str(_("RFID scanner service")),
+        }
+        for spec in SERVICE_REPORT_DEFINITIONS:
+            docs_url_map[
+                spec["unit_template"].format(service=service_name)
+            ] = _service_docs_url(spec["docs"])
+
+    for unit_name in systemd_units:
+        normalized = unit_name.strip()
+        _add_unit(
+            normalized,
+            label=base_label_map.get(normalized),
+            configured=True,
+            docs_url=docs_url_map.get(normalized, ""),
         )
 
     return service_units
@@ -2064,7 +2129,14 @@ def _build_services_report() -> dict[str, object]:
 
     services: list[dict[str, object]] = []
     for unit in configured_units:
-        status_info = _systemd_unit_status(unit["unit"], command=command)
+        if unit.get("configured"):
+            status_info = _systemd_unit_status(unit["unit"], command=command)
+        else:
+            status_info = {
+                "status": str(_("Not configured")),
+                "enabled": "",
+                "missing": False,
+            }
         services.append({**unit, **status_info})
 
     return {
