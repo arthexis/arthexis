@@ -9,6 +9,8 @@ from apps.sigils.models import SigilRoot
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
 
+pytestmark = pytest.mark.slow
+
 
 @contextmanager
 def sigil_resolution_deadline(seconds: float):
