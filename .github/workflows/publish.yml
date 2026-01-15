@@ -21,15 +21,47 @@ jobs:
     environment: pypi
     steps:
       - name: Download release artifacts
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p dist
-          gh release download "${{ inputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            --pattern "*.whl" \
-            --pattern "*.tar.gz" \
-            --dir dist
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const tag = '${{ inputs.tag }}';
+            const { owner, repo } = context.repo;
+            const release = await github.rest.repos.getReleaseByTag({
+              owner,
+              repo,
+              tag,
+            });
+
+            const assets = release.data.assets.filter((asset) =>
+              asset.name.endsWith('.whl') || asset.name.endsWith('.tar.gz')
+            );
+
+            if (assets.length === 0) {
+              core.setFailed(`No wheel or sdist assets found for tag ${tag}.`);
+              return;
+            }
+
+            fs.mkdirSync('dist', { recursive: true });
+
+            for (const asset of assets) {
+              const download = await github.request(
+                'GET /repos/{owner}/{repo}/releases/assets/{asset_id}',
+                {
+                  owner,
+                  repo,
+                  asset_id: asset.id,
+                  headers: {
+                    accept: 'application/octet-stream',
+                  },
+                }
+              );
+              const filePath = path.join('dist', asset.name);
+              fs.writeFileSync(filePath, Buffer.from(download.data));
+            }
 
       - name: Verify wheel and sdist artifacts
         run: |
@@ -38,7 +70,7 @@ jobs:
           ls dist/*.tar.gz
 
       - name: Publish to PyPI via OIDC
-        uses: pypa/gh-action-pypi-publish@v1.8.11
+        uses: pypa/gh-action-pypi-publish@2f6f737ca5f74c637829c0f5c3acd0e29ea5e8bf # v1.8.11
         with:
           repository-url: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/legacy/' || '' }}
           skip-existing: false
