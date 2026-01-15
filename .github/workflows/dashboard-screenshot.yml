@@ -10,21 +10,23 @@ on:
   push:
     paths:
       - '.github/workflows/dashboard-screenshot.yml'
-      - 'apps/**'
-      - 'config/**'
-      - 'scripts/**'
-      - 'start.sh'
-      - 'install.sh'
-      - 'requirements.txt'
+      - 'apps/**/templates/**'
+      - 'apps/**/static/**'
+      - 'apps/**/templatetags/**'
+      - 'apps/**/admin/**'
+      - 'apps/**/views/**'
+      - 'apps/**/urls.py'
+      - 'static/**'
   pull_request:
     paths:
       - '.github/workflows/dashboard-screenshot.yml'
-      - 'apps/**'
-      - 'config/**'
-      - 'scripts/**'
-      - 'start.sh'
-      - 'install.sh'
-      - 'requirements.txt'
+      - 'apps/**/templates/**'
+      - 'apps/**/static/**'
+      - 'apps/**/templatetags/**'
+      - 'apps/**/admin/**'
+      - 'apps/**/views/**'
+      - 'apps/**/urls.py'
+      - 'static/**'
 
 jobs:
   install:
