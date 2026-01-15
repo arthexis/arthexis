@@ -18,15 +18,25 @@ class NodesConfig(AppConfig):
         if not argv:
             return True
         executable = os.path.basename(argv[0])
+        command_args = argv[1:]
+        if executable != "manage.py":
+            if executable.startswith("python") and command_args:
+                executable = os.path.basename(command_args[0])
+                command_args = command_args[1:]
+            else:
+                return True
         if executable != "manage.py":
             return True
-        return any(arg == "runserver" for arg in argv[1:])
+        return any(arg == "runserver" for arg in command_args)
 
     def ready(self):  # pragma: no cover - exercised on app start
         # Import node signal handlers
         from . import signals  # noqa: F401
 
         if not self._should_enqueue_startup_message():
+            return
+
+        if "runserver" in sys.argv and os.environ.get("RUN_MAIN") != "true":
             return
 
         try:
