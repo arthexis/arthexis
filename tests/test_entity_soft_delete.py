@@ -7,7 +7,7 @@ from django.test.utils import isolate_apps
 from apps.base.models import Entity
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_seed_soft_delete_skipped_for_constrained_model(caplog):
     with isolate_apps("tests"):
 
@@ -39,7 +39,7 @@ def test_seed_soft_delete_skipped_for_constrained_model(caplog):
                 schema_editor.delete_model(ConstrainedEntity)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_seed_soft_delete_applies_without_constraint():
     with isolate_apps("tests"):
 
