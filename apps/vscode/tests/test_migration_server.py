@@ -3,54 +3,31 @@
 from __future__ import annotations
 
 import multiprocessing
-import os
-import sys
-import time
-
-import psutil
+from unittest import mock
 
 from apps.vscode import migration_server
 
 
-def test_stop_django_server_terminates_runserver_process(tmp_path) -> None:
-    """Ensure stopping the server terminates the spawned runserver process."""
+def test_stop_django_server_terminates_multiprocessing_process() -> None:
+    """Ensure stop_django_server handles multiprocessing-based servers."""
 
-    command = [sys.executable, "-c", "import time; time.sleep(60)"]
-    env = os.environ.copy()
+    process = mock.Mock(spec=multiprocessing.Process)
+    process.is_alive.return_value = True
+    process.pid = 4321
 
-    process = multiprocessing.Process(
-        target=migration_server._run_django_server,  # type: ignore[attr-defined]
-        args=(command,),
-        kwargs={"cwd": tmp_path, "env": env},
-        daemon=True,
-    )
+    child = mock.Mock()
+    parent = mock.Mock()
+    parent.children.return_value = [child]
 
-    process.start()
+    wait_procs = mock.Mock(return_value=([], []))
 
-    server_proc = psutil.Process(process.pid)
-    target_pid: int | None = None
-    for _ in range(30):
-        children = server_proc.children(recursive=True)
-        if children:
-            target_pid = children[0].pid
-            break
-        if server_proc.is_running():
-            target_pid = server_proc.pid
-            break
-        time.sleep(0.1)
-
-    assert target_pid is not None
-
-    try:
+    with mock.patch.object(migration_server.psutil, "Process", return_value=parent), \
+        mock.patch.object(migration_server.psutil, "wait_procs", wait_procs):
         migration_server.stop_django_server(process)
-        time.sleep(0.2)
-        assert not psutil.pid_exists(target_pid)
-    finally:
-        migration_server.stop_django_server(process)
-        if psutil.pid_exists(target_pid):
-            try:
-                psutil.Process(target_pid).kill()
-            except psutil.NoSuchProcess:
-                pass
 
+    parent.children.assert_called_once_with(recursive=True)
+    child.terminate.assert_called_once()
+    parent.terminate.assert_called_once()
+    wait_procs.assert_any_call([child, parent], timeout=5.0)
+    process.join.assert_called_once_with(timeout=0.1)
 

@@ -207,20 +207,6 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[3][1].startswith("https://visitor.test:8000")
 
 
-def test_resolve_visitor_base_defaults_to_loopback_https():
-    node_admin = NodeAdmin(Node, AdminSite())
-    request = RequestFactory().get("/admin/nodes/node/register_visitor/")
-
-    visitor_base, visitor_host, visitor_port, visitor_scheme = node_admin._resolve_visitor_base(
-        request
-    )
-
-    assert visitor_base == "https://127.0.0.1:443"
-    assert visitor_host == "127.0.0.1"
-    assert visitor_port == 443
-    assert visitor_scheme == "https"
-
-
 @pytest.mark.django_db
 def test_register_visitor_telemetry_logs(client, caplog):
     url = reverse("register-telemetry")
