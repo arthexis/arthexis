@@ -299,12 +299,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     if "--celery" in args:
         celery_enabled = True
         args.remove("--celery")
+        os.environ.pop("ARTHEXIS_DISABLE_CELERY", None)
     if "--no-celery" in args:
         celery_enabled = False
         args.remove("--no-celery")
         os.environ["ARTHEXIS_DISABLE_CELERY"] = "1"
-    else:
-        os.environ.pop("ARTHEXIS_DISABLE_CELERY", None)
 
     debug_flag = "--debug" in args
     if debug_flag:
