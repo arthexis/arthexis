@@ -94,7 +94,9 @@ class Command(BaseCommand):
         created = False
         if not users:
             if not create_user:
-                raise CommandError(f"No user found for identifier {identifier!r}.")
+                raise CommandError(
+                    f"No user found for identifier {identifier!r}. Use --create to add one."
+                )
             users = [self._create_user(manager, identifier, staff=staff, superuser=superuser)]
             created = True
         if len(users) > 1:
@@ -189,4 +191,3 @@ class Command(BaseCommand):
 
         user.temporary_expires_at = None
         user.save(update_fields=["temporary_expires_at"])
-
