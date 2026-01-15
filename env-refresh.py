@@ -45,6 +45,7 @@ django.setup()
 from apps.nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 
 from apps.release.models import PackageRelease
 from apps.sigils.sigil_builder import generate_model_sigils
@@ -567,9 +568,7 @@ def run_database_tasks(
                     except Exception:
                         raise exc
 
-    # Remove auto-generated SigilRoot entries so fixtures define prefixes
-    SigilRoot = apps.get_model("sigils", "SigilRoot")
-    SigilRoot.objects.all().delete()
+    # SigilRoot entries are protected from deletion; fixtures will update them.
 
     # Track Site entries provided via fixtures so we can update them without
     # disturbing operator-managed records.
@@ -642,7 +641,6 @@ def run_database_tasks(
                     default_db=default_db,
                     interactive=False,
                 )
-                SigilRoot.objects.all().delete()
                 call_command("register_site_apps")
                 existing_tables = set(connection.introspection.table_names())
                 missing_tables = required_tables - existing_tables
@@ -715,6 +713,39 @@ def run_database_tasks(
                         if skip_reason:
                             prefix = fields.get("prefix", "?")
                             print(f"Skipping SigilRoot '{prefix}' ({skip_reason})")
+                            modified = True
+                            continue
+                        prefix = fields.get("prefix")
+                        if prefix:
+                            defaults = dict(fields)
+                            content_type = defaults.get("content_type")
+                            if isinstance(content_type, (list, tuple)) and len(
+                                content_type
+                            ) >= 2:
+                                defaults["content_type"] = (
+                                    ContentType.objects.get_by_natural_key(
+                                        content_type[0],
+                                        content_type[1],
+                                    )
+                                )
+                            elif isinstance(content_type, dict):
+                                app_label = content_type.get("app_label")
+                                model_name = content_type.get("model")
+                                if not model_name:
+                                    model_name = content_type.get("model_name")
+                                if app_label and model_name:
+                                    defaults["content_type"] = (
+                                        ContentType.objects.get_by_natural_key(
+                                            app_label,
+                                            model_name,
+                                        )
+                                    )
+                            SigilRoot = model
+                            SigilRoot.objects.update_or_create(
+                                prefix=prefix,
+                                defaults=defaults,
+                            )
+                            model_counts[model._meta.label] += 1
                             modified = True
                             continue
                     if model is Site:

@@ -3,10 +3,15 @@ from django.db import models
 from django.db.models.deletion import ProtectedError
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.entity import Entity, EntityManager
+from apps.core.entity import Entity, EntityManager, EntityQuerySet
 
 
-class SigilRootManager(EntityManager):
+class SigilRootQuerySet(EntityQuerySet):
+    def delete(self):  # pragma: no cover - protected from deletion
+        raise ProtectedError(_("Sigil Roots cannot be deleted."), list(self))
+
+
+class SigilRootManager(EntityManager.from_queryset(SigilRootQuerySet)):
     def get_by_natural_key(self, prefix: str):
         return self.get(prefix=prefix)
 
