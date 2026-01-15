@@ -652,10 +652,9 @@ def _suite_reachable(
         sock.settimeout(timeout)
         try:
             sock.connect(("127.0.0.1", port))
-        except OSError:
-            is_up = False
-        else:
             is_up = True
+        except OSError:
+            pass
 
     _SUITE_REACHABILITY_CACHE["checked_at"] = now_value
     _SUITE_REACHABILITY_CACHE["is_up"] = is_up
@@ -682,6 +681,7 @@ def _boot_elapsed_seconds(
 def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> int | None:
     now_value = now or datetime.now(datetime_timezone.utc)
     is_up = _suite_reachable(base_dir)
+    elapsed_seconds = _boot_elapsed_seconds(now=now_value)
 
     if is_up:
         available_seconds = _availability_seconds(base_dir, now=now_value)
@@ -691,12 +691,11 @@ def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> in
             _SUITE_AVAILABILITY_STATE["locked"] = True
             return available_seconds
 
-        if _SUITE_AVAILABILITY_STATE["is_up"]:
+        if _SUITE_AVAILABILITY_STATE["is_up"] and _SUITE_AVAILABILITY_STATE["locked"]:
             cached_seconds = _SUITE_AVAILABILITY_STATE["duration_seconds"]
             if cached_seconds is not None:
                 return cached_seconds
 
-        elapsed_seconds = _boot_elapsed_seconds(now=now_value)
         _SUITE_AVAILABILITY_STATE["is_up"] = True
         _SUITE_AVAILABILITY_STATE["duration_seconds"] = elapsed_seconds
         _SUITE_AVAILABILITY_STATE["locked"] = False
@@ -705,7 +704,7 @@ def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> in
     _SUITE_AVAILABILITY_STATE["is_up"] = False
     _SUITE_AVAILABILITY_STATE["duration_seconds"] = None
     _SUITE_AVAILABILITY_STATE["locked"] = False
-    return _boot_elapsed_seconds(now=now_value)
+    return elapsed_seconds
 
 def _uptime_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
