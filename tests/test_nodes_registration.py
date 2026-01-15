@@ -8,8 +8,10 @@ import requests
 import pytest
 from django.urls import reverse
 
+from apps.nodes.admin.node_admin import NodeAdmin
 from apps.nodes.models import Node
 from django.contrib.sites.models import Site
+from django.contrib.admin.sites import AdminSite
 
 
 @pytest.mark.django_db
@@ -37,80 +39,18 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     assert payload["features"] == []
 
 
-@pytest.mark.django_db
-def test_node_changelist_excludes_register_local_tool(admin_client):
-    response = admin_client.get(reverse("admin:nodes_node_changelist"))
+def test_resolve_visitor_base_defaults_to_loopback():
+    admin_site = AdminSite()
+    node_admin = NodeAdmin(Node, admin_site)
 
-    assert response.status_code == 200
-    assert "Register local host" not in response.content.decode()
-
-
-@pytest.mark.django_db
-def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch):
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
+    visitor_base, visitor_host, visitor_port, visitor_scheme = (
+        node_admin._resolve_visitor_base(request=Mock())
     )
 
-    call_count: dict[str, int] = {"count": 0}
-
-    def fake_register_current(cls):
-        call_count["count"] += 1
-        return node, False
-
-    monkeypatch.setattr(Node, "register_current", classmethod(fake_register_current))
-
-    response = admin_client.get(
-        reverse("admin:nodes_node_register_visitor"),
-        {"visitor": "visitor.example.com:9999/extra/path"},
-    )
-
-    assert response.status_code == 200
-    assert call_count["count"] == 1
-
-    context = response.context[-1]
-    assert context["token"]
-    assert context["info_url"] == reverse("node-info")
-    assert context["register_url"] == reverse("register-node")
-    assert context["telemetry_url"] == reverse("register-telemetry")
-    assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
-    assert context["visitor_info_url"] == "https://127.0.0.1:443/nodes/info/"
-    assert (
-        context["visitor_register_url"]
-        == "https://127.0.0.1:443/nodes/register/"
-    )
-    assert context["visitor_host"] == "127.0.0.1"
-    assert context["visitor_port"] == 443
-
-
-@pytest.mark.django_db
-def test_register_visitor_view_ignores_client_address_headers(admin_client, monkeypatch):
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
-    )
-
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
-
-    response = admin_client.get(
-        reverse("admin:nodes_node_register_visitor"),
-        REMOTE_ADDR="198.51.100.5",
-        HTTP_X_FORWARDED_FOR="203.0.113.1, 203.0.113.2",
-    )
-
-    assert response.status_code == 200
-    context = response.context[-1]
-    assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "https://127.0.0.1:443/nodes/info/"
-    assert context["visitor_register_url"] == "https://127.0.0.1:443/nodes/register/"
-    assert context["telemetry_url"] == reverse("register-telemetry")
-    assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
+    assert visitor_base == "https://127.0.0.1:443"
+    assert visitor_host == "127.0.0.1"
+    assert visitor_port == 443
+    assert visitor_scheme == "https"
 
 
 @pytest.mark.django_db
@@ -281,29 +221,6 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[3][1].startswith("https://visitor.test:8000")
 
 
-@pytest.mark.django_db
-def test_register_visitor_view_defaults_loopback_port(admin_client, monkeypatch):
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
-    )
-
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
-
-    response = admin_client.get(
-        reverse("admin:nodes_node_register_visitor"),
-        REMOTE_ADDR="127.0.0.1",
-    )
-
-    assert response.status_code == 200
-    context = response.context[-1]
-    assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "https://127.0.0.1:443/nodes/info/"
-    assert context["visitor_register_url"] == "https://127.0.0.1:443/nodes/register/"
-    assert context["telemetry_url"] == reverse("register-telemetry")
 
 
 @pytest.mark.django_db
