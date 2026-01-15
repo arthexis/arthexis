@@ -38,10 +38,18 @@
         <tbody>
           {% for service in services_report.services %}
             <tr>
-              <th scope="row">{{ service.label }}</th>
+              <th scope="row">
+                {% if service.docs_url %}
+                  <a href="{{ service.docs_url }}">{{ service.label }}</a>
+                {% else %}
+                  {{ service.label }}
+                {% endif %}
+              </th>
               <td><code>{{ service.unit_display }}</code></td>
               <td>
-                {% if service.missing %}
+                {% if not service.configured %}
+                  <span class="help">{% trans "Not configured" %}</span>
+                {% elif service.missing %}
                   <span class="errornote">{% trans "Not found" %}</span>
                   {% if service.status %}
                     <div class="help">{{ service.status }}</div>
@@ -51,7 +59,9 @@
                 {% endif %}
               </td>
               <td>
-                {% if service.enabled %}
+                {% if not service.configured %}
+                  {% trans "Not configured" %}
+                {% elif service.enabled %}
                   {{ service.enabled }}
                 {% elif service.missing %}
                   {% trans "Unavailable" %}
