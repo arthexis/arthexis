@@ -13,6 +13,7 @@ from apps.core.views import (
     DirtyRepository,
     PUBLISH_STEPS,
     ApprovalRequired,
+    PublishPending,
     _append_log,
     _release_log_name,
     _resolve_release_log_dir,
@@ -113,6 +114,12 @@ def run_headless_publish(release, *, auto_release: bool = False) -> Path:
             raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
         except DirtyRepository as exc:
             message = "Scheduled release halted by dirty repository state"
+            _append_log(log_path, message)
+            context["error"] = message
+            logger.warning("%s: %s", release, message)
+            raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
+        except PublishPending as exc:
+            message = "Scheduled release awaiting publish completion"
             _append_log(log_path, message)
             context["error"] = message
             logger.warning("%s: %s", release, message)

@@ -11,8 +11,8 @@ flowchart TD
     E -->|Promote build, commit metadata, push| F[Complete test suite with --all flag]
     F --> TP[Confirm PyPI Trusted Publisher settings]
     TP --> G[Get Release Manager Approval]
-    G -->|Credentials provided & approval logged| H[Upload final build to PyPI]
-    H --> I[Record publish URLs & update fixtures]
+    G -->|Approval logged| H[Export artifacts and trigger GitHub Actions publish]
+    H --> I[Record publish URLs & update fixtures after publish]
     I --> J[Finish and log completion]
     G -->|Missing credentials| G
     B -->|Dirty repo or version conflict| B
@@ -27,7 +27,8 @@ flowchart TD
 5. **Complete test suite with --all flag** – Captures the expectation that the full test suite has been executed with the `--all` flag. The UI records acknowledgement, keeping the workflow consistent even when tests run externally.
 6. **Confirm PyPI Trusted Publisher settings** – Release Managers must verify the PyPI project settings include the Trusted Publisher entry that matches the repository, workflow file, tag pattern, and GitHub environment used by the publish workflow before approving a release.
 7. **Get Release Manager Approval** – Requires PyPI publishing credentials. For scheduled runs, auto-approval is logged when credentials exist; otherwise the workflow pauses until a release manager approves or rejects the release. Missing credentials are surfaced explicitly in the log.
-8. **Upload final build to PyPI** – Publishes to the configured targets (including PyPI and optional GitHub registries), records any warnings, stores the resulting package URLs, and persists fixture updates. The workflow also commits and pushes publish metadata when fixtures change.
+8. **Export artifacts and trigger GitHub Actions publish** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and dispatches the `publish.yml` workflow so PyPI uploads run via OIDC.
+9. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
 
 ## Operational notes
 
@@ -35,17 +36,17 @@ flowchart TD
 - Dry-run mode exercises build and publish commands against Test PyPI, restoring `VERSION` and `pyproject.toml` afterward to avoid polluting the working tree.
 - Repository hygiene safeguards (dirty checks, syncs against `origin/main`, and build stale detection) ensure releases restart when source changes appear mid-run.
 
-## Proposal: adopt PyPI Trusted Publishers (OIDC)
+## Publish with PyPI Trusted Publishers (OIDC)
 
-To remove long-lived PyPI API tokens from the release workflow, we can delegate publishing to GitHub Actions using PyPI Trusted Publishers (OIDC). This preserves the current release manager approvals while shifting the final publish step to an audited, short-lived credential flow.
+To remove long-lived PyPI API tokens from the release workflow, publishing is delegated to GitHub Actions using PyPI Trusted Publishers (OIDC). This preserves the current release manager approvals while shifting the final publish step to an audited, short-lived credential flow.
 
-### Suggested workflow changes
+### Workflow changes
 
 1. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. Capture the required configuration fields (GitHub owner, repository name, workflow filename such as `publish.yml`, and the optional GitHub environment name if using environment protection rules). This ties the project to the repository, workflow file path, and branch or tag protection rules.
 2. **Split release into two phases**:
-   - Keep the current release UI/headless workflow through step 7 for approvals, metadata, and artifact generation.
-   - Export the built artifacts (wheel/sdist) as a workflow artifact and trigger a GitHub Actions `publish` workflow that performs the upload with OIDC (for example, using a `workflow_run` trigger from the artifact-generation workflow to avoid a PAT-backed `workflow_dispatch` call).
-3. **Create a release publish workflow** (example: `.github/workflows/publish.yml`) that:
+   - The release UI/headless workflow runs through approvals, metadata prep, and artifact generation.
+   - The workflow exports built artifacts (wheel/sdist) to the GitHub release and triggers the GitHub Actions `publish` workflow so uploads run with OIDC.
+3. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Has `permissions: id-token: write` and `contents: read`.
    - Downloads the build artifacts from the release process.
    - Uses a pinned `pypa/gh-action-pypi-publish` version (for example, `pypa/gh-action-pypi-publish@v1.8.11`) with `skip-existing: false` and no API token configured, relying on OIDC instead.

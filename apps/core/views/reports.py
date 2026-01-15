@@ -8,6 +8,7 @@ import subprocess
 import uuid
 from pathlib import Path
 from typing import Optional, Sequence
+from urllib.parse import urlparse
 
 import requests
 from django.conf import settings
@@ -50,6 +51,10 @@ class ApprovalRequired(Exception):
 
 class DirtyRepository(Exception):
     """Raised when the Git workspace has uncommitted changes."""
+
+
+class PublishPending(Exception):
+    """Raised when publish metadata updates must wait for external publishing."""
 
 
 def _append_log(path: Path, message: str) -> None:
@@ -555,6 +560,8 @@ def _run_release_step(
                 pass
             except DirtyRepository:
                 pass
+            except PublishPending:
+                pass
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
@@ -724,6 +731,197 @@ def _collect_dirty_files() -> list[dict[str, str]]:
 
 def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
+
+
+def _parse_github_repository(repo_url: str) -> tuple[str, str] | None:
+    repo_url = (repo_url or "").strip()
+    if not repo_url:
+        return None
+    if repo_url.startswith("git@"):
+        if "github.com" not in repo_url:
+            return None
+        _, _, path = repo_url.partition("github.com:")
+        path = path.strip("/")
+    else:
+        parsed = urlparse(repo_url)
+        if "github.com" not in parsed.netloc.lower():
+            return None
+        path = parsed.path.strip("/")
+    if path.endswith(".git"):
+        path = path[: -len(".git")]
+    parts = [part for part in path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    return parts[0], parts[1]
+
+
+def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
+    repo_url = release.package.repository_url or ""
+    parsed = _parse_github_repository(repo_url)
+    if parsed:
+        return parsed
+    remote_url = release_utils._git_remote_url()
+    if remote_url:
+        parsed = _parse_github_repository(remote_url)
+        if parsed:
+            return parsed
+    raise Exception("GitHub repository URL is required to export artifacts")
+
+
+def _github_headers(token: str | None) -> dict[str, str]:
+    if not token:
+        raise Exception("GitHub token is required to export artifacts")
+    return {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def _github_request(
+    method: str,
+    url: str,
+    *,
+    token: str | None,
+    expected_status: set[int],
+    **kwargs,
+) -> requests.Response:
+    headers = kwargs.pop("headers", {})
+    headers.update(_github_headers(token))
+    response = requests.request(method, url, headers=headers, **kwargs)
+    if response.status_code not in expected_status:
+        detail = response.text.strip()
+        raise Exception(
+            f"GitHub API request failed ({response.status_code}): {detail}"
+        )
+    return response
+
+
+def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
+    tag_name = f"v{release.version}"
+    tag_ref = f"refs/tags/{tag_name}"
+    exists = subprocess.run(
+        ["git", "rev-parse", "--verify", "-q", tag_ref],
+        check=False,
+        capture_output=True,
+    )
+    if exists.returncode != 0:
+        subprocess.run(["git", "tag", tag_name], check=True)
+        _append_log(log_path, f"Created git tag {tag_name}")
+    else:
+        _append_log(log_path, f"Git tag {tag_name} already exists")
+    release_utils._push_tag(tag_name, release.to_package())
+    _append_log(log_path, f"Pushed git tag {tag_name} to origin")
+    return tag_name
+
+
+def _ensure_github_release(
+    *,
+    owner: str,
+    repo: str,
+    tag_name: str,
+    token: str | None,
+) -> dict[str, object]:
+    release_url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag_name}"
+    response = requests.get(release_url, headers=_github_headers(token))
+    if response.status_code == 404:
+        create_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
+        response = _github_request(
+            "post",
+            create_url,
+            token=token,
+            expected_status={201},
+            json={"tag_name": tag_name, "name": tag_name},
+        )
+    elif response.status_code != 200:
+        detail = response.text.strip()
+        raise Exception(
+            f"GitHub release lookup failed ({response.status_code}): {detail}"
+        )
+    data = response.json()
+    if not isinstance(data, dict):
+        raise Exception("GitHub release response was not a JSON object")
+    return data
+
+
+def _upload_release_assets(
+    *,
+    owner: str,
+    repo: str,
+    release_data: dict[str, object],
+    token: str | None,
+    artifacts: Sequence[Path],
+    log_path: Path,
+) -> None:
+    assets = release_data.get("assets") or []
+    existing_assets: dict[str, int] = {}
+    if isinstance(assets, list):
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            name = asset.get("name")
+            asset_id = asset.get("id")
+            if isinstance(name, str) and isinstance(asset_id, int):
+                existing_assets[name] = asset_id
+
+    release_id = release_data.get("id")
+    if not isinstance(release_id, int):
+        raise Exception("GitHub release ID missing")
+
+    for artifact in artifacts:
+        name = artifact.name
+        existing_id = existing_assets.get(name)
+        if existing_id:
+            delete_url = (
+                "https://api.github.com/repos/"
+                f"{owner}/{repo}/releases/assets/{existing_id}"
+            )
+            _github_request(
+                "delete",
+                delete_url,
+                token=token,
+                expected_status={204},
+            )
+            _append_log(log_path, f"Removed existing GitHub asset {name}")
+
+        upload_url = (
+            "https://uploads.github.com/repos/"
+            f"{owner}/{repo}/releases/{release_id}/assets"
+            f"?name={name}"
+        )
+        with artifact.open("rb") as handle:
+            _github_request(
+                "post",
+                upload_url,
+                token=token,
+                expected_status={201},
+                headers={"Content-Type": "application/octet-stream"},
+                data=handle.read(),
+            )
+        _append_log(log_path, f"Uploaded GitHub release asset {name}")
+
+
+def _trigger_publish_workflow(
+    *,
+    owner: str,
+    repo: str,
+    tag_name: str,
+    token: str | None,
+    repository: str,
+) -> None:
+    dispatch_url = (
+        f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/publish.yml/dispatches"
+    )
+    _github_request(
+        "post",
+        dispatch_url,
+        token=token,
+        expected_status={204},
+        json={
+            "ref": tag_name,
+            "inputs": {"repository": repository, "tag": tag_name},
+        },
+    )
 
 
 def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
@@ -1206,125 +1404,117 @@ def _step_release_manager_approval(
     raise ApprovalRequired()
 
 
-def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
+def _collect_release_artifacts() -> list[Path]:
+    dist_path = Path("dist")
+    if not dist_path.exists():
+        raise Exception("dist directory not found")
+    artifacts = sorted(
+        [
+            *dist_path.glob("*.whl"),
+            *dist_path.glob("*.tar.gz"),
+        ]
+    )
+    if not artifacts:
+        raise Exception("No release artifacts found in dist/")
+    return artifacts
+
+
+def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> None:
     if ctx.get("dry_run"):
-        test_repository_url = os.environ.get(
-            "PYPI_TEST_REPOSITORY_URL", "https://test.pypi.org/legacy/"
+        _append_log(
+            log_path,
+            "Dry run: skipping GitHub Actions publish dispatch",
         )
-        test_creds = release.to_credentials(user=user)
-        if not (test_creds and test_creds.has_auth()):
-            test_creds = release_utils.Credentials(
-                token=os.environ.get("PYPI_TEST_API_TOKEN"),
-                username=os.environ.get("PYPI_TEST_USERNAME"),
-                password=os.environ.get("PYPI_TEST_PASSWORD"),
-            )
-            if not test_creds.has_auth():
-                test_creds = None
-        target = release_utils.RepositoryTarget(
-            name="Test PyPI",
-            repository_url=(test_repository_url or None),
-            credentials=test_creds,
-            verify_availability=False,
+        return
+
+    if not release_utils.network_available():
+        raise Exception("Network unavailable; cannot export artifacts")
+
+    artifacts = _collect_release_artifacts()
+    owner, repo = _resolve_github_repository(release)
+    token = release.get_github_token()
+    tag_name = _ensure_release_tag(release, log_path)
+    release_data = _ensure_github_release(
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
+        token=token,
+    )
+    _upload_release_assets(
+        owner=owner,
+        repo=repo,
+        release_data=release_data,
+        token=token,
+        artifacts=artifacts,
+        log_path=log_path,
+    )
+    _append_log(log_path, "Exported release artifacts to GitHub release")
+
+    _trigger_publish_workflow(
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
+        token=token,
+        repository="pypi",
+    )
+    _append_log(
+        log_path,
+        f"Triggered GitHub Actions publish workflow for {tag_name}",
+    )
+
+
+def _pypi_release_available(release) -> bool:
+    from packaging.version import InvalidVersion, Version
+
+    if not release_utils.network_available():
+        return False
+    try:
+        resp = requests.get(
+            f"https://pypi.org/pypi/{release.package.name}/json",
+            timeout=PYPI_REQUEST_TIMEOUT,
         )
-        label = target.repository_url or target.name
-        dist_path = Path("dist")
-        if not dist_path.exists():
-            _append_log(log_path, "Dry run: building distribution artifacts")
-            package = release.to_package()
-            version_path = (
-                Path(package.version_path)
-                if package.version_path
-                else Path("VERSION")
-            )
-            original_version = (
-                version_path.read_text(encoding="utf-8")
-                if version_path.exists()
-                else None
-            )
-            pyproject_path = Path("pyproject.toml")
-            original_pyproject = (
-                pyproject_path.read_text(encoding="utf-8")
-                if pyproject_path.exists()
-                else None
-            )
+    except Exception:
+        return False
+    if not resp.ok:
+        return False
+    data = resp.json()
+    releases = data.get("releases", {})
+    try:
+        target_version = Version(release.version)
+    except InvalidVersion:
+        target_version = None
+    for candidate, files in releases.items():
+        same_version = candidate == release.version
+        if target_version is not None and not same_version:
             try:
-                release_utils.build(
-                    package=package,
-                    version=release.version,
-                    creds=release.to_credentials(user=user),
-                    dist=True,
-                    tests=False,
-                    twine=False,
-                    git=False,
-                    tag=False,
-                    stash=True,
-                )
-            except release_utils.ReleaseError as exc:
-                _append_log(
-                    log_path,
-                    f"Dry run: failed to prepare distribution artifacts ({exc})",
-                )
-                raise
-            finally:
-                if original_version is None:
-                    if version_path.exists():
-                        version_path.unlink()
-                else:
-                    version_path.write_text(original_version, encoding="utf-8")
-                if original_pyproject is None:
-                    if pyproject_path.exists():
-                        pyproject_path.unlink()
-                else:
-                    pyproject_path.write_text(original_pyproject, encoding="utf-8")
-        _append_log(log_path, f"Dry run: uploading distribution to {label}")
-        release_utils.publish(
-            package=release.to_package(),
-            version=release.version,
-            creds=target.credentials or release.to_credentials(user=user),
-            repositories=[target],
-        )
+                same_version = Version(candidate) == target_version
+            except InvalidVersion:
+                same_version = False
+        if not same_version:
+            continue
+        if any(
+            isinstance(file_data, dict)
+            and not file_data.get("yanked", False)
+            for file_data in files or []
+        ):
+            return True
+    return False
+
+
+def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) -> None:
+    if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipped release metadata updates")
         return
 
-    targets = release.build_publish_targets(user=user)
-    repo_labels = []
-    for target in targets:
-        label = target.name
-        if target.repository_url:
-            label = f"{label} ({target.repository_url})"
-        repo_labels.append(label)
-    if repo_labels:
+    if not _pypi_release_available(release):
+        ctx["paused"] = True
         _append_log(
             log_path,
-            "Uploading distribution"
-            if len(repo_labels) == 1
-            else "Uploading distribution to: " + ", ".join(repo_labels),
+            "Publish not detected on PyPI yet; resume after GitHub Actions completes",
         )
-    else:
-        _append_log(log_path, "Uploading distribution")
-    publish_warning: release_utils.PostPublishWarning | None = None
-    try:
-        release_utils.publish(
-            package=release.to_package(),
-            version=release.version,
-            creds=release.to_credentials(user=user),
-            repositories=targets,
-        )
-    except release_utils.PostPublishWarning as warning:
-        publish_warning = warning
+        raise PublishPending()
 
-    if publish_warning is not None:
-        message = str(publish_warning)
-        followups = _dedupe_preserve_order(publish_warning.followups)
-        warning_entries = ctx.setdefault("warnings", [])
-        if not any(entry.get("message") == message for entry in warning_entries):
-            entry: dict[str, object] = {"message": message}
-            if followups:
-                entry["followups"] = followups
-            warning_entries.append(entry)
-        _append_log(log_path, message)
-        for note in followups:
-            _append_log(log_path, f"Follow-up: {note}")
+    targets = release.build_publish_targets(user=user)
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
@@ -1367,7 +1557,7 @@ def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
                 log_path,
                 "No release metadata updates detected after publish; skipping commit",
             )
-    _append_log(log_path, "Upload complete")
+    _append_log(log_path, "Publish metadata recorded")
 
 
 FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
@@ -1380,7 +1570,11 @@ PUBLISH_STEPS = [
     ("Build release artifacts", _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
     ("Get Release Manager Approval", _step_release_manager_approval),
-    ("Upload final build to PyPI", _step_publish),
+    (
+        "Export artifacts and trigger GitHub Actions publish",
+        _step_export_and_dispatch,
+    ),
+    ("Record publish metadata", _step_record_publish_metadata),
 ]
 
 
