@@ -58,6 +58,16 @@ To remove long-lived PyPI API tokens from the release workflow, we can delegate 
 - Configure the PyPI trusted publisher to match the repository, workflow path, and tag patterns (for example, `v*`).
 - Use the `pypi` environment in GitHub with required reviewers to preserve release manager sign-off before the job publishes.
 
+### PyPI Trusted Publisher configuration (required)
+
+Add (or update) the Trusted Publisher entry in the PyPI project settings for `arthexis` with the exact values below so the OIDC publish workflow can authenticate:
+
+- **Owner**: `arthexis`
+- **Repository**: `arthexis`
+- **Workflow file**: `.github/workflows/publish.yml`
+- **Workflow ref / tag pattern**: `refs/tags/v*`
+- **GitHub environment**: `pypi` (must match `environment: pypi` in `.github/workflows/publish.yml`)
+
 ### Advantages
 
 - **Credential-free publishing**: no API tokens stored in secrets, reducing rotation and leak risk.
