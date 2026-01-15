@@ -169,10 +169,25 @@ class Entity(models.Model):
 
     def delete(self, using=None, keep_parents=False):
         if self.is_seed_data:
+            if self._prevents_soft_delete():
+                logger.info(
+                    "Skipping soft delete for %s because is_deleted is constrained.",
+                    self._meta.label,
+                )
+                return
             self.is_deleted = True
             self.save(update_fields=["is_deleted"])
         else:
             super().delete(using=using, keep_parents=keep_parents)
+
+    def _prevents_soft_delete(self) -> bool:
+        """Return True when the model enforces is_deleted to remain False."""
+        for constraint in self._meta.constraints:
+            if not isinstance(constraint, models.CheckConstraint):
+                continue
+            if constraint.condition == models.Q(is_deleted=False):
+                return True
+        return False
 
 
 __all__ = [
