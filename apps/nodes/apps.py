@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 from django.apps import AppConfig
 
 from apps.celery.utils import schedule_task
@@ -11,9 +13,21 @@ class NodesConfig(AppConfig):
     name = "apps.nodes"
     label = "nodes"
 
+    def _should_enqueue_startup_message(self) -> bool:
+        argv = sys.argv
+        if not argv:
+            return True
+        executable = os.path.basename(argv[0])
+        if executable != "manage.py":
+            return True
+        return any(arg == "runserver" for arg in argv[1:])
+
     def ready(self):  # pragma: no cover - exercised on app start
         # Import node signal handlers
         from . import signals  # noqa: F401
+
+        if not self._should_enqueue_startup_message():
+            return
 
         try:
             from .tasks import send_startup_net_message
