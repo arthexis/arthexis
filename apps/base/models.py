@@ -186,17 +186,15 @@ class Entity(models.Model):
             if not isinstance(constraint, models.CheckConstraint):
                 continue
             condition = constraint.condition
-            if condition == models.Q(is_deleted=False):
-                return True
             if not isinstance(condition, models.Q):
                 continue
             if condition.negated or condition.connector != models.Q.AND:
                 continue
-            if len(condition.children) != 1:
-                continue
-            field, value = condition.children[0]
-            if field == "is_deleted" and value in (False, 0):
-                return True
+            for child in condition.children:
+                if isinstance(child, tuple) and len(child) == 2:
+                    field, value = child
+                    if field == "is_deleted" and value in (False, 0):
+                        return True
         return False
 
 
