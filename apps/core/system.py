@@ -1986,7 +1986,6 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
         systemd_units = []
 
     service_units: list[dict[str, object]] = []
-    seen_units: set[str] = set()
 
     def _normalize_unit(unit_name: str) -> tuple[str, str]:
         normalized = unit_name.strip()
@@ -2006,11 +2005,16 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
         docs_url: str = "",
     ) -> None:
         normalized = unit_name.strip()
-        if not normalized or normalized in seen_units:
+        if not normalized:
             return
 
         unit, unit_display = _normalize_unit(normalized)
-        seen_units.add(normalized)
+        for existing_unit in service_units:
+            if existing_unit["unit_display"] == unit_display:
+                existing_unit["label"] = label or existing_unit["label"]
+                existing_unit["configured"] = configured
+                existing_unit["docs_url"] = docs_url
+                return
         service_units.append(
             {
                 "label": label or normalized,
@@ -2028,14 +2032,16 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
 
     for spec in SERVICE_REPORT_DEFINITIONS:
         unit_name = spec["unit_template"].format(service=service_name_placeholder)
-        if spec["key"] == "suite":
-            configured = bool(service_name)
+        if not service_name:
+            configured = False
+        elif spec["key"] == "suite":
+            configured = True
         elif spec["key"] in {"celery-worker", "celery-beat"}:
-            configured = bool(service_name) and celery_enabled
+            configured = celery_enabled
         elif spec["key"] == "lcd-screen":
-            configured = bool(service_name) and lcd_enabled
+            configured = lcd_enabled
         elif spec["key"] == "rfid-service":
-            configured = bool(service_name) and rfid_enabled
+            configured = rfid_enabled
         else:
             configured = False
 
