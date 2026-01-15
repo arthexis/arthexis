@@ -17,6 +17,7 @@ import logging
 import math
 import os
 import random
+import socket
 import signal
 import time
 from dataclasses import dataclass
@@ -113,6 +114,12 @@ INSTALL_DATE_LOCK_NAME = "install_date.lck"
 EVENT_LOCK_GLOB = "lcd-event-*.lck"
 EVENT_LOCK_PREFIX = "lcd-event-"
 EVENT_DEFAULT_DURATION_SECONDS = 30
+SUITE_PORT_DEFAULT = "8888"
+SUITE_REACHABILITY_CACHE_SECONDS = 2.0
+SUITE_REACHABILITY_TIMEOUT_SECONDS = 0.25
+
+_SUITE_REACHABILITY_CACHE = {"checked_at": 0.0, "is_up": False}
+_SUITE_AVAILABILITY_STATE = {"is_up": False, "duration_seconds": None, "locked": False}
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -442,7 +449,7 @@ def _select_low_payload(
     _install_date(base_dir, now=now_value)
     uptime_secs = _uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
-    on_label = _format_on_label(_availability_seconds(base_dir, now=now_value)) or "?m?s"
+    on_label = _format_on_label(_on_seconds(base_dir, now=now_value)) or "?m?s"
     subject_parts = [f"UP {uptime_label}"]
     if _ap_mode_enabled():
         ap_client_count = _ap_client_count()
@@ -606,6 +613,100 @@ def _internet_interface_label() -> str:
     return uptime_utils.internet_interface_label()
 
 
+def _suite_port(base_dir: Path = BASE_DIR) -> str:
+    port_value = (os.getenv("PORT") or "").strip() or SUITE_PORT_DEFAULT
+    lock_path = Path(base_dir) / ".locks" / uptime_utils.STARTUP_DURATION_LOCK_NAME
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = None
+
+    if isinstance(payload, dict):
+        lock_port = str(payload.get("port") or "").strip()
+        if lock_port:
+            return lock_port
+
+    return port_value
+
+
+def _suite_reachable(
+    base_dir: Path = BASE_DIR,
+    *,
+    timeout: float = SUITE_REACHABILITY_TIMEOUT_SECONDS,
+) -> bool:
+    try:
+        port = int(_suite_port(base_dir))
+    except (TypeError, ValueError):
+        return False
+
+    if port <= 0:
+        return False
+
+    now_value = time.monotonic()
+    last_checked = _SUITE_REACHABILITY_CACHE["checked_at"]
+    if now_value - last_checked < SUITE_REACHABILITY_CACHE_SECONDS:
+        return bool(_SUITE_REACHABILITY_CACHE["is_up"])
+
+    is_up = False
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        try:
+            sock.connect(("127.0.0.1", port))
+        except OSError:
+            is_up = False
+        else:
+            is_up = True
+
+    _SUITE_REACHABILITY_CACHE["checked_at"] = now_value
+    _SUITE_REACHABILITY_CACHE["is_up"] = is_up
+    return is_up
+
+
+def _boot_elapsed_seconds(
+    *, now: datetime | None = None
+) -> int | None:
+    now_value = now or datetime.now(datetime_timezone.utc)
+    try:
+        boot_time = float(psutil.boot_time())
+    except Exception:
+        return None
+
+    if not boot_time:
+        return None
+
+    boot_dt = datetime.fromtimestamp(boot_time, tz=datetime_timezone.utc)
+    seconds = int((now_value - boot_dt).total_seconds())
+    return seconds if seconds >= 0 else None
+
+
+def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> int | None:
+    now_value = now or datetime.now(datetime_timezone.utc)
+    is_up = _suite_reachable(base_dir)
+
+    if is_up:
+        available_seconds = _availability_seconds(base_dir, now=now_value)
+        if available_seconds is not None:
+            _SUITE_AVAILABILITY_STATE["is_up"] = True
+            _SUITE_AVAILABILITY_STATE["duration_seconds"] = available_seconds
+            _SUITE_AVAILABILITY_STATE["locked"] = True
+            return available_seconds
+
+        if _SUITE_AVAILABILITY_STATE["is_up"]:
+            cached_seconds = _SUITE_AVAILABILITY_STATE["duration_seconds"]
+            if cached_seconds is not None:
+                return cached_seconds
+
+        elapsed_seconds = _boot_elapsed_seconds(now=now_value)
+        _SUITE_AVAILABILITY_STATE["is_up"] = True
+        _SUITE_AVAILABILITY_STATE["duration_seconds"] = elapsed_seconds
+        _SUITE_AVAILABILITY_STATE["locked"] = False
+        return elapsed_seconds
+
+    _SUITE_AVAILABILITY_STATE["is_up"] = False
+    _SUITE_AVAILABILITY_STATE["duration_seconds"] = None
+    _SUITE_AVAILABILITY_STATE["locked"] = False
+    return _boot_elapsed_seconds(now=now_value)
+
 def _uptime_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
@@ -744,7 +845,8 @@ def _refresh_uptime_payload(
     if not has_uptime:
         return payload
 
-    uptime_secs = _uptime_seconds(base_dir, now=now)
+    now_value = now or datetime.now(datetime_timezone.utc)
+    uptime_secs = _uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs)
     if not uptime_label:
         return payload
@@ -755,7 +857,16 @@ def _refresh_uptime_payload(
     if extra_suffix:
         subject = f"{subject} {extra_suffix}"
 
-    return payload._replace(line1=subject)
+    line2 = payload.line2
+    if line2.startswith("ON "):
+        suffix = line2[len("ON "):].strip()
+        extra = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
+        on_label = _format_on_label(_on_seconds(base_dir, now=now_value)) or "?m?s"
+        line2 = f"ON {on_label}"
+        if extra:
+            line2 = f"{line2} {extra}"
+
+    return payload._replace(line1=subject, line2=line2)
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:

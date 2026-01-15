@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from apps.screens import lcd_screen
 
 
-def test_refresh_uptime_payload_updates_subject(tmp_path):
+def test_refresh_uptime_payload_updates_subject(monkeypatch, tmp_path):
     base_dir = tmp_path
     lock_dir = base_dir / ".locks"
     lock_dir.mkdir()
@@ -26,12 +26,41 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
         lcd_screen.DEFAULT_SCROLL_MS,
     )
 
+    lcd_screen._SUITE_AVAILABILITY_STATE.update(
+        {"is_up": False, "duration_seconds": None, "locked": False}
+    )
+
+    def _suite_up(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(lcd_screen, "_suite_reachable", _suite_up)
+    monkeypatch.setattr(lcd_screen, "_availability_seconds", lambda *_args, **_kwargs: 0)
+
     refreshed = lcd_screen._refresh_uptime_payload(
         uptime_payload, base_dir=base_dir, now=now
     )
 
     assert refreshed.line1 == "UP 0d1h2m AP"
     assert refreshed.line2 == "ON 0m0s eth0"
+
+
+def test_refresh_uptime_payload_updates_on_label_when_suite_down(monkeypatch, tmp_path):
+    payload = lcd_screen.LockPayload(
+        "UP 0d0h0m",
+        "ON 0m0s eth0",
+        lcd_screen.DEFAULT_SCROLL_MS,
+    )
+
+    lcd_screen._SUITE_AVAILABILITY_STATE.update(
+        {"is_up": False, "duration_seconds": None, "locked": False}
+    )
+
+    monkeypatch.setattr(lcd_screen, "_suite_reachable", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(lcd_screen, "_boot_elapsed_seconds", lambda **_kwargs: 90)
+
+    refreshed = lcd_screen._refresh_uptime_payload(payload, base_dir=tmp_path)
+
+    assert refreshed.line2 == "ON 1m30s eth0"
 
 
 def test_refresh_uptime_payload_passes_through_non_uptime_payload(tmp_path):
@@ -92,6 +121,7 @@ def test_select_low_payload_includes_ap_client_count(tmp_path, monkeypatch):
 
     monkeypatch.setattr(lcd_screen, "_ap_mode_enabled", lambda: True)
     monkeypatch.setattr(lcd_screen, "_ap_client_count", lambda: 3)
+    monkeypatch.setattr(lcd_screen, "_on_seconds", lambda *_args, **_kwargs: 0)
 
     payload = lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
     selected = lcd_screen._select_low_payload(payload, base_dir=base_dir, now=now)
