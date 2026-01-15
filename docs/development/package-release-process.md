@@ -64,11 +64,15 @@ To remove long-lived PyPI API tokens from the release workflow, we can delegate 
 
 Add (or update) the Trusted Publisher entry in the PyPI project settings for `arthexis` with the exact values below so the OIDC publish workflow can authenticate:
 
-- **Owner**: `arthexis`
-- **Repository**: `arthexis`
-- **Workflow file**: `.github/workflows/publish.yml`
-- **Workflow ref / tag pattern**: `refs/tags/v*`
-- **GitHub environment**: `pypi` (must match `environment: pypi` in `.github/workflows/publish.yml`)
+| Setting                    | Value                           | Notes                                                                                          |
+| -------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Owner                      | `arthexis`                      |                                                                                                |
+| Repository                 | `arthexis`                      |                                                                                                |
+| Workflow file              | `.github/workflows/publish.yml` |                                                                                                |
+| Workflow ref / tag pattern | `refs/tags/v*`                  | Run the workflow dispatch from the tag so the OIDC `ref` claim matches this pattern.           |
+| GitHub environment         | `pypi`                          | Must match `environment: pypi` in `.github/workflows/publish.yml`.                              |
+
+If the workflow is dispatched from a branch (for example, the default branch in the UI), the OIDC `ref` claim will be `refs/heads/<branch>`. In that case, add an additional trusted publisher entry that matches the branch ref (for example, `refs/heads/main`) or ensure the workflow is always dispatched from a release tag.
 
 ### Advantages
 
