@@ -49,10 +49,6 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
-      - name: Check documentation links use HTTPS
-        run: |
-          source .venv/bin/activate
-          python scripts/check_no_http_links.py
       - name: Validate migrations
         run: |
           source .venv/bin/activate
@@ -70,6 +66,56 @@ jobs:
         run: |
           source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration"
+  docs-changes:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+              - 'README.md'
+              - 'mkdocs.yml'
+  docs-links:
+    if: ${{ github.event_name == 'schedule' || needs.docs-changes.outputs.docs == 'true' }}
+    needs: docs-changes
+    runs-on: ubuntu-latest
+    steps:
+      # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+      - name: Check documentation links use HTTPS
+        run: |
+          source .venv/bin/activate
+          python scripts/check_no_http_links.py
   upgrade:
     runs-on: ubuntu-latest
     steps:
