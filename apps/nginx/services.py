@@ -9,13 +9,13 @@ from pathlib import Path
 
 from django.conf import settings
 
-from apps.nginx.config_utils import slugify
+from apps.nginx.config_utils import MAINTENANCE_ROOT, slugify
 from apps.nginx.renderers import apply_site_entries, generate_primary_config
 
 SITES_AVAILABLE_DIR = Path("/etc/nginx/sites-available")
 SITES_ENABLED_DIR = Path("/etc/nginx/sites-enabled")
 MAINTENANCE_ASSETS_DIR = Path(settings.BASE_DIR) / "config" / "data" / "nginx" / "maintenance"
-MAINTENANCE_DEST_DIR = Path("/usr/share/arthexis-fallback")
+MAINTENANCE_DEST_DIR = Path(MAINTENANCE_ROOT)
 
 
 @dataclass
@@ -215,15 +215,10 @@ def _ensure_maintenance_assets(*, sudo: str = "sudo") -> None:
         return
     if not MAINTENANCE_ASSETS_DIR.is_dir():
         return
-    subprocess.run([sudo, "mkdir", "-p", str(MAINTENANCE_DEST_DIR)], check=False)
+    subprocess.run([sudo, "mkdir", "-p", str(MAINTENANCE_DEST_DIR)], check=True)
     subprocess.run(
-        [
-            sudo,
-            "sh",
-            "-c",
-            f"cp -r {MAINTENANCE_ASSETS_DIR}/. {MAINTENANCE_DEST_DIR}/",
-        ],
-        check=False,
+        [sudo, "cp", "-r", f"{MAINTENANCE_ASSETS_DIR}/.", str(MAINTENANCE_DEST_DIR)],
+        check=True,
     )
 
 

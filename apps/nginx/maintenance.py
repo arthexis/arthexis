@@ -4,27 +4,27 @@ import re
 import textwrap
 from pathlib import Path
 
+from apps.nginx.config_utils import MAINTENANCE_ROOT
+
 ERROR_LINES = (
     "error_page 404 /maintenance/404.html;",
     "error_page 500 502 503 504 /maintenance/app-down.html;",
 )
-INDEX_BLOCK = """location = /maintenance/index.html {
-    root /usr/share/arthexis-fallback;
+MAINTENANCE_FILES = ("index.html", "404.html", "app-down.html")
+DIR_BLOCK = f"""location /maintenance/ {{
+    alias {MAINTENANCE_ROOT}/;
     add_header Cache-Control \"no-store\";
-}"""
-NOT_FOUND_BLOCK = """location = /maintenance/404.html {
-    root /usr/share/arthexis-fallback;
-    add_header Cache-Control \"no-store\";
-}"""
-DOWN_BLOCK = """location = /maintenance/app-down.html {
-    root /usr/share/arthexis-fallback;
-    add_header Cache-Control \"no-store\";
-}"""
-DIR_BLOCK = """location /maintenance/ {
-    alias /usr/share/arthexis-fallback/;
-    add_header Cache-Control \"no-store\";
-}"""
+}}"""
 PROXY_TARGET = "proxy_pass http://127.0.0.1"
+
+
+def _build_exact_match_block(filename: str) -> str:
+    return (
+        f"location = /maintenance/{filename} {{\n"
+        f"    alias {MAINTENANCE_ROOT}/{filename};\n"
+        "    add_header Cache-Control \"no-store\";\n"
+        "}"
+    )
 
 
 def iter_blocks(text: str, keyword: str):
@@ -96,11 +96,10 @@ def ensure_blocks(block: str) -> tuple[str, bool]:
 
     location_marker = "    location / {"
     indented_dir = textwrap.indent(DIR_BLOCK, "    ")
-    file_blocks = (
-        ("location = /maintenance/index.html", INDEX_BLOCK),
-        ("location = /maintenance/404.html", NOT_FOUND_BLOCK),
-        ("location = /maintenance/app-down.html", DOWN_BLOCK),
-    )
+    file_blocks = [
+        (f"location = /maintenance/{filename}", _build_exact_match_block(filename))
+        for filename in MAINTENANCE_FILES
+    ]
 
     for identifier, snippet in file_blocks:
         if identifier not in inner:

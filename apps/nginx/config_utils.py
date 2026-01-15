@@ -96,22 +96,23 @@ def websocket_directives() -> tuple[str, ...]:
 
 
 def maintenance_block_lines() -> list[str]:
+    maintenance_files = ("index.html", "404.html", "app-down.html")
+    file_blocks = "\n".join(
+        textwrap.dedent(
+            f"""
+            location = /maintenance/{filename} {{
+                alias {MAINTENANCE_ROOT}/{filename};
+                add_header Cache-Control "no-store";
+            }}
+            """
+        ).strip()
+        for filename in maintenance_files
+    )
     content = textwrap.dedent(
         f"""
         {"\n        ".join(MAINTENANCE_ERROR_LINES)}
 
-        location = /maintenance/index.html {{
-            alias {MAINTENANCE_ROOT}/index.html;
-            add_header Cache-Control "no-store";
-        }}
-        location = /maintenance/404.html {{
-            alias {MAINTENANCE_ROOT}/404.html;
-            add_header Cache-Control "no-store";
-        }}
-        location = /maintenance/app-down.html {{
-            alias {MAINTENANCE_ROOT}/app-down.html;
-            add_header Cache-Control "no-store";
-        }}
+        {file_blocks}
         location /maintenance/ {{
             alias {MAINTENANCE_ROOT}/;
             add_header Cache-Control "no-store";
