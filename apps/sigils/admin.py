@@ -37,3 +37,6 @@ class SigilRootAdmin(EntityModelAdmin):
     )
     list_filter = ("context_type", "is_seed_data", "is_deleted")
     search_fields = ("prefix",)
+
+    def has_delete_permission(self, request, obj=None):
+        return False

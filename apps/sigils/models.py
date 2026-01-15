@@ -1,5 +1,6 @@
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.db.models.deletion import ProtectedError
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager
@@ -73,10 +74,19 @@ class SigilRoot(Entity):
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.prefix,)
 
+    def delete(self, using=None, keep_parents=False):
+        raise ProtectedError(_("Sigil Roots cannot be deleted."), [self])
+
     class Meta:
         db_table = "core_sigilroot"
         verbose_name = _("Sigil Root")
         verbose_name_plural = _("Sigil Roots")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(is_deleted=False),
+                name="sigilroot_is_deleted_false",
+            ),
+        ]
 
 
 class CustomSigil(SigilRoot):
