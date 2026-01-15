@@ -39,20 +39,6 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     assert payload["features"] == []
 
 
-def test_resolve_visitor_base_defaults_to_loopback():
-    admin_site = AdminSite()
-    node_admin = NodeAdmin(Node, admin_site)
-
-    visitor_base, visitor_host, visitor_port, visitor_scheme = (
-        node_admin._resolve_visitor_base(request=Mock())
-    )
-
-    assert visitor_base == "https://127.0.0.1:443"
-    assert visitor_host == "127.0.0.1"
-    assert visitor_port == 443
-    assert visitor_scheme == "https"
-
-
 @pytest.mark.django_db
 def test_node_info_uses_site_domain_port(monkeypatch, client):
     domain = f"{uuid4().hex}.example.com"
@@ -73,6 +59,27 @@ def test_node_info_uses_site_domain_port(monkeypatch, client):
     assert response.status_code == 200
     payload = response.json()
     assert payload["port"] == 443
+
+
+@pytest.mark.django_db
+def test_resolve_visitor_base_defaults_to_loopback():
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+
+    from apps.nodes.admin.node_admin import NodeAdmin
+
+    admin_site = AdminSite()
+    node_admin = NodeAdmin(Node, admin_site)
+    request = RequestFactory().get("/")
+
+    visitor_base, visitor_host, visitor_port, visitor_scheme = node_admin._resolve_visitor_base(
+        request
+    )
+
+    assert visitor_base == "https://127.0.0.1:443"
+    assert visitor_host == "127.0.0.1"
+    assert visitor_port == 443
+    assert visitor_scheme == "https"
 
 
 
@@ -219,8 +226,6 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[1][1].startswith("https://visitor.test:8000")
     assert session.requests[2][1].startswith("https://visitor.test:8888")
     assert session.requests[3][1].startswith("https://visitor.test:8000")
-
-
 
 
 @pytest.mark.django_db
