@@ -182,11 +182,22 @@ class Entity(models.Model):
 
     def _prevents_soft_delete(self) -> bool:
         """Return True when the model enforces is_deleted to remain False."""
-        return any(
-            isinstance(constraint, models.CheckConstraint)
-            and constraint.condition == models.Q(is_deleted=False)
-            for constraint in self._meta.constraints
-        )
+        for constraint in self._meta.constraints:
+            if not isinstance(constraint, models.CheckConstraint):
+                continue
+            condition = constraint.condition
+            if condition == models.Q(is_deleted=False):
+                return True
+            if not isinstance(condition, models.Q):
+                continue
+            if condition.negated or condition.connector != models.Q.AND:
+                continue
+            if len(condition.children) != 1:
+                continue
+            field, value = condition.children[0]
+            if field == "is_deleted" and value in (False, 0):
+                return True
+        return False
 
 
 __all__ = [
