@@ -17,6 +17,11 @@ SSL_OPTIONS_PATH = Path("/etc/letsencrypt/options-ssl-nginx.conf")
 SSL_DHPARAM_PATH = Path("/etc/letsencrypt/ssl-dhparams.pem")
 BUNDLED_SSL_OPTIONS_PATH = Path(__file__).with_name("options-ssl-nginx.conf")
 BUNDLED_SSL_DHPARAM_PATH = Path(__file__).with_name("ssl-dhparams.pem")
+MAINTENANCE_ROOT = "/usr/share/arthexis-fallback"
+MAINTENANCE_ERROR_LINES = (
+    "error_page 404 /maintenance/404.html;",
+    "error_page 500 502 503 504 /maintenance/app-down.html;",
+)
 
 
 def slugify(domain: str) -> str:
@@ -88,6 +93,33 @@ def websocket_directives() -> tuple[str, ...]:
         WEBSOCKET_READ_TIMEOUT,
         WEBSOCKET_SEND_TIMEOUT,
     )
+
+
+def maintenance_block_lines() -> list[str]:
+    content = textwrap.dedent(
+        f"""
+        {MAINTENANCE_ERROR_LINES[0]}
+        {MAINTENANCE_ERROR_LINES[1]}
+
+        location = /maintenance/index.html {{
+            root {MAINTENANCE_ROOT};
+            add_header Cache-Control "no-store";
+        }}
+        location = /maintenance/404.html {{
+            root {MAINTENANCE_ROOT};
+            add_header Cache-Control "no-store";
+        }}
+        location = /maintenance/app-down.html {{
+            root {MAINTENANCE_ROOT};
+            add_header Cache-Control "no-store";
+        }}
+        location /maintenance/ {{
+            alias {MAINTENANCE_ROOT}/;
+            add_header Cache-Control "no-store";
+        }}
+        """
+    ).strip("\n")
+    return [f"    {line}" if line else "" for line in content.splitlines()]
 
 
 def proxy_block(
@@ -215,6 +247,8 @@ def http_proxy_server(
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
     lines.append("")
+    lines.extend(maintenance_block_lines())
+    lines.append("")
     lines.append(
         textwrap.indent(
             proxy_block(
@@ -304,6 +338,8 @@ def https_proxy_server(
         '    add_header Strict-Transport-Security '
         '"max-age=31536000; includeSubDomains; preload" always;'
     )
+    lines.append("")
+    lines.extend(maintenance_block_lines())
     lines.append("")
     lines.append(
         textwrap.indent(

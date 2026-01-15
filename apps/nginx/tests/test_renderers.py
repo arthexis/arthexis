@@ -14,6 +14,8 @@ def test_generate_primary_config_internal_mode():
     config = generate_primary_config("internal", 8080)
 
     assert "proxy_pass http://127.0.0.1:8080" in config
+    assert "error_page 500 502 503 504 /maintenance/app-down.html;" in config
+    assert "location = /maintenance/app-down.html" in config
     assert "ssl_certificate" not in config
 
 
