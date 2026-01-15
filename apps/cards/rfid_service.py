@@ -267,7 +267,7 @@ def write_rfid_scan_lock(result: dict[str, Any], base_dir: Path | None = None) -
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps(payload), encoding="utf-8")
-    except Exception:  # pragma: no cover - filesystem dependent
+    except OSError:  # pragma: no cover - filesystem dependent
         logger.debug("Unable to write RFID scan lock file", exc_info=True)
 
 
