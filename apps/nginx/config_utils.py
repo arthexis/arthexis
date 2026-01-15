@@ -98,19 +98,18 @@ def websocket_directives() -> tuple[str, ...]:
 def maintenance_block_lines() -> list[str]:
     content = textwrap.dedent(
         f"""
-        {MAINTENANCE_ERROR_LINES[0]}
-        {MAINTENANCE_ERROR_LINES[1]}
+        {"\n        ".join(MAINTENANCE_ERROR_LINES)}
 
         location = /maintenance/index.html {{
-            root {MAINTENANCE_ROOT};
+            alias {MAINTENANCE_ROOT}/index.html;
             add_header Cache-Control "no-store";
         }}
         location = /maintenance/404.html {{
-            root {MAINTENANCE_ROOT};
+            alias {MAINTENANCE_ROOT}/404.html;
             add_header Cache-Control "no-store";
         }}
         location = /maintenance/app-down.html {{
-            root {MAINTENANCE_ROOT};
+            alias {MAINTENANCE_ROOT}/app-down.html;
             add_header Cache-Control "no-store";
         }}
         location /maintenance/ {{
