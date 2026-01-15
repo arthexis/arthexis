@@ -9,6 +9,77 @@ from apps.video.models import VideoDevice, VideoSnapshot
 
 
 @pytest.mark.django_db
+def test_power_camera_action_links_to_docs_when_unconfigured(
+    admin_client, settings, monkeypatch
+):
+    Node._local_cache.clear()
+    Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    settings.USB_CAMERA_POWER_BUS = ""
+    settings.USB_CAMERA_POWER_PORT = ""
+    monkeypatch.setattr(video_admin.shutil, "which", lambda _: None)
+
+    response = admin_client.get(
+        reverse("admin:video_videodevice_power_off_camera"),
+        follow=True,
+    )
+
+    messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("USB Camera Power-Off guide" in msg for msg in messages)
+    assert response.status_code == 200
+    assert response.request["PATH_INFO"].endswith(
+        reverse("admin:video_videodevice_changelist")
+    )
+
+
+@pytest.mark.django_db
+def test_power_camera_action_runs_uhubctl(
+    admin_client, settings, monkeypatch
+):
+    Node._local_cache.clear()
+    Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    settings.USB_CAMERA_POWER_BUS = "1"
+    settings.USB_CAMERA_POWER_PORT = "7"
+    monkeypatch.setattr(video_admin.shutil, "which", lambda _: "/usr/bin/uhubctl")
+
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(video_admin.subprocess, "run", fake_run)
+
+    response = admin_client.get(
+        reverse("admin:video_videodevice_power_off_camera"),
+        follow=True,
+    )
+
+    assert captured["args"] == [
+        "/usr/bin/uhubctl",
+        "-l",
+        "1",
+        "-p",
+        "7",
+        "-a",
+        "off",
+    ]
+    assert captured["kwargs"]["capture_output"] is True
+    assert captured["kwargs"]["text"] is True
+    assert response.status_code == 200
+    messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("USB camera power turned off" in msg for msg in messages)
+
+
+@pytest.mark.django_db
 def test_take_snapshot_discovers_device_and_redirects(
     admin_client, monkeypatch, tmp_path
 ):
