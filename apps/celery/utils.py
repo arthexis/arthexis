@@ -13,6 +13,12 @@ from django.db.utils import IntegrityError
 logger = logging.getLogger(__name__)
 
 
+def _env_var_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def celery_lock_path(base_dir: Path | str | None = None) -> Path:
     """Return the path of the Celery feature lock file."""
 
@@ -24,6 +30,9 @@ def celery_lock_path(base_dir: Path | str | None = None) -> Path:
 
 def is_celery_enabled(lock_path: Path | str | None = None) -> bool:
     """Return ``True`` when the Celery feature lock file exists."""
+
+    if _env_var_truthy(os.environ.get("ARTHEXIS_DISABLE_CELERY")):
+        return False
 
     path = Path(lock_path) if lock_path is not None else celery_lock_path()
     return path.exists()

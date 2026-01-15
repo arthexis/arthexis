@@ -17,7 +17,8 @@ class TempPasswordCommandTests(TestCase):
         identifier = "missing@example.com"
 
         with self.assertRaisesMessage(
-            CommandError, f"No user found for identifier '{identifier}'."
+            CommandError,
+            f"No user found for identifier '{identifier}'. Use --create to add one.",
         ):
             call_command("temp_password", identifier)
 
