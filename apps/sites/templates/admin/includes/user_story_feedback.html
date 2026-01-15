@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n static %}
 <button
   type="button"
   id="user-story-toggle"
@@ -35,7 +35,13 @@
       <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close></button>
     </div>
     <div class="card-body">
-      <form id="user-story-form" method="post" action="{% url 'pages:user-story-submit' %}">
+      <form
+        id="user-story-form"
+        method="post"
+        action="{% url 'pages:user-story-submit' %}"
+        data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
+        data-network-error="{% trans 'Network error. Please try again.' %}"
+      >
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
         {% if request.user.is_authenticated %}
@@ -88,7 +94,18 @@
               <input type="radio" id="user-story-rating-1" name="rating" value="1">
               <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
             </div>
-            <span class="user-story-rating-hint" id="user-story-rating-hint">{% trans 'Select a rating' %}</span>
+            <span
+              class="user-story-rating-hint"
+              id="user-story-rating-hint"
+              data-rating-message-0="{% trans 'Select a rating' %}"
+              data-rating-message-1="{% trans 'Requires urgent attention' %}"
+              data-rating-message-2="{% trans 'Negative user experience' %}"
+              data-rating-message-3="{% trans 'Minor functional issues' %}"
+              data-rating-message-4="{% trans 'Serviceable' %}"
+              data-rating-message-5="{% trans 'Requires no improvement' %}"
+            >
+              {% trans 'Select a rating' %}
+            </span>
           </div>
         </div>
         <div class="mb-3">
@@ -117,188 +134,4 @@
     </div>
   </div>
 </div>
-<script>
-  (function() {
-    const toggle = document.getElementById('user-story-toggle');
-    const overlay = document.getElementById('user-story-overlay');
-    const form = document.getElementById('user-story-form');
-    if (!toggle || !overlay || !form) {
-      return;
-    }
-
-    const closeBtn = overlay.querySelector('[data-feedback-close]');
-    const card = overlay.querySelector('.user-story-card');
-    const successAlert = document.getElementById('user-story-success');
-    const errorAlert = document.getElementById('user-story-error');
-    const commentField = document.getElementById('user-story-comments');
-    const counter = document.getElementById('user-story-char-count');
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
-    const ratingInputs = overlay.querySelectorAll('.user-story-rating input');
-    const ratingHint = document.getElementById('user-story-rating-hint');
-    const ratingMessages = {
-      0: '{% trans "Select a rating" %}',
-      1: '{% trans "Requires urgent attention" %}',
-      2: '{% trans "Negative user experience" %}',
-      3: '{% trans "Minor functional issues" %}',
-      4: '{% trans "Serviceable" %}',
-      5: '{% trans "Requires no improvement" %}',
-    };
-    let previousFocus = null;
-
-    const setRatingHint = () => {
-      if (!ratingHint) {
-        return;
-      }
-      const selected = Array.from(ratingInputs || []).find(input => input.checked);
-      const ratingValue = selected ? Number(selected.value) : 0;
-      ratingHint.textContent = ratingMessages[ratingValue] || ratingMessages[0];
-    };
-
-    const setCharCount = () => {
-      if (counter && commentField) {
-        counter.textContent = commentField.value.length;
-      }
-    };
-
-    const resetAlerts = () => {
-      if (successAlert) {
-        successAlert.textContent = defaultSuccessMessage;
-        successAlert.classList.add('d-none');
-        successAlert.setAttribute('hidden', '');
-      }
-      if (errorAlert) {
-        errorAlert.classList.add('d-none');
-        errorAlert.textContent = '';
-        errorAlert.setAttribute('hidden', '');
-      }
-    };
-
-    const openOverlay = () => {
-      if (!overlay.hasAttribute('hidden')) {
-        return;
-      }
-      previousFocus = document.activeElement;
-      overlay.removeAttribute('hidden');
-      requestAnimationFrame(() => {
-        overlay.classList.add('show');
-        document.body.classList.add('user-story-open');
-        toggle.setAttribute('aria-expanded', 'true');
-        if (card) {
-          card.focus();
-        }
-      });
-    };
-
-    const closeOverlay = () => {
-      if (overlay.hasAttribute('hidden')) {
-        return;
-      }
-      overlay.classList.remove('show');
-      document.body.classList.remove('user-story-open');
-      toggle.setAttribute('aria-expanded', 'false');
-      setTimeout(() => {
-        overlay.setAttribute('hidden', '');
-        resetAlerts();
-        form.reset();
-        setCharCount();
-        setRatingHint();
-        if (previousFocus) {
-          previousFocus.focus();
-        }
-      }, 200);
-    };
-
-    toggle.addEventListener('click', () => {
-      if (overlay.hasAttribute('hidden')) {
-        openOverlay();
-      } else {
-        closeOverlay();
-      }
-    });
-
-    if (closeBtn) {
-      closeBtn.addEventListener('click', closeOverlay);
-    }
-
-    overlay.addEventListener('click', event => {
-      if (event.target === overlay) {
-        closeOverlay();
-      }
-    });
-
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && !overlay.hasAttribute('hidden')) {
-        closeOverlay();
-      }
-    });
-
-    if (commentField) {
-      commentField.addEventListener('input', setCharCount);
-      setCharCount();
-    }
-
-    if (ratingInputs && ratingInputs.length) {
-      ratingInputs.forEach(input => {
-        input.addEventListener('change', setRatingHint);
-      });
-      setRatingHint();
-    }
-
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      resetAlerts();
-
-      if (submitBtn) {
-        submitBtn.disabled = true;
-      }
-
-      const formData = new FormData(form);
-      try {
-        const response = await fetch(form.action, {
-          method: 'POST',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          body: formData,
-        });
-
-        if (response.ok) {
-          form.reset();
-          setCharCount();
-          if (successAlert) {
-            successAlert.textContent = defaultSuccessMessage;
-            successAlert.classList.remove('d-none');
-            successAlert.removeAttribute('hidden');
-          }
-        } else {
-          const data = await response.json().catch(() => ({}));
-          let message = '';
-          if (data && data.errors) {
-            message = Object.values(data.errors)
-              .flat()
-              .join(' ');
-          }
-          if (!message) {
-            message = '{% trans "We could not submit your feedback. Please try again." %}';
-          }
-          if (errorAlert) {
-            errorAlert.textContent = message;
-            errorAlert.classList.remove('d-none');
-            errorAlert.removeAttribute('hidden');
-          }
-        }
-      } catch (error) {
-        if (errorAlert) {
-          errorAlert.textContent = '{% trans "Network error. Please try again." %}';
-          errorAlert.classList.remove('d-none');
-          errorAlert.removeAttribute('hidden');
-        }
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-        }
-      }
-    });
-  })();
-</script>
+<script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>
