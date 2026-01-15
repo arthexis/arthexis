@@ -12,6 +12,7 @@ from .odoo import (
 from .reports import (
     ApprovalRequired,
     DirtyRepository,
+    PublishPending,
     PUBLISH_STEPS,
     _append_log,
     _release_log_name,
@@ -24,6 +25,7 @@ from .usage_analytics import usage_analytics_summary
 __all__ = [
     "ApprovalRequired",
     "DirtyRepository",
+    "PublishPending",
     "PUBLISH_STEPS",
     "_append_log",
     "_release_log_name",
