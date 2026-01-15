@@ -6,11 +6,9 @@ from django.db import migrations, models
 
 
 def restore_sigil_roots(apps, schema_editor):
-    del schema_editor
-
     SigilRoot = apps.get_model("sigils", "SigilRoot")
     manager = getattr(SigilRoot, "all_objects", SigilRoot._base_manager)
-    manager.update(is_deleted=False)
+    manager.using(schema_editor.connection.alias).update(is_deleted=False)
 
 
 class Migration(migrations.Migration):

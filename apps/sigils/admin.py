@@ -25,6 +25,9 @@ class CustomSigilAdmin(EntityModelAdmin):
         obj.context_type = SigilRoot.Context.ENTITY
         super().save_model(request, obj, form, change)
 
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(SigilRoot)
 class SigilRootAdmin(EntityModelAdmin):
