@@ -16,6 +16,8 @@ on:
       - 'apps/**/admin/**'
       - 'apps/**/views/**'
       - 'apps/**/urls.py'
+      - 'apps/**/dashboard*.py'
+      - 'apps/**/favorites_cache.py'
       - 'static/**'
   pull_request:
     paths:
@@ -26,6 +28,8 @@ on:
       - 'apps/**/admin/**'
       - 'apps/**/views/**'
       - 'apps/**/urls.py'
+      - 'apps/**/dashboard*.py'
+      - 'apps/**/favorites_cache.py'
       - 'static/**'
 
 jobs:
