@@ -954,7 +954,13 @@
           <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close></button>
         </div>
         <div class="card-body">
-          <form id="user-story-form" method="post" action="{% url 'pages:user-story-submit' %}">
+          <form
+            id="user-story-form"
+            method="post"
+            action="{% url 'pages:user-story-submit' %}"
+            data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
+            data-network-error="{% trans 'Network error. Please try again.' %}"
+          >
             {% csrf_token %}
             <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
           {% if request.user.is_authenticated %}
@@ -1007,7 +1013,18 @@
                   <input type="radio" id="user-story-rating-1" name="rating" value="1">
                   <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
                 </div>
-                <span class="user-story-rating-hint" id="user-story-rating-hint">{% trans 'Select a rating' %}</span>
+                <span
+                  class="user-story-rating-hint"
+                  id="user-story-rating-hint"
+                  data-rating-message-0="{% trans 'Select a rating' %}"
+                  data-rating-message-1="{% trans 'Requires urgent attention' %}"
+                  data-rating-message-2="{% trans 'Negative user experience' %}"
+                  data-rating-message-3="{% trans 'Minor functional issues' %}"
+                  data-rating-message-4="{% trans 'Serviceable' %}"
+                  data-rating-message-5="{% trans 'Requires no improvement' %}"
+                >
+                  {% trans 'Select a rating' %}
+                </span>
               </div>
             </div>
             <div class="mb-3">
@@ -1307,193 +1324,7 @@
           }
         })();
       </script>
-      <script>
-        (function() {
-          const toggle = document.getElementById('user-story-toggle');
-          const overlay = document.getElementById('user-story-overlay');
-          const form = document.getElementById('user-story-form');
-          if (!toggle || !overlay || !form) {
-            return;
-          }
-
-          const closeBtn = overlay.querySelector('[data-feedback-close]');
-          const card = overlay.querySelector('.user-story-card');
-          const successAlert = document.getElementById('user-story-success');
-          const errorAlert = document.getElementById('user-story-error');
-          const commentField = document.getElementById('user-story-comments');
-          const counter = document.getElementById('user-story-char-count');
-          const submitBtn = form.querySelector('button[type="submit"]');
-          const ratingInputs = overlay.querySelectorAll('.user-story-rating input');
-          const ratingHint = document.getElementById('user-story-rating-hint');
-          const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
-          const anonymousLabel = '{% trans "Anonymous" %}';
-          const ratingMessages = {
-            0: '{% trans "Select a rating" %}',
-            1: '{% trans "Requires urgent attention" %}',
-            2: '{% trans "Negative user experience" %}',
-            3: '{% trans "Minor functional issues" %}',
-            4: '{% trans "Serviceable" %}',
-            5: '{% trans "Requires no improvement" %}',
-          };
-          let previousFocus = null;
-
-          const setCharCount = () => {
-            if (counter && commentField) {
-              counter.textContent = commentField.value.length;
-            }
-          };
-
-          const setRatingHint = () => {
-            if (!ratingHint) {
-              return;
-            }
-            const selected = Array.from(ratingInputs || []).find(input => input.checked);
-            const ratingValue = selected ? Number(selected.value) : 0;
-            ratingHint.textContent = ratingMessages[ratingValue] || ratingMessages[0];
-          };
-
-          const resetAlerts = () => {
-            if (successAlert) {
-              successAlert.textContent = defaultSuccessMessage;
-              successAlert.classList.add('d-none');
-              successAlert.setAttribute('hidden', '');
-            }
-            if (errorAlert) {
-              errorAlert.classList.add('d-none');
-              errorAlert.textContent = '';
-              errorAlert.setAttribute('hidden', '');
-            }
-          };
-
-          const openOverlay = () => {
-            if (!overlay.hasAttribute('hidden')) {
-              return;
-            }
-            previousFocus = document.activeElement;
-            overlay.removeAttribute('hidden');
-            requestAnimationFrame(() => {
-              overlay.classList.add('show');
-              document.body.classList.add('user-story-open');
-              toggle.setAttribute('aria-expanded', 'true');
-              if (card) {
-                card.focus();
-              }
-            });
-          };
-
-          const closeOverlay = () => {
-            if (overlay.hasAttribute('hidden')) {
-              return;
-            }
-            overlay.classList.remove('show');
-            document.body.classList.remove('user-story-open');
-            toggle.setAttribute('aria-expanded', 'false');
-            setTimeout(() => {
-              overlay.setAttribute('hidden', '');
-              resetAlerts();
-              form.reset();
-              setCharCount();
-              setRatingHint();
-              if (previousFocus) {
-                previousFocus.focus();
-              }
-            }, 200);
-          };
-
-          toggle.addEventListener('click', () => {
-            if (overlay.hasAttribute('hidden')) {
-              openOverlay();
-            } else {
-              closeOverlay();
-            }
-          });
-
-          if (closeBtn) {
-            closeBtn.addEventListener('click', closeOverlay);
-          }
-
-          overlay.addEventListener('click', event => {
-            if (event.target === overlay) {
-              closeOverlay();
-            }
-          });
-
-          document.addEventListener('keydown', event => {
-            if (event.key === 'Escape' && !overlay.hasAttribute('hidden')) {
-              closeOverlay();
-            }
-          });
-
-          if (commentField) {
-            commentField.addEventListener('input', setCharCount);
-            setCharCount();
-          }
-
-          if (ratingInputs && ratingInputs.length) {
-            ratingInputs.forEach(input => {
-              input.addEventListener('change', setRatingHint);
-            });
-            setRatingHint();
-          }
-
-          form.addEventListener('submit', async event => {
-            event.preventDefault();
-            resetAlerts();
-
-            if (submitBtn) {
-              submitBtn.disabled = true;
-            }
-
-            const formData = new FormData(form);
-            try {
-              const response = await fetch(form.action, {
-                method: 'POST',
-                headers: {
-                  'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: formData,
-              });
-
-              if (response.ok) {
-                form.reset();
-                setCharCount();
-                setRatingHint();
-                if (successAlert) {
-                  successAlert.textContent = defaultSuccessMessage;
-                  successAlert.classList.remove('d-none');
-                  successAlert.removeAttribute('hidden');
-                }
-              } else {
-                const data = await response.json().catch(() => ({}));
-                let message = '';
-                if (data && data.errors) {
-                  message = Object.values(data.errors)
-                    .flat()
-                    .join(' ');
-                }
-                if (!message) {
-                  message = '{% trans "We could not submit your feedback. Please try again." %}';
-                }
-                if (errorAlert) {
-                  errorAlert.textContent = message;
-                  errorAlert.classList.remove('d-none');
-                  errorAlert.removeAttribute('hidden');
-                }
-              }
-            } catch (error) {
-              if (errorAlert) {
-                errorAlert.textContent = '{% trans "Network error. Please try again." %}';
-                errorAlert.classList.remove('d-none');
-                errorAlert.removeAttribute('hidden');
-              }
-            } finally {
-              if (submitBtn) {
-                submitBtn.disabled = false;
-              }
-            }
-          });
-        })();
-      </script>
+      <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>
     <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
       <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-moon"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol>
       <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-sun"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol>
