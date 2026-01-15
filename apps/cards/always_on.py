@@ -3,6 +3,7 @@ import threading
 from typing import Optional
 
 from .background_reader import get_next_tag
+from .rfid_service import write_rfid_scan_lock
 from .signals import tag_scanned
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ def _worker() -> None:  # pragma: no cover - background thread
         result = get_next_tag(timeout=0.1)
         if result and result.get("rfid"):
             logger.info("RFID tag detected: %s", result.get("rfid"))
+            write_rfid_scan_lock(result)
             tag_scanned.send(sender=None, **result)
     logger.debug("RFID watch thread exiting")
 
