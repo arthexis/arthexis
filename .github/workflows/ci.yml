@@ -67,7 +67,6 @@ jobs:
           source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration"
   docs-changes:
-    if: ${{ github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
