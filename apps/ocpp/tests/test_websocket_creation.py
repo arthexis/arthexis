@@ -250,6 +250,7 @@ def test_pending_connection_replaced_on_reconnect():
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
+@pytest.mark.slow
 def test_assign_connector_rebinds_store_preserves_state():
     async def run_scenario():
         serial = "CP-CONNECTOR-REASSIGN"
