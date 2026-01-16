@@ -13,7 +13,8 @@ flowchart TD
     TP --> G[Get Release Manager Approval]
     G -->|Approval logged| H[Export artifacts and trigger GitHub Actions publish]
     H --> I[Record publish URLs & update fixtures after publish]
-    I --> J[Finish and log completion]
+    I --> J[Capture PyPI publish logs]
+    J --> K[Finish and log completion]
     G -->|Missing credentials| G
     B -->|Dirty repo or version conflict| B
 ```
@@ -29,6 +30,7 @@ flowchart TD
 7. **Get Release Manager Approval** – Requires PyPI publishing credentials. For scheduled runs, auto-approval is logged when credentials exist; otherwise the workflow pauses until a release manager approves or rejects the release. Missing credentials are surfaced explicitly in the log.
 8. **Export artifacts and trigger GitHub Actions publish** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and dispatches the `publish.yml` workflow so PyPI uploads run via OIDC.
 9. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
+10. **Capture PyPI publish logs** – Downloads the GitHub Actions publish run logs, stores the PyPI upload results, and persists them into the release fixtures for traceability.
 
 ## Operational notes
 

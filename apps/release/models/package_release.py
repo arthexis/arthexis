@@ -116,6 +116,9 @@ class PackageRelease(Entity):
     )
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
     github_url = models.URLField("GitHub URL", blank=True, editable=False)
+    pypi_publish_log = models.TextField(
+        "PyPI publish log", blank=True, default="", editable=False
+    )
     release_on = models.DateTimeField(blank=True, null=True, editable=False)
     scheduled_date = models.DateField(blank=True, null=True)
     scheduled_time = models.TimeField(blank=True, null=True)

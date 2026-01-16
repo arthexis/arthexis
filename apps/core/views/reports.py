@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import logging
 import os
 import subprocess
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Optional, Sequence
 from urllib.parse import urlparse
@@ -930,6 +932,108 @@ def _trigger_publish_workflow(
     )
 
 
+def _fetch_publish_workflow_run(
+    *,
+    owner: str,
+    repo: str,
+    tag_name: str,
+    token: str | None,
+) -> dict[str, object] | None:
+    runs_url = (
+        f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/publish.yml/runs"
+    )
+    response = _github_request(
+        "get",
+        runs_url,
+        token=token,
+        expected_status={200},
+        params={"event": "workflow_dispatch", "branch": tag_name, "per_page": 5},
+    )
+    payload = response.json()
+    runs = payload.get("workflow_runs")
+    if not isinstance(runs, list) or not runs:
+        response = _github_request(
+            "get",
+            runs_url,
+            token=token,
+            expected_status={200},
+            params={"event": "workflow_dispatch", "per_page": 5},
+        )
+        payload = response.json()
+        runs = payload.get("workflow_runs")
+    if not isinstance(runs, list) or not runs:
+        return None
+    for run in runs:
+        if run.get("head_branch") == tag_name:
+            return run
+    return runs[0]
+
+
+def _download_publish_workflow_logs(
+    *,
+    owner: str,
+    repo: str,
+    run_id: int,
+    token: str | None,
+) -> str:
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/logs"
+    response = requests.get(
+        url,
+        headers=_github_headers(token),
+        allow_redirects=True,
+        timeout=30,
+    )
+    if response.status_code != 200:
+        detail = response.text.strip()
+        raise Exception(
+            f"GitHub Actions log download failed ({response.status_code}): {detail}"
+        )
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    sections: list[str] = []
+    for name in sorted(archive.namelist()):
+        if not name.endswith(".txt"):
+            continue
+        data = archive.read(name).decode("utf-8", errors="replace")
+        sections.append(f"--- {name} ---\n{data}")
+    return "\n\n".join(sections)
+
+
+def _truncate_publish_log(log_text: str, *, limit: int = 50000) -> str:
+    if len(log_text) <= limit:
+        return log_text
+    trimmed = log_text[-limit:]
+    return f"[truncated; last {limit} of {len(log_text)} chars]\n{trimmed}"
+
+
+def _record_release_fixture_updates(
+    log_path: Path,
+    *,
+    commit_message: str,
+    staged_message: str,
+    committed_message: str,
+    skipped_message: str,
+) -> None:
+    fixture_paths = [
+        str(path) for path in Path("apps/core/fixtures").glob("releases__*.json")
+    ]
+    if not fixture_paths:
+        return
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--", *fixture_paths],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    if status.stdout.strip():
+        subprocess.run(["git", "add", *fixture_paths], check=True)
+        _append_log(log_path, staged_message)
+        subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        _append_log(log_path, committed_message)
+        _push_release_changes(log_path)
+    else:
+        _append_log(log_path, skipped_message)
+
+
 def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
     message = (exc.stderr or exc.stdout or "").strip().lower()
     if not message:
@@ -1531,31 +1635,106 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
     _append_log(log_path, f"Recorded PyPI URL: {release.pypi_url}")
     if release.github_url:
         _append_log(log_path, f"Recorded GitHub URL: {release.github_url}")
-    fixture_paths = [
-        str(path) for path in Path("apps/core/fixtures").glob("releases__*.json")
-    ]
-    if fixture_paths:
-        status = subprocess.run(
-            ["git", "status", "--porcelain", "--", *fixture_paths],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if status.stdout.strip():
-            subprocess.run(["git", "add", *fixture_paths], check=True)
-            _append_log(log_path, "Staged publish metadata updates")
-            commit_message = f"chore: record publish metadata for v{release.version}"
-            subprocess.run(["git", "commit", "-m", commit_message], check=True)
-            _append_log(
-                log_path, f"Committed publish metadata for v{release.version}"
-            )
-            _push_release_changes(log_path)
-        else:
-            _append_log(
-                log_path,
-                "No release metadata updates detected after publish; skipping commit",
-            )
+    _record_release_fixture_updates(
+        log_path,
+        commit_message=f"chore: record publish metadata for v{release.version}",
+        staged_message="Staged publish metadata updates",
+        committed_message=f"Committed publish metadata for v{release.version}",
+        skipped_message=(
+            "No release metadata updates detected after publish; skipping commit"
+        ),
+    )
     _append_log(log_path, "Publish metadata recorded")
+
+
+def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> None:
+    if ctx.get("dry_run"):
+        _append_log(log_path, "Dry run: skipped capture of publish logs")
+        return
+
+    token = release.get_github_token()
+    if not token:
+        ctx.setdefault("warnings", []).append(
+            {
+                "message": _(
+                    "GitHub token missing; PyPI publish logs were not captured."
+                ),
+                "followups": [
+                    _(
+                        "Add a GitHub token to the release manager or "
+                        "GITHUB_TOKEN in the environment."
+                    )
+                ],
+            }
+        )
+        _append_log(log_path, "GitHub token missing; skipping publish log capture")
+        return
+
+    owner, repo = _resolve_github_repository(release)
+    tag_name = f"v{release.version}"
+    run = _fetch_publish_workflow_run(
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
+        token=token,
+    )
+    if not run:
+        ctx["paused"] = True
+        _append_log(
+            log_path,
+            "Publish workflow run not found yet; resume after GitHub Actions completes",
+        )
+        raise PublishPending()
+
+    status = run.get("status")
+    if status != "completed":
+        ctx["paused"] = True
+        _append_log(
+            log_path,
+            "Publish workflow still running; resume after GitHub Actions completes",
+        )
+        raise PublishPending()
+
+    run_id = run.get("id")
+    if not isinstance(run_id, int):
+        raise Exception("Publish workflow run ID missing")
+
+    raw_log = _download_publish_workflow_logs(
+        owner=owner, repo=repo, run_id=run_id, token=token
+    )
+    if not raw_log:
+        ctx["paused"] = True
+        _append_log(
+            log_path,
+            "Publish workflow logs empty; resume after GitHub Actions completes",
+        )
+        raise PublishPending()
+
+    run_url = run.get("html_url") or ""
+    conclusion = run.get("conclusion") or ""
+    summary_lines = [
+        f"Workflow run: {run_url or run_id}",
+        f"Status: {status}",
+    ]
+    if conclusion:
+        summary_lines.append(f"Conclusion: {conclusion}")
+    log_text = "\n".join(summary_lines) + "\n\n" + raw_log
+    log_text = _truncate_publish_log(log_text)
+
+    if log_text != release.pypi_publish_log:
+        release.pypi_publish_log = log_text
+        release.save(update_fields=["pypi_publish_log"])
+        PackageRelease.dump_fixture()
+        _append_log(log_path, "Recorded PyPI publish logs")
+        _record_release_fixture_updates(
+            log_path,
+            commit_message=f"chore: record publish logs for v{release.version}",
+            staged_message="Staged publish log updates",
+            committed_message=f"Committed publish log updates for v{release.version}",
+            skipped_message="Publish logs already recorded; skipping commit",
+        )
+    else:
+        _append_log(log_path, "Publish logs already recorded")
 
 
 FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
@@ -1573,6 +1752,7 @@ PUBLISH_STEPS = [
         _step_export_and_dispatch,
     ),
     ("Record publish metadata", _step_record_publish_metadata),
+    ("Capture PyPI publish logs", _step_capture_publish_logs),
 ]
 
 
