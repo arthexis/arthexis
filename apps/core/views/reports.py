@@ -11,6 +11,7 @@ from typing import Optional, Sequence
 from urllib.parse import urlparse
 
 import requests
+from packaging.version import InvalidVersion, Version
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -823,7 +824,12 @@ def _ensure_github_release(
     token: str | None,
 ) -> dict[str, object]:
     release_url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag_name}"
-    response = requests.get(release_url, headers=_github_headers(token))
+    response = _github_request(
+        "get",
+        release_url,
+        token=token,
+        expected_status={200, 404},
+    )
     if response.status_code == 404:
         create_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
         response = _github_request(
@@ -896,7 +902,7 @@ def _upload_release_assets(
                 token=token,
                 expected_status={201},
                 headers={"Content-Type": "application/octet-stream"},
-                data=handle.read(),
+                data=handle,
             )
         _append_log(log_path, f"Uploaded GitHub release asset {name}")
 
@@ -1006,8 +1012,6 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
 
 
 def _next_patch_version(version: str) -> str:
-    from packaging.version import InvalidVersion, Version
-
     cleaned = PackageRelease.strip_dev_suffix(version)
     try:
         parsed = Version(cleaned)
@@ -1030,8 +1034,6 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
     if not previous_clean or not current_clean:
         return False
 
-    from packaging.version import InvalidVersion, Version
-
     try:
         prev_version = Version(previous_clean)
         curr_version = Version(current_clean)
@@ -1045,8 +1047,6 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
 
 
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
-    from packaging.version import InvalidVersion, Version
-
     sync_error: Optional[Exception] = None
     retry_sync = False
     try:
@@ -1464,8 +1464,6 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
 
 
 def _pypi_release_available(release) -> bool:
-    from packaging.version import InvalidVersion, Version
-
     if not release_utils.network_available():
         return False
     try:
@@ -1473,7 +1471,7 @@ def _pypi_release_available(release) -> bool:
             f"https://pypi.org/pypi/{release.package.name}/json",
             timeout=PYPI_REQUEST_TIMEOUT,
         )
-    except Exception:
+    except requests.exceptions.RequestException:
         return False
     if not resp.ok:
         return False
