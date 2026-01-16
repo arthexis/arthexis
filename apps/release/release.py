@@ -959,6 +959,7 @@ def check_pypi_readiness(
 
     messages: list[tuple[str, str]] = []
     has_error = False
+    oidc_enabled = False
 
     def add(level: str, message: str) -> None:
         nonlocal has_error
@@ -972,6 +973,7 @@ def check_pypi_readiness(
         repositories = release.build_publish_targets()
         creds = release.to_credentials()
         release_manager = release.release_manager or release.package.release_manager
+        oidc_enabled = release.uses_oidc_publishing()
         add("success", f"Checking PyPI configuration for {release}")
 
     if package is None:
@@ -997,14 +999,20 @@ def check_pypi_readiness(
                 f"Release manager '{release_manager}' has PyPI credentials configured",
             )
         else:
+            level = "warning" if oidc_enabled else "warning"
             add(
-                "warning",
+                level,
                 f"Release manager '{release_manager}' is missing PyPI credentials",
             )
     else:
         add(
             "warning",
             "No release manager configured for PyPI uploads; falling back to environment",
+        )
+    if oidc_enabled:
+        add(
+            "success",
+            "OIDC publishing enabled; PyPI credentials are not required for approval.",
         )
 
     env_creds = Credentials(
@@ -1026,6 +1034,12 @@ def check_pypi_readiness(
         credential_source = "environment"
 
     if candidate is None:
+        if oidc_enabled:
+            add(
+                "warning",
+                "No PyPI credentials configured; OIDC publishing will be used.",
+            )
+            return PyPICheckResult(ok=not has_error, messages=messages)
         add(
             "error",
             "Missing PyPI credentials. Configure a token or username/password for the release manager or environment.",

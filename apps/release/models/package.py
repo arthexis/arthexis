@@ -38,6 +38,12 @@ class Package(Entity):
         default=False,
         help_text="Build wheel distributions when creating releases",
     )
+    oidc_publish_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Publish releases via GitHub Actions OIDC instead of direct PyPI credentials."
+        ),
+    )
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )

@@ -30,6 +30,7 @@ class PackageAdmin(PackageAdminActionsMixin, SaveBeforeChangeAction, EntityModel
         "name",
         "description",
         "homepage_url",
+        "oidc_publish_enabled",
         "release_manager",
         "is_active",
     )
