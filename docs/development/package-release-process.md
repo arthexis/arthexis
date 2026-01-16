@@ -27,7 +27,7 @@ flowchart TD
 4. **Build release artifacts** – Re-validates that `origin/main` is unchanged, promotes the build via `release_utils.promote`, and commits any updated metadata (e.g., `VERSION`, release fixtures). The step sets the build revision and renames the log to the release-specific filename, ensuring traceability.
 5. **Complete test suite with --all flag** – Captures the expectation that the full test suite has been executed with the `--all` flag. The UI records acknowledgement, keeping the workflow consistent even when tests run externally.
 6. **Confirm PyPI Trusted Publisher settings** – Release Managers must verify the PyPI project settings include the Trusted Publisher entry that matches the repository, workflow file, tag pattern, and GitHub environment used by the publish workflow before approving a release.
-7. **Get Release Manager Approval** – Requires PyPI publishing credentials. For scheduled runs, auto-approval is logged when credentials exist; otherwise the workflow pauses until a release manager approves or rejects the release. Missing credentials are surfaced explicitly in the log.
+7. **Get Release Manager Approval** – Requires credentials for the selected publishing mode. OIDC-enabled packages need a GitHub token (for tag pushes and workflow dispatch) instead of PyPI credentials. For scheduled runs, auto-approval is logged when the required credentials exist; otherwise the workflow pauses until a release manager approves or rejects the release. Missing credentials are surfaced explicitly in the log.
 8. **Export artifacts and trigger GitHub Actions publish** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and dispatches the `publish.yml` workflow so PyPI uploads run via OIDC.
 9. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
 10. **Capture PyPI publish logs** – Downloads the GitHub Actions publish run logs, stores the PyPI upload results, and persists them into the release fixtures for traceability.
@@ -44,18 +44,19 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
 
 ### Workflow changes
 
-1. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. Capture the required configuration fields (GitHub owner, repository name, workflow filename such as `publish.yml`, and the optional GitHub environment name if using environment protection rules). This ties the project to the repository, workflow file path, and branch or tag protection rules.
-2. **Split release into two phases**:
+1. **Enable OIDC publishing on the package** – In the Release Package admin, enable the OIDC publish toggle so the suite knows to skip PyPI credentials and rely on GitHub Actions publishing.
+2. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. Capture the required configuration fields (GitHub owner, repository name, workflow filename such as `publish.yml`, and the optional GitHub environment name if using environment protection rules). This ties the project to the repository, workflow file path, and branch or tag protection rules.
+3. **Split release into two phases**:
    - The release UI/headless workflow runs through approvals, metadata prep, and artifact generation.
    - The workflow exports built artifacts (wheel/sdist) to the GitHub release and triggers the GitHub Actions `publish` workflow so uploads run with OIDC.
-3. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
+4. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Has `permissions: id-token: write` and `contents: read`.
    - Downloads the build artifacts from the release process.
    - Uses a pinned `pypa/gh-action-pypi-publish` version (for example, `pypa/gh-action-pypi-publish@v1.8.11`) with `skip-existing: false` and no API token configured, relying on OIDC instead.
-4. **Gate publishing with release manager approval** by:
+5. **Gate publishing with release manager approval** by:
    - Requiring the workflow to be manually dispatched (or triggered by a protected tag) after approval.
    - Using GitHub environment protection rules (required reviewers) to enforce human approval before the publish job runs.
-5. **Capture published URLs and logs** by pulling the resulting upload metadata back into the release fixtures (mirroring today’s step 8), ensuring traceability remains intact.
+6. **Capture published URLs and logs** by pulling the resulting upload metadata back into the release fixtures (mirroring today’s step 8), ensuring traceability remains intact.
 
 ### Implementation notes
 

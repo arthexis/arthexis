@@ -16,6 +16,7 @@
       "dependencies_path": "",
       "test_command": "",
       "generate_wheels": false,
+      "oidc_publish_enabled": true,
       "release_manager": null,
       "is_active": true
     }

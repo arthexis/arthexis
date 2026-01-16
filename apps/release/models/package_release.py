@@ -263,6 +263,16 @@ class PackageRelease(Entity):
             return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
 
+    def uses_oidc_publishing(self) -> bool:
+        """Return True when the package should publish via GitHub OIDC."""
+        return bool(getattr(self.package, "oidc_publish_enabled", False))
+
+    def approval_credentials_ready(self, user: models.Model | None = None) -> bool:
+        """Return True when approval prerequisites are satisfied for publishing."""
+        if self.uses_oidc_publishing():
+            return bool(self.get_github_token())
+        return bool(self.to_credentials(user=user))
+
     def build_publish_targets(
         self, user: models.Model | None = None
     ) -> list[RepositoryTarget]:

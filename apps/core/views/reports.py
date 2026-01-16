@@ -1474,14 +1474,29 @@ def _step_release_manager_approval(
     release, ctx, log_path: Path, *, user=None
 ) -> None:
     auto_release = bool(ctx.get("auto_release"))
-    creds = release.to_credentials(user=user)
-    if creds is None:
-        ctx.pop("release_approval", None)
-        if not ctx.get("approval_credentials_missing"):
-            _append_log(log_path, "Release manager publishing credentials missing")
-        ctx["approval_credentials_missing"] = True
-        ctx["awaiting_approval"] = True
-        raise ApprovalRequired()
+    if release.uses_oidc_publishing():
+        github_token = release.get_github_token()
+        if not github_token:
+            ctx.pop("release_approval", None)
+            if not ctx.get("approval_credentials_missing"):
+                _append_log(
+                    log_path,
+                    "GitHub token required for OIDC publishing is missing",
+                )
+            ctx["approval_credentials_missing"] = True
+            ctx["awaiting_approval"] = True
+            raise ApprovalRequired()
+    else:
+        creds = release.to_credentials(user=user)
+        if creds is None:
+            ctx.pop("release_approval", None)
+            if not ctx.get("approval_credentials_missing"):
+                _append_log(
+                    log_path, "Release manager publishing credentials missing"
+                )
+            ctx["approval_credentials_missing"] = True
+            ctx["awaiting_approval"] = True
+            raise ApprovalRequired()
 
     missing_before = ctx.pop("approval_credentials_missing", None)
     if missing_before:
@@ -1825,7 +1840,7 @@ def release_progress(request, pk: int, action: str):
     start_enabled = (not started_flag or paused_flag) and not done_flag and not error_flag
 
     manager = release.release_manager or release.package.release_manager
-    credentials_ready = bool(release.to_credentials(user=request.user))
+    credentials_ready = release.approval_credentials_ready(user=request.user)
     if credentials_ready and ctx.get("approval_credentials_missing"):
         ctx.pop("approval_credentials_missing", None)
 
@@ -1994,7 +2009,10 @@ def release_progress(request, pk: int, action: str):
             )
         except NoReverseMatch:
             pass
-    pypi_credentials_missing = not manager or manager.to_credentials() is None
+    oidc_enabled = release.uses_oidc_publishing()
+    pypi_credentials_missing = (
+        not oidc_enabled and (not manager or manager.to_credentials() is None)
+    )
     github_credentials_missing = not manager or manager.to_git_credentials() is None
 
     fixtures_summary = ctx.get("fixtures")
@@ -2031,6 +2049,7 @@ def release_progress(request, pk: int, action: str):
         "awaiting_approval": awaiting_approval,
         "approval_credentials_missing": approval_credentials_missing,
         "approval_credentials_ready": approval_credentials_ready,
+        "oidc_enabled": oidc_enabled,
         "release_manager_owner": release_manager_owner,
         "has_release_manager": bool(manager),
         "release_manager_admin_url": release_manager_admin_url,
