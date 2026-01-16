@@ -51,6 +51,7 @@ def isolate_log_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "LOG_DIR", log_dir)
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_charge_point_created_for_new_websocket_path():
     async def run_scenario():
