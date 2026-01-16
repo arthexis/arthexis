@@ -634,9 +634,6 @@ def _suite_reachable(
     *,
     timeout: float = SUITE_REACHABILITY_TIMEOUT_SECONDS,
 ) -> bool:
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return False
-
     try:
         port = int(_suite_port(base_dir))
     except (TypeError, ValueError):
