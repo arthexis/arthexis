@@ -999,11 +999,11 @@ def check_pypi_readiness(
                 f"Release manager '{release_manager}' has PyPI credentials configured",
             )
         else:
-            level = "warning" if oidc_enabled else "warning"
-            add(
-                level,
-                f"Release manager '{release_manager}' is missing PyPI credentials",
-            )
+            if not oidc_enabled:
+                add(
+                    "warning",
+                    f"Release manager '{release_manager}' is missing PyPI credentials",
+                )
     else:
         add(
             "warning",

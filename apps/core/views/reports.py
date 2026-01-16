@@ -1475,28 +1475,19 @@ def _step_release_manager_approval(
 ) -> None:
     auto_release = bool(ctx.get("auto_release"))
     if release.uses_oidc_publishing():
-        github_token = release.get_github_token()
-        if not github_token:
-            ctx.pop("release_approval", None)
-            if not ctx.get("approval_credentials_missing"):
-                _append_log(
-                    log_path,
-                    "GitHub token required for OIDC publishing is missing",
-                )
-            ctx["approval_credentials_missing"] = True
-            ctx["awaiting_approval"] = True
-            raise ApprovalRequired()
+        creds_ready = bool(release.get_github_token())
+        error_message = "GitHub token required for OIDC publishing is missing"
     else:
-        creds = release.to_credentials(user=user)
-        if creds is None:
-            ctx.pop("release_approval", None)
-            if not ctx.get("approval_credentials_missing"):
-                _append_log(
-                    log_path, "Release manager publishing credentials missing"
-                )
-            ctx["approval_credentials_missing"] = True
-            ctx["awaiting_approval"] = True
-            raise ApprovalRequired()
+        creds_ready = release.to_credentials(user=user) is not None
+        error_message = "Release manager publishing credentials missing"
+
+    if not creds_ready:
+        ctx.pop("release_approval", None)
+        if not ctx.get("approval_credentials_missing"):
+            _append_log(log_path, error_message)
+        ctx["approval_credentials_missing"] = True
+        ctx["awaiting_approval"] = True
+        raise ApprovalRequired()
 
     missing_before = ctx.pop("approval_credentials_missing", None)
     if missing_before:
