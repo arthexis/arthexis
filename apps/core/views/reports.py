@@ -942,31 +942,38 @@ def _fetch_publish_workflow_run(
     runs_url = (
         f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/publish.yml/runs"
     )
-    response = _github_request(
-        "get",
-        runs_url,
-        token=token,
-        expected_status={200},
-        params={"event": "workflow_dispatch", "branch": tag_name, "per_page": 5},
-    )
-    payload = response.json()
-    runs = payload.get("workflow_runs")
-    if not isinstance(runs, list) or not runs:
+    try:
+        tag_sha = _git_stdout(["git", "rev-parse", f"{tag_name}^{{}}"])
+    except Exception:
+        tag_sha = ""
+
+    def _get_runs(params: dict[str, object]) -> list[dict[str, object]] | None:
         response = _github_request(
             "get",
             runs_url,
             token=token,
             expected_status={200},
-            params={"event": "workflow_dispatch", "per_page": 5},
+            params=params,
         )
         payload = response.json()
         runs = payload.get("workflow_runs")
+        if not isinstance(runs, list):
+            return None
+        return runs
+
+    runs = _get_runs({"event": "workflow_dispatch", "branch": tag_name, "per_page": 5})
+    if not runs:
+        runs = _get_runs({"event": "workflow_dispatch", "per_page": 5})
     if not isinstance(runs, list) or not runs:
         return None
     for run in runs:
         if run.get("head_branch") == tag_name:
             return run
-    return runs[0]
+    if tag_sha:
+        for run in runs:
+            if run.get("head_sha") == tag_sha:
+                return run
+    return None
 
 
 def _download_publish_workflow_logs(
@@ -977,17 +984,14 @@ def _download_publish_workflow_logs(
     token: str | None,
 ) -> str:
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/logs"
-    response = requests.get(
+    response = _github_request(
+        "get",
         url,
-        headers=_github_headers(token),
+        token=token,
+        expected_status={200},
         allow_redirects=True,
         timeout=30,
     )
-    if response.status_code != 200:
-        detail = response.text.strip()
-        raise Exception(
-            f"GitHub Actions log download failed ({response.status_code}): {detail}"
-        )
     archive = zipfile.ZipFile(io.BytesIO(response.content))
     sections: list[str] = []
     for name in sorted(archive.namelist()):
@@ -998,7 +1002,12 @@ def _download_publish_workflow_logs(
     return "\n\n".join(sections)
 
 
-def _truncate_publish_log(log_text: str, *, limit: int = 50000) -> str:
+MAX_PYPI_PUBLISH_LOG_SIZE = 50000
+
+
+def _truncate_publish_log(
+    log_text: str, *, limit: int = MAX_PYPI_PUBLISH_LOG_SIZE
+) -> str:
     if len(log_text) <= limit:
         return log_text
     trimmed = log_text[-limit:]
@@ -1697,7 +1706,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
 
     run_id = run.get("id")
     if not isinstance(run_id, int):
-        raise Exception("Publish workflow run ID missing")
+        raise ValueError("Publish workflow run ID missing")
 
     raw_log = _download_publish_workflow_logs(
         owner=owner, repo=repo, run_id=run_id, token=token
