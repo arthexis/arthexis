@@ -1475,7 +1475,7 @@ def _step_release_manager_approval(
 ) -> None:
     auto_release = bool(ctx.get("auto_release"))
     if release.uses_oidc_publishing():
-        creds_ready = bool(release.get_github_token())
+        creds_ready = bool(release.get_github_token(user=user))
         error_message = "GitHub token required for OIDC publishing is missing"
     else:
         creds_ready = release.to_credentials(user=user) is not None

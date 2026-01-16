@@ -256,11 +256,25 @@ class PackageRelease(Entity):
             return Credentials(username=username, password=password)
         return None
 
-    def get_github_token(self) -> str | None:
+    def get_github_token(self, user: models.Model | None = None) -> str | None:
         """Return GitHub token from the associated release manager or environment."""
-        manager = self.release_manager or self.package.release_manager
-        if manager and manager.github_token:
-            return manager.github_token
+        manager_candidates = [
+            candidate
+            for candidate in (self.release_manager, self.package.release_manager)
+            if candidate
+        ]
+        if user is not None and getattr(user, "is_authenticated", False):
+            try:
+                user_manager = ReleaseManager.objects.get(user=user)
+            except ReleaseManager.DoesNotExist:
+                user_manager = None
+            else:
+                if user_manager not in manager_candidates:
+                    manager_candidates.append(user_manager)
+
+        for manager in manager_candidates:
+            if manager.github_token:
+                return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
 
     def uses_oidc_publishing(self) -> bool:
@@ -270,7 +284,7 @@ class PackageRelease(Entity):
     def approval_credentials_ready(self, user: models.Model | None = None) -> bool:
         """Return True when approval prerequisites are satisfied for publishing."""
         if self.uses_oidc_publishing():
-            return bool(self.get_github_token())
+            return bool(self.get_github_token(user=user))
         return bool(self.to_credentials(user=user))
 
     def build_publish_targets(
