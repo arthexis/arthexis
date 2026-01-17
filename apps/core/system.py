@@ -44,12 +44,7 @@ from apps.core.auto_upgrade import (
     set_auto_upgrade_fast_lane,
     ensure_auto_upgrade_periodic_task,
 )
-from apps.release.release import (
-    _git_authentication_missing,
-    _git_remote_url,
-    _manager_git_credentials,
-    _remote_with_credentials,
-)
+from apps.release import git_utils
 from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
 from apps.core.uptime_constants import SUITE_UPTIME_LOCK_MAX_AGE, SUITE_UPTIME_LOCK_NAME
 from apps.nginx.renderers import generate_primary_config
@@ -132,7 +127,7 @@ def _github_commit_url_base() -> str:
     """Return the GitHub commit URL template for the configured repository."""
 
     try:
-        remote_url = _git_remote_url()
+        remote_url = git_utils.git_remote_url()
     except FileNotFoundError:  # pragma: no cover - depends on environment setup
         logger.debug("Skipping GitHub commit URL generation; git executable not found")
         remote_url = None
