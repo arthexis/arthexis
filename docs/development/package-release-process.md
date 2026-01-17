@@ -84,6 +84,22 @@ If the workflow is dispatched from a branch (for example, the default branch in 
 - **Auditable, short-lived credentials**: PyPI only trusts GitHub’s OIDC token for the workflow + repository.
 - **Clear separation of duties**: release management remains in the UI; publishing is automated and policy-controlled.
 
+## Git authentication for tag pushes
+
+When the release workflow needs to push a tag to GitHub (for example during the
+"Export artifacts and trigger GitHub Actions publish" step), the release runner
+must be authenticated to `origin`. If the logs show authentication failures
+like `fatal: could not read Username for 'https://github.com'`, a release
+manager needs to authenticate before retrying the publish step or pushing the
+tag manually.
+
+Use one of the following options:
+
+- **Release manager profile**: Add GitHub credentials (token) to the Release
+  Manager profile so the workflow can push tags automatically.
+- **Local authentication**: Run `git push origin vX.Y.Z` from an authenticated
+  environment (for example a shell with a GitHub token or SSH key configured).
+
 ### Next steps
 
 - Identify the release workflow entry point (tag or manual dispatch) and align it with the PyPI trusted publisher settings.
