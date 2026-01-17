@@ -233,11 +233,7 @@ class PackageRelease(Entity):
                 manager_candidates.append(candidate)
 
         if user is not None and getattr(user, "is_authenticated", False):
-            try:
-                user_manager = ReleaseManager.objects.get(user=user)
-            except ReleaseManager.DoesNotExist:
-                user_manager = None
-            else:
+            for user_manager in ReleaseManager.objects.filter(user=user):
                 if user_manager not in manager_candidates:
                     manager_candidates.append(user_manager)
 
@@ -264,11 +260,7 @@ class PackageRelease(Entity):
             if candidate
         ]
         if user is not None and getattr(user, "is_authenticated", False):
-            try:
-                user_manager = ReleaseManager.objects.get(user=user)
-            except ReleaseManager.DoesNotExist:
-                user_manager = None
-            else:
+            for user_manager in ReleaseManager.objects.filter(user=user):
                 if user_manager not in manager_candidates:
                     manager_candidates.append(user_manager)
 
