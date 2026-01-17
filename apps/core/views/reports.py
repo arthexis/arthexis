@@ -477,6 +477,31 @@ def _build_artifacts_stale(
     return _working_tree_dirty()
 
 
+def _pre_build_sources_changed(
+    ctx: dict, step_count: int, steps: Sequence[tuple[str, object]]
+) -> bool:
+    build_step_index = next(
+        (index for index, (name, _) in enumerate(steps) if name == "Build release artifacts"),
+        None,
+    )
+    if build_step_index is None:
+        return False
+    if step_count != build_step_index:
+        return False
+    if ctx.get("dry_run"):
+        return False
+
+    pre_build_revision = (ctx.get("pre_build_revision") or "").strip()
+    if not pre_build_revision:
+        return False
+
+    current_revision = _current_git_revision()
+    if current_revision and current_revision != pre_build_revision:
+        return True
+
+    return _working_tree_dirty()
+
+
 def _broadcast_release_message(release: PackageRelease) -> None:
     subject = f"Release v{release.version}"
     try:
@@ -1347,6 +1372,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping pre-release actions")
+        ctx["pre_build_revision"] = _current_git_revision()
         return
     _sync_with_origin_main(log_path)
     PackageRelease.dump_fixture()
@@ -1390,6 +1416,12 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
             subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
             _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
     _append_log(log_path, "Pre-release actions complete")
+    ctx["pre_build_revision"] = _current_git_revision()
+    if ctx["pre_build_revision"]:
+        _append_log(
+            log_path,
+            f"Recorded pre-build revision {ctx['pre_build_revision']}",
+        )
 
 
 def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
@@ -1868,6 +1900,19 @@ def release_progress(request, pk: int, action: str):
             clean_repo=False,
             message_text=_(
                 "Source changes detected after build. Restarting publish workflow."
+            ),
+        )
+    if _pre_build_sources_changed(ctx, step_count, steps):
+        return _reset_release_progress(
+            request,
+            release,
+            session_key,
+            lock_path,
+            restart_path,
+            log_dir,
+            clean_repo=False,
+            message_text=_(
+                "Source changes detected before build. Restarting publish workflow."
             ),
         )
 
