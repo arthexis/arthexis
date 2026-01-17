@@ -457,6 +457,15 @@ def _manager_git_credentials(package: Optional[Package] = None) -> Optional[GitC
     return None
 
 
+def _environment_git_credentials() -> Optional[GitCredentials]:
+    """Return Git credentials from environment variables when available."""
+
+    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    if not token:
+        return None
+    return GitCredentials(username="x-access-token", password=token)
+
+
 def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
     message = (exc.stderr or exc.stdout or "").strip().lower()
     if not message:
@@ -575,7 +584,7 @@ def _push_tag(tag_name: str, package: Package) -> None:
             raise
         auth_error = exc
 
-    creds = _manager_git_credentials(package)
+    creds = _manager_git_credentials(package) or _environment_git_credentials()
     if creds and creds.has_auth():
         remote_url = _git_remote_url("origin")
         if remote_url:
