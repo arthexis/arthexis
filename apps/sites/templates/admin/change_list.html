@@ -1,6 +1,6 @@
 {% extends "admin/change_list_base.html" %}
 
-{% block extra_load %}{% load admin_extras favorites %}{% endblock %}
+{% block extra_load %}{% load admin_extras favorites %}{% admin_show_filters cl as show_filters %}{% endblock %}
 
 {% block related_models_styles %}
   {% include "admin/includes/related_models_styles.html" %}
@@ -25,7 +25,7 @@
   </div>
 {% endblock %}
 
-{% block module_class %}{% admin_show_filters cl as show_filters %}module{% if show_filters %} filtered{% endif %}{% endblock %}
+{% block module_class %}module{% if show_filters %} filtered{% endif %}{% endblock %}
 
 {% block filters %}
   {% if show_filters %}
