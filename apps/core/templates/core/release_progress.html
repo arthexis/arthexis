@@ -396,7 +396,9 @@
     <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
     {% endif %}
     {% if started %}
-      {% if awaiting_approval %}
+      {% if start_pending %}
+      <p class="status-message">{% trans 'Starting publish…' %}</p>
+      {% elif awaiting_approval %}
         {% if approval_credentials_ready %}
         <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
         {% else %}

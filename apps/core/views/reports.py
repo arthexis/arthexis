@@ -1835,6 +1835,7 @@ def release_progress(request, pk: int, action: str):
     if credentials_ready and ctx.get("approval_credentials_missing"):
         ctx.pop("approval_credentials_missing", None)
 
+    start_requested = bool(request.GET.get("start")) and start_enabled
     ctx, resume_requested, redirect_response = _update_publish_controls(
         request,
         ctx,
@@ -1869,7 +1870,7 @@ def release_progress(request, pk: int, action: str):
             message_text=_(
                 "Source changes detected after build. Restarting publish workflow."
             ),
-        )
+    )
 
     ctx = _handle_dirty_repository_action(request, ctx, log_path)
 
@@ -1882,17 +1883,18 @@ def release_progress(request, pk: int, action: str):
         None,
     )
 
-    ctx, step_count = _run_release_step(
-        request,
-        steps,
-        ctx,
-        step_param,
-        step_count,
-        release,
-        log_path,
-        session_key,
-        lock_path,
-    )
+    if not start_requested:
+        ctx, step_count = _run_release_step(
+            request,
+            steps,
+            ctx,
+            step_param,
+            step_count,
+            release,
+            log_path,
+            session_key,
+            lock_path,
+        )
 
     error = ctx.get("error")
     done = step_count >= len(steps) and not error
@@ -2036,6 +2038,7 @@ def release_progress(request, pk: int, action: str):
         "started": ctx.get("started", False),
         "paused": paused,
         "show_log": show_log,
+        "start_pending": start_requested,
         "step_states": step_states,
         "awaiting_approval": awaiting_approval,
         "approval_credentials_missing": approval_credentials_missing,
