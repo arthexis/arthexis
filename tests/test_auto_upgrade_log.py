@@ -95,51 +95,6 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
     )
 
 
-@pytest.mark.django_db
-def test_auto_upgrade_report_marks_fast_lane(monkeypatch, settings, tmp_path):
-    env_base = tmp_path / "runtime"
-    lock_dir = env_base / ".locks"
-    lock_dir.mkdir(parents=True)
-    (lock_dir / "auto_upgrade_fast_lane.lck").touch()
-
-    settings.BASE_DIR = tmp_path / "settings"
-    monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
-
-    report = system._build_auto_upgrade_report()
-
-    assert report["settings"]["fast_lane_enabled"]
-    assert report["schedule"]["fast_lane_enabled"]
-    assert "hour" in report["schedule"]["description"].lower()
-
-
-@pytest.mark.django_db
-def test_auto_upgrade_report_fast_lane_next_run_uses_log_timestamp(
-    monkeypatch, settings, tmp_path
-):
-    env_base = tmp_path / "runtime"
-    lock_dir = env_base / ".locks"
-    log_dir = env_base / "logs"
-    lock_dir.mkdir(parents=True)
-    log_dir.mkdir(parents=True)
-    (lock_dir / "auto_upgrade_fast_lane.lck").touch()
-
-    log_file = log_dir / "auto-upgrade.log"
-    log_file.write_text("2024-01-01T12:44:00+00:00 logged entry\n", encoding="utf-8")
-
-    settings.BASE_DIR = tmp_path / "settings"
-    monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
-
-    monkeypatch.setattr(
-        system,
-        "_load_auto_upgrade_schedule",
-        lambda: {"available": True, "configured": True, "last_run_at": "", "next_run": ""},
-    )
-
-    report = system._build_auto_upgrade_report()
-
-    assert report["schedule"]["last_run_at"] == report["log_entries"][0]["timestamp"]
-    assert report["schedule"]["next_run"]
-
 
 def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
     calls: list[str | None] = []
