@@ -49,7 +49,7 @@ class SecondaryInstanceError(Exception):
     """Raised when a referenced sibling installation cannot be used."""
 
 
-def maintenance_assets_dir() -> Path:
+def _maintenance_assets_dir() -> Path:
     return Path(settings.BASE_DIR) / "config" / "data" / "nginx" / "maintenance"
 
 
@@ -214,9 +214,7 @@ def _write_config_with_sudo(dest: Path, content: str, *, sudo: str = "sudo") -> 
 
 
 def _ensure_maintenance_assets(*, sudo: str = "sudo") -> None:
-    assets_dir = maintenance_assets_dir()
-    if not assets_dir.exists():
-        return
+    assets_dir = _maintenance_assets_dir()
     if not assets_dir.is_dir():
         return
     subprocess.run([sudo, "mkdir", "-p", str(MAINTENANCE_DEST_DIR)], check=True)
