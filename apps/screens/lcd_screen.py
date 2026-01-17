@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from glob import glob
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -31,6 +32,7 @@ from itertools import cycle, islice
 
 import psutil
 
+from apps.loggers.rotation import build_daily_rotating_file_handler
 
 def _resolve_base_dir() -> Path:
     env_base = os.getenv("ARTHEXIS_BASE_DIR")
@@ -56,20 +58,27 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 WORK_DIR.mkdir(parents=True, exist_ok=True)
 HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
+file_handler = build_daily_rotating_file_handler(
+    LOG_FILE,
+    formatter=logging.Formatter(LOG_FORMAT),
+)
 logging.basicConfig(
     level=logging.DEBUG,
     format=LOG_FORMAT,
-    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
+    handlers=[file_handler, logging.StreamHandler()],
 )
 root_logger = logging.getLogger()
 if not any(
-    isinstance(handler, logging.FileHandler)
+    isinstance(handler, TimedRotatingFileHandler)
     and Path(getattr(handler, "baseFilename", "")) == LOG_FILE
     for handler in root_logger.handlers
 ):
-    file_handler = logging.FileHandler(LOG_FILE)
-    file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-    root_logger.addHandler(file_handler)
+    root_logger.addHandler(
+        build_daily_rotating_file_handler(
+            LOG_FILE,
+            formatter=logging.Formatter(LOG_FORMAT),
+        )
+    )
 root_logger.setLevel(logging.DEBUG)
 
 from apps.screens.lcd import (
