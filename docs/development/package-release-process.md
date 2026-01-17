@@ -95,8 +95,9 @@ tag manually.
 
 Use one of the following options:
 
-- **Release manager profile**: Add GitHub credentials (token) to the Release
-  Manager profile so the workflow can push tags automatically.
+- **Release manager profile**: Add a GitHub personal access token to the `Git
+  password/token` or `GitHub token` field in the Release Manager profile so the
+  workflow can push tags automatically.
 - **Local authentication**: Run `git push origin vX.Y.Z` from an authenticated
   environment (for example a shell with a GitHub token or SSH key configured).
 
