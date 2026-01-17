@@ -4,10 +4,10 @@ import importlib.util
 import os
 import shutil
 import subprocess
-from urllib.parse import quote, urlsplit, urlunsplit
 from pathlib import Path
 from typing import Iterable
 
+from apps.release import git_utils
 
 def _run(
     cmd: Iterable[str], *, check: bool = True, cwd: Path | str | None = None
@@ -19,24 +19,16 @@ def _authed_remote_url(remote: str, *, base_dir: Path | None = None) -> str | No
     token = (os.environ.get("GITHUB_TOKEN") or "").strip()
     if not token:
         return None
-    proc = subprocess.run(
-        ["git", "remote", "get-url", remote],
-        capture_output=True,
-        text=True,
-        cwd=base_dir,
-    )
-    if proc.returncode != 0:
-        return None
-    url = (proc.stdout or "").strip()
+    url = git_utils.git_remote_url(remote, base_dir=base_dir, use_push_url=True)
+    if not url:
+        url = git_utils.git_remote_url(remote, base_dir=base_dir)
     if not url:
         return None
-    parsed = urlsplit(url)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    host = parsed.netloc.split("@", 1)[-1]
-    password = quote(token, safe="")
-    netloc = f"x-access-token:{password}@{host}"
-    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+    return git_utils.remote_url_with_credentials(
+        url,
+        username="x-access-token",
+        password=token,
+    )
 
 
 def _git_push(remote: str, *refs: str, base_dir: Path | None = None) -> None:

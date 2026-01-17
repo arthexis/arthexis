@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
-from urllib.parse import quote, urlsplit, urlunsplit
+from apps.release import git_utils
 
 try:  # pragma: no cover - optional dependency
     import toml  # type: ignore
@@ -483,18 +483,6 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
 
 
-def _git_remote_url(remote: str = "origin") -> Optional[str]:
-    proc = subprocess.run(
-        ["git", "remote", "get-url", remote],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        return None
-    return (proc.stdout or "").strip() or None
-
-
 def _git_tag_commit(tag_name: str) -> Optional[str]:
     """Return the commit referenced by ``tag_name`` in the local repository."""
 
@@ -536,19 +524,6 @@ def _git_remote_tag_commit(remote: str, tag_name: str) -> Optional[str]:
     return commit
 
 
-def _remote_with_credentials(url: str, creds: GitCredentials) -> Optional[str]:
-    if not creds.has_auth():
-        return None
-    parsed = urlsplit(url)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    host = parsed.netloc.split("@", 1)[-1]
-    username = quote((creds.username or "").strip(), safe="")
-    password = quote((creds.password or "").strip(), safe="")
-    netloc = f"{username}:{password}@{host}"
-    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
-
-
 def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcessError) -> None:
     details = _format_subprocess_error(exc)
     message = (
@@ -586,9 +561,13 @@ def _push_tag(tag_name: str, package: Package) -> None:
 
     creds = _manager_git_credentials(package) or _environment_git_credentials()
     if creds and creds.has_auth():
-        remote_url = _git_remote_url("origin")
+        remote_url = git_utils.git_remote_url("origin")
         if remote_url:
-            authed_url = _remote_with_credentials(remote_url, creds)
+            authed_url = git_utils.remote_url_with_credentials(
+                remote_url,
+                username=(creds.username or "").strip(),
+                password=(creds.password or "").strip(),
+            )
             if authed_url:
                 try:
                     _run(["git", "push", authed_url, tag_name])
