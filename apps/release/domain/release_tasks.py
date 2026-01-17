@@ -4,6 +4,7 @@ import importlib.util
 import os
 import shutil
 import subprocess
+from urllib.parse import quote, urlsplit, urlunsplit
 from pathlib import Path
 from typing import Iterable
 
@@ -12,6 +13,36 @@ def _run(
     cmd: Iterable[str], *, check: bool = True, cwd: Path | str | None = None
 ) -> subprocess.CompletedProcess:
     return subprocess.run(list(cmd), check=check, cwd=cwd)
+
+
+def _authed_remote_url(remote: str, *, base_dir: Path | None = None) -> str | None:
+    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    if not token:
+        return None
+    proc = subprocess.run(
+        ["git", "remote", "get-url", remote],
+        capture_output=True,
+        text=True,
+        cwd=base_dir,
+    )
+    if proc.returncode != 0:
+        return None
+    url = (proc.stdout or "").strip()
+    if not url:
+        return None
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    host = parsed.netloc.split("@", 1)[-1]
+    password = quote(token, safe="")
+    netloc = f"x-access-token:{password}@{host}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def _git_push(remote: str, *refs: str, base_dir: Path | None = None) -> None:
+    authed_remote = _authed_remote_url(remote, base_dir=base_dir)
+    target_remote = authed_remote or remote
+    _run(["git", "push", target_remote, *refs], cwd=base_dir)
 
 
 def _ignored_working_tree_paths(base_dir: Path) -> set[Path]:
@@ -105,7 +136,7 @@ def _maybe_create_maintenance_branch(
         == 0
     )
     if not remote_exists:
-        _run(["git", "push", "origin", maintenance_branch], cwd=base_dir)
+        _git_push("origin", maintenance_branch, base_dir=base_dir)
 
 
 def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
@@ -175,4 +206,4 @@ def prepare_release(version: str, *, base_dir: Path | None = None) -> None:
     _run(["git", "commit", "--amend", "--no-edit"], cwd=base_dir)
 
     _run(["git", "tag", "-a", f"v{version}", "-m", f"Release {version}"], cwd=base_dir)
-    _run(["git", "push", "origin", "main", "--tags"], cwd=base_dir)
+    _git_push("origin", "main", "--tags", base_dir=base_dir)
