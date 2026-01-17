@@ -14,7 +14,6 @@ from apps.nginx.renderers import apply_site_entries, generate_primary_config
 
 SITES_AVAILABLE_DIR = Path("/etc/nginx/sites-available")
 SITES_ENABLED_DIR = Path("/etc/nginx/sites-enabled")
-MAINTENANCE_ASSETS_DIR = Path(settings.BASE_DIR) / "config" / "data" / "nginx" / "maintenance"
 MAINTENANCE_DEST_DIR = Path(MAINTENANCE_ROOT)
 
 
@@ -48,6 +47,10 @@ class SecondaryInstance:
 
 class SecondaryInstanceError(Exception):
     """Raised when a referenced sibling installation cannot be used."""
+
+
+def maintenance_assets_dir() -> Path:
+    return Path(settings.BASE_DIR) / "config" / "data" / "nginx" / "maintenance"
 
 
 def ensure_nginx_in_path() -> bool:
@@ -211,13 +214,14 @@ def _write_config_with_sudo(dest: Path, content: str, *, sudo: str = "sudo") -> 
 
 
 def _ensure_maintenance_assets(*, sudo: str = "sudo") -> None:
-    if not MAINTENANCE_ASSETS_DIR.exists():
+    assets_dir = maintenance_assets_dir()
+    if not assets_dir.exists():
         return
-    if not MAINTENANCE_ASSETS_DIR.is_dir():
+    if not assets_dir.is_dir():
         return
     subprocess.run([sudo, "mkdir", "-p", str(MAINTENANCE_DEST_DIR)], check=True)
     subprocess.run(
-        [sudo, "cp", "-r", f"{MAINTENANCE_ASSETS_DIR}/.", str(MAINTENANCE_DEST_DIR)],
+        [sudo, "cp", "-r", f"{assets_dir}/.", str(MAINTENANCE_DEST_DIR)],
         check=True,
     )
 
