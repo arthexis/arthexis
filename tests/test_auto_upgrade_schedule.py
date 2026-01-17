@@ -8,28 +8,14 @@ from apps.core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PAT
 
 
 @pytest.mark.django_db
-def test_auto_upgrade_schedule_has_empty_last_run_before_first_execution():
-    from django_celery_beat.models import IntervalSchedule, PeriodicTask
-
-    PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
-
-    schedule = IntervalSchedule.objects.create(every=5, period=IntervalSchedule.MINUTES)
-    PeriodicTask.objects.create(
-        name=AUTO_UPGRADE_TASK_NAME,
-        task=AUTO_UPGRADE_TASK_PATH,
-        interval=schedule,
-        enabled=True,
-    )
-
-    info = system._load_auto_upgrade_schedule()
-
-    assert info["configured"] is True
-    assert info["available"] is True
-    assert info["last_run_at"] == ""
-
-
-@pytest.mark.django_db
-def test_auto_upgrade_schedule_reports_last_run_once_recorded():
+@pytest.mark.parametrize(
+    ("last_run_at", "expected"),
+    [
+        (None, ""),
+        ("timestamp", "formatted"),
+    ],
+)
+def test_auto_upgrade_schedule_reports_last_run(last_run_at, expected):
     from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
     PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
@@ -42,11 +28,14 @@ def test_auto_upgrade_schedule_reports_last_run_once_recorded():
         enabled=True,
     )
 
-    timestamp = timezone.now()
-    task.last_run_at = timestamp
-    task.save(update_fields=["last_run_at"])
+    if last_run_at == "timestamp":
+        timestamp = timezone.now()
+        task.last_run_at = timestamp
+        task.save(update_fields=["last_run_at"])
+        expected = system._format_timestamp(timestamp)
 
     info = system._load_auto_upgrade_schedule()
 
-    assert info["last_run_at"] == system._format_timestamp(timestamp)
-
+    assert info["configured"] is True
+    assert info["available"] is True
+    assert info["last_run_at"] == expected
