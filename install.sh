@@ -54,7 +54,6 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
-ENABLE_AP_WATCHDOG=false
 SECONDARY_INSTANCE=""
 MIGRATOR_INSTANCE=""
 INSTANCE_TYPE="primary"
@@ -62,7 +61,7 @@ MIGRATOR_SERVICE_NAME=""
 SIDECAR_RECORDS=()
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--ap-watchdog] [--clean] [--start|--no-start] [--repair] [--secondary NAME] [--migrator NAME]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--clean] [--start|--no-start] [--repair] [--secondary NAME] [--migrator NAME]" >&2
     exit 1
 }
 
@@ -461,10 +460,6 @@ while [[ $# -gt 0 ]]; do
         --no-rfid-service)
             ENABLE_RFID_SERVICE=false
             DISABLE_RFID_SERVICE=true
-            shift
-            ;;
-        --ap-watchdog)
-            ENABLE_AP_WATCHDOG=true
             shift
             ;;
         --clean)
@@ -875,11 +870,6 @@ if [ -n "$SERVICE" ]; then
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
     fi
-fi
-
-if [ "$ENABLE_AP_WATCHDOG" = true ]; then
-    "$BASE_DIR/.venv/bin/python" "$BASE_DIR/scripts/ap_watchdog.py" --snapshot || true
-    arthexis_install_ap_watchdog_service "$BASE_DIR" "$LOCK_DIR" "$LOG_DIR"
 fi
 
 
