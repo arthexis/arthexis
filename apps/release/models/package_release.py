@@ -221,23 +221,42 @@ class PackageRelease(Entity):
             combined, timezone.get_current_timezone()
         )
 
+    def _manager_candidates(
+        self, user: models.Model | None = None
+    ) -> list[ReleaseManager]:
+        """Return available release managers from release, package, or user."""
+
+        candidates: list[ReleaseManager] = []
+        seen: set[tuple[str, int]] = set()
+
+        def add_candidate(candidate: ReleaseManager | None) -> None:
+            if not candidate:
+                return
+            key = (
+                ("pk", candidate.pk)
+                if candidate.pk is not None
+                else ("obj", id(candidate))
+            )
+            if key in seen:
+                return
+            seen.add(key)
+            candidates.append(candidate)
+
+        for candidate in (self.release_manager, self.package.release_manager):
+            add_candidate(candidate)
+
+        if user is not None and getattr(user, "is_authenticated", False):
+            for user_manager in ReleaseManager.objects.filter(user=user):
+                add_candidate(user_manager)
+
+        return candidates
+
     def to_credentials(
         self, user: models.Model | None = None
     ) -> Credentials | None:
         """Return :class:`Credentials` from available release managers."""
 
-        manager_candidates: list[ReleaseManager] = []
-
-        for candidate in (self.release_manager, self.package.release_manager):
-            if candidate and candidate not in manager_candidates:
-                manager_candidates.append(candidate)
-
-        if user is not None and getattr(user, "is_authenticated", False):
-            for user_manager in ReleaseManager.objects.filter(user=user):
-                if user_manager not in manager_candidates:
-                    manager_candidates.append(user_manager)
-
-        for manager in manager_candidates:
+        for manager in self._manager_candidates(user=user):
             creds = manager.to_credentials()
             if creds and creds.has_auth():
                 return creds
@@ -254,17 +273,7 @@ class PackageRelease(Entity):
 
     def get_github_token(self, user: models.Model | None = None) -> str | None:
         """Return GitHub token from the associated release manager or environment."""
-        manager_candidates = [
-            candidate
-            for candidate in (self.release_manager, self.package.release_manager)
-            if candidate
-        ]
-        if user is not None and getattr(user, "is_authenticated", False):
-            for user_manager in ReleaseManager.objects.filter(user=user):
-                if user_manager not in manager_candidates:
-                    manager_candidates.append(user_manager)
-
-        for manager in manager_candidates:
+        for manager in self._manager_candidates(user=user):
             if manager.github_token:
                 return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
