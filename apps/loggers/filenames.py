@@ -11,5 +11,5 @@ def normalize_log_filename(value: str, fallback: str = "arthexis") -> str:
     """Return a filename-safe string with nonstandard characters collapsed."""
 
     cleaned = _FILENAME_SAFE_PATTERN.sub("_", value.strip())
-    cleaned = cleaned.strip("_")
+    cleaned = cleaned.strip("_.")
     return cleaned or fallback
