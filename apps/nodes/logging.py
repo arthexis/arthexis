@@ -5,6 +5,7 @@ from pathlib import Path
 
 from django.conf import settings
 
+from apps.loggers.rotation import build_daily_rotating_file_handler
 
 _LOGGER_NAME = "register_visitor_node"
 _HANDLER_ATTR = "_register_visitor_configured"
@@ -24,8 +25,10 @@ def _build_registration_logger(
     log_dir = Path(getattr(settings, "LOG_DIR", Path(settings.BASE_DIR) / "logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    handler = logging.FileHandler(log_dir / filename)
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    handler = build_daily_rotating_file_handler(
+        log_dir / filename,
+        formatter=logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"),
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
@@ -50,4 +53,3 @@ def get_register_local_node_logger() -> logging.Logger:
     return _build_registration_logger(
         _LOCAL_LOGGER_NAME, _LOCAL_HANDLER_ATTR, "register_local_node.log"
     )
-

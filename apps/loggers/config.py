@@ -10,6 +10,7 @@ from typing import Any
 
 from .filenames import normalize_log_filename
 from .paths import select_log_dir
+from .rotation import TRANSACTIONAL_LOG_RETENTION_DAYS
 
 
 def configure_library_loggers(
@@ -58,7 +59,7 @@ def build_logging_settings(
                 "class": "apps.loggers.handlers.ActiveAppFileHandler",
                 "filename": str(log_dir / log_file_name),
                 "when": "midnight",
-                "backupCount": 30,
+                "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
                 "formatter": "standard",
             },
@@ -66,7 +67,7 @@ def build_logging_settings(
                 "class": "apps.loggers.handlers.ErrorFileHandler",
                 "filename": str(log_dir / "error.log"),
                 "when": "midnight",
-                "backupCount": 30,
+                "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
                 "formatter": "standard",
                 "level": "WARNING",
@@ -75,7 +76,7 @@ def build_logging_settings(
                 "class": "apps.loggers.handlers.CeleryFileHandler",
                 "filename": str(log_dir / "celery.log"),
                 "when": "midnight",
-                "backupCount": 30,
+                "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
                 "formatter": "standard",
                 "level": "INFO",
@@ -84,7 +85,7 @@ def build_logging_settings(
                 "class": "apps.loggers.handlers.PageMissesFileHandler",
                 "filename": str(log_dir / "page_misses.log"),
                 "when": "midnight",
-                "backupCount": 30,
+                "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
                 "formatter": "standard",
                 "level": "INFO",
