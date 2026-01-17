@@ -456,7 +456,11 @@ def _build_artifacts_stale(
     ctx: dict, step_count: int, steps: Sequence[tuple[str, object]]
 ) -> bool:
     build_step_index = next(
-        (index for index, (name, _) in enumerate(steps) if name == "Build release artifacts"),
+        (
+            index
+            for index, (name, _) in enumerate(steps)
+            if name == BUILD_RELEASE_ARTIFACTS_STEP_NAME
+        ),
         None,
     )
     if build_step_index is None:
@@ -481,7 +485,11 @@ def _pre_build_sources_changed(
     ctx: dict, step_count: int, steps: Sequence[tuple[str, object]]
 ) -> bool:
     build_step_index = next(
-        (index for index, (name, _) in enumerate(steps) if name == "Build release artifacts"),
+        (
+            index
+            for index, (name, _) in enumerate(steps)
+            if name == BUILD_RELEASE_ARTIFACTS_STEP_NAME
+        ),
         None,
     )
     if build_step_index is None:
@@ -1372,56 +1380,61 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping pre-release actions")
-        ctx["pre_build_revision"] = _current_git_revision()
-        return
-    _sync_with_origin_main(log_path)
-    PackageRelease.dump_fixture()
-    staged_release_fixtures: list[Path] = []
-    release_fixture_paths = sorted(
-        Path("apps/core/fixtures").glob("releases__*.json")
-    )
-    if release_fixture_paths:
-        subprocess.run(
-            ["git", "add", *[str(path) for path in release_fixture_paths]],
-            check=True,
-        )
-        staged_release_fixtures = release_fixture_paths
-        formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
-        _append_log(log_path, "Staged release fixtures " + formatted)
-    version_path = Path("VERSION")
-    previous_version_text = ""
-    if version_path.exists():
-        previous_version_text = version_path.read_text(encoding="utf-8").strip()
-    repo_version_before_sync = getattr(
-        release, "_repo_version_before_sync", previous_version_text
-    )
-    version_path.write_text(f"{release.version}\n", encoding="utf-8")
-    _append_log(log_path, f"Updated VERSION file to {release.version}")
-    subprocess.run(["git", "add", "VERSION"], check=True)
-    _append_log(log_path, "Staged VERSION for commit")
-    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False)
-    if diff.returncode != 0:
-        subprocess.run(
-            ["git", "commit", "-m", f"pre-release commit {release.version}"],
-            check=True,
-        )
-        _append_log(log_path, f"Committed VERSION update for {release.version}")
     else:
-        _append_log(
-            log_path, "No changes detected for VERSION; skipping commit"
+        _sync_with_origin_main(log_path)
+        PackageRelease.dump_fixture()
+        staged_release_fixtures: list[Path] = []
+        release_fixture_paths = sorted(
+            Path("apps/core/fixtures").glob("releases__*.json")
         )
-        subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
-        _append_log(log_path, "Unstaged VERSION file")
-        for path in staged_release_fixtures:
-            subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
-            _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
-    _append_log(log_path, "Pre-release actions complete")
-    ctx["pre_build_revision"] = _current_git_revision()
+        if release_fixture_paths:
+            subprocess.run(
+                ["git", "add", *[str(path) for path in release_fixture_paths]],
+                check=True,
+            )
+            staged_release_fixtures = release_fixture_paths
+            formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
+            _append_log(log_path, "Staged release fixtures " + formatted)
+        version_path = Path("VERSION")
+        previous_version_text = ""
+        if version_path.exists():
+            previous_version_text = version_path.read_text(encoding="utf-8").strip()
+        repo_version_before_sync = getattr(
+            release, "_repo_version_before_sync", previous_version_text
+        )
+        version_path.write_text(f"{release.version}\n", encoding="utf-8")
+        _append_log(log_path, f"Updated VERSION file to {release.version}")
+        subprocess.run(["git", "add", "VERSION"], check=True)
+        _append_log(log_path, "Staged VERSION for commit")
+        diff = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False)
+        if diff.returncode != 0:
+            subprocess.run(
+                ["git", "commit", "-m", f"pre-release commit {release.version}"],
+                check=True,
+            )
+            _append_log(log_path, f"Committed VERSION update for {release.version}")
+        else:
+            _append_log(
+                log_path, "No changes detected for VERSION; skipping commit"
+            )
+            subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
+            _append_log(log_path, "Unstaged VERSION file")
+            for path in staged_release_fixtures:
+                subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
+                _append_log(
+                    log_path,
+                    f"Unstaged release fixture {_format_path(path)}",
+                )
+        _append_log(log_path, "Pre-release actions complete")
+    pre_build_revision = _current_git_revision()
+    ctx["pre_build_revision"] = pre_build_revision
     if ctx["pre_build_revision"]:
         _append_log(
             log_path,
             f"Recorded pre-build revision {ctx['pre_build_revision']}",
         )
+    if ctx.get("dry_run"):
+        return
 
 
 def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
@@ -1785,13 +1798,14 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
 
 
 FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
+BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
 
 
 PUBLISH_STEPS = [
     ("Check version number availability", _step_check_version),
     (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
     ("Execute pre-release actions", _step_pre_release_actions),
-    ("Build release artifacts", _step_promote_build),
+    (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
     ("Get Release Manager Approval", _step_release_manager_approval),
     (
