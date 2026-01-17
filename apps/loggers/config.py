@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .filenames import normalize_log_filename
 from .paths import select_log_dir
 
 
@@ -38,7 +39,11 @@ def build_logging_settings(
 
     log_dir = select_log_dir(base_dir)
     os.environ.setdefault("ARTHEXIS_LOG_DIR", str(log_dir))
-    log_file_name = "tests.log" if "test" in sys.argv else f"{socket.gethostname()}.log"
+    log_file_name = (
+        "tests.log"
+        if "test" in sys.argv
+        else f"{normalize_log_filename(socket.gethostname())}.log"
+    )
 
     logging_config: dict[str, Any] = {
         "version": 1,
