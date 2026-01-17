@@ -14,6 +14,7 @@
   const counter = document.getElementById('user-story-char-count');
   const submitBtn = form.querySelector('button[type="submit"]');
   const ratingInputs = overlay.querySelectorAll('.user-story-rating input');
+  const ratingLabels = overlay.querySelectorAll('.user-story-rating label');
   const ratingHint = document.getElementById('user-story-rating-hint');
   const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
   const errorMessage = form.dataset.submitError;
@@ -33,13 +34,23 @@
     }
   };
 
-  const setRatingHint = () => {
+  const setRatingHintText = ratingValue => {
     if (!ratingHint) {
       return;
     }
+    ratingHint.textContent = ratingMessages[ratingValue] || ratingMessages[0] || '';
+  };
+
+  const setRatingHint = () => {
     const selected = Array.from(ratingInputs || []).find(input => input.checked);
     const ratingValue = selected ? Number(selected.value) : 0;
-    ratingHint.textContent = ratingMessages[ratingValue] || ratingMessages[0] || '';
+    setRatingHintText(ratingValue);
+  };
+
+  const getRatingValueFromLabel = label => {
+    const inputId = label.getAttribute('for');
+    const input = inputId ? document.getElementById(inputId) : null;
+    return input ? Number(input.value) : 0;
   };
 
   const resetAlerts = () => {
@@ -124,6 +135,16 @@
       input.addEventListener('change', setRatingHint);
     });
     setRatingHint();
+  }
+
+  if (ratingLabels && ratingLabels.length) {
+    ratingLabels.forEach(label => {
+      const ratingValue = getRatingValueFromLabel(label);
+      label.addEventListener('mouseenter', () => setRatingHintText(ratingValue));
+      label.addEventListener('mouseleave', setRatingHint);
+      label.addEventListener('focus', () => setRatingHintText(ratingValue));
+      label.addEventListener('blur', setRatingHint);
+    });
   }
 
   form.addEventListener('submit', async event => {
