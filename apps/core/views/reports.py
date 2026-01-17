@@ -396,6 +396,18 @@ def _update_publish_controls(
     return ctx, resume_requested, None
 
 
+def _parse_step_param(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        step = int(value.strip())
+    except (AttributeError, ValueError):
+        return None
+    if step < 0:
+        return None
+    return step
+
+
 def _prepare_step_progress(
     request,
     ctx: dict,
@@ -409,9 +421,13 @@ def _prepare_step_progress(
         except Exception:
             restart_count = 0
     step_count = ctx.get("step", 0)
-    step_param = request.GET.get("step")
+    try:
+        step_count = int(step_count)
+    except (TypeError, ValueError):
+        step_count = 0
+    step_param = _parse_step_param(request.GET.get("step"))
     if resume_requested and step_param is None:
-        step_param = str(step_count)
+        step_param = step_count
     return restart_count, step_param
 
 
@@ -420,7 +436,7 @@ def _prepare_logging(
     release: PackageRelease,
     log_dir: Path,
     log_dir_warning_message: str | None,
-    step_param: str | None,
+    step_param: int | None,
     step_count: int,
 ):
     log_name = _release_log_name(release.package.name, release.version)
@@ -439,7 +455,7 @@ def _prepare_logging(
     if (
         ctx.get("started")
         and step_count == 0
-        and (step_param is None or step_param == "0")
+        and (step_param is None or step_param == 0)
     ):
         if log_path.exists():
             log_path.unlink()
@@ -538,7 +554,7 @@ def _run_release_step(
     request,
     steps,
     ctx: dict,
-    step_param: str | None,
+    step_param: int | None,
     step_count: int,
     release: PackageRelease,
     log_path: Path,
@@ -554,9 +570,8 @@ def _run_release_step(
         and not error
         and step_count < len(steps)
     ):
-        to_run = int(step_param)
-        if to_run == step_count:
-            name, func = steps[to_run]
+        if step_param == step_count:
+            name, func = steps[step_param]
             try:
                 func(release, ctx, log_path, user=request.user)
             except ApprovalRequired:
