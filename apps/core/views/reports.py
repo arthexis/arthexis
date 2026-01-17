@@ -909,29 +909,6 @@ def _upload_release_assets(
         _append_log(log_path, f"Uploaded GitHub release asset {name}")
 
 
-def _trigger_publish_workflow(
-    *,
-    owner: str,
-    repo: str,
-    tag_name: str,
-    token: str | None,
-    repository: str,
-) -> None:
-    dispatch_url = (
-        f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/publish.yml/dispatches"
-    )
-    _github_request(
-        "post",
-        dispatch_url,
-        token=token,
-        expected_status={204},
-        json={
-            "ref": tag_name,
-            "inputs": {"repository": repository, "tag": tag_name},
-        },
-    )
-
-
 def _fetch_publish_workflow_run(
     *,
     owner: str,
@@ -961,9 +938,9 @@ def _fetch_publish_workflow_run(
             return None
         return runs
 
-    runs = _get_runs({"event": "workflow_dispatch", "branch": tag_name, "per_page": 5})
+    runs = _get_runs({"event": "push", "branch": tag_name, "per_page": 5})
     if not runs:
-        runs = _get_runs({"event": "workflow_dispatch", "per_page": 5})
+        runs = _get_runs({"event": "push", "per_page": 5})
     if not isinstance(runs, list) or not runs:
         return None
     for run in runs:
@@ -1542,7 +1519,7 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
     if ctx.get("dry_run"):
         _append_log(
             log_path,
-            "Dry run: skipping GitHub Actions publish dispatch",
+            "Dry run: skipping GitHub Actions publish trigger",
         )
         return
 
@@ -1568,17 +1545,9 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
         log_path=log_path,
     )
     _append_log(log_path, "Exported release artifacts to GitHub release")
-
-    _trigger_publish_workflow(
-        owner=owner,
-        repo=repo,
-        tag_name=tag_name,
-        token=token,
-        repository="pypi",
-    )
     _append_log(
         log_path,
-        f"Triggered GitHub Actions publish workflow for {tag_name}",
+        f"Release tag {tag_name} pushed; publish workflow will run on tag.",
     )
 
 
