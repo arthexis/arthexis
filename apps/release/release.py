@@ -546,8 +546,8 @@ def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcess
         "Git authentication failed while pushing tag {tag}. "
         "Configure Git credentials in the release manager profile or authenticate "
         "locally, then rerun the publish step or push the tag manually with `git push "
-        "origin {tag}`. See docs/development/package-release-process.md#git-authentication-"
-        "for-tag-pushes."
+        "origin {tag}`. "
+        "See docs/development/package-release-process.md#git-authentication-for-tag-pushes."
     ).format(tag=tag_name)
     if details:
         message = f"{message} Git reported: {details}"
