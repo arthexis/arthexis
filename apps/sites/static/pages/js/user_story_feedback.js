@@ -132,8 +132,9 @@
 
   if (ratingInputs && ratingInputs.length) {
     ratingInputs.forEach(input => {
+      const showHint = () => setRatingHintText(Number(input.value));
       input.addEventListener('change', setRatingHint);
-      input.addEventListener('focus', () => setRatingHintText(Number(input.value)));
+      input.addEventListener('focus', showHint);
       input.addEventListener('blur', setRatingHint);
     });
     setRatingHint();
@@ -142,7 +143,8 @@
   if (ratingLabels && ratingLabels.length) {
     ratingLabels.forEach(label => {
       const ratingValue = getRatingValueFromLabel(label);
-      label.addEventListener('mouseenter', () => setRatingHintText(ratingValue));
+      const showHint = () => setRatingHintText(ratingValue);
+      label.addEventListener('mouseenter', showHint);
       label.addEventListener('mouseleave', setRatingHint);
     });
   }
