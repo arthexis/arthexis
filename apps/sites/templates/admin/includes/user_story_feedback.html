@@ -56,10 +56,6 @@
               value="{{ request.user.username|slice:':40' }}"
               readonly
             >
-            <div class="form-text">
-              {% blocktrans with username=request.user.username %}
-              {% endblocktrans %}
-            </div>
           </div>
         {% else %}
           <div class="mb-3">
