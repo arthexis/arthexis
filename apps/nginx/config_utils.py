@@ -97,6 +97,7 @@ def websocket_directives() -> tuple[str, ...]:
 
 def maintenance_block_lines() -> list[str]:
     maintenance_files = ("index.html", "404.html", "app-down.html")
+    error_lines = "\n        ".join(MAINTENANCE_ERROR_LINES)
     file_blocks = "\n".join(
         textwrap.dedent(
             f"""
@@ -110,7 +111,7 @@ def maintenance_block_lines() -> list[str]:
     )
     content = textwrap.dedent(
         f"""
-        {"\n        ".join(MAINTENANCE_ERROR_LINES)}
+        {error_lines}
 
         {file_blocks}
         location /maintenance/ {{
