@@ -11,6 +11,7 @@ from pathlib import Path
 from django.conf import settings
 
 from config.active_app import get_active_app
+from apps.loggers.filenames import normalize_log_filename
 
 
 class ActiveAppFileHandler(TimedRotatingFileHandler):
@@ -21,7 +22,7 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
         log_dir.mkdir(parents=True, exist_ok=True)
         if "test" in sys.argv:
             return log_dir / "tests.log"
-        return log_dir / f"{get_active_app()}.log"
+        return log_dir / f"{normalize_log_filename(get_active_app())}.log"
 
     def emit(self, record: logging.LogRecord) -> None:
         current = str(self._current_file())
