@@ -68,6 +68,15 @@ if NODE_ROLE is None:
     role_lock = BASE_DIR / ".locks" / "role.lck"
     NODE_ROLE = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
 
+PRODUCTION_ROLES = {
+    "watchtower",
+    "constellation",
+    "satellite",
+    "control",
+    "terminal",
+    "gateway",
+}
+
 _debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
 DEBUG = env_bool("DEBUG", _debugpy_attached)
 HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
