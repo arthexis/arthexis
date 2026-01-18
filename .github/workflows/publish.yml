@@ -6,7 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -44,6 +44,9 @@ jobs:
     environment:
       name: pypi
       url: https://pypi.org/project/arthexis/
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       id-token: write
       attestations: write

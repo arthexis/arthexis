@@ -16,7 +16,11 @@ def _run(
 
 
 def _authed_remote_url(remote: str, *, base_dir: Path | None = None) -> str | None:
-    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    token = (
+        os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("GH_TOKEN")
+        or ""
+    ).strip()
     if not token:
         return None
     url = git_utils.git_remote_url(remote, base_dir=base_dir, use_push_url=True)
