@@ -714,6 +714,26 @@ def _collect_dirty_files() -> list[dict[str, str]]:
     return dirty
 
 
+def _collect_status_paths(pathspecs: list[str]) -> list[str]:
+    if not pathspecs:
+        return []
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "--", *pathspecs],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    paths: list[str] = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:]
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1]
+        paths.append(path)
+    return paths
+
+
 def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
 
@@ -1339,28 +1359,37 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     _sync_with_origin_main(log_path)
     PackageRelease.dump_fixture()
     staged_release_fixtures: list[Path] = []
-    release_fixture_paths = sorted(
-        Path("apps/core/fixtures").glob("releases__*.json")
+    release_fixture_status = _collect_status_paths(
+        ["apps/core/fixtures/releases__*.json"]
     )
-    if release_fixture_paths:
+    if release_fixture_status:
         subprocess.run(
-            ["git", "add", *[str(path) for path in release_fixture_paths]],
+            ["git", "add", "-A", "--", "apps/core/fixtures/releases__*.json"],
             check=True,
         )
-        staged_release_fixtures = release_fixture_paths
-        formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
+        staged_release_fixtures = [Path(path) for path in release_fixture_status]
+        formatted = ", ".join(
+            _format_path(path) for path in staged_release_fixtures
+        )
         _append_log(log_path, "Staged release fixtures " + formatted)
     version_path = Path("VERSION")
-    previous_version_text = ""
-    if version_path.exists():
-        previous_version_text = version_path.read_text(encoding="utf-8").strip()
+    previous_version_text = (
+        version_path.read_text(encoding="utf-8").strip()
+        if version_path.exists()
+        else ""
+    )
     repo_version_before_sync = getattr(
         release, "_repo_version_before_sync", previous_version_text
     )
-    version_path.write_text(f"{release.version}\n", encoding="utf-8")
-    _append_log(log_path, f"Updated VERSION file to {release.version}")
-    subprocess.run(["git", "add", "VERSION"], check=True)
-    _append_log(log_path, "Staged VERSION for commit")
+    if previous_version_text != release.version:
+        version_path.write_text(f"{release.version}\n", encoding="utf-8")
+        _append_log(log_path, f"Updated VERSION file to {release.version}")
+        subprocess.run(["git", "add", "VERSION"], check=True)
+        _append_log(log_path, "Staged VERSION for commit")
+    else:
+        _append_log(
+            log_path, f"VERSION already set to {release.version}; skipping update"
+        )
     diff = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False)
     if diff.returncode != 0:
         subprocess.run(
@@ -1370,13 +1399,8 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         _append_log(log_path, f"Committed VERSION update for {release.version}")
     else:
         _append_log(
-            log_path, "No changes detected for VERSION; skipping commit"
+            log_path, "No release metadata changes detected; skipping commit"
         )
-        subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
-        _append_log(log_path, "Unstaged VERSION file")
-        for path in staged_release_fixtures:
-            subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
-            _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
     _append_log(log_path, "Pre-release actions complete")
 
 
