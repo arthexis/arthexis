@@ -28,6 +28,8 @@ _stop_event = threading.Event()
 _reader = None
 _auto_detect_logged = False
 _last_setup_failure: float | None = None
+_last_auto_detect_failure: float | None = None
+_last_not_configured_log = 0.0
 _suite_marker = f"{os.getpid()}:{int(time.time())}"
 
 try:  # pragma: no cover - debugging helper not available on all platforms
@@ -39,6 +41,12 @@ _FD_SNAPSHOT_THRESHOLD = int(os.environ.get("RFID_FD_LOG_THRESHOLD", "400"))
 _FD_SNAPSHOT_INTERVAL = float(os.environ.get("RFID_FD_LOG_INTERVAL", "10"))
 _last_fd_snapshot = 0.0
 _SETUP_BACKOFF_SECONDS = float(os.environ.get("RFID_SETUP_BACKOFF_SECONDS", "30"))
+_AUTO_DETECT_BACKOFF_SECONDS = float(
+    os.environ.get("RFID_AUTO_DETECT_BACKOFF_SECONDS", "30")
+)
+_NOT_CONFIGURED_LOG_INTERVAL = float(
+    os.environ.get("RFID_NOT_CONFIGURED_LOG_INTERVAL", "30")
+)
 
 
 def _log_fd_snapshot(label: str) -> None:
@@ -234,7 +242,7 @@ def _auto_detect_configured() -> bool:
 
 def is_configured() -> bool:
     """Return ``True`` if an RFID reader is configured for this node."""
-    global _auto_detect_logged
+    global _auto_detect_logged, _last_auto_detect_failure
 
     has_lock, lock = lock_file_active()
     if has_lock:
@@ -244,6 +252,14 @@ def is_configured() -> bool:
     if env_flag and env_flag not in {"1", "true", "yes"}:
         return False
 
+    now = time.monotonic()
+    if (
+        _last_auto_detect_failure is not None
+        and _AUTO_DETECT_BACKOFF_SECONDS > 0
+        and now - _last_auto_detect_failure < _AUTO_DETECT_BACKOFF_SECONDS
+    ):
+        return False
+
     detected = _auto_detect_configured()
     if detected and not _auto_detect_logged:
         logger.info(
@@ -251,6 +267,9 @@ def is_configured() -> bool:
             _spi_device_path(),
         )
         _auto_detect_logged = True
+        _last_auto_detect_failure = None
+    elif not detected:
+        _last_auto_detect_failure = now
     return detected
 
 
@@ -395,8 +414,15 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
 
     Falls back to direct polling if no IRQ events are queued.
     """
+    global _last_not_configured_log
     if not is_configured():
-        logger.debug("RFID not configured; skipping read")
+        now = time.monotonic()
+        if (
+            _NOT_CONFIGURED_LOG_INTERVAL <= 0
+            or now - _last_not_configured_log >= _NOT_CONFIGURED_LOG_INTERVAL
+        ):
+            logger.debug("RFID not configured; skipping read")
+            _last_not_configured_log = now
         return None
     try:
         result = _tag_queue.get(timeout=timeout)
