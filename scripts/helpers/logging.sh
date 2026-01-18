@@ -125,11 +125,12 @@ arthexis_clear_log_files() {
     for dir in "${log_dirs[@]}"; do
         if [ -d "$dir" ]; then
             echo "Clearing log files in $dir..."
+            local -a find_args=("$dir" -type f ! -name ".gitkeep")
             if [ -n "$log_file" ]; then
-                find "$dir" -type f ! -path "$log_file" ! -name ".gitkeep" -print -delete
-            else
-                find "$dir" -type f ! -name ".gitkeep" -print -delete
+                find_args+=(! -path "$log_file")
             fi
+            find_args+=(-print -delete)
+            find "${find_args[@]}"
         fi
     done
 }
