@@ -31,7 +31,6 @@ class PackageAdmin(PackageAdminActionsMixin, SaveBeforeChangeAction, EntityModel
         "description",
         "homepage_url",
         "oidc_publish_enabled",
-        "release_manager",
         "is_active",
     )
     change_actions = ["create_repository_action", "prepare_next_release_action"]
@@ -57,7 +56,6 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     search_fields = ("version", "package__name")
     fields = (
         "package",
-        "release_manager",
         "version",
         "severity",
         "revision",
@@ -167,7 +165,6 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             new_releases = [
                 PackageRelease(
                     package=package,
-                    release_manager=package.release_manager,
                     version=version,
                     pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
                     release_on=release_on,

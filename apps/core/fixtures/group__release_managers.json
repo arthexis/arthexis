@@ -1,9 +1,0 @@
-[
-  {
-    "model": "auth.group",
-    "fields": {
-      "name": "Release Managers",
-      "permissions": []
-    }
-  }
-]

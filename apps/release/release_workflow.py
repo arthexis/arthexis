@@ -12,7 +12,6 @@ from django.db import DatabaseError, models
 from apps.core.views import (
     DirtyRepository,
     PUBLISH_STEPS,
-    ApprovalRequired,
     PublishPending,
     _append_log,
     _release_log_name,
@@ -106,12 +105,6 @@ def run_headless_publish(release, *, auto_release: bool = False) -> Path:
     def _execute_step(step: NodeWorkflowStep, context: dict[str, Any]):
         try:
             return step.func(release, context, log_path, user=None)
-        except ApprovalRequired as exc:
-            message = "Scheduled release requires manual approval"
-            _append_log(log_path, message)
-            context["error"] = message
-            logger.warning("%s: %s", release, message)
-            raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
         except DirtyRepository as exc:
             message = "Scheduled release halted by dirty repository state"
             _append_log(log_path, message)

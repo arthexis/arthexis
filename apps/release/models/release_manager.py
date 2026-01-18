@@ -21,7 +21,7 @@ class ReleaseManagerManager(EntityManager):
 
 
 class ReleaseManager(Profile):
-    """Store credentials for publishing packages."""
+    """Deprecated storage for release credentials (no longer used in publishing)."""
 
     owner_required = True
     objects = ReleaseManagerManager()

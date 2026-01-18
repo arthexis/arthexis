@@ -39,9 +39,7 @@ class Command(BaseCommand):
         raise CommandError("PyPI connectivity check failed")
 
     def _resolve_release(self, identifier):
-        queryset = PackageRelease.objects.select_related(
-            "package", "release_manager", "package__release_manager"
-        )
+        queryset = PackageRelease.objects.select_related("package")
         if identifier:
             try:
                 return queryset.get(pk=int(identifier))
@@ -62,4 +60,3 @@ class Command(BaseCommand):
         if release:
             return release
         raise CommandError("No releases available to check")
-

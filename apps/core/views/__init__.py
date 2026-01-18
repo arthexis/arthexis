@@ -10,7 +10,6 @@ from .odoo import (
     product_list,
 )
 from .reports import (
-    ApprovalRequired,
     DirtyRepository,
     PublishPending,
     PUBLISH_STEPS,
@@ -23,7 +22,6 @@ from .rfid import rfid_batch
 from .usage_analytics import usage_analytics_summary
 
 __all__ = [
-    "ApprovalRequired",
     "DirtyRepository",
     "PublishPending",
     "PUBLISH_STEPS",
