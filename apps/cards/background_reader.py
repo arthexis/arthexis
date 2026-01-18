@@ -30,6 +30,8 @@ _auto_detect_logged = False
 _last_setup_failure: float | None = None
 _last_auto_detect_failure: float | None = None
 _last_not_configured_log = 0.0
+_auto_detect_lock = threading.Lock()
+_log_throttle_lock = threading.Lock()
 _suite_marker = f"{os.getpid()}:{int(time.time())}"
 
 try:  # pragma: no cover - debugging helper not available on all platforms
@@ -252,25 +254,26 @@ def is_configured() -> bool:
     if env_flag and env_flag not in {"1", "true", "yes"}:
         return False
 
-    now = time.monotonic()
-    if (
-        _last_auto_detect_failure is not None
-        and _AUTO_DETECT_BACKOFF_SECONDS > 0
-        and now - _last_auto_detect_failure < _AUTO_DETECT_BACKOFF_SECONDS
-    ):
-        return False
+    with _auto_detect_lock:
+        now = time.monotonic()
+        if (
+            _last_auto_detect_failure is not None
+            and _AUTO_DETECT_BACKOFF_SECONDS > 0
+            and now - _last_auto_detect_failure < _AUTO_DETECT_BACKOFF_SECONDS
+        ):
+            return False
 
-    detected = _auto_detect_configured()
-    if detected and not _auto_detect_logged:
-        logger.info(
-            "RFID reader detected without lock file using SPI device %s",
-            _spi_device_path(),
-        )
-        _auto_detect_logged = True
-        _last_auto_detect_failure = None
-    elif not detected:
-        _last_auto_detect_failure = now
-    return detected
+        detected = _auto_detect_configured()
+        if detected and not _auto_detect_logged:
+            logger.info(
+                "RFID reader detected without lock file using SPI device %s",
+                _spi_device_path(),
+            )
+            _auto_detect_logged = True
+            _last_auto_detect_failure = None
+        elif not detected:
+            _last_auto_detect_failure = now
+        return detected
 
 
 def _irq_callback(channel):  # pragma: no cover - hardware dependent
@@ -416,13 +419,14 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
     """
     global _last_not_configured_log
     if not is_configured():
-        now = time.monotonic()
-        if (
-            _NOT_CONFIGURED_LOG_INTERVAL <= 0
-            or now - _last_not_configured_log >= _NOT_CONFIGURED_LOG_INTERVAL
-        ):
-            logger.debug("RFID not configured; skipping read")
-            _last_not_configured_log = now
+        with _log_throttle_lock:
+            now = time.monotonic()
+            if (
+                _NOT_CONFIGURED_LOG_INTERVAL <= 0
+                or now - _last_not_configured_log >= _NOT_CONFIGURED_LOG_INTERVAL
+            ):
+                logger.debug("RFID not configured; skipping read")
+                _last_not_configured_log = now
         return None
     try:
         result = _tag_queue.get(timeout=timeout)
