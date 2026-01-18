@@ -130,6 +130,51 @@ def _normalize_port(value: str | int | None) -> int | None:
     return port
 
 
+def _is_public_url(url: str) -> bool:
+    """Return True if the URL resolves only to public IP addresses."""
+
+    try:
+        parsed = urlsplit(url)
+    except Exception:
+        return False
+
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname
+
+    try:
+        addrinfo_list = socket.getaddrinfo(hostname, None)
+    except OSError:
+        return False
+
+    for family, _, _, _, sockaddr in addrinfo_list:
+        if family == socket.AF_INET:
+            ip_str = sockaddr[0]
+        elif family == socket.AF_INET6:
+            ip_str = sockaddr[0]
+        else:
+            # Unknown address family; reject conservatively.
+            return False
+
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_reserved
+            or ip_obj.is_unspecified
+        ):
+            return False
+
+    return True
+
+
 def _iter_port_fallback_urls(base_url: str):
     """Yield the provided URL and any additional port-based fallbacks."""
 
@@ -1054,6 +1099,9 @@ def register_visitor_proxy(request):
     parsed_register = urlsplit(visitor_register_url)
     if parsed_info.scheme != "https" or parsed_register.scheme != "https":
         return JsonResponse({"detail": "HTTPS is required for visitor registration"}, status=400)
+
+    if not (_is_public_url(visitor_info_url) and _is_public_url(visitor_register_url)):
+        return JsonResponse({"detail": "invalid visitor info/register URL"}, status=400)
 
     visitor_info_url = _append_token(visitor_info_url, token)
 
