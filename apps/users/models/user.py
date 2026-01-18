@@ -273,10 +273,6 @@ class User(Entity, AbstractUser):
         return self.get_phones_by_priority()
 
     @property
-    def release_manager(self):
-        return self._direct_profile("ReleaseManager")
-
-    @property
     def odoo_employee(self):
         return self._direct_profile("OdooEmployee", app_label="odoo")
 
