@@ -27,6 +27,7 @@ DEBUG_MODE=false
 SHOW_LEVEL=""
 SERVICE_ARGS=()
 RELOAD_REQUESTED=false
+CLEAR_LOGS=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --silent)
@@ -45,7 +46,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--silent] [--debug] [--show LEVEL] [--log-follow] [service args...]" >&2
+        echo "Usage: $0 [--silent] [--debug] [--show LEVEL] [--log-follow] [--clear-logs] [service args...]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
@@ -54,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --log-follow)
       SERVICE_ARGS+=("$1")
+      shift
+      ;;
+    --clear-logs)
+      CLEAR_LOGS=true
       shift
       ;;
     *)
@@ -65,6 +70,18 @@ done
 
 if [ -n "$SHOW_LEVEL" ] && [ "${SHOW_LEVEL^^}" = "DEBUG" ]; then
   DEBUG_MODE=true
+fi
+
+if [ "$CLEAR_LOGS" = true ]; then
+  if [ -x "$BASE_DIR/stop.sh" ]; then
+    echo "Stopping services before clearing logs..."
+    if ! "$BASE_DIR/stop.sh"; then
+      echo "Unable to stop services; refusing to clear logs." >&2
+      exit 1
+    fi
+  fi
+  arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
+  arthexis_clear_log_files "$BASE_DIR" "$LOG_DIR" ""
 fi
 
 echo "Manual start requested." >>"$BASE_DIR/logs/start.log" 2>/dev/null || true
