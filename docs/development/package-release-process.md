@@ -88,15 +88,16 @@ If the workflow is triggered from a branch, the OIDC `ref` claim will be `refs/h
 
 ## GitHub Actions release environment requirements
 
-The release verification step checks that a GitHub token is available in the environment. GitHub Actions provides a `secrets.GITHUB_TOKEN`, but it is **not** automatically exported as `GITHUB_TOKEN`. Add an `env` block for the job (or workflow) that runs the publish process, optionally preferring an environment secret `GH_TOKEN` for restricted publish credentials:
+The release verification step checks that a GitHub token is available in the environment. GitHub Actions provides a `secrets.GITHUB_TOKEN`, but it is **not** automatically exported as `GITHUB_TOKEN`. Add an `env` block for the job (or workflow) that runs the publish process, optionally preferring an environment secret `GH_TOKEN` for restricted publish credentials. Scope `id-token: write` to the publish job to keep OIDC permissions limited to the job that actually publishes:
 
 ```yaml
 permissions:
-  contents: read
-  id-token: write
+  contents: write
 
 jobs:
   publish-to-pypi:
+    permissions:
+      id-token: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
