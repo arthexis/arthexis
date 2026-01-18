@@ -120,6 +120,9 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
         def __init__(self):
             self.requests = []
 
+        def mount(self, prefix, adapter):
+            return None
+
         def get(self, url, timeout=None, headers=None):
             self.requests.append(("get", url, headers))
             return FakeResponse(
@@ -194,6 +197,9 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     class FakeSession:
         def __init__(self):
             self.requests = []
+
+        def mount(self, prefix, adapter):
+            return None
 
         def get(self, url, timeout=None, headers=None):
             self.requests.append(("get", url, headers))

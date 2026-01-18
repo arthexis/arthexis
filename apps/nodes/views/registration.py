@@ -3,6 +3,7 @@ import ipaddress
 import json
 import logging
 import socket
+import ssl
 from importlib import import_module
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -10,8 +11,10 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
+import urllib3
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate
 from django.contrib.sites.models import Site
@@ -158,7 +161,36 @@ def _build_ip_url(parsed_url, ip_str: str) -> str:
     )
 
 
-def _get_public_targets(url: str) -> list[tuple[str, str]]:
+@dataclass(frozen=True)
+class _PublicTarget:
+    url: str
+    host_header: str
+    server_hostname: str
+
+
+class _HostNameSSLAdapter(requests.adapters.HTTPAdapter):
+    """HTTP adapter that preserves SNI/verification for IP-based URLs."""
+
+    def __init__(self, server_hostname: str, **kwargs: Any) -> None:
+        self._server_hostname = server_hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(  # type: ignore[override]
+        self, connections: int, maxsize: int, block: bool = False, **pool_kwargs: Any
+    ) -> None:
+        pool_kwargs.setdefault("server_hostname", self._server_hostname)
+        pool_kwargs.setdefault("assert_hostname", self._server_hostname)
+        pool_kwargs.setdefault("cert_reqs", ssl.CERT_REQUIRED)
+        pool_kwargs.setdefault("ca_certs", requests.certs.where())
+        self.poolmanager = urllib3.PoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            **pool_kwargs,
+        )
+
+
+def _get_public_targets(url: str) -> list[_PublicTarget]:
     """Return IP-based target URLs and Host headers for public URLs."""
 
     try:
@@ -194,14 +226,23 @@ def _get_public_targets(url: str) -> list[tuple[str, str]]:
         if ip_str not in resolved_ips:
             resolved_ips.append(ip_str)
 
-    return [(_build_ip_url(parsed, ip_str), host_header) for ip_str in resolved_ips]
+    return [
+        _PublicTarget(
+            url=_build_ip_url(parsed, ip_str),
+            host_header=host_header,
+            server_hostname=hostname,
+        )
+        for ip_str in resolved_ips
+    ]
 
 
-# Allowed host suffixes for visitor URLs.
-# Replace these placeholder domains with the trusted domains for your deployment.
-ALLOWED_VISITOR_HOST_SUFFIXES: tuple[str, ...] = (
-    "example.com",
-)
+def _get_allowed_visitor_suffixes() -> tuple[str, ...]:
+    """Return the configured visitor host suffixes allowlist."""
+
+    suffixes = getattr(settings, "VISITOR_ALLOWED_HOST_SUFFIXES", ())
+    if isinstance(suffixes, str):
+        suffixes = (suffixes,)
+    return tuple(value for value in suffixes if value)
 
 
 def _is_allowed_visitor_url(url: str) -> bool:
@@ -221,7 +262,10 @@ def _is_allowed_visitor_url(url: str) -> bool:
         return False
 
     hostname = parsed.hostname.lower()
-    for suffix in ALLOWED_VISITOR_HOST_SUFFIXES:
+    suffixes = _get_allowed_visitor_suffixes()
+    if not suffixes:
+        return True
+    for suffix in suffixes:
         suffix_lc = suffix.lower()
         if hostname == suffix_lc or hostname.endswith("." + suffix_lc):
             return True
@@ -1159,12 +1203,6 @@ def register_visitor_proxy(request):
     if parsed_info.scheme != "https" or parsed_register.scheme != "https":
         return JsonResponse({"detail": "HTTPS is required for visitor registration"}, status=400)
 
-    if not (_is_allowed_visitor_url(visitor_info_url) and _is_allowed_visitor_url(visitor_register_url)):
-        return JsonResponse(
-            {"detail": "visitor info/register URL not allowed"},
-            status=400,
-        )
-
     if not (_get_public_targets(visitor_info_url) and _get_public_targets(visitor_register_url)):
         return JsonResponse(
             {"detail": "visitor info/register URL must resolve to a public IP address"},
@@ -1193,11 +1231,17 @@ def register_visitor_proxy(request):
         if not targets:
             last_error = ValueError("invalid visitor info URL")
             continue
-        for target_url, host_header in targets:
+        for target in targets:
             try:
+                parsed_target_url = urlsplit(target.url)
+                adapter = _HostNameSSLAdapter(target.server_hostname)
+                session.mount(
+                    f"{parsed_target_url.scheme}://{parsed_target_url.netloc}",
+                    adapter,
+                )
                 visitor_info_response = session.get(
-                    target_url,
-                    headers={"Host": host_header},
+                    target.url,
+                    headers={"Host": target.host_header},
                     timeout=timeout_seconds,
                 )
                 visitor_info_response.raise_for_status()
@@ -1248,12 +1292,18 @@ def register_visitor_proxy(request):
         if not targets:
             last_error = ValueError("invalid visitor register URL")
             continue
-        for target_url, host_header in targets:
+        for target in targets:
             try:
+                parsed_target_url = urlsplit(target.url)
+                adapter = _HostNameSSLAdapter(target.server_hostname)
+                session.mount(
+                    f"{parsed_target_url.scheme}://{parsed_target_url.netloc}",
+                    adapter,
+                )
                 visitor_register_response = session.post(
-                    target_url,
+                    target.url,
                     json=visitor_payload,
-                    headers={"Host": host_header},
+                    headers={"Host": target.host_header},
                     timeout=timeout_seconds,
                 )
                 visitor_register_response.raise_for_status()
