@@ -1148,6 +1148,12 @@ def register_visitor_proxy(request):
     if not visitor_info_url or not visitor_register_url:
         return JsonResponse({"detail": "visitor info/register URLs required"}, status=400)
 
+    # Enforce an allow-list for visitor URLs to prevent SSRF.
+    if not _is_allowed_visitor_url(visitor_info_url) or not _is_allowed_visitor_url(
+        visitor_register_url
+    ):
+        return JsonResponse({"detail": "invalid visitor info/register URL"}, status=400)
+
     parsed_info = urlsplit(visitor_info_url)
     parsed_register = urlsplit(visitor_register_url)
     if parsed_info.scheme != "https" or parsed_register.scheme != "https":
