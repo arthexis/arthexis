@@ -130,49 +130,71 @@ def _normalize_port(value: str | int | None) -> int | None:
     return port
 
 
-def _is_public_url(url: str) -> bool:
-    """Return True if the URL resolves only to public IP addresses."""
+def _build_host_header(parsed_url) -> str:
+    """Return the Host header value for the parsed URL."""
+
+    hostname = parsed_url.hostname or ""
+    if not hostname:
+        return ""
+    if parsed_url.port and parsed_url.port != 443:
+        return f"{hostname}:{parsed_url.port}"
+    return hostname
+
+
+def _build_ip_url(parsed_url, ip_str: str) -> str:
+    """Return a URL built from the parsed URL using the provided IP address."""
+
+    netloc = f"[{ip_str}]" if ":" in ip_str else ip_str
+    if parsed_url.port:
+        netloc = f"{netloc}:{parsed_url.port}"
+    return urlunsplit(
+        (
+            parsed_url.scheme or "https",
+            netloc,
+            parsed_url.path,
+            parsed_url.query,
+            parsed_url.fragment,
+        )
+    )
+
+
+def _get_public_targets(url: str) -> list[tuple[str, str]]:
+    """Return IP-based target URLs and Host headers for public URLs."""
 
     try:
         parsed = urlsplit(url)
     except Exception:
-        return False
+        return []
 
     if parsed.scheme != "https" or not parsed.hostname:
-        return False
+        return []
 
     hostname = parsed.hostname
+    host_header = _build_host_header(parsed)
 
     try:
-        addrinfo_list = socket.getaddrinfo(hostname, None)
+        addrinfo_list = socket.getaddrinfo(hostname, parsed.port or 443)
     except OSError:
-        return False
+        return []
 
+    resolved_ips: list[str] = []
     for family, _, _, _, sockaddr in addrinfo_list:
-        if family == socket.AF_INET:
-            ip_str = sockaddr[0]
-        elif family == socket.AF_INET6:
-            ip_str = sockaddr[0]
-        else:
+        if family not in (socket.AF_INET, socket.AF_INET6):
             # Unknown address family; reject conservatively.
-            return False
+            return []
 
+        ip_str = sockaddr[0]
         try:
             ip_obj = ipaddress.ip_address(ip_str)
         except ValueError:
-            return False
+            return []
 
-        if (
-            ip_obj.is_private
-            or ip_obj.is_loopback
-            or ip_obj.is_link_local
-            or ip_obj.is_multicast
-            or ip_obj.is_reserved
-            or ip_obj.is_unspecified
-        ):
-            return False
+        if not ip_obj.is_global or ip_obj.is_multicast:
+            return []
+        if ip_str not in resolved_ips:
+            resolved_ips.append(ip_str)
 
-    return True
+    return [(_build_ip_url(parsed, ip_str), host_header) for ip_str in resolved_ips]
 
 
 def _iter_port_fallback_urls(base_url: str):
@@ -1100,8 +1122,11 @@ def register_visitor_proxy(request):
     if parsed_info.scheme != "https" or parsed_register.scheme != "https":
         return JsonResponse({"detail": "HTTPS is required for visitor registration"}, status=400)
 
-    if not (_is_public_url(visitor_info_url) and _is_public_url(visitor_register_url)):
-        return JsonResponse({"detail": "invalid visitor info/register URL"}, status=400)
+    if not (_get_public_targets(visitor_info_url) and _get_public_targets(visitor_register_url)):
+        return JsonResponse(
+            {"detail": "visitor info/register URL must resolve to a public IP address"},
+            status=400,
+        )
 
     visitor_info_url = _append_token(visitor_info_url, token)
 
@@ -1121,16 +1146,25 @@ def register_visitor_proxy(request):
     visitor_info = None
     last_error: Exception | None = None
     for candidate_info_url in _iter_port_fallback_urls(visitor_info_url):
-        try:
-            visitor_info_response = session.get(
-                candidate_info_url, timeout=timeout_seconds
-            )
-            visitor_info_response.raise_for_status()
-            visitor_info = visitor_info_response.json()
-            visitor_info_url = candidate_info_url
+        targets = _get_public_targets(candidate_info_url)
+        if not targets:
+            last_error = ValueError("invalid visitor info URL")
+            continue
+        for target_url, host_header in targets:
+            try:
+                visitor_info_response = session.get(
+                    target_url,
+                    headers={"Host": host_header},
+                    timeout=timeout_seconds,
+                )
+                visitor_info_response.raise_for_status()
+                visitor_info = visitor_info_response.json()
+                visitor_info_url = candidate_info_url
+                break
+            except Exception as exc:
+                last_error = exc
+        if visitor_info is not None:
             break
-        except Exception as exc:
-            last_error = exc
 
     if visitor_info is None:
         registration_logger.warning(
@@ -1167,18 +1201,26 @@ def register_visitor_proxy(request):
     visitor_register_body = None
     last_error = None
     for candidate_register_url in _iter_port_fallback_urls(visitor_register_url):
-        try:
-            visitor_register_response = session.post(
-                candidate_register_url,
-                json=visitor_payload,
-                timeout=timeout_seconds,
-            )
-            visitor_register_response.raise_for_status()
-            visitor_register_body = visitor_register_response.json()
-            visitor_register_url = candidate_register_url
+        targets = _get_public_targets(candidate_register_url)
+        if not targets:
+            last_error = ValueError("invalid visitor register URL")
+            continue
+        for target_url, host_header in targets:
+            try:
+                visitor_register_response = session.post(
+                    target_url,
+                    json=visitor_payload,
+                    headers={"Host": host_header},
+                    timeout=timeout_seconds,
+                )
+                visitor_register_response.raise_for_status()
+                visitor_register_body = visitor_register_response.json()
+                visitor_register_url = candidate_register_url
+                break
+            except Exception as exc:
+                last_error = exc
+        if visitor_register_body is not None:
             break
-        except Exception as exc:
-            last_error = exc
 
     if visitor_register_body is None:
         registration_logger.warning(

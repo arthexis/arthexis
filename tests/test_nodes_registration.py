@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 from uuid import uuid4
 from unittest.mock import Mock
 
@@ -9,6 +10,7 @@ import pytest
 from django.urls import reverse
 
 from apps.nodes.models import Node
+from apps.nodes.views import registration as registration_views
 from django.contrib.sites.models import Site
 
 
@@ -93,6 +95,15 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
 
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        if host == "visitor.test":
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 443))
+            ]
+        raise OSError("unknown host")
+
+    monkeypatch.setattr(registration_views.socket, "getaddrinfo", fake_getaddrinfo)
+
     class FakeResponse:
         def __init__(self, payload, status_code=200):
             self._payload = payload
@@ -109,8 +120,8 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
         def __init__(self):
             self.requests = []
 
-        def get(self, url, timeout=None):
-            self.requests.append(("get", url))
+        def get(self, url, timeout=None, headers=None):
+            self.requests.append(("get", url, headers))
             return FakeResponse(
                 {
                     "hostname": "visitor-host",
@@ -122,8 +133,8 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
                 }
             )
 
-        def post(self, url, json=None, timeout=None):
-            self.requests.append(("post", url, json))
+        def post(self, url, json=None, timeout=None, headers=None):
+            self.requests.append(("post", url, json, headers))
             return FakeResponse({"id": 2, "detail": "ok"})
 
     monkeypatch.setattr(requests, "Session", lambda: FakeSession())
@@ -159,6 +170,15 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        if host == "visitor.test":
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 443))
+            ]
+        raise OSError("unknown host")
+
+    monkeypatch.setattr(registration_views.socket, "getaddrinfo", fake_getaddrinfo)
+
     class FakeResponse:
         def __init__(self, payload, status_code=200):
             self._payload = payload
@@ -175,9 +195,9 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
         def __init__(self):
             self.requests = []
 
-        def get(self, url, timeout=None):
-            self.requests.append(("get", url))
-            if url.startswith("https://visitor.test:8888"):
+        def get(self, url, timeout=None, headers=None):
+            self.requests.append(("get", url, headers))
+            if url.startswith("https://93.184.216.34:8888"):
                 raise requests.ConnectTimeout()
             return FakeResponse(
                 {
@@ -190,9 +210,9 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
                 }
             )
 
-        def post(self, url, json=None, timeout=None):
-            self.requests.append(("post", url, json))
-            if url.startswith("https://visitor.test:8888"):
+        def post(self, url, json=None, timeout=None, headers=None):
+            self.requests.append(("post", url, json, headers))
+            if url.startswith("https://93.184.216.34:8888"):
                 raise requests.ConnectTimeout()
             return FakeResponse({"id": 3, "detail": "ok"})
 
@@ -220,10 +240,10 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert response.status_code == 200
     assert sessions
     session = sessions[-1]
-    assert session.requests[0][1].startswith("https://visitor.test:8888")
-    assert session.requests[1][1].startswith("https://visitor.test:8000")
-    assert session.requests[2][1].startswith("https://visitor.test:8888")
-    assert session.requests[3][1].startswith("https://visitor.test:8000")
+    assert session.requests[0][1].startswith("https://93.184.216.34:8888")
+    assert session.requests[1][1].startswith("https://93.184.216.34:8000")
+    assert session.requests[2][1].startswith("https://93.184.216.34:8888")
+    assert session.requests[3][1].startswith("https://93.184.216.34:8000")
 
 
 @pytest.mark.django_db
