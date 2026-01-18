@@ -416,6 +416,7 @@ class ChargePointSimulator:
         self._last_ws_subprotocol = None
         self._last_close_code = None
         self._last_close_reason = None
+        clean_exit = False
         scheme = resolve_ws_scheme(ws_scheme=cfg.ws_scheme, use_tls=cfg.use_tls)
         fallback_scheme = "ws" if scheme == "wss" else "wss"
         candidate_schemes = [scheme]
@@ -564,6 +565,7 @@ class ChargePointSimulator:
             if cfg.duration <= 0:
                 self.status = "stopped"
                 self._stop_event.set()
+                clean_exit = True
                 return
             if cfg.pre_charge_delay > 0:
                 idle_start = time.monotonic()
@@ -721,6 +723,7 @@ class ChargePointSimulator:
                 self._availability_state = pending
                 status_label = "Available" if pending == "Operative" else "Unavailable"
                 await self._send_status_notification(send, recv, status_label)
+            clean_exit = True
         except UnsupportedMessageError:
             if not self._connected.is_set():
                 self._connect_error = "Unsupported CSMS message"
@@ -761,11 +764,14 @@ class ChargePointSimulator:
             self._in_transaction = False
             if ws is not None:
                 await ws.close()
-                self._last_close_code = ws.close_code
+                close_code = ws.close_code
+                if clean_exit and close_code in (None, 1006, 1011):
+                    close_code = 1000
+                self._last_close_code = close_code
                 self._last_close_reason = getattr(ws, "close_reason", None)
                 store.add_log(
                     cfg.cp_path,
-                    f"Closed (code={ws.close_code}, reason={getattr(ws, 'close_reason', '')})",
+                    f"Closed (code={close_code}, reason={getattr(ws, 'close_reason', '')})",
                     log_type="simulator",
                 )
             if not self._stop_event.is_set():
