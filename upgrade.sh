@@ -1370,33 +1370,6 @@ restart_lcd_service() {
   wait_for_service_active "$lcd_service" 1
 }
 
-clear_log_files_before_restart() {
-  local -a log_dirs=()
-
-  if [ -n "${LOG_DIR:-}" ]; then
-    log_dirs+=("$LOG_DIR")
-  fi
-
-  if [ -n "${BASE_DIR:-}" ]; then
-    local default_logs="$BASE_DIR/logs"
-    if [ -z "${LOG_DIR:-}" ] || [ "$LOG_DIR" != "$default_logs" ]; then
-      log_dirs+=("$default_logs")
-    fi
-  fi
-
-  local dir
-  for dir in "${log_dirs[@]}"; do
-    if [ -d "$dir" ]; then
-      echo "Clearing log files in $dir before restart..."
-      if [ -n "${LOG_FILE:-}" ]; then
-        find "$dir" -type f ! -path "$LOG_FILE" ! -name ".gitkeep" -print -delete
-      else
-        find "$dir" -type f ! -name ".gitkeep" -print -delete
-      fi
-    fi
-  done
-}
-
 clear_workdir_before_restart() {
   local work_dir="$BASE_DIR/work"
 
@@ -1862,7 +1835,7 @@ fi
 restore_stashed_changes_after_upgrade
 
 if [[ $CLEAR_LOGS -eq 1 ]]; then
-  clear_log_files_before_restart
+  arthexis_clear_log_files "$BASE_DIR" "${LOG_DIR:-}" "${LOG_FILE:-}"
 fi
 
 if [[ $CLEAR_WORK -eq 1 ]]; then

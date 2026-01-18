@@ -103,3 +103,33 @@ arthexis_log_startup_event() {
         "$timestamp" "$script_name" "$event" "${detail:-}" \
         >>"$log_file" 2>/dev/null || true
 }
+
+arthexis_clear_log_files() {
+    local base_dir="$1"
+    local log_dir="$2"
+    local log_file="$3"
+    local -a log_dirs=()
+
+    if [ -n "$log_dir" ]; then
+        log_dirs+=("$log_dir")
+    fi
+
+    if [ -n "$base_dir" ]; then
+        local default_logs="$base_dir/logs"
+        if [ -z "$log_dir" ] || [ "$log_dir" != "$default_logs" ]; then
+            log_dirs+=("$default_logs")
+        fi
+    fi
+
+    local dir
+    for dir in "${log_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            echo "Clearing log files in $dir..."
+            if [ -n "$log_file" ]; then
+                find "$dir" -type f ! -path "$log_file" ! -name ".gitkeep" -print -delete
+            else
+                find "$dir" -type f ! -name ".gitkeep" -print -delete
+            fi
+        fi
+    done
+}
