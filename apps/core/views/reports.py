@@ -727,8 +727,9 @@ def _collect_status_paths(pathspecs: list[str]) -> list[str]:
     for line in proc.stdout.splitlines():
         if not line.strip():
             continue
+        status = line[:2]
         path = line[3:]
-        if " -> " in path:
+        if "R" in status and " -> " in path:
             path = path.split(" -> ", 1)[1]
         paths.append(path)
     return paths
@@ -1364,7 +1365,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     )
     if release_fixture_status:
         subprocess.run(
-            ["git", "add", "-A", "--", "apps/core/fixtures/releases__*.json"],
+            ["git", "add", "--", *release_fixture_status],
             check=True,
         )
         staged_release_fixtures = [Path(path) for path in release_fixture_status]
