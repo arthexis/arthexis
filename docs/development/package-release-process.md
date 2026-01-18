@@ -27,7 +27,7 @@ flowchart TD
 4. **Build release artifacts** – Re-validates that `origin/main` is unchanged, promotes the build via `release_utils.promote`, and commits any updated metadata (e.g., `VERSION`, release fixtures). The step sets the build revision and renames the log to the release-specific filename, ensuring traceability.
 5. **Complete test suite with --all flag** – Captures the expectation that the full test suite has been executed with the `--all` flag. The UI records acknowledgement, keeping the workflow consistent even when tests run externally.
 6. **Confirm PyPI Trusted Publisher settings** – Verify the PyPI project settings include the Trusted Publisher entry that matches the repository, workflow file, tag pattern, and GitHub environment used by the publish workflow.
-7. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map `secrets.GITHUB_TOKEN` into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
+7. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map a GitHub token into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
 8. **Export artifacts and push release tag** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and pushes the tag to GitHub. The `publish.yml` workflow listens for tag pushes and publishes to PyPI via OIDC.
 9. **Wait for GitHub Actions publish** – The workflow pauses until the publish workflow completes, logging the GitHub Actions run URL when available so operators can monitor progress.
 10. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
@@ -52,9 +52,9 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
    - The workflow exports built artifacts (wheel/sdist) to the GitHub release and pushes the release tag, which triggers the GitHub Actions `publish` workflow for OIDC uploads.
 4. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Builds the sdist and wheel in a dedicated job, uploads them as artifacts, and publishes in a separate job.
-   - Uses `permissions: id-token: write` on the publish job and `permissions: contents: write` at the workflow level to allow tags/releases.
+   - Uses `permissions: id-token: write` on the publish job and keeps `permissions: contents: read` at the workflow level.
    - Uses `pypa/gh-action-pypi-publish@release/v1` with `attestations: true` and no API token configured, relying on OIDC instead.
-   - Exposes `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`/`GH_TOKEN` so release automation can create GitHub releases, upload assets, and check workflow runs.
+   - Exposes `secrets.GITHUB_TOKEN` (or an environment-specific `GH_TOKEN` secret) as `GITHUB_TOKEN`/`GH_TOKEN` so release automation can create GitHub releases, upload assets, and check workflow runs.
 5. **Gate publishing with environment protection rules** by:
    - Triggering the workflow from a protected tag.
    - Using GitHub environment protection rules (required reviewers) to enforce human approval before the publish job runs when policy requires it.
@@ -74,7 +74,7 @@ Add (or update) the Trusted Publisher entry in the PyPI project settings for `ar
 | -------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Owner                      | `arthexis`                      |                                                                                                |
 | Repository                 | `arthexis`                      |                                                                                                |
-| Workflow file              | `.github/workflows/publish.yml` |                                                                                                |
+| Workflow file              | `publish.yml`                   | Matches the workflow filename registered in PyPI.                                               |
 | Workflow ref / tag pattern | `refs/tags/v*`                  | Run the workflow dispatch from the tag so the OIDC `ref` claim matches this pattern.           |
 | GitHub environment         | `pypi`                          | Must match `environment: pypi` in `.github/workflows/publish.yml`.                              |
 
@@ -88,18 +88,18 @@ If the workflow is triggered from a branch, the OIDC `ref` claim will be `refs/h
 
 ## GitHub Actions release environment requirements
 
-The release verification step checks that a GitHub token is available in the environment. GitHub Actions provides a `secrets.GITHUB_TOKEN`, but it is **not** automatically exported as `GITHUB_TOKEN`. Add an `env` block for the job (or workflow) that runs the publish process:
+The release verification step checks that a GitHub token is available in the environment. GitHub Actions provides a `secrets.GITHUB_TOKEN`, but it is **not** automatically exported as `GITHUB_TOKEN`. Add an `env` block for the job (or workflow) that runs the publish process, optionally preferring an environment secret `GH_TOKEN` for restricted publish credentials:
 
 ```yaml
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
   publish-to-pypi:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 ```
 
 If you need to restrict access to `main`, enforce branch protection rules on GitHub; the token will still be able to create releases/tags while respecting those protections.
