@@ -221,9 +221,7 @@ class PackageRelease(Entity):
             combined, timezone.get_current_timezone()
         )
 
-    def to_credentials(
-        self, user: models.Model | None = None
-    ) -> Credentials | None:
+    def to_credentials(self) -> Credentials | None:
         """Return :class:`Credentials` from the environment."""
         token = (os.environ.get("PYPI_API_TOKEN") or "").strip()
         username = (os.environ.get("PYPI_USERNAME") or "").strip()
@@ -235,7 +233,7 @@ class PackageRelease(Entity):
             return Credentials(username=username, password=password)
         return None
 
-    def get_github_token(self, user: models.Model | None = None) -> str | None:
+    def get_github_token(self) -> str | None:
         """Return GitHub token from the environment."""
         return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
 
@@ -243,9 +241,7 @@ class PackageRelease(Entity):
         """Return True when the package should publish via GitHub OIDC."""
         return bool(getattr(self.package, "oidc_publish_enabled", False))
 
-    def build_publish_targets(
-        self, user: models.Model | None = None
-    ) -> list[RepositoryTarget]:
+    def build_publish_targets(self) -> list[RepositoryTarget]:
         """Return repository targets for publishing this release."""
         targets: list[RepositoryTarget] = []
 
@@ -258,7 +254,7 @@ class PackageRelease(Entity):
         primary_url = env_primary.strip()
 
         if package_targets:
-            primary_creds = self.to_credentials(user=user)
+            primary_creds = self.to_credentials()
             for index, target in enumerate(package_targets):
                 repository_url = target.repository_url
                 if index == 0 and primary_url:
@@ -280,7 +276,7 @@ class PackageRelease(Entity):
 
             return targets
 
-        primary_creds = self.to_credentials(user=user)
+        primary_creds = self.to_credentials()
         targets.append(
             RepositoryTarget(
                 name="PyPI",

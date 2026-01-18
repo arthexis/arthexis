@@ -952,6 +952,9 @@ def _append_publish_workflow_status(
             token=token,
         )
     except Exception:
+        logger.warning(
+            "Failed to fetch publish workflow run for %s", release, exc_info=True
+        )
         run = None
     if run and isinstance(run.get("html_url"), str):
         run_url = run.get("html_url") or ""
@@ -1405,7 +1408,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
         release_utils.promote(
             package=release.to_package(),
             version=release.version,
-            creds=release.to_credentials(user=user),
+            creds=release.to_credentials(),
             stash=True,
         )
         _append_log(
@@ -1470,7 +1473,7 @@ def _step_verify_release_environment(
             )
         )
 
-    token = release.get_github_token(user=user)
+    token = release.get_github_token()
     if not token:
         raise RuntimeError(
             _(
@@ -1588,7 +1591,7 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         )
         raise PublishPending()
 
-    targets = release.build_publish_targets(user=user)
+    targets = release.build_publish_targets()
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
