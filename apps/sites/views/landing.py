@@ -19,6 +19,7 @@ from apps.docs import rendering
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
+from utils.decorators import staff_required
 from utils.sites import get_site
 
 from ..forms import UserStoryForm
@@ -96,6 +97,7 @@ def sitemap(request):
 
 
 @landing("Package Releases")
+@staff_required
 def release_checklist(request):
     file_path = Path(settings.BASE_DIR) / "releases" / "release-checklist.md"
     if not file_path.exists():
