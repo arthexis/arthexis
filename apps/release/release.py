@@ -322,7 +322,7 @@ def _upload_with_retries(
                 "Twine upload to {repo} failed after {attempts} attempts due to a network interruption. "
                 "Check your internet connection, wait a moment, then rerun the release command. "
                 "If uploads continue to fail, manually run `python -m twine upload dist/*` once the network "
-                "stabilizes or contact the release manager for assistance.\n\nLast error:\n{error}".format(
+                "stabilizes.\n\nLast error:\n{error}".format(
                     repo=repository, attempts=attempt, error=last_output
                 )
             )
@@ -425,42 +425,10 @@ def _git_has_staged_changes() -> bool:
     return proc.returncode != 0
 
 
-def _manager_credentials() -> Optional[Credentials]:
-    """Return credentials from the Package's release manager if available."""
-    try:  # pragma: no cover - optional dependency
-        from apps.release.models import Package as PackageModel
-
-        package_obj = PackageModel.objects.select_related("release_manager").first()
-        if package_obj and package_obj.release_manager:
-            return package_obj.release_manager.to_credentials()
-    except Exception:
-        return None
-    return None
-
-
-def _manager_git_credentials(package: Optional[Package] = None) -> Optional[GitCredentials]:
-    """Return Git credentials from the Package's release manager if available."""
-
-    try:  # pragma: no cover - optional dependency
-        from apps.release.models import Package as PackageModel
-
-        queryset = PackageModel.objects.select_related("release_manager")
-        if package is not None:
-            queryset = queryset.filter(name=package.name)
-        package_obj = queryset.first()
-        if package_obj and package_obj.release_manager:
-            creds = package_obj.release_manager.to_git_credentials()
-            if creds and creds.has_auth():
-                return creds
-    except Exception:
-        return None
-    return None
-
-
 def _environment_git_credentials() -> Optional[GitCredentials]:
     """Return Git credentials from environment variables when available."""
 
-    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
     if not token:
         return None
     return GitCredentials(username="x-access-token", password=token)
@@ -528,9 +496,10 @@ def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcess
     details = _format_subprocess_error(exc)
     message = (
         "Git authentication failed while pushing tag {tag}. "
-        "Configure Git credentials in the release manager profile or authenticate "
-        "locally, then rerun the publish step or push the tag manually with `git push "
-        "origin {tag}`. "
+        "Configure your local environment to authenticate with the repository "
+        "(for example, set up an SSH key or configure a GitHub token in your git "
+        "credential helper), then rerun the publish step or push the tag manually "
+        "with `git push origin {tag}`. "
         "See docs/development/package-release-process.md#git-authentication-for-tag-pushes."
     ).format(tag=tag_name)
     if details:
@@ -559,7 +528,7 @@ def _push_tag(tag_name: str, package: Package) -> None:
             raise
         auth_error = exc
 
-    creds = _manager_git_credentials(package) or _environment_git_credentials()
+    creds = _environment_git_credentials()
     if creds and creds.has_auth():
         remote_url = git_utils.git_remote_url("origin")
         if remote_url:
@@ -753,7 +722,6 @@ def build(
                 raise ReleaseError(f"Version {version} already on PyPI")
         creds = (
             creds
-            or _manager_credentials()
             or Credentials(
                 token=os.environ.get("PYPI_API_TOKEN"),
                 username=os.environ.get("PYPI_USERNAME"),
@@ -828,7 +796,6 @@ def publish(
 
         candidate = (
             creds
-            or _manager_credentials()
             or Credentials(
                 token=os.environ.get("PYPI_API_TOKEN"),
                 username=os.environ.get("PYPI_USERNAME"),
@@ -956,12 +923,10 @@ def check_pypi_readiness(
         if level == "error":
             has_error = True
 
-    release_manager = None
     if release is not None:
         package = release.to_package()
         repositories = release.build_publish_targets()
         creds = release.to_credentials()
-        release_manager = release.release_manager or release.package.release_manager
         oidc_enabled = release.uses_oidc_publishing()
         add("success", f"Checking PyPI configuration for {release}")
 
@@ -979,29 +944,10 @@ def check_pypi_readiness(
         add("error", "No repositories configured for upload")
         return PyPICheckResult(ok=False, messages=messages)
 
-    if release_manager is not None:
-        if release_manager.pypi_token or (
-            release_manager.pypi_username and release_manager.pypi_password
-        ):
-            add(
-                "success",
-                f"Release manager '{release_manager}' has PyPI credentials configured",
-            )
-        else:
-            if not oidc_enabled:
-                add(
-                    "warning",
-                    f"Release manager '{release_manager}' is missing PyPI credentials",
-                )
-    else:
-        add(
-            "warning",
-            "No release manager configured for PyPI uploads; falling back to environment",
-        )
     if oidc_enabled:
         add(
             "success",
-            "OIDC publishing enabled; PyPI credentials are not required for approval.",
+            "OIDC publishing enabled; PyPI credentials are not required.",
         )
 
     env_creds = Credentials(
@@ -1017,7 +963,7 @@ def check_pypi_readiness(
     credential_source = "repository"
     if candidate is None and creds is not None and creds.has_auth():
         candidate = creds
-        credential_source = "release manager"
+        credential_source = "release context"
     if candidate is None and env_creds is not None:
         candidate = env_creds
         credential_source = "environment"
@@ -1031,7 +977,7 @@ def check_pypi_readiness(
             return PyPICheckResult(ok=not has_error, messages=messages)
         add(
             "error",
-            "Missing PyPI credentials. Configure a token or username/password for the release manager or environment.",
+            "Missing PyPI credentials. Configure a token or username/password in the environment.",
         )
     else:
         try:
@@ -1040,8 +986,8 @@ def check_pypi_readiness(
             add("error", f"Invalid PyPI credentials: {exc}")
         else:
             auth_kind = "API token" if candidate.token else "username/password"
-            if credential_source == "release manager":
-                add("success", f"Using {auth_kind} provided by the release manager")
+            if credential_source == "release context":
+                add("success", f"Using {auth_kind} provided by the release context")
             elif credential_source == "environment":
                 add("success", f"Using {auth_kind} from environment variables")
             elif credential_source == "repository":

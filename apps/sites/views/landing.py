@@ -16,7 +16,6 @@ from django.core.cache import cache
 from apps.core import changelog
 from apps.docs import views as docs_views
 from apps.docs import rendering
-from apps.groups.decorators import security_group_required
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
@@ -97,7 +96,6 @@ def sitemap(request):
 
 
 @landing("Package Releases")
-@security_group_required("Release Managers")
 def release_checklist(request):
     file_path = Path(settings.BASE_DIR) / "releases" / "release-checklist.md"
     if not file_path.exists():

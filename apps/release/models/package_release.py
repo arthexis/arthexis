@@ -221,46 +221,10 @@ class PackageRelease(Entity):
             combined, timezone.get_current_timezone()
         )
 
-    def _manager_candidates(
-        self, user: models.Model | None = None
-    ) -> list[ReleaseManager]:
-        """Return available release managers from release, package, or user."""
-
-        candidates: list[ReleaseManager] = []
-        seen: set[tuple[str, int]] = set()
-
-        def add_candidate(candidate: ReleaseManager | None) -> None:
-            if not candidate:
-                return
-            key = (
-                ("pk", candidate.pk)
-                if candidate.pk is not None
-                else ("obj", id(candidate))
-            )
-            if key in seen:
-                return
-            seen.add(key)
-            candidates.append(candidate)
-
-        for candidate in (self.release_manager, self.package.release_manager):
-            add_candidate(candidate)
-
-        if user is not None and getattr(user, "is_authenticated", False):
-            for user_manager in ReleaseManager.objects.filter(user=user):
-                add_candidate(user_manager)
-
-        return candidates
-
     def to_credentials(
         self, user: models.Model | None = None
     ) -> Credentials | None:
-        """Return :class:`Credentials` from available release managers."""
-
-        for manager in self._manager_candidates(user=user):
-            creds = manager.to_credentials()
-            if creds and creds.has_auth():
-                return creds
-
+        """Return :class:`Credentials` from the environment."""
         token = (os.environ.get("PYPI_API_TOKEN") or "").strip()
         username = (os.environ.get("PYPI_USERNAME") or "").strip()
         password = (os.environ.get("PYPI_PASSWORD") or "").strip()
@@ -272,28 +236,17 @@ class PackageRelease(Entity):
         return None
 
     def get_github_token(self, user: models.Model | None = None) -> str | None:
-        """Return GitHub token from the associated release manager or environment."""
-        for manager in self._manager_candidates(user=user):
-            if manager.github_token:
-                return manager.github_token
-        return os.environ.get("GITHUB_TOKEN")
+        """Return GitHub token from the environment."""
+        return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
 
     def uses_oidc_publishing(self) -> bool:
         """Return True when the package should publish via GitHub OIDC."""
         return bool(getattr(self.package, "oidc_publish_enabled", False))
 
-    def approval_credentials_ready(self, user: models.Model | None = None) -> bool:
-        """Return True when approval prerequisites are satisfied for publishing."""
-        if self.uses_oidc_publishing():
-            return bool(self.get_github_token(user=user))
-        return bool(self.to_credentials(user=user))
-
     def build_publish_targets(
         self, user: models.Model | None = None
     ) -> list[RepositoryTarget]:
         """Return repository targets for publishing this release."""
-
-        manager = self.release_manager or self.package.release_manager
         targets: list[RepositoryTarget] = []
 
         package_targets = [
@@ -337,12 +290,8 @@ class PackageRelease(Entity):
             )
         )
 
-        secondary_url = ""
-        if manager and getattr(manager, "secondary_pypi_url", ""):
-            secondary_url = manager.secondary_pypi_url.strip()
-        if not secondary_url:
-            env_secondary = os.environ.get("PYPI_SECONDARY_URL", "")
-            secondary_url = env_secondary.strip()
+        env_secondary = os.environ.get("PYPI_SECONDARY_URL", "")
+        secondary_url = env_secondary.strip()
         if not secondary_url:
             return targets
 
@@ -357,14 +306,12 @@ class PackageRelease(Entity):
 
         github_token = self.get_github_token()
         github_username = None
-        if manager and manager.pypi_username:
-            github_username = manager.pypi_username.strip() or None
         env_secondary_username = os.environ.get("PYPI_SECONDARY_USERNAME")
         env_secondary_password = os.environ.get("PYPI_SECONDARY_PASSWORD")
         if not github_username:
             github_username = (
-                os.environ.get("GITHUB_USERNAME")
-                or os.environ.get("GITHUB_ACTOR")
+                os.environ.get("GITHUB_ACTOR")
+                or os.environ.get("GITHUB_USERNAME")
                 or (env_secondary_username.strip() if env_secondary_username else None)
             )
 

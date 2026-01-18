@@ -61,18 +61,11 @@ def resolve_repository_token(package: Package | None) -> str:
             return ""
         return token.strip() if isinstance(token, str) else str(token).strip()
 
-    if package:
-        manager = getattr(package, "release_manager", None)
-        if manager:
-            token = _clean_token(getattr(manager, "github_token", ""))
-            if token:
-                return token
-
     release_token = _get_latest_release_token()
     if release_token:
         return release_token
 
-    token = os.environ.get("GITHUB_TOKEN", "")
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN", "")
     cleaned_env = _clean_token(token)
     if not cleaned_env:
         raise GitHubRepositoryError("GitHub token is not configured")

@@ -149,55 +149,6 @@
   .log-column h2 {
     margin-top: 0;
   }
-  .progress-steps li.status-awaiting-approval .progress-name {
-    color: var(--link-fg);
-  }
-  .progress-steps li.status-missing-credentials .progress-name {
-    color: var(--warning-fg, #c09853);
-  }
-  .approval-actions {
-    margin: 1.5rem 0;
-    padding: 1rem;
-    border: 1px solid var(--hairline-color);
-    border-radius: 6px;
-    background: var(--body-bg);
-  }
-  .approval-actions h2 {
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-  }
-  .approval-actions p {
-    margin: 0;
-  }
-  .approval-buttons {
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    margin-top: 0.75rem;
-  }
-  .approval-buttons form {
-    display: inline;
-  }
-  .approval-buttons button {
-    min-width: 7rem;
-    padding-inline: 1rem;
-    padding-block: 0.45rem 0.6rem;
-  }
-  .approval-requirements {
-    margin: 0.75rem 0 0;
-    padding-left: 1.2rem;
-  }
-  .approval-requirements li {
-    margin-bottom: 0.25rem;
-  }
-  .approval-buttons .reject-btn {
-    border-color: var(--error-fg, #ba2121);
-    color: var(--error-fg, #ba2121);
-    background: rgba(186, 33, 33, 0.15);
-  }
-  .approval-buttons .reject-btn:hover {
-    background: rgba(186, 33, 33, 0.25);
-  }
   .log-text {
     background: var(--body-bg);
     padding: 0.75rem;
@@ -369,26 +320,6 @@
       {% endif %}
     </div>
     {% endif %}
-    {% if awaiting_approval %}
-    <div class="approval-actions">
-      {% if approval_credentials_ready %}
-      <h2>{% trans 'Release manager approval required' %}</h2>
-      <p>{% trans 'A release manager must approve before publishing can continue.' %}</p>
-      <div class="approval-buttons">
-        <form method="get">
-          <input type="hidden" name="step" value="{{ current_step }}">
-          <button type="submit" name="approve" value="1">{% trans 'Approve' %}</button>
-        </form>
-        <form method="get">
-          <input type="hidden" name="step" value="{{ current_step }}">
-          <button type="submit" name="reject" value="1" class="reject-btn">{% trans 'Reject' %}</button>
-        </form>
-      </div>
-      {% else %}
-      {% include "core/includes/release_credentials_required.html" %}
-      {% endif %}
-    </div>
-    {% endif %}
     {% if error %}
     <p class="error">{{ error }}</p>
     {% elif not done %}
@@ -398,12 +329,6 @@
     {% if started %}
       {% if start_pending %}
       <p class="status-message">{% trans 'Starting publish…' %}</p>
-      {% elif awaiting_approval %}
-        {% if approval_credentials_ready %}
-        <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
-        {% else %}
-        <p class="status-message">{% trans 'Waiting for release manager credentials' %}</p>
-        {% endif %}
       {% elif paused %}
       {# Paused message shown above #}
       {% else %}

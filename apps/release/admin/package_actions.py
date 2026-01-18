@@ -55,7 +55,6 @@ def prepare_package_release(admin_view, request, package):
         package=package,
         version=str(next_version),
         defaults={
-            "release_manager": package.release_manager,
             "is_deleted": False,
         },
     )

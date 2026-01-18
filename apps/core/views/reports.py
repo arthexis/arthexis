@@ -23,7 +23,6 @@ from django.template.loader import get_template
 from django.test import signals
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from django.urls import NoReverseMatch, reverse
 
 from apps.loggers.paths import select_log_dir
 from apps.nodes.models import NetMessage, Node
@@ -46,10 +45,6 @@ DIRTY_STATUS_LABELS = {
     "U": _("Updated"),
     "??": _("Untracked"),
 }
-
-
-class ApprovalRequired(Exception):
-    """Raised when release manager approval is required before continuing."""
 
 
 class DirtyRepository(Exception):
@@ -356,7 +351,6 @@ def _update_publish_controls(
     ctx: dict,
     start_enabled: bool,
     session_key: str,
-    credentials_ready: bool,
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
 
@@ -371,16 +365,6 @@ def _update_publish_controls(
             ctx["dry_run"] = bool(request.GET.get("dry_run"))
         ctx["started"] = True
         ctx["paused"] = False
-
-    if (
-        ctx.get("awaiting_approval")
-        and not ctx.get("approval_credentials_missing")
-        and credentials_ready
-    ):
-        if request.GET.get("approve"):
-            ctx["release_approval"] = "approved"
-        if request.GET.get("reject"):
-            ctx["release_approval"] = "rejected"
 
     resume_requested = bool(request.GET.get("resume"))
 
@@ -559,8 +543,6 @@ def _run_release_step(
             name, func = steps[to_run]
             try:
                 func(release, ctx, log_path, user=request.user)
-            except ApprovalRequired:
-                pass
             except DirtyRepository:
                 pass
             except PublishPending:
@@ -951,6 +933,32 @@ def _fetch_publish_workflow_run(
             if run.get("head_sha") == tag_sha:
                 return run
     return None
+
+
+def _append_publish_workflow_status(
+    release: PackageRelease,
+    log_path: Path,
+    *,
+    token: str | None,
+    message: str,
+) -> None:
+    run_url = ""
+    try:
+        owner, repo = _resolve_github_repository(release)
+        run = _fetch_publish_workflow_run(
+            owner=owner,
+            repo=repo,
+            tag_name=f"v{release.version}",
+            token=token,
+        )
+    except Exception:
+        run = None
+    if run and isinstance(run.get("html_url"), str):
+        run_url = run.get("html_url") or ""
+    if run_url:
+        _append_log(log_path, f"{message} Workflow run: {run_url}")
+    else:
+        _append_log(log_path, message)
 
 
 def _download_publish_workflow_logs(
@@ -1447,57 +1455,35 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(new_log, "Build complete")
 
 
-def _step_release_manager_approval(
+def _step_verify_release_environment(
     release, ctx, log_path: Path, *, user=None
 ) -> None:
-    auto_release = bool(ctx.get("auto_release"))
-    if release.uses_oidc_publishing():
-        creds_ready = bool(release.get_github_token(user=user))
-        error_message = "GitHub token required for OIDC publishing is missing"
-    else:
-        creds_ready = release.to_credentials(user=user) is not None
-        error_message = "Release manager publishing credentials missing"
-
-    if not creds_ready:
-        ctx.pop("release_approval", None)
-        if not ctx.get("approval_credentials_missing"):
-            _append_log(log_path, error_message)
-        ctx["approval_credentials_missing"] = True
-        ctx["awaiting_approval"] = True
-        raise ApprovalRequired()
-
-    missing_before = ctx.pop("approval_credentials_missing", None)
-    if missing_before:
-        ctx.pop("awaiting_approval", None)
-    if auto_release:
-        ctx.pop("release_approval", None)
-        ctx.pop("awaiting_approval", None)
-        ctx.pop("approval_credentials_missing", None)
-        if not ctx.get("auto_release_approval_logged"):
-            _append_log(log_path, "Scheduled release automatically approved")
-            ctx["auto_release_approval_logged"] = True
+    if ctx.get("dry_run"):
+        _append_log(log_path, "Dry run: skipping release environment verification")
         return
-    decision = ctx.get("release_approval")
-    if decision == "approved":
-        ctx.pop("release_approval", None)
-        ctx.pop("awaiting_approval", None)
-        ctx.pop("approval_credentials_missing", None)
-        _append_log(log_path, "Release manager approved release")
-        return
-    if decision == "rejected":
-        ctx.pop("release_approval", None)
-        ctx.pop("awaiting_approval", None)
-        ctx.pop("approval_credentials_missing", None)
-        _append_log(log_path, "Release manager rejected release")
+
+    if not _has_remote("origin"):
         raise RuntimeError(
-            _("Release manager rejected the release. Restart required."),
+            _(
+                "Git remote 'origin' is not configured. Configure your git remote "
+                "to point at the repository before continuing."
+            )
         )
-    if not ctx.get("awaiting_approval"):
-        ctx["awaiting_approval"] = True
-        _append_log(log_path, "Awaiting release manager approval")
-    else:
-        ctx["awaiting_approval"] = True
-    raise ApprovalRequired()
+
+    token = release.get_github_token(user=user)
+    if not token:
+        raise RuntimeError(
+            _(
+                "GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN in the release "
+                "environment so the workflow can create releases, upload artifacts, "
+                "and monitor publish status."
+            )
+        )
+
+    _append_log(
+        log_path,
+        "Release environment verified (origin remote configured, GitHub token available)",
+    )
 
 
 def _collect_release_artifacts() -> list[Path]:
@@ -1594,9 +1580,11 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
 
     if not _pypi_release_available(release):
         ctx["paused"] = True
-        _append_log(
+        _append_publish_workflow_status(
+            release,
             log_path,
-            "Publish not detected on PyPI yet; resume after GitHub Actions completes",
+            token=release.get_github_token(),
+            message="Publish not detected on PyPI yet; resume after GitHub Actions completes.",
         )
         raise PublishPending()
 
@@ -1645,8 +1633,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
                 ),
                 "followups": [
                     _(
-                        "Add a GitHub token to the release manager or "
-                        "GITHUB_TOKEN in the environment."
+                        "Set GITHUB_TOKEN or GH_TOKEN in the environment."
                     )
                 ],
             }
@@ -1664,19 +1651,28 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     )
     if not run:
         ctx["paused"] = True
-        _append_log(
+        _append_publish_workflow_status(
+            release,
             log_path,
-            "Publish workflow run not found yet; resume after GitHub Actions completes",
+            token=token,
+            message="Publish workflow run not found yet; resume after GitHub Actions completes.",
         )
         raise PublishPending()
 
     status = run.get("status")
     if status != "completed":
         ctx["paused"] = True
-        _append_log(
-            log_path,
-            "Publish workflow still running; resume after GitHub Actions completes",
-        )
+        run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
+        if run_url:
+            _append_log(
+                log_path,
+                f"Publish workflow still running; monitor at {run_url}",
+            )
+        else:
+            _append_log(
+                log_path,
+                "Publish workflow still running; resume after GitHub Actions completes.",
+            )
         raise PublishPending()
 
     run_id = run.get("id")
@@ -1688,9 +1684,11 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     )
     if not raw_log:
         ctx["paused"] = True
-        _append_log(
+        _append_publish_workflow_status(
+            release,
             log_path,
-            "Publish workflow logs empty; resume after GitHub Actions completes",
+            token=token,
+            message="Publish workflow logs empty; resume after GitHub Actions completes.",
         )
         raise PublishPending()
 
@@ -1730,7 +1728,7 @@ PUBLISH_STEPS = [
     ("Execute pre-release actions", _step_pre_release_actions),
     ("Build release artifacts", _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
-    ("Get Release Manager Approval", _step_release_manager_approval),
+    ("Verify release environment", _step_verify_release_environment),
     (
         "Export artifacts and trigger GitHub Actions publish",
         _step_export_and_dispatch,
@@ -1799,18 +1797,12 @@ def release_progress(request, pk: int, action: str):
     done_flag = step_count >= total_steps and not error_flag
     start_enabled = (not started_flag or paused_flag) and not done_flag and not error_flag
 
-    manager = release.release_manager or release.package.release_manager
-    credentials_ready = release.approval_credentials_ready(user=request.user)
-    if credentials_ready and ctx.get("approval_credentials_missing"):
-        ctx.pop("approval_credentials_missing", None)
-
     start_requested = bool(request.GET.get("start")) and start_enabled
     ctx, resume_requested, redirect_response = _update_publish_controls(
         request,
         ctx,
         start_enabled,
         session_key,
-        credentials_ready,
     )
     if redirect_response:
         return redirect_response
@@ -1888,19 +1880,9 @@ def release_progress(request, pk: int, action: str):
     dirty_files = ctx.get("dirty_files")
     if dirty_files:
         next_step = None
-    awaiting_approval = bool(ctx.get("awaiting_approval"))
-    approval_credentials_missing = bool(ctx.get("approval_credentials_missing"))
-    if awaiting_approval:
-        next_step = None
-    if approval_credentials_missing:
-        next_step = None
     paused = ctx.get("paused", False)
 
     step_names = [s[0] for s in steps]
-    approval_credentials_ready = credentials_ready
-    credentials_blocking = approval_credentials_missing or (
-        awaiting_approval and not approval_credentials_ready
-    )
     step_states = []
     for index, name in enumerate(step_names):
         if index < step_count:
@@ -1915,25 +1897,6 @@ def release_progress(request, pk: int, action: str):
             status = "paused"
             icon = "⏸️"
             label = _("Paused")
-        elif (
-            credentials_blocking
-            and ctx.get("started")
-            and index == step_count
-            and not done
-        ):
-            status = "missing-credentials"
-            icon = "🔐"
-            label = _("Credentials required")
-        elif (
-            awaiting_approval
-            and approval_credentials_ready
-            and ctx.get("started")
-            and index == step_count
-            and not done
-        ):
-            status = "awaiting-approval"
-            icon = "🤝"
-            label = _("Awaiting approval")
         elif ctx.get("started") and index == step_count and not done:
             status = "active"
             icon = "⏳"
@@ -1962,20 +1925,9 @@ def release_progress(request, pk: int, action: str):
         and next_step is None
     )
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
-    release_manager_owner = manager.owner_display() if manager else ""
-    release_manager_admin_url = None
-    if manager:
-        try:
-            release_manager_admin_url = reverse(
-                "admin:release_releasemanager_change", args=[manager.pk]
-            )
-        except NoReverseMatch:
-            pass
     oidc_enabled = release.uses_oidc_publishing()
-    pypi_credentials_missing = (
-        not oidc_enabled and (not manager or manager.to_credentials() is None)
-    )
-    github_credentials_missing = not manager or manager.to_git_credentials() is None
+    pypi_credentials_missing = not oidc_enabled and release.to_credentials() is None
+    github_credentials_missing = release.get_github_token() is None
 
     fixtures_summary = ctx.get("fixtures")
     if (
@@ -2009,13 +1961,7 @@ def release_progress(request, pk: int, action: str):
         "show_log": show_log,
         "start_pending": start_requested,
         "step_states": step_states,
-        "awaiting_approval": awaiting_approval,
-        "approval_credentials_missing": approval_credentials_missing,
-        "approval_credentials_ready": approval_credentials_ready,
         "oidc_enabled": oidc_enabled,
-        "release_manager_owner": release_manager_owner,
-        "has_release_manager": bool(manager),
-        "release_manager_admin_url": release_manager_admin_url,
         "pypi_credentials_missing": pypi_credentials_missing,
         "github_credentials_missing": github_credentials_missing,
         "is_running": is_running,
