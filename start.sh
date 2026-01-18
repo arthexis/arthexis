@@ -74,8 +74,21 @@ fi
 
 if [ "$CLEAR_LOGS" = true ]; then
   if [ -x "$BASE_DIR/stop.sh" ]; then
+    STOP_ARGS=()
+    for arg in "${SERVICE_ARGS[@]}"; do
+      case "$arg" in
+        --all|--force)
+          STOP_ARGS+=("$arg")
+          ;;
+        --*)
+          ;;
+        *)
+          STOP_ARGS+=("$arg")
+          ;;
+      esac
+    done
     echo "Stopping services before clearing logs..."
-    if ! "$BASE_DIR/stop.sh"; then
+    if ! "$BASE_DIR/stop.sh" "${STOP_ARGS[@]}"; then
       echo "Unable to stop services; refusing to clear logs." >&2
       exit 1
     fi
