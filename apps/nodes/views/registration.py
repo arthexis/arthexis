@@ -197,6 +197,37 @@ def _get_public_targets(url: str) -> list[tuple[str, str]]:
     return [(_build_ip_url(parsed, ip_str), host_header) for ip_str in resolved_ips]
 
 
+# Allowed host suffixes for visitor URLs.
+# Replace these placeholder domains with the trusted domains for your deployment.
+ALLOWED_VISITOR_HOST_SUFFIXES: tuple[str, ...] = (
+    "example.com",
+)
+
+
+def _is_allowed_visitor_url(url: str) -> bool:
+    """
+    Return True if the given URL is allowed for visitor info/register endpoints.
+
+    The URL must use HTTPS and its hostname must end with one of the
+    ALLOWED_VISITOR_HOST_SUFFIXES. This prevents arbitrary outbound
+    requests based on user input.
+    """
+    try:
+        parsed = urlsplit(url)
+    except Exception:
+        return False
+
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname.lower()
+    for suffix in ALLOWED_VISITOR_HOST_SUFFIXES:
+        suffix_lc = suffix.lower()
+        if hostname == suffix_lc or hostname.endswith("." + suffix_lc):
+            return True
+    return False
+
+
 def _iter_port_fallback_urls(base_url: str):
     """Yield the provided URL and any additional port-based fallbacks."""
 
@@ -1121,6 +1152,12 @@ def register_visitor_proxy(request):
     parsed_register = urlsplit(visitor_register_url)
     if parsed_info.scheme != "https" or parsed_register.scheme != "https":
         return JsonResponse({"detail": "HTTPS is required for visitor registration"}, status=400)
+
+    if not (_is_allowed_visitor_url(visitor_info_url) and _is_allowed_visitor_url(visitor_register_url)):
+        return JsonResponse(
+            {"detail": "visitor info/register URL not allowed"},
+            status=400,
+        )
 
     if not (_get_public_targets(visitor_info_url) and _get_public_targets(visitor_register_url)):
         return JsonResponse(
