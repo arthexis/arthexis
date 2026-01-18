@@ -5,7 +5,6 @@ from django.db import models
 from apps.base.models import Entity, EntityManager
 
 from ..release import DEFAULT_PACKAGE, Package as ReleasePackage
-from .release_manager import ReleaseManager
 
 
 class PackageManager(EntityManager):
@@ -43,9 +42,6 @@ class Package(Entity):
         help_text=(
             "Publish releases via GitHub Actions OIDC instead of direct PyPI credentials."
         ),
-    )
-    release_manager = models.ForeignKey(
-        ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
     is_active = models.BooleanField(
         default=False,

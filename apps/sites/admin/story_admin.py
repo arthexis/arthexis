@@ -1,12 +1,10 @@
 import logging
 
 from django.contrib import admin, messages
-from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.locals.user_data import EntityModelAdmin
-from apps.release.models import ReleaseManager
 
 from ..models import UserStory
 
@@ -115,20 +113,11 @@ class UserStoryAdmin(EntityModelAdmin):
                     isinstance(exc, RuntimeError)
                     and "GitHub token is not configured" in str(exc)
                 ):
-                    try:
-                        opts = ReleaseManager._meta
-                        config_url = reverse(
-                            f"{self.admin_site.name}:{opts.app_label}_{opts.model_name}_changelist"
-                        )
-                    except NoReverseMatch:  # pragma: no cover - defensive guard
-                        config_url = None
-                    if config_url:
-                        message = format_html(
-                            "{} <a href=\"{}\">{}</a>",
-                            message,
-                            config_url,
-                            _("Configure GitHub credentials."),
-                        )
+                    message = format_html(
+                        "{} {}",
+                        message,
+                        _("Set the GITHUB_TOKEN or GH_TOKEN environment variable."),
+                    )
 
                 self.message_user(
                     request,

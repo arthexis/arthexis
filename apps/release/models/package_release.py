@@ -21,7 +21,6 @@ from utils import revision as revision_utils
 
 from ..release import Credentials, Package as ReleasePackage, RepositoryTarget
 from .package import Package
-from .release_manager import ReleaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -100,9 +99,6 @@ class PackageRelease(Entity):
 
     package = models.ForeignKey(
         Package, on_delete=models.CASCADE, related_name="releases"
-    )
-    release_manager = models.ForeignKey(
-        ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
     version = models.CharField(max_length=20, default="0.0.0")
     revision = models.CharField(

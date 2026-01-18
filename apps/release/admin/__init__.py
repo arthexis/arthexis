@@ -16,12 +16,11 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EntityModelAdmin, SaveBeforeChangeAction
 from apps.release import release as release_utils
-from apps.release.admin.credentials import ReleaseManagerAdmin
 from apps.release.admin.package_actions import (
     PackageAdminActionsMixin,
     prepare_package_release,
 )
-from apps.release.models import Package, PackageRelease, ReleaseManager
+from apps.release.models import Package, PackageRelease
 
 
 class PackageAdmin(PackageAdminActionsMixin, SaveBeforeChangeAction, EntityModelAdmin):
@@ -339,7 +338,6 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return self._boolean_icon(obj.is_current)
 
 
-admin.site.register(ReleaseManager, ReleaseManagerAdmin)
 admin.site.register(Package, PackageAdmin)
 admin.site.register(PackageRelease, PackageReleaseAdmin)
 
@@ -347,5 +345,4 @@ admin.site.register(PackageRelease, PackageReleaseAdmin)
 __all__ = [
     "PackageAdmin",
     "PackageReleaseAdmin",
-    "ReleaseManagerAdmin",
 ]

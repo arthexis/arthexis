@@ -1,20 +1,19 @@
 [
-{
-  "model": "core.package",
-  "fields": {
-    "is_seed_data": false,
-    "is_deleted": false,
-    "name": "arthexis",
-    "description": "Power & Energy Infrastructure",
-    "author": "Rafael J. Guillén-Osorio",
-    "email": "tecnologia@gelectriic.com",
-    "python_requires": ">=3.10",
-    "license": "GPL-3.0-only",
-    "repository_url": "https://github.com/arthexis/arthexis",
-    "homepage_url": "https://arthexis.com",
-    "oidc_publish_enabled": true,
-    "release_manager": ["arthexis", "arthexis"],
-    "is_active": true
+  {
+    "fields": {
+      "author": "Rafael J. Guill\u00e9n-Osorio",
+      "description": "Power & Energy Infrastructure",
+      "email": "tecnologia@gelectriic.com",
+      "homepage_url": "https://arthexis.com",
+      "is_active": true,
+      "is_deleted": false,
+      "is_seed_data": false,
+      "license": "GPL-3.0-only",
+      "name": "arthexis",
+      "oidc_publish_enabled": true,
+      "python_requires": ">=3.10",
+      "repository_url": "https://github.com/arthexis/arthexis"
+    },
+    "model": "core.package"
   }
-}
 ]
