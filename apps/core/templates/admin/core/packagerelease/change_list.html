@@ -2,7 +2,9 @@
 {% load i18n %}
 
 {% block object-tools-items %}
-    {% include "admin/includes/import_export_buttons.html" %}
+    {% block import_export_buttons %}
+        {% include "admin/includes/import_export_buttons.html" %}
+    {% endblock %}
     {% if soft_deleted_url %}
         {% if soft_deleted_count %}
             {% blocktrans count count=soft_deleted_count asvar soft_deleted_label %}
@@ -15,7 +17,7 @@
         {% endif %}
         <li>
             <a href="{{ soft_deleted_url }}" class="historylink" title="{{ soft_deleted_label }}" aria-label="{{ soft_deleted_label }}">
-                <span aria-hidden="true">♻️</span>
+                <span aria-hidden="true">HIST</span>
                 <span class="visually-hidden">{{ soft_deleted_label }}</span>
             </a>
         </li>

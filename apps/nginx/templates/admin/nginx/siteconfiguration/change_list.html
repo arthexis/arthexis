@@ -73,7 +73,9 @@
     {% block object-tools %}
         <ul class="object-tools">
           {% block object-tools-items %}
-            {% include "admin/includes/import_export_buttons.html" %}
+            {% block import_export_buttons %}
+              {% include "admin/includes/import_export_buttons.html" %}
+            {% endblock %}
             {% change_list_object_tools %}
             {% if default_preview_url %}
               <li><a href="{{ default_preview_url }}">{% translate "Preview Default Sites" %}</a></li>
