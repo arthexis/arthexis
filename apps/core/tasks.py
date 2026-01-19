@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 import json
+import logging
 import os
-import shutil
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -1702,7 +1702,101 @@ def _default_auto_upgrade_operations() -> AutoUpgradeOperations:
     )
 
 
+def _ensure_git_safe_directory(base_dir: Path) -> None:
+    if shutil.which("git") is None:
+        return
+
+    base_dir_str = str(base_dir)
+    check_result = subprocess.run(
+        ["git", "config", "--global", "--get-all", "safe.directory", base_dir_str],
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+    )
+    if check_result.returncode == 0:
+        return
+
+    subprocess.run(
+        ["git", "config", "--global", "--add", "safe.directory", base_dir_str],
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _auto_upgrade_enabled(base_dir: Path) -> bool:
+    return (base_dir / ".locks" / "auto_upgrade.lck").exists()
+
+
+def _is_non_terminal_role(role_name: str) -> bool:
+    return role_name in {"Control", "Constellation", "Watchtower"}
+
+
+def _git_repo_dirty(base_dir: Path) -> bool:
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain"],
+        cwd=base_dir,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    return bool(status.strip())
+
+
+def _discard_local_git_changes(base_dir: Path) -> None:
+    subprocess.run(
+        ["git", "reset", "--hard", "HEAD"],
+        cwd=base_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "clean", "-fd", "-e", "data/"],
+        cwd=base_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _prepare_manual_auto_upgrade_repo(base_dir: Path) -> None:
+    role_name = getattr(settings, "NODE_ROLE", "Terminal")
+    if not (_auto_upgrade_enabled(base_dir) or _is_non_terminal_role(role_name)):
+        return
+
+    try:
+        repo_dirty = _git_repo_dirty(base_dir)
+    except subprocess.CalledProcessError as exc:
+        append_auto_upgrade_log(
+            base_dir,
+            f"Unable to read git status before manual upgrade check: {exc}",
+        )
+        raise
+
+    if not repo_dirty:
+        return
+
+    append_auto_upgrade_log(
+        base_dir,
+        "Manual upgrade check requested; discarding local changes before checking for updates.",
+    )
+
+    try:
+        _discard_local_git_changes(base_dir)
+    except subprocess.CalledProcessError as exc:
+        error_output = (exc.stderr or exc.stdout or "").strip()
+        error_message = (
+            f"Unable to discard local changes for manual upgrade check "
+            f"(exit code {exc.returncode})"
+        )
+        if error_output:
+            error_message = f"{error_message}: {error_output}"
+        append_auto_upgrade_log(base_dir, error_message)
+        raise
+
+
 def _git_fetch(base_dir: Path, branch: str) -> None:
+    _ensure_git_safe_directory(base_dir)
     subprocess.run(
         ["git", "fetch", "origin", branch],
         cwd=base_dir,
@@ -1713,6 +1807,7 @@ def _git_fetch(base_dir: Path, branch: str) -> None:
 
 
 def _git_remote_revision(base_dir: Path, branch: str) -> str:
+    _ensure_git_safe_directory(base_dir)
     return subprocess.check_output(
         ["git", "rev-parse", f"origin/{branch}"],
         cwd=base_dir,
@@ -2111,6 +2206,7 @@ def check_github_updates(
     channel_override: str | None = None,
     *,
     operations: AutoUpgradeOperations | None = None,
+    manual_trigger: bool = False,
 ) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
 
@@ -2149,6 +2245,10 @@ def check_github_updates(
             from apps.core.notifications import notify  # type: ignore
         except Exception:
             notify = None
+
+        if manual_trigger:
+            _ensure_git_safe_directory(base_dir)
+            _prepare_manual_auto_upgrade_repo(base_dir)
 
         repo_state = _fetch_repository_state(base_dir, branch, mode, ops, state)
         if repo_state is None:
