@@ -6,6 +6,8 @@ BASE_DIR="$SCRIPT_DIR"
 SCRIPTS_DIR="$BASE_DIR/scripts"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/git_remote.sh
+. "$BASE_DIR/scripts/helpers/git_remote.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
@@ -13,6 +15,8 @@ SCRIPTS_DIR="$BASE_DIR/scripts"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
+
+arthexis_ensure_upstream_remotes "$BASE_DIR"
 
 SERVICE=""
 NODE_ROLE=""
