@@ -4,12 +4,9 @@ import base64
 
 import pytest
 from asgiref.sync import async_to_sync
-from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
-from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.testing import ChannelsLiveServerTestCase, WebsocketCommunicator
 from django.contrib.contenttypes.models import ContentType
-from django.core.asgi import get_asgi_application
 from django.core.cache import cache
 from django.core.management import call_command
 from django.contrib.auth import get_user_model
@@ -21,36 +18,16 @@ from apps.ocpp import consumers, store
 from apps.ocpp.models import Charger, Simulator
 from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
+from config.asgi import create_asgi_application
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
 CONNECT_TIMEOUT = 5
 
 
-def build_asgi_application():
-    django_asgi_app = get_asgi_application()
-
-    import apps.ocpp.routing
-    import apps.nodes.routing
-    import apps.sites.routing
-
-    websocket_patterns = [
-        *apps.sites.routing.websocket_urlpatterns,
-        *apps.nodes.routing.websocket_urlpatterns,
-        *apps.ocpp.routing.websocket_urlpatterns,
-    ]
-
-    return ProtocolTypeRouter(
-        {
-            "http": django_asgi_app,
-            "websocket": AuthMiddlewareStack(URLRouter(websocket_patterns)),
-        }
-    )
-
-
 @pytest.fixture
 def asgi_application():
-    return build_asgi_application()
+    return create_asgi_application()
 
 
 @pytest.fixture(autouse=True)

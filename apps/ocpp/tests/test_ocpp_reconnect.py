@@ -10,9 +10,14 @@ from django.core.cache import cache
 from django.test.utils import override_settings
 
 from apps.ocpp import store
-from config.asgi import application
+from config.asgi import create_asgi_application
 
 pytestmark = pytest.mark.django_db(transaction=True)
+
+
+@pytest.fixture
+def asgi_application():
+    return create_asgi_application()
 
 
 class FakeRedis:
@@ -155,7 +160,7 @@ async def _wait_for_pending_result(message_id: str, timeout: float = 2.0):
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
+def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs, asgi_application):
     async def run_scenario():
         serial = "CP-RESUME"
         message_id = "resume-1"
@@ -177,7 +182,7 @@ def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
         assert message_id in restored
         assert message_id in store.pending_calls
 
-        communicator = WebsocketCommunicator(application, f"/{serial}")
+        communicator = WebsocketCommunicator(asgi_application, f"/{serial}")
         connected, _ = await communicator.connect()
         assert connected is True
 
@@ -193,7 +198,7 @@ def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_reconnect_resumes_pending_call_case_insensitive(
-    fake_state_redis, temp_store_dirs
+    fake_state_redis, temp_store_dirs, asgi_application
 ):
     async def run_scenario():
         serial = "CP-RESUME"
@@ -216,7 +221,7 @@ def test_reconnect_resumes_pending_call_case_insensitive(
         assert message_id in restored
         assert message_id in store.pending_calls
 
-        communicator = WebsocketCommunicator(application, f"/{serial}")
+        communicator = WebsocketCommunicator(asgi_application, f"/{serial}")
         connected, _ = await communicator.connect()
         assert connected is True
 
@@ -231,7 +236,9 @@ def test_reconnect_resumes_pending_call_case_insensitive(
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store_dirs):
+def test_replayed_result_keeps_pending_queue_intact(
+    fake_state_redis, temp_store_dirs, asgi_application
+):
     async def run_scenario():
         serial = "CP-REPLAY"
         completed_id = "done-1"
@@ -256,7 +263,7 @@ def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store
         assert pending_id in store.pending_calls
         assert completed_id not in store.pending_calls
 
-        communicator = WebsocketCommunicator(application, f"/{serial}")
+        communicator = WebsocketCommunicator(asgi_application, f"/{serial}")
         connected, _ = await communicator.connect()
         assert connected is True
 
@@ -272,7 +279,9 @@ def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_unexpected_message_does_not_drop_restored_pending(fake_state_redis, temp_store_dirs):
+def test_unexpected_message_does_not_drop_restored_pending(
+    fake_state_redis, temp_store_dirs, asgi_application
+):
     async def run_scenario():
         serial = "CP-UNEXPECTED"
         message_id = "unexpected-1"
@@ -292,7 +301,7 @@ def test_unexpected_message_does_not_drop_restored_pending(fake_state_redis, tem
         assert message_id in restored
         assert message_id in store.pending_calls
 
-        communicator = WebsocketCommunicator(application, f"/{serial}")
+        communicator = WebsocketCommunicator(asgi_application, f"/{serial}")
         connected, _ = await communicator.connect()
         assert connected is True
 
