@@ -765,7 +765,10 @@ class ChargePointSimulator:
             if ws is not None:
                 await ws.close()
                 close_code = ws.close_code
-                if clean_exit and close_code in (None, 1006, 1011):
+                is_clean_exit = clean_exit or (
+                    self.status == "stopped" and self._connect_error == "accepted"
+                )
+                if is_clean_exit and close_code in (None, 1006, 1011):
                     close_code = 1000
                 self._last_close_code = close_code
                 self._last_close_reason = getattr(ws, "close_reason", None)
