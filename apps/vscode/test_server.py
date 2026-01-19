@@ -25,6 +25,8 @@ diff_snapshots = migration.diff_snapshots
 wait_for_changes = migration.wait_for_changes
 
 PREFIX = "[Test Server]"
+PYTEST_DURATIONS_COUNT = 5
+PYTEST_DURATIONS_MIN_SECONDS = 0.0
 
 
 @pytest.fixture
@@ -161,7 +163,13 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
 def run_tests(base_dir: Path) -> bool:
     """Execute the full test suite using pytest."""
 
-    command = [sys.executable, "-m", "pytest", "--durations=5", "--durations-min=0"]
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        f"--durations={PYTEST_DURATIONS_COUNT}",
+        f"--durations-min={PYTEST_DURATIONS_MIN_SECONDS}",
+    ]
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Running tests:", " ".join(command))
