@@ -18,6 +18,8 @@ if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
 fi
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/git_remote.sh
+. "$BASE_DIR/scripts/helpers/git_remote.sh"
 # Record upgrade lifecycle in the startup report for visibility in admin reports.
 UPGRADE_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
@@ -62,6 +64,8 @@ LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+
+arthexis_ensure_upstream_remotes "$BASE_DIR"
 
 arthexis_record_upgrade_duration() {
   local status="${1:-0}"
