@@ -1,4 +1,5 @@
 {% extends "admin/base/entity_change_list.html" %}
+{% block import_export_buttons %}{% endblock %}
 {% block object-tools-items %}
 {{ block.super }}
 <li><a href="{% url 'admin:cards_rfid_report' %}">Consumer Report</a></li>
