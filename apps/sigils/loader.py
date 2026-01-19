@@ -45,6 +45,7 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
     fixtures_dir = Path(__file__).resolve().parent / "fixtures"
     using = kwargs.get("using") or SigilRoot.all_objects.db
     manager = _get_sigil_manager(using)
+    skipped_roots = []
 
     for fields in _iter_fixture_entries(fixtures_dir):
         prefix = fields.get("prefix")
@@ -59,6 +60,7 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
             try:
                 ct_obj = ContentType.objects.get_by_natural_key(app_label, model_name)
             except ContentType.DoesNotExist:
+                skipped_roots.append(f"'{prefix}' ({app_label}.{model_name})")
                 continue
 
         _save_sigil_root(
@@ -71,6 +73,13 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
             },
             using=using,
             manager=manager,
+        )
+
+    if skipped_roots:
+        logger.debug(
+            "Skipped creating %d SigilRoot(s) due to missing content types: %s",
+            len(skipped_roots),
+            ", ".join(skipped_roots),
         )
 
 
