@@ -13,6 +13,7 @@ import pytest
 # connection attempts when checking availability inside config.settings.
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault("ARTHEXIS_SKIP_ENV_LOAD", "1")
 
 
 def _ensure_clean_test_databases() -> None:
