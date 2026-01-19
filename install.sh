@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/git_remote.sh
+. "$SCRIPT_DIR/scripts/helpers/git_remote.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
 . "$SCRIPT_DIR/scripts/helpers/desktop_shortcuts.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
@@ -591,6 +593,8 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 DB_FILE="$BASE_DIR/db.sqlite3"
+
+arthexis_ensure_upstream_remotes "$BASE_DIR"
 
 if [ "$INSTANCE_TYPE" = "migrator" ] && [ -z "$SERVICE" ] && [ -n "${ARTHEXIS_MIGRATOR_SERVICE_NAME:-}" ]; then
     SERVICE="$ARTHEXIS_MIGRATOR_SERVICE_NAME"
