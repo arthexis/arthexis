@@ -15,6 +15,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
+from django.core.serializers import deserialize, serialize
+from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -639,7 +641,104 @@ class UserDatumAdminMixin(admin.ModelAdmin):
             )
 
 
-class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+class ImportExportAdminMixin:
+    """Provide import/export actions for all model admins."""
+
+    import_template = "admin/base/model_import.html"
+
+    def _admin_view_name(self, suffix: str) -> str:
+        opts = self.model._meta
+        return f"{opts.app_label}_{opts.model_name}_{suffix}"
+
+    def _export_url(self):
+        try:
+            return reverse(f"admin:{self._admin_view_name('export')}")
+        except NoReverseMatch:
+            return None
+
+    def _import_url(self):
+        try:
+            return reverse(f"admin:{self._admin_view_name('import')}")
+        except NoReverseMatch:
+            return None
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "export/",
+                self.admin_site.admin_view(self.export_view),
+                name=self._admin_view_name("export"),
+            ),
+            path(
+                "import/",
+                self.admin_site.admin_view(self.import_view),
+                name=self._admin_view_name("import"),
+            ),
+        ]
+        return custom_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        if self.has_view_permission(request):
+            extra_context.setdefault("model_export_url", self._export_url())
+        if self.has_add_permission(request) or self.has_change_permission(request):
+            extra_context.setdefault("model_import_url", self._import_url())
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def export_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        queryset = self.get_queryset(request)
+        payload = serialize("json", queryset)
+        opts = self.model._meta
+        response = HttpResponse(payload, content_type="application/json")
+        response["Content-Disposition"] = (
+            f"attachment; filename={opts.app_label}_{opts.model_name}.json"
+        )
+        return response
+
+    def import_view(self, request):
+        if not (self.has_add_permission(request) or self.has_change_permission(request)):
+            raise PermissionDenied
+        opts = self.model._meta
+        changelist_url = reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_changelist"
+        )
+        if request.method == "POST" and request.FILES.get("import_file"):
+            payload = request.FILES["import_file"].read().decode("utf-8")
+            objects = list(deserialize("json", payload))
+            with transaction.atomic():
+                for obj in objects:
+                    obj.save()
+            name = (
+                opts.verbose_name
+                if len(objects) == 1
+                else opts.verbose_name_plural
+            )
+            self.message_user(
+                request,
+                ngettext(
+                    "Imported %(count)d %(name)s.",
+                    "Imported %(count)d %(name)s.",
+                    len(objects),
+                )
+                % {"count": len(objects), "name": name},
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(_safe_next_url(request) or changelist_url)
+        context = admin.site.each_context(request)
+        context.update(
+            {
+                "title": _("Import %(name)s") % {"name": opts.verbose_name_plural},
+                "opts": opts,
+                "changelist_url": changelist_url,
+            }
+        )
+        return TemplateResponse(request, self.import_template, context)
+
+
+class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelAdmin):
     """ModelAdmin base class for :class:`Entity` models."""
 
     change_form_template = "admin/user_datum_change_form.html"
@@ -890,6 +989,40 @@ def patch_admin_user_datum() -> None:
 
     admin.site.register = register
     admin.site._user_datum_patched = True
+
+
+def patch_admin_import_export() -> None:
+    """Mixin import/export actions into registered admin classes."""
+
+    if getattr(admin.site, "_import_export_patched", False):
+        return
+
+    def _patched(admin_class):
+        return type(
+            f"ImportExport{admin_class.__name__}",
+            (ImportExportAdminMixin, admin_class),
+            {},
+        )
+
+    for model, model_admin in list(admin.site._registry.items()):
+        if not isinstance(model_admin, ImportExportAdminMixin):
+            admin.site.unregister(model)
+            admin.site.register(model, _patched(model_admin.__class__))
+
+    original_register = admin.site.register
+
+    def register(model_or_iterable, admin_class=None, **options):
+        models = model_or_iterable
+        if not isinstance(models, (list, tuple, set)):
+            models = [models]
+        admin_class = admin_class or admin.ModelAdmin
+        patched_class = admin_class
+        if not issubclass(patched_class, ImportExportAdminMixin):
+            patched_class = _patched(patched_class)
+        return original_register(model_or_iterable, patched_class, **options)
+
+    admin.site.register = register
+    admin.site._import_export_patched = True
 
 
 def _iter_entity_admin_models():
