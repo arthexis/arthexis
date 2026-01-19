@@ -66,6 +66,17 @@ jobs:
           source .venv/bin/activate
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
+      - name: Create docs admin user
+        env:
+          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
+            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+          fi
+          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
+          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
       - name: Check import resolution
         run: |
           source .venv/bin/activate
@@ -184,6 +195,17 @@ jobs:
           source .venv/bin/activate
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
+      - name: Create docs admin user
+        env:
+          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
+            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+          fi
+          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
+          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
 
       - name: Run tests on upgraded install
         run: |
