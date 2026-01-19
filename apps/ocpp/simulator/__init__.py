@@ -418,6 +418,7 @@ class ChargePointSimulator:
         self._last_close_reason = None
         clean_exit = False
         abnormal_disconnect = False
+        stop_requested = False
         scheme = resolve_ws_scheme(ws_scheme=cfg.ws_scheme, use_tls=cfg.use_tls)
         fallback_scheme = "ws" if scheme == "wss" else "wss"
         candidate_schemes = [scheme]
@@ -565,6 +566,7 @@ class ChargePointSimulator:
                 self._connected.set()
             if cfg.duration <= 0:
                 self.status = "stopped"
+                stop_requested = True
                 self._stop_event.set()
                 clean_exit = True
                 return
@@ -623,6 +625,8 @@ class ChargePointSimulator:
                     await asyncio.sleep(cfg.interval)
 
             if not await self._wait_until_operative(send, recv):
+                if self._stop_event.is_set():
+                    stop_requested = True
                 return
             meter_start = random.randint(1000, 2000)
             await send(
@@ -660,6 +664,7 @@ class ChargePointSimulator:
             start_time = time.monotonic()
             while time.monotonic() - start_time < cfg.duration:
                 if self._stop_event.is_set():
+                    stop_requested = True
                     break
                 inc = _jitter(step_avg)
                 meter += max(1, int(inc))
@@ -768,10 +773,14 @@ class ChargePointSimulator:
             if ws is not None:
                 await ws.close()
                 close_code = ws.close_code
-                is_clean_exit = clean_exit or (
-                    self.status == "stopped"
-                    and self._connect_error == "accepted"
-                    and not abnormal_disconnect
+                is_clean_exit = (
+                    clean_exit
+                    or stop_requested
+                    or (
+                        self.status == "stopped"
+                        and self._connect_error == "accepted"
+                        and not abnormal_disconnect
+                    )
                 )
                 if is_clean_exit and close_code in (None, 1006, 1011):
                     close_code = 1000
