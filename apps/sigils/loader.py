@@ -59,12 +59,6 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
             try:
                 ct_obj = ContentType.objects.get_by_natural_key(app_label, model_name)
             except ContentType.DoesNotExist:
-                logger.debug(
-                    "Skipping SigilRoot %s: missing content type %s.%s",
-                    prefix,
-                    app_label,
-                    model_name,
-                )
                 continue
 
         _save_sigil_root(
