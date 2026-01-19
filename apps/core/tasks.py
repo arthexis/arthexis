@@ -51,6 +51,7 @@ STABLE_AUTO_UPGRADE_END = datetime_time(hour=5, minute=30)
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
 AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
 AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
+NON_TERMINAL_ROLES = {"Control", "Constellation", "Watchtower"}
 
 _NETWORK_FAILURE_PATTERNS = (
     "could not resolve host",
@@ -1721,6 +1722,7 @@ def _ensure_git_safe_directory(base_dir: Path) -> None:
         cwd=base_dir,
         capture_output=True,
         text=True,
+        check=True,
     )
 
 
@@ -1729,10 +1731,11 @@ def _auto_upgrade_enabled(base_dir: Path) -> bool:
 
 
 def _is_non_terminal_role(role_name: str) -> bool:
-    return role_name in {"Control", "Constellation", "Watchtower"}
+    return role_name in NON_TERMINAL_ROLES
 
 
 def _git_repo_dirty(base_dir: Path) -> bool:
+    _ensure_git_safe_directory(base_dir)
     status = subprocess.check_output(
         ["git", "status", "--porcelain"],
         cwd=base_dir,
@@ -2211,6 +2214,8 @@ def check_github_updates(
     """Check the GitHub repo for updates and upgrade if needed."""
 
     base_dir = _project_base_dir()
+    if manual_trigger:
+        _ensure_git_safe_directory(base_dir)
     branch = "main"
     ops = operations or _default_auto_upgrade_operations()
     state = AutoUpgradeState()
@@ -2247,7 +2252,6 @@ def check_github_updates(
             notify = None
 
         if manual_trigger:
-            _ensure_git_safe_directory(base_dir)
             _prepare_manual_auto_upgrade_repo(base_dir)
 
         repo_state = _fetch_repository_state(base_dir, branch, mode, ops, state)

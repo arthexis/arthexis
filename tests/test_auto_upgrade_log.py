@@ -97,11 +97,11 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
 
 
 def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
-    calls: list[str | None] = []
+    calls: list[tuple[str | None, bool]] = []
 
     class Runner:
-        def __call__(self, channel_override=None):
-            calls.append(channel_override)
+        def __call__(self, channel_override=None, *, manual_trigger=False):
+            calls.append((channel_override, manual_trigger))
 
         def delay(self, channel_override=None):  # pragma: no cover - defensive
             raise AssertionError("delay should not be used")
@@ -112,7 +112,7 @@ def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, setti
     queued = system._trigger_upgrade_check()
 
     assert not queued
-    assert calls == [None]
+    assert calls == [(None, True)]
 
 
 def test_health_check_failure_without_revision(monkeypatch, tmp_path):
