@@ -22,7 +22,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--password",
-            default="docs",
+            required=True,
             help="Password to set for the docs admin account.",
         )
         parser.add_argument(
@@ -65,9 +65,16 @@ class Command(BaseCommand):
             user.is_active = True
             updated_fields.append("is_active")
 
-        user.set_password(password)
-        updated_fields.append("password")
-        user.save(update_fields=updated_fields)
+        if getattr(user, "is_deleted", False):
+            user.is_deleted = False
+            updated_fields.append("is_deleted")
+
+        if not user.check_password(password):
+            user.set_password(password)
+            updated_fields.append("password")
+
+        if updated_fields:
+            user.save(update_fields=updated_fields)
 
         action = "Created" if created else "Updated"
         self.stdout.write(self.style.SUCCESS(f"{action} docs admin user '{username}'."))
