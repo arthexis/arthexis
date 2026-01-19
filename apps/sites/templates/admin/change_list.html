@@ -64,7 +64,9 @@
     {% block object-tools %}
         <ul class="object-tools">
           {% block object-tools-items %}
-            {% include "admin/includes/import_export_buttons.html" %}
+            {% block import_export_buttons %}
+              {% include "admin/includes/import_export_buttons.html" %}
+            {% endblock %}
             {% change_list_object_tools %}
           {% endblock %}
         </ul>
