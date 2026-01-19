@@ -304,11 +304,23 @@
         <dd>
           {% if report.settings.enabled %}
             {% if report.settings.is_unstable_mode %}
-              {% trans "Enabled (tracking the unstable channel)" %}
+              {% if report.settings.fast_lane_enabled %}
+                {% trans "Enabled (tracking the unstable channel; Fast Lane enabled)" %}
+              {% else %}
+                {% trans "Enabled (tracking the unstable channel)" %}
+              {% endif %}
             {% elif report.settings.is_stable_mode %}
-              {% trans "Enabled (tracking the stable release channel)" %}
+              {% if report.settings.fast_lane_enabled %}
+                {% trans "Enabled (tracking the stable release channel; Fast Lane enabled)" %}
+              {% else %}
+                {% trans "Enabled (tracking the stable release channel)" %}
+              {% endif %}
             {% else %}
-              {% blocktrans %}Enabled (mode "{{ report.settings.mode }}"){% endblocktrans %}
+              {% if report.settings.fast_lane_enabled %}
+                {% blocktrans %}Enabled (mode "{{ report.settings.mode }}"; Fast Lane enabled){% endblocktrans %}
+              {% else %}
+                {% blocktrans %}Enabled (mode "{{ report.settings.mode }}"){% endblocktrans %}
+              {% endif %}
             {% endif %}
           {% else %}
             {% if report.settings.lock_exists %}
