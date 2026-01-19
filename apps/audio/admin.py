@@ -99,7 +99,7 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
 
         feature = self._ensure_audio_feature_enabled(
             request,
-            _("Find Devices"),
+            self.find_recording_devices.label,
             node=node,
             auto_enable=True,
         )
