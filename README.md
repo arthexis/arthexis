@@ -89,7 +89,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 1.1 Remotes (for preloaded environments)
-If this repository is provided without Git remotes configured, the `configure.sh` and `install.sh` scripts automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
+If this repository is provided without Git remotes configured, the `configure.sh`, `install.sh`, and `upgrade.sh` scripts automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
 
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
