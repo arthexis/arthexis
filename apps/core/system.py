@@ -2305,9 +2305,9 @@ def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
         """Run the upgrade check synchronously with optional channel override."""
 
         if channel_override:
-            check_github_updates(channel_override=channel_override)
+            check_github_updates(channel_override=channel_override, manual_trigger=True)
         else:
-            check_github_updates()
+            check_github_updates(manual_trigger=True)
 
     broker_url = str(getattr(settings, "CELERY_BROKER_URL", "")).strip()
     if not broker_url or broker_url.startswith("memory://"):
@@ -2320,10 +2320,17 @@ def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
 
     if channel_override:
         queued = enqueue_task(
-            check_github_updates, channel_override=channel_override, require_enabled=False
+            check_github_updates,
+            channel_override=channel_override,
+            manual_trigger=True,
+            require_enabled=False,
         )
     else:
-        queued = enqueue_task(check_github_updates, require_enabled=False)
+        queued = enqueue_task(
+            check_github_updates,
+            manual_trigger=True,
+            require_enabled=False,
+        )
 
     if not queued:
         logger.warning(
