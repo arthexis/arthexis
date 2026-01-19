@@ -1331,25 +1331,30 @@
     }
   }
 
+  async function stopLocalReadLoop({updateStatus = true, enableRequestButton = true} = {}){
+    if(localReader){
+      try { await localReader.cancel(); } catch(err) { /* ignore */ }
+    }
+    if(localPort){
+      try { await localPort.close(); } catch(err) { /* ignore */ }
+    }
+    if(localConnected && updateStatus){
+      statusEl.textContent = text.localDisconnected;
+    }
+    if(enableRequestButton && localRequestBtn){
+      localRequestBtn.disabled = false;
+    }
+    localConnected = false;
+    localPort = null;
+    localReader = null;
+  }
+
   function startLocalReadLoop(){
     readFromLocalPort()
       .catch((err) => {
         console.warn('[RFID] Local scanner read error', err);
       })
-      .finally(async () => {
-        if(localReader){
-          try { await localReader.cancel(); } catch(err) { /* ignore */ }
-        }
-        if(localPort){
-          try { await localPort.close(); } catch(err) { /* ignore */ }
-          localPort = null;
-        }
-        if(localConnected){
-          statusEl.textContent = text.localDisconnected;
-        }
-        localConnected = false;
-        localReader = null;
-      });
+      .finally(() => stopLocalReadLoop());
   }
 
   async function connectToLocalPort(port){
@@ -1358,6 +1363,7 @@
     }
     try {
       statusEl.textContent = text.connectingSavedScanner;
+      await stopLocalReadLoop({updateStatus: false, enableRequestButton: false});
       await port.open({baudRate: 9600});
       localPort = port;
       localConnected = true;
@@ -1415,8 +1421,7 @@
     }
     navigator.serial.addEventListener('disconnect', (event) => {
       if(localPort && event.target === localPort){
-        localPort = null;
-        localConnected = false;
+        stopLocalReadLoop();
         showError(text.localDisconnected);
       }
     });
