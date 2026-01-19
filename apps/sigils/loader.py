@@ -17,6 +17,7 @@ from .models import SigilRoot
 logger = logging.getLogger(__name__)
 
 FIXTURE_GLOB = "sigil_roots__*.json"
+_missing_content_types_logged = False
 
 
 def _iter_fixture_entries(fixtures_dir: Path) -> Iterable[dict]:
@@ -41,6 +42,8 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
     """Hydrate bundled SigilRoot fixtures while tolerating missing models."""
 
     del sender
+
+    global _missing_content_types_logged
 
     fixtures_dir = Path(__file__).resolve().parent / "fixtures"
     using = kwargs.get("using") or SigilRoot.all_objects.db
@@ -75,12 +78,13 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
             manager=manager,
         )
 
-    if skipped_roots:
+    if skipped_roots and not _missing_content_types_logged:
         logger.debug(
             "Skipped creating %d SigilRoot(s) due to missing content types: %s",
             len(skipped_roots),
             ", ".join(skipped_roots),
         )
+        _missing_content_types_logged = True
 
 
 def _get_sigil_manager(using: str):
