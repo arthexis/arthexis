@@ -161,7 +161,7 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
 def run_tests(base_dir: Path) -> bool:
     """Execute the full test suite using pytest."""
 
-    command = [sys.executable, "-m", "pytest"]
+    command = [sys.executable, "-m", "pytest", "--durations=5", "--durations-min=0"]
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Running tests:", " ".join(command))
