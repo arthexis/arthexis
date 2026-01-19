@@ -27,7 +27,10 @@ CONNECT_TIMEOUT = 5
 
 @pytest.fixture
 def asgi_application():
-    return create_asgi_application()
+    def _build():
+        return create_asgi_application()
+
+    return _build
 
 
 @pytest.fixture(autouse=True)
@@ -59,6 +62,7 @@ def isolate_log_dir(tmp_path, monkeypatch):
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_charge_point_created_for_new_websocket_path(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
         serial = "CP-UNUSED-PATH"
         path = f"/{serial}"
@@ -68,7 +72,7 @@ def test_charge_point_created_for_new_websocket_path(asgi_application):
         )()
         assert exists_before is False
 
-        communicator = WebsocketCommunicator(asgi_application, path)
+        communicator = WebsocketCommunicator(asgi_app, path)
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
@@ -143,6 +147,7 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
     [consumers.OCPP_VERSION_201, consumers.OCPP_VERSION_21],
 )
 def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred, asgi_application):
+    asgi_app = asgi_application()
     charger = Charger.objects.create(
         charger_id=f"CP-PREFERRED-{preferred}",
         connector_id=None,
@@ -150,7 +155,7 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred, asg
     )
 
     async def run_scenario():
-        communicator = WebsocketCommunicator(asgi_application, f"/{charger.charger_id}")
+        communicator = WebsocketCommunicator(asgi_app, f"/{charger.charger_id}")
         communicator.scope["subprotocols"] = []
 
         connected, agreed = await communicator.connect(timeout=CONNECT_TIMEOUT)
@@ -168,15 +173,16 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred, asg
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_ocpp_websocket_rate_limit_enforced(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
         serial = "CP-RATE-LIMIT"
         path = f"/{serial}"
 
-        first = WebsocketCommunicator(asgi_application, path)
+        first = WebsocketCommunicator(asgi_app, path)
         connected, _ = await first.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
-        second = WebsocketCommunicator(asgi_application, path)
+        second = WebsocketCommunicator(asgi_app, path)
         connected, _ = await second.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         await second.disconnect()
@@ -197,16 +203,17 @@ def test_ocpp_websocket_rate_limit_enforced(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_local_ip_bypasses_rate_limit_with_custom_scope_client(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
         serial = "CP-LOCAL-BYPASS"
         path = f"/{serial}"
 
-        throttled = WebsocketCommunicator(asgi_application, path)
+        throttled = WebsocketCommunicator(asgi_app, path)
         throttled.scope["client"] = ("8.8.8.8", 1000)
         connected, _ = await throttled.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
 
-        local = WebsocketCommunicator(asgi_application, path)
+        local = WebsocketCommunicator(asgi_app, path)
         local.scope["client"] = ("127.0.0.1", 1001)
         connected, _ = await local.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
@@ -227,17 +234,18 @@ def test_local_ip_bypasses_rate_limit_with_custom_scope_client(asgi_application)
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_pending_connection_replaced_on_reconnect(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
         serial = "CP-REPLACE"
         path = f"/{serial}"
 
-        first = WebsocketCommunicator(asgi_application, path)
+        first = WebsocketCommunicator(asgi_app, path)
         connected, _ = await first.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         existing_consumer = store.connections[store.pending_key(serial)]
 
-        second = WebsocketCommunicator(asgi_application, path)
+        second = WebsocketCommunicator(asgi_app, path)
         connected, _ = await second.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
@@ -257,6 +265,7 @@ def test_pending_connection_replaced_on_reconnect(asgi_application):
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 @pytest.mark.slow
 def test_assign_connector_rebinds_store_preserves_state(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
         serial = "CP-CONNECTOR-REASSIGN"
         path = f"/{serial}"
@@ -265,7 +274,7 @@ def test_assign_connector_rebinds_store_preserves_state(asgi_application):
         aggregate_key = store.identity_key(serial, None)
         connector_key = store.identity_key(serial, 1)
 
-        communicator = WebsocketCommunicator(asgi_application, path)
+        communicator = WebsocketCommunicator(asgi_app, path)
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
@@ -331,6 +340,7 @@ def test_assign_connector_rebinds_store_preserves_state(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch, asgi_application):
+    asgi_app = asgi_application()
     charger = Charger.objects.create(
         charger_id="CP-CLEAR-CACHE",
         connector_id=None,
@@ -352,7 +362,7 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch, as
     )
 
     async def run_scenario():
-        communicator = WebsocketCommunicator(asgi_application, f"/{charger.charger_id}")
+        communicator = WebsocketCommunicator(asgi_app, f"/{charger.charger_id}")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
         await communicator.disconnect()
@@ -423,8 +433,9 @@ def _latest_log_message(key: str) -> str:
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_serial_from_path_logs_reason(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
-        communicator = WebsocketCommunicator(asgi_application, "/<charger_id>")
+        communicator = WebsocketCommunicator(asgi_app, "/<charger_id>")
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
@@ -438,8 +449,9 @@ def test_rejects_invalid_serial_from_path_logs_reason(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_query_serial_and_logs_details(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
-        communicator = WebsocketCommunicator(asgi_application, "/?cid=")
+        communicator = WebsocketCommunicator(asgi_app, "/?cid=")
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
@@ -459,11 +471,12 @@ def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_when_missing_header(asgi_application):
+    asgi_app = asgi_application()
     user = get_user_model().objects.create_user(username="auth-missing", password="secret")
     charger = Charger.objects.create(charger_id="AUTH-MISSING", connector_id=None, ws_auth_user=user)
 
     async def run_scenario():
-        communicator = WebsocketCommunicator(asgi_application, f"/{charger.charger_id}")
+        communicator = WebsocketCommunicator(asgi_app, f"/{charger.charger_id}")
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
@@ -477,12 +490,13 @@ def test_basic_auth_rejects_when_missing_header(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_header_format(asgi_application):
+    asgi_app = asgi_application()
     user = get_user_model().objects.create_user(username="auth-invalid", password="secret")
     charger = Charger.objects.create(charger_id="AUTH-INVALID", connector_id=None, ws_auth_user=user)
 
     async def run_scenario():
         communicator = WebsocketCommunicator(
-            asgi_application,
+            asgi_app,
             f"/{charger.charger_id}",
             headers=[(b"authorization", b"Bearer token")],
         )
@@ -499,12 +513,13 @@ def test_basic_auth_rejects_invalid_header_format(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_credentials(asgi_application):
+    asgi_app = asgi_application()
     user = get_user_model().objects.create_user(username="auth-fail", password="secret")
     charger = Charger.objects.create(charger_id="AUTH-FAIL", connector_id=None, ws_auth_user=user)
 
     async def run_scenario():
         communicator = WebsocketCommunicator(
-            asgi_application,
+            asgi_app,
             f"/{charger.charger_id}",
             headers=_auth_header("auth-fail", "wrong"),
         )
@@ -521,6 +536,7 @@ def test_basic_auth_rejects_invalid_credentials(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_unauthorized_user(asgi_application):
+    asgi_app = asgi_application()
     authorized = get_user_model().objects.create_user(username="authorized", password="secret")
     unauthorized = get_user_model().objects.create_user(username="unauthorized", password="secret")
     charger = Charger.objects.create(
@@ -529,7 +545,7 @@ def test_basic_auth_rejects_unauthorized_user(asgi_application):
 
     async def run_scenario():
         communicator = WebsocketCommunicator(
-            asgi_application,
+            asgi_app,
             f"/{charger.charger_id}",
             headers=_auth_header("unauthorized", "secret"),
         )
@@ -552,6 +568,7 @@ def test_basic_auth_rejects_unauthorized_user(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_authorized_user(asgi_application):
+    asgi_app = asgi_application()
     user = get_user_model().objects.create_user(username="auth-ok", password="secret")
     charger = Charger.objects.create(charger_id="AUTH-OK", connector_id=None, ws_auth_user=user)
 
@@ -559,7 +576,7 @@ def test_basic_auth_accepts_authorized_user(asgi_application):
 
     async def run_scenario():
         communicator = WebsocketCommunicator(
-            asgi_application,
+            asgi_app,
             f"/{charger.charger_id}",
             headers=_auth_header("auth-ok", "secret"),
         )
@@ -583,9 +600,10 @@ def test_basic_auth_accepts_authorized_user(asgi_application):
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_unknown_extension_action_replies_with_empty_call_result(asgi_application):
+    asgi_app = asgi_application()
     async def run_scenario():
         serial = "CP-EXT-ACTION"
-        communicator = WebsocketCommunicator(asgi_application, f"/{serial}")
+        communicator = WebsocketCommunicator(asgi_app, f"/{serial}")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
