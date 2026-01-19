@@ -362,7 +362,10 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
     assert called["refresh_forwarders"] is False
 
 
-@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+@override_settings(
+    ROOT_URLCONF="apps.ocpp.urls",
+    CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
+)
 class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
     host = "127.0.0.1"
 
