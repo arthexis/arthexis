@@ -417,6 +417,7 @@ class ChargePointSimulator:
         self._last_close_code = None
         self._last_close_reason = None
         clean_exit = False
+        abnormal_disconnect = False
         scheme = resolve_ws_scheme(ws_scheme=cfg.ws_scheme, use_tls=cfg.use_tls)
         fallback_scheme = "ws" if scheme == "wss" else "wss"
         candidate_schemes = [scheme]
@@ -732,6 +733,7 @@ class ChargePointSimulator:
             self._stop_event.set()
             return
         except asyncio.TimeoutError:
+            abnormal_disconnect = True
             if not self._connected.is_set():
                 self._connect_error = "Timeout waiting for response"
                 self._connected.set()
@@ -739,6 +741,7 @@ class ChargePointSimulator:
             self._stop_event.set()
             return
         except websockets.exceptions.ConnectionClosed as exc:
+            abnormal_disconnect = True
             if not self._connected.is_set():
                 self._connect_error = str(exc)
                 self._connected.set()
@@ -766,7 +769,9 @@ class ChargePointSimulator:
                 await ws.close()
                 close_code = ws.close_code
                 is_clean_exit = clean_exit or (
-                    self.status == "stopped" and self._connect_error == "accepted"
+                    self.status == "stopped"
+                    and self._connect_error == "accepted"
+                    and not abnormal_disconnect
                 )
                 if is_clean_exit and close_code in (None, 1006, 1011):
                     close_code = 1000
