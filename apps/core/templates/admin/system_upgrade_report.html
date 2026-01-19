@@ -303,17 +303,17 @@
         <dt>{% trans "Auto-upgrade status" %}</dt>
         <dd>
           {% if report.settings.enabled %}
-            {% if report.settings.is_unstable_mode %}
-              {% if report.settings.fast_lane_enabled %}
-                {% trans "Enabled (tracking the unstable channel; Fast Lane enabled)" %}
+            {% if report.settings.is_unstable_mode or report.settings.is_stable_mode %}
+              {% if report.settings.is_unstable_mode %}
+                {% trans "tracking the unstable channel" as mode_description %}
               {% else %}
-                {% trans "Enabled (tracking the unstable channel)" %}
+                {% trans "tracking the stable release channel" as mode_description %}
               {% endif %}
-            {% elif report.settings.is_stable_mode %}
+
               {% if report.settings.fast_lane_enabled %}
-                {% trans "Enabled (tracking the stable release channel; Fast Lane enabled)" %}
+                {% blocktrans with description=mode_description %}Enabled ({{ description }}; Fast Lane enabled){% endblocktrans %}
               {% else %}
-                {% trans "Enabled (tracking the stable release channel)" %}
+                {% blocktrans with description=mode_description %}Enabled ({{ description }}){% endblocktrans %}
               {% endif %}
             {% else %}
               {% if report.settings.fast_lane_enabled %}
