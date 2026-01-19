@@ -24,6 +24,18 @@ on:
 jobs:
   install:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
       # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
       - uses: actions/checkout@v6
@@ -117,6 +129,18 @@ jobs:
           python scripts/check_no_http_links.py
   upgrade:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
       # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
       - name: Checkout main
@@ -171,6 +195,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUN_SLOW_TESTS: '1'
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v6
         with:
