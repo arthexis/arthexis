@@ -16,7 +16,8 @@ from django.contrib.auth.signals import user_logged_in
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.serializers import deserialize, serialize
-from django.db import transaction
+from django.core.serializers.base import DeserializationError
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -662,20 +663,29 @@ class ImportExportAdminMixin:
         except NoReverseMatch:
             return None
 
+    @staticmethod
+    def _has_route(urls, route: str) -> bool:
+        return any(getattr(url.pattern, "_route", None) == route for url in urls)
+
     def get_urls(self):
         urls = super().get_urls()
-        custom_urls = [
-            path(
-                "export/",
-                self.admin_site.admin_view(self.export_view),
-                name=self._admin_view_name("export"),
-            ),
-            path(
-                "import/",
-                self.admin_site.admin_view(self.import_view),
-                name=self._admin_view_name("import"),
-            ),
-        ]
+        custom_urls = []
+        if not self._has_route(urls, "export/"):
+            custom_urls.append(
+                path(
+                    "export/",
+                    self.admin_site.admin_view(self.export_view),
+                    name=self._admin_view_name("export"),
+                )
+            )
+        if not self._has_route(urls, "import/"):
+            custom_urls.append(
+                path(
+                    "import/",
+                    self.admin_site.admin_view(self.import_view),
+                    name=self._admin_view_name("import"),
+                )
+            )
         return custom_urls + urls
 
     def changelist_view(self, request, extra_context=None):
@@ -699,21 +709,52 @@ class ImportExportAdminMixin:
         return response
 
     def import_view(self, request):
-        if not (self.has_add_permission(request) or self.has_change_permission(request)):
+        can_add = self.has_add_permission(request)
+        can_change = self.has_change_permission(request)
+        if not (can_add or can_change):
             raise PermissionDenied
         opts = self.model._meta
         changelist_url = reverse(
             f"admin:{opts.app_label}_{opts.model_name}_changelist"
         )
         if request.method == "POST" and request.FILES.get("import_file"):
-            payload = request.FILES["import_file"].read().decode("utf-8")
-            objects = list(deserialize("json", payload))
-            with transaction.atomic():
-                for obj in objects:
-                    obj.save()
+            imported = 0
+            import_file = request.FILES["import_file"]
+            try:
+                with transaction.atomic():
+                    for deserialized_object in deserialize("json", import_file):
+                        if (
+                            deserialized_object.object._meta.concrete_model
+                            is not self.model._meta.concrete_model
+                        ):
+                            raise ValidationError(
+                                _(
+                                    "Imported data contains objects of an unexpected model type."
+                                )
+                            )
+                        if not can_add:
+                            pk = deserialized_object.object.pk
+                            if pk is None or not self.model._default_manager.filter(
+                                pk=pk
+                            ).exists():
+                                raise ValidationError(
+                                    _(
+                                        "You do not have permission to add new %(name)s records."
+                                    )
+                                    % {"name": opts.verbose_name_plural}
+                                )
+                        deserialized_object.save()
+                        imported += 1
+            except (DeserializationError, IntegrityError, ValidationError, ValueError) as exc:
+                self.message_user(
+                    request,
+                    _("Error processing import: %(error)s") % {"error": exc},
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(_safe_next_url(request) or changelist_url)
             name = (
                 opts.verbose_name
-                if len(objects) == 1
+                if imported == 1
                 else opts.verbose_name_plural
             )
             self.message_user(
@@ -721,9 +762,9 @@ class ImportExportAdminMixin:
                 ngettext(
                     "Imported %(count)d %(name)s.",
                     "Imported %(count)d %(name)s.",
-                    len(objects),
+                    imported,
                 )
-                % {"count": len(objects), "name": name},
+                % {"count": imported, "name": name},
                 level=messages.SUCCESS,
             )
             return HttpResponseRedirect(_safe_next_url(request) or changelist_url)
