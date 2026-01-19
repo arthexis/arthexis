@@ -1331,6 +1331,27 @@
     }
   }
 
+  function startLocalReadLoop(){
+    readFromLocalPort()
+      .catch((err) => {
+        console.warn('[RFID] Local scanner read error', err);
+      })
+      .finally(async () => {
+        if(localReader){
+          try { await localReader.cancel(); } catch(err) { /* ignore */ }
+        }
+        if(localPort){
+          try { await localPort.close(); } catch(err) { /* ignore */ }
+          localPort = null;
+        }
+        if(localConnected){
+          statusEl.textContent = text.localDisconnected;
+        }
+        localConnected = false;
+        localReader = null;
+      });
+  }
+
   async function connectToLocalPort(port){
     if(!port){
       return false;
@@ -1345,23 +1366,10 @@
         firstReadySource = 'local';
         statusEl.textContent = text.scannerReadyLocal;
       }
-      await readFromLocalPort();
+      startLocalReadLoop();
       return true;
     } catch(err){
       showError(text.localConnectFailed);
-    } finally {
-      if(localReader){
-        try { await localReader.cancel(); } catch(err) { /* ignore */ }
-      }
-      if(localPort){
-        try { await localPort.close(); } catch(err) { /* ignore */ }
-        localPort = null;
-      }
-      if(localConnected){
-        statusEl.textContent = text.localDisconnected;
-      }
-      localConnected = false;
-      localReader = null;
     }
     return false;
   }
