@@ -73,6 +73,22 @@
     {% block object-tools %}
         <ul class="object-tools">
           {% block object-tools-items %}
+            {% if model_export_url %}
+              <li>
+                <a href="{{ model_export_url }}" class="historylink" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}">
+                  <span aria-hidden="true">📤</span>
+                  <span class="visually-hidden">{% trans "Export" %}</span>
+                </a>
+              </li>
+            {% endif %}
+            {% if model_import_url %}
+              <li>
+                <a href="{{ model_import_url }}" class="addlink" title="{% trans 'Import' %}" aria-label="{% trans 'Import' %}">
+                  <span aria-hidden="true">📥</span>
+                  <span class="visually-hidden">{% trans "Import" %}</span>
+                </a>
+              </li>
+            {% endif %}
             {% change_list_object_tools %}
             {% if default_preview_url %}
               <li><a href="{{ default_preview_url }}">{% translate "Preview Default Sites" %}</a></li>
