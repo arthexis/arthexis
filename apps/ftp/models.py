@@ -50,7 +50,12 @@ class FTPServer(Entity):
                 fields=["node"],
                 name="ftpserver_unique_node",
                 condition=models.Q(node__isnull=False),
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["node"],
+                name="ftpserver_unique_global",
+                condition=models.Q(node__isnull=True),
+            ),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
