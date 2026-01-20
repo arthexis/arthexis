@@ -4,7 +4,7 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "name": "ArthexisSim Connector 2",
+      "name": "Arthexis CP 2",
       "cp_path": "ARTHEXIS-0004",
       "host": "arthexis.com",
       "ws_port": 8888,
