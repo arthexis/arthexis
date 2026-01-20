@@ -39,6 +39,7 @@ exec > >(tee "$LOG_FILE") 2>&1
 ORIGINAL_ARGS=("$@")
 SERVICE=""
 PORT=""
+DEFAULT_BASE_SERVICE_NAME="arthexis"
 AUTO_UPGRADE=false
 CHANNEL="stable"
 UPGRADE=false
@@ -290,7 +291,7 @@ delegate_secondary_install() {
         base_service="$(cat "$SCRIPT_DIR/.locks/service.lck")"
     fi
     if [ -z "$base_service" ]; then
-        base_service="arthexis"
+        base_service="$DEFAULT_BASE_SERVICE_NAME"
     fi
 
     local -a forwarded_args=()
@@ -313,6 +314,10 @@ delegate_secondary_install() {
         if [ "$arg" = "--service" ]; then
             has_service_arg=true
             secondary_service="${ORIGINAL_ARGS[$((index + 1))]}"
+            forwarded_args+=("$arg")
+            forwarded_args+=("${ORIGINAL_ARGS[$((index + 1))]}")
+            index=$((index + 2))
+            continue
         fi
         if [ "$arg" = "--lcd-screen" ] || [ "$arg" = "--no-lcd-screen" ]; then
             has_lcd_flag=true
