@@ -239,6 +239,32 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    function getBreadcrumbCopyValue() {
+        const breadcrumbLabel = breadcrumbs.dataset.breadcrumbText || breadcrumbText;
+        return `In ${breadcrumbLabel} (${window.location.href})`;
+    }
+
+    function focusNavFilter() {
+        const navFilter = document.getElementById('nav-filter');
+        if (navFilter && typeof navFilter.focus === 'function') {
+            navFilter.focus();
+            if (typeof navFilter.select === 'function') {
+                navFilter.select();
+            }
+        }
+    }
+
+    function handleBreadcrumbCopy() {
+        const copyValue = getBreadcrumbCopyValue();
+        return copyText(copyValue)
+            .then(function () {
+                setStatus(copiedLabel);
+            })
+            .catch(function () {
+                setStatus(copyErrorLabel);
+            });
+    }
+
     function setStatus(label) {
         breadcrumbsCopyLink.textContent = label;
         window.setTimeout(function () {
@@ -260,16 +286,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     breadcrumbsCopyLink.addEventListener('click', function (event) {
         event.preventDefault();
-        const breadcrumbLabel = breadcrumbs.dataset.breadcrumbText || breadcrumbText;
-        const copyValue = `In ${breadcrumbLabel} (${window.location.href})`;
+        handleBreadcrumbCopy();
+    });
 
-        copyText(copyValue)
-            .then(function () {
-                setStatus(copiedLabel);
-            })
-            .catch(function () {
-                setStatus(copyErrorLabel);
+    document.addEventListener('keydown', function (event) {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            handleBreadcrumbCopy().finally(function () {
+                focusNavFilter();
             });
+        }
     });
 });
 </script>
