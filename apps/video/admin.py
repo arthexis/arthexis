@@ -220,7 +220,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             reverse(f"admin:{self._admin_view_name('change')}", args=[obj.pk])
         )
 
-    @admin.action(description=_("Reload camera resolution defaults"))
+    @admin.action(description=_("Reload resolution defaults"))
     def reload_camera_defaults(self, request, queryset):
         width, height = DEFAULT_CAMERA_RESOLUTION
         updated = queryset.update(capture_width=width, capture_height=height)
@@ -232,24 +232,24 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 level=messages.SUCCESS,
             )
 
-    find_video_devices.label = _("Find Video Devices")
-    find_video_devices.short_description = _("Find Video Devices")
+    find_video_devices.label = _("Find Devices")
+    find_video_devices.short_description = _("Find Devices")
     find_video_devices.changelist = True
 
     take_snapshot.label = _("Take Snapshot")
     take_snapshot.short_description = _("Take Snapshot")
     take_snapshot.changelist = True
 
-    test_camera.label = _("Test Camera")
-    test_camera.short_description = _("Test Camera")
+    test_camera.label = _("Test Stream")
+    test_camera.short_description = _("Test Stream")
     test_camera.changelist = True
 
-    power_off_camera.label = _("Power Off Camera")
-    power_off_camera.short_description = _("Power Off Camera")
+    power_off_camera.label = _("Power Off")
+    power_off_camera.short_description = _("Power Off")
     power_off_camera.changelist = True
 
-    power_on_camera.label = _("Power On Camera")
-    power_on_camera.short_description = _("Power On Camera")
+    power_on_camera.label = _("Power On")
+    power_on_camera.short_description = _("Power On")
     power_on_camera.changelist = True
 
     refresh_snapshot.label = _("Take Snapshot")
@@ -384,7 +384,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
     def find_video_devices_view(self, request):
         feature = self._ensure_video_feature_enabled(
-            request, _("Find Video Devices"), auto_enable=True, require_stack=False
+            request, _("Find Devices"), auto_enable=True, require_stack=False
         )
         if not feature:
             return redirect("..")
