@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function focusNavFilter() {
         const navFilter = document.getElementById('nav-filter');
-        if (navFilter && typeof navFilter.focus === 'function') {
+        if (navFilter) {
             navFilter.focus();
             if (typeof navFilter.select === 'function') {
                 navFilter.select();
