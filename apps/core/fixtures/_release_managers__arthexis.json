@@ -1,17 +1,1 @@
-[
-{
-  "model": "core.releasemanager",
-  "fields": {
-    "is_seed_data": false,
-    "is_deleted": false,
-    "user": ["arthexis"],
-    "pypi_username": "arthexis",
-    "pypi_token": "",
-    "github_token": "",
-    "git_username": "",
-    "git_password": "",
-    "pypi_password": "",
-    "pypi_url": "https://pypi.org/user/arthexis/"
-  }
-}
-]
+[]
