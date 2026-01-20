@@ -2,9 +2,6 @@
 {% load i18n %}
 
 {% block object-tools-items %}
-    {% block import_export_buttons %}
-        {% include "admin/includes/import_export_buttons.html" %}
-    {% endblock %}
     {% if soft_deleted_active_url %}
         <li>
             <a href="{{ soft_deleted_active_url }}" class="viewlink">

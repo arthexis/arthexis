@@ -2,9 +2,6 @@
 {% load i18n %}
 
 {% block object-tools-items %}
-    {% block import_export_buttons %}
-        {% include "admin/includes/import_export_buttons.html" %}
-    {% endblock %}
     {% if soft_deleted_url %}
         {% if soft_deleted_count %}
             {% blocktrans count count=soft_deleted_count asvar soft_deleted_label %}
