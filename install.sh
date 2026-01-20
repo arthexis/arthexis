@@ -283,10 +283,24 @@ delegate_secondary_install() {
     echo "Staging secondary installation at $target_dir"
     sync_secondary_tree "$target_dir"
 
+    local base_service=""
+    if [ -n "$SERVICE" ]; then
+        base_service="$SERVICE"
+    elif [ -f "$SCRIPT_DIR/.locks/service.lck" ]; then
+        base_service="$(cat "$SCRIPT_DIR/.locks/service.lck")"
+    fi
+    if [ -z "$base_service" ]; then
+        base_service="arthexis"
+    fi
+
     local -a forwarded_args=()
     local index=0
     local total=${#ORIGINAL_ARGS[@]}
     local has_port_arg=false
+    local has_service_arg=false
+    local has_lcd_flag=false
+    local has_rfid_flag=false
+    local secondary_service=""
     while [ $index -lt $total ]; do
         local arg="${ORIGINAL_ARGS[$index]}"
         if [ "$arg" = "--secondary" ]; then
@@ -295,6 +309,16 @@ delegate_secondary_install() {
         fi
         if [ "$arg" = "--port" ]; then
             has_port_arg=true
+        fi
+        if [ "$arg" = "--service" ]; then
+            has_service_arg=true
+            secondary_service="${ORIGINAL_ARGS[$((index + 1))]}"
+        fi
+        if [ "$arg" = "--lcd-screen" ] || [ "$arg" = "--no-lcd-screen" ]; then
+            has_lcd_flag=true
+        fi
+        if [ "$arg" = "--rfid-service" ] || [ "$arg" = "--no-rfid-service" ]; then
+            has_rfid_flag=true
         fi
         forwarded_args+=("$arg")
         index=$((index + 1))
@@ -306,6 +330,19 @@ delegate_secondary_install() {
         forwarded_args+=("--port" "$sibling_port")
     fi
 
+    if [ "$has_service_arg" = false ]; then
+        secondary_service="${base_service}-${secondary_name}"
+        forwarded_args+=("--service" "$secondary_service")
+    fi
+
+    if [ "$has_lcd_flag" = false ]; then
+        forwarded_args+=("--no-lcd-screen")
+    fi
+
+    if [ "$has_rfid_flag" = false ]; then
+        forwarded_args+=("--no-rfid-service")
+    fi
+
     echo "Delegating installation to $target_dir/install.sh with sibling-awareness"
     ARTHEXIS_SECONDARY_CHILD=1 "$target_dir/install.sh" "${forwarded_args[@]}"
     local status=$?
@@ -314,7 +351,7 @@ delegate_secondary_install() {
         exit $status
     fi
 
-    queue_sidecar_record "secondary" "$secondary_name" "$target_dir" ""
+    queue_sidecar_record "secondary" "$secondary_name" "$target_dir" "$secondary_service"
 }
 
 delegate_migrator_install() {
