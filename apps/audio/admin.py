@@ -17,14 +17,14 @@ from .utils import has_audio_capture_device, record_microphone_sample, save_audi
 class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     list_display = ("identifier", "node", "description", "capture_channels")
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
-    changelist_actions = ["find_recording_devices"]
+    changelist_actions = ["find_devices"]
     change_list_template = "django_object_actions/change_list.html"
 
     def get_urls(self):
         custom = [
             path(
                 "find-recording-devices/",
-                self.admin_site.admin_view(self.find_recording_devices_view),
+                self.admin_site.admin_view(self.find_devices_view),
                 name="audio_recordingdevice_find_devices",
             ),
             path(
@@ -35,12 +35,12 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         ]
         return custom + super().get_urls()
 
-    def find_recording_devices(self, request, queryset=None):
+    def find_devices(self, request, queryset=None):
         return redirect("admin:audio_recordingdevice_find_devices")
 
-    find_recording_devices.label = _("Find Devices")
-    find_recording_devices.short_description = _("Find Devices")
-    find_recording_devices.changelist = True
+    find_devices.label = _("Find Devices")
+    find_devices.short_description = _("Find Devices")
+    find_devices.changelist = True
 
     def _ensure_audio_feature_enabled(
         self,
@@ -92,14 +92,14 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             )
         return node
 
-    def find_recording_devices_view(self, request):
+    def find_devices_view(self, request):
         node = self._get_local_node(request)
         if node is None:
             return redirect("..")
 
         feature = self._ensure_audio_feature_enabled(
             request,
-            self.find_recording_devices.label,
+            self.find_devices.label,
             node=node,
             auto_enable=True,
         )

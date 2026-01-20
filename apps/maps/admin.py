@@ -34,7 +34,7 @@ class LocationAdminForm(forms.ModelForm):
 @admin.register(Location)
 class LocationAdmin(EntityModelAdmin):
     form = LocationAdminForm
-    changelist_actions = ["add_current_location"]
+    changelist_actions = ["add_current"]
     list_display = (
         "name",
         "zone",
@@ -53,8 +53,8 @@ class LocationAdmin(EntityModelAdmin):
         custom = [
             path(
                 "add/current/",
-                self.admin_site.admin_view(self.add_current_location),
-                name="maps_location_add_current_location",
+                self.admin_site.admin_view(self.add_current),
+                name="maps_location_add_current",
             )
         ]
         return custom + urls
@@ -66,11 +66,11 @@ class LocationAdmin(EntityModelAdmin):
             parent_actions = parent(request)
             if parent_actions:
                 actions.extend(parent_actions)
-        if "add_current_location" not in actions:
-            actions.append("add_current_location")
+        if "add_current" not in actions:
+            actions.append("add_current")
         return actions
 
-    def add_current_location(self, request, queryset=None):
+    def add_current(self, request, queryset=None):
         if not self.has_add_permission(request):
             raise PermissionDenied
 
@@ -120,9 +120,9 @@ class LocationAdmin(EntityModelAdmin):
         }
         return TemplateResponse(request, "admin/maps/location/add_current.html", context)
 
-    add_current_location.label = _("Add Current Location")
-    add_current_location.short_description = _("Add Current Location")
-    add_current_location.requires_queryset = False
+    add_current.label = _("Add Current Location")
+    add_current.short_description = _("Add Current Location")
+    add_current.requires_queryset = False
 
 
 @admin.register(GoogleMapsLocation)

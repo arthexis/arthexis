@@ -65,9 +65,9 @@ class LightsailActionMixin(DjangoObjectActions):
 
 @admin.register(LightsailInstance)
 class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
-    actions = ["fetch_instance"]
-    changelist_actions = ["fetch_instance"]
-    dashboard_actions = ["fetch_instance"]
+    actions = ["fetch"]
+    changelist_actions = ["fetch"]
+    dashboard_actions = ["fetch"]
     list_display = (
         "name",
         "region",
@@ -97,7 +97,7 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
         custom = [
             path(
                 "fetch/",
-                self.admin_site.admin_view(self.fetch_instance_view),
+                self.admin_site.admin_view(self.fetch_view),
                 name="aws_lightsailinstance_fetch",
             ),
         ]
@@ -106,14 +106,14 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     def _action_url(self):
         return reverse("admin:aws_lightsailinstance_fetch")
 
-    def fetch_instance(self, request, queryset=None):  # pragma: no cover - admin action
+    def fetch(self, request, queryset=None):  # pragma: no cover - admin action
         return HttpResponseRedirect(self._action_url())
 
-    fetch_instance.label = _("Fetch Instance")
-    fetch_instance.short_description = _("Fetch Instance")
-    fetch_instance.requires_queryset = False
+    fetch.label = _("Fetch Instance")
+    fetch.short_description = _("Fetch Instance")
+    fetch.requires_queryset = False
 
-    def fetch_instance_view(self, request):
+    def fetch_view(self, request):
         if not self.has_view_or_change_permission(request):
             raise PermissionDenied
 
@@ -185,9 +185,9 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
 
 @admin.register(LightsailDatabase)
 class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
-    actions = ["fetch_database"]
-    changelist_actions = ["fetch_database"]
-    dashboard_actions = ["fetch_database"]
+    actions = ["fetch"]
+    changelist_actions = ["fetch"]
+    dashboard_actions = ["fetch"]
     list_display = (
         "name",
         "region",
@@ -216,7 +216,7 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
         custom = [
             path(
                 "fetch/",
-                self.admin_site.admin_view(self.fetch_database_view),
+                self.admin_site.admin_view(self.fetch_view),
                 name="aws_lightsaildatabase_fetch",
             ),
         ]
@@ -225,14 +225,14 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
     def _action_url(self):
         return reverse("admin:aws_lightsaildatabase_fetch")
 
-    def fetch_database(self, request, queryset=None):  # pragma: no cover - admin action
+    def fetch(self, request, queryset=None):  # pragma: no cover - admin action
         return HttpResponseRedirect(self._action_url())
 
-    fetch_database.label = _("Fetch Database")
-    fetch_database.short_description = _("Fetch Database")
-    fetch_database.requires_queryset = False
+    fetch.label = _("Fetch Database")
+    fetch.short_description = _("Fetch Database")
+    fetch.requires_queryset = False
 
-    def fetch_database_view(self, request):
+    def fetch_view(self, request):
         if not self.has_view_or_change_permission(request):
             raise PermissionDenied
 

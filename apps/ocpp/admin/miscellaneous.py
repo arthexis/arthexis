@@ -2017,8 +2017,8 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         "stop_simulator",
         "send_open_door",
     )
-    changelist_actions = ["start_default_simulator"]
-    change_actions = ["start_simulator_action", "stop_simulator_action"]
+    changelist_actions = ["start_default"]
+    change_actions = ["start_action", "stop_action"]
 
     log_type = "simulator"
 
@@ -2136,7 +2136,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         self._start_simulators(request, queryset)
 
     @admin.action(description="Start Default Simulator")
-    def start_default_simulator(self, request, queryset=None):
+    def start_default(self, request, queryset=None):
         from django.urls import reverse
         from django.utils.html import format_html
 
@@ -2181,8 +2181,8 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
         return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
 
-    start_default_simulator.label = _("Start Default Simulator")
-    start_default_simulator.requires_queryset = False
+    start_default.label = _("Start Default Simulator")
+    start_default.requires_queryset = False
 
     def stop_simulator(self, request, queryset):
         async def _stop(objs):
@@ -2202,17 +2202,17 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
     stop_simulator.short_description = "Stop selected simulators"
 
-    def start_simulator_action(self, request, obj):
+    def start_action(self, request, obj):
         queryset = type(obj).objects.filter(pk=obj.pk)
         self.start_simulator(request, queryset)
 
-    def stop_simulator_action(self, request, obj):
+    def stop_action(self, request, obj):
         queryset = type(obj).objects.filter(pk=obj.pk)
         self.stop_simulator(request, queryset)
 
     def response_action(self, request, queryset):
-        if request.POST.get("action") == "start_default_simulator":
-            return self.start_default_simulator(request)
+        if request.POST.get("action") == "start_default":
+            return self.start_default(request)
         return super().response_action(request, queryset)
 
     def log_link(self, obj):
