@@ -1,3 +1,5 @@
+import time
+
 from django.db import IntegrityError
 
 from apps.cards.models import RFID
@@ -55,6 +57,7 @@ def scan_sources(
     request=None, *, endianness: str | None = None, timeout: float | None = None
 ):
     """Read the next RFID tag from the local scanner."""
+    start_time = time.monotonic()
     response = scan_via_service(timeout=timeout)
     if response is not None:
         service_mode = "service"
@@ -69,7 +72,11 @@ def scan_sources(
     start()
     if not is_configured():
         return {"rfid": None, "label_id": None, "service_mode": service_mode}
-    result = get_next_tag(timeout=timeout or 0)
+    remaining_timeout = 0.0
+    if timeout is not None:
+        elapsed = time.monotonic() - start_time
+        remaining_timeout = max(0.0, timeout - elapsed)
+    result = get_next_tag(timeout=remaining_timeout)
     if not result:
         return {"rfid": None, "label_id": None, "service_mode": service_mode}
     if result.get("error"):

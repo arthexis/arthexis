@@ -412,7 +412,7 @@ def stop():
     _thread = None
 
 
-def get_next_tag(timeout: float = 0) -> Optional[dict]:
+def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
     """Retrieve the next tag read from the queue.
 
     Falls back to direct polling if no IRQ events are queued.
@@ -428,6 +428,10 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
                 logger.debug("RFID not configured; skipping read")
                 _last_not_configured_log = now
         return None
+    if timeout is None:
+        timeout = 0.0
+    timeout = max(0.0, timeout)
+    start_time = time.monotonic()
     try:
         result = _tag_queue.get(timeout=timeout)
         if result and result.get("rfid"):
@@ -439,7 +443,9 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
         try:
             from .reader import read_rfid
 
-            res = read_rfid(mfrc=_reader, cleanup=False)
+            elapsed = time.monotonic() - start_time
+            remaining_timeout = max(0.0, timeout - elapsed)
+            res = read_rfid(mfrc=_reader, cleanup=False, timeout=remaining_timeout)
             if res.get("rfid") or res.get("error"):
                 logger.debug("Polling read result: %s", res)
                 if res.get("rfid"):
