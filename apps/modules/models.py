@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
@@ -9,7 +11,7 @@ from apps.core.entity import Entity
 from apps.groups.models import SecurityGroup
 from apps.media.models import MediaFile
 from apps.media.utils import ensure_media_bucket
-from apps.nodes.models import NodeRole
+from apps.nodes.models import NodeFeature, NodeRole
 
 
 class ModuleManager(models.Manager):
@@ -79,6 +81,12 @@ class Module(Entity):
         blank=True,
         help_text="Leave blank to apply this module to all node roles.",
     )
+    features = models.ManyToManyField(
+        NodeFeature,
+        related_name="modules",
+        blank=True,
+        help_text="Require these node features to be enabled for this module to appear.",
+    )
 
     objects = ModuleManager()
 
@@ -130,6 +138,14 @@ class Module(Entity):
     def favicon_url(self) -> str:
         file = self.favicon_file
         return file.url if file else ""
+
+    def meets_feature_requirements(
+        self, feature_is_enabled: Callable[[str], bool]
+    ) -> bool:
+        required = list(self.features.all())
+        if not required:
+            return True
+        return all(feature_is_enabled(feature.slug) for feature in required)
 
 
 __all__ = ["Module", "ModuleManager"]

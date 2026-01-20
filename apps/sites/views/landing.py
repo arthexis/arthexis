@@ -18,7 +18,7 @@ from apps.docs import views as docs_views
 from apps.docs import rendering
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
-from apps.nodes.models import Node
+from apps.nodes.models import Node, NodeFeature
 from utils.decorators import staff_required
 from utils.sites import get_site
 
@@ -80,7 +80,22 @@ def sitemap(request):
     site = get_site(request)
     node = Node.get_local()
     role = node.role if node else None
-    applications = Module.objects.for_role(role).filter(is_deleted=False)
+    applications = Module.objects.for_role(role).filter(is_deleted=False).prefetch_related("features")
+    feature_cache: dict[str, bool] = {}
+
+    def feature_is_enabled(slug: str) -> bool:
+        if slug in feature_cache:
+            return feature_cache[slug]
+        try:
+            feature = NodeFeature.objects.filter(slug=slug).first()
+        except Exception:
+            feature = None
+        try:
+            enabled = bool(feature and feature.is_enabled)
+        except Exception:
+            enabled = False
+        feature_cache[slug] = enabled
+        return enabled
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -88,6 +103,8 @@ def sitemap(request):
     ]
     seen = set()
     for app in applications:
+        if not app.meets_feature_requirements(feature_is_enabled):
+            continue
         loc = f"{base}{app.path}"
         if loc not in seen:
             seen.add(loc)
