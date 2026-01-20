@@ -898,13 +898,14 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
             self.message_user(
                 request,
                 ngettext(
-                    "Recovered %(count)d deleted %(name)s.",
-                    "Recovered %(count)d deleted %(name)s.",
+                    "Recovered %(count)d deleted %(verbose_name)s.",
+                    "Recovered %(count)d deleted %(verbose_name_plural)s.",
                     recovered,
                 )
                 % {
                     "count": recovered,
-                    "name": self.model._meta.verbose_name_plural,
+                    "verbose_name": self.model._meta.verbose_name,
+                    "verbose_name_plural": self.model._meta.verbose_name_plural,
                 },
                 level=messages.SUCCESS,
             )
