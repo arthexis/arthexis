@@ -1771,7 +1771,17 @@ def release_progress(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
     if error_response:
         return error_response
-    safe_pk = int(pk)
+    try:
+        safe_pk = int(pk)
+    except (TypeError, ValueError):
+        return _render_release_progress_error(
+            request,
+            None,
+            action,
+            _("Invalid release ID provided."),
+            status=400,
+            debug_info={"pk": pk},
+        )
     session_key = f"release_publish_{safe_pk}"
     lock_dir = Path(settings.BASE_DIR) / ".locks"
     lock_path = lock_dir / f"release_publish_{safe_pk}.json"
