@@ -26,6 +26,13 @@ from .utils import (
 )
 
 
+def set_admin_action_label(action, label, *, changelist=False):
+    action.label = _(label)
+    action.short_description = action.label
+    if changelist:
+        action.changelist = True
+
+
 class VideoDeviceAdminForm(forms.ModelForm):
     resolution_choice = forms.ChoiceField(
         required=False,
@@ -198,19 +205,19 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         )
 
     def find_devices(self, request, queryset=None):
-        return redirect("admin:video_videodevice_find_devices")
+        return self._redirect_admin("video_videodevice_find_devices")
 
     def take_snapshot(self, request, queryset=None):
-        return redirect("admin:video_videodevice_take_snapshot")
+        return self._redirect_admin("video_videodevice_take_snapshot")
 
     def test_stream(self, request, queryset=None):
-        return redirect("admin:video_videodevice_view_stream")
+        return self._redirect_admin("video_videodevice_view_stream")
 
     def power_off(self, request, queryset=None):
-        return redirect("admin:video_videodevice_power_off_camera")
+        return self._redirect_admin("video_videodevice_power_off_camera")
 
     def power_on(self, request, queryset=None):
-        return redirect("admin:video_videodevice_power_on_camera")
+        return self._redirect_admin("video_videodevice_power_on_camera")
 
     def refresh_snapshot(self, request, obj):
         self._capture_snapshot_for_device(
@@ -232,28 +239,15 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 level=messages.SUCCESS,
             )
 
-    find_devices.label = _("Find Devices")
-    find_devices.short_description = find_devices.label
-    find_devices.changelist = True
+    set_admin_action_label(find_devices, "Find Devices", changelist=True)
+    set_admin_action_label(take_snapshot, "Take Snapshot", changelist=True)
+    set_admin_action_label(test_stream, "Test Stream", changelist=True)
+    set_admin_action_label(power_off, "Power Off", changelist=True)
+    set_admin_action_label(power_on, "Power On", changelist=True)
+    set_admin_action_label(refresh_snapshot, "Take Snapshot")
 
-    take_snapshot.label = _("Take Snapshot")
-    take_snapshot.short_description = take_snapshot.label
-    take_snapshot.changelist = True
-
-    test_stream.label = _("Test Stream")
-    test_stream.short_description = test_stream.label
-    test_stream.changelist = True
-
-    power_off.label = _("Power Off")
-    power_off.short_description = power_off.label
-    power_off.changelist = True
-
-    power_on.label = _("Power On")
-    power_on.short_description = power_on.label
-    power_on.changelist = True
-
-    refresh_snapshot.label = _("Take Snapshot")
-    refresh_snapshot.short_description = refresh_snapshot.label
+    def _redirect_admin(self, url_name):
+        return redirect(f"admin:{url_name}")
 
     def _get_camera_power_doc_url(self):
         try:
