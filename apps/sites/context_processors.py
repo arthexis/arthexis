@@ -59,7 +59,7 @@ def nav_links(request):
             Module.objects.for_role(role)
             .filter(is_deleted=False)
             .select_related("application", "security_group")
-            .prefetch_related("landings", "roles")
+            .prefetch_related("landings", "roles", "features")
         )
     except (OperationalError, ProgrammingError):
         modules = []
@@ -97,6 +97,8 @@ def nav_links(request):
         return enabled
 
     for module in modules:
+        if not module.meets_feature_requirements(feature_is_enabled):
+            continue
         module_roles = getattr(module, "roles")
         role_ids = {r.id for r in module_roles.all()} if module_roles else set()
         role_matches = not role_ids or (role and role.id in role_ids)

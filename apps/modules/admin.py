@@ -7,6 +7,7 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 from apps.nodes.forms import NodeRoleMultipleChoiceField
+from apps.nodes.models import NodeFeature
 from apps.sites.models import Landing
 
 from .models import Module, get_module_favicon_bucket
@@ -22,6 +23,11 @@ class LandingInline(admin.TabularInline):
 
 class ModuleAdminForm(forms.ModelForm):
     roles = NodeRoleMultipleChoiceField()
+    features = forms.ModelMultipleChoiceField(
+        queryset=NodeFeature.objects.all(),
+        required=False,
+        help_text=_("Require these node features to be enabled for this module."),
+    )
     favicon_upload = forms.ImageField(
         required=False,
         label=_("Favicon upload"),
@@ -32,6 +38,7 @@ class ModuleAdminForm(forms.ModelForm):
         model = Module
         fields = (
             "roles",
+            "features",
             "application",
             "path",
             "menu",
@@ -79,6 +86,7 @@ class ModuleAdmin(EntityModelAdmin):
     list_display = (
         "application",
         "roles_display",
+        "features_display",
         "path",
         "menu",
         "landings_count",
@@ -87,9 +95,10 @@ class ModuleAdmin(EntityModelAdmin):
         "security_group",
         "security_mode",
     )
-    list_filter = ("roles", "application", "security_group", "security_mode")
+    list_filter = ("roles", "features", "application", "security_group", "security_mode")
     fields = (
         "roles",
+        "features",
         "application",
         "path",
         "menu",
@@ -107,7 +116,10 @@ class ModuleAdmin(EntityModelAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        return queryset.annotate(landing_count=Count("landings", distinct=True)).prefetch_related("roles")
+        return queryset.annotate(landing_count=Count("landings", distinct=True)).prefetch_related(
+            "roles",
+            "features",
+        )
 
     @admin.display(description=_("Landings"), ordering="landing_count")
     def landings_count(self, obj):
@@ -117,6 +129,11 @@ class ModuleAdmin(EntityModelAdmin):
     def roles_display(self, obj):
         roles = [role.name for role in obj.roles.all()]
         return ", ".join(roles) if roles else _("All")
+
+    @admin.display(description=_("Features"))
+    def features_display(self, obj):
+        features = [feature.display for feature in obj.features.all()]
+        return ", ".join(features) if features else _("None")
 
     @admin.display(description=_("Favicon metadata"))
     def favicon_metadata(self, obj):

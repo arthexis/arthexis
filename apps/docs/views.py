@@ -9,7 +9,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
-from apps.nodes.models import Node
+from apps.nodes.models import Node, NodeFeature
 from apps.modules.models import Module
 
 from . import assets, rendering
@@ -19,11 +19,31 @@ logger = logging.getLogger(__name__)
 
 
 def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace:
-    app = (
+    modules = (
         Module.objects.for_role(role)
         .filter(is_default=True, is_deleted=False)
         .select_related("application")
-        .first()
+        .prefetch_related("features")
+    )
+    feature_cache: dict[str, bool] = {}
+
+    def feature_is_enabled(slug: str) -> bool:
+        if slug in feature_cache:
+            return feature_cache[slug]
+        try:
+            feature = NodeFeature.objects.filter(slug=slug).first()
+        except Exception:
+            feature = None
+        try:
+            enabled = bool(feature and feature.is_enabled)
+        except Exception:
+            enabled = False
+        feature_cache[slug] = enabled
+        return enabled
+
+    app = next(
+        (module for module in modules if module.meets_feature_requirements(feature_is_enabled)),
+        None,
     )
     app_slug = app.path.strip("/") if app else ""
     root_base = Path(settings.BASE_DIR).resolve()
