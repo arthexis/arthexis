@@ -390,7 +390,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         call_command(
             "loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json"
         )
-        simulator = Simulator.objects.get(default=True)
+        simulator = Simulator.objects.get(name="Local CP 2")
         config = simulator.as_config()
         config.pre_charge_delay = 0
         config.duration = 0
