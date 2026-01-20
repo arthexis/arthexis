@@ -388,7 +388,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
 
     def test_cp_simulator_connects_with_default_fixture(self):
         call_command(
-            "loaddata", "apps/ocpp/fixtures/simulators__localsim_connector_2.json"
+            "loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json"
         )
         simulator = Simulator.objects.get(default=True)
         config = simulator.as_config()
