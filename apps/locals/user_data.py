@@ -870,6 +870,52 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
         finally:
             self.change_list_template = change_list_template
 
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not self._supports_soft_delete():
+            return actions
+        if getattr(request, "_soft_deleted_only", False):
+            action = self.get_action("recover_selected")
+            if action is not None:
+                actions.setdefault("recover_selected", action)
+        return actions
+
+    @admin.action(description=_("Recover selected"))
+    def recover_selected(self, request, queryset):
+        if not self._supports_soft_delete():
+            messages.warning(
+                request,
+                _("Recovery is not available for this model."),
+            )
+            return
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        manager = getattr(self.model, "all_objects", self.model._default_manager)
+        recovered = manager.filter(pk__in=queryset.values_list("pk", flat=True)).update(
+            is_deleted=False
+        )
+        if recovered:
+            self.message_user(
+                request,
+                ngettext(
+                    "Recovered %(count)d deleted %(name)s.",
+                    "Recovered %(count)d deleted %(name)s.",
+                    recovered,
+                )
+                % {
+                    "count": recovered,
+                    "name": self.model._meta.verbose_name_plural,
+                },
+                level=messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("No deleted %(name)s were recovered.")
+                % {"name": self.model._meta.verbose_name_plural},
+                level=messages.WARNING,
+            )
+
     def soft_deleted_changelist_view(self, request):
         if not self._supports_soft_delete():
             raise Http404
