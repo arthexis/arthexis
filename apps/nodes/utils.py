@@ -1,10 +1,32 @@
 import logging
 from pathlib import Path
 
+from django.db.utils import OperationalError, ProgrammingError
+
 from apps.content import utils as content_utils
+from apps.nodes.models import NodeFeature
 
 SCREENSHOT_DIR = content_utils.SCREENSHOT_DIR
 DEFAULT_SCREENSHOT_RESOLUTION = content_utils.DEFAULT_SCREENSHOT_RESOLUTION
+
+
+class FeatureChecker:
+    def __init__(self) -> None:
+        self._cache: dict[str, bool] = {}
+
+    def is_enabled(self, slug: str) -> bool:
+        if slug in self._cache:
+            return self._cache[slug]
+        try:
+            feature = NodeFeature.objects.filter(slug=slug).first()
+        except (OperationalError, ProgrammingError):
+            feature = None
+        try:
+            enabled = bool(feature and feature.is_enabled)
+        except (OperationalError, ProgrammingError):
+            enabled = False
+        self._cache[slug] = enabled
+        return enabled
 
 
 def capture_screenshot(
@@ -85,4 +107,5 @@ __all__ = [
     "save_screenshot",
     "SCREENSHOT_DIR",
     "DEFAULT_SCREENSHOT_RESOLUTION",
+    "FeatureChecker",
 ]

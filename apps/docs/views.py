@@ -9,7 +9,8 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node
+from apps.nodes.utils import FeatureChecker
 from apps.modules.models import Module
 
 from . import assets, rendering
@@ -25,24 +26,14 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
         .select_related("application")
         .prefetch_related("features")
     )
-    feature_cache: dict[str, bool] = {}
-
-    def feature_is_enabled(slug: str) -> bool:
-        if slug in feature_cache:
-            return feature_cache[slug]
-        try:
-            feature = NodeFeature.objects.filter(slug=slug).first()
-        except Exception:
-            feature = None
-        try:
-            enabled = bool(feature and feature.is_enabled)
-        except Exception:
-            enabled = False
-        feature_cache[slug] = enabled
-        return enabled
+    feature_checker = FeatureChecker()
 
     app = next(
-        (module for module in modules if module.meets_feature_requirements(feature_is_enabled)),
+        (
+            module
+            for module in modules
+            if module.meets_feature_requirements(feature_checker.is_enabled)
+        ),
         None,
     )
     app_slug = app.path.strip("/") if app else ""

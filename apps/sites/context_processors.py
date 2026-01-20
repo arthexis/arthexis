@@ -4,7 +4,8 @@ from django.shortcuts import resolve_url
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node
+from apps.nodes.utils import FeatureChecker
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
@@ -80,24 +81,10 @@ def nav_links(request):
     else:
         user_group_names = set()
         user_group_ids = set()
-    feature_cache: dict[str, bool] = {}
-
-    def feature_is_enabled(slug: str) -> bool:
-        if slug in feature_cache:
-            return feature_cache[slug]
-        try:
-            feature = NodeFeature.objects.filter(slug=slug).first()
-        except (OperationalError, ProgrammingError):
-            feature = None
-        try:
-            enabled = bool(feature and feature.is_enabled)
-        except Exception:
-            enabled = False
-        feature_cache[slug] = enabled
-        return enabled
+    feature_checker = FeatureChecker()
 
     for module in modules:
-        if not module.meets_feature_requirements(feature_is_enabled):
+        if not module.meets_feature_requirements(feature_checker.is_enabled):
             continue
         module_roles = getattr(module, "roles")
         role_ids = {r.id for r in module_roles.all()} if module_roles else set()
@@ -137,7 +124,10 @@ def nav_links(request):
                 view_func, "required_features_any", frozenset()
             )
             if required_features_any:
-                if not any(feature_is_enabled(slug) for slug in required_features_any):
+                if not any(
+                    feature_checker.is_enabled(slug)
+                    for slug in required_features_any
+                ):
                     landing.nav_is_invalid = True
                     landings.append(landing)
                     continue
