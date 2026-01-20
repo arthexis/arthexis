@@ -109,13 +109,13 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         "is_default",
     )
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
-    actions = ("reload_camera_defaults",)
+    actions = ("reload_resolution_defaults",)
     changelist_actions = [
-        "find_video_devices",
+        "find_devices",
         "take_snapshot",
-        "test_camera",
-        "power_off_camera",
-        "power_on_camera",
+        "test_stream",
+        "power_off",
+        "power_on",
     ]
     change_list_template = "django_object_actions/change_list.html"
     change_form_template = "admin/video/videodevice/change_form.html"
@@ -148,8 +148,8 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     def get_urls(self):
         custom = [
             path(
-                "find-video-devices/",
-                self.admin_site.admin_view(self.find_video_devices_view),
+                "find-devices/",
+                self.admin_site.admin_view(self.find_devices_view),
                 name="video_videodevice_find_devices",
             ),
             path(
@@ -163,17 +163,17 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 name="video_videodevice_view_stream",
             ),
             path(
-                "test-camera/",
+                "test-stream/",
                 self.admin_site.admin_view(self.view_stream),
                 name="video_videodevice_test_camera",
             ),
             path(
-                "power-camera-off/",
+                "power-off/",
                 self.admin_site.admin_view(self.power_off_camera_view),
                 name="video_videodevice_power_off_camera",
             ),
             path(
-                "power-camera-on/",
+                "power-on/",
                 self.admin_site.admin_view(self.power_on_camera_view),
                 name="video_videodevice_power_on_camera",
             ),
@@ -197,19 +197,19 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             request, object_id, form_url=form_url, extra_context=extra_context
         )
 
-    def find_video_devices(self, request, queryset=None):
+    def find_devices(self, request, queryset=None):
         return redirect("admin:video_videodevice_find_devices")
 
     def take_snapshot(self, request, queryset=None):
         return redirect("admin:video_videodevice_take_snapshot")
 
-    def test_camera(self, request, queryset=None):
+    def test_stream(self, request, queryset=None):
         return redirect("admin:video_videodevice_view_stream")
 
-    def power_off_camera(self, request, queryset=None):
+    def power_off(self, request, queryset=None):
         return redirect("admin:video_videodevice_power_off_camera")
 
-    def power_on_camera(self, request, queryset=None):
+    def power_on(self, request, queryset=None):
         return redirect("admin:video_videodevice_power_on_camera")
 
     def refresh_snapshot(self, request, obj):
@@ -221,7 +221,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         )
 
     @admin.action(description=_("Reload resolution defaults"))
-    def reload_camera_defaults(self, request, queryset):
+    def reload_resolution_defaults(self, request, queryset):
         width, height = DEFAULT_CAMERA_RESOLUTION
         updated = queryset.update(capture_width=width, capture_height=height)
         if updated:
@@ -232,28 +232,28 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 level=messages.SUCCESS,
             )
 
-    find_video_devices.label = _("Find Devices")
-    find_video_devices.short_description = _("Find Devices")
-    find_video_devices.changelist = True
+    find_devices.label = _("Find Devices")
+    find_devices.short_description = find_devices.label
+    find_devices.changelist = True
 
     take_snapshot.label = _("Take Snapshot")
-    take_snapshot.short_description = _("Take Snapshot")
+    take_snapshot.short_description = take_snapshot.label
     take_snapshot.changelist = True
 
-    test_camera.label = _("Test Stream")
-    test_camera.short_description = _("Test Stream")
-    test_camera.changelist = True
+    test_stream.label = _("Test Stream")
+    test_stream.short_description = test_stream.label
+    test_stream.changelist = True
 
-    power_off_camera.label = _("Power Off")
-    power_off_camera.short_description = _("Power Off")
-    power_off_camera.changelist = True
+    power_off.label = _("Power Off")
+    power_off.short_description = power_off.label
+    power_off.changelist = True
 
-    power_on_camera.label = _("Power On")
-    power_on_camera.short_description = _("Power On")
-    power_on_camera.changelist = True
+    power_on.label = _("Power On")
+    power_on.short_description = power_on.label
+    power_on.changelist = True
 
     refresh_snapshot.label = _("Take Snapshot")
-    refresh_snapshot.short_description = _("Take Snapshot")
+    refresh_snapshot.short_description = refresh_snapshot.label
 
     def _get_camera_power_doc_url(self):
         try:
@@ -382,7 +382,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             )
         return snapshot
 
-    def find_video_devices_view(self, request):
+    def find_devices_view(self, request):
         feature = self._ensure_video_feature_enabled(
             request, _("Find Devices"), auto_enable=True, require_stack=False
         )
