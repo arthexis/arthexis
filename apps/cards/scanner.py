@@ -51,9 +51,11 @@ def _normalize_scan_response(
     return response
 
 
-def scan_sources(request=None, *, endianness: str | None = None):
+def scan_sources(
+    request=None, *, endianness: str | None = None, timeout: float | None = None
+):
     """Read the next RFID tag from the local scanner."""
-    response = scan_via_service()
+    response = scan_via_service(timeout=timeout)
     if response is not None:
         service_mode = "service"
         if response.get("error"):
@@ -67,7 +69,7 @@ def scan_sources(request=None, *, endianness: str | None = None):
     start()
     if not is_configured():
         return {"rfid": None, "label_id": None, "service_mode": service_mode}
-    result = get_next_tag()
+    result = get_next_tag(timeout=timeout or 0)
     if not result:
         return {"rfid": None, "label_id": None, "service_mode": service_mode}
     if result.get("error"):
