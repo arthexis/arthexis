@@ -227,6 +227,8 @@ def test_change_view_shows_latest_snapshot(admin_client, monkeypatch, tmp_path):
     assert latest_snapshot.image_format.lower() == "jpeg"
     assert VideoSnapshot.objects.filter(device=device).count() == 1
     assert "LATEST" in response.rendered_content
+    sample_url = reverse("admin:content_contentsample_change", args=[sample.pk])
+    assert sample_url in response.rendered_content
 
 
 @pytest.mark.django_db

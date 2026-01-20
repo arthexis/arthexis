@@ -32,6 +32,14 @@
           {% endif %}
         </div>
         <div>
+          <strong>{% trans "Content Sample" %}:</strong>
+          {% if latest_snapshot and latest_snapshot_sample_url %}
+            <a href="{{ latest_snapshot_sample_url }}">{% trans "View sample" %}</a>
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+        </div>
+        <div>
           <button
             type="submit"
             class="button"
