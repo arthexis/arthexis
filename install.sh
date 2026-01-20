@@ -220,13 +220,14 @@ sync_secondary_tree() {
 
     mkdir -p "$target_dir"
 
-    local -a rsync_args=("-a" "--delete" "--exclude=.venv" "--exclude=logs" "--exclude=backups" "--exclude=work" "--exclude=.locks" "--exclude=db.sqlite3" "--exclude=scripts/generated/certificates")
+    local CERT_EXCLUDE_DIR="scripts/generated/certificates"
+    local -a rsync_args=("-a" "--delete" "--exclude=.venv" "--exclude=logs" "--exclude=backups" "--exclude=work" "--exclude=.locks" "--exclude=db.sqlite3" "--exclude=$CERT_EXCLUDE_DIR")
 
     if command -v rsync >/dev/null 2>&1; then
         rsync "${rsync_args[@]}" "$SCRIPT_DIR/" "$target_dir/"
     else
         echo "rsync not available; using tar to stage secondary installation" >&2
-        tar -cf - --exclude=.venv --exclude=logs --exclude=backups --exclude=work --exclude=.locks --exclude=db.sqlite3 --exclude=scripts/generated/certificates -C "$SCRIPT_DIR" . \
+        tar -cf - --exclude=.venv --exclude=logs --exclude=backups --exclude=work --exclude=.locks --exclude=db.sqlite3 --exclude="$CERT_EXCLUDE_DIR" -C "$SCRIPT_DIR" . \
             | tar -xf - -C "$target_dir"
     fi
 }
