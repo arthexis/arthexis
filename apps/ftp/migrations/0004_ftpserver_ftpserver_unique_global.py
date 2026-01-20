@@ -5,15 +5,10 @@ from django.db import migrations, models
 
 def prune_duplicate_global_servers(apps, schema_editor):
     FTPServer = apps.get_model("ftp", "FTPServer")
-    global_server_ids = list(
-        FTPServer.objects.filter(node__isnull=True)
-        .order_by("id")
-        .values_list("id", flat=True)
-    )
-    if len(global_server_ids) <= 1:
-        return
-    ids_to_keep = global_server_ids[:1]
-    FTPServer.objects.filter(node__isnull=True).exclude(id__in=ids_to_keep).delete()
+    global_servers = FTPServer.objects.filter(node__isnull=True).order_by("id")
+    server_to_keep = global_servers.first()
+    if server_to_keep:
+        global_servers.exclude(pk=server_to_keep.pk).delete()
 
 
 class Migration(migrations.Migration):
