@@ -150,7 +150,9 @@ def _render_release_progress_error(
     return HttpResponse(content, status=status)
 
 
-def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
+def _sync_release_with_revision(
+    release: PackageRelease,
+) -> tuple[bool, str, PackageRelease | None]:
     """Align the release metadata with the current repository revision.
 
     Returns a tuple of (updated, previous_version).
@@ -159,6 +161,7 @@ def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
     version_path = Path("VERSION")
     previous_version = release.version
     updated = False
+    conflicting_release = None
     if version_path.exists():
         current_version = version_path.read_text(encoding="utf-8").strip()
         if "+" in current_version:
@@ -167,11 +170,20 @@ def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
                 version_path.write_text(normalized_version + "\n", encoding="utf-8")
                 current_version = normalized_version
         if current_version and current_version != release.version:
+            conflicting_release = (
+                PackageRelease.objects.filter(
+                    package=release.package, version=current_version
+                )
+                .exclude(pk=release.pk)
+                .first()
+            )
+            if conflicting_release:
+                return updated, previous_version, conflicting_release
             release.version = current_version
             release.revision = revision.get_revision()
             release.save(update_fields=["version", "revision"])
             updated = True
-    return updated, previous_version
+    return updated, previous_version, conflicting_release
 
 
 def _ensure_template_name(template, name: str):
@@ -237,7 +249,28 @@ def _handle_release_sync(
             },
         )
 
-    updated, previous_version = _sync_release_with_revision(release)
+    updated, previous_version, conflicting_release = _sync_release_with_revision(
+        release
+    )
+    if conflicting_release:
+        return _render_release_progress_error(
+            request,
+            release,
+            action,
+            _(
+                "Another release already exists for %(package)s %(version)s."
+            )
+            % {
+                "package": release.package.name,
+                "version": conflicting_release.version,
+            },
+            status=409,
+            debug_info={
+                "release_version": release.version,
+                "repository_version": repo_version_before_sync,
+                "conflicting_release_id": conflicting_release.pk,
+            },
+        )
     if updated:
         request.session.pop(session_key, None)
         if lock_path.exists():
