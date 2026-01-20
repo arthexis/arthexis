@@ -3,8 +3,11 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
+from apps.cards.background_reader import is_configured
 from apps.cards.models import RFID
-from apps.cards.reader import read_rfid, validate_rfid_value
+from apps.cards.reader import validate_rfid_value
+from apps.cards.rfid_service import service_available
+from apps.cards.scanner import scan_sources
 
 
 class Command(BaseCommand):
@@ -104,11 +107,13 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        result = read_rfid(timeout=timeout)
+        result = scan_sources(timeout=timeout)
         if result.get("error"):
             return result
 
         if not result.get("rfid"):
+            if not is_configured() and not service_available():
+                return {"error": "RFID scanner not configured or detected"}
             return {"error": "No RFID detected before timeout"}
 
         return result
