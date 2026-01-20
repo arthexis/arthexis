@@ -5,7 +5,6 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "Local CP 2",
-      "default": true,
       "cp_path": "LOCALSIM-0001",
       "host": "127.0.0.1",
       "ws_port": 8888,
