@@ -200,6 +200,14 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 silent=True,
             ) or obj.get_latest_snapshot()
         extra_context["latest_snapshot"] = latest_snapshot
+        if latest_snapshot:
+            try:
+                extra_context["latest_snapshot_sample_url"] = reverse(
+                    "admin:content_contentsample_change",
+                    args=[latest_snapshot.sample_id],
+                )
+            except NoReverseMatch:
+                extra_context["latest_snapshot_sample_url"] = None
         return super().changeform_view(
             request, object_id, form_url=form_url, extra_context=extra_context
         )
