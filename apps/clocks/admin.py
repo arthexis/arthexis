@@ -18,25 +18,25 @@ from .utils import has_clock_device
 class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     list_display = ("address", "bus", "node", "description", "public_view")
     search_fields = ("address", "description", "raw_info", "node__hostname")
-    changelist_actions = ["find_clock_devices"]
+    changelist_actions = ["find_devices"]
     change_list_template = "django_object_actions/change_list.html"
 
     def get_urls(self):
         custom = [
             path(
                 "find-clock-devices/",
-                self.admin_site.admin_view(self.find_clock_devices_view),
+                self.admin_site.admin_view(self.find_devices_view),
                 name="clocks_clockdevice_find_devices",
             ),
         ]
         return custom + super().get_urls()
 
-    def find_clock_devices(self, request, queryset=None):
+    def find_devices(self, request, queryset=None):
         return redirect("admin:clocks_clockdevice_find_devices")
 
-    find_clock_devices.label = _("Find Clock Devices")
-    find_clock_devices.short_description = _("Find Clock Devices")
-    find_clock_devices.changelist = True
+    find_devices.label = _("Find Devices")
+    find_devices.short_description = _("Find Devices")
+    find_devices.changelist = True
 
     @admin.display(description=_("Public View"))
     def public_view(self, obj):
@@ -97,14 +97,14 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             )
         return node
 
-    def find_clock_devices_view(self, request):
+    def find_devices_view(self, request):
         node = self._get_local_node(request)
         if node is None:
             return redirect("..")
 
         feature = self._ensure_rtc_feature_enabled(
             request,
-            _("Find Clock Devices"),
+            _("Find Devices"),
             node=node,
             auto_enable=True,
         )

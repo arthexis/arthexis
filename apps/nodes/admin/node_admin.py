@@ -165,7 +165,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         user.user_permissions.set(permissions)
         return user, password, expires_at
 
-    change_actions = ["update_node_action"]
+    change_actions = ["update_action"]
     inlines = [NodeFeatureAssignmentInline, SSHAccountInline]
 
     @admin.display(description=_("Relation"), ordering="current_relation")
@@ -1356,7 +1356,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             }
         return _("%(label)s %(status)s.") % {"label": label, "status": status}
 
-    def update_node_action(self, request, obj):
+    def update_action(self, request, obj):
         local_result = self._refresh_local_information(obj)
         remote_result = self._push_remote_information(obj)
 
@@ -1393,5 +1393,5 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         self.message_user(request, message, level=level_map[status_key])
 
-    update_node_action.label = _("Update Node")
-    update_node_action.short_description = _("Update Node")
+    update_action.label = _("Update")
+    update_action.short_description = _("Update")

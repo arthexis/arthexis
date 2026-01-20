@@ -12,7 +12,7 @@ class SQLReportAdmin(admin.ModelAdmin):
     search_fields = ("name", "query")
     readonly_fields = ("created_at", "updated_at", "last_run_at", "last_run_duration")
 
-    changelist_actions = ["open_system_sql_report"]
+    changelist_actions = ["open_system"]
 
     def get_changelist_actions(self, request):  # pragma: no cover - admin hook
         parent = getattr(super(), "get_changelist_actions", None)
@@ -21,8 +21,8 @@ class SQLReportAdmin(admin.ModelAdmin):
             parent_actions = parent(request)
             if parent_actions:
                 actions.extend(parent_actions)
-        if "open_system_sql_report" not in actions:
-            actions.append("open_system_sql_report")
+        if "open_system" not in actions:
+            actions.append("open_system")
         return actions
 
     def get_urls(self):  # pragma: no cover - admin hook
@@ -30,18 +30,18 @@ class SQLReportAdmin(admin.ModelAdmin):
         custom = [
             path(
                 "system-sql-report/",
-                self.admin_site.admin_view(self.open_system_sql_report),
-                name="reports_sqlreport_open_system_sql_report",
+                self.admin_site.admin_view(self.open_system),
+                name="reports_sqlreport_open_system",
             )
         ]
         return custom + urls
 
-    def open_system_sql_report(self, request, queryset=None):
+    def open_system(self, request, queryset=None):
         return HttpResponseRedirect(reverse("admin:system-sql-report"))
 
-    open_system_sql_report.short_description = _("System SQL report")
-    open_system_sql_report.label = _("System SQL report")
-    open_system_sql_report.requires_queryset = False
+    open_system.short_description = _("System SQL report")
+    open_system.label = _("System SQL report")
+    open_system.requires_queryset = False
 
 
 __all__ = ["SQLReportAdmin"]

@@ -49,8 +49,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     )
     list_display_links = ("version",)
     actions = ["publish_release", "validate_releases", "test_pypi_connection"]
-    change_actions = ["publish_release_action", "test_pypi_connection_action"]
-    changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
+    change_actions = ["publish_action", "test_pypi_connection_action"]
+    changelist_actions = ["refresh_from_pypi", "prepare_next"]
     readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
     search_fields = ("version", "package__name")
     fields = (
@@ -214,15 +214,15 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return None
         return min(candidates)
 
-    def prepare_next_release(self, request, queryset):
+    def prepare_next(self, request, queryset):
         package = Package.objects.filter(is_active=True).first()
         if not package:
             self.message_user(request, "No active package", messages.ERROR)
             return redirect("admin:release_packagerelease_changelist")
         return prepare_package_release(self, request, package)
 
-    prepare_next_release.label = "Prepare next Release"
-    prepare_next_release.short_description = "Prepare next release"
+    prepare_next.label = "Prepare next Release"
+    prepare_next.short_description = "Prepare next release"
 
     def _publish_release(self, request, release):
         try:
@@ -241,11 +241,11 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return
         return self._publish_release(request, queryset.first())
 
-    def publish_release_action(self, request, obj):
+    def publish_action(self, request, obj):
         return self._publish_release(request, obj)
 
-    publish_release_action.label = "Publish selected Release"
-    publish_release_action.short_description = "Publish this release"
+    publish_action.label = "Publish selected Release"
+    publish_action.short_description = "Publish this release"
 
     def _emit_pypi_check_messages(
         self, request, release, result: release_utils.PyPICheckResult
