@@ -4,7 +4,7 @@ from django.shortcuts import resolve_url
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
-from apps.nodes.models import Node
+from apps.nodes.models import Node, NodeFeature
 from apps.nodes.utils import FeatureChecker
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
