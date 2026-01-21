@@ -29,6 +29,8 @@ def _extract_payload(request: HttpRequest) -> tuple[dict[str, Any], str]:
                 parsed = None
             if isinstance(parsed, dict):
                 return parsed, raw_body
+            if isinstance(parsed, list):
+                return {"items": parsed}, raw_body
 
     try:
         parsed = json.loads(raw_body)
@@ -45,11 +47,8 @@ def _extract_payload(request: HttpRequest) -> tuple[dict[str, Any], str]:
 def _extract_repository(payload: dict[str, Any]) -> tuple[str, str]:
     repository = payload.get("repository") if isinstance(payload, dict) else None
     if isinstance(repository, dict):
-        owner = repository.get("owner") or {}
-        if isinstance(owner, dict):
-            owner_name = owner.get("login") or ""
-        else:
-            owner_name = ""
+        owner_info = repository.get("owner")
+        owner_name = owner_info.get("login", "") if isinstance(owner_info, dict) else ""
         name = repository.get("name") or ""
         if not owner_name:
             full_name = repository.get("full_name") or ""
@@ -78,13 +77,12 @@ def github_webhook(request: HttpRequest, owner: str = "", name: str = "") -> Jso
         repository=repository,
         owner=owner or "",
         name=name or "",
-        event_type=headers.get("X-GitHub-Event", ""),
-        delivery_id=headers.get("X-GitHub-Delivery", ""),
-        hook_id=headers.get("X-GitHub-Hook-Id", "")
-        or headers.get("X-GitHub-Hook-ID", ""),
-        signature=headers.get("X-Hub-Signature", ""),
-        signature_256=headers.get("X-Hub-Signature-256", ""),
-        user_agent=headers.get("User-Agent", ""),
+        event_type=request.headers.get("X-GitHub-Event", ""),
+        delivery_id=request.headers.get("X-GitHub-Delivery", ""),
+        hook_id=request.headers.get("X-GitHub-Hook-ID", ""),
+        signature=request.headers.get("X-Hub-Signature", ""),
+        signature_256=request.headers.get("X-Hub-Signature-256", ""),
+        user_agent=request.headers.get("User-Agent", ""),
         http_method=request.method,
         headers=headers,
         query_params=query_params,
