@@ -4,6 +4,7 @@ This site aggregates operator guides, architecture notes, and development refere
 
 ## Quick links
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
+- [CodeQL Configuration](development/codeql.md)
 - [Auto-Upgrade Flow](auto-upgrade.md)
 - [Suite Services Report](suite-services-report.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)

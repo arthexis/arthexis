@@ -21,6 +21,7 @@ nav:
       - LLM LCD Log Summary: llm-summary.md
   - Development:
       - CI Troubleshooting: development/ci-troubleshooting.md
+      - CodeQL Configuration: development/codeql.md
       - Migration Branch Guards: development/migration-branch-guards.md
       - Pytest Role Markers: development/pytest-role-markers.md
       - Secret Scanning: development/secret-scanning.md
