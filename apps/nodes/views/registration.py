@@ -38,6 +38,21 @@ logger = logging.getLogger("apps.nodes.views")
 registration_logger = get_register_visitor_logger()
 
 
+def _redact_mac(mac: str | None) -> str:
+    """
+    Return a redacted representation of a MAC address suitable for logging.
+
+    Keeps only the last 4 characters to allow coarse correlation while
+    avoiding logging the full hardware identifier.
+    """
+    if not mac:
+        return ""
+    mac_str = str(mac)
+    # Ensure we don't reveal the full value; keep at most the last 4 chars.
+    tail = mac_str[-4:]
+    return f"***REDACTED***-{tail}"
+
+
 def _get_client_ip(request):
     """Return the client IP from the request headers."""
 
@@ -1016,9 +1031,9 @@ def register_node(request):
     payload = NodeRegistrationPayload.from_data(data)
 
     registration_logger.info(
-        "Visitor registration: payload parsed hostname=%s mac=%s relation=%s trusted_requested=%s",
+        "Visitor registration: payload parsed hostname=%s mac_redacted=%s relation=%s trusted_requested=%s",
         payload.hostname or "",
-        payload.mac_address or "",
+        _redact_mac(payload.mac_address),
         payload.relation_value or "",
         bool(payload.trusted_requested),
     )
