@@ -285,10 +285,10 @@ class ModelDetailDocsView(BaseAdminDocsView):
 
     def _build_model_methods(self, model, opts) -> list[dict[str, str]]:
         methods = []
-        for func_name, func in model.__dict__.items():
+        for func_name, func in inspect.getmembers(model, inspect.isfunction):
             if self._should_exclude_method(func_name):
                 continue
-            if not inspect.isfunction(func):
+            if func.__module__.startswith("django.db.models"):
                 continue
             methods.append(
                 {
