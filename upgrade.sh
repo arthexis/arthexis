@@ -605,50 +605,34 @@ lcd_service_lockfiles_present() {
 }
 
 lcd_systemd_unit_present() {
-  local service_name="$1"
-
-  if [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    return 1
-  fi
-
-  local lcd_unit
-  lcd_unit="lcd-${service_name}.service"
-
-  if [ -f "${SYSTEMD_DIR}/${lcd_unit}" ]; then
-    return 0
-  fi
-
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$lcd_unit"
-    return $?
-  fi
-
-  return 1
+  _prefixed_systemd_unit_present "lcd" "$1"
 }
 
 rfid_service_configured() {
-  if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
-    return 0
-  fi
-  return 1
+  [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]
 }
 
 rfid_systemd_unit_present() {
-  local service_name="$1"
+  _prefixed_systemd_unit_present "rfid" "$1"
+}
 
-  if [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+_prefixed_systemd_unit_present() {
+  local prefix="$1"
+  local service_name="$2"
+
+  if [ -z "$prefix" ] || [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     return 1
   fi
 
-  local rfid_unit
-  rfid_unit="rfid-${service_name}.service"
+  local unit_name
+  unit_name="${prefix}-${service_name}.service"
 
-  if [ -f "${SYSTEMD_DIR}/${rfid_unit}" ]; then
+  if [ -f "${SYSTEMD_DIR}/${unit_name}" ]; then
     return 0
   fi
 
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$rfid_unit"
+    systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"
     return $?
   fi
 
@@ -1243,6 +1227,46 @@ lcd_service_was_active() {
 }
 
 # Restart core, LCD, and Celery services while respecting systemd when available.
+_ensure_service_active() {
+  local service_unit="$1"
+  local service_desc="$2"
+  local systemctl_available="$3"
+  shift 3
+  local -a systemctl_cmd=("$@")
+
+  if ! wait_for_service_active "$service_unit" 1; then
+    if [ "$systemctl_available" -eq 1 ]; then
+      echo "$service_desc service $service_unit did not become active after restart. Attempting manual start..." >&2
+      if "${systemctl_cmd[@]}" start "$service_unit"; then
+        if ! wait_for_service_active "$service_unit" 1; then
+          echo "$service_desc service $service_unit did not become active after manual start." >&2
+          return 1
+        fi
+      else
+        echo "$service_desc service $service_unit failed to start manually." >&2
+        return 1
+      fi
+    else
+      echo "$service_desc service $service_unit did not become active after restart, and systemctl is unavailable for manual start." >&2
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+_check_service_active() {
+  local service_unit="$1"
+  local service_desc="$2"
+
+  if ! wait_for_service_active "$service_unit" 1; then
+    echo "$service_desc service $service_unit did not become active after restart." >&2
+    return 1
+  fi
+
+  return 0
+}
+
 restart_services() {
   local include_lcd="${1:-1}"
   echo "Restarting services..."
@@ -1305,23 +1329,7 @@ restart_services() {
       fi
       if [ "$include_lcd" -eq 1 ] && lcd_systemd_unit_present "$service_name"; then
         local lcd_service="lcd-$service_name"
-        if ! wait_for_service_active "$lcd_service" 1; then
-          if [ "$systemctl_available" -eq 1 ]; then
-            echo "LCD service $lcd_service did not become active after restart. Attempting manual start..." >&2
-            if "${systemctl_cmd[@]}" start "$lcd_service"; then
-              if ! wait_for_service_active "$lcd_service" 1; then
-                echo "LCD service $lcd_service did not become active after manual start." >&2
-                return 1
-              fi
-            else
-              echo "LCD service $lcd_service failed to start manually." >&2
-              return 1
-            fi
-          else
-            echo "LCD service $lcd_service did not become active after restart, and systemctl is unavailable for manual start." >&2
-            return 1
-          fi
-        fi
+        _ensure_service_active "$lcd_service" "LCD" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
         LCD_RESTART_COMPLETED=1
       elif [ "$include_lcd" -eq 0 ] && lcd_systemd_unit_present "$service_name"; then
         local lcd_service="lcd-$service_name"
@@ -1333,61 +1341,12 @@ restart_services() {
         local celery_service="celery-$service_name"
         local celery_beat_service="celery-beat-$service_name"
 
-        if ! wait_for_service_active "$celery_service" 1; then
-          if [ "$systemctl_available" -eq 1 ]; then
-            echo "Celery service $celery_service did not become active after restart. Attempting manual start..." >&2
-            if "${systemctl_cmd[@]}" start "$celery_service"; then
-              if ! wait_for_service_active "$celery_service" 1; then
-                echo "Celery service $celery_service did not become active after manual start." >&2
-                return 1
-              fi
-            else
-              echo "Celery service $celery_service failed to start manually." >&2
-              return 1
-            fi
-          else
-            echo "Celery service $celery_service did not become active after restart, and systemctl is unavailable for manual start." >&2
-            return 1
-          fi
-        fi
-
-        if ! wait_for_service_active "$celery_beat_service" 1; then
-          if [ "$systemctl_available" -eq 1 ]; then
-            echo "Celery beat service $celery_beat_service did not become active after restart. Attempting manual start..." >&2
-            if "${systemctl_cmd[@]}" start "$celery_beat_service"; then
-              if ! wait_for_service_active "$celery_beat_service" 1; then
-                echo "Celery beat service $celery_beat_service did not become active after manual start." >&2
-                return 1
-              fi
-            else
-              echo "Celery beat service $celery_beat_service failed to start manually." >&2
-              return 1
-            fi
-          else
-            echo "Celery beat service $celery_beat_service did not become active after restart, and systemctl is unavailable for manual start." >&2
-            return 1
-          fi
-        fi
+        _ensure_service_active "$celery_service" "Celery" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
+        _ensure_service_active "$celery_beat_service" "Celery beat" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
       fi
       if [ "$include_rfid" -eq 1 ]; then
         local rfid_service="rfid-$service_name"
-        if ! wait_for_service_active "$rfid_service" 1; then
-          if [ "$systemctl_available" -eq 1 ]; then
-            echo "RFID service $rfid_service did not become active after restart. Attempting manual start..." >&2
-            if "${systemctl_cmd[@]}" start "$rfid_service"; then
-              if ! wait_for_service_active "$rfid_service" 1; then
-                echo "RFID service $rfid_service did not become active after manual start." >&2
-                return 1
-              fi
-            else
-              echo "RFID service $rfid_service failed to start manually." >&2
-              return 1
-            fi
-          else
-            echo "RFID service $rfid_service did not become active after restart, and systemctl is unavailable for manual start." >&2
-            return 1
-          fi
-        fi
+        _ensure_service_active "$rfid_service" "RFID" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
       fi
       return 0
     fi
@@ -1401,17 +1360,11 @@ restart_services() {
     fi
     if [ "$include_lcd" -eq 1 ] && lcd_systemd_unit_present "$service_name"; then
       local lcd_service="lcd-$service_name"
-      if ! wait_for_service_active "$lcd_service" 1; then
-        echo "LCD service $lcd_service did not become active after restart." >&2
-        return 1
-      fi
+      _check_service_active "$lcd_service" "LCD" || return 1
     fi
     if [ "$include_rfid" -eq 1 ]; then
       local rfid_service="rfid-$service_name"
-      if ! wait_for_service_active "$rfid_service" 1; then
-        echo "RFID service $rfid_service did not become active after restart." >&2
-        return 1
-      fi
+      _check_service_active "$rfid_service" "RFID" || return 1
     fi
     return 0
   fi
