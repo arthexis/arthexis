@@ -47,7 +47,9 @@ def _redact_mac(mac: str | None) -> str:
     """
     if not mac:
         return ""
-    mac_str = str(mac)
+    mac_str = "".join(char for char in str(mac) if char.isalnum())
+    if len(mac_str) <= 4:
+        return "***REDACTED***"
     # Ensure we don't reveal the full value; keep at most the last 4 chars.
     tail = mac_str[-4:]
     return f"***REDACTED***-{tail}"
@@ -876,10 +878,10 @@ def _log_registration_event(
     host_ip = _get_host_ip(request) or ""
     registration_logger.log(
         level,
-        "Node registration %s: hostname=%s mac=%s relation=%s client_ip=%s host_ip=%s detail=%s",
+        "Node registration %s: hostname=%s mac_redacted=%s relation=%s client_ip=%s host_ip=%s detail=%s",
         status,
         payload.hostname or "<unknown>",
-        payload.mac_address or "<unknown>",
+        _redact_mac(payload.mac_address) or "<unknown>",
         payload.relation_value or "unspecified",
         client_ip,
         host_ip,
@@ -1125,8 +1127,8 @@ def register_node(request):
         defaults=defaults,
     )
     registration_logger.info(
-        "Visitor registration: node lookup mac=%s created=%s node_id=%s",
-        mac_address,
+        "Visitor registration: node lookup mac_redacted=%s created=%s node_id=%s",
+        _redact_mac(mac_address),
         created,
         node.id,
     )
