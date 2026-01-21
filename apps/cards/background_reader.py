@@ -3,7 +3,6 @@
 import atexit
 import logging
 import os
-import re
 import queue
 import threading
 import time
@@ -12,7 +11,8 @@ from typing import Optional
 
 from django.conf import settings
 
-from .constants import DEFAULT_IRQ_PIN, SPI_BUS, SPI_DEVICE
+from .constants import DEFAULT_IRQ_PIN, DEFAULT_RST_PIN, GPIO_PIN_MODE_BCM
+from .reader import resolve_spi_bus_device, resolve_spi_device_path
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,6 @@ except Exception:  # pragma: no cover - hardware dependent
     GPIO = None  # type: ignore
 
 IRQ_PIN = int(os.environ.get("RFID_IRQ_PIN", str(DEFAULT_IRQ_PIN)))
-_DEFAULT_SPI_DEVICE = Path(f"/dev/spidev{SPI_BUS}.{SPI_DEVICE}")
 _tag_queue: "queue.Queue[dict]" = queue.Queue()
 _thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
@@ -34,8 +33,6 @@ _last_not_configured_log = 0.0
 _auto_detect_lock = threading.Lock()
 _log_throttle_lock = threading.Lock()
 _suite_marker = f"{os.getpid()}:{int(time.time())}"
-_SPI_DEVICE_PATTERN = re.compile(r"(?:/dev/)?spidev(?P<bus>\d+)\.(?P<device>\d+)$")
-_SPI_DEVICE_SHORT_PATTERN = re.compile(r"(?P<bus>\d+)\.(?P<device>\d+)$")
 
 try:  # pragma: no cover - debugging helper not available on all platforms
     import resource
@@ -170,22 +167,7 @@ def _mark_scanner_used() -> None:
 
 def _spi_device_path() -> Path:
     """Return the expected SPI device path for the RFID reader."""
-
-    override = os.environ.get("RFID_SPI_DEVICE")
-    if override:
-        cleaned = override.strip()
-        if cleaned:
-            match = _SPI_DEVICE_PATTERN.search(cleaned) or _SPI_DEVICE_SHORT_PATTERN.fullmatch(
-                cleaned
-            )
-            if match:
-                bus = int(match["bus"])
-                device = int(match["device"])
-                return Path(f"/dev/spidev{bus}.{device}")
-            if cleaned.isdigit():
-                return Path(f"/dev/spidev{SPI_BUS}.{int(cleaned)}")
-            return Path(cleaned)
-    return _DEFAULT_SPI_DEVICE
+    return resolve_spi_device_path()
 
 
 def _available_spi_devices() -> list[Path]:
@@ -322,7 +304,13 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
         GPIO.setup(IRQ_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         logger.debug("Initialized GPIO on IRQ pin %s", IRQ_PIN)
 
-        _reader = MFRC522()
+        spi_bus, spi_device = resolve_spi_bus_device()
+        _reader = MFRC522(
+            bus=spi_bus,
+            device=spi_device,
+            pin_mode=GPIO_PIN_MODE_BCM,
+            pin_rst=DEFAULT_RST_PIN,
+        )
         try:
             # Enable interrupts for card detection (best effort)
             _reader.dev_write(_reader.ComIEnReg, 0xA0)  # enable IdleIrq
