@@ -303,10 +303,10 @@ class ModelDetailDocsView(BaseAdminDocsView):
         if manager is None:
             return []
         methods = []
-        for func_name, func in manager.__class__.__dict__.items():
+        for func_name, func in inspect.getmembers(manager, inspect.ismethod):
             if self._should_exclude_method(func_name):
                 continue
-            if not inspect.isfunction(func):
+            if func.__module__.startswith("django.db.models"):
                 continue
             methods.append(
                 {
@@ -398,20 +398,6 @@ class ModelDetailDocsView(BaseAdminDocsView):
             if self._should_exclude_method(func_name):
                 continue
             if isinstance(func, (cached_property, property)):
-                verbose = self._parse_docstring(func.__doc__, opts)
-                fields.append(
-                    {
-                        "name": func_name,
-                        "data_type": get_return_data_type(func_name),
-                        "verbose": verbose or "",
-                    }
-                )
-            elif (
-                inspect.isfunction(func)
-                and method_has_no_args(func)
-                and not func_accepts_kwargs(func)
-                and not func_accepts_var_args(func)
-            ):
                 verbose = self._parse_docstring(func.__doc__, opts)
                 fields.append(
                     {
