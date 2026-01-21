@@ -3,6 +3,7 @@
 import atexit
 import logging
 import os
+import re
 import queue
 import threading
 import time
@@ -33,6 +34,8 @@ _last_not_configured_log = 0.0
 _auto_detect_lock = threading.Lock()
 _log_throttle_lock = threading.Lock()
 _suite_marker = f"{os.getpid()}:{int(time.time())}"
+_SPI_DEVICE_PATTERN = re.compile(r"(?:/dev/)?spidev(?P<bus>\d+)\.(?P<device>\d+)$")
+_SPI_DEVICE_SHORT_PATTERN = re.compile(r"(?P<bus>\d+)\.(?P<device>\d+)$")
 
 try:  # pragma: no cover - debugging helper not available on all platforms
     import resource
@@ -170,7 +173,18 @@ def _spi_device_path() -> Path:
 
     override = os.environ.get("RFID_SPI_DEVICE")
     if override:
-        return Path(override)
+        cleaned = override.strip()
+        if cleaned:
+            match = _SPI_DEVICE_PATTERN.search(cleaned) or _SPI_DEVICE_SHORT_PATTERN.fullmatch(
+                cleaned
+            )
+            if match:
+                bus = int(match["bus"])
+                device = int(match["device"])
+                return Path(f"/dev/spidev{bus}.{device}")
+            if cleaned.isdigit():
+                return Path(f"/dev/spidev{SPI_BUS}.{int(cleaned)}")
+            return Path(cleaned)
     return _DEFAULT_SPI_DEVICE
 
 

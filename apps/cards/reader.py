@@ -22,6 +22,8 @@ _deep_read_enabled: bool = False
 
 _HEX_RE = re.compile(r"^[0-9A-F]+$")
 _KEY_RE = re.compile(r"^[0-9A-F]{12}$")
+_SPI_DEVICE_PATTERN = re.compile(r"(?:/dev/)?spidev(?P<bus>\d+)\.(?P<device>\d+)$")
+_SPI_DEVICE_SHORT_PATTERN = re.compile(r"(?P<bus>\d+)\.(?P<device>\d+)$")
 
 
 def _normalize_command_text(value: object) -> str:
@@ -111,6 +113,20 @@ def _build_key_candidates(tag, key_attr: str, verified_attr: str) -> list[tuple[
             candidates.append((fallback, bytes_key))
 
     return candidates
+
+
+def _resolve_spi_bus_device() -> tuple[int, int]:
+    override = os.environ.get("RFID_SPI_DEVICE", "")
+    if override:
+        cleaned = override.strip()
+        match = _SPI_DEVICE_PATTERN.search(cleaned) or _SPI_DEVICE_SHORT_PATTERN.fullmatch(
+            cleaned
+        )
+        if match:
+            return int(match["bus"]), int(match["device"])
+        if cleaned.isdigit():
+            return SPI_BUS, int(cleaned)
+    return SPI_BUS, SPI_DEVICE
 
 
 def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = None) -> dict:
@@ -253,9 +269,10 @@ def read_rfid(
         if mfrc is None:
             from mfrc522 import MFRC522  # type: ignore
 
+            spi_bus, spi_device = _resolve_spi_bus_device()
             mfrc = MFRC522(
-                bus=SPI_BUS,
-                device=SPI_DEVICE,
+                bus=spi_bus,
+                device=spi_device,
                 pin_mode=GPIO_PIN_MODE_BCM,
                 pin_rst=DEFAULT_RST_PIN,
             )
