@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qs
 from typing import Any
 
 from django.http import HttpRequest, JsonResponse
@@ -20,8 +21,12 @@ def _extract_payload(request: HttpRequest) -> tuple[dict[str, Any], str]:
     if not raw_bytes:
         return payload, raw_body
 
-    if request.content_type == "application/x-www-form-urlencoded":
+    if request.content_type.startswith("application/x-www-form-urlencoded"):
         payload_field = request.POST.get("payload")
+        if payload_field is None:
+            payload_values = parse_qs(raw_body, keep_blank_values=True).get("payload")
+            if payload_values:
+                payload_field = payload_values[0]
         if payload_field:
             try:
                 parsed = json.loads(payload_field)
