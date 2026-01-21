@@ -66,6 +66,7 @@ class Ownable(Entity):
         ]
 
     def clean(self):
+        """Validate mutually exclusive ownership requirements."""
         super().clean()
         provided = [
             field for field in ("user", "group") if getattr(self, f"{field}_id")
@@ -81,9 +82,11 @@ class Ownable(Entity):
 
     @property
     def owner(self):
+        """Return the active owner (user or security group)."""
         return self.user if self.user_id else self.group
 
     def owner_display(self) -> str:
+        """Return a human-readable label for the owner."""
         owner = self.owner
         if owner is None:
             return ""
@@ -94,6 +97,7 @@ class Ownable(Entity):
         return str(owner)
 
     def owner_members(self) -> list[str]:
+        """Return usernames for members who own the record."""
         if self.user_id and self.user:
             return [self.user.get_username()]
         if self.group_id and self.group:
@@ -101,6 +105,7 @@ class Ownable(Entity):
         return []
 
     def resolve_profile_field_value(self, key: str):
+        """Resolve owner-related fields for profile rendering."""
         normalized = key.lower()
         if normalized == "owner":
             return True, self.owner
@@ -110,6 +115,7 @@ class Ownable(Entity):
 
 
 def get_ownable_models() -> Sequence[type[Ownable]]:
+    """Return all concrete Ownable models registered in the project."""
     return tuple(
         model
         for model in apps.get_models()
@@ -120,6 +126,7 @@ def get_ownable_models() -> Sequence[type[Ownable]]:
 
 
 def _ownable_admin_url(obj: Ownable) -> str | None:
+    """Return the admin change URL for a owned object when available."""
     opts = obj._meta
     try:
         return reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[obj.pk])
@@ -128,6 +135,7 @@ def _ownable_admin_url(obj: Ownable) -> str | None:
 
 
 def _build_links(objects: Iterable[Ownable], via: str | None = None) -> list[OwnedObjectLink]:
+    """Build admin links for owned objects."""
     links: list[OwnedObjectLink] = []
     for obj in objects:
         opts = obj._meta
@@ -143,6 +151,7 @@ def _build_links(objects: Iterable[Ownable], via: str | None = None) -> list[Own
 
 
 def get_owned_objects_for_user(user) -> tuple[list[OwnedObjectLink], list[OwnedObjectLink]]:
+    """Return owned object links grouped by direct and group ownership."""
     direct: list[OwnedObjectLink] = []
     via_groups: list[OwnedObjectLink] = []
     groups = list(getattr(user, "groups", []).all()) if hasattr(user, "groups") else []
@@ -163,6 +172,7 @@ def get_owned_objects_for_user(user) -> tuple[list[OwnedObjectLink], list[OwnedO
 
 
 def get_owned_objects_for_group(group) -> tuple[list[OwnedObjectLink], list[OwnedObjectLink]]:
+    """Return owned objects for a group and its members."""
     direct: list[OwnedObjectLink] = []
     member_owned: list[OwnedObjectLink] = []
     members = list(group.user_set.all()) if group is not None else []

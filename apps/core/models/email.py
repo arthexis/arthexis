@@ -19,6 +19,7 @@ class EmailArtifact(Entity):
 
     @staticmethod
     def fingerprint_for(subject: str, sender: str, body: str) -> str:
+        """Return a stable fingerprint hash for an email payload."""
         import hashlib
 
         data = (subject or "") + (sender or "") + (body or "")
@@ -169,6 +170,7 @@ class EmailTransaction(Entity):
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
+        """Validate that the transaction references a matching inbox/outbox."""
         super().clean()
         if not (self.collector_id or self.inbox_id or self.outbox_id):
             raise ValidationError(
@@ -184,6 +186,7 @@ class EmailTransaction(Entity):
             )
 
     def __str__(self):  # pragma: no cover - simple representation
+        """Return a readable label for the email transaction."""
         if self.subject:
             return self.subject
         if self.from_address:
@@ -230,6 +233,7 @@ class EmailTransactionAttachment(Entity):
     )
 
     def __str__(self):  # pragma: no cover - simple representation
+        """Return the filename when available for the attachment."""
         if self.filename:
             return self.filename
         return super().__str__()

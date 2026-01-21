@@ -41,4 +41,5 @@ class UsageEvent(models.Model):
         ordering = ["-timestamp"]
 
     def __str__(self) -> str:  # pragma: no cover - human-readable fallback
+        """Return a readable label for the usage event."""
         return f"{self.app_label}:{self.view_name} ({self.action})"

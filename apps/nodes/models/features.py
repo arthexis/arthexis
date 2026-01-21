@@ -110,6 +110,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
 
     @property
     def is_enabled(self) -> bool:
+        """Return whether the feature is enabled for the local node."""
         NodeModel = django_apps.get_model("nodes", "Node")
         if NodeModel is None:
             return False
@@ -156,15 +157,18 @@ class NodeFeatureAssignment(Entity):
         verbose_name_plural = "Node Feature Assignments"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        """Return a readable node-to-feature label."""
         return f"{self.node} -> {self.feature}"
 
     def save(self, *args, **kwargs):
+        """Persist the assignment and resync node feature tasks."""
         super().save(*args, **kwargs)
         self.node.sync_feature_tasks()
 
 
 @receiver(post_delete, sender=NodeFeatureAssignment)
 def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
+    """Resync tasks when a feature assignment is removed."""
     node_id = getattr(instance, "node_id", None)
     if not node_id:
         return
@@ -195,6 +199,7 @@ class NodeFeatureMixin:
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture"}
 
     def has_feature(self, slug: str) -> bool:
+        """Return whether the node has the requested feature slug."""
         return self.features.filter(slug=slug).exists()
 
     def _apply_role_manual_features(self) -> None:
@@ -304,6 +309,7 @@ class NodeFeatureMixin:
     def _detect_auto_feature(
         self, slug: str, *, base_dir: Path, base_path: Path
     ) -> bool:
+        """Detect whether an auto-managed feature is active for the node."""
         lock = self.FEATURE_LOCK_MAP.get(slug)
         if lock:
             project_lock_dir = base_dir / ".locks"
@@ -332,6 +338,7 @@ class NodeFeatureMixin:
         return False
 
     def refresh_features(self):
+        """Refresh auto-managed feature assignments and tasks."""
         if not self.pk:
             return
         if not self.is_local:
@@ -367,6 +374,7 @@ class NodeFeatureMixin:
     def update_manual_features(
         self, slugs: Iterable[str]
     ):
+        """Apply manual feature assignments for the provided slugs."""
         desired = {slug for slug in slugs if slug in self.MANUAL_FEATURE_SLUGS}
         remove_slugs = self.MANUAL_FEATURE_SLUGS - desired
         if remove_slugs:
@@ -381,6 +389,7 @@ class NodeFeatureMixin:
         self.sync_feature_tasks()
 
     def sync_feature_tasks(self):
+        """Synchronize periodic tasks based on active features."""
         screenshot_enabled = self.has_feature("screenshot-poll")
         celery_enabled = self.is_local and self.has_feature("celery-queue")
         llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
@@ -394,6 +403,7 @@ class NodeFeatureMixin:
         self._sync_llm_summary_task(llm_summary_enabled)
 
     def _sync_screenshot_task(self, enabled: bool):
+        """Sync the periodic screenshot capture task."""
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = f"capture_screenshot_node_{self.pk}"
@@ -424,6 +434,7 @@ class NodeFeatureMixin:
             ).delete()
 
     def _sync_landing_lead_task(self, enabled: bool):
+        """Sync the periodic landing lead cleanup task."""
         if not self.is_local:
             return
 
@@ -456,6 +467,7 @@ class NodeFeatureMixin:
             ).delete()
 
     def _sync_ocpp_session_report_task(self, celery_enabled: bool):
+        """Sync the periodic OCPP session report task."""
         from django_celery_beat.models import CrontabSchedule, PeriodicTask
         from django.db.utils import OperationalError, ProgrammingError
 
@@ -494,6 +506,7 @@ class NodeFeatureMixin:
             logger.debug("Skipping OCPP session report task sync; tables not ready")
 
     def _sync_upstream_poll_task(self, celery_enabled: bool):
+        """Sync the periodic upstream poll task."""
         if not self.is_local:
             return
 
@@ -521,6 +534,7 @@ class NodeFeatureMixin:
             ).delete()
 
     def _sync_net_message_purge_task(self, celery_enabled: bool):
+        """Sync the periodic net message purge task."""
         if not self.is_local:
             return
 
@@ -549,6 +563,7 @@ class NodeFeatureMixin:
             ).delete()
 
     def _sync_node_update_task(self, celery_enabled: bool):
+        """Sync the periodic node update task."""
         if not self.is_local:
             return
 
@@ -585,6 +600,7 @@ class NodeFeatureMixin:
             ).update(enabled=False)
 
     def _sync_connectivity_monitor_task(self, celery_enabled: bool):
+        """Sync the periodic connectivity monitor task."""
         if not self.is_local:
             return
 
@@ -614,6 +630,7 @@ class NodeFeatureMixin:
             ).delete()
 
     def _sync_llm_summary_task(self, enabled: bool) -> None:
+        """Sync the periodic LLM summary generation task."""
         if not self.is_local:
             return
 

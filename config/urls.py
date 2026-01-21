@@ -26,6 +26,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core import views as core_views
 from apps.core.admindocs import (
     CommandsView,
+    ModelDetailDocsView,
     ModelGraphIndexView,
     OrderedModelIndexView,
 )
@@ -105,6 +106,11 @@ urlpatterns = [
         "admindocs/models/",
         OrderedModelIndexView.as_view(),
         name="django-admindocs-models-index",
+    ),
+    path(
+        "admindocs/models/<str:app_label>/<str:model_name>/",
+        ModelDetailDocsView.as_view(),
+        name="django-admindocs-models-detail",
     ),
     path("admindocs/", include("django.contrib.admindocs.urls")),
     path(
