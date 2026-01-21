@@ -626,6 +626,35 @@ lcd_systemd_unit_present() {
   return 1
 }
 
+rfid_service_configured() {
+  if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
+    return 0
+  fi
+  return 1
+}
+
+rfid_systemd_unit_present() {
+  local service_name="$1"
+
+  if [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    return 1
+  fi
+
+  local rfid_unit
+  rfid_unit="rfid-${service_name}.service"
+
+  if [ -f "${SYSTEMD_DIR}/${rfid_unit}" ]; then
+    return 0
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$rfid_unit"
+    return $?
+  fi
+
+  return 1
+}
+
 # Repair any auto-upgrade working directory to keep services consistent before modifying systemd.
 if [ -n "$SERVICE_NAME" ]; then
   arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
@@ -1227,6 +1256,10 @@ restart_services() {
     if env_refresh_in_progress; then
       env_refresh_running=1
     fi
+    local include_rfid=0
+    if rfid_service_configured && rfid_systemd_unit_present "$service_name"; then
+      include_rfid=1
+    fi
     local restart_via_systemd=0
     local systemctl_available=0
     local -a systemctl_cmd=()
@@ -1252,6 +1285,16 @@ restart_services() {
         if "${systemctl_cmd[@]}" is-active --quiet "$lcd_service"; then
           echo "Signaling $lcd_service for restart via systemd..."
           "${systemctl_cmd[@]}" kill --signal=TERM "$lcd_service" || true
+        fi
+      fi
+      if [ "$include_rfid" -eq 1 ]; then
+        local rfid_service="rfid-$service_name"
+        if "${systemctl_cmd[@]}" is-active --quiet "$rfid_service"; then
+          echo "Signaling $rfid_service for restart via systemd..."
+          "${systemctl_cmd[@]}" kill --signal=TERM "$rfid_service" || true
+        else
+          echo "Starting $rfid_service via systemd..."
+          "${systemctl_cmd[@]}" start "$rfid_service" || true
         fi
       fi
     fi
@@ -1326,6 +1369,26 @@ restart_services() {
           fi
         fi
       fi
+      if [ "$include_rfid" -eq 1 ]; then
+        local rfid_service="rfid-$service_name"
+        if ! wait_for_service_active "$rfid_service" 1; then
+          if [ "$systemctl_available" -eq 1 ]; then
+            echo "RFID service $rfid_service did not become active after restart. Attempting manual start..." >&2
+            if "${systemctl_cmd[@]}" start "$rfid_service"; then
+              if ! wait_for_service_active "$rfid_service" 1; then
+                echo "RFID service $rfid_service did not become active after manual start." >&2
+                return 1
+              fi
+            else
+              echo "RFID service $rfid_service failed to start manually." >&2
+              return 1
+            fi
+          else
+            echo "RFID service $rfid_service did not become active after restart, and systemctl is unavailable for manual start." >&2
+            return 1
+          fi
+        fi
+      fi
       return 0
     fi
     if ! ./start.sh; then
@@ -1340,6 +1403,13 @@ restart_services() {
       local lcd_service="lcd-$service_name"
       if ! wait_for_service_active "$lcd_service" 1; then
         echo "LCD service $lcd_service did not become active after restart." >&2
+        return 1
+      fi
+    fi
+    if [ "$include_rfid" -eq 1 ]; then
+      local rfid_service="rfid-$service_name"
+      if ! wait_for_service_active "$rfid_service" 1; then
+        echo "RFID service $rfid_service did not become active after restart." >&2
         return 1
       fi
     fi

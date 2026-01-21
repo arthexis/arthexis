@@ -163,15 +163,50 @@ SERVICE_NAME=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(tr -d '\r\n' < "$LOCK_DIR/service.lck")"
 fi
+RFID_SERVICE_LOCK="$LOCK_DIR/rfid-service.lck"
+RFID_SERVICE_CONFIGURED=false
+if [ -f "$RFID_SERVICE_LOCK" ]; then
+  RFID_SERVICE_CONFIGURED=true
+fi
+RFID_SERVICE_UNIT=""
+RFID_UNIT_PRESENT=false
+if [ -n "$SERVICE_NAME" ]; then
+  RFID_SERVICE_UNIT="rfid-$SERVICE_NAME"
+fi
+if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && [ -n "$RFID_SERVICE_UNIT" ] && \
+  "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${RFID_SERVICE_UNIT}.service"; then
+  RFID_UNIT_PRESENT=true
+fi
+
+if [ "$RFID_SERVICE_CONFIGURED" = true ]; then
+  RFID_INITIAL_STATUS="unknown"
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    RFID_INITIAL_STATUS="systemctl-unavailable"
+  elif [ "$RFID_UNIT_PRESENT" = true ]; then
+    RFID_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$RFID_SERVICE_UNIT" 2>/dev/null || echo "unknown")
+  else
+    RFID_INITIAL_STATUS="not-registered"
+  fi
+  echo "RFID service initial status: $RFID_INITIAL_STATUS"
+  arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "rfid-status" "initial_status=$RFID_INITIAL_STATUS"
+fi
 
 if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
   && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
   && "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
   "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
+  if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
+    "${SYSTEMCTL_CMD[@]}" restart "$RFID_SERVICE_UNIT"
+  fi
   if [ "$SILENT" = true ]; then
     exit 0
   fi
   if wait_for_systemd_service "$SERVICE_NAME"; then
+    if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
+      if ! wait_for_systemd_service "$RFID_SERVICE_UNIT"; then
+        exit 1
+      fi
+    fi
     refresh_suite_uptime_lock_safe
     exit 0
   else

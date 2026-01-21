@@ -206,10 +206,13 @@ PATTERN="manage.py runserver"
 if [ "$ALL" = true ]; then
   pkill -f "$PATTERN" || true
 else
-  pkill -f "$PATTERN 0.0.0.0:$PORT" || true
+pkill -f "$PATTERN 0.0.0.0:$PORT" || true
 fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true
+if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
+  pkill -f "manage.py rfid_service" || true
+fi
 if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
   if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
