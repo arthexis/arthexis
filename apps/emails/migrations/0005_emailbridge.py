@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
                     "inbox",
                     models.OneToOneField(
                         help_text="Inbound mailbox for this bridge.",
-                        on_delete=django.db.models.deletion.CASCADE,
+                        on_delete=django.db.models.deletion.PROTECT,
                         related_name="bridge",
                         to="emails.emailinbox",
                     ),
@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
                     "outbox",
                     models.OneToOneField(
                         help_text="Outbound mailbox for this bridge.",
-                        on_delete=django.db.models.deletion.CASCADE,
+                        on_delete=django.db.models.deletion.PROTECT,
                         related_name="bridge",
                         to="emails.emailoutbox",
                     ),

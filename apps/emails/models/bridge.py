@@ -14,13 +14,13 @@ class EmailBridge(Entity):
     )
     inbox = models.OneToOneField(
         "emails.EmailInbox",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="bridge",
         help_text=_("Inbound mailbox for this bridge."),
     )
     outbox = models.OneToOneField(
         "emails.EmailOutbox",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="bridge",
         help_text=_("Outbound mailbox for this bridge."),
     )
@@ -32,8 +32,9 @@ class EmailBridge(Entity):
         ordering = ["name", "pk"]
 
     def __str__(self) -> str:
-        if self.name:
-            return self.name
+        name = (self.name or "").strip()
+        if name:
+            return name
         return f"{self.inbox} ↔ {self.outbox}"
 
 
