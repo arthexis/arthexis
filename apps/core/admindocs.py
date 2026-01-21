@@ -5,14 +5,27 @@ from types import SimpleNamespace
 from django.apps import apps
 from django.contrib import admin
 from django.core.management import get_commands, load_command_class
+from django.contrib.admindocs import utils
 from django.contrib.admindocs.views import (
     BaseAdminDocsView,
+    MODEL_METHODS_EXCLUDE,
+    func_accepts_kwargs,
+    func_accepts_var_args,
+    get_func_full_args,
+    get_readable_field_data_type,
+    get_return_data_type,
+    method_has_no_args,
     user_has_model_view_permission,
 )
+from django.core.exceptions import PermissionDenied
+from django.db import models
+from django.http import Http404
 from django.shortcuts import render
 from django.template import loader
 from django.urls import NoReverseMatch, reverse
+from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
+from django.utils.html import strip_tags
 from django.test import signals as test_signals
 
 
@@ -244,3 +257,215 @@ class ModelGraphIndexView(BaseAdminDocsView):
         graph_sections.sort(key=lambda section: section["verbose_name"])
 
         return super().get_context_data(**{**kwargs, "sections": graph_sections})
+
+
+class ModelDetailDocsView(BaseAdminDocsView):
+    template_name = "admin_doc/model_detail.html"
+
+    def _parse_docstring(self, docstring: str | None, opts) -> str:
+        if not docstring:
+            return ""
+        return utils.parse_rst(
+            inspect.cleandoc(docstring),
+            "model",
+            _("model:") + opts.model_name,
+        )
+
+    def _method_arguments(self, func) -> str:
+        arguments = get_func_full_args(func)
+        return ", ".join(
+            [
+                "=".join([arg_el[0], *map(repr, arg_el[1:])])
+                for arg_el in arguments
+            ]
+        )
+
+    def _should_exclude_method(self, func_name: str) -> bool:
+        return any(func_name.startswith(exclude) for exclude in MODEL_METHODS_EXCLUDE)
+
+    def _build_model_methods(self, model, opts) -> list[dict[str, str]]:
+        methods = []
+        for func_name, func in model.__dict__.items():
+            if self._should_exclude_method(func_name):
+                continue
+            if not inspect.isfunction(func):
+                continue
+            methods.append(
+                {
+                    "name": func_name,
+                    "arguments": self._method_arguments(func),
+                    "verbose": self._parse_docstring(func.__doc__, opts),
+                }
+            )
+        return methods
+
+    def _build_manager_methods(self, manager, opts) -> list[dict[str, str]]:
+        if manager is None:
+            return []
+        methods = []
+        for func_name, func in manager.__class__.__dict__.items():
+            if self._should_exclude_method(func_name):
+                continue
+            if not inspect.isfunction(func):
+                continue
+            methods.append(
+                {
+                    "name": func_name,
+                    "arguments": self._method_arguments(func),
+                    "verbose": self._parse_docstring(func.__doc__, opts),
+                }
+            )
+        return methods
+
+    def get_context_data(self, **kwargs):
+        model_name = self.kwargs["model_name"]
+        try:
+            app_config = apps.get_app_config(self.kwargs["app_label"])
+        except LookupError:
+            raise Http404(_("App %(app_label)r not found") % self.kwargs)
+        try:
+            model = app_config.get_model(model_name)
+        except LookupError:
+            raise Http404(
+                _("Model %(model_name)r not found in app %(app_label)r") % self.kwargs
+            )
+
+        opts = model._meta
+        if not user_has_model_view_permission(self.request.user, opts):
+            raise PermissionDenied
+
+        title, body, metadata = utils.parse_docstring(model.__doc__)
+        title = title and utils.parse_rst(title, "model", _("model:") + model_name)
+        body = body and utils.parse_rst(body, "model", _("model:") + model_name)
+
+        fields = []
+        for field in opts.fields:
+            if isinstance(field, models.ForeignKey):
+                data_type = field.remote_field.model.__name__
+                app_label = field.remote_field.model._meta.app_label
+                verbose = utils.parse_rst(
+                    (
+                        _("the related `%(app_label)s.%(data_type)s` object")
+                        % {
+                            "app_label": app_label,
+                            "data_type": data_type,
+                        }
+                    ),
+                    "model",
+                    _("model:") + data_type,
+                )
+            else:
+                data_type = get_readable_field_data_type(field)
+                verbose = field.verbose_name
+            fields.append(
+                {
+                    "name": field.name,
+                    "data_type": data_type,
+                    "verbose": verbose or "",
+                    "help_text": field.help_text,
+                }
+            )
+
+        for field in opts.many_to_many:
+            data_type = field.remote_field.model.__name__
+            app_label = field.remote_field.model._meta.app_label
+            verbose = _("related `%(app_label)s.%(object_name)s` objects") % {
+                "app_label": app_label,
+                "object_name": data_type,
+            }
+            fields.append(
+                {
+                    "name": f"{field.name}.all",
+                    "data_type": "List",
+                    "verbose": utils.parse_rst(
+                        _("all %s") % verbose, "model", _("model:") + opts.model_name
+                    ),
+                }
+            )
+            fields.append(
+                {
+                    "name": f"{field.name}.count",
+                    "data_type": "Integer",
+                    "verbose": utils.parse_rst(
+                        _("number of %s") % verbose,
+                        "model",
+                        _("model:") + opts.model_name,
+                    ),
+                }
+            )
+
+        for func_name, func in model.__dict__.items():
+            if self._should_exclude_method(func_name):
+                continue
+            if isinstance(func, (cached_property, property)):
+                verbose = self._parse_docstring(func.__doc__, opts)
+                fields.append(
+                    {
+                        "name": func_name,
+                        "data_type": get_return_data_type(func_name),
+                        "verbose": verbose or "",
+                    }
+                )
+            elif (
+                inspect.isfunction(func)
+                and method_has_no_args(func)
+                and not func_accepts_kwargs(func)
+                and not func_accepts_var_args(func)
+            ):
+                verbose = self._parse_docstring(func.__doc__, opts)
+                fields.append(
+                    {
+                        "name": func_name,
+                        "data_type": get_return_data_type(func_name),
+                        "verbose": verbose or "",
+                    }
+                )
+
+        for rel in opts.related_objects:
+            verbose = _("related `%(app_label)s.%(object_name)s` objects") % {
+                "app_label": rel.related_model._meta.app_label,
+                "object_name": rel.related_model._meta.object_name,
+            }
+            accessor = rel.accessor_name
+            fields.append(
+                {
+                    "name": f"{accessor}.all",
+                    "data_type": "List",
+                    "verbose": utils.parse_rst(
+                        _("all %s") % verbose, "model", _("model:") + opts.model_name
+                    ),
+                }
+            )
+            fields.append(
+                {
+                    "name": f"{accessor}.count",
+                    "data_type": "Integer",
+                    "verbose": utils.parse_rst(
+                        _("number of %s") % verbose,
+                        "model",
+                        _("model:") + opts.model_name,
+                    ),
+                }
+            )
+
+        model_methods = sorted(
+            self._build_model_methods(model, opts), key=lambda method: method["name"]
+        )
+        manager = getattr(model, "_default_manager", None)
+        manager_methods = sorted(
+            self._build_manager_methods(manager, opts),
+            key=lambda method: method["name"],
+        )
+
+        return super().get_context_data(
+            **{
+                **kwargs,
+                "name": opts.label,
+                "summary": strip_tags(title or ""),
+                "description": body,
+                "fields": fields,
+                "model_methods": model_methods,
+                "manager_methods": manager_methods,
+                "manager_name": manager.__class__.__name__ if manager else "",
+            }
+        )

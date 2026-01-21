@@ -59,6 +59,7 @@ class NameRepresentationMixin:
     """Provide a name-based ``__str__`` for models with a ``name`` field."""
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        """Return the model's name."""
         return self.name
 
 
@@ -93,15 +94,18 @@ class Platform(NameRepresentationMixin, Entity):
         ]
 
 def _upgrade_in_progress() -> bool:
+    """Return True when a local upgrade lock is present."""
     lock_file = Path(settings.BASE_DIR) / ".locks" / "upgrade_in_progress.lck"
     return lock_file.exists()
 
 
 class NodeRoleManager(models.Manager):
     def get_by_natural_key(self, name: str):
+        """Return a role by its natural key name."""
         return self.get(name=name)
 
     def create(self, **kwargs):
+        """Create or update a node role while preserving uniqueness."""
         name = kwargs.get("name")
         if name:
             existing = self.filter(name=name).first()
@@ -144,6 +148,7 @@ class NodeRole(NameRepresentationMixin, Entity):
         verbose_name_plural = "Node Roles"
 
     def natural_key(self):  # pragma: no cover - simple representation
+        """Return the natural key for serialization."""
         return (self.name,)
 
 def get_terminal_role():
@@ -240,6 +245,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         verbose_name_plural = "Nodes"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        """Return the hostname and port for display."""
         return f"{self.hostname}:{self.port}"
 
     def get_base_domain(self) -> str:
@@ -320,6 +326,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
     @classmethod
     def _preferred_site_port(cls, require_https: bool) -> int:
+        """Return the preferred site port for HTTPS or HTTP."""
         return 443 if require_https else 80
 
     @staticmethod
@@ -664,6 +671,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                 logger.warning("Unable to notify node %s of startup", peer)
 
     def ensure_keys(self):
+        """Ensure the node has a valid RSA key pair on disk."""
         security_dir = self.get_base_path() / "security"
         security_dir.mkdir(parents=True, exist_ok=True)
         priv_path = security_dir / f"{self.public_endpoint}"
@@ -791,9 +799,11 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         return slug
 
     def save(self, *args, **kwargs):
+        """Persist the node and ensure derived fields remain consistent."""
         update_fields = kwargs.get("update_fields")
 
         def include_update_field(field: str):
+            """Ensure the field is listed in update_fields when saving."""
             nonlocal update_fields
             if update_fields is None:
                 return
@@ -882,6 +892,7 @@ node_information_updated = Signal()
 
 
 def _format_upgrade_body(version: str, revision: str) -> str:
+    """Return a display string summarizing version and revision."""
     version = (version or "").strip()
     revision = (revision or "").strip()
     parts: list[str] = []
@@ -915,6 +926,7 @@ def _announce_peer_startup(
     current_revision: str = "",
     **_: object,
 ) -> None:
+    """Notify listeners when a peer node reports startup changes."""
     current_version = (current_version or "").strip()
     current_revision = (current_revision or "").strip()
     previous_version = (previous_version or "").strip()
@@ -1041,6 +1053,7 @@ class NetMessage(Entity):
         lcd_channel_type: str | None = None,
         lcd_channel_num: int | None = None,
     ):
+        """Create and propagate a network message."""
         role = None
         if reach:
             if isinstance(reach, NodeRole):
@@ -1108,6 +1121,7 @@ class NetMessage(Entity):
     def normalize_attachments(
         attachments: object,
     ) -> list[dict[str, object]]:
+        """Normalize raw attachment payloads into serialized objects."""
         if not attachments or not isinstance(attachments, list):
             return []
         normalized: list[dict[str, object]] = []
@@ -1129,6 +1143,7 @@ class NetMessage(Entity):
 
     @staticmethod
     def normalize_expires_at(value: datetime | str | None) -> datetime | None:
+        """Parse and normalize an expiration timestamp."""
         if not value:
             return None
 
@@ -1153,6 +1168,7 @@ class NetMessage(Entity):
     def normalize_lcd_channel(
         channel_type: object | None, channel_num: object | None
     ) -> tuple[str, int]:
+        """Normalize LCD channel metadata."""
         normalized_type = (
             str(channel_type or LcdChannel.LOW.value).strip() or LcdChannel.LOW.value
         ).lower()
@@ -1166,6 +1182,7 @@ class NetMessage(Entity):
 
     @property
     def is_expired(self) -> bool:
+        """Return ``True`` when the message has expired."""
         if not self.expires_at:
             return False
         return self.expires_at <= timezone.now()
@@ -1173,6 +1190,7 @@ class NetMessage(Entity):
     def apply_attachments(
         self, attachments: list[dict[str, object]] | None = None
     ) -> None:
+        """Persist attachment objects included with the message."""
         payload = attachments if attachments is not None else self.attachments or []
         if not payload:
             return
@@ -1204,6 +1222,7 @@ class NetMessage(Entity):
         reach_name: str | None,
         seen: list[str],
     ) -> dict[str, object]:
+        """Return the payload sent to peer nodes."""
         from apps.sigils.sigil_resolver import resolve_sigils
 
         payload: dict[str, object] = {
@@ -1240,10 +1259,12 @@ class NetMessage(Entity):
 
     @staticmethod
     def _serialize_payload(payload: dict[str, object]) -> str:
+        """Serialize a payload into deterministic JSON."""
         return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
     @staticmethod
     def _sign_payload(payload_json: str, private_key) -> str | None:
+        """Return the signature for a payload when possible."""
         signature, _error = Node.sign_payload(payload_json, private_key)
         return signature
 
@@ -1285,9 +1306,11 @@ class NetMessage(Entity):
         self._trim_queue(node)
 
     def clear_queue_for_node(self, node: "Node") -> None:
+        """Remove queued deliveries for ``node``."""
         PendingNetMessage.objects.filter(node=node, message=self).delete()
 
     def _trim_queue(self, node: "Node") -> None:
+        """Trim the queued messages for a node to its configured limit."""
         limit = max(int(node.message_queue_length or 0), 0)
         if limit == 0:
             PendingNetMessage.objects.filter(node=node).delete()
@@ -1306,6 +1329,7 @@ class NetMessage(Entity):
         *,
         sender: "Node",
     ) -> "NetMessage":
+        """Create or update a message from an inbound payload."""
         msg_uuid = data.get("uuid")
         if not msg_uuid:
             raise ValueError("uuid required")
@@ -1411,6 +1435,7 @@ class NetMessage(Entity):
         return msg
 
     def propagate(self, seen: list[str] | None = None):
+        """Propagate the message to eligible peer nodes."""
         from apps.core.notifications import notify
         import random
         import requests
@@ -1647,10 +1672,12 @@ class PendingNetMessage(Entity):
         verbose_name_plural = "Pending Net Messages"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        """Return a concise label for the pending message."""
         return f"{self.message_id} → {self.node_id}"
 
     @property
     def is_stale(self) -> bool:
+        """Return ``True`` when the pending message is stale."""
         if self.message and getattr(self.message, "is_expired", False):
             return True
         return self.stale_at <= timezone.now()

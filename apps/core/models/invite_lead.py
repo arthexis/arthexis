@@ -22,4 +22,5 @@ class InviteLead(Lead):
         verbose_name_plural = "Invite Leads"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        """Return the invite lead email address."""
         return self.email

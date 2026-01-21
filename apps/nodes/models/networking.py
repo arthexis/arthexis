@@ -10,6 +10,7 @@ class NodeNetworkingMixin:
     """Networking helpers for :class:`Node`."""
 
     def prefers_https(self, *, require_https: bool | None = None) -> bool:
+        """Return ``True`` when HTTPS is preferred for this node."""
         if require_https is not None:
             return require_https
         site = getattr(self, "base_site", None)
@@ -25,6 +26,7 @@ class NodeNetworkingMixin:
         default: str = "http",
         require_https: bool | None = None,
     ) -> tuple[str, ...]:
+        """Return preferred schemes ordered for remote URL construction."""
         if self.prefers_https(require_https=require_https):
             return ("https",)
         if default == "https":
@@ -37,6 +39,7 @@ class NodeNetworkingMixin:
         default: str = "http",
         require_https: bool | None = None,
     ) -> str:
+        """Return the preferred scheme for this node."""
         return "https" if self.prefers_https(require_https=require_https) else default
 
     @staticmethod
@@ -75,6 +78,7 @@ class NodeNetworkingMixin:
 
     @classmethod
     def _iter_ipv4_inputs(cls, values) -> Iterable[str]:
+        """Yield IPv4 candidates from a mixed input value."""
         if values is None:
             return []
         if isinstance(values, str):
@@ -110,6 +114,7 @@ class NodeNetworkingMixin:
 
     @classmethod
     def order_ipv4_addresses(cls, addresses: Iterable[str]) -> list[str]:
+        """Return IPv4 addresses ordered by routing preference."""
         ordered: list[tuple[int, str]] = []
         for index, value in enumerate(addresses):
             score = cls._ip_preference(value)[0]
@@ -119,6 +124,7 @@ class NodeNetworkingMixin:
 
     @classmethod
     def serialize_ipv4_addresses(cls, values) -> str | None:
+        """Return a comma-separated IPv4 string for storage."""
         cleaned = cls.sanitize_ipv4_addresses(values)
         if not cleaned:
             return None
@@ -126,6 +132,7 @@ class NodeNetworkingMixin:
         return ",".join(ordered)
 
     def get_ipv4_addresses(self) -> list[str]:
+        """Return the stored IPv4 addresses in preferred order."""
         stored = self.ipv4_address or ""
         cleaned = self.sanitize_ipv4_addresses(stored)
         return self.order_ipv4_addresses(cleaned)
