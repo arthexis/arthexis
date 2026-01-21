@@ -42,17 +42,25 @@ def _redact_mac(mac: str | None) -> str:
     """
     Return a redacted representation of a MAC address suitable for logging.
 
-    Keeps only the last 4 characters to allow coarse correlation while
-    avoiding logging the full hardware identifier.
+    The original MAC address is never logged in clear text. Instead, a
+    deterministic, non-reversible hash-based token is emitted to allow
+    coarse correlation between events without exposing the hardware
+    identifier itself.
     """
     if not mac:
         return ""
+    # Normalize the MAC to an alphanumeric form before hashing so that
+    # equivalent values with different formatting yield the same token.
     mac_str = "".join(char for char in str(mac) if char.isalnum())
-    if len(mac_str) <= 4:
+    if not mac_str:
         return "***REDACTED***"
-    # Ensure we don't reveal the full value; keep at most the last 4 chars.
-    tail = mac_str[-4:]
-    return f"***REDACTED***-{tail}"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(mac_str.encode("utf-8"))
+    mac_hash = digest.finalize().hex()
+    # Use only a short prefix of the hash for log compactness while
+    # preserving non-reversibility of the original MAC value.
+    token = mac_hash[:12]
+    return f"***REDACTED***-{token}"
 
 
 def _get_client_ip(request):
