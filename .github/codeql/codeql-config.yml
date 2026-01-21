@@ -5,6 +5,5 @@ paths-ignore:
   - static/**
   - media/**
   - scripts/**
-  - config/**
-  - .github/**
+  - .github/workflows/**
   - "**/migrations/**"
