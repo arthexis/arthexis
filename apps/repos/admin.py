@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.repos.models.events import GitHubEvent
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
@@ -132,3 +133,31 @@ class PackageRepositoryAdmin(admin.ModelAdmin):
     search_fields = ("name", "repository_url")
     filter_horizontal = ("packages",)
 
+
+@admin.register(GitHubEvent)
+class GitHubEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "event_type",
+        "delivery_id",
+        "repository",
+        "owner",
+        "name",
+        "received_at",
+    )
+    list_filter = ("event_type", "received_at")
+    search_fields = ("delivery_id", "event_type", "owner", "name")
+    readonly_fields = (
+        "received_at",
+        "http_method",
+        "headers",
+        "query_params",
+        "payload",
+        "raw_body",
+        "event_type",
+        "delivery_id",
+        "hook_id",
+        "signature",
+        "signature_256",
+        "user_agent",
+    )
+    raw_id_fields = ("repository",)
