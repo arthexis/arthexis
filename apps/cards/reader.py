@@ -1,7 +1,9 @@
+import logging
 import os
 import re
 import subprocess
 import time
+from pathlib import Path
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
@@ -17,6 +19,8 @@ from .constants import (
 from apps.video.rfid import queue_camera_snapshot
 from .utils import convert_endianness_value, normalize_endianness
 
+
+logger = logging.getLogger(__name__)
 
 _deep_read_enabled: bool = False
 
@@ -115,10 +119,14 @@ def _build_key_candidates(tag, key_attr: str, verified_attr: str) -> list[tuple[
     return candidates
 
 
-def _resolve_spi_bus_device() -> tuple[int, int]:
-    override = os.environ.get("RFID_SPI_DEVICE", "")
-    if override:
-        cleaned = override.strip()
+def resolve_spi_bus_device(
+    override: str | None = None,
+    *,
+    log_invalid: bool = True,
+) -> tuple[int, int]:
+    value = override if override is not None else os.environ.get("RFID_SPI_DEVICE", "")
+    cleaned = value.strip()
+    if cleaned:
         match = _SPI_DEVICE_PATTERN.search(cleaned) or _SPI_DEVICE_SHORT_PATTERN.fullmatch(
             cleaned
         )
@@ -126,7 +134,24 @@ def _resolve_spi_bus_device() -> tuple[int, int]:
             return int(match["bus"]), int(match["device"])
         if cleaned.isdigit():
             return SPI_BUS, int(cleaned)
+        if log_invalid:
+            logger.warning(
+                "RFID_SPI_DEVICE override %r is not recognized; using default SPI device "
+                "/dev/spidev%s.%s",
+                cleaned,
+                SPI_BUS,
+                SPI_DEVICE,
+            )
     return SPI_BUS, SPI_DEVICE
+
+
+def resolve_spi_device_path(
+    override: str | None = None,
+    *,
+    log_invalid: bool = True,
+) -> Path:
+    bus, device = resolve_spi_bus_device(override, log_invalid=log_invalid)
+    return Path(f"/dev/spidev{bus}.{device}")
 
 
 def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = None) -> dict:
@@ -269,7 +294,7 @@ def read_rfid(
         if mfrc is None:
             from mfrc522 import MFRC522  # type: ignore
 
-            spi_bus, spi_device = _resolve_spi_bus_device()
+            spi_bus, spi_device = resolve_spi_bus_device()
             mfrc = MFRC522(
                 bus=spi_bus,
                 device=spi_device,
