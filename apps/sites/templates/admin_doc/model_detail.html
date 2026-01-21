@@ -25,7 +25,7 @@
 <h1>{{ name }}</h1>
 <h2 class="subhead">{{ summary }}</h2>
 
-{{ description }}
+{{ description|safe }}
 
 <h3>{% translate 'Fields' %}</h3>
 <div class="module">
@@ -42,7 +42,7 @@
 <tr>
     <td>{{ field.name }}</td>
     <td>{{ field.data_type }}</td>
-    <td>{{ field.verbose }}{% if field.help_text %} - {{ field.help_text|safe }}{% endif %}</td>
+    <td>{{ field.verbose|safe }}{% if field.help_text %} - {{ field.help_text|safe }}{% endif %}</td>
 </tr>
 {% endfor %}
 </tbody>
@@ -65,7 +65,7 @@
 <tr>
     <td>{{ method.name }}</td>
     <td>{{ method.arguments }}</td>
-    <td>{{ method.verbose }}</td>
+    <td>{{ method.verbose|safe }}</td>
 </tr>
 {% endfor %}
 </tbody>
@@ -89,7 +89,7 @@
 <tr>
     <td>{{ method.name }}</td>
     <td>{{ method.arguments }}</td>
-    <td>{{ method.verbose }}</td>
+    <td>{{ method.verbose|safe }}</td>
 </tr>
 {% endfor %}
 </tbody>
