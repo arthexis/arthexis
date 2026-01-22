@@ -167,7 +167,7 @@ class GitHubEventAdmin(admin.ModelAdmin):
 @admin.register(GitHubApp)
 class GitHubAppAdmin(admin.ModelAdmin):
     list_display = ("display_name", "app_id", "app_slug", "auth_method")
-    search_fields = ("display_name", "app_slug", "app_id")
+    search_fields = ("display_name", "app_slug", "=app_id")
     list_filter = ("auth_method",)
     raw_id_fields = ("auth_user",)
 
@@ -184,5 +184,5 @@ class GitHubAppInstallAdmin(admin.ModelAdmin):
         "suspended_at",
     )
     list_filter = ("target_type", "repository_selection")
-    search_fields = ("installation_id", "account_login")
+    search_fields = ("=installation_id", "account_login")
     raw_id_fields = ("app",)
