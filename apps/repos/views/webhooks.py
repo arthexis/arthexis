@@ -18,21 +18,22 @@ def _extract_payload(request: HttpRequest) -> tuple[dict[str, Any], str]:
     raw_body = raw_bytes.decode("utf-8", errors="replace")
     payload: dict[str, Any] = {}
 
-    if request.content_type.startswith("application/x-www-form-urlencoded"):
-        payload_field = request.POST.get("payload")
-        if payload_field is None and raw_body:
-            payload_values = parse_qs(raw_body, keep_blank_values=True).get("payload")
-            if payload_values:
-                payload_field = payload_values[0]
-        if payload_field:
-            try:
-                parsed = json.loads(payload_field)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, dict):
-                return parsed, raw_body
-            if isinstance(parsed, list):
-                return {"items": parsed}, raw_body
+    payload_field = request.POST.get("payload")
+    if payload_field is None and raw_body and request.content_type.startswith(
+        "application/x-www-form-urlencoded"
+    ):
+        payload_values = parse_qs(raw_body, keep_blank_values=True).get("payload")
+        if payload_values:
+            payload_field = payload_values[0]
+    if payload_field:
+        try:
+            parsed = json.loads(payload_field)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            return parsed, raw_body
+        if isinstance(parsed, list):
+            return {"items": parsed}, raw_body
 
     if not raw_body:
         return payload, raw_body
