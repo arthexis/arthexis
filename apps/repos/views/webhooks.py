@@ -18,12 +18,9 @@ def _extract_payload(request: HttpRequest) -> tuple[dict[str, Any], str]:
     raw_body = raw_bytes.decode("utf-8", errors="replace")
     payload: dict[str, Any] = {}
 
-    if not raw_bytes:
-        return payload, raw_body
-
     if request.content_type.startswith("application/x-www-form-urlencoded"):
         payload_field = request.POST.get("payload")
-        if payload_field is None:
+        if payload_field is None and raw_body:
             payload_values = parse_qs(raw_body, keep_blank_values=True).get("payload")
             if payload_values:
                 payload_field = payload_values[0]
@@ -36,6 +33,9 @@ def _extract_payload(request: HttpRequest) -> tuple[dict[str, Any], str]:
                 return parsed, raw_body
             if isinstance(parsed, list):
                 return {"items": parsed}, raw_body
+
+    if not raw_body:
+        return payload, raw_body
 
     try:
         parsed = json.loads(raw_body)
