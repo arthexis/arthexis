@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 
 import pytest
 from django.urls import reverse
@@ -18,7 +19,9 @@ def test_github_webhook_form_payload_array_is_preserved(client):
     )
     response = client.post(
         url,
-        data={"payload": json.dumps([{"action": "opened"}])},
+        data=urllib.parse.urlencode(
+            {"payload": json.dumps([{"action": "opened"}])}
+        ),
         content_type="application/x-www-form-urlencoded",
     )
 
