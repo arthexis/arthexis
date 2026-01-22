@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.repos.models.events import GitHubEvent
+from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
@@ -161,3 +162,27 @@ class GitHubEventAdmin(admin.ModelAdmin):
         "user_agent",
     )
     raw_id_fields = ("repository",)
+
+
+@admin.register(GitHubApp)
+class GitHubAppAdmin(admin.ModelAdmin):
+    list_display = ("display_name", "app_id", "app_slug", "auth_method")
+    search_fields = ("display_name", "app_slug", "app_id")
+    list_filter = ("auth_method",)
+    raw_id_fields = ("auth_user",)
+
+
+@admin.register(GitHubAppInstall)
+class GitHubAppInstallAdmin(admin.ModelAdmin):
+    list_display = (
+        "app",
+        "installation_id",
+        "account_login",
+        "target_type",
+        "repository_selection",
+        "installed_at",
+        "suspended_at",
+    )
+    list_filter = ("target_type", "repository_selection")
+    search_fields = ("installation_id", "account_login")
+    raw_id_fields = ("app",)
