@@ -6,7 +6,7 @@ import asyncio
 import concurrent.futures
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone as dt_timezone
 import json
 import os
 from pathlib import Path
@@ -17,6 +17,7 @@ import itertools
 from typing import Iterable, Iterator
 
 from django.conf import settings
+from django.utils import timezone
 from redis import Redis
 from redis.exceptions import RedisError
 
@@ -159,7 +160,7 @@ def register_transaction_request(message_id: str, metadata: dict[str, object]) -
 
     entry = dict(metadata)
     entry.setdefault("status", "requested")
-    entry.setdefault("status_at", datetime.now(timezone.utc))
+    entry.setdefault("status_at", datetime.now(dt_timezone.utc))
     connector_key = _transaction_connector_key(
         str(entry.get("charger_id") or ""), entry.get("connector_id")
     )
@@ -394,7 +395,7 @@ def update_transaction_request(
             return None
         if status:
             entry["status"] = status
-            entry["status_at"] = datetime.now(timezone.utc)
+            entry["status_at"] = datetime.now(dt_timezone.utc)
         if connector_id is not None and connector_slug(entry.get("connector_id")) != connector_slug(
             connector_id
         ):
@@ -470,7 +471,7 @@ def find_transaction_requests(
     results.sort(
         key=lambda item: item[1].get("requested_at")
         or item[1].get("status_at")
-        or datetime.min.replace(tzinfo=timezone.utc),
+        or datetime.min.replace(tzinfo=dt_timezone.utc),
         reverse=True,
     )
     return results
@@ -1175,7 +1176,9 @@ def _file_path(cid: str, log_type: str = "charger") -> Path:
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     """Append a timestamped log entry for the given id and log type."""
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    timestamp = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M:%S.%f")[
+        :-3
+    ]
     entry = f"{timestamp} {entry}"
 
     key = _append_memory_log(cid, entry, log_type=log_type)
@@ -1257,7 +1260,7 @@ def start_session_log(cid: str, tx_id: int) -> None:
             # the session metadata so the new session can proceed.
             pass
 
-    start = datetime.now(timezone.utc)
+    start = datetime.now(dt_timezone.utc)
     folder = _session_folder(cid)
     date = start.strftime("%Y%m%d")
     filename = f"{date}_{tx_id}.json"
@@ -1282,7 +1285,7 @@ def add_session_message(cid: str, message: str) -> None:
     buffer: list[str] = sess.setdefault("buffer", [])
     payload = json.dumps(
         {
-            "timestamp": datetime.now(timezone.utc)
+            "timestamp": datetime.now(dt_timezone.utc)
             .isoformat()
             .replace("+00:00", "Z"),
             "message": message,
@@ -1425,7 +1428,7 @@ def _parse_log_timestamp(entry: str) -> datetime | None:
         timestamp = datetime.strptime(entry[:23], "%Y-%m-%d %H:%M:%S.%f")
     except ValueError:
         return None
-    return timestamp.replace(tzinfo=timezone.utc)
+    return timezone.make_aware(timestamp, timezone.get_current_timezone())
 
 
 def _iter_file_lines_reverse(path: Path, *, limit: int | None = None) -> Iterator[str]:
