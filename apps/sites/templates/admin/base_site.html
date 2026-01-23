@@ -1390,12 +1390,14 @@ body.user-story-open {
   {% endif %}
   <span class="badge {% if not badge_video_device %}badge-unknown{% endif %}" {% if badge_video_device %}style="background-color: {{ badge_video_device_color }};"{% endif %}>
     <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
-    {% if badge_video_device %}
-      <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ badge_video_device.display_name }}</a>
-    {% else %}
-      <span class="badge-link badge-link-value">N/A</span>
-    {% endif %}
-    <span style="display:none">CAM: {{ badge_video_device.display_name|default:"N/A" }}</span>
+    {% with device_display_text=badge_video_device.display_name|default:"N/A" %}
+      {% if badge_video_device %}
+        <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ device_display_text }}</a>
+      {% else %}
+        <span class="badge-link badge-link-value">{{ device_display_text }}</span>
+      {% endif %}
+      <span style="display:none">CAM: {{ device_display_text }}</span>
+    {% endwith %}
   </span>
 </div>
 {% endblock %}
