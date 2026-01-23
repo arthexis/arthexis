@@ -109,13 +109,21 @@ class VideoDeviceAdminForm(forms.ModelForm):
 class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
     form = VideoDeviceAdminForm
     list_display = (
-        "identifier",
+        "name",
+        "slug",
         "node",
         "owner_display",
         "description",
         "is_default",
     )
-    search_fields = ("identifier", "description", "raw_info", "node__hostname")
+    search_fields = (
+        "name",
+        "slug",
+        "identifier",
+        "description",
+        "raw_info",
+        "node__hostname",
+    )
     actions = ("reload_resolution_defaults",)
     changelist_actions = [
         "find_devices",
@@ -131,12 +139,14 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         (
             None,
             {
-                "fields": (
-                    "node",
-                    "identifier",
-                    "description",
-                    "raw_info",
-                    "is_default",
+                    "fields": (
+                        "node",
+                        "name",
+                        "slug",
+                        "identifier",
+                        "description",
+                        "raw_info",
+                        "is_default",
                 )
             },
         ),
@@ -585,7 +595,7 @@ class VideoRecordingAdmin(EntityModelAdmin):
 @admin.register(MjpegStream)
 class MjpegStreamAdmin(EntityModelAdmin):
     list_display = ("name", "slug", "video_device", "is_active", "public_link")
-    search_fields = ("name", "slug", "video_device__identifier")
+    search_fields = ("name", "slug", "video_device__name", "video_device__slug")
     list_filter = ("is_active",)
 
     def get_view_on_site_url(self, obj=None):

@@ -8,6 +8,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from PIL import Image
@@ -42,10 +43,13 @@ class VideoDevice(Ownable):
     """Detected video capture device available to a node."""
 
     owner_required = False
+    DEFAULT_NAME = "BASE (migrate)"
 
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.CASCADE, related_name="video_devices"
     )
+    name = models.CharField(max_length=255, default=DEFAULT_NAME)
+    slug = models.SlugField(max_length=255, blank=True, default="")
     identifier = models.CharField(max_length=100)
     description = models.CharField(max_length=255, blank=True)
     raw_info = models.TextField(blank=True)
@@ -64,7 +68,25 @@ class VideoDevice(Ownable):
         verbose_name_plural = _("Video Devices")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.identifier} ({self.node})"
+        return f"{self.display_name} ({self.node})"
+
+    @property
+    def display_name(self) -> str:
+        name = (self.name or "").strip()
+        if name:
+            return name
+        slug = (self.slug or "").strip()
+        if slug:
+            return slug
+        return self.identifier
+
+    def save(self, *args, **kwargs) -> None:
+        if not (self.name or "").strip():
+            self.name = self.DEFAULT_NAME
+        self.slug = (self.slug or "").strip()
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
     @property
     def is_public(self) -> bool:
