@@ -4,6 +4,7 @@ import base64
 from dataclasses import dataclass
 import logging
 from pathlib import Path
+import uuid
 
 from django.conf import settings
 from django.db import models
@@ -86,6 +87,8 @@ class VideoDevice(Ownable):
         self.slug = (self.slug or "").strip()
         if not self.slug:
             self.slug = slugify(self.name)
+        if not self.slug:
+            self.slug = uuid.uuid4().hex[:12]
         super().save(*args, **kwargs)
 
     @property
