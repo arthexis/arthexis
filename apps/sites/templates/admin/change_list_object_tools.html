@@ -1,7 +1,8 @@
-{% load i18n admin_urls %}
+{% load i18n admin_urls admin_list %}
 
 {% if has_add_permission %}
   <li>
-    <a href="{% url cl.opts|admin_urlname:'add' %}" class="addlink">{% translate "Create" %}</a>
+    {% url cl.opts|admin_urlname:'add' as add_url %}
+    <a href="{% add_preserved_filters add_url is_popup to_field %}" class="addlink">{% translate "Create" %}</a>
   </li>
 {% endif %}
