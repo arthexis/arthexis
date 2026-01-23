@@ -1,0 +1,64 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Cameras" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row g-4">
+    <div class="col-lg-9">
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+          <p class="text-muted mb-1">{% trans "Live thumbnails" %}</p>
+          <h1 class="h3 mb-0">{% trans "Camera Gallery" %}</h1>
+        </div>
+      </div>
+      <div class="row g-4">
+        {% for stream in streams %}
+          <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm">
+              {% with preview=stream.get_thumbnail_data_uri|default:stream.get_last_frame_data_uri %}
+                {% if preview %}
+                  <img src="{{ preview }}" class="card-img-top" alt="{{ stream.name }}">
+                {% else %}
+                  <div class="card-img-top bg-dark d-flex align-items-center justify-content-center" style="height: 180px;">
+                    <span class="text-light">{% trans "No thumbnail" %}</span>
+                  </div>
+                {% endif %}
+              {% endwith %}
+              <div class="card-body">
+                <h2 class="h6 mb-2">{{ stream.name }}</h2>
+                <a class="btn btn-sm btn-outline-primary" href="{{ stream.get_absolute_url }}">
+                  {% trans "View stream" %}
+                </a>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="col-12">
+            <div class="alert alert-info mb-0">
+              {% trans "No cameras are available yet." %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-lg-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h6">{% trans "Available cameras" %}</h2>
+          <ul class="list-unstyled mb-0">
+            {% for stream in streams %}
+              <li class="mb-2">
+                <a href="{{ stream.get_absolute_url }}">{{ stream.name }}</a>
+              </li>
+            {% empty %}
+              <li class="text-muted">{% trans "No streams configured." %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

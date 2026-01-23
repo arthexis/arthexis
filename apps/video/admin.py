@@ -597,6 +597,7 @@ class MjpegStreamAdmin(EntityModelAdmin):
     list_display = ("name", "slug", "video_device", "is_active", "public_link")
     search_fields = ("name", "slug", "video_device__name", "video_device__slug")
     list_filter = ("is_active",)
+    change_form_template = "admin/video/mjpegstream/change_form.html"
 
     def get_view_on_site_url(self, obj=None):
         if obj:
@@ -611,6 +612,32 @@ class MjpegStreamAdmin(EntityModelAdmin):
             '<a href="{}" target="_blank" rel="noopener">{}</a>',
             obj.get_absolute_url(),
             _("View"),
+        )
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        stream = self.get_object(request, object_id)
+        if stream:
+            preview = stream.get_thumbnail_data_uri() or stream.get_last_frame_data_uri()
+            extra_context["last_frame_preview"] = preview
+            if stream.last_frame_sample_id:
+                try:
+                    extra_context["last_frame_sample_url"] = reverse(
+                        "admin:content_contentsample_change",
+                        args=[stream.last_frame_sample_id],
+                    )
+                except NoReverseMatch:  # pragma: no cover - admin URL always registered
+                    extra_context["last_frame_sample_url"] = None
+            if stream.last_thumbnail_sample_id:
+                try:
+                    extra_context["last_thumbnail_sample_url"] = reverse(
+                        "admin:content_contentsample_change",
+                        args=[stream.last_thumbnail_sample_id],
+                    )
+                except NoReverseMatch:  # pragma: no cover - admin URL always registered
+                    extra_context["last_thumbnail_sample_url"] = None
+        return super().change_view(
+            request, object_id, form_url=form_url, extra_context=extra_context
         )
 
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+import hashlib
+import io
 import logging
 from pathlib import Path
 import uuid
@@ -15,6 +17,7 @@ from django.urls import reverse
 from PIL import Image
 
 from apps.content.models import ContentSample
+from apps.content.utils import save_content_sample
 
 from apps.base.models import Entity
 from apps.core.models.ownable import Ownable
@@ -210,6 +213,28 @@ class MjpegStream(VideoStream):
         on_delete=models.PROTECT,
         related_name="mjpeg_streams",
     )
+    last_frame_sample = models.ForeignKey(
+        ContentSample,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mjpeg_frames",
+    )
+    last_frame_captured_at = models.DateTimeField(null=True, blank=True)
+    last_thumbnail_sample = models.ForeignKey(
+        ContentSample,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mjpeg_thumbnails",
+    )
+    last_thumbnail_at = models.DateTimeField(null=True, blank=True)
+    thumbnail_frequency = models.PositiveIntegerField(
+        default=60,
+        help_text=_(
+            "Seconds between automatic thumbnail captures even without active viewers."
+        ),
+    )
 
     class Meta:
         verbose_name = _("MJPEG Stream")
@@ -217,6 +242,109 @@ class MjpegStream(VideoStream):
 
     def get_stream_url(self) -> str:
         return reverse("video:mjpeg-stream", args=[self.slug])
+
+    @staticmethod
+    def _resolve_sample_path(sample: ContentSample) -> Path:
+        file_path = Path(sample.path)
+        if not file_path.is_absolute():
+            file_path = settings.LOG_DIR / file_path
+        return file_path
+
+    def _data_uri_for_sample(self, sample: ContentSample | None) -> str | None:
+        if not sample:
+            return None
+        file_path = self._resolve_sample_path(sample)
+        if not file_path.exists():
+            return None
+        try:
+            with Image.open(file_path) as image:
+                mime = (image.format or "jpeg").lower()
+        except Exception:  # pragma: no cover - best-effort metadata
+            mime = "jpeg"
+        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return f"data:image/{mime};base64,{data}"
+
+    def get_last_frame_data_uri(self) -> str | None:
+        return self._data_uri_for_sample(self.last_frame_sample)
+
+    def get_thumbnail_data_uri(self) -> str | None:
+        return self._data_uri_for_sample(self.last_thumbnail_sample)
+
+    def _write_frame_file(self, frame_bytes: bytes, *, suffix: str) -> Path:
+        storage_dir = settings.LOG_DIR / "video" / "streams"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = timezone.now().strftime("%Y%m%d%H%M%S%f")
+        slug = self.slug or f"stream-{self.pk or 'unknown'}"
+        filename = f"{slug}-{timestamp}-{suffix}.jpg"
+        file_path = storage_dir / filename
+        file_path.write_bytes(frame_bytes)
+        return file_path
+
+    def _save_frame_sample(
+        self,
+        frame_bytes: bytes,
+        *,
+        suffix: str,
+        method: str,
+    ) -> ContentSample | None:
+        digest = hashlib.sha256(frame_bytes).hexdigest()
+        existing = ContentSample.objects.filter(hash=digest).first()
+        if existing:
+            return existing
+        file_path = self._write_frame_file(frame_bytes, suffix=suffix)
+        sample = save_content_sample(
+            path=file_path,
+            kind=ContentSample.IMAGE,
+            method=method,
+            link_duplicates=True,
+            duplicate_log_context="MJPEG frame",
+        )
+        if sample and sample.path:
+            sample_path = self._resolve_sample_path(sample)
+            if sample_path.resolve() != file_path.resolve():
+                try:
+                    file_path.unlink()
+                except OSError:  # pragma: no cover - best-effort cleanup
+                    logger.warning(
+                        "Unable to remove duplicate MJPEG frame file %s", file_path
+                    )
+        return sample
+
+    def _build_thumbnail_bytes(self, frame_bytes: bytes) -> bytes:
+        with Image.open(io.BytesIO(frame_bytes)) as image:
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            image.thumbnail((320, 320), Image.LANCZOS)
+            output = io.BytesIO()
+            image.save(output, format="JPEG")
+        return output.getvalue()
+
+    def store_frame_bytes(self, frame_bytes: bytes, *, update_thumbnail: bool = True) -> None:
+        if not frame_bytes:
+            return
+        now = timezone.now()
+        frame_sample = self._save_frame_sample(
+            frame_bytes, suffix="frame", method="MJPEG_STREAM"
+        )
+        updates: dict[str, object] = {"last_frame_captured_at": now}
+        if frame_sample and frame_sample != self.last_frame_sample:
+            updates["last_frame_sample"] = frame_sample
+        if update_thumbnail:
+            try:
+                thumb_bytes = self._build_thumbnail_bytes(frame_bytes)
+            except Exception as exc:  # pragma: no cover - best-effort thumbnail
+                logger.warning("Unable to build MJPEG thumbnail: %s", exc)
+            else:
+                thumb_sample = self._save_frame_sample(
+                    thumb_bytes, suffix="thumb", method="MJPEG_THUMBNAIL"
+                )
+                updates["last_thumbnail_at"] = now
+                if thumb_sample and thumb_sample != self.last_thumbnail_sample:
+                    updates["last_thumbnail_sample"] = thumb_sample
+        if updates:
+            for field, value in updates.items():
+                setattr(self, field, value)
+            self.save(update_fields=list(updates.keys()))
 
     def iter_frame_bytes(self):
         """Yield encoded JPEG frames from the configured capture device."""
@@ -247,12 +375,44 @@ class MjpegStream(VideoStream):
         finally:  # pragma: no cover - release resource
             capture.release()
 
+    def capture_frame_bytes(self) -> bytes | None:
+        try:
+            import cv2  # type: ignore
+        except ImportError as exc:  # pragma: no cover - runtime dependency
+            raise RuntimeError("MJPEG streaming requires the OpenCV (cv2) package") from exc
+
+        capture = cv2.VideoCapture(self.video_device.identifier)
+        if not capture.isOpened():
+            capture.release()
+            raise RuntimeError(
+                _("Unable to open video device %(device)s")
+                % {"device": self.video_device.identifier}
+            )
+        try:
+            success, frame = capture.read()
+            if not success:
+                return None
+            success, buffer = cv2.imencode(".jpg", frame)
+            if not success:
+                return None
+            return buffer.tobytes()
+        finally:  # pragma: no cover - release resource
+            capture.release()
+
     def mjpeg_stream(self):
         boundary = b"--frame\r\n"
         content_type = b"Content-Type: image/jpeg\r\n\r\n"
-
-        for frame in self.iter_frame_bytes():
-            yield boundary + content_type + frame + b"\r\n"
+        last_frame: bytes | None = None
+        try:
+            for frame in self.iter_frame_bytes():
+                last_frame = frame
+                yield boundary + content_type + frame + b"\r\n"
+        finally:
+            if last_frame:
+                try:
+                    self.store_frame_bytes(last_frame, update_thumbnail=True)
+                except Exception as exc:  # pragma: no cover - best-effort storage
+                    logger.warning("Unable to persist final MJPEG frame: %s", exc)
 
 
 class VideoSnapshot(Entity):
