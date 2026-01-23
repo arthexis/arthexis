@@ -1393,9 +1393,9 @@ body.user-story-open {
     {% if badge_video_device %}
       <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ badge_video_device.display_name }}</a>
     {% else %}
-      <span class="badge-link badge-link-value">None</span>
+      <span class="badge-link badge-link-value">N/A</span>
     {% endif %}
-    <span style="display:none">CAM: {{ badge_video_device.display_name|default:"None" }}</span>
+    <span style="display:none">CAM: {{ badge_video_device.display_name|default:"N/A" }}</span>
   </span>
 </div>
 {% endblock %}
