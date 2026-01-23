@@ -1,0 +1,56 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+  {% if original %}
+    <fieldset class="module aligned">
+      <h2>{% trans "LATEST FRAME" %}</h2>
+      <div class="form-row">
+        <div>
+          <strong>{% trans "Captured" %}:</strong>
+          {% if original.last_frame_captured_at %}
+            {{ original.last_frame_captured_at|date:"DATETIME_FORMAT" }}
+          {% else %}
+            <em>{% trans "Not captured" %}</em>
+          {% endif %}
+        </div>
+        <div>
+          <strong>{% trans "Thumbnail" %}:</strong>
+          {% if original.last_thumbnail_at %}
+            {{ original.last_thumbnail_at|date:"DATETIME_FORMAT" }}
+          {% else %}
+            <em>{% trans "Not captured" %}</em>
+          {% endif %}
+        </div>
+        <div>
+          <strong>{% trans "Frame Sample" %}:</strong>
+          {% if last_frame_sample_url %}
+            <a href="{{ last_frame_sample_url }}">{% trans "View sample" %}</a>
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+        </div>
+        <div>
+          <strong>{% trans "Thumbnail Sample" %}:</strong>
+          {% if last_thumbnail_sample_url %}
+            <a href="{{ last_thumbnail_sample_url }}">{% trans "View sample" %}</a>
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+        </div>
+      </div>
+      <div class="form-row">
+        {% if last_frame_preview %}
+          <img
+            src="{{ last_frame_preview }}"
+            alt="{% trans 'Latest frame preview' %}"
+            style="max-width: 240px; height: auto;"
+          />
+        {% else %}
+          <em>{% trans "Preview unavailable" %}</em>
+        {% endif %}
+      </div>
+    </fieldset>
+  {% endif %}
+{% endblock %}

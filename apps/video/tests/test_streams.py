@@ -64,3 +64,40 @@ def test_mjpeg_stream_serves_frames(client, video_device, monkeypatch):
     assert chunks
     assert b"frame-one" in chunks[0]
     assert b"frame-two" in chunks[1]
+    response.close()
+
+
+@pytest.mark.django_db
+def test_mjpeg_stream_stores_final_frame(client, video_device, monkeypatch):
+    stream = MjpegStream.objects.create(name="Atrium", slug="atrium", video_device=video_device)
+    captured: dict[str, bytes | bool] = {}
+
+    def fake_frames(self):
+        yield b"first-frame"
+        yield b"final-frame"
+
+    def fake_store(self, frame_bytes, update_thumbnail=True):
+        captured["frame"] = frame_bytes
+        captured["update_thumbnail"] = update_thumbnail
+
+    monkeypatch.setattr(MjpegStream, "iter_frame_bytes", fake_frames)
+    monkeypatch.setattr(MjpegStream, "store_frame_bytes", fake_store)
+
+    response = client.get(reverse("video:mjpeg-stream", args=[stream.slug]))
+
+    list(itertools.islice(response.streaming_content, 2))
+    response.close()
+
+    assert captured["frame"] == b"final-frame"
+    assert captured["update_thumbnail"] is True
+
+
+@pytest.mark.django_db
+def test_camera_gallery_lists_streams(client, video_device):
+    stream = MjpegStream.objects.create(name="Lobby", slug="lobby", video_device=video_device)
+
+    response = client.get(reverse("video:camera-gallery"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert stream.name in content

@@ -25,3 +25,13 @@ def mjpeg_stream(request, slug):
         generator,
         content_type="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+def camera_gallery(request):
+    streams = (
+        MjpegStream.objects.filter(is_active=True)
+        .select_related("last_thumbnail_sample", "last_frame_sample")
+        .order_by("name")
+    )
+    context = {"streams": streams}
+    return render(request, "video/camera_gallery.html", context)
