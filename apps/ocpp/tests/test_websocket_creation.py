@@ -421,8 +421,8 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
             def __init__(self, responses):
                 self._responses = iter(responses)
                 self.subprotocol = None
-                self.close_code = None
-                self.close_reason = None
+                self.close_code = 1000
+                self.close_reason = ""
 
             async def send(self, _msg):
                 return None
@@ -435,6 +435,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
 
             async def close(self):
                 self.close_code = 1000
+                self.close_reason = ""
 
         responses = [
             json.dumps([3, "boot", {"status": "Accepted"}]),
