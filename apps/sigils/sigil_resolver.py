@@ -445,16 +445,15 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     else:
                         field = None
                     if field and aggregate_func in {"total", "min", "max", "count"}:
-                        aggregation = None
-                        if aggregate_func == "total":
-                            aggregation = Sum(field.attname)
-                        elif aggregate_func == "min":
-                            aggregation = Min(field.attname)
-                        elif aggregate_func == "max":
-                            aggregation = Max(field.attname)
-                        elif aggregate_func == "count":
-                            aggregation = Count(field.attname)
-                        if aggregation is not None:
+                        aggregation_map = {
+                            "total": Sum,
+                            "min": Min,
+                            "max": Max,
+                            "count": Count,
+                        }
+                        agg_class = aggregation_map.get(aggregate_func)
+                        if agg_class:
+                            aggregation = agg_class(field.attname)
                             result = qs.aggregate(value=aggregation).get("value")
                             return "" if result is None else str(result)
                     values: list[float] = []
