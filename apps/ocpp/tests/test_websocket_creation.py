@@ -1,6 +1,7 @@
 import asyncio
 import json
 import base64
+from unittest.mock import patch
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -15,6 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.ocpp import consumers, store
+from apps.ocpp import simulator as simulator_module
 from apps.ocpp.models import Charger, Simulator
 from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
@@ -386,7 +388,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         self._reset_store()
         super().tearDown()
 
-    def test_cp_simulator_connects_with_default_fixture(self):
+    def _build_simulator(self) -> ChargePointSimulator:
         call_command(
             "loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json"
         )
@@ -398,12 +400,36 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         config.host = self.host
         config.ws_port = self._port
 
-        cp_simulator = ChargePointSimulator(config)
+        return ChargePointSimulator(config)
+
+    def test_cp_simulator_negotiates_ocpp_subprotocol(self):
+        cp_simulator = self._build_simulator()
 
         async_to_sync(cp_simulator._run_session)()
 
-        # Accept None when the server omits subprotocol negotiation.
-        assert cp_simulator._last_ws_subprotocol in ("ocpp1.6", None)
+        assert cp_simulator._last_ws_subprotocol == "ocpp1.6"
+        assert cp_simulator._last_close_code == 1000
+        assert cp_simulator._last_close_reason in ("", None)
+        assert cp_simulator._connected.is_set()
+        assert cp_simulator._connect_error == "accepted"
+        assert cp_simulator.status == "stopped"
+
+    def test_cp_simulator_falls_back_without_subprotocol(self):
+        cp_simulator = self._build_simulator()
+        original_connect = simulator_module.websockets.connect
+
+        async def connect_without_subprotocols(uri, *args, **kwargs):
+            if kwargs.get("subprotocols"):
+                raise RuntimeError("subprotocols rejected")
+            return await original_connect(uri, *args, **kwargs)
+
+        with patch(
+            "apps.ocpp.simulator.websockets.connect",
+            new=connect_without_subprotocols,
+        ):
+            async_to_sync(cp_simulator._run_session)()
+
+        assert cp_simulator._last_ws_subprotocol is None
         assert cp_simulator._last_close_code == 1000
         assert cp_simulator._last_close_reason in ("", None)
         assert cp_simulator._connected.is_set()
