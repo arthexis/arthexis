@@ -1,0 +1,216 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "Thermometer trends" %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script src="{% static 'core/vendor/chart.umd.min.js' %}" data-chartjs="true"></script>
+  <style>
+    #thermometer-graph-module {
+      background: var(--body-bg);
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+    }
+    #thermometer-chart {
+      max-width: 100%;
+    }
+    #thermometer-empty {
+      margin-top: 16px;
+    }
+    .thermometer-range-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div id="thermometer-graph-module" class="module">
+    <h1>{% translate "Thermometer trends" %}</h1>
+    <p class="help">{% translate "Average readings per sensor for the selected range." %}</p>
+    <p>
+      <a class="button" href="{% url 'admin:sensors_thermometer_changelist' %}">{% translate "Back to thermometers" %}</a>
+    </p>
+    <div class="thermometer-range-buttons" role="group" aria-label="{% translate 'Range' %}">
+      {% for key, option in range_options.items %}
+      <a class="button{% if key == range_key %} default{% endif %}" href="?range={{ key }}">{{ option.label }}</a>
+      {% endfor %}
+    </div>
+    <p id="thermometer-meta" class="quiet"></p>
+    <canvas id="thermometer-chart" role="img" aria-label="{% translate 'Line chart showing thermometer readings' %}" height="360"></canvas>
+    <p id="thermometer-empty" class="quiet" hidden>{% translate "No thermometer data is available yet." %}</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+  {{ block.super }}
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('thermometer-chart');
+      if (!canvas) {
+        return;
+      }
+      const metaLabel = document.getElementById('thermometer-meta');
+      const emptyLabel = document.getElementById('thermometer-empty');
+      const chartJsUrl = '{% static "core/vendor/chart.umd.min.js" %}';
+
+      const waitForChart = (resolve) => {
+        if (window.Chart) {
+          resolve(window.Chart);
+          return true;
+        }
+        return false;
+      };
+
+      const ensureChartJs = () => {
+        const existing = document.querySelector('script[data-chartjs]');
+        if (existing) {
+          if (existing.dataset.chartjsState === 'error') {
+            return Promise.resolve(null);
+          }
+
+          if (existing.dataset.chartjsState !== 'loaded') {
+            return new Promise((resolve) => {
+              existing.addEventListener(
+                'load',
+                () => {
+                  existing.dataset.chartjsState = 'loaded';
+                  resolve(window.Chart || null);
+                },
+                { once: true },
+              );
+              existing.addEventListener(
+                'error',
+                () => {
+                  existing.dataset.chartjsState = 'error';
+                  resolve(null);
+                },
+                { once: true },
+              );
+            });
+          }
+
+          return Promise.resolve(window.Chart || null);
+        }
+
+        return new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = chartJsUrl;
+          script.async = true;
+          script.dataset.chartjs = 'true';
+          script.dataset.chartjsState = 'loading';
+          script.addEventListener(
+            'load',
+            () => {
+              script.dataset.chartjsState = 'loaded';
+              resolve(window.Chart || null);
+            },
+            { once: true },
+          );
+          script.addEventListener(
+            'error',
+            () => {
+              script.dataset.chartjsState = 'error';
+              resolve(null);
+            },
+            { once: true },
+          );
+          document.head.appendChild(script);
+        });
+      };
+
+      const chartEndpoint = new URL('{{ chart_endpoint }}', window.location);
+
+      const fetchData = () =>
+        fetch(chartEndpoint.toString(), {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        }).then((response) => (response.ok ? response.json() : Promise.reject()));
+
+      ensureChartJs()
+        .then((Chart) => {
+          if (!Chart && !waitForChart(() => {})) {
+            throw new Error('Chart.js unavailable');
+          }
+          return fetchData().then((data) => ({ Chart: window.Chart, data }));
+        })
+        .then(({ Chart, data }) => {
+          if (!data || !Array.isArray(data.labels) || !Array.isArray(data.datasets)) {
+            throw new Error('Invalid chart data');
+          }
+          if (!data.datasets.length) {
+            canvas.hidden = true;
+            emptyLabel.hidden = false;
+            return;
+          }
+          if (data.meta && metaLabel) {
+            const start = data.meta.start || '';
+            const end = data.meta.end || '';
+            const range = data.meta.range || '';
+            const summary = [];
+            if (start && end) {
+              summary.push(`{% translate "Range" %}: ${start} – ${end}`);
+            }
+            if (range) {
+              summary.push(`{% translate "View" %}: ${range}`);
+            }
+            metaLabel.textContent = summary.join(' \u2022 ');
+          }
+          emptyLabel.hidden = true;
+          const context = canvas.getContext('2d');
+          new Chart(context, {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: data.datasets.map((dataset) => ({
+                ...dataset,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+              })),
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: {
+                  title: {
+                    display: true,
+                    text: '{% translate "Timestamp" %}',
+                  },
+                },
+                y: {
+                  title: {
+                    display: true,
+                    text: '{% translate "Reading" %}',
+                  },
+                },
+              },
+              plugins: {
+                legend: {
+                  position: 'bottom',
+                },
+                tooltip: {
+                  mode: 'nearest',
+                  intersect: false,
+                },
+              },
+            },
+          });
+        })
+        .catch(() => {
+          canvas.hidden = true;
+          emptyLabel.hidden = false;
+          if (emptyLabel) {
+            emptyLabel.textContent = '{% translate "Unable to load thermometer data at this time." %}';
+          }
+        });
+    });
+  </script>
+{% endblock %}
