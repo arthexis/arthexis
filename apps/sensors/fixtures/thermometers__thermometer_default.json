@@ -11,6 +11,7 @@
       "report_regex": "temp(?:erature)?\\s*[=:]\\s*(?P<value>-?\\d+(?:\\.\\d+)?)",
       "report_scale": "1",
       "display_precision": 1,
+      "sampling_interval_seconds": 300,
       "is_active": true
     }
   }

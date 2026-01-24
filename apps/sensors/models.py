@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 import re
 
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -33,6 +34,11 @@ class PhysicalSensor(Entity):
     )
     display_precision = models.PositiveSmallIntegerField(
         default=1, help_text=_("Number of decimal places to display for readings.")
+    )
+    sampling_interval_seconds = models.PositiveIntegerField(
+        default=300,
+        validators=[MinValueValidator(1)],
+        help_text=_("Sampling interval in seconds."),
     )
     last_reading = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True
