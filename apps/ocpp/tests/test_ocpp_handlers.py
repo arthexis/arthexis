@@ -732,6 +732,22 @@ async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
 
 
 @pytest.mark.anyio
+async def test_notify_event_registered_for_ocpp201_and_ocpp21():
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    calls = getattr(consumer._handle_notify_event_action, "__protocol_calls__", set())
+    assert (
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "NotifyEvent",
+    ) in calls
+    assert (
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "NotifyEvent",
+    ) in calls
+
+
+@pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
