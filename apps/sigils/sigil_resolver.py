@@ -4,11 +4,13 @@ import json
 import logging
 import os
 from decimal import Decimal
+from functools import lru_cache
 from typing import Iterable, Optional
 
 from django.conf import settings
 from django.core import serializers
 from django.db import models
+from django.db.models import Count, Max, Min, Sum
 
 from .models import SigilRoot
 from .sigil_context import get_context, get_request
@@ -47,6 +49,23 @@ def _failed_resolution(token: str) -> str:
 
 def _normalize_name(name: str) -> str:
     return name.replace("-", "_")
+
+
+@lru_cache(maxsize=256)
+def _get_sigil_root(prefix: str) -> Optional[SigilRoot]:
+    try:
+        return SigilRoot.objects.get(prefix__iexact=prefix)
+    except SigilRoot.DoesNotExist:
+        logger.warning("Unknown sigil root [%s]", prefix)
+        return None
+    except Exception:
+        logger.exception("Error resolving sigil root [%s]", prefix)
+        return None
+
+
+@lru_cache(maxsize=256)
+def _model_field_map(model: type[models.Model]) -> dict[str, models.Field]:
+    return {field.name.lower(): field for field in model._meta.fields}
 
 
 def _candidate_names(name: str) -> list[str]:
@@ -238,17 +257,8 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
         dynamic_model = current.__class__
         root = None
     else:
-        try:
-            root = SigilRoot.objects.get(prefix__iexact=lookup_root)
-        except SigilRoot.DoesNotExist:
-            logger.warning("Unknown sigil root [%s]", lookup_root)
-            return _failed_resolution(original_token)
-        except Exception:
-            logger.exception(
-                "Error resolving sigil [%s.%s]",
-                lookup_root,
-                key_upper or normalized_key or raw_key,
-            )
+        root = _get_sigil_root(lookup_root)
+        if root is None:
             return _failed_resolution(original_token)
 
     try:
@@ -265,14 +275,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                         custom_value = None
                     if handled:
                         return _stringify_value(custom_value)
-                field = next(
-                    (
-                        f
-                        for f in model._meta.fields
-                        if f.name.lower() == (key_lower or "")
-                    ),
-                    None,
-                )
+                field = _model_field_map(model).get(key_lower or "")
                 if field:
                     val = getattr(instance, field.attname)
                     if isinstance(field, models.ForeignKey):
@@ -415,14 +418,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                             custom_value = None
                         if handled:
                             return _stringify_value(custom_value)
-                    field = next(
-                        (
-                            f
-                            for f in model._meta.fields
-                            if f.name.lower() == (key_lower or "")
-                        ),
-                        None,
-                    )
+                    field = _model_field_map(model).get(key_lower or "")
                     if field:
                         val = getattr(instance, field.attname)
                         if isinstance(field, models.ForeignKey):
@@ -444,18 +440,28 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     target_name = _normalize_name(aggregate_target or "")
                     if aggregate_func == "count" and not target_name:
                         return str(qs.count())
+                    if target_name:
+                        field = _model_field_map(model).get(target_name.lower())
+                    else:
+                        field = None
+                    if field and aggregate_func in {"total", "min", "max", "count"}:
+                        aggregation = None
+                        if aggregate_func == "total":
+                            aggregation = Sum(field.attname)
+                        elif aggregate_func == "min":
+                            aggregation = Min(field.attname)
+                        elif aggregate_func == "max":
+                            aggregation = Max(field.attname)
+                        elif aggregate_func == "count":
+                            aggregation = Count(field.attname)
+                        if aggregation is not None:
+                            result = qs.aggregate(value=aggregation).get("value")
+                            return "" if result is None else str(result)
                     values: list[float] = []
                     for obj in qs:
                         source = None
                         if target_name:
-                            field = next(
-                                (
-                                    f
-                                    for f in model._meta.fields
-                                    if f.name.lower() == target_name.lower()
-                                ),
-                                None,
-                            )
+                            field = _model_field_map(model).get(target_name.lower())
                             if field:
                                 source = getattr(obj, field.attname)
                             else:
