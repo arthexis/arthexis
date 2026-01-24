@@ -273,7 +273,7 @@ class MjpegStream(VideoStream):
     def _write_frame_file(self, frame_bytes: bytes, *, suffix: str) -> Path:
         storage_dir = settings.LOG_DIR / "video" / "streams"
         storage_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = timezone.now().strftime("%Y%m%d%H%M%S%f")
+        timestamp = timezone.localtime().strftime("%Y%m%d%H%M%S%f")
         slug = self.slug or f"stream-{self.pk or 'unknown'}"
         filename = f"{slug}-{timestamp}-{suffix}.jpg"
         file_path = storage_dir / filename
@@ -322,7 +322,7 @@ class MjpegStream(VideoStream):
     def store_frame_bytes(self, frame_bytes: bytes, *, update_thumbnail: bool = True) -> None:
         if not frame_bytes:
             return
-        now = timezone.now()
+        now = timezone.localtime()
         frame_sample = self._save_frame_sample(
             frame_bytes, suffix="frame", method="MJPEG_STREAM"
         )

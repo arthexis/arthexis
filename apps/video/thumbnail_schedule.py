@@ -19,6 +19,7 @@ def ensure_mjpeg_thumbnail_task(sender=None, **kwargs) -> None:
 
     try:  # pragma: no cover - optional dependency
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
+        from django.db.models import Min
         from django.db.utils import OperationalError, ProgrammingError
     except Exception:
         return
@@ -33,8 +34,16 @@ def ensure_mjpeg_thumbnail_task(sender=None, **kwargs) -> None:
         return
 
     try:
+        from .models import MjpegStream
+
+        min_frequency = (
+            MjpegStream.objects.filter(thumbnail_frequency__gt=0)
+            .aggregate(Min("thumbnail_frequency"))
+            .get("thumbnail_frequency__min")
+            or 60
+        )
         schedule, _ = IntervalSchedule.objects.get_or_create(
-            every=60,
+            every=max(1, int(min_frequency)),
             period=IntervalSchedule.SECONDS,
         )
         task_name = normalize_periodic_task_name(

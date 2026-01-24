@@ -616,26 +616,25 @@ class MjpegStreamAdmin(EntityModelAdmin):
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
+
+        def _get_sample_url(sample_id):
+            if not sample_id:
+                return None
+            try:
+                return reverse("admin:content_contentsample_change", args=[sample_id])
+            except NoReverseMatch:  # pragma: no cover - admin URL always registered
+                return None
+
         stream = self.get_object(request, object_id)
         if stream:
             preview = stream.get_thumbnail_data_uri() or stream.get_last_frame_data_uri()
             extra_context["last_frame_preview"] = preview
-            if stream.last_frame_sample_id:
-                try:
-                    extra_context["last_frame_sample_url"] = reverse(
-                        "admin:content_contentsample_change",
-                        args=[stream.last_frame_sample_id],
-                    )
-                except NoReverseMatch:  # pragma: no cover - admin URL always registered
-                    extra_context["last_frame_sample_url"] = None
-            if stream.last_thumbnail_sample_id:
-                try:
-                    extra_context["last_thumbnail_sample_url"] = reverse(
-                        "admin:content_contentsample_change",
-                        args=[stream.last_thumbnail_sample_id],
-                    )
-                except NoReverseMatch:  # pragma: no cover - admin URL always registered
-                    extra_context["last_thumbnail_sample_url"] = None
+            extra_context["last_frame_sample_url"] = _get_sample_url(
+                stream.last_frame_sample_id
+            )
+            extra_context["last_thumbnail_sample_url"] = _get_sample_url(
+                stream.last_thumbnail_sample_id
+            )
         return super().change_view(
             request, object_id, form_url=form_url, extra_context=extra_context
         )
