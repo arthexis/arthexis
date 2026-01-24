@@ -27,6 +27,7 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_INTERVAL_MINUTES,
     AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
     auto_upgrade_fast_lane_enabled,
+    shorten_auto_upgrade_failure,
     DEFAULT_AUTO_UPGRADE_MODE,
     append_auto_upgrade_log,
     auto_upgrade_base_dir,
@@ -1479,10 +1480,7 @@ def _reset_auto_upgrade_failure_count(base_dir: Path) -> None:
 
 
 def _normalize_failure_reason(reason: str) -> str:
-    tokens = re.findall(r"[A-Z0-9]+", reason.upper())
-    if not tokens:
-        return "AUTO-UPGRADE-FAIL"
-    return "-".join(tokens[:5])
+    return shorten_auto_upgrade_failure(reason)
 
 
 def _short_revision(revision: str | None) -> str:

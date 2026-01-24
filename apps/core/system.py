@@ -37,6 +37,7 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
     AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
+    auto_upgrade_failure_guide,
     auto_upgrade_fast_lane_enabled,
     auto_upgrade_fast_lane_lock_file,
     auto_upgrade_base_dir,
@@ -1544,6 +1545,7 @@ def _build_auto_upgrade_report(
         "log_error": str(log_info.get("error", "")),
         "summary": summary,
         "recent_activity_hours": AUTO_UPGRADE_RECENT_ACTIVITY_HOURS,
+        "failure_guide": auto_upgrade_failure_guide(),
     }
 
 
