@@ -15,7 +15,7 @@ import pytest
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 if "ARTHEXIS_SQLITE_TEST_PATH" not in os.environ:
-    test_db_root = Path(tempfile.gettempdir()) / "arthexis-test-db"
+    test_db_root = Path(tempfile.mkdtemp(prefix="arthexis-test-db-"))
     os.environ["ARTHEXIS_SQLITE_TEST_PATH"] = str(
         test_db_root / "test_db.sqlite3"
     )
@@ -35,10 +35,6 @@ def _ensure_clean_test_databases() -> None:
     for path in candidates:
         if path.exists():
             path.unlink()
-
-    (base_dir / "work" / "test_db").mkdir(parents=True, exist_ok=True)
-    if sqlite_test_path:
-        Path(sqlite_test_path).parent.mkdir(parents=True, exist_ok=True)
 
 
 _ensure_clean_test_databases()
