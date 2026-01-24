@@ -566,7 +566,8 @@ def _parse_log_timestamp(value: str) -> datetime | None:
     if timezone.is_naive(parsed):
         try:
             parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to make timestamp aware in _parse_log_timestamp: %s", exc)
             return None
     return parsed
 
@@ -576,12 +577,15 @@ def _filter_recent_log_entries(
 ) -> list[dict[str, object]]:
     """Return log entries that fall within the recent activity window."""
 
-    recent_entries: list[dict[str, object]] = []
-    for entry in entries:
-        timestamp = entry.get("timestamp_raw")
-        if isinstance(timestamp, datetime) and timestamp >= cutoff:
-            recent_entries.append(entry)
-    return recent_entries
+    return [
+        entry
+        for entry in entries
+        if (
+            (timestamp := entry.get("timestamp_raw"))
+            and isinstance(timestamp, datetime)
+            and timestamp >= cutoff
+        )
+    ]
 
 
 def _load_auto_upgrade_log_entries(
@@ -1459,7 +1463,7 @@ def _build_auto_upgrade_report(
     settings_info.update(revision_details)
 
     log_entries = log_info.get("entries", [])
-    recent_cutoff = timezone.now() - timedelta(hours=AUTO_UPGRADE_RECENT_ACTIVITY_HOURS)
+    recent_cutoff = timezone.localtime() - timedelta(hours=AUTO_UPGRADE_RECENT_ACTIVITY_HOURS)
     recent_log_entries = _filter_recent_log_entries(log_entries, cutoff=recent_cutoff)
     last_log_entry = recent_log_entries[0] if recent_log_entries else {}
 
@@ -1539,6 +1543,7 @@ def _build_auto_upgrade_report(
         "log_entries": recent_log_entries,
         "log_error": str(log_info.get("error", "")),
         "summary": summary,
+        "recent_activity_hours": AUTO_UPGRADE_RECENT_ACTIVITY_HOURS,
     }
 
 

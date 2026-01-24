@@ -511,7 +511,7 @@
     </div>
     <div class="upgrade-report-section">
       <h3>{% trans "Recent activity" %}</h3>
-      <p class="help">{% trans "Showing the last 48 hours of activity." %}</p>
+      <p class="help">{% blocktrans with hours=report.recent_activity_hours %}Showing the last {{ hours }} hours of activity.{% endblocktrans %}</p>
       {% if report.log_entries %}
       <table class="table table-striped">
         <thead>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from django.utils import timezone
 
 from apps.core import system, tasks
 from apps.core.tasks import _project_base_dir
@@ -26,7 +27,8 @@ def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path
     log_dir.mkdir(parents=True)
 
     log_file = log_dir / "auto-upgrade.log"
-    log_file.write_text("2024-01-01T00:00:00+00:00 logged entry\n", encoding="utf-8")
+    log_timestamp = timezone.now().isoformat()
+    log_file.write_text(f"{log_timestamp} logged entry\n", encoding="utf-8")
 
     settings.BASE_DIR = tmp_path / "settings"
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
@@ -46,7 +48,8 @@ def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
     log_dir.mkdir(parents=True)
 
     log_file = log_dir / "auto-upgrade.log"
-    log_file.write_text("2024-01-01T00:00:00+00:00 logged entry\n", encoding="utf-8")
+    log_timestamp = timezone.now().isoformat()
+    log_file.write_text(f"{log_timestamp} logged entry\n", encoding="utf-8")
 
     settings.BASE_DIR = tmp_path / "settings"
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
@@ -69,7 +72,8 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
     log_dir.mkdir(parents=True)
 
     log_file = log_dir / "auto-upgrade.log"
-    log_file.write_text("2024-01-01T00:00:00+00:00 logged entry\n", encoding="utf-8")
+    log_timestamp = timezone.now().isoformat()
+    log_file.write_text(f"{log_timestamp} logged entry\n", encoding="utf-8")
 
     settings.BASE_DIR = tmp_path / "settings"
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
