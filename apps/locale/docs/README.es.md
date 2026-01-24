@@ -98,7 +98,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **Windows**: abre PowerShell o Git Bash y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en `http://localhost:8000/` de forma predeterminada.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en `localhost:8888/` de forma predeterminada.
 
 - **VS Code**
    - Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
@@ -124,8 +124,8 @@ El script de configuración de roles ahora se encuentra en la raíz como [`./con
    - No es necesario instalar para iniciar en modo Terminal (el predeterminado).
 
 ### 4. Administración
-- Accede al Django admin en `http://localhost:8000/admin/` para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
-- Consulta la documentación de administración en `http://localhost:8000/admindocs/` para leer la API generada automáticamente a partir de tus modelos.
+- Accede al Django admin en `localhost:8888/admin/` para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
+- Consulta la documentación de administración en `localhost:8888/admindocs/` para leer la API generada automáticamente a partir de tus modelos.
 - Canales de actualización: las instalaciones nuevas usan `--fixed` por defecto para mantener desactivada la actualización automática. Activa las actualizaciones en el canal estable con `--stable` (revisiones semanales los jueves por la mañana, antes de las 5:00, alineadas con las versiones), sigue la rama principal rápidamente con `--unstable` (revisiones cada 15 minutos) o usa el canal latest con `--latest` (revisiones diarias a la misma hora).
 - Sigue la [Guía de instalación y administración](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
 - Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).

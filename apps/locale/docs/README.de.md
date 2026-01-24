@@ -98,7 +98,7 @@ Die Arthexis-Konstellation wird in vier Node-Rollen ausgeliefert, die auf unters
 - **Windows**: Öffne PowerShell oder Git Bash und führe denselben Befehl aus.
 
 ### 2. Starten und Stoppen
-Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Watchtower müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf `http://localhost:8000/`.
+Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Watchtower müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf `localhost:8888/`.
 
 - **VS Code**
    - Ordner öffnen und zum Bereich **Run and Debug** (`Ctrl+Shift+D`) wechseln.
@@ -124,8 +124,8 @@ Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure
    - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
-- Greife über `http://localhost:8000/admin/` auf den Django-Admin zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
-- Durchstöbere die admindocs unter `http://localhost:8000/admindocs/`, um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
+- Greife über `localhost:8888/admin/` auf den Django-Admin zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
+- Durchstöbere die admindocs unter `localhost:8888/admindocs/`, um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
 - Upgrade-Kanäle: Neue Installationen setzen standardmäßig `--fixed` und lassen Auto-Upgrade deaktiviert. Aktiviere automatische Updates auf dem stabilen Kanal mit `--stable` (wöchentliche Prüfungen am Donnerstagmorgen vor 5:00 gemäß den Releases), verfolge Hauptzweig-Revisionen schnell mit `--unstable` (Prüfungen alle 15 Minuten) oder nutze den Latest-Kanal mit `--latest` (tägliche Prüfungen zur gleichen Uhrzeit).
 - Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.

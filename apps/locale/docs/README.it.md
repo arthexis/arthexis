@@ -98,7 +98,7 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
 - **Windows**: apri PowerShell o Git Bash ed esegui lo stesso comando.
 
 ### 2. Avvio e arresto
-I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su `http://localhost:8000/` per impostazione predefinita.
+I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su `localhost:8888/` per impostazione predefinita.
 
 - **VS Code**
    - Apri la cartella e vai al pannello **Run and Debug** (`Ctrl+Shift+D`).
@@ -124,8 +124,8 @@ Lo script di configurazione dei ruoli si trova ora nella directory principale co
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
-- Accedi al Django admin su `http://localhost:8000/admin/` per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
-- Consulta gli admindocs su `http://localhost:8000/admindocs/` per leggere la documentazione API generata automaticamente dai tuoi modelli.
+- Accedi al Django admin su `localhost:8888/admin/` per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
+- Consulta gli admindocs su `localhost:8888/admindocs/` per leggere la documentazione API generata automaticamente dai tuoi modelli.
 - Canali di aggiornamento: le nuove installazioni usano `--fixed` per impostazione predefinita e lasciano l'aggiornamento automatico disattivato. Attiva gli aggiornamenti automatici sul canale stabile con `--stable` (controlli settimanali il giovedì mattina, prima delle 5:00, allineati alle release), segui rapidamente le revisioni del branch principale con `--unstable` (controlli ogni 15 minuti) oppure usa il canale latest con `--latest` (controlli giornalieri alla stessa ora).
 - Segui la [Guida all'installazione e all'amministrazione](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
