@@ -167,7 +167,8 @@ def render_readme_page(
         role = node.role if node else None
     document = _locate_readme_document(role, normalized_doc, lang)
     cache_key = _build_render_cache_key(document.file, lang)
-    if getattr(request, "user", None) and request.user.is_authenticated:
+    is_authenticated = getattr(request, "user", None) and request.user.is_authenticated
+    if is_authenticated:
         html, toc_html = rendering.render_document_file(document.file)
     else:
         html, toc_html = _render_document_cached(document.file, cache_key)
@@ -201,10 +202,7 @@ def render_readme_page(
         "force_footer": force_footer,
     }
     response = render(request, "docs/readme.html", context)
-    if getattr(request, "user", None) and request.user.is_authenticated:
-        patch_vary_headers(response, ["Accept-Language", "Cookie"])
-    else:
-        patch_vary_headers(response, ["Accept-Language"])
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
 
 

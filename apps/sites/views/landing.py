@@ -75,8 +75,6 @@ def index(request):
     response = docs_views.render_readme_page(request, force_footer=True, role=role)
     if not request.user.is_authenticated:
         patch_cache_control(response, public=True, max_age=300, s_maxage=300)
-    else:
-        patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
 
 
