@@ -58,6 +58,7 @@ from apps.core import changelog
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_LIMIT = 30
+AUTO_UPGRADE_RECENT_ACTIVITY_HOURS = 48
 UPGRADE_REVISION_SESSION_KEY = "system_upgrade_revision_info"
 
 STARTUP_REPORT_LOG_NAME = "startup-report.log"
@@ -558,9 +559,29 @@ def _parse_log_timestamp(value: str) -> datetime | None:
         candidate = f"{candidate[:-1]}+00:00"
 
     try:
-        return datetime.fromisoformat(candidate)
+        parsed = datetime.fromisoformat(candidate)
     except ValueError:
         return None
+
+    if timezone.is_naive(parsed):
+        try:
+            parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+        except Exception:
+            return None
+    return parsed
+
+
+def _filter_recent_log_entries(
+    entries: list[dict[str, object]], *, cutoff: datetime
+) -> list[dict[str, object]]:
+    """Return log entries that fall within the recent activity window."""
+
+    recent_entries: list[dict[str, object]] = []
+    for entry in entries:
+        timestamp = entry.get("timestamp_raw")
+        if isinstance(timestamp, datetime) and timestamp >= cutoff:
+            recent_entries.append(entry)
+    return recent_entries
 
 
 def _load_auto_upgrade_log_entries(
@@ -921,7 +942,16 @@ def _suite_uptime_details() -> dict[str, object]:
         }
 
     if lock_info.get("exists"):
-        return {"available": False}
+        if boot_time:
+            uptime_label = timesince(boot_time, now)
+            return {
+                "uptime": uptime_label,
+                "boot_time": boot_time,
+                "boot_time_label": _format_datetime(boot_time),
+                "lock_started_at": lock_start,
+                "available": True,
+            }
+        return {"available": False, "boot_time": boot_time}
 
     if boot_time:
         uptime_label = timesince(boot_time, now)
@@ -1429,7 +1459,9 @@ def _build_auto_upgrade_report(
     settings_info.update(revision_details)
 
     log_entries = log_info.get("entries", [])
-    last_log_entry = log_entries[0] if log_entries else {}
+    recent_cutoff = timezone.now() - timedelta(hours=AUTO_UPGRADE_RECENT_ACTIVITY_HOURS)
+    recent_log_entries = _filter_recent_log_entries(log_entries, cutoff=recent_cutoff)
+    last_log_entry = recent_log_entries[0] if recent_log_entries else {}
 
     issues: list[dict[str, str]] = []
     status_state = "ok"
@@ -1504,7 +1536,7 @@ def _build_auto_upgrade_report(
     return {
         "settings": settings_info,
         "schedule": schedule_info,
-        "log_entries": log_entries,
+        "log_entries": recent_log_entries,
         "log_error": str(log_info.get("error", "")),
         "summary": summary,
     }
