@@ -4,7 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from django.conf import settings
-from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.core.cache import cache
+from django.utils.cache import patch_vary_headers
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
@@ -133,8 +134,30 @@ def _normalize_docs_path(doc: str | None, prepend_docs: bool) -> str | None:
     return f"docs/{doc}"
 
 
+def _render_document_cached(file_path: Path, cache_key: str) -> tuple[str, str]:
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+    html, toc_html = rendering.render_document_file(file_path)
+    cache.set(cache_key, (html, toc_html), timeout=300)
+    return html, toc_html
+
+
+def _build_render_cache_key(file_path: Path, lang: str) -> str:
+    try:
+        mtime = int(file_path.stat().st_mtime)
+    except OSError:
+        mtime = 0
+    return f"docs:render:{file_path}:{mtime}:{lang}"
+
+
 def render_readme_page(
-    request, *, doc: str | None = None, force_footer: bool = False, prepend_docs: bool = False, role=None
+    request,
+    *,
+    doc: str | None = None,
+    force_footer: bool = False,
+    prepend_docs: bool = False,
+    role=None,
 ):
     lang = getattr(request, "LANGUAGE_CODE", "")
     lang = lang.replace("_", "-").lower()
@@ -143,7 +166,11 @@ def render_readme_page(
         node = Node.get_local()
         role = node.role if node else None
     document = _locate_readme_document(role, normalized_doc, lang)
-    html, toc_html = rendering.render_document_file(document.file)
+    cache_key = _build_render_cache_key(document.file, lang)
+    if getattr(request, "user", None) and request.user.is_authenticated:
+        html, toc_html = rendering.render_document_file(document.file)
+    else:
+        html, toc_html = _render_document_cached(document.file, cache_key)
     full_document = request.GET.get("full") == "1"
     initial_content, remaining_content = rendering.split_html_sections(html, 2)
     if full_document:
@@ -174,7 +201,10 @@ def render_readme_page(
         "force_footer": force_footer,
     }
     response = render(request, "docs/readme.html", context)
-    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    if getattr(request, "user", None) and request.user.is_authenticated:
+        patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    else:
+        patch_vary_headers(response, ["Accept-Language"])
     return response
 
 
