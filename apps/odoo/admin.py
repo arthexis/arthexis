@@ -8,7 +8,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.locals.user_data import EntityModelAdmin
 
-from .models import OdooDeployment
+from .models import OdooDeployment, OdooQuery, OdooQueryVariable
 from .services import sync_odoo_deployments
 
 
@@ -125,3 +125,71 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
             "admin/odoo/odoodeployment/discover.html",
             context,
         )
+
+
+class OdooQueryVariableInline(admin.TabularInline):
+    model = OdooQueryVariable
+    extra = 0
+    fields = (
+        "sort_order",
+        "key",
+        "label",
+        "input_type",
+        "default_value",
+        "is_required",
+        "help_text",
+    )
+
+
+@admin.register(OdooQuery)
+class OdooQueryAdmin(EntityModelAdmin):
+    list_display = (
+        "name",
+        "model_name",
+        "method",
+        "profile",
+        "enable_public_view",
+        "public_view_slug",
+    )
+    search_fields = ("name", "model_name", "method")
+    list_filter = ("enable_public_view", "method")
+    readonly_fields = ("public_view_slug", "created_at", "updated_at")
+    inlines = [OdooQueryVariableInline]
+
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "description",
+                    "profile",
+                )
+            },
+        ),
+        (
+            _("Query"),
+            {
+                "fields": (
+                    "model_name",
+                    "method",
+                    "kwquery",
+                )
+            },
+        ),
+        (
+            _("Public View"),
+            {
+                "fields": (
+                    "enable_public_view",
+                    "public_view_slug",
+                    "public_title",
+                    "public_description",
+                )
+            },
+        ),
+        (
+            _("Metadata"),
+            {"fields": ("created_at", "updated_at")},
+        ),
+    )

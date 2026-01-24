@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ query.public_title|default:query.name }}</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+        body {
+            font-family: "Inter", "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 2.5rem;
+            background: #0f1115;
+            color: #f1f3f5;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+        h1 {
+            margin-bottom: 0.25rem;
+        }
+        .subtitle {
+            color: #b9bec7;
+            margin-top: 0;
+            margin-bottom: 2rem;
+        }
+        form {
+            background: #151922;
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid #242a35;
+        }
+        .field {
+            margin-bottom: 1rem;
+        }
+        label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.35rem;
+        }
+        input {
+            width: 100%;
+            padding: 0.65rem 0.75rem;
+            border-radius: 10px;
+            border: 1px solid #2e3441;
+            background: #0f1115;
+            color: #f1f3f5;
+        }
+        .help {
+            font-size: 0.9rem;
+            color: #a4adbb;
+        }
+        .error {
+            color: #ff7b7b;
+            font-size: 0.9rem;
+        }
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+        button {
+            background: #4c7dff;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 0.6rem 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #3a68db;
+        }
+        .results {
+            margin-top: 2rem;
+            background: #12151c;
+            border-radius: 16px;
+            border: 1px solid #232a37;
+            padding: 1.25rem;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+        .empty {
+            color: #8892a3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ query.public_title|default:query.name }}</h1>
+        {% if query.public_description %}
+            <p class="subtitle">{{ query.public_description }}</p>
+        {% elif query.description %}
+            <p class="subtitle">{{ query.description }}</p>
+        {% endif %}
+
+        <form method="get">
+            {% for variable in variables %}
+                <div class="field">
+                    <label for="var-{{ variable.key }}">{{ variable.label }}</label>
+                    <input
+                        id="var-{{ variable.key }}"
+                        type="{{ variable.input_type }}"
+                        name="{{ variable.key }}"
+                        value="{{ variable.value }}"
+                        {% if variable.is_required %}required{% endif %}
+                    />
+                    {% if variable.help_text %}
+                        <div class="help">{{ variable.help_text }}</div>
+                    {% endif %}
+                    {% if errors[variable.key] %}
+                        <div class="error">{{ errors[variable.key] }}</div>
+                    {% endif %}
+                </div>
+            {% empty %}
+                <p class="empty">No variables are defined for this query.</p>
+            {% endfor %}
+            <div class="actions">
+                <button type="submit">Run Query</button>
+            </div>
+        </form>
+
+        <div class="results">
+            <h2>Results</h2>
+            {% if error_message %}
+                <p class="error">{{ error_message }}</p>
+            {% elif ran_query %}
+                {% if results_json %}
+                    <pre>{{ results_json }}</pre>
+                {% else %}
+                    <p class="empty">No results returned.</p>
+                {% endif %}
+            {% else %}
+                <p class="empty">Run the query to see results.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
