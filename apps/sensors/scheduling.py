@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+
+from django.db.utils import OperationalError, ProgrammingError
+
 from apps.celery.utils import (
     is_celery_enabled,
     normalize_periodic_task_name,
@@ -17,11 +21,9 @@ def ensure_thermometer_sampling_task(sender=None, **kwargs) -> None:
 
     del sender, kwargs
 
-    try:  # pragma: no cover - optional dependency
-        from django_celery_beat.models import IntervalSchedule, PeriodicTask
-        from django.db.utils import OperationalError, ProgrammingError
-    except Exception:
+    if importlib.util.find_spec("django_celery_beat") is None:
         return
+    from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
     task_names = periodic_task_name_variants(THERMOMETER_SAMPLING_TASK_NAME)
 
@@ -35,7 +37,7 @@ def ensure_thermometer_sampling_task(sender=None, **kwargs) -> None:
     try:
         schedule, _ = IntervalSchedule.objects.get_or_create(
             every=1,
-            period=IntervalSchedule.MINUTES,
+            period=IntervalSchedule.SECONDS,
         )
         task_name = normalize_periodic_task_name(
             PeriodicTask.objects, THERMOMETER_SAMPLING_TASK_NAME
