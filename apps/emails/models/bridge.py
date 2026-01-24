@@ -26,8 +26,8 @@ class EmailBridge(Entity):
     )
 
     class Meta:
-        verbose_name = _("Email bridge")
-        verbose_name_plural = _("Email bridges")
+        verbose_name = _("Email Bridge")
+        verbose_name_plural = _("Email Bridges")
         db_table = "emails_emailbridge"
         ordering = ["name", "pk"]
 
