@@ -1655,9 +1655,12 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
     )
     github_url = ""
     for target in targets[1:]:
-        if target.repository_url and "github.com" in target.repository_url:
-            github_url = release.github_package_url() or ""
-            break
+        if target.repository_url:
+            parsed = urlparse(target.repository_url)
+            host = parsed.hostname or ""
+            if host == "github.com" or host.endswith(".github.com"):
+                github_url = release.github_package_url() or ""
+                break
     if github_url:
         release.github_url = github_url
     else:
