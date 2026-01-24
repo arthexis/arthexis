@@ -134,15 +134,7 @@ AUTO_UPGRADE_FAILURE_GUIDE = (
 def auto_upgrade_failure_guide() -> list[dict[str, str]]:
     """Return the failure guide entries used by the upgrade report view."""
 
-    return [
-        {
-            "code": entry["code"],
-            "label": entry["label"],
-            "details": entry["details"],
-            "action": entry["action"],
-        }
-        for entry in AUTO_UPGRADE_FAILURE_GUIDE
-    ]
+    return list(AUTO_UPGRADE_FAILURE_GUIDE)
 
 
 def shorten_auto_upgrade_failure(reason: str) -> str:
@@ -190,7 +182,7 @@ def shorten_auto_upgrade_failure(reason: str) -> str:
         return "TIMEOUT"
 
     short_code = "-".join(tokens[:3])
-    return short_code[:16] if short_code else "AUTO-FAIL"
+    return short_code[:16]
 
 
 def auto_upgrade_log_file(base_dir: Path) -> Path:
