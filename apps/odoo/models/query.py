@@ -6,7 +6,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -60,15 +60,24 @@ class OdooQuery(Entity):
         return self.name
 
     def save(self, *args, **kwargs):
-        generate_slug = self.enable_public_view and not self.public_view_slug
-        super().save(*args, **kwargs)
-        if generate_slug and self.pk and not self.public_view_slug:
-            base = slugify(self.name or f"odoo-query-{self.pk}")
-            slug = base or f"odoo-query-{self.pk}"
-            if type(self).objects.filter(public_view_slug=slug).exclude(pk=self.pk).exists():
-                slug = slugify(f"{slug}-{self.pk}")
-            type(self).objects.filter(pk=self.pk).update(public_view_slug=slug)
+        if self.enable_public_view and not self.public_view_slug:
+            if not self.pk:
+                super().save(*args, **kwargs)
+            base_slug = slugify(self.name or f"odoo-query-{self.pk}")
+            slug = base_slug
+            counter = 1
+            while (
+                type(self)
+                .objects.filter(public_view_slug=slug)
+                .exclude(pk=self.pk)
+                .exists()
+            ):
+                slug = f"{base_slug}-{counter}"
+                counter += 1
             self.public_view_slug = slug
+        if not self.enable_public_view:
+            self.public_view_slug = None
+        super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()
@@ -91,7 +100,7 @@ class OdooQuery(Entity):
             return ""
         try:
             return reverse("odoo-query-public-view", args=[self.public_view_slug])
-        except Exception:  # pragma: no cover - best effort
+        except NoReverseMatch:  # pragma: no cover - best effort
             return ""
 
     def variable_defaults(self) -> dict[str, str]:
@@ -129,17 +138,24 @@ class OdooQuery(Entity):
         if isinstance(value, list):
             return [cls._resolve_structure(child, resolved_values) for child in value]
         if isinstance(value, str):
-            localized = cls._resolve_local_sigils(value, resolved_values)
-            return resolve_sigils(localized)
+            return cls._resolve_string(value, resolved_values)
         return value
 
     @staticmethod
-    def _resolve_local_sigils(value: str, resolved_values: dict[str, str]) -> str:
+    def _resolve_string(value: str, resolved_values: dict[str, str]) -> str:
+        placeholders: dict[str, str] = {}
+
         def replace(match: re.Match[str]) -> str:
             key = match.group(1).lower()
-            return resolved_values.get(key, "")
+            token = f"__VAR_PLACEHOLDER_{len(placeholders)}__"
+            placeholders[token] = str(resolved_values.get(key, ""))
+            return token
 
-        return _LOCAL_SIGIL_PATTERN.sub(replace, value)
+        template = _LOCAL_SIGIL_PATTERN.sub(replace, value)
+        resolved = resolve_sigils(template)
+        for token, replacement in placeholders.items():
+            resolved = resolved.replace(token, replacement)
+        return resolved
 
     @classmethod
     def _find_unresolved_sigils(cls, resolved_query: dict[str, Any]) -> set[str]:
@@ -210,10 +226,6 @@ class OdooQueryVariable(Entity):
 
     def clean(self):
         super().clean()
-        if self.is_required and not (self.default_value or "").strip():
-            raise ValidationError(
-                {"default_value": _("Provide a default value for required variables.")}
-            )
 
     def to_context(self, value: str | None) -> dict[str, str]:
         return {
