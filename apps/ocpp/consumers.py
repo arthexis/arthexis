@@ -2921,6 +2921,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
     async def _handle_notify_event_action(self, payload, msg_id, raw, text_data):
         payload_data = payload if isinstance(payload, dict) else {}
         event_entries = payload_data.get("eventData")
@@ -4096,6 +4097,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
     async def _handle_transaction_event_action(
         self, payload, msg_id, raw, text_data
     ):
