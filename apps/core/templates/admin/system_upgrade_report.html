@@ -428,6 +428,31 @@
       {% endif %}
     </div>
     <div class="upgrade-report-section">
+      <h3>{% trans "Auto-upgrade return codes" %}</h3>
+      <p class="help">{% trans "LCD status codes are shortened to fit a 16-character display." %}</p>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "LCD code" %}</th>
+            <th scope="col">{% trans "Meaning" %}</th>
+            <th scope="col">{% trans "Suggested action" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in report.failure_guide %}
+          <tr>
+            <td><code>{{ entry.code }}</code></td>
+            <td>
+              <strong>{{ entry.label }}</strong><br />
+              <span class="help">{{ entry.details }}</span>
+            </td>
+            <td>{{ entry.action }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="upgrade-report-section">
       <h3>{% trans "Schedule" %}</h3>
       {% if report.schedule.available %}
         {% if report.schedule.configured %}

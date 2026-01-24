@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from os import environ
 from pathlib import Path
 
@@ -59,6 +60,137 @@ AUTO_UPGRADE_CRONTAB_SCHEDULES = {
 
 
 logger = logging.getLogger(__name__)
+
+AUTO_UPGRADE_FAILURE_GUIDE = (
+    {
+        "code": "NET-FAIL",
+        "label": "Network unavailable",
+        "details": "The upgrade check could not reach upstream services.",
+        "action": "Check DNS, gateway, firewall, and proxy settings, then rerun Pre-Upgrade Checks.",
+    },
+    {
+        "code": "URL-ERR",
+        "label": "Local URL error",
+        "details": "The post-upgrade health check could not open the local service URL.",
+        "action": "Verify the suite services are running and review nginx or gunicorn logs.",
+    },
+    {
+        "code": "HTTP-###",
+        "label": "HTTP error",
+        "details": "The health check reached the suite but received a non-200 status.",
+        "action": "Inspect application logs and confirm dependencies are healthy before retrying.",
+    },
+    {
+        "code": "CI-FAIL",
+        "label": "CI failing",
+        "details": "The candidate revision reported failing CI status.",
+        "action": "Wait for CI to pass or pick a different release revision.",
+    },
+    {
+        "code": "GIT-ERR",
+        "label": "Git fetch error",
+        "details": "Fetching the upstream repository failed.",
+        "action": "Confirm git remote access, credentials, and disk space.",
+    },
+    {
+        "code": "UPG-SCRIPT",
+        "label": "Upgrade script error",
+        "details": "The upgrade script exited with an error.",
+        "action": "Review upgrade logs and re-run the script manually if needed.",
+    },
+    {
+        "code": "UPG-LAUNCH",
+        "label": "Upgrade launch failed",
+        "details": "The upgrade command could not be started or delegated.",
+        "action": "Verify script permissions and the systemd service configuration.",
+    },
+    {
+        "code": "HLTH-FAIL",
+        "label": "Health check failed",
+        "details": "Post-upgrade health checks did not succeed.",
+        "action": "Check service logs, then rerun after resolving the failure.",
+    },
+    {
+        "code": "PROC-ERR",
+        "label": "Subprocess error",
+        "details": "An unexpected subprocess failure occurred during upgrade checks.",
+        "action": "Review the auto-upgrade log for the failing command.",
+    },
+    {
+        "code": "TIMEOUT",
+        "label": "Timeout",
+        "details": "A request timed out during the upgrade workflow.",
+        "action": "Verify service responsiveness and network stability.",
+    },
+    {
+        "code": "AUTO-FAIL",
+        "label": "Unknown failure",
+        "details": "The error could not be classified into a known category.",
+        "action": "Review the auto-upgrade log for the full error output.",
+    },
+)
+
+
+def auto_upgrade_failure_guide() -> list[dict[str, str]]:
+    """Return the failure guide entries used by the upgrade report view."""
+
+    return [
+        {
+            "code": entry["code"],
+            "label": entry["label"],
+            "details": entry["details"],
+            "action": entry["action"],
+        }
+        for entry in AUTO_UPGRADE_FAILURE_GUIDE
+    ]
+
+
+def shorten_auto_upgrade_failure(reason: str) -> str:
+    """Return a shortened failure code suitable for LCD output."""
+
+    tokens = re.findall(r"[A-Z0-9]+", reason.upper())
+    if not tokens:
+        return "AUTO-FAIL"
+
+    if "HTTP" in tokens:
+        http_index = tokens.index("HTTP")
+        if http_index + 1 < len(tokens) and tokens[http_index + 1].isdigit():
+            return f"HTTP-{tokens[http_index + 1]}"[:16]
+        return "HTTP-ERR"
+
+    if "URLOPEN" in tokens or "URLERROR" in tokens or "URL" in tokens:
+        if "ERRNO" in tokens:
+            err_index = tokens.index("ERRNO")
+            if err_index + 1 < len(tokens) and tokens[err_index + 1].isdigit():
+                return f"URL-ERR{tokens[err_index + 1]}"[:16]
+        return "URL-ERR"
+
+    if "NETWORK" in tokens or "UNREACHABLE" in tokens:
+        return "NET-FAIL"
+
+    if "CI" in tokens:
+        return "CI-FAIL"
+
+    if "GIT" in tokens:
+        return "GIT-ERR"
+
+    if "UPGRADE" in tokens and "LAUNCH" in tokens:
+        return "UPG-LAUNCH"
+
+    if "UPGRADE" in tokens and "SCRIPT" in tokens:
+        return "UPG-SCRIPT"
+
+    if "HEALTH" in tokens:
+        return "HLTH-FAIL"
+
+    if "SUBPROCESS" in tokens:
+        return "PROC-ERR"
+
+    if "TIMEOUT" in tokens:
+        return "TIMEOUT"
+
+    short_code = "-".join(tokens[:3])
+    return short_code[:16] if short_code else "AUTO-FAIL"
 
 
 def auto_upgrade_log_file(base_dir: Path) -> Path:
