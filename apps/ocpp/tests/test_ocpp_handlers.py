@@ -1056,10 +1056,6 @@ async def test_notify_customer_information_persists_chunks():
 def test_notify_customer_information_routes_to_customer_care_workflow():
     charger = Charger.objects.create(charger_id="INFO-ROUTE")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = "INFO-ROUTE"
-    consumer.charger_id = charger.charger_id
-    consumer.charger = charger
-    consumer.aggregate_charger = None
 
     consumer._route_customer_care_acknowledgement(
         charger=charger,
