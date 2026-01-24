@@ -7,7 +7,14 @@ from .thermometers import read_w1_temperature
 
 @admin.register(Thermometer)
 class ThermometerAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "last_reading", "last_read_at", "is_active")
+    list_display = (
+        "name",
+        "slug",
+        "sampling_interval_seconds",
+        "last_reading",
+        "last_read_at",
+        "is_active",
+    )
     search_fields = ("name", "slug")
     list_filter = ("is_active",)
     actions = ("sample_selected_thermometers",)
