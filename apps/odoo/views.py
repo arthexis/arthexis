@@ -22,8 +22,8 @@ def query_public_view(request, slug: str):
     errors: dict[str, str] = {}
 
     for variable in variables:
-        raw_value = request.GET.get(variable.key, "")
-        value = raw_value if raw_value != "" else variable.default_value
+        raw_value = request.GET.get(variable.key)
+        value = raw_value if raw_value is not None else variable.default_value
         value = value or ""
         if variable.is_required and not value.strip():
             errors[variable.key] = _("This field is required.")
@@ -38,6 +38,13 @@ def query_public_view(request, slug: str):
         try:
             results = query.execute(values)
             ran_query = True
+        except RuntimeError as exc:
+            logger.warning(
+                "Configuration error executing Odoo query %s: %s",
+                query.pk,
+                exc,
+            )
+            error_message = str(exc)
         except Exception:
             logger.exception("Unable to execute Odoo query %s", query.pk)
             error_message = _("Unable to execute query.")
