@@ -70,7 +70,7 @@ class SigilRoot(Entity):
         if ordering:
             qs = qs.order_by(*ordering)
         else:
-            qs = qs.order_by("?")
+            qs = qs.order_by("pk")
         return qs.first()
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
