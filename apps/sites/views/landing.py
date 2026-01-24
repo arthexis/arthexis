@@ -7,9 +7,8 @@ from django.shortcuts import redirect, render
 from django.template import loader
 from django.template.response import TemplateResponse
 from django.utils import timezone
-from django.utils.cache import patch_vary_headers
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.translation import gettext as _
-from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 
@@ -56,7 +55,6 @@ def footer_fragment(request):
 
 
 @landing("Home")
-@never_cache
 def index(request):
     site = get_site(request)
     if site:
@@ -74,20 +72,30 @@ def index(request):
                 return redirect(target_path)
     node = Node.get_local()
     role = node.role if node else None
-    return docs_views.render_readme_page(request, force_footer=True, role=role)
+    response = docs_views.render_readme_page(request, force_footer=True, role=role)
+    if not request.user.is_authenticated:
+        patch_cache_control(response, public=True, max_age=300, s_maxage=300)
+    else:
+        patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
 
 
 def sitemap(request):
     site = get_site(request)
     node = Node.get_local()
     role = node.role if node else None
+    role_id = getattr(role, "id", "none")
+    base = request.build_absolute_uri("/").rstrip("/")
+    cache_key = f"sitemap:role:{role_id}:{base}"
+    cached = cache.get(cache_key)
+    if cached:
+        return HttpResponse(cached, content_type="application/xml")
     applications = (
         Module.objects.for_role(role)
         .filter(is_deleted=False)
         .prefetch_related("features")
     )
     feature_checker = FeatureChecker()
-    base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
@@ -101,7 +109,9 @@ def sitemap(request):
             seen.add(loc)
             lines.append(f"  <url><loc>{loc}</loc></url>")
     lines.append("</urlset>")
-    return HttpResponse("\n".join(lines), content_type="application/xml")
+    xml_content = "\n".join(lines)
+    cache.set(cache_key, xml_content, timeout=300)
+    return HttpResponse(xml_content, content_type="application/xml")
 
 
 @landing("Package Releases")

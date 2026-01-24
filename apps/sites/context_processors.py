@@ -2,6 +2,7 @@ from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.shortcuts import resolve_url
 from django.conf import settings
+from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node, NodeFeature
@@ -55,6 +56,18 @@ def nav_links(request):
     request.badge_node = node
     request.badge_role = role
 
+    user = getattr(request, "user", None)
+    user_is_authenticated = getattr(user, "is_authenticated", False)
+    role_id = getattr(role, "id", "none")
+    site_id = getattr(site, "id", "none")
+
+    if not user_is_authenticated:
+        template_id = getattr(getattr(site, "template", None), "id", "none")
+        cache_key = f"nav_links:anon:{role_id}:{site_id}:{template_id}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
     try:
         modules = (
             Module.objects.for_role(role)
@@ -72,8 +85,6 @@ def nav_links(request):
 
     valid_modules = []
     current_module = None
-    user = getattr(request, "user", None)
-    user_is_authenticated = getattr(user, "is_authenticated", False)
     user_is_superuser = getattr(user, "is_superuser", False)
     if user_is_authenticated:
         user_group_names = set(user.groups.values_list("name", flat=True))
@@ -261,7 +272,7 @@ def nav_links(request):
         except (OperationalError, ProgrammingError):
             site_template = None
 
-    return {
+    context = {
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
         "header_references": header_references,
@@ -270,3 +281,6 @@ def nav_links(request):
         "chat_socket_path": chat_socket_path,
         "site_template": site_template,
     }
+    if not user_is_authenticated:
+        cache.set(cache_key, context, timeout=300)
+    return context
