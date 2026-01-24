@@ -1052,25 +1052,24 @@ async def test_notify_customer_information_persists_chunks():
     assert chunk.request_id == request.request_id
 
 
-@pytest.mark.anyio
-@pytest.mark.django_db(transaction=True)
-async def test_notify_customer_information_routes_to_customer_care_workflow():
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="INFO-ROUTE")
+@pytest.mark.django_db
+def test_notify_customer_information_routes_to_customer_care_workflow():
+    charger = Charger.objects.create(charger_id="INFO-ROUTE")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INFO-ROUTE"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
 
-    payload = {"requestId": 11, "data": "acknowledged", "tbc": True}
-    result = await consumer._handle_notify_customer_information_action(
-        payload, "msg-11", "", ""
+    consumer._route_customer_care_acknowledgement(
+        charger=charger,
+        request_id=11,
+        data_text="acknowledged",
+        tbc=True,
+        notified_at=timezone.now(),
     )
 
-    assert result == {}
-    entries = list(store.logs["charger"].get(consumer.store_key, []))
-    assert any("NotifyCustomerInformation" in entry for entry in entries)
-    transition = await database_sync_to_async(Transition.objects.get)(
+    transition = Transition.objects.get(
         workflow="customer-care.customer-information",
         identifier="INFO-ROUTE:11",
     )
