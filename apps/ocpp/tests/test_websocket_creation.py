@@ -416,12 +416,35 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
 
     def test_cp_simulator_falls_back_without_subprotocol(self):
         cp_simulator = self._build_simulator()
-        original_connect = simulator_module.websockets.connect
 
-        async def connect_without_subprotocols(uri, *args, **kwargs):
+        class FakeWebSocket:
+            def __init__(self, responses):
+                self._responses = iter(responses)
+                self.subprotocol = None
+                self.close_code = None
+                self.close_reason = None
+
+            async def send(self, _msg):
+                return None
+
+            async def recv(self):
+                try:
+                    return next(self._responses)
+                except StopIteration as exc:
+                    raise AssertionError("Unexpected recv call") from exc
+
+            async def close(self):
+                self.close_code = 1000
+
+        responses = [
+            json.dumps([3, "boot", {"status": "Accepted"}]),
+            json.dumps([3, "auth", {"idTagInfo": {"status": "Accepted"}}]),
+        ]
+
+        async def connect_without_subprotocols(_uri, *args, **kwargs):
             if kwargs.get("subprotocols"):
                 raise RuntimeError("subprotocols rejected")
-            return await original_connect(uri, *args, **kwargs)
+            return FakeWebSocket(responses)
 
         with patch(
             "apps.ocpp.simulator.websockets.connect",
