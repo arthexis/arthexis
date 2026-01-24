@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def capture_mjpeg_thumbnails() -> dict[str, int]:
     """Capture thumbnails for active MJPEG streams that are due."""
 
-    now = timezone.now()
+    now = timezone.localtime()
     captured = 0
     skipped = 0
     for stream in MjpegStream.objects.filter(is_active=True):
