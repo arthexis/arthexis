@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Arthexis Constellation is a [Django](https://www.djangoproject.com/)-based [software suite](https://en.wikipedia.org/wiki/Software_suite) that centralizes tools for managing [electric vehicle charging infrastructure](https://en.wikipedia.org/wiki/Charging_station) and orchestrating [energy](https://en.wikipedia.org/wiki/Energy)-related [products](https://en.wikipedia.org/wiki/Product_(business)) and [services](https://en.wikipedia.org/wiki/Service_(economics)).
+Arthexis Constellation is a Django-based software suite that centralizes tools for managing electric vehicle charging infrastructure and orchestrating energy-related products and services.
 
 Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and future features and other updates.
 
@@ -85,8 +85,8 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 ## Quick Guide
 
 ### 1. Clone
-- **[Linux](https://en.wikipedia.org/wiki/Linux)**: open a [terminal](https://en.wikipedia.org/wiki/Command-line_interface) and run `git clone https://github.com/arthexis/arthexis.git`.
-- **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
+- **Linux**: open a terminal and run `git clone https://github.com/arthexis/arthexis.git`.
+- **Windows**: open PowerShell or Git Bash and run the same command.
 
 ### 1.1 Remotes (for preloaded environments)
 If this repository is provided without Git remotes configured, the `configure.sh`, `install.sh`, and `upgrade.sh` scripts automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
@@ -96,12 +96,12 @@ Terminal nodes can start directly with the scripts below without installing; Con
 
 For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload` or `--celery`), and execute a quick smoke test with `pytest -k smoke`. Override the role, port, reload, Celery, and test selection with the script flags when needed.
 
-- **[VS Code](https://code.visualstudio.com/)**
+- **VS Code**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
    - Select the **Run Server** (or **Debug Server**) configuration.
    - Press the green start button. Stop the server with the red square button (`Shift+F5`).
 
-- **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
+- **Shell**
    - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
    - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
@@ -125,8 +125,8 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 | Manual | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | _Run upgrades on demand without specifying a channel flag._ |
 
 ### 4. Administration
-- Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
-- Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at `localhost:8888/admindocs/` for API documentation that is generated from your models.
+- Access the Django admin at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
+- Browse the admindocs at `localhost:8888/admindocs/` for API documentation that is generated from your models.
 - Follow the [Install & Administration Guide](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
 - Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configure payment gateways with the [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
@@ -141,9 +141,9 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 
 Arthexis Constellation is still under very active development and new features are added every day.
 
-If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for [professional services](https://en.wikipedia.org/wiki/Professional_services) and [commercial support](https://en.wikipedia.org/wiki/Technical_support).
+If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.
 
 ## About Me
 
-> "What, you want to know about me too? Well, I enjoy [developing software](https://en.wikipedia.org/wiki/Software_development), [role-playing games](https://en.wikipedia.org/wiki/Role-playing_game), long walks on the [beach](https://en.wikipedia.org/wiki/Beach) and a fourth secret thing above all else."
+> "What, you want to know about me too? Well, I enjoy developing software, role-playing games, long walks on the beach and a fourth secret thing above all else."
 > --Arthexis
