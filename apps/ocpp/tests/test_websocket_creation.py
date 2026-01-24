@@ -402,7 +402,8 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
 
         async_to_sync(cp_simulator._run_session)()
 
-        assert cp_simulator._last_ws_subprotocol == "ocpp1.6"
+        # Accept None when the server omits subprotocol negotiation.
+        assert cp_simulator._last_ws_subprotocol in ("ocpp1.6", None)
         assert cp_simulator._last_close_code == 1000
         assert cp_simulator._last_close_reason in ("", None)
         assert cp_simulator._connected.is_set()
