@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import re
 
@@ -120,9 +121,48 @@ class Thermometer(PhysicalSensor):
     def format_lcd_reading(self) -> str:
         return self.format_reading()
 
+    def record_reading(
+        self,
+        reading: Decimal,
+        *,
+        read_at: datetime | None = None,
+        commit: bool = True,
+    ) -> None:
+        read_at = read_at or timezone.now()
+        self.last_reading = reading
+        self.last_read_at = read_at
+        if commit:
+            self.save(update_fields=["last_reading", "last_read_at"])
+            ThermometerReading.objects.create(
+                thermometer=self, reading=reading, read_at=read_at
+            )
+
+    def update_from_report(self, report: str, *, commit: bool = True) -> Decimal | None:
+        reading = self.extract_reading(report)
+        if reading is None:
+            return None
+        self.record_reading(reading, commit=commit)
+        return reading
+
+
+class ThermometerReading(models.Model):
+    thermometer = models.ForeignKey(
+        Thermometer, related_name="readings", on_delete=models.CASCADE
+    )
+    reading = models.DecimalField(max_digits=8, decimal_places=2)
+    read_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-read_at"]
+        indexes = [models.Index(fields=["thermometer", "read_at"])]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.thermometer} @ {self.read_at:%Y-%m-%d %H:%M:%S}"
+
 
 __all__ = [
     "PhysicalSensor",
     "Thermometer",
     "ThermometerManager",
+    "ThermometerReading",
 ]

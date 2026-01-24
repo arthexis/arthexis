@@ -43,9 +43,7 @@ def sample_thermometers() -> dict[str, int]:
             )
             continue
 
-        thermometer.last_reading = reading
-        thermometer.last_read_at = now
-        thermometer.save(update_fields=["last_reading", "last_read_at"])
+        thermometer.record_reading(reading, read_at=now)
         sampled += 1
 
     return {"sampled": sampled, "skipped": skipped, "failed": failed}
