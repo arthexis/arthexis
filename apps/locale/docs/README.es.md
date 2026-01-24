@@ -5,7 +5,7 @@
 
 ## Propósito
 
-Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/Suite_de_software) basada en [Django](https://www.djangoproject.com/) que centraliza herramientas para gestionar la [infraestructura de carga de vehículos eléctricos](https://es.wikipedia.org/wiki/Punto_de_recarga) y orquestar [productos](https://es.wikipedia.org/wiki/Producto_(econom%C3%ADa)) y [servicios](https://es.wikipedia.org/wiki/Servicio_(econom%C3%ADa)) relacionados con la [energía](https://es.wikipedia.org/wiki/Energ%C3%ADa).
+Constelación Arthexis es una suite de software basada en Django que centraliza herramientas para gestionar la infraestructura de carga de vehículos eléctricos y orquestar productos y servicios relacionados con la energía.
 
 Visita el [Informe de cambios](https://arthexis.com/changelog/) para explorar las funciones pasadas y futuras junto con otras actualizaciones.
 
@@ -55,8 +55,8 @@ Visita el [Informe de cambios](https://arthexis.com/changelog/) para explorar la
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
 - Consulta el [cookbook de integración de API con Odoo](apps/docs/cookbooks/odoo-integrations.md) para ver cómo sincronizamos credenciales de empleados mediante `res.users` y consultas al catálogo de productos mediante `product.product`.
-- Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
-- Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
+- Funciona en Windows 11 y Ubuntu 22.04 LTS.
+- Probado para la Raspberry Pi 4 Modelo B.
 
 Proyecto en desarrollo abierto y muy activo.
 
@@ -94,18 +94,18 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 ## Quick Guide
 
 ### 1. Clonar
-- **[Linux](https://es.wikipedia.org/wiki/Linux)**: abre una [terminal](https://es.wikipedia.org/wiki/Interfaz_de_l%C3%ADnea_de_comandos) y ejecuta `git clone https://github.com/arthexis/arthexis.git`.
-- **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
+- **Linux**: abre una terminal y ejecuta `git clone https://github.com/arthexis/arthexis.git`.
+- **Windows**: abre PowerShell o Git Bash y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en `http://localhost:8000/` de forma predeterminada.
 
-- **[VS Code](https://code.visualstudio.com/)**
+- **VS Code**
    - Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
    - Selecciona la configuración **Run Server** (o **Debug Server**).
    - Presiona el botón verde de inicio. Detén el servidor con el cuadrado rojo (`Shift+F5`).
 
-- **[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**
+- **Shell**
    - Linux: ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh).
    - Windows: ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
@@ -124,8 +124,8 @@ El script de configuración de roles ahora se encuentra en la raíz como [`./con
    - No es necesario instalar para iniciar en modo Terminal (el predeterminado).
 
 ### 4. Administración
-- Accede al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) en [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
-- Consulta la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) en [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para leer la API generada automáticamente a partir de tus modelos.
+- Accede al Django admin en `http://localhost:8000/admin/` para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
+- Consulta la documentación de administración en `http://localhost:8000/admindocs/` para leer la API generada automáticamente a partir de tus modelos.
 - Canales de actualización: las instalaciones nuevas usan `--fixed` por defecto para mantener desactivada la actualización automática. Activa las actualizaciones en el canal estable con `--stable` (revisiones semanales los jueves por la mañana, antes de las 5:00, alineadas con las versiones), sigue la rama principal rápidamente con `--unstable` (revisiones cada 15 minutos) o usa el canal latest con `--latest` (revisiones diarias a la misma hora).
 - Sigue la [Guía de instalación y administración](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
 - Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
@@ -140,9 +140,9 @@ El script de configuración de roles ahora se encuentra en la raíz como [`./con
 
 Constelación Arthexis sigue en desarrollo muy activo y se agregan nuevas funciones cada día.
 
-Si decides usar nuestra suite para tus proyectos de energía, puedes contactarnos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitar nuestro [sitio web](https://www.gelectriic.com/) para [servicios profesionales](https://es.wikipedia.org/wiki/Servicios_profesionales) y [soporte comercial](https://es.wikipedia.org/wiki/Soporte_t%C3%A9cnico).
+Si decides usar nuestra suite para tus proyectos de energía, puedes contactarnos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitar nuestro [sitio web](https://www.gelectriic.com/) para servicios profesionales y soporte comercial.
 
 ## Sobre mí
 
-> "¿Qué? ¿También quieres saber sobre mí? Bueno, disfruto el [desarrollo de software](https://es.wikipedia.org/wiki/Desarrollo_de_software), los [juegos de rol](https://es.wikipedia.org/wiki/Juego_de_rol), largas caminatas por la [playa](https://es.wikipedia.org/wiki/Playa) y una cuarta cosa secreta."
+> "¿Qué? ¿También quieres saber sobre mí? Bueno, disfruto el desarrollo de software, los juegos de rol, largas caminatas por la playa y una cuarta cosa secreta."
 > --Arthexis

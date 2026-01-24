@@ -5,7 +5,7 @@
 
 ## Scopo
 
-Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Suite_informatiche) basata su [Django](https://www.djangoproject.com/) che centralizza gli strumenti per gestire l'[infrastruttura di ricarica dei veicoli elettrici](https://it.wikipedia.org/wiki/Stazione_di_ricarica) e orchestrare [prodotti](https://it.wikipedia.org/wiki/Prodotto_(economia)) e [servizi](https://it.wikipedia.org/wiki/Servizio_(economia)) legati all'[energia](https://it.wikipedia.org/wiki/Energia).
+Costellazione Arthexis è una suite software basata su Django che centralizza gli strumenti per gestire l'infrastruttura di ricarica dei veicoli elettrici e orchestrare prodotti e servizi legati all'energia.
 
 Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare funzionalità passate e future insieme ad altri aggiornamenti.
 
@@ -55,8 +55,8 @@ Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare 
 
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 - Scopri il [cookbook di integrazione API con Odoo](apps/docs/cookbooks/odoo-integrations.md) per i dettagli sulle sincronizzazioni delle credenziali dei dipendenti tramite `res.users` e sulle ricerche del catalogo prodotti tramite `product.product`.
-- Funziona su [Windows 11](https://www.microsoft.com/windows/windows-11) e [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
-- Testato per il [Raspberry Pi 4 Modello B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
+- Funziona su Windows 11 e Ubuntu 22.04 LTS.
+- Testato per il Raspberry Pi 4 Modello B.
 
 Progetto in sviluppo aperto e molto attivo.
 
@@ -94,18 +94,18 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
 ## Guida rapida
 
 ### 1. Clonare
-- **[Linux](https://it.wikipedia.org/wiki/Linux)**: apri un [terminale](https://it.wikipedia.org/wiki/Interfaccia_a_riga_di_comando) ed esegui `git clone https://github.com/arthexis/arthexis.git`.
-- **[Windows](https://it.wikipedia.org/wiki/Microsoft_Windows)**: apri [PowerShell](https://learn.microsoft.com/powershell/) o [Git Bash](https://gitforwindows.org/) ed esegui lo stesso comando.
+- **Linux**: apri un terminale ed esegui `git clone https://github.com/arthexis/arthexis.git`.
+- **Windows**: apri PowerShell o Git Bash ed esegui lo stesso comando.
 
 ### 2. Avvio e arresto
-I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su [`http://localhost:8000/`](http://localhost:8000/) per impostazione predefinita.
+I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su `http://localhost:8000/` per impostazione predefinita.
 
-- **[VS Code](https://code.visualstudio.com/)**
+- **VS Code**
    - Apri la cartella e vai al pannello **Run and Debug** (`Ctrl+Shift+D`).
    - Seleziona la configurazione **Run Server** (o **Debug Server**).
    - Premi il pulsante verde di avvio. Arresta il server con il quadrato rosso (`Shift+F5`).
 
-- **[Shell](https://it.wikipedia.org/wiki/Shell_(informatica))**
+- **Shell**
    - Linux: esegui [`./start.sh`](start.sh) e arresta con [`./stop.sh`](stop.sh).
    - Windows: esegui [`start.bat`](start.bat) e interrompi con `Ctrl+C`.
 
@@ -124,8 +124,8 @@ Lo script di configurazione dei ruoli si trova ora nella directory principale co
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
-- Accedi al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) su [`http://localhost:8000/admin/`](http://localhost:8000/admin/) per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
-- Consulta gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) su [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) per leggere la documentazione API generata automaticamente dai tuoi modelli.
+- Accedi al Django admin su `http://localhost:8000/admin/` per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
+- Consulta gli admindocs su `http://localhost:8000/admindocs/` per leggere la documentazione API generata automaticamente dai tuoi modelli.
 - Canali di aggiornamento: le nuove installazioni usano `--fixed` per impostazione predefinita e lasciano l'aggiornamento automatico disattivato. Attiva gli aggiornamenti automatici sul canale stabile con `--stable` (controlli settimanali il giovedì mattina, prima delle 5:00, allineati alle release), segui rapidamente le revisioni del branch principale con `--unstable` (controlli ogni 15 minuti) oppure usa il canale latest con `--latest` (controlli giornalieri alla stessa ora).
 - Segui la [Guida all'installazione e all'amministrazione](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
@@ -140,9 +140,9 @@ Lo script di configurazione dei ruoli si trova ora nella directory principale co
 
 Costellazione Arthexis è ancora in fase di sviluppo molto attivo e ogni giorno vengono aggiunte nuove funzionalità.
 
-Se decidi di utilizzare la nostra suite per i tuoi progetti energetici, puoi contattarci all'indirizzo [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitare la nostra [pagina web](https://www.gelectriic.com/) per [servizi professionali](https://it.wikipedia.org/wiki/Servizio_professionale) e [supporto commerciale](https://it.wikipedia.org/wiki/Supporto_tecnico).
+Se decidi di utilizzare la nostra suite per i tuoi progetti energetici, puoi contattarci all'indirizzo [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitare la nostra [pagina web](https://www.gelectriic.com/) per servizi professionali e supporto commerciale.
 
 ## Chi sono
 
-> "Cosa? Vuoi sapere qualcosa anche su di me? Beh, mi piace [sviluppare software](https://it.wikipedia.org/wiki/Sviluppo_software), i [giochi di ruolo](https://it.wikipedia.org/wiki/Gioco_di_ruolo), lunghe passeggiate sulla [spiaggia](https://it.wikipedia.org/wiki/Spiaggia) e una quarta cosa segreta."
+> "Cosa? Vuoi sapere qualcosa anche su di me? Beh, mi piace sviluppare software, i giochi di ruolo, lunghe passeggiate sulla spiaggia e una quarta cosa segreta."
 > --Arthexis

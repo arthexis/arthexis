@@ -5,7 +5,7 @@
 
 ## Zweck
 
-Die Arthexis-Konstellation ist eine auf [Django](https://www.djangoproject.com/) basierende [Softwaresuite](https://de.wikipedia.org/wiki/Softwarepaket), die Werkzeuge zur Verwaltung der [Ladeinfrastruktur für Elektrofahrzeuge](https://de.wikipedia.org/wiki/Lades%C3%A4ule) sowie zur Orchestrierung von [energiebezogenen Produkten](https://de.wikipedia.org/wiki/Produkt) und [Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) zentralisiert.
+Die Arthexis-Konstellation ist eine auf Django basierende Softwaresuite, die Werkzeuge zur Verwaltung der Ladeinfrastruktur für Elektrofahrzeuge sowie zur Orchestrierung von energiebezogenen Produkten und Dienstleistungen zentralisiert.
 
 Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene und geplante Funktionen sowie weitere Updates zu entdecken.
 
@@ -55,8 +55,8 @@ Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene 
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 - Details findest du im [Odoo-API-Integrations-Cookbook](apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
-- Läuft auf [Windows 11](https://www.microsoft.com/windows/windows-11) und [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
-- Getestet für den [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
+- Läuft auf Windows 11 und Ubuntu 22.04 LTS.
+- Getestet für den Raspberry Pi 4 Model B.
 
 Projekt in offener, sehr aktiver Entwicklung.
 
@@ -94,18 +94,18 @@ Die Arthexis-Konstellation wird in vier Node-Rollen ausgeliefert, die auf unters
 ## Kurzanleitung
 
 ### 1. Klonen
-- **[Linux](https://de.wikipedia.org/wiki/Linux)**: Öffne ein [Terminal](https://de.wikipedia.org/wiki/Kommandozeile) und führe `git clone https://github.com/arthexis/arthexis.git` aus.
-- **[Windows](https://de.wikipedia.org/wiki/Microsoft_Windows)**: Öffne [PowerShell](https://learn.microsoft.com/powershell/) oder [Git Bash](https://gitforwindows.org/) und führe denselben Befehl aus.
+- **Linux**: Öffne ein Terminal und führe `git clone https://github.com/arthexis/arthexis.git` aus.
+- **Windows**: Öffne PowerShell oder Git Bash und führe denselben Befehl aus.
 
 ### 2. Starten und Stoppen
-Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Watchtower müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf [`http://localhost:8000/`](http://localhost:8000/).
+Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Watchtower müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf `http://localhost:8000/`.
 
-- **[VS Code](https://code.visualstudio.com/)**
+- **VS Code**
    - Ordner öffnen und zum Bereich **Run and Debug** (`Ctrl+Shift+D`) wechseln.
    - Die Konfiguration **Run Server** (oder **Debug Server**) auswählen.
    - Auf den grünen Startknopf klicken. Den Server mit dem roten Quadrat (`Shift+F5`) anhalten.
 
-- **[Shell](https://de.wikipedia.org/wiki/Shell_(Informatik))**
+- **Shell**
    - Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
    - Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
 
@@ -124,8 +124,8 @@ Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure
    - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
-- Greife über [`http://localhost:8000/admin/`](http://localhost:8000/admin/) auf den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
-- Durchstöbere die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) unter [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/), um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
+- Greife über `http://localhost:8000/admin/` auf den Django-Admin zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
+- Durchstöbere die admindocs unter `http://localhost:8000/admindocs/`, um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
 - Upgrade-Kanäle: Neue Installationen setzen standardmäßig `--fixed` und lassen Auto-Upgrade deaktiviert. Aktiviere automatische Updates auf dem stabilen Kanal mit `--stable` (wöchentliche Prüfungen am Donnerstagmorgen vor 5:00 gemäß den Releases), verfolge Hauptzweig-Revisionen schnell mit `--unstable` (Prüfungen alle 15 Minuten) oder nutze den Latest-Kanal mit `--latest` (tägliche Prüfungen zur gleichen Uhrzeit).
 - Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
@@ -140,9 +140,9 @@ Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure
 
 Die Arthexis-Konstellation befindet sich weiterhin in sehr aktiver Entwicklung und erhält täglich neue Funktionen.
 
-Wenn du unsere Suite für deine Energieprojekte einsetzen möchtest, erreichst du uns unter [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder über unsere [Webseite](https://www.gelectriic.com/) für [professionelle Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) und [kommerziellen Support](https://de.wikipedia.org/wiki/Technischer_Support).
+Wenn du unsere Suite für deine Energieprojekte einsetzen möchtest, erreichst du uns unter [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder über unsere [Webseite](https://www.gelectriic.com/) für professionelle Dienstleistungen und kommerziellen Support.
 
 ## Über mich
 
-> "Wie bitte, du willst auch etwas über mich wissen? Nun, ich mag es, [Software zu entwickeln](https://de.wikipedia.org/wiki/Softwareentwicklung), [Pen-&-Paper-Rollenspiele](https://de.wikipedia.org/wiki/Rollenspiel), lange Spaziergänge am [Strand](https://de.wikipedia.org/wiki/Strand) und eine vierte geheime Sache."
+> "Wie bitte, du willst auch etwas über mich wissen? Nun, ich mag es, Software zu entwickeln, Pen-&-Paper-Rollenspiele, lange Spaziergänge am Strand und eine vierte geheime Sache."
 > --Arthexis
