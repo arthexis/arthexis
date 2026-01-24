@@ -95,8 +95,8 @@ class PackageAdminActionsMixin:
     def prepare_next_release_action(self, request, obj):
         return prepare_package_release(self, request, obj)
 
-    prepare_next_release_action.label = "Prepare next Release"
-    prepare_next_release_action.short_description = "Prepare next release"
+    prepare_next_release_action.label = _("Prepare next")
+    prepare_next_release_action.short_description = _("Prepare next")
 
     @admin.action(description=_("Create GitHub repository"))
     def create_repository_bulk_action(self, request, queryset):
