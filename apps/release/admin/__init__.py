@@ -182,8 +182,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             self.message_user(request, message, messages.SUCCESS)
 
     refresh_from_pypi.requires_queryset = False
-    refresh_from_pypi.label = "Sync to PyPI"
-    refresh_from_pypi.short_description = "Sync to PyPI"
+    refresh_from_pypi.label = _("Sync to PyPI")
+    refresh_from_pypi.short_description = _("Sync to PyPI")
 
     def refresh_from_pypi_view(self, request):
         if not self.has_change_permission(request):
@@ -221,8 +221,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return redirect("admin:release_packagerelease_changelist")
         return prepare_package_release(self, request, package)
 
-    prepare_next.label = "Prepare next"
-    prepare_next.short_description = "Prepare next"
+    prepare_next.label = _("Prepare next")
+    prepare_next.short_description = _("Prepare next")
 
     def _publish_release(self, request, release):
         try:
