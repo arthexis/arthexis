@@ -701,7 +701,8 @@ async def test_cost_updated_rejects_invalid_payload():
 
 
 @pytest.mark.anyio
-async def test_transaction_event_registered_for_ocpp201():
+@pytest.mark.django_db
+async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
     consumer.charger_id = "CP-201"
@@ -720,6 +721,11 @@ async def test_transaction_event_registered_for_ocpp201():
     calls = getattr(consumer._handle_transaction_event_action, "__protocol_calls__", set())
     assert (
         "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "TransactionEvent",
+    ) in calls
+    assert (
+        "ocpp21",
         ProtocolCallModel.CP_TO_CSMS,
         "TransactionEvent",
     ) in calls
