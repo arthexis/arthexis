@@ -200,7 +200,7 @@ def submit_user_story(request):
 
     data = request.POST.copy()
     anonymous_placeholder = ""
-    if request.user.is_authenticated:
+    if request.user.is_authenticated and not data.get("name"):
         data["name"] = request.user.get_username()[:40]
     elif not data.get("name"):
         anonymous_placeholder = "anonymous@example.invalid"
@@ -219,7 +219,8 @@ def submit_user_story(request):
         if request.user.is_authenticated:
             story.user = request.user
             story.owner = request.user
-            story.name = request.user.get_username()[:40]
+            if not story.name:
+                story.name = request.user.get_username()[:40]
         if not story.name:
             story.name = str(_("Anonymous"))[:40]
         story.path = (story.path or request.get_full_path())[:500]

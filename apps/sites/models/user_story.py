@@ -4,7 +4,13 @@ import contextlib
 import logging
 
 from django.conf import settings
-from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import (
+    EmailValidator,
+    MaxLengthValidator,
+    MaxValueValidator,
+    MinValueValidator,
+)
 from django.db import models
 from django.utils.translation import gettext, gettext_lazy as _, get_language_info
 
@@ -19,6 +25,16 @@ logger = logging.getLogger(__name__)
 class UserStory(Lead):
     path = models.CharField(max_length=500)
     name = models.CharField(max_length=40, blank=True)
+    feedback_for_page = models.BooleanField(
+        default=False,
+        blank=True,
+        help_text=_("Feedback indicates this report is for the current page."),
+    )
+    contact_me = models.BooleanField(
+        default=False,
+        blank=True,
+        help_text=_("Requester asked to be contacted about this feedback."),
+    )
     rating = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)],
         help_text=_("Rate your experience from 1 (lowest) to 5 (highest)."),
@@ -67,6 +83,18 @@ class UserStory(Lead):
         display = self.name or _("Anonymous")
         return f"{display} ({self.rating}/5)"
 
+    @property
+    def name_identifier_type(self) -> str:
+        name = (self.name or "").strip()
+        if not name:
+            return "anonymous"
+        validator = EmailValidator()
+        try:
+            validator(name)
+        except ValidationError:
+            return "username"
+        return "email"
+
     def get_github_issue_labels(self) -> list[str]:
         """Return default labels used when creating GitHub issues."""
 
@@ -98,6 +126,13 @@ class UserStory(Lead):
             f"**Rating:** {self.rating}/5",
             f"**Name:** {name}",
         ]
+        name_type = self.name_identifier_type
+        if name_type != "anonymous":
+            lines.append(f"**Name type:** {name_type.capitalize()}")
+        lines.append(
+            f"**Feedback for this page:** {'Yes' if self.feedback_for_page else 'No'}"
+        )
+        lines.append(f"**Contact requested:** {'Yes' if self.contact_me else 'No'}")
 
         language_code = (self.language_code or "").strip()
         if language_code:
