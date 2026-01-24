@@ -441,6 +441,8 @@ class ChargePointSimulator:
 
         ws = None
         last_error: Exception | None = None
+        requested_subprotocols = ["ocpp1.6"]
+        connected_with_subprotocols = False
         try:
             self._unsupported_message = False
             self._unsupported_message_reason = ""
@@ -448,8 +450,9 @@ class ChargePointSimulator:
                 uri = _build_uri(ws_scheme)
                 try:
                     ws = await websockets.connect(
-                        uri, subprotocols=["ocpp1.6"], **connect_kwargs
+                        uri, subprotocols=requested_subprotocols, **connect_kwargs
                     )
+                    connected_with_subprotocols = True
                 except Exception as exc:
                     store.add_log(
                         cfg.cp_path,
@@ -458,6 +461,7 @@ class ChargePointSimulator:
                     )
                     try:
                         ws = await websockets.connect(uri, **connect_kwargs)
+                        connected_with_subprotocols = False
                     except Exception as inner_exc:
                         last_error = inner_exc
                         ws = None
@@ -487,7 +491,12 @@ class ChargePointSimulator:
                 f"Connected (subprotocol={ws.subprotocol or 'none'})",
                 log_type="simulator",
             )
-            self._last_ws_subprotocol = ws.subprotocol
+            if ws.subprotocol:
+                self._last_ws_subprotocol = ws.subprotocol
+            elif connected_with_subprotocols and requested_subprotocols:
+                self._last_ws_subprotocol = requested_subprotocols[0]
+            else:
+                self._last_ws_subprotocol = None
 
             async def send(msg: str) -> None:
                 try:
