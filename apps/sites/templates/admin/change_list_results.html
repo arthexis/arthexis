@@ -37,7 +37,7 @@
     {% if show_user_data %}
     <td class="field-user-data user-data-column">
         {% if original %}
-        <input type="hidden" name="next" value="{{ request.get_full_path|escape }}">
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <button type="submit"
                 class="favorite-star user-data-star{% if original.is_user_data %} has-user-data{% endif %}"
                 title="{% translate 'Toggle User Data' %}"
