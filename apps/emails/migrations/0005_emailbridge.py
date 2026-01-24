@@ -54,8 +54,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Email Bridge",
-                "verbose_name_plural": "Email Bridges",
+                "verbose_name": "Email bridge",
+                "verbose_name_plural": "Email bridges",
                 "db_table": "emails_emailbridge",
                 "ordering": ["name", "pk"],
             },
