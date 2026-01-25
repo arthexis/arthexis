@@ -503,7 +503,7 @@ def node_info(request):
 
     response = JsonResponse(data)
     response["Access-Control-Allow-Origin"] = "*"
-    role_name = node.role.name if node.role_id and node.role else ""
+    role_name = getattr(node.role, "name", "")
     registration_logger.info(
         "Visitor registration: node_info response hostname=%s address=%s port=%s role=%s",
         hostname or "",
