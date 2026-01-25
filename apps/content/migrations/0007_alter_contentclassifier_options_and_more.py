@@ -23,6 +23,10 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Content Classifiers",
             },
         ),
+        migrations.AlterModelBases(
+            name="contentclassifier",
+            bases=(parler.models.TranslatableModel, models.Model),
+        ),
         migrations.AlterModelOptions(
             name="contenttag",
             options={
@@ -31,6 +35,10 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Content Tags",
             },
         ),
+        migrations.AlterModelBases(
+            name="contenttag",
+            bases=(parler.models.TranslatableModel, models.Model),
+        ),
         migrations.AlterModelOptions(
             name="webrequestsampler",
             options={
@@ -38,6 +46,14 @@ class Migration(migrations.Migration):
                 "verbose_name": "Web Request Sampler",
                 "verbose_name_plural": "Web Request Samplers",
             },
+        ),
+        migrations.AlterModelBases(
+            name="webrequestsampler",
+            bases=(parler.models.TranslatableModel, models.Model),
+        ),
+        migrations.AlterModelBases(
+            name="webrequeststep",
+            bases=(parler.models.TranslatableModel, models.Model),
         ),
         migrations.RemoveField(
             model_name="contentclassifier",
