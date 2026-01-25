@@ -3,6 +3,10 @@ from django.shortcuts import get_object_or_404, render
 
 from .models import MjpegStream
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def stream_detail(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
@@ -22,9 +26,11 @@ def mjpeg_stream(request, slug):
     except StopIteration:
         return HttpResponseServerError("No frames available for this stream.")
     except RuntimeError as exc:
-        return HttpResponseServerError(str(exc))
+        logger.exception("Runtime error while starting MJPEG stream %s", slug)
+        return HttpResponseServerError("Unable to start stream.")
     except Exception as exc:
-        return HttpResponseServerError(f"Unable to start stream: {exc}")
+        logger.exception("Unexpected error while starting MJPEG stream %s", slug)
+        return HttpResponseServerError("Unable to start stream.")
 
     generator = stream.mjpeg_stream(frame_iter, first_frame=first_frame)
 
