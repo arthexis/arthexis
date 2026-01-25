@@ -6,6 +6,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from parler.models import TranslatableModel, TranslatedFields
 
 from apps.core.entity import Entity
 from apps.core.models import Ownable
@@ -69,40 +70,44 @@ class ContentSample(Entity):
         return str(self.name)
 
 
-class ContentClassifier(Entity):
+class ContentClassifier(TranslatableModel, Entity):
     """Configured callable that classifies :class:`ContentSample` objects."""
 
     slug = models.SlugField(max_length=100, unique=True)
-    label = models.CharField(max_length=150)
+    translations = TranslatedFields(
+        label=models.CharField(max_length=150),
+    )
     kind = models.CharField(max_length=10, choices=ContentSample.KIND_CHOICES)
     entrypoint = models.CharField(max_length=255, help_text="Dotted path to classifier callable")
     run_by_default = models.BooleanField(default=True)
     active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ["label"]
+        ordering = ["translations__label"]
         verbose_name = "Content Classifier"
         verbose_name_plural = "Content Classifiers"
         db_table = "nodes_contentclassifier"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.label
+        return self.safe_translation_getter("label", any_language=True) or self.slug
 
 
-class ContentTag(Entity):
+class ContentTag(TranslatableModel, Entity):
     """Tag that can be attached to classified content samples."""
 
     slug = models.SlugField(max_length=100, unique=True)
-    label = models.CharField(max_length=150)
+    translations = TranslatedFields(
+        label=models.CharField(max_length=150),
+    )
 
     class Meta:
-        ordering = ["label"]
+        ordering = ["translations__label"]
         verbose_name = "Content Tag"
         verbose_name_plural = "Content Tags"
         db_table = "nodes_contenttag"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.label
+        return self.safe_translation_getter("label", any_language=True) or self.slug
 
 
 class ContentClassification(Entity):
@@ -132,14 +137,16 @@ class ContentClassification(Entity):
         return f"{self.sample} → {self.tag}"
 
 
-class WebRequestSampler(Ownable):
+class WebRequestSampler(TranslatableModel, Ownable):
     """Sequence of cURL requests that collect web sampling data."""
 
     owner_required = False
 
     slug = models.SlugField(max_length=100, unique=True)
-    label = models.CharField(max_length=150)
-    description = models.TextField(blank=True)
+    translations = TranslatedFields(
+        label=models.CharField(max_length=150),
+        description=models.TextField(blank=True),
+    )
     sampling_period_minutes = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -148,15 +155,15 @@ class WebRequestSampler(Ownable):
     last_sampled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ["label"]
+        ordering = ["translations__label"]
         verbose_name = "Web Request Sampler"
         verbose_name_plural = "Web Request Samplers"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.label
+        return self.safe_translation_getter("label", any_language=True) or self.slug
 
 
-class WebRequestStep(Entity):
+class WebRequestStep(TranslatableModel, Entity):
     """Individual cURL call that belongs to a :class:`WebRequestSampler`."""
 
     sampler = models.ForeignKey(
@@ -164,7 +171,9 @@ class WebRequestStep(Entity):
     )
     order = models.PositiveIntegerField(default=0)
     slug = models.SlugField(max_length=100)
-    name = models.CharField(max_length=150, blank=True)
+    translations = TranslatedFields(
+        name=models.CharField(max_length=150, blank=True),
+    )
     curl_command = models.TextField(
         help_text="Full cURL command or arguments to execute when sampling."
     )
@@ -186,7 +195,8 @@ class WebRequestStep(Entity):
         verbose_name_plural = "Web Request Steps"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name or f"{self.sampler} step {self.slug}"
+        name = self.safe_translation_getter("name", any_language=True)
+        return name or f"{self.sampler} step {self.slug}"
 
 
 class WebSample(Entity):
