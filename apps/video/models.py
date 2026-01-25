@@ -47,7 +47,7 @@ class VideoDevice(Ownable):
     """Detected video capture device available to a node."""
 
     owner_required = False
-    DEFAULT_NAME = "BASE (migrate)"
+    DEFAULT_NAME = "BASE"
 
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.CASCADE, related_name="video_devices"

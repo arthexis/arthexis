@@ -6,7 +6,7 @@ from django.utils.text import slugify
 
 def populate_videodevice_names(apps, schema_editor):
     VideoDevice = apps.get_model("video", "VideoDevice")
-    default_name = "BASE (migrate)"
+    default_name = "BASE"
     devices_to_update = []
     for device in VideoDevice.objects.iterator():
         name = (device.name or "").strip() or default_name
@@ -34,7 +34,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="videodevice",
             name="name",
-            field=models.CharField(default="BASE (migrate)", max_length=255),
+            field=models.CharField(default="BASE", max_length=255),
         ),
         migrations.AddField(
             model_name="videodevice",

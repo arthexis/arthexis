@@ -52,7 +52,7 @@ def test_videodevice_default_name_when_empty(node):
     )
 
     assert device.name == VideoDevice.DEFAULT_NAME
-    assert device.slug == "base-migrate"
+    assert device.slug == "base"
 
 
 @pytest.mark.django_db
