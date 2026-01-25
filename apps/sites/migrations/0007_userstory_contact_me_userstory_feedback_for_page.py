@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("pages", "0006_sitebadge_favicon_media"),
+        ("sites", "0006_sitebadge_favicon_media"),
     ]
 
     operations = [

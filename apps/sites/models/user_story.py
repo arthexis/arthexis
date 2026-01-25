@@ -20,6 +20,7 @@ from apps.repos import github
 from apps.tasks.tasks import create_user_story_github_issue
 
 logger = logging.getLogger(__name__)
+EMAIL_VALIDATOR = EmailValidator()
 
 
 class UserStory(Lead):
@@ -88,9 +89,10 @@ class UserStory(Lead):
         name = (self.name or "").strip()
         if not name:
             return "anonymous"
-        validator = EmailValidator()
+        if name.casefold() in {"anonymous", gettext("Anonymous").strip().casefold()}:
+            return "anonymous"
         try:
-            validator(name)
+            EMAIL_VALIDATOR(name)
         except ValidationError:
             return "username"
         return "email"
