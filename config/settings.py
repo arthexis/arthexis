@@ -14,6 +14,7 @@ import contextlib
 import importlib.util
 import ipaddress
 import os
+import tempfile
 import socket
 from pathlib import Path
 from apps.loggers import build_logging_settings
@@ -702,8 +703,23 @@ else:
     else:
         SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
 
-    SQLITE_TEST_DB_PATH = BASE_DIR / "work" / "test_db" / "test_db.sqlite3"
-    SQLITE_TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    def _sqlite_test_db_path() -> Path:
+        sqlite_test_override = os.environ.get("ARTHEXIS_SQLITE_TEST_PATH")
+        if sqlite_test_override:
+            return Path(sqlite_test_override)
+
+        preferred_dir = BASE_DIR / "work" / "test_db"
+        try:
+            preferred_dir.mkdir(parents=True, exist_ok=True)
+            if os.access(preferred_dir, os.W_OK):
+                return preferred_dir / "test_db.sqlite3"
+        except OSError:
+            pass
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="arthexis_test_db_"))
+        return temp_dir / "test_db.sqlite3"
+
+    SQLITE_TEST_DB_PATH = _sqlite_test_db_path()
 
     DATABASES = {
         "default": {
