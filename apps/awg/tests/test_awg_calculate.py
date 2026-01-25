@@ -5,7 +5,8 @@ from apps.awg.models import CableSize, CalculatorTemplate
 
 
 class AwgCalculateViewTests(TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         CableSize.objects.create(
             awg_size="4",
             material="cu",
