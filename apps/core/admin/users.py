@@ -167,7 +167,6 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         return HttpResponseRedirect(redirect_url)
 
     login_as_guest_user.label = _("Login as Guest")
-    login_as_guest_user.short_description = _("Login as Guest")
     login_as_guest_user.requires_queryset = False
 
     def get_fieldsets(self, request, obj=None):
