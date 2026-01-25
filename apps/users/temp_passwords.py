@@ -16,11 +16,43 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from cryptography.fernet import Fernet, InvalidToken
+import base64
 
 
 DEFAULT_PASSWORD_LENGTH = 16
 DEFAULT_EXPIRATION = timedelta(hours=1)
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def _encryption_key() -> bytes:
+    """
+    Derive a stable Fernet key from Django's SECRET_KEY.
+
+    This avoids storing encryption keys alongside the temp password files.
+    """
+    secret = settings.SECRET_KEY.encode("utf-8")
+    digest = hashlib.sha256(secret).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+def _encrypt_payload(plaintext: str) -> str:
+    """Return an encrypted representation of the given plaintext JSON."""
+    key = _encryption_key()
+    f = Fernet(key)
+    token = f.encrypt(plaintext.encode("utf-8"))
+    return token.decode("utf-8")
+
+
+def _decrypt_payload(ciphertext: str) -> Optional[str]:
+    """Return the decrypted plaintext, or ``None`` if decryption fails."""
+    key = _encryption_key()
+    f = Fernet(key)
+    try:
+        plaintext = f.decrypt(ciphertext.encode("utf-8"))
+    except (InvalidToken, ValueError, TypeError):
+        return None
+    return plaintext.decode("utf-8")
 
 
 def _base_lock_dir() -> Path:
@@ -126,7 +158,9 @@ def store_temp_password(
         "created_at": created_at.isoformat(),
         "allow_change": allow_change,
     }
-    path.write_text(json.dumps(data, indent=2, sort_keys=True))
+    plaintext = json.dumps(data, indent=2, sort_keys=True)
+    ciphertext = _encrypt_payload(plaintext)
+    path.write_text(ciphertext)
     return TempPasswordEntry(
         username=username,
         password_hash=data["password_hash"],
@@ -144,8 +178,12 @@ def load_temp_password(username: str) -> Optional[TempPasswordEntry]:
     if not path.exists():
         return None
     try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        raw_content = path.read_text()
+        plaintext = _decrypt_payload(raw_content)
+        if plaintext is None:
+            raise ValueError("Unable to decrypt temp password entry")
+        data = json.loads(plaintext)
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         path.unlink(missing_ok=True)
         return None
 
