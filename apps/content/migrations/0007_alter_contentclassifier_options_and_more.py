@@ -91,7 +91,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "verbose_name": "Content Classifier Translation",
-                "db_table": "nodes_contentclassifier_translation",
+                "db_table": "content_contentclassifier_translation",
                 "db_tablespace": "",
                 "managed": True,
                 "default_permissions": (),
@@ -131,7 +131,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "verbose_name": "Content Tag Translation",
-                "db_table": "nodes_contenttag_translation",
+                "db_table": "content_contenttag_translation",
                 "db_tablespace": "",
                 "managed": True,
                 "default_permissions": (),
