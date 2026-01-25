@@ -7,6 +7,7 @@ from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+from parler.admin import TranslatableAdmin, TranslatableTabularInline
 
 from apps.audio.models import AudioSample
 from apps.content.models import (
@@ -33,13 +34,13 @@ from .web_sampling import execute_sampler
 
 
 @admin.register(ContentTag)
-class ContentTagAdmin(EntityModelAdmin):
+class ContentTagAdmin(TranslatableAdmin, EntityModelAdmin):
     list_display = ("label", "slug")
     search_fields = ("label", "slug")
 
 
 @admin.register(ContentClassifier)
-class ContentClassifierAdmin(EntityModelAdmin):
+class ContentClassifierAdmin(TranslatableAdmin, EntityModelAdmin):
     list_display = ("label", "slug", "kind", "run_by_default", "active")
     list_filter = ("kind", "run_by_default", "active")
     search_fields = ("label", "slug", "entrypoint")
@@ -213,7 +214,7 @@ class ContentSampleAdmin(EntityModelAdmin):
         )
 
 
-class WebRequestStepInline(admin.TabularInline):
+class WebRequestStepInline(TranslatableTabularInline):
     model = WebRequestStep
     extra = 0
     fields = (
@@ -227,7 +228,7 @@ class WebRequestStepInline(admin.TabularInline):
 
 
 @admin.register(WebRequestSampler)
-class WebRequestSamplerAdmin(OwnableAdminMixin, EntityModelAdmin):
+class WebRequestSamplerAdmin(OwnableAdminMixin, TranslatableAdmin, EntityModelAdmin):
     list_display = (
         "label",
         "slug",

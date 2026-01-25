@@ -478,6 +478,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_mermaid.apps.MermaidConfig",
+    "parler",
     "import_export",
     "django_object_actions",
     "django.contrib.sites",
@@ -746,6 +747,21 @@ LANGUAGES = [
     ("it", _("Italian")),
     ("de", _("German")),
 ]
+
+PARLER_DEFAULT_LANGUAGE_CODE = "en"
+
+PARLER_LANGUAGES = {
+    None: (
+        {"code": "en"},
+        {"code": "es"},
+        {"code": "it"},
+        {"code": "de"},
+    ),
+    "default": {
+        "fallbacks": ["en"],
+        "hide_untranslated": False,
+    },
+}
 
 LOCALE_PATHS = [BASE_DIR / "apps" / "locale" / "locale"]
 
