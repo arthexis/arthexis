@@ -17,9 +17,16 @@ def mjpeg_stream(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
 
     try:
-        generator = stream.mjpeg_stream()
+        frame_iter = stream.iter_frame_bytes()
+        first_frame = next(frame_iter)
+    except StopIteration:
+        return HttpResponseServerError("No frames available for this stream.")
     except RuntimeError as exc:
         return HttpResponseServerError(str(exc))
+    except Exception as exc:
+        return HttpResponseServerError(f"Unable to start stream: {exc}")
+
+    generator = stream.mjpeg_stream(frame_iter, first_frame=first_frame)
 
     return StreamingHttpResponse(
         generator,

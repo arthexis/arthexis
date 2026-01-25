@@ -399,12 +399,22 @@ class MjpegStream(VideoStream):
         finally:  # pragma: no cover - release resource
             capture.release()
 
-    def mjpeg_stream(self):
+    def mjpeg_stream(
+        self,
+        frame_iter=None,
+        *,
+        first_frame: bytes | None = None,
+    ):
         boundary = b"--frame\r\n"
         content_type = b"Content-Type: image/jpeg\r\n\r\n"
         last_frame: bytes | None = None
         try:
-            for frame in self.iter_frame_bytes():
+            if first_frame is not None:
+                last_frame = first_frame
+                yield boundary + content_type + first_frame + b"\r\n"
+            if frame_iter is None:
+                frame_iter = self.iter_frame_bytes()
+            for frame in frame_iter:
                 last_frame = frame
                 yield boundary + content_type + frame + b"\r\n"
         finally:
