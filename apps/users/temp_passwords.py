@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -17,7 +18,6 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from cryptography.fernet import Fernet, InvalidToken
-import base64
 
 
 DEFAULT_PASSWORD_LENGTH = 16
@@ -50,9 +50,9 @@ def _decrypt_payload(ciphertext: str) -> Optional[str]:
     f = Fernet(key)
     try:
         plaintext = f.decrypt(ciphertext.encode("utf-8"))
-    except (InvalidToken, ValueError, TypeError):
+        return plaintext.decode("utf-8")
+    except (InvalidToken, ValueError, TypeError, UnicodeDecodeError):
         return None
-    return plaintext.decode("utf-8")
 
 
 def _base_lock_dir() -> Path:
@@ -216,4 +216,3 @@ def discard_temp_password(username: str) -> None:
 
     path = _lockfile_path(username)
     path.unlink(missing_ok=True)
-
