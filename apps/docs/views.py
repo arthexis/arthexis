@@ -76,6 +76,9 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
         search_roots = [readme_base]
         if readme_base != root_base:
             search_roots.append(root_base)
+        locale_docs_base = root_base / "apps" / "locale" / "docs"
+        if locale_docs_base.exists():
+            search_roots.append(locale_docs_base)
 
         for relative in relative_candidates:
             for base in search_roots:
@@ -112,6 +115,14 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
                 if short != lang:
                     candidates.append(locale_base / f"README.{short}.md")
             candidates.append(locale_base / "README.md")
+        locale_docs_base = root_base / "apps" / "locale" / "docs"
+        if locale_docs_base.exists():
+            if lang:
+                candidates.append(locale_docs_base / f"README.{lang}.md")
+                short = lang.split("-")[0]
+                if short != lang:
+                    candidates.append(locale_docs_base / f"README.{short}.md")
+            candidates.append(locale_docs_base / "README.md")
         if root_default is not None:
             candidates.append(root_default)
 
