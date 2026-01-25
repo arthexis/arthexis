@@ -2,10 +2,12 @@
 {% load i18n %}
 
 {% block object-tools-items %}
-  <li>
-    <a href="{% url 'admin:core_user_login_as_guest_user' %}?next={{ request.get_full_path|urlencode }}">
-      {% translate "Login as Guest" %}
-    </a>
-  </li>
+  {% if perms.core.add_user %}
+    <li>
+      <a href="{% url 'admin:core_user_login_as_guest_user' %}?next={{ request.get_full_path|urlencode }}">
+        {% translate "Login as Guest" %}
+      </a>
+    </li>
+  {% endif %}
   {{ block.super }}
 {% endblock %}
