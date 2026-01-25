@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from django.utils import timezone
 
+from apps.counters.models import DashboardRule
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
@@ -106,3 +107,19 @@ def test_site_configuration_apply_bubbles_secondary_errors(monkeypatch):
 
     with pytest.raises(services.ValidationError):
         config.apply()
+
+
+@pytest.mark.django_db
+def test_site_configuration_save_invalidates_dashboard_rule_cache(monkeypatch):
+    called = []
+
+    def fake_invalidate(model):
+        called.append(model)
+
+    monkeypatch.setattr(DashboardRule, "invalidate_model_cache", fake_invalidate)
+
+    config = SiteConfiguration.objects.create(name="cache-test")
+    assert called[-1] is SiteConfiguration
+
+    config.delete()
+    assert called[-1] is SiteConfiguration
