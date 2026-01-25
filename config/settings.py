@@ -520,6 +520,7 @@ def _get_current_site_with_request_fallback(request=None):
 sites_shortcuts.get_current_site = _get_current_site_with_request_fallback
 
 MIDDLEWARE = [
+    # Must be first to run last in the response phase to strip COOP headers.
     "config.middleware.CrossOriginOpenerPolicyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
