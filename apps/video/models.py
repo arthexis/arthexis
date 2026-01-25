@@ -401,7 +401,7 @@ class MjpegStream(VideoStream):
 
     def mjpeg_stream(
         self,
-        frame_iter=None,
+        frame_iter: "Iterator[bytes] | None" = None,
         *,
         first_frame: bytes | None = None,
     ):
