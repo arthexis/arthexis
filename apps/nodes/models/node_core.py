@@ -225,6 +225,16 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     base_path = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=20, blank=True)
     installed_revision = models.CharField(max_length=40, blank=True)
+    upgrade_canaries = models.ManyToManyField(
+        "self",
+        blank=True,
+        symmetrical=False,
+        related_name="upgrade_targets",
+        help_text=(
+            "Nodes that must be running and upgraded before this node can "
+            "auto-upgrade."
+        ),
+    )
     features = models.ManyToManyField(
         "nodes.NodeFeature",
         through="nodes.NodeFeatureAssignment",

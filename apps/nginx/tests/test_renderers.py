@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from types import SimpleNamespace
-
 from apps.nginx import config_utils
 from apps.nginx.renderers import (
     apply_site_entries,
@@ -38,20 +36,6 @@ def test_generate_primary_config_external_websockets_toggle():
 
     assert config_utils.WEBSOCKET_MAP_DIRECTIVE not in disabled
     assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
-
-
-def test_generate_primary_config_with_secondary_backend():
-    secondary = SimpleNamespace(name="Blue", port=9090)
-
-    config = generate_primary_config(
-        "internal", 8080, secondary_instance=secondary, external_websockets=True
-    )
-
-    assert "upstream arthexis-blue-pool" in config
-    assert "server 127.0.0.1:8080;" in config
-    assert "server 127.0.0.1:9090 backup;" in config
-    assert "proxy_pass http://arthexis-blue-pool" in config
-    assert config_utils.WEBSOCKET_MAP_DIRECTIVE in config
 
 
 def test_apply_site_entries(tmp_path: Path):

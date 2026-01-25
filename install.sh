@@ -20,8 +20,6 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/timing.sh
 . "$SCRIPT_DIR/scripts/helpers/timing.sh"
-# shellcheck source=scripts/helpers/sidecars.sh
-. "$SCRIPT_DIR/scripts/helpers/sidecars.sh"
 
 # Determine the target user and re-exec as needed before continuing.
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
@@ -57,24 +55,11 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
-SECONDARY_INSTANCE=""
-MIGRATOR_INSTANCE=""
-INSTANCE_TYPE="primary"
-MIGRATOR_SERVICE_NAME=""
-SIDECAR_RECORDS=()
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--clean] [--start|--no-start] [--repair] [--secondary NAME] [--migrator NAME]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
-
-if [ -n "${ARTHEXIS_SECONDARY_CHILD:-}" ]; then
-    INSTANCE_TYPE="secondary"
-fi
-
-if [ -n "${ARTHEXIS_MIGRATOR_CHILD:-}" ]; then
-    INSTANCE_TYPE="migrator"
-fi
 
 # Service management helpers to avoid lock conflicts during repair operations.
 stop_existing_units_for_repair() {
@@ -211,232 +196,6 @@ ensure_i2c_packages() {
     fi
 }
 
-sync_secondary_tree() {
-    local target_dir="$1"
-
-    if [ -z "$target_dir" ]; then
-        echo "Secondary target directory not provided" >&2
-        exit 1
-    fi
-
-    mkdir -p "$target_dir"
-
-    local CERT_EXCLUDE_DIR="scripts/generated/certificates"
-    local -a rsync_args=("-a" "--delete" "--exclude=.venv" "--exclude=logs" "--exclude=backups" "--exclude=work" "--exclude=.locks" "--exclude=db.sqlite3" "--exclude=$CERT_EXCLUDE_DIR")
-
-    if command -v rsync >/dev/null 2>&1; then
-        rsync "${rsync_args[@]}" "$SCRIPT_DIR/" "$target_dir/"
-    else
-        echo "rsync not available; using tar to stage secondary installation" >&2
-        tar -cf - --exclude=.venv --exclude=logs --exclude=backups --exclude=work --exclude=.locks --exclude=db.sqlite3 --exclude="$CERT_EXCLUDE_DIR" -C "$SCRIPT_DIR" . \
-            | tar -xf - -C "$target_dir"
-    fi
-}
-
-
-queue_sidecar_record() {
-    local type="$1"
-    local name="$2"
-    local path="$3"
-    local service="$4"
-
-    SIDECAR_RECORDS+=("${type}::${name}::${path}::${service}")
-}
-
-persist_sidecar_records() {
-    local base_dir="$1"
-
-    if [ ${#SIDECAR_RECORDS[@]} -eq 0 ]; then
-        return 0
-    fi
-
-    local record
-    for record in "${SIDECAR_RECORDS[@]}"; do
-        IFS='::' read -r type name path service <<< "$record"
-        [ -z "$type" ] && continue
-        arthexis_record_sidecar "$base_dir" "$type" "$name" "$path" "$service"
-    done
-}
-delegate_secondary_install() {
-    local secondary_name="$1"
-    if [ -z "$secondary_name" ]; then
-        return 0
-    fi
-
-    if [ -n "${ARTHEXIS_SECONDARY_CHILD:-}" ]; then
-        return 0
-    fi
-
-    local parent_dir
-    parent_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
-    local target_dir="$parent_dir/$secondary_name"
-
-    if [ "$target_dir" = "$SCRIPT_DIR" ]; then
-        echo "Secondary target cannot be the current installation directory" >&2
-        exit 1
-    fi
-
-    if [ -e "$target_dir" ] && [ ! -d "$target_dir" ]; then
-        echo "Secondary target $target_dir exists and is not a directory" >&2
-        exit 1
-    fi
-
-    echo "Staging secondary installation at $target_dir"
-    sync_secondary_tree "$target_dir"
-
-    local base_service=""
-    if [ -n "$SERVICE" ]; then
-        base_service="$SERVICE"
-    elif [ -f "$SCRIPT_DIR/.locks/service.lck" ]; then
-        base_service="$(cat "$SCRIPT_DIR/.locks/service.lck")"
-    fi
-    if [ -z "$base_service" ]; then
-        base_service="$DEFAULT_BASE_SERVICE_NAME"
-    fi
-
-    local -a forwarded_args=()
-    local index=0
-    local total=${#ORIGINAL_ARGS[@]}
-    local has_port_arg=false
-    local has_service_arg=false
-    local has_lcd_flag=false
-    local has_rfid_flag=false
-    local secondary_service=""
-    while [ $index -lt $total ]; do
-        local arg="${ORIGINAL_ARGS[$index]}"
-        if [ "$arg" = "--secondary" ]; then
-            index=$((index + 2))
-            continue
-        fi
-        if [ "$arg" = "--port" ]; then
-            has_port_arg=true
-        fi
-        if [ "$arg" = "--service" ]; then
-            has_service_arg=true
-            secondary_service="${ORIGINAL_ARGS[$((index + 1))]}"
-            forwarded_args+=("$arg")
-            forwarded_args+=("${ORIGINAL_ARGS[$((index + 1))]}")
-            index=$((index + 2))
-            continue
-        fi
-        if [ "$arg" = "--lcd-screen" ] || [ "$arg" = "--no-lcd-screen" ]; then
-            has_lcd_flag=true
-        fi
-        if [ "$arg" = "--rfid-service" ] || [ "$arg" = "--no-rfid-service" ]; then
-            has_rfid_flag=true
-        fi
-        forwarded_args+=("$arg")
-        index=$((index + 1))
-    done
-
-    if [ "$has_port_arg" = false ]; then
-        local primary_port="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
-        local sibling_port=$((primary_port + 1))
-        forwarded_args+=("--port" "$sibling_port")
-    fi
-
-    if [ "$has_service_arg" = false ]; then
-        secondary_service="${base_service}-${secondary_name}"
-        forwarded_args+=("--service" "$secondary_service")
-    fi
-
-    if [ "$has_lcd_flag" = false ]; then
-        forwarded_args+=("--no-lcd-screen")
-    fi
-
-    if [ "$has_rfid_flag" = false ]; then
-        forwarded_args+=("--no-rfid-service")
-    fi
-
-    echo "Delegating installation to $target_dir/install.sh with sibling-awareness"
-    ARTHEXIS_SECONDARY_CHILD=1 "$target_dir/install.sh" "${forwarded_args[@]}"
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "Secondary installation at $target_dir failed with status $status" >&2
-        exit $status
-    fi
-
-    queue_sidecar_record "secondary" "$secondary_name" "$target_dir" "$secondary_service"
-}
-
-delegate_migrator_install() {
-    local migrator_name="$1"
-    if [ -z "$migrator_name" ]; then
-        return 0
-    fi
-
-    if [ -n "${ARTHEXIS_MIGRATOR_CHILD:-}" ]; then
-        return 0
-    fi
-
-    local parent_dir
-    parent_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
-    local target_dir="$parent_dir/$migrator_name"
-
-    if [ "$target_dir" = "$SCRIPT_DIR" ]; then
-        echo "Migrator target cannot be the current installation directory" >&2
-        exit 1
-    fi
-
-    if [ -e "$target_dir" ] && [ ! -d "$target_dir" ]; then
-        echo "Migrator target $target_dir exists and is not a directory" >&2
-        exit 1
-    fi
-
-    echo "Staging migrator installation at $target_dir"
-    sync_secondary_tree "$target_dir"
-
-    local -a forwarded_args=()
-    local index=0
-    local total=${#ORIGINAL_ARGS[@]}
-    local has_port_arg=false
-    local has_service_arg=false
-    local has_mode_arg=false
-    while [ $index -lt $total ]; do
-        local arg="${ORIGINAL_ARGS[$index]}"
-        if [ "$arg" = "--migrator" ]; then
-            index=$((index + 2))
-            continue
-        fi
-        case "$arg" in
-            --port)
-                has_port_arg=true
-                ;;
-            --service)
-                has_service_arg=true
-                ;;
-            --systemd|--embedded)
-                has_mode_arg=true
-                ;;
-        esac
-        forwarded_args+=("$arg")
-        index=$((index + 1))
-    done
-
-    if [ "$has_port_arg" = false ]; then
-        local primary_port="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
-        local sibling_port=$((primary_port + 2))
-        forwarded_args+=("--port" "$sibling_port")
-    fi
-
-    MIGRATOR_SERVICE_NAME="migration-${migrator_name}"
-    if [ "$has_service_arg" = false ]; then
-        forwarded_args+=("--service" "$MIGRATOR_SERVICE_NAME")
-    fi
-    if [ "$has_mode_arg" = false ] && command -v systemctl >/dev/null 2>&1; then
-        forwarded_args+=("--systemd")
-    fi
-
-    echo "Delegating migrator installation to $target_dir/install.sh"
-    ARTHEXIS_MIGRATOR_CHILD=1 ARTHEXIS_MIGRATOR_SERVICE_NAME="$MIGRATOR_SERVICE_NAME" "$target_dir/install.sh" "${forwarded_args[@]}"
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "Migrator installation at $target_dir failed with status $status" >&2
-        exit $status
-    fi
-
-    queue_sidecar_record "migrator" "$migrator_name" "$target_dir" "$MIGRATOR_SERVICE_NAME"
-}
 
 # Parse CLI arguments to configure the installation behavior.
 while [[ $# -gt 0 ]]; do
@@ -521,16 +280,6 @@ while [[ $# -gt 0 ]]; do
             START_FLAG=true
             shift
             ;;
-        --secondary)
-            [ -z "$2" ] && usage
-            SECONDARY_INSTANCE="$2"
-            shift 2
-            ;;
-        --migrator)
-            [ -z "$2" ] && usage
-            MIGRATOR_INSTANCE="$2"
-            shift 2
-            ;;
         --repair)
             REPAIR=true
             shift
@@ -573,17 +322,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-if [ -n "$MIGRATOR_INSTANCE" ] && [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    ENABLE_CELERY=true
-fi
-
-if [ "$INSTANCE_TYPE" = "migrator" ] && [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    ENABLE_CELERY=true
-fi
-
-delegate_secondary_install "$SECONDARY_INSTANCE"
-delegate_migrator_install "$MIGRATOR_INSTANCE"
 
 if [ "$REPAIR" = true ]; then
     LOCK_DIR_PATH="$SCRIPT_DIR/.locks"
@@ -639,9 +377,6 @@ DB_FILE="$BASE_DIR/db.sqlite3"
 
 arthexis_ensure_upstream_remotes "$BASE_DIR"
 
-if [ "$INSTANCE_TYPE" = "migrator" ] && [ -z "$SERVICE" ] && [ -n "${ARTHEXIS_MIGRATOR_SERVICE_NAME:-}" ]; then
-    SERVICE="$ARTHEXIS_MIGRATOR_SERVICE_NAME"
-fi
 
 arthexis_timing_setup "install"
 
@@ -661,8 +396,6 @@ elif [ -f "$DB_FILE" ]; then
     fi
 fi
 mkdir -p "$LOCK_DIR"
-echo "$INSTANCE_TYPE" > "$LOCK_DIR/instance_type.lck"
-persist_sidecar_records "$BASE_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
 
 if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
@@ -870,9 +603,6 @@ if [ -n "$SERVICE" ]; then
         arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
     fi
     EXEC_CMD="$BASE_DIR/scripts/service-start.sh"
-    if [ "$INSTANCE_TYPE" = "migrator" ]; then
-        EXEC_CMD="$BASE_DIR/scripts/migration-service-start.sh"
-    fi
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE"
 fi
 

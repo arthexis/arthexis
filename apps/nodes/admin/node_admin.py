@@ -127,6 +127,12 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 )
             },
         ),
+        (
+            _("Upgrade"),
+            {
+                "fields": ("upgrade_canaries",),
+            },
+        ),
     )
     actions = [
         update_selected_nodes,

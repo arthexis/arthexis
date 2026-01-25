@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import os
 import re
@@ -53,6 +52,7 @@ WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
 AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
 AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 NON_TERMINAL_ROLES = {"Control", "Constellation", "Watchtower"}
+CANARY_LIVE_GRACE_MINUTES = 10
 
 _NETWORK_FAILURE_PATTERNS = (
     "could not resolve host",
@@ -143,237 +143,129 @@ def legacy_heartbeat(self) -> None:
     heartbeat()
 
 
-SIDE_CAR_LOCK_NAME = "sidecars.lck"
-
-
-def _sidecar_lock_path(base_dir: Path) -> Path:
-    return base_dir / ".locks" / SIDE_CAR_LOCK_NAME
-
-
-def _load_sidecar_records(base_dir: Path) -> list[dict[str, str]]:
-    lock_file = _sidecar_lock_path(base_dir)
-    try:
-        lines = lock_file.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return []
-    except OSError:
-        logger.warning("Unable to read sidecar lock file at %s", lock_file)
-        return []
-
-    records: list[dict[str, str]] = []
-    for line in lines:
-        parts = line.split("\t")
-        if len(parts) < 3:
-            parts = line.split("    ")  # fallback for legacy space-delimited entries
-
-        if len(parts) < 3:
-            continue
-
-        record: dict[str, str] = {"type": parts[0], "name": parts[1], "path": parts[2]}
-        if len(parts) > 3 and parts[3]:
-            record["service"] = parts[3]
-        records.append(record)
-    return records
-
-
-def _read_process_cmdline(pid: int) -> list[str] | None:
-    try:
-        with open(f"/proc/{pid}/cmdline", "rb") as handle:
-            raw_value = handle.read()
-    except OSError:
-        return None
-
-    if not raw_value:
-        return []
-
-    try:
-        decoded = raw_value.decode("utf-8", errors="ignore")
-    except UnicodeDecodeError:
-        return None
-
-    return [entry for entry in decoded.split("\0") if entry]
-
-
-def _read_process_start_time(pid: int) -> float | None:
-    try:
-        with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as handle:
-            contents = handle.read().split()
-    except OSError:
-        return None
-
-    try:
-        start_ticks = int(contents[21])
-    except (IndexError, ValueError):
-        return None
-
-    try:
-        with open("/proc/uptime", "r", encoding="utf-8") as handle:
-            uptime_seconds = float(handle.read().split()[0])
-    except (OSError, ValueError, IndexError):
-        return None
-
-    try:
-        ticks_per_second = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
-    except (ValueError, AttributeError, KeyError):
-        return None
-
-    boot_time = time.time() - uptime_seconds
-    return boot_time + (start_ticks / ticks_per_second)
-
-
-def _migration_pid_matches(pid: int, lock_dir: Path, started_at: float | None) -> bool:
-    if pid <= 0:
-        return False
-
-    cmdline = _read_process_cmdline(pid)
-    if not cmdline:
-        return False
-
-    base_dir = lock_dir.parent.resolve()
-    expected_script = (base_dir / "scripts" / "migration_server.py").resolve()
-    matches_cmd = any(
-        part.endswith("migration_server.py") or str(expected_script) in part for part in cmdline
-    )
-    if not matches_cmd:
-        return False
-
-    if started_at is not None:
-        process_start = _read_process_start_time(pid)
-        if process_start is not None and process_start > started_at + 120:
-            return False
-
-    return True
-
-
-def _is_migration_server_running(lock_dir: Path) -> bool:
-    state_path = lock_dir / "migration_server.json"
-    try:
-        payload = json.loads(state_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return False
-    except json.JSONDecodeError:
-        return True
-
-    pid = payload.get("pid")
-    started_at = payload.get("timestamp")
-    if isinstance(pid, str) and pid.isdigit():
-        pid = int(pid)
-    if not isinstance(pid, int):
-        return False
-
-    if not _migration_pid_matches(pid, lock_dir, started_at if isinstance(started_at, (int, float)) else None):
-        return False
-
-    try:
-        os.kill(pid, 0)
-    except PermissionError:
-        return True
-    except OSError:
-        try:
-            state_path.unlink()
-        except OSError:
-            pass
-        return False
-    return True
-
-
-def _read_service_mode(lock_dir: Path) -> str:
-    lock_path = lock_dir / "service_mode.lck"
-    try:
-        return lock_path.read_text(encoding="utf-8").strip().lower()
-    except FileNotFoundError:
-        return "embedded"
-    except OSError:
-        logger.warning("Failed to read service mode from %s", lock_path)
-        return "embedded"
-
-
-def _read_service_name(lock_dir: Path) -> str | None:
-    lock_path = lock_dir / "service.lck"
-    try:
-        raw_value = lock_path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return None
-    except OSError:
-        logger.warning("Unable to read service name from %s", lock_path)
-        return None
-
-    return raw_value or None
-
-
-def _start_migration_service(base_dir: Path, service_name: str | None, use_systemd: bool) -> None:
-    if use_systemd and service_name:
-        command = _systemctl_command()
-        if command:
-            unit_name = service_name if service_name.endswith(".service") else f"{service_name}.service"
-            subprocess.run([*command, "restart", unit_name], check=False)
-            return
-
-    script = base_dir / "scripts" / "migration-service-start.sh"
-    if not script.exists():
-        logger.warning("Migration service launcher missing at %s", script)
-        return
-
-    env = os.environ.copy()
-    env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    log_path = base_dir / "logs" / "migration-service.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        with log_path.open("ab") as log_handle:
-            subprocess.Popen(
-                ["bash", str(script)],
-                cwd=base_dir,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                env=env,
-                start_new_session=True,
-            )
-    except OSError:
-        logger.exception("Failed to start migration service for %s", base_dir)
-
-
-def _ensure_migrator_alive(record: dict[str, str]) -> None:
-    base_dir = Path(record.get("path", ""))
-    if not base_dir.exists():
-        logger.warning("Recorded migrator path missing: %s", base_dir)
-        return
-
-    lock_dir = base_dir / ".locks"
-    if _is_migration_server_running(lock_dir):
-        return
-
-    service_name = record.get("service") or _read_service_name(lock_dir)
-    service_mode = _read_service_mode(lock_dir)
-    use_systemd = service_mode == "systemd"
-
-    logger.info(
-        "Migration service for %s is down; attempting restart via %s",
-        base_dir,
-        "systemd" if use_systemd else "embedded runner",
-    )
-    _start_migration_service(base_dir, service_name, use_systemd)
-
-
-def _ensure_migrators_alive(base_dir: Path) -> None:
-    for record in _load_sidecar_records(base_dir):
-        if record.get("type") != "migrator":
-            continue
-        _ensure_migrator_alive(record)
-
-
-@shared_task
-def ensure_migration_service_alive() -> None:
-    """Restart migration sidecars when they stop running."""
-
-    base_dir = _project_base_dir()
-    _ensure_migrators_alive(base_dir)
-
-
 def _project_base_dir() -> Path:
     """Return the filesystem base directory for runtime operations."""
 
     return auto_upgrade_base_dir()
+
+
+def _load_upgrade_canaries() -> list["Node"]:
+    try:
+        from apps.nodes.models import Node
+    except Exception:  # pragma: no cover - import safety
+        return []
+
+    try:
+        local = Node.get_local()
+    except Exception:  # pragma: no cover - database or config failure
+        return []
+
+    if local is None:
+        return []
+
+    try:
+        return list(local.upgrade_canaries.all())
+    except Exception:  # pragma: no cover - database unavailable
+        return []
+
+
+def _canary_is_live(node: "Node", *, now: datetime) -> bool:
+    if not getattr(node, "last_updated", None):
+        return False
+    return node.last_updated >= now - timedelta(minutes=CANARY_LIVE_GRACE_MINUTES)
+
+
+def _resolve_canary_target(
+    repo_state: "AutoUpgradeRepositoryState",
+    mode: "AutoUpgradeMode",
+) -> tuple[str | None, str | None]:
+    if mode.mode == "unstable":
+        return "revision", repo_state.remote_revision
+    if repo_state.release_revision:
+        return "revision", repo_state.release_revision
+    target_version = repo_state.remote_version or repo_state.local_version
+    return ("version", target_version) if target_version else (None, None)
+
+
+def _canary_matches_target(
+    node: "Node", target_type: str | None, target_value: str | None
+) -> bool:
+    if not target_type or not target_value:
+        return False
+    if target_type == "revision":
+        return (node.installed_revision or "").strip() == target_value
+    return (node.installed_version or "").strip() == target_value
+
+
+def _format_canary_state(
+    node: "Node",
+    *,
+    live: bool,
+    matches_target: bool,
+    target_type: str | None,
+    target_value: str | None,
+) -> str:
+    identifier = node.hostname or f"node-{node.pk}"
+    parts = ["live" if live else "offline"]
+    if target_type and target_value:
+        label = "revision" if target_type == "revision" else "version"
+        status = "ready" if matches_target else "pending"
+        parts.append(f"{label} {status} ({target_value})")
+    else:
+        parts.append("target unknown")
+    return f"{identifier}: {', '.join(parts)}"
+
+
+def _canary_gate(
+    base_dir: Path,
+    repo_state: "AutoUpgradeRepositoryState",
+    mode: "AutoUpgradeMode",
+    *,
+    now: datetime | None = None,
+) -> bool:
+    canaries = _load_upgrade_canaries()
+    if not canaries:
+        return True
+
+    now = now or timezone.now()
+    target_type, target_value = _resolve_canary_target(repo_state, mode)
+    if not target_type or not target_value:
+        append_auto_upgrade_log(
+            base_dir,
+            "Skipping auto-upgrade; canary target could not be resolved.",
+        )
+        return False
+
+    blockers: list[str] = []
+    for node in canaries:
+        live = _canary_is_live(node, now=now)
+        matches_target = _canary_matches_target(node, target_type, target_value)
+        if not (live and matches_target):
+            blockers.append(
+                _format_canary_state(
+                    node,
+                    live=live,
+                    matches_target=matches_target,
+                    target_type=target_type,
+                    target_value=target_value,
+                )
+            )
+
+    if blockers:
+        append_auto_upgrade_log(
+            base_dir,
+            (
+                "Skipping auto-upgrade; canary gate blocked. "
+                f"Status: {'; '.join(blockers)}"
+            ),
+        )
+        return False
+
+    append_auto_upgrade_log(
+        base_dir,
+        "Canary gate satisfied; proceeding with auto-upgrade.",
+    )
+    return True
 
 def _recency_lock_path(base_dir: Path) -> Path:
     return base_dir / ".locks" / AUTO_UPGRADE_RECENCY_LOCK_NAME
@@ -1983,6 +1875,16 @@ def _plan_auto_upgrade(
     args: list[str] = []
     upgrade_subject = _resolve_upgrade_subject()
     upgrade_stamp = timezone.localtime(timezone.now()).strftime("@ %Y%m%d %H:%M")
+
+    if not _canary_gate(base_dir, repo_state, mode):
+        ops.ensure_runtime_services(
+            base_dir,
+            restart_if_active=False,
+            revert_on_failure=False,
+        )
+        if startup:
+            startup()
+        return None
 
     if mode.mode == "unstable":
         if repo_state.severity == SEVERITY_LOW:

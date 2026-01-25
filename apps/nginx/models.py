@@ -85,14 +85,6 @@ class SiteConfiguration(models.Model):
         default=8888,
         validators=[validators.MinValueValidator(1), validators.MaxValueValidator(65535)],
     )
-    secondary_instance = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text=_(
-            "Optional sibling installation folder to use as a failover target."
-        ),
-    )
     certificate = models.ForeignKey(
         "certs.CertificateBase",
         null=True,
@@ -151,33 +143,14 @@ class SiteConfiguration(models.Model):
     def site_destination_path(self) -> Path:
         return Path(self.site_destination)
 
-    def resolve_secondary_instance(self) -> services.SecondaryInstance | None:
-        if not self.secondary_instance:
-            return None
-        return services.get_secondary_instance(self.secondary_instance)
-
     def get_subdomain_prefixes(self) -> list[str]:
         return parse_subdomain_prefixes(self.managed_subdomains, strict=False)
 
     def clean(self):
         super().clean()
         parse_subdomain_prefixes(self.managed_subdomains)
-        if not self.secondary_instance:
-            return
-        try:
-            self.resolve_secondary_instance()
-        except services.SecondaryInstanceError as exc:
-            raise ValidationError({"secondary_instance": str(exc)}) from exc
-
     def apply(self, *, reload: bool = True, remove: bool = False) -> services.ApplyResult:
         """Apply or remove the managed nginx configuration."""
-
-        secondary_instance = None
-        if not remove:
-            try:
-                secondary_instance = self.resolve_secondary_instance()
-            except services.SecondaryInstanceError as exc:
-                raise services.ValidationError(str(exc)) from exc
 
         if remove:
             result = services.remove_nginx_configuration(reload=reload)
@@ -195,7 +168,6 @@ class SiteConfiguration(models.Model):
                 site_destination=self.site_destination_path,
                 subdomain_prefixes=self.get_subdomain_prefixes(),
                 reload=reload,
-                secondary_instance=secondary_instance,
             )
 
         self.last_applied_at = timezone.now()

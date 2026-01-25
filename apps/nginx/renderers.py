@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 from apps.nginx.config_utils import (
     default_reject_server,
     http_proxy_server,
@@ -13,9 +11,6 @@ from apps.nginx.config_utils import (
     websocket_map,
     write_if_changed,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - import cycle guard for type checkers
-    from apps.nginx.services import SecondaryInstance
 
 HTTP_IPV4_LISTENS = (
     "0.0.0.0:80",
@@ -42,17 +37,6 @@ def _build_server_names(domain: str, prefixes: list[str]) -> str:
     return " ".join(dict.fromkeys(names))
 
 
-def upstream_block(upstream_name: str, primary_port: int, backup_port: int | None = None) -> str:
-    lines = [
-        f"upstream {upstream_name} {{",
-        f"    server 127.0.0.1:{primary_port};",
-    ]
-    if backup_port:
-        lines.append(f"    server 127.0.0.1:{backup_port} backup;")
-    lines.append("}")
-    return "\n".join(lines)
-
-
 def generate_primary_config(
     mode: str,
     port: int,
@@ -63,7 +47,6 @@ def generate_primary_config(
     https_enabled: bool = False,
     include_ipv6: bool = False,
     external_websockets: bool = True,
-    secondary_instance: "SecondaryInstance | None" = None,
 ) -> str:
     mode = mode.lower()
     if mode not in {"internal", "public"}:
@@ -82,14 +65,8 @@ def generate_primary_config(
     certificate_path = getattr(certificate, "certificate_path", None)
     certificate_key_path = getattr(certificate, "certificate_key_path", None)
 
-    proxy_target = f"127.0.0.1:{port}"
     prefix_blocks: list[str] = []
-    if secondary_instance:
-        upstream_name = f"arthexis-{slugify(secondary_instance.name)}-pool"
-        prefix_blocks.append(
-            upstream_block(upstream_name, port, getattr(secondary_instance, "port", None))
-        )
-        proxy_target = upstream_name
+    proxy_target = f"127.0.0.1:{port}"
 
     if external_websockets:
         prefix_blocks.insert(0, websocket_map())
