@@ -2,7 +2,91 @@
 
 import django.db.models.deletion
 import parler.models
+from django.conf import settings
 from django.db import migrations, models
+from django.db.migrations.operations.base import Operation
+
+
+class AlterModelBases(Operation):
+    reversible = True
+    reduces_to_sql = False
+
+    def __init__(self, name, bases):
+        self.name = name
+        self.bases = bases
+
+    def state_forwards(self, app_label, state):
+        model_key = (app_label, self.name.lower())
+        model_state = state.models[model_key]
+        model_state.bases = self.bases
+        state.reload_model(app_label, self.name.lower(), delay=True)
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        pass
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        pass
+
+    def describe(self):
+        return f"Alter {self.name} bases"
+
+    def deconstruct(self):
+        return (
+            f"{self.__class__.__module__}.{self.__class__.__name__}",
+            [],
+            {"name": self.name, "bases": self.bases},
+        )
+
+
+def backfill_translations(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
+    default_language = getattr(
+        settings,
+        "PARLER_DEFAULT_LANGUAGE_CODE",
+        getattr(settings, "LANGUAGE_CODE", "en"),
+    )
+    ContentClassifier = apps.get_model("content", "ContentClassifier")
+    ContentClassifierTranslation = apps.get_model(
+        "content", "ContentClassifierTranslation"
+    )
+    for classifier in ContentClassifier.objects.using(db_alias).all():
+        ContentClassifierTranslation.objects.using(db_alias).get_or_create(
+            master_id=classifier.id,
+            language_code=default_language,
+            defaults={"label": classifier.label},
+        )
+
+    ContentTag = apps.get_model("content", "ContentTag")
+    ContentTagTranslation = apps.get_model("content", "ContentTagTranslation")
+    for tag in ContentTag.objects.using(db_alias).all():
+        ContentTagTranslation.objects.using(db_alias).get_or_create(
+            master_id=tag.id,
+            language_code=default_language,
+            defaults={"label": tag.label},
+        )
+
+    WebRequestSampler = apps.get_model("content", "WebRequestSampler")
+    WebRequestSamplerTranslation = apps.get_model(
+        "content", "WebRequestSamplerTranslation"
+    )
+    for sampler in WebRequestSampler.objects.using(db_alias).all():
+        WebRequestSamplerTranslation.objects.using(db_alias).get_or_create(
+            master_id=sampler.id,
+            language_code=default_language,
+            defaults={
+                "label": sampler.label,
+                "description": sampler.description,
+            },
+        )
+
+    WebRequestStep = apps.get_model("content", "WebRequestStep")
+    WebRequestStepTranslation = apps.get_model("content", "WebRequestStepTranslation")
+    for step in WebRequestStep.objects.using(db_alias).all():
+        WebRequestStepTranslation.objects.using(db_alias).get_or_create(
+            master_id=step.id,
+            language_code=default_language,
+            defaults={"name": step.name},
+        )
 
 
 class Migration(migrations.Migration):
@@ -23,7 +107,7 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Content Classifiers",
             },
         ),
-        migrations.AlterModelBases(
+        AlterModelBases(
             name="contentclassifier",
             bases=(parler.models.TranslatableModel, models.Model),
         ),
@@ -35,7 +119,7 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Content Tags",
             },
         ),
-        migrations.AlterModelBases(
+        AlterModelBases(
             name="contenttag",
             bases=(parler.models.TranslatableModel, models.Model),
         ),
@@ -47,33 +131,13 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Web Request Samplers",
             },
         ),
-        migrations.AlterModelBases(
+        AlterModelBases(
             name="webrequestsampler",
             bases=(parler.models.TranslatableModel, models.Model),
         ),
-        migrations.AlterModelBases(
+        AlterModelBases(
             name="webrequeststep",
             bases=(parler.models.TranslatableModel, models.Model),
-        ),
-        migrations.RemoveField(
-            model_name="contentclassifier",
-            name="label",
-        ),
-        migrations.RemoveField(
-            model_name="contenttag",
-            name="label",
-        ),
-        migrations.RemoveField(
-            model_name="webrequestsampler",
-            name="description",
-        ),
-        migrations.RemoveField(
-            model_name="webrequestsampler",
-            name="label",
-        ),
-        migrations.RemoveField(
-            model_name="webrequeststep",
-            name="name",
         ),
         migrations.CreateModel(
             name="ContentClassifierTranslation",
@@ -235,5 +299,26 @@ class Migration(migrations.Migration):
                 "unique_together": {("language_code", "master")},
             },
             bases=(parler.models.TranslatedFieldsModelMixin, models.Model),
+        ),
+        migrations.RunPython(backfill_translations, migrations.RunPython.noop),
+        migrations.RemoveField(
+            model_name="contentclassifier",
+            name="label",
+        ),
+        migrations.RemoveField(
+            model_name="contenttag",
+            name="label",
+        ),
+        migrations.RemoveField(
+            model_name="webrequestsampler",
+            name="description",
+        ),
+        migrations.RemoveField(
+            model_name="webrequestsampler",
+            name="label",
+        ),
+        migrations.RemoveField(
+            model_name="webrequeststep",
+            name="name",
         ),
     ]
