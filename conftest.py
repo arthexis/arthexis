@@ -29,8 +29,8 @@ def _ensure_clean_test_databases() -> None:
     candidates.add(sqlite_test_path)
     candidates.update(
         {
-            sqlite_test_path.with_suffix(f"{sqlite_test_path.suffix}-wal"),
-            sqlite_test_path.with_suffix(f"{sqlite_test_path.suffix}-shm"),
+            Path(f"{sqlite_test_path}-wal"),
+            Path(f"{sqlite_test_path}-shm"),
         }
     )
 
