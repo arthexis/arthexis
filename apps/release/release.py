@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 from apps.release import git_utils
+from apps.release.constants import PACKAGE_DESCRIPTION
 
 try:  # pragma: no cover - optional dependency
     import toml  # type: ignore
@@ -105,7 +106,7 @@ class RepositoryTarget:
 
 DEFAULT_PACKAGE = Package(
     name="arthexis",
-    description="Energy & Power Infrastructure",
+    description=PACKAGE_DESCRIPTION,
     author="Rafael J. Guillén-Osorio",
     email="tecnologia@gelectriic.com",
     python_requires=">=3.10",

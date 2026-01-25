@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from django.db import migrations, models
 
+from apps.release.constants import PACKAGE_DESCRIPTION
+
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -13,7 +15,7 @@ class Migration(migrations.Migration):
             model_name="package",
             name="description",
             field=models.CharField(
-                default="Energy & Power Infrastructure",
+                default=PACKAGE_DESCRIPTION,
                 max_length=255,
             ),
         ),
