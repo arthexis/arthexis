@@ -134,6 +134,11 @@ def _flush_buffer():
         _reset_buffer()
 
 
+def flush_usage_event_buffer() -> None:
+    """Flush any buffered usage events (intended for tests or manual calls)."""
+    _flush_buffer()
+
+
 @receiver(post_save, dispatch_uid="core_usage_analytics_post_save", weak=False)
 def _usage_post_save(sender, instance, created, **kwargs):
     if sender is UsageEvent:
@@ -217,4 +222,3 @@ def build_usage_summary(days: int = 30, queryset: QuerySet[UsageEvent] | None = 
             {"model_label": "model_label", "action": "action", "count": "count"},
         ),
     }
-

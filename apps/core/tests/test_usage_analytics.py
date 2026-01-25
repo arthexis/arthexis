@@ -2,10 +2,11 @@ from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
-from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 
 from config.middleware import UsageAnalyticsMiddleware
 
+from apps.core.analytics import flush_usage_event_buffer
 from apps.core.models import UsageEvent
 
 
@@ -48,18 +49,14 @@ class UsageAnalyticsMiddlewareTests(TestCase):
 
 
 @override_settings(ENABLE_USAGE_ANALYTICS=True)
-class UsageAnalyticsSignalTests(TransactionTestCase):
-    reset_sequences = True
-
-    def setUp(self):
-        super().setUp()
-        self.user_model = get_user_model()
-
+class UsageAnalyticsSignalTests(TestCase):
     def test_model_signals_record_events(self):
-        user = self.user_model.objects.create_user(username="signal-user")
+        user_model = get_user_model()
+        user = user_model.objects.create_user(username="signal-user")
         user.first_name = "Updated"
         user.save()
         user.delete()
+        flush_usage_event_buffer()
 
         actions = list(
             UsageEvent.objects.filter(model_label="users.user")
