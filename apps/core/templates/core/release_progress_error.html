@@ -1,44 +1,92 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "Release publishing" %} | {{ block.super }}{% endblock %}
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .release-error-card {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 8px;
+    background: var(--body-bg);
+  }
+  .release-error-card h2 {
+    margin-top: 0;
+    color: var(--error-fg, #ba2121);
+  }
+  .release-error-meta {
+    margin: 0.75rem 0 1.25rem;
+    color: var(--body-quiet-color);
+  }
+  .release-error-actions {
+    margin-top: 1.5rem;
+  }
+  .release-error-actions a {
+    margin-right: 1rem;
+  }
+  .release-error-debug {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 6px;
+    background: var(--darkened-bg, rgba(0, 0, 0, 0.05));
+    border: 1px dashed var(--hairline-color);
+  }
+  .release-error-debug pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+{% endblock %}
 
 {% block nav-breadcrumbs %}
 <nav aria-label="{% translate 'Breadcrumbs' %}">
   <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
-    {% url 'admin:app_list' 'release' as core_admin_url %}
-    <a href="{{ core_admin_url }}">{% trans '2. Business' %}</a> ›
-    <a href="{% url 'admin:release_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a>
     {% if release %}
-      › <a href="{% url 'admin:release_packagerelease_change' release.pk %}">{{ release }}</a>
+      {% url 'admin:app_list' 'release' as core_admin_url %}
+      <a href="{{ core_admin_url }}">{% trans '2. Business' %}</a> ›
+      <a href="{% url 'admin:release_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a> ›
+      <a href="{% url 'admin:release_packagerelease_change' release.pk %}">{{ release }}</a>
+      {% if action %}› {{ action|capfirst }}{% endif %}
+    {% else %}
+      {% trans 'Release Publishing' %}
     {% endif %}
-    › {% trans "Publish" %}
   </div>
 </nav>
 {% endblock %}
 
 {% block content %}
-<div class="module errornote">
-  <h1>{% trans "Unable to continue with publishing" %}</h1>
+<h1>{% trans "Release publishing error" %}</h1>
+<div class="release-error-card">
+  <h2>{% trans "We couldn't continue the publish flow" %}</h2>
   <p>{{ message }}</p>
-  {% if release_url %}
-  <p>
-    <a href="{{ release_url }}">{% trans "Return to the release details" %}</a>
-  </p>
+  <div class="release-error-meta">
+    {% if release %}
+      <div><strong>{% trans "Release" %}:</strong> {{ release.package.name }} {{ release.version }}</div>
+    {% endif %}
+    {% if action %}
+      <div><strong>{% trans "Action" %}:</strong> {{ action|capfirst }}</div>
+    {% endif %}
+    <div><strong>{% trans "Status code" %}:</strong> {{ status_code }}</div>
+  </div>
+  <div class="release-error-actions">
+    {% if release %}
+      <a class="button" href="{% url 'admin:release_packagerelease_change' release.pk %}">
+        {% trans "Back to release" %}
+      </a>
+      <a class="button" href="{% url 'release-progress' release.pk action %}">
+        {% trans "Return to publish progress" %}
+      </a>
+    {% endif %}
+    <a class="button" href="{% url 'admin:index' %}">{% trans "Admin home" %}</a>
+  </div>
+  {% if debug_info %}
+    <div class="release-error-debug">
+      <strong>{% trans "Debug details" %}</strong>
+      <pre>{{ debug_info }}</pre>
+    </div>
   {% endif %}
 </div>
-
-{% if show_debug %}
-<div class="module">
-  <h2>{% trans "Debug details" %}</h2>
-  <p>{% trans "The following data is only visible because DEBUG is enabled." %}</p>
-  <dl>
-    {% for item in debug_items %}
-    <dt>{{ item.name }}</dt>
-    <dd><code>{{ item.value }}</code></dd>
-    {% endfor %}
-  </dl>
-</div>
-{% endif %}
 {% endblock %}

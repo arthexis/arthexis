@@ -18,7 +18,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.template.loader import get_template
 from django.test import signals
 from django.utils import timezone
@@ -144,10 +144,21 @@ def _render_release_progress_error(
         message,
         debug_info,
     )
-    content = str(message)
+    debug_payload = None
     if settings.DEBUG and debug_info:
-        content = f"{content}\n{json.dumps(debug_info, indent=2, sort_keys=True)}"
-    return HttpResponse(content, status=status)
+        debug_payload = json.dumps(debug_info, indent=2, sort_keys=True)
+    return render(
+        request,
+        "core/release_progress_error.html",
+        {
+            "release": release,
+            "action": action,
+            "message": str(message),
+            "debug_info": debug_payload,
+            "status_code": status,
+        },
+        status=status,
+    )
 
 
 def _sync_release_with_revision(
