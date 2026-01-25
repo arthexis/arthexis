@@ -105,7 +105,7 @@ class RepositoryTarget:
 
 DEFAULT_PACKAGE = Package(
     name="arthexis",
-    description="Power & Energy Infrastructure",
+    description="Energy & Power Infrastructure",
     author="Rafael J. Guillén-Osorio",
     email="tecnologia@gelectriic.com",
     python_requires=">=3.10",
