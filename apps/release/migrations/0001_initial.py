@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.CharField(
-                        default="Power & Energy Infrastructure", max_length=255
+                        default="Energy & Power Infrastructure", max_length=255
                     ),
                 ),
                 (
