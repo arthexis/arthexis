@@ -49,6 +49,8 @@ _AUTO_DETECT_BACKOFF_SECONDS = float(
 _NOT_CONFIGURED_LOG_INTERVAL = float(
     os.environ.get("RFID_NOT_CONFIGURED_LOG_INTERVAL", "30")
 )
+_IRQ_EMPTY_LOG_INTERVAL = float(os.environ.get("RFID_IRQ_EMPTY_LOG_INTERVAL", "30"))
+_last_irq_empty_log = 0.0
 
 
 def _log_fd_snapshot(label: str) -> None:
@@ -440,8 +442,16 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
             _mark_scanner_used()
         return result
     except queue.Empty:
+        global _last_irq_empty_log
         _log_fd_snapshot("get_next_tag-empty")
-        logger.debug("IRQ queue empty; falling back to direct read")
+        with _log_throttle_lock:
+            now = time.monotonic()
+            if (
+                _IRQ_EMPTY_LOG_INTERVAL <= 0
+                or now - _last_irq_empty_log >= _IRQ_EMPTY_LOG_INTERVAL
+            ):
+                logger.debug("IRQ queue empty; falling back to direct read")
+                _last_irq_empty_log = now
         try:
             from .reader import read_rfid
 
