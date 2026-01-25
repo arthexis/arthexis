@@ -119,7 +119,13 @@ def test_site_configuration_save_invalidates_dashboard_rule_cache(monkeypatch):
     monkeypatch.setattr(DashboardRule, "invalidate_model_cache", fake_invalidate)
 
     config = SiteConfiguration.objects.create(name="cache-test")
-    assert called[-1] is SiteConfiguration
+    assert len(called) == 1
+    assert called[0] is SiteConfiguration
+
+    config.save()
+    assert len(called) == 2
+    assert called[1] is SiteConfiguration
 
     config.delete()
-    assert called[-1] is SiteConfiguration
+    assert len(called) == 3
+    assert called[2] is SiteConfiguration
