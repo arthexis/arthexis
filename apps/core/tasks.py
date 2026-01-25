@@ -152,12 +152,12 @@ def _project_base_dir() -> Path:
 def _load_upgrade_canaries() -> list["Node"]:
     try:
         from apps.nodes.models import Node
-    except Exception:  # pragma: no cover - import safety
+    except ImportError:  # pragma: no cover - import safety
         return []
 
     try:
         local = Node.get_local()
-    except Exception:  # pragma: no cover - database or config failure
+    except (DatabaseError, Node.DoesNotExist):  # pragma: no cover - database or config failure
         return []
 
     if local is None:
@@ -165,7 +165,7 @@ def _load_upgrade_canaries() -> list["Node"]:
 
     try:
         return list(local.upgrade_canaries.all())
-    except Exception:  # pragma: no cover - database unavailable
+    except DatabaseError:  # pragma: no cover - database unavailable
         return []
 
 

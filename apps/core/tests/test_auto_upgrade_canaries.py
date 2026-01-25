@@ -10,10 +10,11 @@ from apps.nodes.models import Node
 
 @pytest.mark.django_db
 def test_canary_gate_blocks_when_canary_offline(monkeypatch, tmp_path: Path):
+    now = timezone.now()
     local = Node.objects.create(hostname="local")
     canary = Node.objects.create(hostname="canary", installed_revision="rev-1")
     Node.objects.filter(pk=canary.pk).update(
-        last_updated=timezone.now() - timedelta(minutes=30)
+        last_updated=now - timedelta(minutes=30)
     )
     local.upgrade_canaries.add(canary)
 
@@ -38,13 +39,12 @@ def test_canary_gate_blocks_when_canary_offline(monkeypatch, tmp_path: Path):
         interval_minutes=60,
     )
 
-    assert (
-        tasks._canary_gate(tmp_path, repo_state, mode, now=timezone.now()) is False
-    )
+    assert tasks._canary_gate(tmp_path, repo_state, mode, now=now) is False
 
 
 @pytest.mark.django_db
 def test_canary_gate_allows_when_canary_ready(monkeypatch, tmp_path: Path):
+    now = timezone.now()
     local = Node.objects.create(hostname="local")
     canary = Node.objects.create(hostname="canary", installed_revision="rev-2")
     local.upgrade_canaries.add(canary)
@@ -70,11 +70,12 @@ def test_canary_gate_allows_when_canary_ready(monkeypatch, tmp_path: Path):
         interval_minutes=60,
     )
 
-    assert tasks._canary_gate(tmp_path, repo_state, mode, now=timezone.now()) is True
+    assert tasks._canary_gate(tmp_path, repo_state, mode, now=now) is True
 
 
 @pytest.mark.django_db
 def test_canary_gate_blocks_when_canary_version_mismatch(monkeypatch, tmp_path: Path):
+    now = timezone.now()
     local = Node.objects.create(hostname="local")
     canary = Node.objects.create(hostname="canary", installed_version="2.0.0")
     local.upgrade_canaries.add(canary)
@@ -100,6 +101,4 @@ def test_canary_gate_blocks_when_canary_version_mismatch(monkeypatch, tmp_path: 
         interval_minutes=60,
     )
 
-    assert (
-        tasks._canary_gate(tmp_path, repo_state, mode, now=timezone.now()) is False
-    )
+    assert tasks._canary_gate(tmp_path, repo_state, mode, now=now) is False
