@@ -125,7 +125,7 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
             actions.append("login_as_guest_user")
         return actions
 
-    @admin.action(description=_("Login as Guest User"), permissions=["add"])
+    @admin.action(description=_("Login as Guest"), permissions=["add"])
     def login_as_guest_user(self, request, queryset=None):
         if not self.has_add_permission(request):
             raise PermissionDenied
@@ -166,8 +166,8 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         redirect_url = request.GET.get("next") or reverse("admin:index")
         return HttpResponseRedirect(redirect_url)
 
-    login_as_guest_user.label = _("Login as Guest User")
-    login_as_guest_user.short_description = _("Login as Guest User")
+    login_as_guest_user.label = _("Login as Guest")
+    login_as_guest_user.short_description = _("Login as Guest")
     login_as_guest_user.requires_queryset = False
 
     def get_fieldsets(self, request, obj=None):
