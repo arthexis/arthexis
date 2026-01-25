@@ -703,21 +703,23 @@ else:
     else:
         SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
 
-    def _sqlite_test_db_path() -> Path:
-        sqlite_test_override = os.environ.get("ARTHEXIS_SQLITE_TEST_PATH")
-        if sqlite_test_override:
-            return Path(sqlite_test_override)
+def _sqlite_test_db_path() -> Path:
+    sqlite_test_override = os.environ.get("ARTHEXIS_SQLITE_TEST_PATH")
+    if sqlite_test_override:
+        return Path(sqlite_test_override)
 
-        preferred_dir = BASE_DIR / "work" / "test_db"
-        try:
-            preferred_dir.mkdir(parents=True, exist_ok=True)
-            if os.access(preferred_dir, os.W_OK):
-                return preferred_dir / "test_db.sqlite3"
-        except OSError:
+    preferred_dir = BASE_DIR / "work" / "test_db"
+    try:
+        preferred_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix="writable_check_", dir=preferred_dir):
             pass
+        return preferred_dir / "test_db.sqlite3"
+    except OSError:
+        pass
 
-        temp_dir = Path(tempfile.mkdtemp(prefix="arthexis_test_db_"))
-        return temp_dir / "test_db.sqlite3"
+    temp_dir_path = tempfile.mkdtemp(prefix="arthexis_test_db_")
+    atexit.register(shutil.rmtree, temp_dir_path, ignore_errors=True)
+    return Path(temp_dir_path) / "test_db.sqlite3"
 
     SQLITE_TEST_DB_PATH = _sqlite_test_db_path()
 
