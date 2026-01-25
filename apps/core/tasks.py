@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import re
@@ -18,6 +19,7 @@ import urllib.error
 import urllib.request
 
 import requests
+import psutil
 
 from celery import shared_task
 from apps.repos import github
@@ -147,6 +149,64 @@ def _project_base_dir() -> Path:
     """Return the filesystem base directory for runtime operations."""
 
     return auto_upgrade_base_dir()
+
+
+def _read_process_cmdline(pid: int) -> list[str]:
+    """Return the command line for a process when available."""
+
+    try:
+        return psutil.Process(pid).cmdline()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+        return []
+
+
+def _read_process_start_time(pid: int) -> float | None:
+    """Return the process start time in epoch seconds when available."""
+
+    try:
+        return psutil.Process(pid).create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+        return None
+
+
+def _is_migration_server_running(lock_dir: Path) -> bool:
+    """Return ``True`` when the migration server lock indicates it is active."""
+
+    state_path = lock_dir / "migration_server.json"
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    except json.JSONDecodeError:
+        return True
+
+    pid = payload.get("pid")
+    if isinstance(pid, str) and pid.isdigit():
+        pid = int(pid)
+    if not isinstance(pid, int):
+        return False
+
+    cmdline = _read_process_cmdline(pid)
+    script_path = lock_dir.parent / "scripts" / "migration_server.py"
+    if not any(str(part) == str(script_path) for part in cmdline):
+        return False
+
+    timestamp = payload.get("timestamp")
+    if isinstance(timestamp, str):
+        try:
+            timestamp = float(timestamp)
+        except ValueError:
+            timestamp = None
+
+    start_time = _read_process_start_time(pid)
+    if (
+        isinstance(timestamp, (int, float))
+        and start_time is not None
+        and abs(start_time - timestamp) > 120
+    ):
+        return False
+
+    return True
 
 
 def _load_upgrade_canaries() -> list["Node"]:
