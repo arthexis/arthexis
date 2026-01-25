@@ -13,21 +13,33 @@ import pytest
 # connection attempts when checking availability inside config.settings.
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault(
+    "ARTHEXIS_SQLITE_TEST_PATH", "/tmp/arthexis/test_db/test_db.sqlite3"
+)
 
 
 def _ensure_clean_test_databases() -> None:
     base_dir = Path(__file__).resolve().parent
-    candidates = [
+    candidates = {
         base_dir / "test_db.sqlite3",
         base_dir / "work" / "test_db.sqlite3",
         base_dir / "work" / "test_db" / "test_db.sqlite3",
-    ]
+    }
+    sqlite_test_path = Path(os.environ["ARTHEXIS_SQLITE_TEST_PATH"])
+    candidates.add(sqlite_test_path)
+    candidates.update(
+        {
+            sqlite_test_path.with_suffix(f"{sqlite_test_path.suffix}-wal"),
+            sqlite_test_path.with_suffix(f"{sqlite_test_path.suffix}-shm"),
+        }
+    )
 
-    for path in candidates:
+    for path in sorted(candidates):
         if path.exists():
             path.unlink()
 
     (base_dir / "work" / "test_db").mkdir(parents=True, exist_ok=True)
+    sqlite_test_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 _ensure_clean_test_databases()
