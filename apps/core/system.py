@@ -2190,7 +2190,10 @@ def _read_service_mode(lock_dir: Path) -> str:
 def _pid_file_running(pid_path: Path) -> bool:
     try:
         raw_pid = pid_path.read_text(encoding="utf-8").strip()
-    except OSError:
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        logger.warning("Failed to read PID file %s: %s", pid_path, exc)
         return False
 
     if not raw_pid.isdigit():
