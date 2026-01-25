@@ -19,6 +19,31 @@ delegated systemd unit is launched, and what to check if something fails.
   while latest runs daily at the same hour unless overridden with
   `ARTHEXIS_UPGRADE_FREQ`.
 
+## Canary node gating
+
+Auto-upgrades can be gated behind designated canary nodes. When canaries are
+configured, a node will only auto-upgrade after every canary is both online and
+already running the target version or revision. This prevents simultaneous
+rollouts and ensures upgrades roll through a trusted subset first.
+
+### Configure canaries (admin only)
+
+1. Open **Admin → Nodes → Nodes**.
+2. Edit the local node.
+3. In the **Upgrade** section, set **Upgrade canaries** to one or more nodes.
+4. Save the node.
+
+### How the gate works
+
+- **Online requirement:** each canary must have reported in within the last 10
+  minutes (based on `last_updated`).
+- **Upgrade requirement:**
+  - **Stable channel:** the canary must match the target release version (or
+    release revision when provided).
+  - **Unstable channel:** the canary must already be on the target Git revision.
+- If any canary is offline or behind, the local node logs a canary gate message
+  in `logs/auto-upgrade.log` and skips the upgrade check.
+
 ## How delegation works
 
 1. Celery calls `scripts/delegated-upgrade.sh` when an update is required.

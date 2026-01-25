@@ -12,7 +12,6 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.nginx import services
-from apps.nginx.config_utils import slugify
 from apps.nginx.forms import ManagedSubdomainForm
 from apps.nginx.renderers import generate_primary_config, generate_site_entries_content
 
@@ -26,7 +25,6 @@ class SiteConfigurationViewMixin:
         "protocol",
         "role",
         "port",
-        "secondary_target",
         "certificate",
         "include_ipv6",
         "last_sync_at",
@@ -69,10 +67,6 @@ class SiteConfigurationViewMixin:
         if not latest:
             return "-"
         return naturaltime(latest)
-
-    @admin.display(description=_("Secondary instance"))
-    def secondary_target(self, obj):
-        return obj.secondary_instance or "-"
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
@@ -230,11 +224,6 @@ class SiteConfigurationViewMixin:
     def _build_file_previews(self, config) -> list[dict]:
         files: list[dict] = []
 
-        secondary_instance, secondary_error = self._resolve_secondary_instance(config)
-        proxy_target = None
-        if secondary_instance:
-            proxy_target = f"arthexis-{slugify(secondary_instance.name)}-pool"
-
         primary_content = generate_primary_config(
             config.mode,
             config.port,
@@ -242,7 +231,6 @@ class SiteConfigurationViewMixin:
             https_enabled=config.protocol == "https",
             include_ipv6=config.include_ipv6,
             external_websockets=config.external_websockets,
-            secondary_instance=secondary_instance,
         )
         files.append(
             self._build_file_preview(
@@ -252,16 +240,6 @@ class SiteConfigurationViewMixin:
             )
         )
 
-        if secondary_error:
-            files.append(
-                {
-                    "label": _("Secondary instance validation"),
-                    "path": config.secondary_instance or "-",
-                    "content": "",
-                    "status": secondary_error,
-                }
-            )
-
         try:
             site_content = generate_site_entries_content(
                 config.staged_site_config,
@@ -269,7 +247,6 @@ class SiteConfigurationViewMixin:
                 config.port,
                 https_enabled=config.protocol == "https",
                 external_websockets=config.external_websockets,
-                proxy_target=proxy_target,
                 subdomain_prefixes=config.get_subdomain_prefixes(),
             )
         except ValueError as exc:
@@ -387,11 +364,3 @@ class SiteConfigurationViewMixin:
             "%(config)s requires a linked certificate before applying HTTPS. Use %(link)s after assigning one."
         ) % {"config": config, "link": link}
         self.message_user(request, message, messages.ERROR)
-
-    def _resolve_secondary_instance(self, config):
-        if not getattr(config, "secondary_instance", ""):
-            return None, None
-        try:
-            return config.resolve_secondary_instance(), None
-        except services.SecondaryInstanceError as exc:
-            return None, str(exc)

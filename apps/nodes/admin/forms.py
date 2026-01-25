@@ -10,6 +10,17 @@ from ..models import NetMessage, Node, NodeFeature, NodeRole
 
 
 class NodeAdminForm(forms.ModelForm):
+    upgrade_canaries = forms.ModelMultipleChoiceField(
+        queryset=Node.objects.all(),
+        required=False,
+        label=_("Upgrade canaries"),
+        widget=FilteredSelectMultiple("Nodes", False),
+        help_text=_(
+            "Select nodes that must be upgraded and online before this node can "
+            "auto-upgrade."
+        ),
+    )
+
     class Meta:
         model = Node
         exclude = ("badge_color", "features")
@@ -33,6 +44,14 @@ class NodeAdminForm(forms.ModelForm):
                 _("Enter at least one valid, non-loopback IPv4 address or leave blank."),
             )
         return serialized
+
+    def clean_upgrade_canaries(self):
+        canaries = self.cleaned_data.get("upgrade_canaries")
+        if not canaries:
+            return canaries
+        if self.instance.pk and self.instance in canaries:
+            raise forms.ValidationError(_("A node cannot be its own upgrade canary."))
+        return canaries
 
 
 class SendNetMessageForm(forms.Form):

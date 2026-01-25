@@ -8,22 +8,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
-# shellcheck source=scripts/helpers/sidecars.sh
-. "$SCRIPT_DIR/scripts/helpers/sidecars.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
 SERVICE=""
 NO_WARN=0
-TARGET_SECONDARY=""
-TARGET_MIGRATOR=""
-FULL_UNINSTALL=0
-PRIMARY_ONLY=0
 REMOVE_RFID_SERVICE=1
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--no-warn] [--secondary NAME] [--migrator NAME] [--rfid-service|--no-rfid-service] [--full] [--primary]" >&2
+    echo "Usage: $0 [--service NAME] [--no-warn] [--rfid-service|--no-rfid-service]" >&2
     exit 1
 }
 
@@ -54,49 +48,6 @@ confirm_database_deletion() {
     return 0
 }
 
-resolve_sidecar_path() {
-    local type="$1"
-    local name="$2"
-
-    for record in "${SIDECAR_RECORDS[@]}"; do
-        IFS=$'	' read -r r_type r_name r_path r_service <<< "$record"
-        if [ "$r_type" = "$type" ] && [ "$r_name" = "$name" ]; then
-            echo "$r_path"
-            return 0
-        fi
-    done
-
-    local candidate
-    candidate="$(cd "$SCRIPT_DIR/.." && pwd)/$name"
-    echo "$candidate"
-}
-
-uninstall_sidecar_instance() {
-    local type="$1"
-    local name="$2"
-    local target_path="$3"
-
-    if [ -z "$target_path" ]; then
-        echo "Unable to resolve path for $type instance $name" >&2
-        return 1
-    fi
-
-    local script="$target_path/uninstall.sh"
-    if [ ! -x "$script" ]; then
-        echo "No uninstall script found for $type instance at $target_path" >&2
-        return 1
-    fi
-
-    echo "Uninstalling $type instance '$name' at $target_path"
-    if ARTHEXIS_SIDELOAD_PARENT=1 "$script" --no-warn; then
-        arthexis_remove_sidecar_record "$BASE_DIR" "$type" "$name"
-        return 0
-    fi
-
-    echo "Failed to uninstall $type instance '$name'" >&2
-    return 1
-}
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -108,30 +59,12 @@ while [[ $# -gt 0 ]]; do
             NO_WARN=1
             shift
             ;;
-        --secondary)
-            [ -z "$2" ] && usage
-            TARGET_SECONDARY="$2"
-            shift 2
-            ;;
-        --migrator)
-            [ -z "$2" ] && usage
-            TARGET_MIGRATOR="$2"
-            shift 2
-            ;;
-        --full)
-            FULL_UNINSTALL=1
-            shift
-            ;;
         --rfid-service)
             REMOVE_RFID_SERVICE=1
             shift
             ;;
         --no-rfid-service)
             REMOVE_RFID_SERVICE=0
-            shift
-            ;;
-        --primary)
-            PRIMARY_ONLY=1
             shift
             ;;
         *)
@@ -149,18 +82,6 @@ RECORDED_SYSTEMD_UNITS=()
 if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
     mapfile -t RECORDED_SYSTEMD_UNITS < "$SYSTEMD_UNITS_LOCK"
 fi
-
-INSTANCE_TYPE="primary"
-if [ -f "$LOCK_DIR/instance_type.lck" ]; then
-    INSTANCE_TYPE="$(cat "$LOCK_DIR/instance_type.lck")"
-fi
-
-SIDECAR_RECORDS=()
-while IFS=$'\t' read -r type name path service; do
-    [ -z "$type" ] && continue
-    SIDECAR_RECORDS+=("$type\t$name\t$path\t$service")
-done < <(arthexis_read_sidecar_records "$BASE_DIR")
-
 
 if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
     SERVICE="$(cat "$LOCK_DIR/service.lck")"
@@ -187,24 +108,6 @@ if [ -z "$SERVICE" ] && [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
     fi
 fi
 
-if [ -n "$TARGET_SECONDARY" ]; then
-    TARGET_PATH=$(resolve_sidecar_path "secondary" "$TARGET_SECONDARY")
-    uninstall_sidecar_instance "secondary" "$TARGET_SECONDARY" "$TARGET_PATH"
-    exit $?
-fi
-
-if [ -n "$TARGET_MIGRATOR" ]; then
-    TARGET_PATH=$(resolve_sidecar_path "migrator" "$TARGET_MIGRATOR")
-    uninstall_sidecar_instance "migrator" "$TARGET_MIGRATOR" "$TARGET_PATH"
-    exit $?
-fi
-
-SIDECAR_COUNT=${#SIDECAR_RECORDS[@]}
-if [ "$INSTANCE_TYPE" = "primary" ] && [ $SIDECAR_COUNT -gt 0 ] && [ $FULL_UNINSTALL -eq 0 ] && [ $PRIMARY_ONLY -eq 0 ]; then
-    echo "Multiple Arthexis instances detected. Use --full, --primary, --secondary or --migrator to choose a target."
-    exit 1
-fi
-
 
 read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
@@ -215,13 +118,6 @@ fi
 if ! confirm_database_deletion "Uninstalling Arthexis"; then
     echo "Uninstall aborted."
     exit 0
-fi
-
-if [ $FULL_UNINSTALL -eq 1 ]; then
-    for record in "${SIDECAR_RECORDS[@]}"; do
-        IFS=$'	' read -r type name path service <<< "$record"
-        uninstall_sidecar_instance "$type" "$name" "$path" || true
-    done
 fi
 
 if [ -n "$SERVICE" ]; then
