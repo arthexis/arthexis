@@ -520,13 +520,13 @@ def _get_current_site_with_request_fallback(request=None):
 sites_shortcuts.get_current_site = _get_current_site_with_request_fallback
 
 MIDDLEWARE = [
+    "config.middleware.CrossOriginOpenerPolicyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "config.middleware.ActiveAppMiddleware",
     "config.middleware.SiteHttpsRedirectMiddleware",
     "config.middleware.ContentSecurityPolicyMiddleware",
-    "config.middleware.CrossOriginOpenerPolicyMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "apps.sites.middleware.LanguagePreferenceMiddleware",
     "django.middleware.common.CommonMiddleware",
