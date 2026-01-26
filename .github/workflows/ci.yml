@@ -300,21 +300,21 @@ jobs:
         continue-on-error: true
         with:
           name: install-pytest-log
-          path: artifacts
+          path: artifacts/install-pytest-log
       - name: Download upgrade pytest log
         if: always()
         uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: upgrade-pytest-log
-          path: artifacts
+          path: artifacts/upgrade-pytest-log
       - name: Download slow tests pytest log
         if: always()
         uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: slow-tests-pytest-log
-          path: artifacts
+          path: artifacts/slow-tests-pytest-log
       - name: Comment on PR with failure summary
         uses: actions/github-script@v8
         env:
