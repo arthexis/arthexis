@@ -960,6 +960,8 @@
             action="{% url 'pages:user-story-submit' %}"
             data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
             data-network-error="{% trans 'Network error. Please try again.' %}"
+            data-copy-success="{% trans 'Copied!' %}"
+            data-copy-error="{% trans 'Copy failed. Please try again.' %}"
           >
             {% csrf_token %}
             <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
@@ -994,7 +996,7 @@
             </div>
           {% endif %}
             <div class="mb-3">
-              <span class="form-label d-block">
+              <span class="form-label d-block" id="user-story-rating-group-label">
                 {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
                   Your experience on {{ link_start }}this page{{ link_end }}
                 {% endblocktrans %}
