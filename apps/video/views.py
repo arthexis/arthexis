@@ -41,6 +41,29 @@ def mjpeg_stream(request, slug):
     )
 
 
+def mjpeg_probe(request, slug):
+    stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
+    try:
+        frame_bytes = stream.capture_frame_bytes()
+    except RuntimeError:
+        logger.exception("Runtime error while capturing MJPEG frame for %s", slug)
+        return HttpResponse("Unable to capture frame.", status=503)
+    except Exception:
+        logger.exception("Unexpected error while capturing MJPEG frame for %s", slug)
+        return HttpResponse("Unable to capture frame.", status=503)
+
+    if not frame_bytes:
+        return HttpResponse(status=204)
+
+    try:
+        stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
+    except Exception:
+        logger.exception("Unable to store MJPEG frame for %s", slug)
+        return HttpResponse("Unable to store frame.", status=503)
+
+    return HttpResponse(status=204)
+
+
 def camera_gallery(request):
     streams = (
         MjpegStream.objects.filter(is_active=True)
