@@ -7,7 +7,14 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.core import system
+from apps.core.system.filesystem import _auto_upgrade_mode_file
+from apps.core.system.ui import _format_timestamp
+from apps.core.system.upgrade import (
+    _auto_upgrade_next_check,
+    _get_auto_upgrade_periodic_task,
+    _load_auto_upgrade_skip_revisions,
+    _read_auto_upgrade_mode,
+)
 
 
 class Command(BaseCommand):
@@ -18,7 +25,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):  # noqa: D401 - inherited docstring
         base_dir = Path(settings.BASE_DIR)
         now = timezone.now()
-        task, available, error = system._get_auto_upgrade_periodic_task()
+        task, available, error = _get_auto_upgrade_periodic_task()
         schedule = self._resolve_schedule(task)
 
         next_run_dt = self._estimate_next_run(task, schedule) if task else None
@@ -26,25 +33,25 @@ class Command(BaseCommand):
 
         next_display = "Unavailable"
         if next_run_dt is not None:
-            next_display = system._format_timestamp(next_run_dt) or "Unavailable"
+            next_display = _format_timestamp(next_run_dt) or "Unavailable"
         else:
             # Fall back to the legacy formatter so disabled schedules still display
-            fallback = system._auto_upgrade_next_check()
+            fallback = _auto_upgrade_next_check()
             next_display = fallback or next_display
 
         last_display = (
-            system._format_timestamp(last_run_dt)
+            _format_timestamp(last_run_dt)
             if last_run_dt is not None
             else ""
         )
         if not last_display:
             last_display = "Unavailable"
 
-        mode_info = system._read_auto_upgrade_mode(base_dir)
+        mode_info = _read_auto_upgrade_mode(base_dir)
         mode_value = str(mode_info.get("mode", "version"))
         mode_enabled = bool(mode_info.get("enabled", False))
 
-        skip_revisions = system._load_auto_upgrade_skip_revisions(base_dir)
+        skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
         blockers = self._collect_blockers(
             base_dir,
             available,
@@ -160,7 +167,7 @@ class Command(BaseCommand):
             elif schedule is None:
                 blockers.append("The auto-upgrade schedule configuration could not be read.")
 
-        mode_file = system._auto_upgrade_mode_file(base_dir)
+        mode_file = _auto_upgrade_mode_file(base_dir)
         if not mode_info.get("enabled"):
             if not mode_info.get("lock_exists"):
                 blockers.append(

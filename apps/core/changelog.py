@@ -241,7 +241,9 @@ def _gather_commits(
     except ChangelogError:
         return tuple()
 
-    from apps.core.system import _github_commit_url  # Local import to avoid circular dependency
+    from apps.core.system.network import (  # Local import to avoid circular dependency
+        _github_commit_url,
+    )
 
     for chunk in output.strip().split("\x1e"):
         if not chunk:

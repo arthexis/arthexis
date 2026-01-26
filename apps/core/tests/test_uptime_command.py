@@ -10,6 +10,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
+from apps.core.uptime_constants import SUITE_UPTIME_LOCK_MAX_AGE
 from apps.core.management.commands import uptime as uptime_command
 
 
@@ -31,7 +32,9 @@ def test_uptime_command_reports_lcd_format(monkeypatch, settings, tmp_path):
 
     monkeypatch.setattr(uptime_command.timezone, "now", lambda: now)
     monkeypatch.setattr(uptime_command.node_tasks.django_timezone, "now", lambda: now)
-    monkeypatch.setattr(uptime_command.system, "_system_boot_time", lambda _now: started_at - timedelta(minutes=1))
+    monkeypatch.setattr(
+        uptime_command, "_system_boot_time", lambda _now: started_at - timedelta(minutes=1)
+    )
     monkeypatch.setattr(
         uptime_command.node_tasks.psutil,
         "boot_time",
@@ -58,7 +61,9 @@ def test_uptime_command_warns_when_lock_missing(monkeypatch, settings, tmp_path)
     settings.BASE_DIR = tmp_path
     monkeypatch.setattr(uptime_command.timezone, "now", lambda: now)
     monkeypatch.setattr(uptime_command.node_tasks.django_timezone, "now", lambda: now)
-    monkeypatch.setattr(uptime_command.system, "_system_boot_time", lambda _now: now - timedelta(hours=1))
+    monkeypatch.setattr(
+        uptime_command, "_system_boot_time", lambda _now: now - timedelta(hours=1)
+    )
 
     stdout = io.StringIO()
     call_command("uptime", stdout=stdout)
@@ -71,7 +76,7 @@ def test_uptime_command_warns_when_lock_missing(monkeypatch, settings, tmp_path)
 def test_uptime_command_detects_stale_heartbeat(monkeypatch, settings, tmp_path):
     now = timezone.make_aware(datetime(2024, 1, 1, 12, 0, 0))
     started_at = now - timedelta(hours=1)
-    stale_time = now - (uptime_command.system.SUITE_UPTIME_LOCK_MAX_AGE * 2)
+    stale_time = now - (SUITE_UPTIME_LOCK_MAX_AGE * 2)
 
     settings.BASE_DIR = tmp_path
     lock_path = _write_lock(tmp_path / ".locks", started_at)
@@ -79,7 +84,9 @@ def test_uptime_command_detects_stale_heartbeat(monkeypatch, settings, tmp_path)
 
     monkeypatch.setattr(uptime_command.timezone, "now", lambda: now)
     monkeypatch.setattr(uptime_command.node_tasks.django_timezone, "now", lambda: now)
-    monkeypatch.setattr(uptime_command.system, "_system_boot_time", lambda _now: now - timedelta(hours=2))
+    monkeypatch.setattr(
+        uptime_command, "_system_boot_time", lambda _now: now - timedelta(hours=2)
+    )
 
     stdout = io.StringIO()
     call_command("uptime", stdout=stdout)

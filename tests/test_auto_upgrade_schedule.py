@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from django.utils import timezone
 
-from apps.core import system
+from apps.core.system import upgrade
+from apps.core.system.ui import _format_timestamp
 from apps.core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
 
 
@@ -32,9 +33,9 @@ def test_auto_upgrade_schedule_reports_last_run(last_run_at, expected):
         timestamp = timezone.now()
         task.last_run_at = timestamp
         task.save(update_fields=["last_run_at"])
-        expected = system._format_timestamp(timestamp)
+        expected = _format_timestamp(timestamp)
 
-    info = system._load_auto_upgrade_schedule()
+    info = upgrade._load_auto_upgrade_schedule()
 
     assert info["configured"] is True
     assert info["available"] is True
