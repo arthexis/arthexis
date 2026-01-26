@@ -1,0 +1,176 @@
+{% extends "pages/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% trans "Charging Station Map" %}{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <style>
+    #charging-map {
+      min-height: 60vh;
+      height: 75vh;
+      border-radius: 0.5rem;
+    }
+    .charging-location-link {
+      text-decoration: none;
+    }
+    .charging-location-link.active {
+      font-weight: 600;
+      color: var(--bs-primary);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-3 mt-4 mt-lg-0 order-2 order-lg-1">
+    <div class="reader-sidebar">
+      <nav class="toc">
+        <h4>{% trans "Charging Locations" %}</h4>
+        <ul class="list-unstyled" id="charging-location-list">
+          {% for location in locations %}
+            <li class="mb-2">
+              <a
+                href="#"
+                class="charging-location-link{% if forloop.first %} active{% endif %}"
+                data-location-id="{{ location.id }}"
+                data-lat="{{ location.latitude }}"
+                data-lng="{{ location.longitude }}"
+                data-directions="{{ location.directions_url }}"
+                data-name="{{ location.name }}"
+              >
+                {{ location.name }}
+              </a>
+            </li>
+          {% empty %}
+            <li class="text-muted">{% trans "No charging locations available yet." %}</li>
+          {% endfor %}
+        </ul>
+      </nav>
+      <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
+        <div class="card-body flex-column">
+          <p class="small text-uppercase mb-3 text-muted">
+            {% trans "Directions to" %} <span id="charging-qr-location-name">
+              {% if initial_location %}{{ initial_location.name }}{% else %}{% trans "station" %}{% endif %}
+            </span>
+          </p>
+          <div class="reader-qr-image" id="charging-qr"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-9 order-1 order-lg-2">
+    <div class="markdown-body" id="reader-content">
+      <h1>{% trans "Charging Station Map" %}</h1>
+      {% if locations %}
+        <div id="charging-map"></div>
+      {% else %}
+        <p class="text-muted">{% trans "There are no charging locations with coordinates yet." %}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{{ locations|json_script:"charging-locations-data" }}
+{% endblock %}
+
+{% block extra_scripts %}
+  {{ block.super }}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="{% static 'docs/js/qrcode.min.js' %}"></script>
+  <script>
+    (function () {
+      const dataElement = document.getElementById('charging-locations-data');
+      const locations = dataElement ? JSON.parse(dataElement.textContent || '[]') : [];
+      const mapContainer = document.getElementById('charging-map');
+      const qrContainer = document.getElementById('charging-qr');
+      const qrLabel = document.getElementById('charging-qr-location-name');
+      const locationLinks = Array.from(document.querySelectorAll('.charging-location-link'));
+      const markers = new Map();
+      let map = null;
+
+      function setActiveLink(target) {
+        locationLinks.forEach((link) => link.classList.remove('active'));
+        if (target) {
+          target.classList.add('active');
+        }
+      }
+
+      function renderQr(location) {
+        if (!qrContainer || !location || typeof window.QRCode === 'undefined') {
+          return;
+        }
+        qrContainer.innerHTML = '';
+        new QRCode(qrContainer, {
+          text: location.directions_url,
+          width: 180,
+          height: 180,
+          colorDark: '#0a0a0a',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+        if (qrLabel) {
+          qrLabel.textContent = location.name;
+        }
+      }
+
+      function selectLocation(location, link) {
+        if (!location) {
+          return;
+        }
+        if (link) {
+          setActiveLink(link);
+        }
+        if (map && markers.has(location.id)) {
+          const marker = markers.get(location.id);
+          marker.openPopup();
+          map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
+        }
+        renderQr(location);
+      }
+
+      if (mapContainer && locations.length) {
+        map = L.map('charging-map');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+
+        const bounds = [];
+        locations.forEach((location) => {
+          const latLng = [location.latitude, location.longitude];
+          bounds.push(latLng);
+          const marker = L.marker(latLng)
+            .addTo(map)
+            .bindPopup(location.name);
+          markers.set(location.id, marker);
+        });
+        if (bounds.length === 1) {
+          map.setView(bounds[0], 14);
+        } else {
+          map.fitBounds(bounds, { padding: [30, 30] });
+        }
+      }
+
+      locationLinks.forEach((link) => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          const locationId = Number.parseInt(link.dataset.locationId, 10);
+          const location = locations.find((entry) => entry.id === locationId);
+          selectLocation(location, link);
+        });
+      });
+
+      if (locations.length) {
+        selectLocation(locations[0], locationLinks[0]);
+      }
+    })();
+  </script>
+{% endblock %}

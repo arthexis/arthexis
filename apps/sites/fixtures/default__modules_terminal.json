@@ -59,6 +59,19 @@
       "is_seed_data": true,
       "is_deleted": false,
       "module": ["/ocpp/"],
+      "path": "/ocpp/charging-map/",
+      "label": "Charging Station Map",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": ["/ocpp/"],
       "path": "/ocpp/evcs/simulator/",
       "label": "EVCS Online Simulator",
       "enabled": true,
