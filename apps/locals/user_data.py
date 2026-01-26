@@ -1270,9 +1270,15 @@ def _user_data_view(request):
             fixture = _fixture_path(request.user, obj)
             items.append({"url": url, "label": str(obj), "fixture": fixture})
         sections.append({"opts": model._meta, "items": items})
+    fixture_status = _user_fixture_status(request.user)
     context = admin.site.each_context(request)
     context.update(
-        {"title": _("User Data"), "sections": sections, "import_export": True}
+        {
+            "title": _("User Data"),
+            "sections": sections,
+            "import_export": True,
+            "fixture_status": fixture_status,
+        }
     )
     return TemplateResponse(request, "admin/data_list.html", context)
 
@@ -1309,6 +1315,102 @@ def _user_data_import(request):
     return HttpResponseRedirect(reverse("admin:user_data"))
 
 
+def _user_fixture_paths(user):
+    return [
+        path
+        for path in sorted(_data_dir(user).glob("*.json"), key=_fixture_sort_key)
+        if not _is_user_fixture(path)
+    ]
+
+
+def _read_fixture_entries(path: Path) -> list[dict]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            content = path.read_bytes().decode("latin-1")
+        except Exception:
+            return []
+    except Exception:
+        return []
+    try:
+        data = json.loads(content)
+    except Exception:
+        return []
+    filtered, _ = _filter_fixture_entries(data)
+    if not isinstance(filtered, list):
+        return []
+    return [obj for obj in filtered if isinstance(obj, dict)]
+
+
+def _fixture_has_unapplied_entries(path: Path) -> bool:
+    entries = _read_fixture_entries(path)
+    for obj in entries:
+        label = obj.get("model")
+        pk = obj.get("pk")
+        if not label or pk is None:
+            continue
+        try:
+            model = apps.get_model(label)
+        except LookupError:
+            continue
+        manager = getattr(model, "all_objects", model._default_manager)
+        if not manager.filter(pk=pk).exists():
+            return True
+    return False
+
+
+def _user_fixture_status(user):
+    paths = _user_fixture_paths(user)
+    pending = [path for path in paths if _fixture_has_unapplied_entries(path)]
+    return {"pending": pending, "total": paths}
+
+
+def _apply_user_fixture_paths(request, paths, *, action_label: str, empty_message):
+    if not paths:
+        messages.warning(request, empty_message)
+        return
+    loaded = 0
+    for path in paths:
+        if _load_fixture(path):
+            loaded += 1
+    if loaded:
+        message = ngettext(
+            "%(action)s %(count)d user data fixture.",
+            "%(action)s %(count)d user data fixtures.",
+            loaded,
+        ) % {"action": action_label, "count": loaded}
+        messages.success(request, message)
+    else:
+        messages.warning(request, _("No user data fixtures were applied."))
+
+
+def _user_data_apply_fixtures(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    status = _user_fixture_status(request.user)
+    _apply_user_fixture_paths(
+        request,
+        status["pending"],
+        action_label=_("Applied"),
+        empty_message=_("No unapplied user data fixtures found."),
+    )
+    return HttpResponseRedirect(reverse("admin:user_data"))
+
+
+def _user_data_reset_fixtures(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    status = _user_fixture_status(request.user)
+    _apply_user_fixture_paths(
+        request,
+        status["total"],
+        action_label=_("Reset"),
+        empty_message=_("No user data fixtures found."),
+    )
+    return HttpResponseRedirect(reverse("admin:user_data"))
+
+
 def patch_admin_user_data_views() -> None:
     original_get_urls = admin.site.get_urls
 
@@ -1330,6 +1432,16 @@ def patch_admin_user_data_views() -> None:
                 "user-data/import/",
                 admin.site.admin_view(_user_data_import),
                 name="user_data_import",
+            ),
+            path(
+                "user-data/apply-fixtures/",
+                admin.site.admin_view(_user_data_apply_fixtures),
+                name="user_data_apply_fixtures",
+            ),
+            path(
+                "user-data/reset-fixtures/",
+                admin.site.admin_view(_user_data_reset_fixtures),
+                name="user_data_reset_fixtures",
             ),
             path(
                 "user-data/toggle/<str:app_label>/<str:model_name>/<str:object_id>/",
