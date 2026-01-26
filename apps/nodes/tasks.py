@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
+from apps.core import uptime_constants, uptime_utils
 from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, lcd_feature_enabled, queue_startup_message
 from .models import NetMessage, Node, NodeRole, PendingNetMessage
 from apps.content.utils import capture_and_save_screenshot
@@ -100,6 +101,88 @@ def _parse_suite_start_timestamp(raw_value: object) -> datetime | None:
 
     return parsed
 
+
+def _startup_duration_seconds(
+    base_dir: Path, *, now: datetime | None = None
+) -> int | None:
+    lock_path = Path(base_dir) / ".locks" / uptime_utils.SUITE_UPTIME_LOCK_NAME
+    now_value = now or django_timezone.now()
+
+    payload = None
+    lock_fresh = False
+    try:
+        stats = lock_path.stat()
+        heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=datetime_timezone.utc)
+        if heartbeat <= now_value:
+            lock_fresh = (
+                now_value - heartbeat
+            ) <= uptime_constants.SUITE_UPTIME_LOCK_MAX_AGE
+    except OSError:
+        lock_fresh = False
+
+    if lock_fresh:
+        try:
+            payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = None
+
+        if isinstance(payload, dict):
+            started_at = _parse_suite_start_timestamp(
+                payload.get("started_at") or payload.get("boot_time")
+            )
+            if started_at:
+                seconds = int((now_value - started_at).total_seconds())
+                if seconds >= 0:
+                    return seconds
+
+    try:
+        boot_time = float(psutil.boot_time())
+    except Exception:
+        return None
+
+    if not boot_time:
+        return None
+
+    boot_dt = datetime.fromtimestamp(boot_time, tz=datetime_timezone.utc)
+    seconds = int((now_value - boot_dt).total_seconds())
+    return seconds if seconds >= 0 else None
+
+
+def _availability_seconds(base_dir: Path, *, now: datetime | None = None) -> int | None:
+    return uptime_utils.availability_seconds(
+        base_dir,
+        _parse_suite_start_timestamp,
+        now=now,
+    )
+
+
+def _active_interface_label() -> str:
+    return uptime_utils.internet_interface_label()
+
+
+def _ap_mode_enabled() -> bool:
+    return uptime_utils.ap_mode_enabled()
+
+
+def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
+    if seconds is None or seconds < 0:
+        return None
+
+    minutes_total, _ = divmod(seconds, 60)
+    days, remaining_minutes = divmod(minutes_total, 24 * 60)
+    hours, minutes = divmod(remaining_minutes, 60)
+    return days, hours, minutes
+
+
+def _format_duration_hms(seconds: int | None) -> str:
+    if seconds is None or seconds < 0:
+        return "?m?s"
+
+    minutes_total, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes_total, 60)
+    if hours:
+        return f"{hours}h{minutes}m{secs}s"
+    return f"{minutes}m{secs}s"
 
 
 
