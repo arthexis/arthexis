@@ -157,6 +157,20 @@ def last_net_message() -> dict[str, object]:
     return {"text": "", "has_content": False, "pk": None, "url": ""}
 
 
+@register.simple_tag
+def admin_translate_url(language_tabs) -> str:
+    """Return the first available translation URL for parler language tabs."""
+
+    if not language_tabs:
+        return ""
+
+    for url, _name, _code, status in language_tabs:
+        if status == "empty":
+            return url
+
+    return ""
+
+
 @register.simple_tag(takes_context=True)
 def model_admin_actions(context, app_label, model_name):
     """Return available admin actions for the given model.
