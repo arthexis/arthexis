@@ -199,7 +199,7 @@ class WebsocketAuthMixin:
             return None
         return user
 
-    async def _enforce_ws_auth(self, existing_charger) -> bool:
+    async def _enforce_ws_auth(self, existing_charger: "Charger" | None) -> bool:
         """Enforce HTTP Basic auth requirements for websocket connections."""
 
         if not existing_charger or not existing_charger.requires_ws_auth:
