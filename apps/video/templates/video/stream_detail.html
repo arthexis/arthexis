@@ -43,7 +43,9 @@
       if (!probeUrl) {
         return;
       }
-      fetch(probeUrl, { cache: "no-store" }).catch(() => {});
+      fetch(probeUrl, { cache: "no-store" }).catch((error) => {
+        console.error("MJPEG probe request failed:", error);
+      });
     };
 
     const startProbing = () => {

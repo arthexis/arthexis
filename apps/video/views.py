@@ -52,14 +52,12 @@ def mjpeg_probe(request, slug):
         logger.exception("Unexpected error while capturing MJPEG frame for %s", slug)
         return HttpResponse("Unable to capture frame.", status=503)
 
-    if not frame_bytes:
-        return HttpResponse(status=204)
-
-    try:
-        stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
-    except Exception:
-        logger.exception("Unable to store MJPEG frame for %s", slug)
-        return HttpResponse("Unable to store frame.", status=503)
+    if frame_bytes:
+        try:
+            stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
+        except Exception:
+            logger.exception("Unable to store MJPEG frame for %s", slug)
+            return HttpResponse("Unable to store frame.", status=503)
 
     return HttpResponse(status=204)
 
