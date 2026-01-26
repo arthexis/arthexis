@@ -81,7 +81,7 @@ from ..views import _charger_state, _live_sessions
 
 
 
-from .miscellaneous import LogViewAdminMixin
+from .miscellaneous.simulator_admin import LogViewAdminMixin
 
 @admin.register(Charger)
 class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
@@ -2218,4 +2218,3 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             start = timezone.make_aware(start, timezone.get_current_timezone())
         end = start + timedelta(days=1)
         return start, end
-
