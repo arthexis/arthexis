@@ -1,58 +1,71 @@
-from django.test import TestCase
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.test import RequestFactory, SimpleTestCase
 from django.urls import reverse
 
-from apps.awg.models import CableSize, CalculatorTemplate
+from apps.awg.views.requests import awg_calculate
 
 
-class AwgCalculateViewTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        CableSize.objects.create(
-            awg_size="4",
-            material="cu",
-            dia_in=0.1,
-            dia_mm=2.5,
-            area_kcmil=21.1,
-            area_mm2=21.1,
-            k_ohm_km=0.1,
-            k_ohm_kft=0.0328,
-            amps_60c=95,
-            amps_75c=105,
-            amps_90c=115,
-            line_num=1,
-        )
+class AwgCalculateViewTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _get(self, url, data):
+        request = self.factory.get(url, data)
+        return awg_calculate(request)
+
+    def _json(self, response):
+        return json.loads(response.content.decode("utf-8"))
 
     def test_missing_meters_rejected(self):
         url = reverse("awg:awg_calculate")
-        response = self.client.get(
-            url, {"amps": 40, "volts": 220, "material": "cu"}
-        )
+        with patch("apps.awg.views.requests.find_awg") as find_awg:
+            response = self._get(url, {"amps": 40, "volts": 220, "material": "cu"})
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("meters", response.json()["error"].lower())
+        self.assertIn("meters", self._json(response)["error"].lower())
+        find_awg.assert_not_called()
 
     def test_calculates_from_parameters(self):
         url = reverse("awg:awg_calculate")
-        response = self.client.get(
-            url,
+        with patch(
+            "apps.awg.views.requests.find_awg", return_value={"awg": "4"}
+        ) as find_awg:
+            response = self._get(
+                url,
+                {
+                    "meters": 10,
+                    "amps": 40,
+                    "volts": 220,
+                    "material": "cu",
+                    "max_lines": 1,
+                    "phases": 2,
+                    "ground": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = self._json(response)
+        self.assertIn("awg", data)
+        self.assertNotEqual(data["awg"], "n/a")
+        find_awg.assert_called_once()
+        self.assertEqual(
+            find_awg.call_args.kwargs,
             {
-                "meters": 10,
-                "amps": 40,
-                "volts": 220,
+                "meters": "10",
+                "amps": "40",
+                "volts": "220",
                 "material": "cu",
-                "max_lines": 1,
-                "phases": 2,
-                "ground": 1,
+                "max_lines": "1",
+                "phases": "2",
+                "ground": "1",
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIn("awg", data)
-        self.assertNotEqual(data["awg"], "n/a")
-
     def test_template_supplies_defaults(self):
-        template = CalculatorTemplate.objects.create(
+        template = SimpleNamespace(
             name="EV Charger",
             meters=20,
             amps=50,
@@ -61,21 +74,68 @@ class AwgCalculateViewTests(TestCase):
             max_lines=1,
             phases=2,
             ground=1,
+            max_awg=None,
+            temperature=None,
+            conduit=None,
         )
         url = reverse("awg:awg_calculate")
-        response = self.client.get(url, {"template": template.pk})
+        with patch(
+            "apps.awg.views.requests.CalculatorTemplate"
+        ) as calculator_template, patch(
+            "apps.awg.views.requests.find_awg", return_value={"awg": "4"}
+        ) as find_awg:
+            calculator_template.objects.filter.return_value.first.return_value = (
+                template
+            )
+            response = self._get(url, {"template": "EV Charger"})
 
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = self._json(response)
         self.assertIn("awg", data)
         self.assertNotEqual(data["awg"], "n/a")
+        find_awg.assert_called_once()
+        self.assertEqual(
+            find_awg.call_args.kwargs,
+            {
+                "meters": 20,
+                "amps": 50,
+                "volts": 220,
+                "material": "cu",
+                "max_lines": 1,
+                "phases": 2,
+                "ground": 1,
+            },
+        )
 
-        override = self.client.get(url, {"template": template.pk, "amps": 30})
+        with patch(
+            "apps.awg.views.requests.CalculatorTemplate"
+        ) as calculator_template, patch(
+            "apps.awg.views.requests.find_awg", return_value={"awg": "4"}
+        ) as find_awg:
+            calculator_template.objects.filter.return_value.first.return_value = (
+                template
+            )
+            override = self._get(url, {"template": "EV Charger", "amps": 30})
         self.assertEqual(override.status_code, 200)
-        self.assertIn("awg", override.json())
+        self.assertIn("awg", self._json(override))
+        find_awg.assert_called_once()
+        self.assertEqual(
+            find_awg.call_args.kwargs,
+            {
+                "meters": 20,
+                "amps": "30",
+                "volts": 220,
+                "material": "cu",
+                "max_lines": 1,
+                "phases": 2,
+                "ground": 1,
+            },
+        )
 
     def test_unknown_template_returns_not_found(self):
         url = reverse("awg:awg_calculate")
-        response = self.client.get(url, {"template": 9999})
+        with patch("apps.awg.views.requests.CalculatorTemplate") as calculator_template:
+            calculator_template.objects.filter.return_value.first.return_value = None
+            response = self._get(url, {"template": 9999})
 
         self.assertEqual(response.status_code, 404)
