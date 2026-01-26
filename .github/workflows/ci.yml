@@ -1,7 +1,6 @@
 name: CI
 
 permissions:
-  actions: read
   contents: read
   pull-requests: write
 
@@ -292,6 +291,10 @@ jobs:
       - docs-links
       - upgrade
       - slow-tests
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Download install pytest log
