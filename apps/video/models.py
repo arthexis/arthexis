@@ -36,6 +36,10 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
+class MjpegDependencyError(RuntimeError):
+    """Raised when optional MJPEG streaming dependencies are unavailable."""
+
+
 @dataclass(frozen=True)
 class DetectedVideoDevice:
     identifier: str
@@ -346,13 +350,19 @@ class MjpegStream(VideoStream):
                 setattr(self, field, value)
             self.save(update_fields=list(updates.keys()))
 
-    def iter_frame_bytes(self):
-        """Yield encoded JPEG frames from the configured capture device."""
-
+    def _load_cv2(self):
         try:
             import cv2  # type: ignore
         except ImportError as exc:  # pragma: no cover - runtime dependency
-            raise RuntimeError("MJPEG streaming requires the OpenCV (cv2) package") from exc
+            raise MjpegDependencyError(
+                "MJPEG streaming requires the OpenCV (cv2) package"
+            ) from exc
+        return cv2
+
+    def iter_frame_bytes(self):
+        """Yield encoded JPEG frames from the configured capture device."""
+
+        cv2 = self._load_cv2()
 
         capture = cv2.VideoCapture(self.video_device.identifier)
 
@@ -376,11 +386,7 @@ class MjpegStream(VideoStream):
             capture.release()
 
     def capture_frame_bytes(self) -> bytes | None:
-        try:
-            import cv2  # type: ignore
-        except ImportError as exc:  # pragma: no cover - runtime dependency
-            raise RuntimeError("MJPEG streaming requires the OpenCV (cv2) package") from exc
-
+        cv2 = self._load_cv2()
         capture = cv2.VideoCapture(self.video_device.identifier)
         if not capture.isOpened():
             capture.release()
