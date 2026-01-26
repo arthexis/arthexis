@@ -1,5 +1,10 @@
 name: CI
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
@@ -87,8 +92,16 @@ jobs:
           python scripts/lint_seed_fixtures.py
       - name: Run tests
         run: |
+          set -o pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration"
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: install-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
   docs-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -211,7 +224,14 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration"
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: upgrade-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
   slow-tests:
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true') }}
     runs-on: ubuntu-latest
@@ -254,5 +274,119 @@ jobs:
           ./install.sh --no-start
       - name: Run slow tests
         run: |
+          set -o pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "slow or integration"
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "slow or integration" | tee pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: slow-tests-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
+
+  notify-failure:
+    if: ${{ failure() && github.event_name == 'pull_request' }}
+    needs:
+      - install
+      - docs-links
+      - upgrade
+      - slow-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download install pytest log
+        if: always()
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: install-pytest-log
+          path: artifacts
+      - name: Download upgrade pytest log
+        if: always()
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: upgrade-pytest-log
+          path: artifacts
+      - name: Download slow tests pytest log
+        if: always()
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: slow-tests-pytest-log
+          path: artifacts
+      - name: Comment on PR with failure summary
+        uses: actions/github-script@v8
+        env:
+          INSTALL_RESULT: ${{ needs.install.result }}
+          DOCS_LINKS_RESULT: ${{ needs.docs-links.result }}
+          UPGRADE_RESULT: ${{ needs.upgrade.result }}
+          SLOW_TESTS_RESULT: ${{ needs.slow-tests.result }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            const prNumber = context.payload.pull_request?.number;
+            if (!prNumber) {
+              core.info('No pull request context available for commenting.');
+              return;
+            }
+
+            const results = {
+              install: process.env.INSTALL_RESULT,
+              'docs-links': process.env.DOCS_LINKS_RESULT,
+              upgrade: process.env.UPGRADE_RESULT,
+              'slow-tests': process.env.SLOW_TESTS_RESULT
+            };
+
+            const failedJobs = Object.entries(results)
+              .filter(([, result]) => result === 'failure')
+              .map(([name]) => `- ${name}`)
+              .join('\n');
+
+            const summaryLines = failedJobs || '- One or more jobs failed. Review the workflow run for details.';
+
+            const logFiles = {
+              install: 'artifacts/install-pytest-log/pytest.log',
+              upgrade: 'artifacts/upgrade-pytest-log/pytest.log',
+              'slow-tests': 'artifacts/slow-tests-pytest-log/pytest.log'
+            };
+
+            const logBlocks = Object.entries(logFiles)
+              .map(([job, filePath]) => {
+                if (!fs.existsSync(filePath)) {
+                  return null;
+                }
+                const content = fs.readFileSync(filePath, 'utf8').trim();
+                if (!content) {
+                  return null;
+                }
+                const lines = content.split('\n');
+                const tail = lines.slice(-200).join('\n');
+                return [
+                  `### ${job} pytest log (tail)`,
+                  '```',
+                  tail,
+                  '```'
+                ].join('\n');
+              })
+              .filter(Boolean)
+              .join('\n\n');
+
+            const body = [
+              '@arthexis @codex CI failed for this PR.',
+              '',
+              '### Failed job summary',
+              summaryLines,
+              logBlocks ? `\n${logBlocks}` : '',
+              '',
+              `View the workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body
+            });
