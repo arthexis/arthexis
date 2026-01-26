@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from utils.api import api_login_required
 
 from ... import store
+from ...models import ChargingProfile
 from .common import (
     CALL_EXPECTED_STATUSES,
     ActionCall,
@@ -31,6 +32,7 @@ __all__ = [
     "ACTION_HANDLERS",
     "ActionCall",
     "ActionContext",
+    "ChargingProfile",
     "dispatch_action",
 ]
 
