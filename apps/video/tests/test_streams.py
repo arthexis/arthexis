@@ -97,8 +97,7 @@ def test_mjpeg_stream_returns_no_content_when_no_frames(client, video_device, mo
     stream = MjpegStream.objects.create(name="Empty", slug="empty", video_device=video_device)
 
     def empty_frames(self):
-        if False:
-            yield b"never"
+        yield from ()
 
     monkeypatch.setattr(MjpegStream, "iter_frame_bytes", empty_frames)
 
