@@ -103,8 +103,8 @@ def test_boot_delay_seconds_ignores_future_start(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    boot_time = 1704067200.0  # 2024-01-01T00:00:00+00:00
     now = uptime_utils.datetime(2024, 1, 1, tzinfo=uptime_utils.datetime_timezone.utc)
+    boot_time = now.timestamp()
 
     monkeypatch.setattr(uptime_utils.psutil, "boot_time", lambda: boot_time)
 
