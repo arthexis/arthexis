@@ -9,7 +9,9 @@ import pytest
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.ocpp import consumers, store, call_error_handlers, call_result_handlers
+from apps.ocpp import store, call_error_handlers, call_result_handlers
+from apps.ocpp.consumers import CSMSConsumer
+from apps.ocpp.consumers import base as consumers_base
 from apps.flows.models import Transition
 from apps.ocpp.views import actions
 from apps.ocpp.views.common import ActionContext
@@ -120,7 +122,7 @@ async def test_handle_clear_charging_profile_result_updates_profile():
         kind=ChargingProfile.Kind.ABSOLUTE,
     )
     await database_sync_to_async(ChargingProfile.objects.bulk_create)([profile])
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CLR-CP-1"
     consumer.charger_id = charger.charger_id
     payload = {"status": "Accepted", "statusInfo": {"detail": "ok"}}
@@ -149,7 +151,7 @@ async def test_handle_clear_charging_profile_result_updates_profile():
 @pytest.mark.anyio
 async def test_set_monitoring_base_result_clears_pending_call():
     _reset_pending_calls()
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-MON-BASE"
     consumer.charger_id = consumer.store_key
     message_id = "msg-monitoring-base"
@@ -172,7 +174,7 @@ async def test_set_monitoring_base_result_clears_pending_call():
 @pytest.mark.anyio
 async def test_set_monitoring_level_error_clears_pending_call():
     _reset_pending_calls()
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-MON-LEVEL"
     consumer.charger_id = consumer.store_key
     message_id = "msg-monitoring-level"
@@ -219,7 +221,7 @@ async def test_set_monitoring_base_result_clears_pending_call_from_action():
     message = json.loads(ws.sent[0])
     message_id = message[1]
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = log_key
     consumer.charger_id = context.cid
 
@@ -255,7 +257,7 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
     message = json.loads(ws.sent[0])
     message_id = message[1]
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = log_key
     consumer.charger_id = context.cid
 
@@ -298,7 +300,7 @@ async def test_unlock_connector_result_updates_state():
         lambda: actions._handle_unlock_connector(context, {})
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = log_key
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -341,7 +343,7 @@ async def test_unlock_connector_error_records_failure():
         lambda: actions._handle_unlock_connector(context, {})
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = log_key
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -379,7 +381,7 @@ async def test_handle_clear_charging_profile_error_records_failure():
         kind=ChargingProfile.Kind.ABSOLUTE,
     )
     await database_sync_to_async(ChargingProfile.objects.bulk_create)([profile])
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CLR-CP-2"
     consumer.charger_id = charger.charger_id
     metadata = {"charging_profile_id": 11, "charger_id": charger.charger_id}
@@ -408,7 +410,7 @@ async def test_handle_clear_charging_profile_error_records_failure():
 
 @pytest.mark.anyio
 async def test_cleared_charging_limit_logs_payload():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
 
     calls = getattr(consumer._handle_cleared_charging_limit_action, "__protocol_calls__", set())
@@ -430,7 +432,7 @@ async def test_cleared_charging_limit_logs_payload():
 @pytest.mark.django_db(transaction=True)
 async def test_cleared_charging_limit_persists_event():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-202")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-202"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -457,7 +459,7 @@ async def test_notify_charging_limit_persists_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="CP-301", connector_id=1
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-301#1"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -499,7 +501,7 @@ async def test_notify_report_persists_inventory_snapshot():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="INV-201", connector_id=1
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INV-201#1"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -557,7 +559,7 @@ async def test_publish_firmware_status_updates_deployment():
         status="Pending",
         status_timestamp=timezone.now(),
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -623,7 +625,7 @@ async def test_publish_firmware_status_updates_deployment():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_notify_report_requires_mandatory_fields():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INV-MISSING"
     consumer.charger_id = "INV-MISSING"
     consumer.connector_value = None
@@ -650,7 +652,7 @@ async def test_cost_updated_persists_and_forwards():
         received_start_time=timezone.now(),
         ocpp_transaction_id="TX-1",
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -684,7 +686,7 @@ async def test_cost_updated_rejects_invalid_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="COST-2"
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -703,7 +705,7 @@ async def test_cost_updated_rejects_invalid_payload():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
     consumer.charger_id = "CP-201"
 
@@ -733,7 +735,7 @@ async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
 
 @pytest.mark.anyio
 async def test_notify_event_registered_for_ocpp201_and_ocpp21():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     calls = getattr(consumer._handle_notify_event_action, "__protocol_calls__", set())
     assert (
         "ocpp201",
@@ -751,7 +753,7 @@ async def test_notify_event_registered_for_ocpp201_and_ocpp21():
 @pytest.mark.django_db(transaction=True)
 async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-1"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -760,7 +762,7 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
         return "EXI-RESPONSE"
 
     monkeypatch.setattr(
-        consumers.certificate_signing, "sign_certificate_request", fake_sign
+        consumers_base.certificate_signing, "sign_certificate_request", fake_sign
     )
 
     payload = {"certificateType": "V2G", "exiRequest": "CSRDATA"}
@@ -789,7 +791,7 @@ async def test_get_certificate_status_persists_check():
         certificate_hash_data=hash_data,
         status=InstalledCertificate.STATUS_INSTALLED,
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-2"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -811,7 +813,7 @@ async def test_get_certificate_status_persists_check():
 @pytest.mark.django_db(transaction=True)
 async def test_get_certificate_status_handles_missing_certificate():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-4"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -833,7 +835,7 @@ async def test_get_certificate_status_handles_missing_certificate():
 @pytest.mark.django_db(transaction=True)
 async def test_sign_certificate_validates_csr(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-3")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-3"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -846,7 +848,7 @@ async def test_sign_certificate_validates_csr(monkeypatch):
         return "CHAIN"
 
     monkeypatch.setattr(
-        consumers.certificate_signing, "sign_certificate_request", fake_sign
+        consumers_base.certificate_signing, "sign_certificate_request", fake_sign
     )
 
     payload = {"csr": "   ", "certificateType": "V2G"}
@@ -865,7 +867,7 @@ async def test_sign_certificate_validates_csr(monkeypatch):
 @pytest.mark.django_db(transaction=True)
 async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-4"
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -881,7 +883,7 @@ async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
         return "CERTCHAIN"
 
     monkeypatch.setattr(
-        consumers.certificate_signing, "sign_certificate_request", fake_sign
+        consumers_base.certificate_signing, "sign_certificate_request", fake_sign
     )
 
     payload = {"csr": "CSR-123", "certificateType": "V2G"}
@@ -912,7 +914,7 @@ async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
 @pytest.mark.django_db(transaction=True)
 async def test_notify_monitoring_report_persists_data():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="MON-1")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "MON-1"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -965,7 +967,7 @@ async def test_notify_monitoring_report_persists_data():
 @pytest.mark.django_db(transaction=True)
 async def test_notify_monitoring_report_records_analytics():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="MON-2")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "MON-2"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1027,7 +1029,7 @@ async def test_notify_customer_information_persists_chunks():
     existing = await database_sync_to_async(CustomerInformationRequest.objects.create)(
         charger=charger, request_id=7
     )
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INFO-1"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1055,7 +1057,7 @@ async def test_notify_customer_information_persists_chunks():
 @pytest.mark.django_db
 def test_notify_customer_information_routes_to_customer_care_workflow():
     charger = Charger.objects.create(charger_id="INFO-ROUTE")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
 
     consumer._route_customer_care_acknowledgement(
         charger=charger,
@@ -1075,7 +1077,7 @@ def test_notify_customer_information_routes_to_customer_care_workflow():
 
 @pytest.mark.anyio
 async def test_notify_customer_information_rejects_non_dict_payload():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INFO-BAD"
 
     result = await consumer._handle_notify_customer_information_action([], "msg-bad", "", "")
@@ -1089,7 +1091,7 @@ async def test_notify_customer_information_rejects_non_dict_payload():
 @pytest.mark.django_db(transaction=True)
 async def test_notify_display_messages_persists_messages():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-1")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "DISP-1"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1134,7 +1136,7 @@ async def test_notify_display_messages_persists_messages():
 @pytest.mark.django_db(transaction=True)
 async def test_notify_display_messages_updates_compliance_report():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-2")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "DISP-2"
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1165,7 +1167,7 @@ async def test_notify_display_messages_updates_compliance_report():
 
 @pytest.mark.anyio
 async def test_request_start_transaction_result_tracks_status():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-REQ"
     consumer.charger_id = "CP-REQ"
     store.register_transaction_request(
@@ -1193,7 +1195,7 @@ async def test_request_start_transaction_result_tracks_status():
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_updates_request_status(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TRX")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1242,7 +1244,7 @@ async def test_transaction_event_updates_request_status(monkeypatch):
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_started_notifies_and_persists():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-1")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1282,7 +1284,7 @@ async def test_transaction_event_started_notifies_and_persists():
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_updated_notifies_existing_transaction():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-2")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1328,7 +1330,7 @@ async def test_transaction_event_updated_notifies_existing_transaction():
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_ended_updates_and_notifies():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-3")
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1378,7 +1380,7 @@ async def test_transaction_event_ended_updates_and_notifies():
 
 @pytest.mark.anyio
 async def test_notify_ev_charging_needs_records_requirements(monkeypatch):
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key("NEEDS-1", 1)
     consumer.charger_id = "NEEDS-1"
     consumer.connector_value = 1
@@ -1419,7 +1421,7 @@ async def test_notify_ev_charging_needs_records_requirements(monkeypatch):
 
 @pytest.mark.anyio
 async def test_notify_ev_charging_needs_requires_fields(monkeypatch):
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "NEEDS-2"
     consumer.charger_id = "NEEDS-2"
 
@@ -1443,7 +1445,7 @@ async def test_notify_ev_charging_needs_requires_fields(monkeypatch):
 
 @pytest.mark.anyio
 async def test_notify_ev_charging_schedule_records_schedule(monkeypatch):
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key("SCHED-1", 1)
     consumer.charger_id = "SCHED-1"
     consumer.connector_value = 1
@@ -1504,7 +1506,7 @@ async def test_notify_ev_charging_schedule_records_schedule(monkeypatch):
 
 @pytest.mark.anyio
 async def test_notify_ev_charging_schedule_requires_fields(monkeypatch):
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "SCHED-2"
     consumer.charger_id = "SCHED-2"
 
@@ -1551,7 +1553,7 @@ async def test_report_charging_profiles_matches_local_state(monkeypatch):
         charging_schedule_periods=[{"start_period": 0, "limit": 32}],
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1597,7 +1599,7 @@ async def test_report_charging_profiles_flags_mismatch(monkeypatch):
         charging_schedule_periods=[{"start_period": 0, "limit": 16}],
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1660,7 +1662,7 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
         charging_schedule_periods=[{"start_period": 0, "limit": 20}],
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
@@ -1689,7 +1691,7 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
 
 @pytest.mark.anyio
 async def test_notify_event_forwards_observability_payload(monkeypatch):
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key("OBS-1", 1)
     consumer.charger_id = "OBS-1"
     consumer.connector_value = 1
@@ -1761,7 +1763,7 @@ async def test_notify_event_forwards_observability_payload(monkeypatch):
 
 @pytest.mark.anyio
 async def test_notify_event_requires_event_data(monkeypatch):
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "OBS-2"
     consumer.charger_id = "OBS-2"
 
@@ -1799,7 +1801,7 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
         duration_minutes=30,
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
     consumer.charger = charger
     consumer.aggregate_charger = None
@@ -1849,7 +1851,7 @@ async def test_reservation_status_update_ignored_for_other_connector():
         duration_minutes=30,
     )
 
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(other.charger_id, other.connector_id)
     consumer.charger = other
     consumer.aggregate_charger = None
