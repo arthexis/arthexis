@@ -994,7 +994,11 @@
             </div>
           {% endif %}
             <div class="mb-3">
-              <span class="form-label d-block">{% trans 'Your experience on this page' %}</span>
+              <span class="form-label d-block">
+                {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+                  Your experience on {{ link_start }}this page{{ link_end }}
+                {% endblocktrans %}
+              </span>
               <div class="user-story-feedback-options">
                 <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
                   <input type="radio" id="user-story-rating-5" name="rating" value="5" required>
