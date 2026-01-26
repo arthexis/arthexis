@@ -273,36 +273,7 @@ def _ensure_charger_access(
     raise Http404("Charger not found")
 
 
-def _build_component_variable_payload(entry: dict) -> tuple[dict[str, object], str | None]:
-    component = entry.get("component")
-    variable = entry.get("variable")
-    if component is None or variable is None:
-        component_name = entry.get("componentName")
-        variable_name = entry.get("variableName")
-        if component_name in (None, "") or variable_name in (None, ""):
-            return {}, "component and variable are required"
-        component = {"name": component_name}
-        variable = {"name": variable_name}
-        component_instance = entry.get("componentInstance")
-        if component_instance not in (None, ""):
-            component["instance"] = component_instance
-        variable_instance = entry.get("variableInstance")
-        if variable_instance not in (None, ""):
-            variable["instance"] = variable_instance
-    if not isinstance(component, dict) or not isinstance(variable, dict):
-        return {}, "component and variable must be objects"
-    component_name = str(component.get("name") or "").strip()
-    variable_name = str(variable.get("name") or "").strip()
-    if not component_name or not variable_name:
-        return {}, "component.name and variable.name required"
-    payload = {"component": component, "variable": variable}
-    attribute_type = entry.get("attributeType")
-    if attribute_type not in (None, ""):
-        payload["attributeType"] = attribute_type
-    return payload, None
-
-
-def _build_component_variable_entry(entry: dict) -> tuple[dict[str, object], str | None]:
+def _build_component_variable_base(entry: dict) -> tuple[dict[str, object], str | None]:
     component = entry.get("component")
     variable = entry.get("variable")
     if component is None or variable is None:
@@ -325,3 +296,17 @@ def _build_component_variable_entry(entry: dict) -> tuple[dict[str, object], str
     if not component_name or not variable_name:
         return {}, "component.name and variable.name required"
     return {"component": component, "variable": variable}, None
+
+
+def _build_component_variable_payload(entry: dict) -> tuple[dict[str, object], str | None]:
+    payload, error = _build_component_variable_base(entry)
+    if error:
+        return payload, error
+    attribute_type = entry.get("attributeType")
+    if attribute_type not in (None, ""):
+        payload["attributeType"] = attribute_type
+    return payload, None
+
+
+def _build_component_variable_entry(entry: dict) -> tuple[dict[str, object], str | None]:
+    return _build_component_variable_base(entry)
