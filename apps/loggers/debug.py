@@ -26,7 +26,7 @@ class DebugLoggingControl:
             return normalized in self.app_names
 
         if self.app_regex is not None:
-            return self.app_regex.search(normalized) is not None
+            return self.app_regex.fullmatch(normalized) is not None
 
         return False
 
