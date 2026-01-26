@@ -6,6 +6,10 @@ from ...models import (
     DisplayMessage,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class ChargingProfileSendForm(forms.Form):
     charger = forms.ModelChoiceField(
@@ -324,9 +328,12 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
         try:
             async_to_sync(ws.send)(frame)
         except Exception as exc:  # pragma: no cover - network failure
-            message = _("Failed to send ChangeConfiguration: %(error)s") % {
-                "error": exc,
-            }
+            logger.exception(
+                "Failed to send ChangeConfiguration for charger %s with payload %r",
+                charger,
+                payload,
+            )
+            message = _("Failed to send ChangeConfiguration.")
             return False, None, message
 
         log_key = store.identity_key(charger.charger_id, connector_value)
