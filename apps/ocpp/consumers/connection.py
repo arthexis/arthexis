@@ -134,7 +134,7 @@ class SubprotocolConnectionMixin:
                 continue
         return normalized
 
-    def _negotiate_ocpp_version(self, existing_charger) -> str | None:
+    def _negotiate_ocpp_version(self, existing_charger: "Charger" | None) -> str | None:
         """Resolve the negotiated OCPP subprotocol and set version attributes."""
 
         preferred_version = (
