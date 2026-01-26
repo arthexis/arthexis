@@ -22,6 +22,7 @@
   const networkErrorMessage = form.dataset.networkError;
   const copySuccessMessage = form.dataset.copySuccess;
   const copyErrorMessage = form.dataset.copyError;
+  const copyAriaLabel = form.dataset.copyAriaLabel;
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -243,6 +244,9 @@
 
   if (copyLink) {
     const defaultCopyText = copyLink.textContent;
+    if (copyAriaLabel) {
+      copyLink.setAttribute('aria-label', copyAriaLabel);
+    }
     const showCopyFeedback = message => {
       if (!message) {
         return;
