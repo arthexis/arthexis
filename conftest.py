@@ -104,18 +104,19 @@ def _requires_db(request: pytest.FixtureRequest) -> bool:
     return issubclass(test_class, TransactionTestCase)
 
 
-@pytest.fixture(autouse=True)
-def _ensure_fixture_sigil_roots(request: pytest.FixtureRequest) -> None:
-    if not _requires_db(request):
-        return
-
-    request.getfixturevalue("django_db_setup")
-    django_db_blocker = request.getfixturevalue("django_db_blocker")
-
+@pytest.fixture(scope="session")
+def _load_sigil_roots_once(django_db_setup: Any, django_db_blocker: Any) -> None:
+    """Load SigilRoot fixtures once per session for tests that need the DB."""
     from apps.sigils.loader import load_fixture_sigil_roots
 
     with django_db_blocker.unblock():
         load_fixture_sigil_roots(using="default")
+
+
+@pytest.fixture(autouse=True)
+def _ensure_fixture_sigil_roots(request: pytest.FixtureRequest) -> None:
+    if _requires_db(request):
+        request.getfixturevalue("_load_sigil_roots_once")
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
