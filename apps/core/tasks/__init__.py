@@ -1,27 +1,67 @@
 from __future__ import annotations
 
-from . import auto_upgrade as _auto_upgrade
-from . import heartbeat as _heartbeat
-from . import release_checks as _release_checks
-from . import system_health as _system_health
-from . import utils as _utils
+from .auto_upgrade import (
+    _ci_status_for_revision,
+    _read_auto_upgrade_failure_count,
+    check_github_updates,
+    legacy_check_github_updates,
+)
+from .heartbeat import heartbeat, legacy_heartbeat, legacy_module_heartbeat
+from .release_checks import (
+    SEVERITY_CRITICAL,
+    SEVERITY_LOW,
+    SEVERITY_NORMAL,
+    _get_package_release_model,
+    _latest_release,
+    _resolve_release_severity,
+    execute_scheduled_release,
+    legacy_run_scheduled_release,
+    run_scheduled_release,
+)
+from .system_health import (
+    legacy_poll_emails,
+    legacy_run_client_report_schedule,
+    legacy_verify_auto_upgrade_health,
+    poll_emails,
+    run_client_report_schedule,
+    verify_auto_upgrade_health,
+)
+from .utils import (
+    _current_revision,
+    _extract_error_output,
+    _is_network_failure,
+    _project_base_dir,
+    _read_process_cmdline,
+    _read_process_start_time,
+)
 
-
-def _export_module(module) -> None:
-    for name, value in module.__dict__.items():
-        if name.startswith("__"):
-            continue
-        globals()[name] = value
-
-
-for _module in (
-    _heartbeat,
-    _release_checks,
-    _system_health,
-    _utils,
-    _auto_upgrade,
-):
-    _export_module(_module)
-
-
-del _module
+__all__ = [
+    "_ci_status_for_revision",
+    "_current_revision",
+    "_extract_error_output",
+    "_get_package_release_model",
+    "_is_network_failure",
+    "_latest_release",
+    "_project_base_dir",
+    "_read_auto_upgrade_failure_count",
+    "_read_process_cmdline",
+    "_read_process_start_time",
+    "_resolve_release_severity",
+    "SEVERITY_CRITICAL",
+    "SEVERITY_LOW",
+    "SEVERITY_NORMAL",
+    "check_github_updates",
+    "execute_scheduled_release",
+    "heartbeat",
+    "legacy_check_github_updates",
+    "legacy_heartbeat",
+    "legacy_module_heartbeat",
+    "legacy_poll_emails",
+    "legacy_run_client_report_schedule",
+    "legacy_run_scheduled_release",
+    "legacy_verify_auto_upgrade_health",
+    "poll_emails",
+    "run_client_report_schedule",
+    "run_scheduled_release",
+    "verify_auto_upgrade_health",
+]

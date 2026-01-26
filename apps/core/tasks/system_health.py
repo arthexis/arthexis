@@ -8,7 +8,12 @@ from pathlib import Path
 
 from celery import shared_task
 from .auto_upgrade import append_auto_upgrade_log, _add_skipped_revision, _record_auto_upgrade_failure
-from .utils import _current_revision, _project_base_dir
+from .utils import (
+    _current_revision,
+    _project_base_dir,
+    _read_process_cmdline,
+    _read_process_start_time,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -31,9 +36,7 @@ def _is_migration_server_running(lock_dir: Path) -> bool:
     if not isinstance(pid, int):
         return False
 
-    from apps.core import tasks as core_tasks
-
-    cmdline = core_tasks._read_process_cmdline(pid)
+    cmdline = _read_process_cmdline(pid)
     script_path = lock_dir.parent / "scripts" / "migration_server.py"
     if not any(str(part) == str(script_path) for part in cmdline):
         return False
@@ -45,7 +48,7 @@ def _is_migration_server_running(lock_dir: Path) -> bool:
         except ValueError:
             timestamp = None
 
-    start_time = core_tasks._read_process_start_time(pid)
+    start_time = _read_process_start_time(pid)
     if (
         isinstance(timestamp, (int, float))
         and start_time is not None
