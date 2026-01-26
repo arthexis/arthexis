@@ -234,6 +234,10 @@
         continue;
       }
       if (name === 'rating') {
+        const ratingValue = Number(trimmedValue);
+        if (!Number.isFinite(ratingValue) || ratingValue <= 0) {
+          continue;
+        }
         details.push(getRatingCopyValue(trimmedValue));
         continue;
       }
