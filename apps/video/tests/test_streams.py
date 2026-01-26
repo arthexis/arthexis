@@ -167,7 +167,7 @@ def test_mjpeg_probe_returns_no_content_when_dependency_missing(
     def missing_cv(self):
         raise MjpegDependencyError("cv2 missing")
 
-    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", missing_cv)
+    monkeypatch.setattr(MjpegStream, "_load_cv2", missing_cv)
 
     response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
 
