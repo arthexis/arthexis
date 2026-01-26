@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,6 +8,7 @@ import pytest
 from django.utils import timezone
 
 from apps.nodes import tasks
+from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
 
 
 class DummyCache:
@@ -45,7 +45,7 @@ class DummyNode:
 
 
 @pytest.mark.django_db
-def test_send_startup_net_message_writes_boot_status(
+def test_send_startup_net_message_writes_startup_message(
     monkeypatch, settings, tmp_path, startup_cache
 ):
     settings.BASE_DIR = tmp_path
@@ -54,44 +54,25 @@ def test_send_startup_net_message_writes_boot_status(
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir()
     (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
-    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
-
-    started_at = timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0))
-    (lock_dir / "suite_uptime.lck").write_text(
-        json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8"
-    )
-
     def write_high_lock(*, base_dir, port, lock_file=None):
         target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("hi\nthere\n", encoding="utf-8")
         return target
 
-    monkeypatch.setattr(
-        tasks.django_timezone, "now", lambda: started_at + timedelta(seconds=42)
-    )
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
-    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
-    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
-    monkeypatch.setattr(
-        tasks.psutil,
-        "boot_time",
-        lambda: (started_at - timedelta(seconds=30)).timestamp(),
-    )
 
     tasks.send_startup_net_message()
 
     high_lines = (lock_dir / tasks.LCD_HIGH_LOCK_FILE).read_text().splitlines()
     assert high_lines == ["hi", "there"]
 
-    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m"
-    assert low_lines[1] == "ON 0m30s NA"
+    assert not (lock_dir / LCD_LOW_LOCK_FILE).exists()
 
 
 @pytest.mark.django_db
-def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
+def test_startup_message_ignores_uptime_lock(monkeypatch, settings, tmp_path):
     settings.BASE_DIR = tmp_path
     startup_cache = DummyCache()
     monkeypatch.setattr(tasks, "cache", startup_cache)
@@ -102,7 +83,7 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
     (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
     (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
 
-    started_at = timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0))
+    started_at = timezone.now()
     (lock_dir / "suite_uptime.lck").write_text(
         json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8"
     )
@@ -113,57 +94,12 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
         target.write_text("hi\nthere\n", encoding="utf-8")
         return target
 
-    monkeypatch.setattr(
-        tasks.django_timezone, "now", lambda: started_at + timedelta(seconds=75)
-    )
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
-    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
-    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
-    monkeypatch.setattr(
-        tasks.psutil, "boot_time", lambda: (started_at - timedelta(minutes=1)).timestamp()
-    )
 
     tasks.send_startup_net_message()
 
-    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0].startswith("UP ")
-    assert low_lines[1] == "ON 1m0s NA"
-
-
-@pytest.mark.django_db
-def test_boot_message_uses_system_boot_time(monkeypatch, settings, tmp_path):
-    settings.BASE_DIR = tmp_path
-    startup_cache = DummyCache()
-    monkeypatch.setattr(tasks, "cache", startup_cache)
-    startup_cache.delete(tasks.STARTUP_NET_MESSAGE_CACHE_KEY)
-
-    lock_dir = tmp_path / ".locks"
-    lock_dir.mkdir()
-    (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
-    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
-
-    now = timezone.make_aware(datetime(2024, 1, 1, 0, 3, 0))
-    boot_timestamp = (now - timedelta(minutes=2, seconds=30)).timestamp()
-
-    def write_high_lock(*, base_dir, port, lock_file=None):
-        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("hi\nthere\n", encoding="utf-8")
-        return target
-
-    monkeypatch.setattr(tasks.django_timezone, "now", lambda: now)
-    monkeypatch.setattr(tasks.psutil, "boot_time", lambda: boot_timestamp)
-    monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
-    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
-    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
-    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
-
-    tasks.send_startup_net_message()
-
-    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h2m"
-    assert low_lines[1] == "ON ?m?s NA"
+    assert not (lock_dir / LCD_LOW_LOCK_FILE).exists()
 
 
 @pytest.mark.django_db
@@ -177,11 +113,6 @@ def test_startup_message_cache_resets_each_boot(
     (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
     (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
 
-    started_at = timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0))
-    (lock_dir / "suite_uptime.lck").write_text(
-        json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8"
-    )
-
     high_payloads: list[str] = []
 
     def write_high_lock(*, base_dir, port, lock_file=None):
@@ -192,29 +123,21 @@ def test_startup_message_cache_resets_each_boot(
         high_payloads.append(payload)
         return target
 
-    now = started_at + timedelta(minutes=5)
-    monkeypatch.setattr(tasks.django_timezone, "now", lambda: now)
+    monkeypatch.setattr(tasks.django_timezone, "now", timezone.now)
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
-    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
-    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
-
-    boot_time = started_at - timedelta(minutes=1)
-    monkeypatch.setattr(tasks.psutil, "boot_time", lambda: boot_time.timestamp())
+    monkeypatch.setattr(tasks.psutil, "boot_time", lambda: 1000.0)
 
     tasks.send_startup_net_message()
-    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h5m"
     assert high_payloads == ["call-0"]
+    assert not (lock_dir / LCD_LOW_LOCK_FILE).exists()
 
     (lock_dir / "role.lck").write_text("Terminal", encoding="utf-8")
-    boot_time = boot_time + timedelta(hours=1)
-    monkeypatch.setattr(tasks.psutil, "boot_time", lambda: boot_time.timestamp())
+    monkeypatch.setattr(tasks.psutil, "boot_time", lambda: 2000.0)
 
     tasks.send_startup_net_message()
-    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h5m"
     assert high_payloads == ["call-0", "call-1"]
+    assert not (lock_dir / LCD_LOW_LOCK_FILE).exists()
 
 
 @pytest.mark.django_db
@@ -228,10 +151,6 @@ def test_lcd_boot_message_avoids_database(
     lock_dir.mkdir()
     (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
 
-    started_at = timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0))
-    (lock_dir / "suite_uptime.lck").write_text(
-        json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8"
-    )
     (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
 
     def write_high_lock(*, base_dir, port, lock_file=None):
@@ -240,21 +159,9 @@ def test_lcd_boot_message_avoids_database(
         target.write_text("hi\nthere\n", encoding="utf-8")
         return target
 
-    monkeypatch.setattr(
-        tasks.django_timezone, "now", lambda: started_at + timedelta(seconds=42)
-    )
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
-    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
-    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
-    monkeypatch.setattr(
-        tasks.psutil,
-        "boot_time",
-        lambda: (started_at - timedelta(seconds=30)).timestamp(),
-    )
 
     with django_assert_num_queries(0):
         tasks.send_startup_net_message()
 
-    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m"
-    assert low_lines[1] == "ON 0m30s NA"
+    assert not (lock_dir / LCD_LOW_LOCK_FILE).exists()
