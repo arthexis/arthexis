@@ -175,8 +175,13 @@ def _system_changelog_report_data_view(request):
 
     try:
         page_data = changelog.get_page(page_number, per_page=1, offset=offset)
-    except changelog.ChangelogError as exc:
-        return JsonResponse({"error": str(exc)}, status=503)
+    except changelog.ChangelogError:
+        logger.exception(
+            "Failed to load changelog page %s (offset %s)", page_number, offset
+        )
+        return JsonResponse(
+            {"error": _("Unable to load additional changes.")}, status=503
+        )
 
     if not page_data.sections:
         return JsonResponse({"html": "", "has_more": False, "next_page": None})
