@@ -67,26 +67,6 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
     store.register_pending_call(
         message_id,
         {
-            "action": "GetConfiguration",
-            "charger_id": context.cid,
-            "connector_id": connector_value,
-            "log_key": log_key,
-            "requested_at": requested_at,
-        },
-    )
-    timeout_message = (
-        "GetConfiguration timed out: charger did not respond" " (operation may not be supported)"
-    )
-    store.schedule_call_timeout(
-        message_id,
-        timeout=5.0,
-        action="GetConfiguration",
-        log_key=log_key,
-        message=timeout_message,
-    )
-    store.register_pending_call(
-        message_id,
-        {
             "action": "ReserveNow",
             "charger_id": context.cid,
             "connector_id": connector_value,
