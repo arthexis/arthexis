@@ -18,7 +18,10 @@
         </a>
         {% endif %}
       </div>
-      <div class="ratio ratio-16x9 bg-dark rounded shadow-sm d-flex align-items-center justify-content-center overflow-hidden">
+      <div
+        class="ratio ratio-16x9 bg-dark rounded shadow-sm d-flex align-items-center justify-content-center overflow-hidden"
+        data-mjpeg-probe-url="{% url 'video:mjpeg-probe' stream.slug %}"
+      >
         <img src="{{ stream_url }}" class="img-fluid w-100 h-100 object-fit-cover" alt="{% trans 'Live video stream' %}">
       </div>
       <p class="mt-3 text-muted">
@@ -27,4 +30,49 @@
     </div>
   </div>
 </div>
+<script>
+  (() => {
+    const container = document.querySelector("[data-mjpeg-probe-url]");
+    if (!container) {
+      return;
+    }
+    const probeUrl = container.dataset.mjpegProbeUrl;
+    let probeTimer = null;
+
+    const sendProbe = () => {
+      if (!probeUrl) {
+        return;
+      }
+      fetch(probeUrl, { cache: "no-store" }).catch(() => {});
+    };
+
+    const startProbing = () => {
+      if (probeTimer) {
+        return;
+      }
+      sendProbe();
+      probeTimer = window.setInterval(sendProbe, 6000);
+    };
+
+    const stopProbing = () => {
+      if (!probeTimer) {
+        return;
+      }
+      window.clearInterval(probeTimer);
+      probeTimer = null;
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        startProbing();
+      } else {
+        stopProbing();
+      }
+    };
+
+    handleVisibility();
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", stopProbing);
+  })();
+</script>
 {% endblock %}
