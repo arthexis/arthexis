@@ -215,7 +215,7 @@
   const getRatingCopyValue = value => {
     const ratingValue = Number(value);
     const actionLabel = getRatingLabel(value);
-    const displayValue = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : value;
+    const displayValue = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : (ratingValue === 0 ? 0 : value);
     return `${actionLabel} (${displayValue}/5)`;
   };
 
