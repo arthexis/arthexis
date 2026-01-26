@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from apps.core.auto_upgrade import append_auto_upgrade_log
 from .auto_upgrade import (
     _ci_status_for_revision,
     _read_auto_upgrade_failure_count,
@@ -47,6 +48,7 @@ __all__ = [
     "_read_process_cmdline",
     "_read_process_start_time",
     "_resolve_release_severity",
+    "append_auto_upgrade_log",
     "SEVERITY_CRITICAL",
     "SEVERITY_LOW",
     "SEVERITY_NORMAL",
