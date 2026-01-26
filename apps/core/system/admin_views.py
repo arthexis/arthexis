@@ -34,6 +34,7 @@ from .upgrade import (
     UPGRADE_CHANNEL_CHOICES,
     UPGRADE_REVISION_SESSION_KEY,
     _build_auto_upgrade_report,
+    _auto_upgrade_next_check,
     _load_upgrade_revision_info,
     _trigger_upgrade_check,
 )
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 def _system_view(request):
-    info = _gather_info()
+    info = _gather_info(_auto_upgrade_next_check)
 
     context = admin.site.each_context(request)
     context.update(

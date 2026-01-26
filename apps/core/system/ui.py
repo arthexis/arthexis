@@ -11,7 +11,7 @@ import re
 import socket
 import subprocess
 import shutil
-from typing import Iterable
+from typing import Callable, Iterable
 
 from django.conf import settings
 from django.utils import timezone
@@ -345,10 +345,8 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
     return fields
 
 
-def _gather_info() -> dict:
+def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
     """Collect basic system information similar to status.sh."""
-
-    from .upgrade import _auto_upgrade_next_check
 
     base_dir = Path(settings.BASE_DIR)
     lock_dir = base_dir / ".locks"
@@ -485,7 +483,7 @@ def _gather_info() -> dict:
     info["ip_addresses"] = ip_list
 
     info["databases"] = _database_configurations()
-    info["auto_upgrade_next_check"] = _auto_upgrade_next_check()
+    info["auto_upgrade_next_check"] = auto_upgrade_next_check()
 
     return info
 
