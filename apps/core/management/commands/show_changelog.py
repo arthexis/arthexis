@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core import changelog
-from apps.core.system import _format_timestamp
+from apps.core.system.ui import _format_timestamp
 
 
 class Command(BaseCommand):

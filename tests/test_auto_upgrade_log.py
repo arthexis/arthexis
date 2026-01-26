@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from django.utils import timezone
 
-from apps.core import system, tasks
+from apps.core import tasks
+from apps.core.system import upgrade
 from apps.core.tasks import _project_base_dir
 
 
@@ -33,7 +34,7 @@ def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path
     settings.BASE_DIR = tmp_path / "settings"
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
 
-    report = system._build_auto_upgrade_report()
+    report = upgrade._build_auto_upgrade_report()
 
     assert report["log_entries"][0]["message"] == "logged entry"
     assert Path(report["settings"]["log_path"]) == log_file
@@ -55,12 +56,12 @@ def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
 
     monkeypatch.setattr(
-        system,
+        upgrade,
         "_load_auto_upgrade_schedule",
         lambda: {"available": True, "configured": True, "last_run_at": ""},
     )
 
-    report = system._build_auto_upgrade_report()
+    report = upgrade._build_auto_upgrade_report()
 
     assert report["schedule"]["last_run_at"] == report["log_entries"][0]["timestamp"]
 
@@ -79,7 +80,7 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
 
     monkeypatch.setattr(
-        system,
+        upgrade,
         "_load_auto_upgrade_schedule",
         lambda: {
             "available": True,
@@ -90,7 +91,7 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
         },
     )
 
-    report = system._build_auto_upgrade_report()
+    report = upgrade._build_auto_upgrade_report()
 
     assert report["summary"]["last_activity"]["message"] == "logged entry"
     assert report["summary"]["next_run"] == "2024-01-02 00:00"
@@ -110,10 +111,10 @@ def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, setti
         def delay(self, channel_override=None):  # pragma: no cover - defensive
             raise AssertionError("delay should not be used")
 
-    monkeypatch.setattr(system, "check_github_updates", Runner())
+    monkeypatch.setattr(upgrade, "check_github_updates", Runner())
     settings.CELERY_BROKER_URL = "memory://"
 
-    queued = system._trigger_upgrade_check()
+    queued = upgrade._trigger_upgrade_check()
 
     assert not queued
     assert calls == [(None, True)]

@@ -4,8 +4,10 @@ from datetime import datetime, timedelta
 
 import pytest
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
-from apps.core import system
+from apps.core.system import upgrade
+from apps.core.system.ui import _format_timestamp
 
 
 class DummySchedule:
@@ -60,7 +62,7 @@ class DummyTask:
 def test_disabled_task_returns_disabled_label():
     task = DummyTask(enabled=False, schedule=object())
 
-    assert system._predict_auto_upgrade_next_run(task) == str(system._("Disabled"))
+    assert upgrade._predict_auto_upgrade_next_run(task) == str(_("Disabled"))
 
 
 def test_missing_schedule_returns_empty_string():
@@ -76,7 +78,7 @@ def test_missing_schedule_returns_empty_string():
 
     task = NoScheduleTask()
 
-    assert system._predict_auto_upgrade_next_run(task) == ""
+    assert upgrade._predict_auto_upgrade_next_run(task) == ""
 
 
 def test_start_time_in_future_uses_normalized_time(settings):
@@ -85,11 +87,11 @@ def test_start_time_in_future_uses_normalized_time(settings):
     schedule = DummySchedule(now, timedelta(minutes=10))
     task = DummyTask(schedule=schedule, start_time=raw_start)
 
-    expected = system._format_timestamp(
+    expected = _format_timestamp(
         timezone.make_aware(raw_start, timezone.get_current_timezone())
     )
 
-    assert system._predict_auto_upgrade_next_run(task) == expected
+    assert upgrade._predict_auto_upgrade_next_run(task) == expected
 
 
 def test_last_run_reference_with_aware_datetime(settings):
@@ -98,9 +100,9 @@ def test_last_run_reference_with_aware_datetime(settings):
     schedule = DummySchedule(now, timedelta(minutes=15))
     task = DummyTask(schedule=schedule, last_run_at=last_run)
 
-    expected = system._format_timestamp(now + timedelta(minutes=15))
+    expected = _format_timestamp(now + timedelta(minutes=15))
 
-    assert system._predict_auto_upgrade_next_run(task) == expected
+    assert upgrade._predict_auto_upgrade_next_run(task) == expected
 
 
 def test_exception_during_remaining_estimate_returns_empty():
@@ -108,7 +110,7 @@ def test_exception_during_remaining_estimate_returns_empty():
     schedule = DummySchedule(now, RuntimeError("no estimate"))
     task = DummyTask(schedule=schedule)
 
-    assert system._predict_auto_upgrade_next_run(task) == ""
+    assert upgrade._predict_auto_upgrade_next_run(task) == ""
 
 
 def test_now_fallback_uses_timezone_now_when_localtime_fails(monkeypatch):
@@ -121,9 +123,9 @@ def test_now_fallback_uses_timezone_now_when_localtime_fails(monkeypatch):
 
     fallback_now = timezone.now()
 
-    monkeypatch.setattr(system.timezone, "localtime", _raise_localtime)
-    monkeypatch.setattr(system.timezone, "now", lambda: fallback_now)
+    monkeypatch.setattr(upgrade.timezone, "localtime", _raise_localtime)
+    monkeypatch.setattr(upgrade.timezone, "now", lambda: fallback_now)
 
-    expected = system._format_timestamp(fallback_now + timedelta(minutes=5))
+    expected = _format_timestamp(fallback_now + timedelta(minutes=5))
 
-    assert system._predict_auto_upgrade_next_run(task) == expected
+    assert upgrade._predict_auto_upgrade_next_run(task) == expected

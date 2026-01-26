@@ -16,7 +16,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.cards.models import RFID
 from apps.cards.sync import serialize_rfid
-from apps.core.system import _systemd_unit_status
+from apps.core.system.ui import _systemd_unit_status
 from apps.ocpp.models import CPForwarder, Charger
 
 from ..models import NetMessage, Node
