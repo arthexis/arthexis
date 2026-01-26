@@ -5029,6 +5029,10 @@ msgstr "Déjalo en blanco para enviar de forma anónima."
 msgid "Your experience on this page"
 msgstr "Tu experiencia en esta página"
 
+#: pages/templates/pages/base.html:1000
+msgid "Your experience on %(link_start)sthis page%(link_end)s"
+msgstr "Tu experiencia en %(link_start)sesta página%(link_end)s"
+
 #: pages/templates/admin/includes/user_story_feedback.html:59
 #: pages/templates/pages/base.html:444
 msgid "Excellent"

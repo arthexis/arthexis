@@ -4963,6 +4963,10 @@ msgstr "Lascia vuoto per inviare in modo anonimo."
 msgid "Your experience on this page"
 msgstr "La tua esperienza su questa pagina"
 
+#: pages/templates/pages/base.html:1000
+msgid "Your experience on %(link_start)sthis page%(link_end)s"
+msgstr "La tua esperienza su %(link_start)squesta pagina%(link_end)s"
+
 #: pages/templates/admin/includes/user_story_feedback.html:59
 #: pages/templates/pages/base.html:444
 msgid "Excellent"
