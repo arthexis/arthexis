@@ -1,4 +1,4 @@
-from django.http import HttpResponseServerError, StreamingHttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 
 from .models import MjpegStream
@@ -24,13 +24,14 @@ def mjpeg_stream(request, slug):
         frame_iter = stream.iter_frame_bytes()
         first_frame = next(frame_iter)
     except StopIteration:
-        return HttpResponseServerError("No frames available for this stream.")
+        logger.info("No frames available for MJPEG stream %s", slug)
+        return HttpResponse(status=204)
     except RuntimeError as exc:
         logger.exception("Runtime error while starting MJPEG stream %s", slug)
-        return HttpResponseServerError("Unable to start stream.")
+        return HttpResponse("Unable to start stream.", status=503)
     except Exception as exc:
         logger.exception("Unexpected error while starting MJPEG stream %s", slug)
-        return HttpResponseServerError("Unable to start stream.")
+        return HttpResponse("Unable to start stream.", status=503)
 
     generator = stream.mjpeg_stream(frame_iter, first_frame=first_frame)
 
