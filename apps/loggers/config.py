@@ -105,7 +105,6 @@ def build_logging_settings(
                 "class": "logging.StreamHandler",
                 "level": "ERROR",
                 "formatter": "standard",
-                "filters": ["debug_app_filter"],
             },
         },
         "root": {
