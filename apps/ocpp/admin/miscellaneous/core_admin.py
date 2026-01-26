@@ -455,7 +455,9 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
             message = _("%(charger)s is not connected to the platform.") % {
                 "charger": charger,
             }
-            return False, message
+            # Log the full exception server-side, but return a generic error message to the client.
+            logging.exception("Failed to send Reset to charger %s (connector %s)", charger.charger_id, connector_value)
+            message = _("Failed to send Reset due to an internal error.")
 
         message_id = uuid.uuid4().hex
         frame = json.dumps([2, message_id, "Reset", {"type": "Soft"}])
