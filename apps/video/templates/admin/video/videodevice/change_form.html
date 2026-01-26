@@ -1,48 +1,77 @@
 {% extends "admin/change_form.html" %}
 {% load i18n %}
 
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .latest-snapshot__header {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .latest-snapshot__details {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .latest-snapshot__actions {
+      flex: 0 0 auto;
+      text-align: right;
+    }
+
+    .latest-snapshot__button {
+      transform: scale(1.4);
+      transform-origin: right center;
+    }
+  </style>
+{% endblock %}
+
 {% block after_field_sets %}
   {{ block.super }}
   {% if original %}
     <fieldset class="module aligned">
       <h2>{% trans "LATEST" %}</h2>
-      <div class="form-row">
-        <div>
-          <strong>{% trans "Captured" %}:</strong>
-          {% if latest_snapshot %}
-            {{ latest_snapshot.captured_at|date:"DATETIME_FORMAT" }}
-          {% else %}
-            <em>{% trans "Not captured" %}</em>
-          {% endif %}
+      <div class="form-row latest-snapshot__header">
+        <div class="latest-snapshot__details">
+          <div>
+            <strong>{% trans "Captured" %}:</strong>
+            {% if latest_snapshot %}
+              {{ latest_snapshot.captured_at|date:"DATETIME_FORMAT" }}
+            {% else %}
+              <em>{% trans "Not captured" %}</em>
+            {% endif %}
+          </div>
+          <div>
+            <strong>{% trans "Resolution" %}:</strong>
+            {% if latest_snapshot and latest_snapshot.resolution_display %}
+              {{ latest_snapshot.resolution_display }}
+            {% else %}
+              <em>{% trans "Unknown" %}</em>
+            {% endif %}
+          </div>
+          <div>
+            <strong>{% trans "Format" %}:</strong>
+            {% if latest_snapshot and latest_snapshot.image_format %}
+              {{ latest_snapshot.image_format }}
+            {% else %}
+              <em>{% trans "Unknown" %}</em>
+            {% endif %}
+          </div>
+          <div>
+            <strong>{% trans "Content Sample" %}:</strong>
+            {% if latest_snapshot_sample_url %}
+              <a href="{{ latest_snapshot_sample_url }}">{% trans "View sample" %}</a>
+            {% else %}
+              <em>{% trans "Unavailable" %}</em>
+            {% endif %}
+          </div>
         </div>
-        <div>
-          <strong>{% trans "Resolution" %}:</strong>
-          {% if latest_snapshot and latest_snapshot.resolution_display %}
-            {{ latest_snapshot.resolution_display }}
-          {% else %}
-            <em>{% trans "Unknown" %}</em>
-          {% endif %}
-        </div>
-        <div>
-          <strong>{% trans "Format" %}:</strong>
-          {% if latest_snapshot and latest_snapshot.image_format %}
-            {{ latest_snapshot.image_format }}
-          {% else %}
-            <em>{% trans "Unknown" %}</em>
-          {% endif %}
-        </div>
-        <div>
-          <strong>{% trans "Content Sample" %}:</strong>
-          {% if latest_snapshot_sample_url %}
-            <a href="{{ latest_snapshot_sample_url }}">{% trans "View sample" %}</a>
-          {% else %}
-            <em>{% trans "Unavailable" %}</em>
-          {% endif %}
-        </div>
-        <div>
+        <div class="latest-snapshot__actions">
           <button
             type="submit"
-            class="button"
+            class="button latest-snapshot__button"
             formaction="{% url 'admin:video_videodevice_actions' pk=original.pk tool='refresh_snapshot' %}"
             formmethod="post"
           >
