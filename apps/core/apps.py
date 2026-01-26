@@ -343,7 +343,7 @@ def _configure_lock_dependent_tasks(config):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.core.tasks.poll_emails",
+                    "task": "apps.core.tasks.system_health.poll_emails",
                 },
             )
         except (OperationalError, ProgrammingError):

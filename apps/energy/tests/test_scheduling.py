@@ -32,4 +32,7 @@ def test_sync_periodic_task_creates_and_links_task():
     schedule.refresh_from_db()
 
     assert schedule.periodic_task is not None
-    assert schedule.periodic_task.task == "apps.core.tasks.run_client_report_schedule"
+    assert (
+        schedule.periodic_task.task
+        == "apps.core.tasks.system_health.run_client_report_schedule"
+    )

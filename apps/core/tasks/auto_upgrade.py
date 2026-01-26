@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import os
 import re
@@ -12,34 +11,41 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable
 from datetime import datetime, time as datetime_time, timedelta
 from pathlib import Path
-import urllib.error
-import urllib.request
+from typing import Any, Callable
 
 import requests
-import psutil
-
 from celery import shared_task
-from apps.repos import github
+from django.conf import settings
+from django.db import DatabaseError
+from django.utils import timezone
+
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
-    AUTO_UPGRADE_INTERVAL_MINUTES,
     AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
-    auto_upgrade_fast_lane_enabled,
-    shorten_auto_upgrade_failure,
+    AUTO_UPGRADE_INTERVAL_MINUTES,
     DEFAULT_AUTO_UPGRADE_MODE,
     append_auto_upgrade_log,
-    auto_upgrade_base_dir,
+    auto_upgrade_fast_lane_enabled,
+    shorten_auto_upgrade_failure,
 )
 from apps.core.notifications import LcdChannel
 from apps.core.systemctl import _systemctl_command
-from apps.release import release_workflow
-from django.conf import settings
-from django.db import DatabaseError, models
-from django.utils import timezone
-from utils.revision import get_revision
+from .release_checks import (
+    SEVERITY_CRITICAL,
+    SEVERITY_LOW,
+    SEVERITY_NORMAL,
+    _get_package_release_model,
+    _latest_release,
+    _resolve_release_severity,
+)
+from .utils import (
+    _current_revision,
+    _extract_error_output,
+    _is_network_failure,
+    _project_base_dir,
+)
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
@@ -56,157 +62,7 @@ AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 NON_TERMINAL_ROLES = {"Control", "Constellation", "Watchtower"}
 CANARY_LIVE_GRACE_MINUTES = 10
 
-_NETWORK_FAILURE_PATTERNS = (
-    "could not resolve host",
-    "couldn't resolve host",
-    "failed to connect",
-    "couldn't connect to server",
-    "connection reset by peer",
-    "recv failure",
-    "connection timed out",
-    "network is unreachable",
-    "temporary failure in name resolution",
-    "tls connection was non-properly terminated",
-    "gnutls recv error",
-    "name or service not known",
-    "could not resolve proxy",
-    "no route to host",
-)
-
-SEVERITY_NORMAL = "normal"
-SEVERITY_LOW = "low"
-SEVERITY_CRITICAL = "critical"
-
-_PackageReleaseModel = None
-
-
-def _get_package_release_model():
-    """Return the :class:`release.models.PackageRelease` model when available."""
-
-    global _PackageReleaseModel
-
-    if _PackageReleaseModel is not None:
-        return _PackageReleaseModel
-
-    try:
-        from apps.release.models import PackageRelease  # noqa: WPS433 - runtime import
-    except Exception:  # pragma: no cover - app registry not ready
-        return None
-
-    _PackageReleaseModel = PackageRelease
-    return PackageRelease
-
-
-model = _get_package_release_model()
-if model is not None:  # pragma: no branch - runtime constant setup
-    SEVERITY_NORMAL = model.Severity.NORMAL
-    SEVERITY_LOW = model.Severity.LOW
-    SEVERITY_CRITICAL = model.Severity.CRITICAL
-
-
 logger = logging.getLogger(__name__)
-
-
-def _resolve_release_severity(version: str | None) -> str:
-    try:
-        return release_workflow.resolve_release_severity(version)
-    except Exception:  # pragma: no cover - protective fallback
-        logger.exception("Failed to resolve release severity")
-        return SEVERITY_NORMAL
-
-
-@shared_task
-def heartbeat() -> None:
-    """Log a simple heartbeat message."""
-    logger.info("Heartbeat task executed")
-
-
-@shared_task(bind=True, name="core.tasks.heartbeat")
-def legacy_heartbeat(self) -> None:
-    """Backward-compatible alias for the heartbeat task.
-
-    Older Celery schedules may still reference ``core.tasks.heartbeat``.
-    Register the legacy name so workers avoid "unregistered task" errors
-    while routing through the current implementation.
-    """
-
-    request = getattr(self, "request", None)
-    if request:
-        logger.warning(
-            "Received legacy heartbeat task; inspect scheduler and broker for stale entries",
-            extra={
-                "celery_id": getattr(request, "id", None),
-                "delivery_info": getattr(request, "delivery_info", None),
-                "origin": getattr(request, "hostname", None),
-                "headers": getattr(request, "headers", None),
-            },
-        )
-
-    heartbeat()
-
-
-def _project_base_dir() -> Path:
-    """Return the filesystem base directory for runtime operations."""
-
-    return auto_upgrade_base_dir()
-
-
-def _read_process_cmdline(pid: int) -> list[str]:
-    """Return the command line for a process when available."""
-
-    try:
-        return psutil.Process(pid).cmdline()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
-        return []
-
-
-def _read_process_start_time(pid: int) -> float | None:
-    """Return the process start time in epoch seconds when available."""
-
-    try:
-        return psutil.Process(pid).create_time()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
-        return None
-
-
-def _is_migration_server_running(lock_dir: Path) -> bool:
-    """Return ``True`` when the migration server lock indicates it is active."""
-
-    state_path = lock_dir / "migration_server.json"
-    try:
-        payload = json.loads(state_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return False
-    except json.JSONDecodeError:
-        return True
-
-    pid = payload.get("pid")
-    if isinstance(pid, str) and pid.isdigit():
-        pid = int(pid)
-    if not isinstance(pid, int):
-        return False
-
-    cmdline = _read_process_cmdline(pid)
-    script_path = lock_dir.parent / "scripts" / "migration_server.py"
-    if not any(str(part) == str(script_path) for part in cmdline):
-        return False
-
-    timestamp = payload.get("timestamp")
-    if isinstance(timestamp, str):
-        try:
-            timestamp = float(timestamp)
-        except ValueError:
-            timestamp = None
-
-    start_time = _read_process_start_time(pid)
-    if (
-        isinstance(timestamp, (int, float))
-        and start_time is not None
-        and abs(start_time - timestamp) > 120
-    ):
-        return False
-
-    return True
 
 
 def _load_upgrade_canaries() -> list["Node"]:
@@ -375,7 +231,7 @@ def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
 
 
 def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
-    base_dir = auto_upgrade_base_dir()
+    base_dir = _project_base_dir()
     if auto_upgrade_fast_lane_enabled(base_dir):
         return AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES
 
@@ -992,28 +848,6 @@ def _ensure_runtime_services(
     )
 
 
-def _latest_release() -> tuple[str | None, str | None]:
-    """Return the latest release version and revision when available."""
-
-    model = _get_package_release_model()
-    if model is None:
-        return None, None
-
-    try:
-        release = model.latest()
-    except DatabaseError:  # pragma: no cover - depends on DB availability
-        return None, None
-    except Exception:  # pragma: no cover - defensive catch-all
-        return None, None
-
-    if not release:
-        return None, None
-
-    version = getattr(release, "version", None)
-    revision = getattr(release, "revision", None)
-    return version, revision
-
-
 def _read_local_version(base_dir: Path) -> str | None:
     """Return the local VERSION file contents when readable."""
 
@@ -1296,39 +1130,6 @@ def _reset_network_failure_count(base_dir: Path) -> None:
         logger.warning("Failed to remove auto-upgrade network failure lockfile")
 
 
-def _extract_error_output(exc: subprocess.CalledProcessError) -> str:
-    parts: list[str] = []
-    for attr in ("stderr", "stdout", "output"):
-        value = getattr(exc, attr, None)
-        if not value:
-            continue
-        if isinstance(value, bytes):
-            try:
-                value = value.decode()
-            except Exception:  # pragma: no cover - best effort decoding
-                value = value.decode(errors="ignore")
-        parts.append(str(value))
-    detail = " ".join(part.strip() for part in parts if part)
-    if not detail:
-        detail = str(exc)
-    return detail
-
-
-def _is_network_failure(exc: subprocess.CalledProcessError) -> bool:
-    command = exc.cmd
-    if isinstance(command, (list, tuple)):
-        if not command:
-            return False
-        first = str(command[0])
-    else:
-        command_str = str(command)
-        first = command_str.split()[0] if command_str else ""
-    if "git" not in first:
-        return False
-    detail = _extract_error_output(exc).lower()
-    return any(pattern in detail for pattern in _NETWORK_FAILURE_PATTERNS)
-
-
 def _record_network_failure(base_dir: Path, detail: str) -> int:
     count = _read_network_failure_count(base_dir) + 1
     _write_network_failure_count(base_dir, count)
@@ -1573,23 +1374,6 @@ def _classify_auto_upgrade_failure(exc: Exception) -> str:
             return "UPGRADE-SCRIPT"
         return "SUBPROCESS"
     return exc.__class__.__name__
-
-
-def _resolve_service_url(base_dir: Path) -> str:
-    """Return the local URL used to probe the Django suite."""
-
-    lock_dir = base_dir / ".locks"
-    mode_file = lock_dir / "nginx_mode.lck"
-    mode = "internal"
-    if mode_file.exists():
-        try:
-            value = mode_file.read_text(encoding="utf-8").strip()
-        except OSError:
-            value = ""
-        if value:
-            mode = value.lower()
-    port = 8888
-    return f"http://127.0.0.1:{port}/"
 
 
 def _parse_major_minor(version: str) -> tuple[int, int] | None:
@@ -2252,161 +2036,26 @@ def check_github_updates(
         _send_auto_upgrade_check_message(status, change_tag)
 
 
-@shared_task
-def poll_emails() -> None:
-    """Poll all configured email collectors for new messages."""
-    try:
-        from apps.emails.models import EmailCollector
-    except Exception:  # pragma: no cover - app not ready
-        return
-
-    for collector in EmailCollector.objects.all():
-        collector.collect()
-
-
-def _record_health_check_result(
-    base_dir: Path, attempt: int, status: int | None, detail: str
+@shared_task(name="apps.core.tasks.check_github_updates")
+def legacy_check_github_updates(
+    channel_override: str | None = None,
+    *,
+    operations: AutoUpgradeOperations | None = None,
+    manual_trigger: bool = False,
 ) -> None:
-    status_display = status if status is not None else "unreachable"
-    message = "Health check attempt %s %s (%s)" % (attempt, detail, status_display)
-    append_auto_upgrade_log(base_dir, message)
+    """Backward-compatible alias for the auto-upgrade task path."""
+
+    check_github_updates(
+        channel_override=channel_override,
+        operations=operations,
+        manual_trigger=manual_trigger,
+    )
 
 
 def _schedule_health_check(next_attempt: int) -> None:
+    from .system_health import verify_auto_upgrade_health
+
     verify_auto_upgrade_health.apply_async(
         kwargs={"attempt": next_attempt},
         countdown=AUTO_UPGRADE_HEALTH_DELAY_SECONDS,
     )
-
-
-def _current_revision(base_dir: Path) -> str:
-    """Return the current git revision when available."""
-
-    del base_dir  # Base directory handled by shared revision helper.
-
-    try:
-        return get_revision()
-    except Exception:  # pragma: no cover - defensive fallback
-        logger.warning(
-            "Failed to resolve git revision for auto-upgrade logging", exc_info=True
-        )
-        return ""
-
-
-def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
-    revision = _current_revision(base_dir)
-    if not revision:
-        logger.warning(
-            "Failed to determine revision during auto-upgrade health check failure"
-        )
-
-    _add_skipped_revision(base_dir, revision)
-    append_auto_upgrade_log(
-        base_dir, "Health check failed; manual intervention required"
-    )
-    _record_auto_upgrade_failure(base_dir, detail or "Health check failed")
-
-
-@shared_task
-def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
-    """Verify the upgraded suite responds successfully.
-
-    After the post-upgrade delay the site is probed once; any response other
-    than HTTP 200 triggers an automatic revert and records the failing
-    revision so future upgrade attempts skip it.
-    """
-
-    base_dir = _project_base_dir()
-    url = _resolve_service_url(base_dir)
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": "Arthexis-AutoUpgrade/1.0"},
-    )
-
-    status: int | None = None
-    detail = "succeeded"
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            status = getattr(response, "status", response.getcode())
-    except urllib.error.HTTPError as exc:
-        status = exc.code
-        detail = f"returned HTTP {exc.code}"
-        logger.warning(
-            "Auto-upgrade health check attempt %s returned HTTP %s", attempt, exc.code
-        )
-    except urllib.error.URLError as exc:
-        detail = f"failed with {exc}"
-        logger.warning(
-            "Auto-upgrade health check attempt %s failed: %s", attempt, exc
-        )
-    except Exception as exc:  # pragma: no cover - unexpected network error
-        detail = f"failed with {exc}"
-        logger.exception(
-            "Unexpected error probing suite during auto-upgrade attempt %s", attempt
-        )
-        _record_health_check_result(base_dir, attempt, status, detail)
-        _handle_failed_health_check(base_dir, detail)
-        return False
-
-    if status == 200:
-        _record_health_check_result(base_dir, attempt, status, "succeeded")
-        logger.info(
-            "Auto-upgrade health check succeeded on attempt %s with HTTP %s",
-            attempt,
-            status,
-        )
-        return True
-
-    if detail == "succeeded":
-        if status is not None:
-            detail = f"returned HTTP {status}"
-        else:
-            detail = "failed with unknown status"
-
-    _record_health_check_result(base_dir, attempt, status, detail)
-    _handle_failed_health_check(base_dir, detail)
-    return False
-
-
-def execute_scheduled_release(release_id: int) -> None:
-    """Run the automated release flow for a scheduled PackageRelease."""
-
-    model = _get_package_release_model()
-    if model is None:
-        logger.warning("Scheduled release %s skipped: model unavailable", release_id)
-        return
-
-    release = model.objects.filter(pk=release_id).first()
-    if release is None:
-        logger.warning("Scheduled release %s skipped: release not found", release_id)
-        return
-
-    try:
-        release_workflow.run_headless_publish(release, auto_release=True)
-    finally:
-        release.clear_schedule(save=True)
-
-
-@shared_task
-def run_scheduled_release(release_id: int) -> None:
-    """Entrypoint used by django-celery-beat to trigger scheduled releases."""
-
-    execute_scheduled_release(release_id)
-
-
-@shared_task
-def run_client_report_schedule(schedule_id: int) -> None:
-    """Execute a :class:`core.models.ClientReportSchedule` run."""
-
-    from apps.energy.models import ClientReportSchedule
-
-    schedule = ClientReportSchedule.objects.filter(pk=schedule_id).first()
-    if not schedule:
-        logger.warning("ClientReportSchedule %s no longer exists", schedule_id)
-        return
-
-    try:
-        schedule.run()
-    except Exception:
-        logger.exception("ClientReportSchedule %s failed", schedule_id)
-        raise

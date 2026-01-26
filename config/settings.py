@@ -842,7 +842,7 @@ CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
 
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
-        "task": "apps.core.tasks.heartbeat",
+        "task": "apps.core.tasks.heartbeat.heartbeat",
         "schedule": crontab(minute="*/5"),
     },
     "ocpp_configuration_check": {

@@ -13,7 +13,7 @@ from django.utils import timezone
 
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
-AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.check_github_updates"
+AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.auto_upgrade.check_github_updates"
 AUTO_UPGRADE_FAST_LANE_LOCK_NAME = "auto_upgrade_fast_lane.lck"
 AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 
