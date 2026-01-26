@@ -16,10 +16,15 @@
   const ratingInputs = overlay.querySelectorAll('.user-story-rating input');
   const ratingLabels = overlay.querySelectorAll('.user-story-rating label');
   const ratingHint = document.getElementById('user-story-rating-hint');
+  const copyLink = overlay.querySelector('[data-feedback-copy]');
   const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
   const errorMessage = form.dataset.submitError;
   const networkErrorMessage = form.dataset.networkError;
+  const copySuccessMessage = form.dataset.copySuccess;
+  const copyErrorMessage = form.dataset.copyError;
+  const copyAriaLabel = form.dataset.copyAriaLabel;
   let previousFocus = null;
+  let copyFeedbackTimeout = null;
 
   const ratingMessages = Array.from({ length: 6 }, (_, index) => {
     if (!ratingHint) {
@@ -146,6 +151,122 @@
       const showHint = () => setRatingHintText(ratingValue);
       label.addEventListener('mouseenter', showHint);
       label.addEventListener('mouseleave', setRatingHint);
+    });
+  }
+
+  const fallbackCopyText = value =>
+    new Promise((resolve, reject) => {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'absolute';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      const selection = document.getSelection();
+      const selected = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+      try {
+        textarea.select();
+        document.execCommand('copy');
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        document.body.removeChild(textarea);
+        if (selected && selection) {
+          selection.removeAllRanges();
+          selection.addRange(selected);
+        }
+      }
+    });
+
+  const copyText = value => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(value).catch(() => fallbackCopyText(value));
+    }
+
+    return fallbackCopyText(value);
+  };
+
+  const getPageCopyValue = () => {
+    const pageLabel = document.title.replace(/\s+/g, ' ').trim() || window.location.pathname;
+    return `In ${pageLabel} (${window.location.href})`;
+  };
+
+  const getFieldLabel = fieldName => {
+    if (fieldName === 'rating') {
+      const ratingLabel = document.getElementById('user-story-rating-group-label');
+      return ratingLabel ? ratingLabel.textContent.trim() : 'Rating';
+    }
+    const field = form.querySelector(`[name="${fieldName}"]`);
+    if (!field) {
+      return fieldName;
+    }
+    const fieldId = field.getAttribute('id');
+    const label = fieldId ? form.querySelector(`label[for="${fieldId}"]`) : null;
+    return label ? label.textContent.trim() : fieldName;
+  };
+
+  const getRatingLabel = value => {
+    const ratingValue = Number(value);
+    return ratingMessages[ratingValue] || value;
+  };
+
+  const getFormDetails = () => {
+    const formData = new FormData(form);
+    const details = [];
+    for (const [name, value] of formData.entries()) {
+      if (name === 'csrfmiddlewaretoken' || name === 'path') {
+        continue;
+      }
+      if (typeof value !== 'string') {
+        continue;
+      }
+      const trimmedValue = value.trim();
+      if (!trimmedValue) {
+        continue;
+      }
+      const label = getFieldLabel(name);
+      const displayValue = name === 'rating' ? getRatingLabel(trimmedValue) : trimmedValue;
+      details.push(`${label}: ${displayValue}`);
+    }
+    return details;
+  };
+
+  const buildCopyValue = () => {
+    const baseValue = getPageCopyValue();
+    const details = getFormDetails();
+    if (!details.length) {
+      return baseValue;
+    }
+    return `${baseValue}\n\nFeedback form:\n${details.map(detail => `- ${detail}`).join('\n')}`;
+  };
+
+  if (copyLink) {
+    const defaultCopyText = copyLink.textContent;
+    if (copyAriaLabel) {
+      copyLink.setAttribute('aria-label', copyAriaLabel);
+    }
+    const showCopyFeedback = message => {
+      if (!message) {
+        return;
+      }
+      if (copyFeedbackTimeout) {
+        clearTimeout(copyFeedbackTimeout);
+      }
+      copyLink.textContent = message;
+      copyFeedbackTimeout = window.setTimeout(() => {
+        copyLink.textContent = defaultCopyText;
+      }, 1500);
+    };
+    copyLink.addEventListener('click', event => {
+      event.preventDefault();
+      copyText(buildCopyValue())
+        .then(() => showCopyFeedback(copySuccessMessage))
+        .catch(error => {
+          showCopyFeedback(copyErrorMessage);
+          console.error('Failed to copy feedback details:', error);
+        });
     });
   }
 

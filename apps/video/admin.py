@@ -128,7 +128,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     changelist_actions = [
         "find_devices",
         "take_snapshot",
-        "test_stream",
         "power_off",
         "power_on",
     ]
@@ -180,11 +179,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 name="video_videodevice_view_stream",
             ),
             path(
-                "test-stream/",
-                self.admin_site.admin_view(self.view_stream),
-                name="video_videodevice_test_camera",
-            ),
-            path(
                 "power-off/",
                 self.admin_site.admin_view(self.power_off_camera_view),
                 name="video_videodevice_power_off_camera",
@@ -228,9 +222,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     def take_snapshot(self, request, queryset=None):
         return self._redirect_admin("video_videodevice_take_snapshot")
 
-    def test_stream(self, request, queryset=None):
-        return self._redirect_admin("video_videodevice_view_stream")
-
     def power_off(self, request, queryset=None):
         return self._redirect_admin("video_videodevice_power_off_camera")
 
@@ -257,12 +248,11 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 level=messages.SUCCESS,
             )
 
-    set_admin_action_label(find_devices, "Find Devices", changelist=True)
-    set_admin_action_label(take_snapshot, "Take Snapshot", changelist=True)
-    set_admin_action_label(test_stream, "Test Stream", changelist=True)
-    set_admin_action_label(power_off, "Power Off", changelist=True)
-    set_admin_action_label(power_on, "Power On", changelist=True)
-    set_admin_action_label(refresh_snapshot, "Take Snapshot")
+    set_admin_action_label(find_devices, "Find", changelist=True)
+    set_admin_action_label(take_snapshot, "Snapshot", changelist=True)
+    set_admin_action_label(power_off, "Off", changelist=True)
+    set_admin_action_label(power_on, "On", changelist=True)
+    set_admin_action_label(refresh_snapshot, "Snapshot")
 
     def _redirect_admin(self, url_name):
         return redirect(f"admin:{url_name}")
@@ -350,7 +340,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     ) -> VideoSnapshot | None:
         feature = self._ensure_video_feature_enabled(
             request,
-            _("Take Snapshot"),
+            _("Snapshot"),
             auto_enable=auto_enable,
             silent=silent,
         )
@@ -396,7 +386,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
     def find_devices_view(self, request):
         feature = self._ensure_video_feature_enabled(
-            request, _("Find Devices"), auto_enable=True, require_stack=False
+            request, _("Find"), auto_enable=True, require_stack=False
         )
         if not feature:
             return redirect("..")

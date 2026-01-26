@@ -191,7 +191,7 @@ def boot_delay_seconds(
     delta_seconds = int((started_at - boot_time).total_seconds())
     if delta_seconds < 0:
         return None
-    if now is not None and started_at > now_value:
+    if started_at > now_value:
         return None
     return delta_seconds
 

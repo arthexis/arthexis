@@ -41,6 +41,9 @@
         action="{% url 'pages:user-story-submit' %}"
         data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
         data-network-error="{% trans 'Network error. Please try again.' %}"
+        data-copy-success="{% trans 'Copied!' %}"
+        data-copy-error="{% trans 'Copy failed. Please try again.' %}"
+        data-copy-aria-label="{% trans 'Copy feedback details to clipboard' %}"
       >
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
@@ -75,7 +78,11 @@
           </div>
         {% endif %}
         <div class="mb-3">
-          <span class="form-label d-block">{% trans 'Your experience on this page' %}</span>
+          <span class="form-label d-block" id="user-story-rating-group-label">
+            {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+              Your experience on {{ link_start }}this page{{ link_end }}
+            {% endblocktrans %}
+          </span>
           <div class="user-story-feedback-options">
             <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
               <input type="radio" id="user-story-rating-5" name="rating" value="5" required>

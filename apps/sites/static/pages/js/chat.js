@@ -22,6 +22,22 @@
     return '';
   };
 
+  const sanitizeAvatarUrl = (raw) => {
+    const value = String(raw || '').trim();
+    if (!value) {
+      return null;
+    }
+    try {
+      const url = new URL(value, window.location.origin);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        return url.toString();
+      }
+    } catch (error) {
+      // Invalid URL, treat as absent
+    }
+    return null;
+  };
+
   ready(() => {
     const widget = document.getElementById('chat-widget');
     if (!widget) {
@@ -161,7 +177,7 @@
       const content = (message.content || '').toString();
       const author = (message.author || '').toString();
       const time = formatTime(message.created);
-      const avatar = (message.avatar || '').toString();
+      const avatar = sanitizeAvatarUrl(message.avatar);
       const item = document.createElement('div');
       item.className = 'chat-message';
       if (message.from_staff) {

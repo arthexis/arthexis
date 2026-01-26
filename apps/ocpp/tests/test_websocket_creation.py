@@ -14,7 +14,13 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.ocpp import consumers, store
+from apps.ocpp import store
+from apps.ocpp.consumers import (
+    CSMSConsumer,
+    OCPP_VERSION_16,
+    OCPP_VERSION_201,
+    OCPP_VERSION_21,
+)
 from apps.ocpp.models import Charger, Simulator
 from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
@@ -103,28 +109,28 @@ def test_charger_page_reverse_resolves_expected_path():
 
 
 def test_select_subprotocol_prioritizes_preference_and_defaults():
-    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
 
     cases = [
         (
             (
                 [
-                    consumers.OCPP_VERSION_16,
-                    consumers.OCPP_VERSION_201,
-                    consumers.OCPP_VERSION_21,
+                    OCPP_VERSION_16,
+                    OCPP_VERSION_201,
+                    OCPP_VERSION_21,
                 ],
-                consumers.OCPP_VERSION_21,
+                OCPP_VERSION_21,
             ),
-            consumers.OCPP_VERSION_21,
+            OCPP_VERSION_21,
         ),
         (
             (
-                [consumers.OCPP_VERSION_21, consumers.OCPP_VERSION_201],
+                [OCPP_VERSION_21, OCPP_VERSION_201],
                 None,
             ),
-            consumers.OCPP_VERSION_21,
+            OCPP_VERSION_21,
         ),
-        (([consumers.OCPP_VERSION_16], None), consumers.OCPP_VERSION_16),
+        (([OCPP_VERSION_16], None), OCPP_VERSION_16),
         ((["unexpected"], None), None),
     ]
 
@@ -135,7 +141,7 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 @pytest.mark.parametrize(
     "preferred",
-    [consumers.OCPP_VERSION_201, consumers.OCPP_VERSION_21],
+    [OCPP_VERSION_201, OCPP_VERSION_21],
 )
 def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
     charger = Charger.objects.create(

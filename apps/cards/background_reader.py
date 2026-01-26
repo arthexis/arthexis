@@ -49,6 +49,39 @@ _AUTO_DETECT_BACKOFF_SECONDS = float(
 _NOT_CONFIGURED_LOG_INTERVAL = float(
     os.environ.get("RFID_NOT_CONFIGURED_LOG_INTERVAL", "30")
 )
+class _IrqEmptyPollTracker:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._count = 0
+        self._since = 0.0
+
+    def record(self) -> None:
+        """Track consecutive empty IRQ queue polls."""
+        now = time.monotonic()
+        with self._lock:
+            if self._count == 0:
+                self._since = now
+            self._count += 1
+
+    def log_summary(self, event: str) -> None:
+        """Log a summary of consecutive empty IRQ polls before a successful read."""
+        with self._lock:
+            if self._count == 0:
+                return
+            count = self._count
+            start = self._since
+            self._count = 0
+            self._since = 0.0
+        waited = max(0.0, time.monotonic() - start)
+        logger.debug(
+            "IRQ queue empty; fell back to direct read %s times over %.2fs before %s",
+            count,
+            waited,
+            event,
+        )
+
+
+_irq_empty_tracker = _IrqEmptyPollTracker()
 
 
 def _log_fd_snapshot(label: str) -> None:
@@ -438,10 +471,11 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
         result = _tag_queue.get(timeout=timeout)
         if result and result.get("rfid"):
             _mark_scanner_used()
+        _irq_empty_tracker.log_summary("queue read")
         return result
     except queue.Empty:
         _log_fd_snapshot("get_next_tag-empty")
-        logger.debug("IRQ queue empty; falling back to direct read")
+        _irq_empty_tracker.record()
         try:
             from .reader import read_rfid
 
@@ -449,6 +483,7 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
             remaining_timeout = max(0.0, timeout - elapsed)
             res = read_rfid(mfrc=_reader, cleanup=False, timeout=remaining_timeout)
             if res.get("rfid") or res.get("error"):
+                _irq_empty_tracker.log_summary("polling read")
                 logger.debug("Polling read result: %s", res)
                 if res.get("rfid"):
                     _mark_scanner_used()

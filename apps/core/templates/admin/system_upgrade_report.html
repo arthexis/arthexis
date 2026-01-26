@@ -146,6 +146,17 @@
     padding: 0.15rem 0.35rem;
   }
 
+  .upgrade-report .upgrade-report-collapsible summary {
+    cursor: pointer;
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .upgrade-report .upgrade-report-collapsible-body {
+    margin-top: 0.5rem;
+  }
+
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: light dark;
@@ -428,29 +439,33 @@
       {% endif %}
     </div>
     <div class="upgrade-report-section">
-      <h3>{% trans "Auto-upgrade return codes" %}</h3>
-      <p class="help">{% trans "LCD status codes are shortened to fit a 16-character display." %}</p>
-      <table class="table table-striped">
-        <thead>
-          <tr>
-            <th scope="col">{% trans "LCD code" %}</th>
-            <th scope="col">{% trans "Meaning" %}</th>
-            <th scope="col">{% trans "Suggested action" %}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for entry in report.failure_guide %}
-          <tr>
-            <td><code>{{ entry.code }}</code></td>
-            <td>
-              <strong>{{ entry.label }}</strong><br />
-              <span class="help">{{ entry.details }}</span>
-            </td>
-            <td>{{ entry.action }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <details class="upgrade-report-collapsible">
+        <summary>{% trans "Auto-upgrade return codes" %}</summary>
+        <div class="upgrade-report-collapsible-body">
+          <p class="help">{% trans "LCD status codes are shortened to fit a 16-character display." %}</p>
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th scope="col">{% trans "LCD code" %}</th>
+                <th scope="col">{% trans "Meaning" %}</th>
+                <th scope="col">{% trans "Suggested action" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in report.failure_guide %}
+              <tr>
+                <td><code>{{ entry.code }}</code></td>
+                <td>
+                  <strong>{{ entry.label }}</strong><br />
+                  <span class="help">{{ entry.details }}</span>
+                </td>
+                <td>{{ entry.action }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
     <div class="upgrade-report-section">
       <h3>{% trans "Schedule" %}</h3>

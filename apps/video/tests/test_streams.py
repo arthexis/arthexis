@@ -93,6 +93,74 @@ def test_mjpeg_stream_stores_final_frame(client, video_device, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_mjpeg_stream_returns_no_content_when_no_frames(client, video_device, monkeypatch):
+    stream = MjpegStream.objects.create(name="Empty", slug="empty", video_device=video_device)
+
+    def empty_frames(self):
+        yield from ()
+
+    monkeypatch.setattr(MjpegStream, "iter_frame_bytes", empty_frames)
+
+    response = client.get(reverse("video:mjpeg-stream", args=[stream.slug]))
+
+    assert response.status_code == 204
+
+
+@pytest.mark.django_db
+def test_mjpeg_probe_captures_frame(client, video_device, monkeypatch):
+    stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
+    captured: dict[str, bytes | bool] = {}
+
+    def fake_capture(self):
+        return b"fresh-frame"
+
+    def fake_store(self, frame_bytes, update_thumbnail=True):
+        captured["frame"] = frame_bytes
+        captured["update_thumbnail"] = update_thumbnail
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", fake_capture)
+    monkeypatch.setattr(MjpegStream, "store_frame_bytes", fake_store)
+
+    response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
+
+    assert response.status_code == 204
+    assert captured["frame"] == b"fresh-frame"
+    assert captured["update_thumbnail"] is True
+
+
+@pytest.mark.django_db
+def test_mjpeg_probe_returns_error_on_capture_failure(client, video_device, monkeypatch):
+    stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
+
+    def fake_capture(self):
+        raise RuntimeError("device error")
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", fake_capture)
+
+    response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
+
+    assert response.status_code == 503
+
+
+@pytest.mark.django_db
+def test_mjpeg_probe_returns_error_on_store_failure(client, video_device, monkeypatch):
+    stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
+
+    def fake_capture(self):
+        return b"fresh-frame"
+
+    def fake_store(self, frame_bytes, update_thumbnail=True):
+        raise RuntimeError("disk error")
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", fake_capture)
+    monkeypatch.setattr(MjpegStream, "store_frame_bytes", fake_store)
+
+    response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
+
+    assert response.status_code == 503
+
+
+@pytest.mark.django_db
 def test_camera_gallery_lists_streams(client, video_device):
     stream = MjpegStream.objects.create(name="Lobby", slug="lobby", video_device=video_device)
 

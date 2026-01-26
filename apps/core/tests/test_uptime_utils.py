@@ -92,3 +92,25 @@ def test_availability_seconds_falls_back_to_boot_delay(tmp_path, monkeypatch):
     monkeypatch.setattr(uptime_utils, "boot_delay_seconds", fake_boot_delay)
 
     assert uptime_utils.availability_seconds(tmp_path, lambda *_args: None) == 42
+
+
+def test_boot_delay_seconds_ignores_future_start(tmp_path, monkeypatch):
+    future_start = "2024-01-02T00:00:00+00:00"
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / uptime_utils.SUITE_UPTIME_LOCK_NAME).write_text(
+        json.dumps({"started_at": future_start}),
+        encoding="utf-8",
+    )
+
+    now = uptime_utils.datetime(2024, 1, 1, tzinfo=uptime_utils.datetime_timezone.utc)
+    boot_time = now.timestamp()
+
+    monkeypatch.setattr(uptime_utils.psutil, "boot_time", lambda: boot_time)
+
+    def parse_start_timestamp(value):
+        return uptime_utils.datetime.fromisoformat(value) if isinstance(value, str) else None
+
+    assert (
+        uptime_utils.boot_delay_seconds(tmp_path, parse_start_timestamp, now=now) is None
+    )

@@ -5029,6 +5029,10 @@ msgstr "Déjalo en blanco para enviar de forma anónima."
 msgid "Your experience on this page"
 msgstr "Tu experiencia en esta página"
 
+#: pages/templates/pages/base.html:1000
+msgid "Your experience on %(link_start)sthis page%(link_end)s"
+msgstr "Tu experiencia en %(link_start)sesta página%(link_end)s"
+
 #: pages/templates/admin/includes/user_story_feedback.html:59
 #: pages/templates/pages/base.html:444
 msgid "Excellent"
@@ -6063,6 +6067,14 @@ msgstr "Elige la ventana de inicio y fin prevista para el trabajo."
 #: ocpp/templates/ocpp/maintenance_request.html:79
 msgid "Enable email reminders to notify assigned contacts when available."
 msgstr "Habilita los recordatorios por correo electrónico para notificar a los contactos asignados cuando estén disponibles."
+
+#: pages/templates/pages/base.html:974
+msgid "Copied!"
+msgstr "¡Copiado!"
+
+#: pages/templates/pages/base.html:975
+msgid "Copy failed. Please try again."
+msgstr "Error al copiar. Por favor, inténtalo de nuevo."
 
 #~ msgid "Alt text"
 #~ msgstr "Texto alternativo"
