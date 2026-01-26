@@ -49,7 +49,7 @@ def _collect_actions_from_dict(node: ast.Assign, target_name: str) -> set[str]:
 
 
 def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
-    source = (app_dir / "consumers.py").read_text(encoding="utf-8")
+    source = (app_dir / "consumers" / "base.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
 
     class Visitor(ast.NodeVisitor):
