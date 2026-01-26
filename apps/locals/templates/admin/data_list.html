@@ -21,14 +21,33 @@
 
 {% block content %}
 <div id="content-main">
-  {% if import_export %}
+  {% if import_export or fixture_status %}
     <div class="actions">
-      <a href="{% url 'admin:user_data_export' %}">{% trans "Export" %}</a>
-      <form action="{% url 'admin:user_data_import' %}" method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-        <input type="file" name="data_zip" accept=".zip" />
-        <a href="#" onclick="this.closest('form').submit(); return false;">{% trans 'Import' %}</a>
-      </form>
+      {% if import_export %}
+        <a href="{% url 'admin:user_data_export' %}">{% trans "Export" %}</a>
+        <form action="{% url 'admin:user_data_import' %}" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="file" name="data_zip" accept=".zip" />
+          <a href="#" onclick="this.closest('form').submit(); return false;">{% trans 'Import' %}</a>
+        </form>
+      {% endif %}
+      {% if fixture_status %}
+        <span>
+          {% blocktrans with pending_count=fixture_status.pending|length total_count=fixture_status.total|length %}
+            Unapplied fixtures: {{ pending_count }} ({{ total_count }} total)
+          {% endblocktrans %}
+        </span>
+        <form action="{% url 'admin:user_data_apply_fixtures' %}" method="post">
+          {% csrf_token %}
+          <button type="submit" class="button"{% if not fixture_status.pending %} disabled{% endif %}>
+            {% trans "Apply fixtures" %}
+          </button>
+        </form>
+        <form action="{% url 'admin:user_data_reset_fixtures' %}" method="post">
+          {% csrf_token %}
+          <button type="submit" class="button">{% trans "Reset fixtures" %}</button>
+        </form>
+      {% endif %}
     </div>
   {% endif %}
   {% if sections %}
