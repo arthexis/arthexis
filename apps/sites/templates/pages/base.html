@@ -1256,6 +1256,22 @@
         });
       </script>
       <script>
+        function getSafeRedirect(url) {
+          const defaultPath = '/';
+          if (!url) {
+            return defaultPath;
+          }
+          try {
+            const candidateUrl = new URL(url, window.location.origin);
+            if (candidateUrl.origin === window.location.origin) {
+              return candidateUrl.pathname + candidateUrl.search + candidateUrl.hash;
+            }
+          } catch (error) {
+            console.error('Invalid redirect URL provided:', url, error);
+          }
+          return defaultPath;
+        }
+
         document.querySelectorAll('.language-select').forEach(select => {
           select.addEventListener('change', () => {
             const form = select.form;
@@ -1272,17 +1288,8 @@
                   form.submit();
                   return;
                 }
-                const rawNext = form.querySelector('input[name="next"]')?.value || '/';
-                let safeNext = '/';
-                try {
-                  const candidateUrl = new URL(rawNext, window.location.origin);
-                  if (candidateUrl.origin === window.location.origin) {
-                    safeNext = candidateUrl.pathname + candidateUrl.search + candidateUrl.hash;
-                  }
-                } catch (e) {
-                  safeNext = '/';
-                }
-                window.location.href = safeNext;
+                const rawNext = form.querySelector('input[name="next"]')?.value;
+                window.location.href = getSafeRedirect(rawNext);
               })
               .catch(() => {
                 form.submit();

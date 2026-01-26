@@ -118,6 +118,22 @@
     return csrfInput ? csrfInput.value : '';
   }
 
+  function getSafeRedirect(url){
+    const defaultPath = '/';
+    if(!url){
+      return defaultPath;
+    }
+    try{
+      const candidateUrl = new URL(url, window.location.origin);
+      if(candidateUrl.origin === window.location.origin){
+        return candidateUrl.pathname + candidateUrl.search + candidateUrl.hash;
+      }
+    } catch(error){
+      console.error('Invalid redirect URL provided:', url, error);
+    }
+    return defaultPath;
+  }
+
   function sanitize(value){
     if(typeof value !== 'string'){
       return '';
@@ -165,8 +181,8 @@
         throw new Error(message);
       }
       setStatus(text.success, 'success');
-      const target = data && data.redirect ? data.redirect : (redirectTarget || '/');
-      window.location.href = target;
+      const target = data && data.redirect ? data.redirect : redirectTarget;
+      window.location.href = getSafeRedirect(target);
     } catch(err){
       const message = err && err.message ? err.message : text.failure;
       setStatus(message, 'error');
