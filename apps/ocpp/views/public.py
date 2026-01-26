@@ -17,7 +17,51 @@ from .common import (
     _transaction_rfid_details,
     _usage_timeline,
     _visible_error_code,
+    _visible_chargers,
 )
+
+
+def charging_station_map(request):
+    chargers = (
+        _visible_chargers(request.user)
+        .select_related("location")
+        .filter(location__isnull=False)
+    )
+    locations_by_id: dict[int, dict[str, object]] = {}
+    for charger in chargers:
+        location = charger.location
+        if not location:
+            continue
+        latitude = location.latitude
+        longitude = location.longitude
+        if latitude is None or longitude is None:
+            continue
+        location_id = location.pk
+        if location_id in locations_by_id:
+            continue
+        lat_value = float(latitude)
+        lng_value = float(longitude)
+        locations_by_id[location_id] = {
+            "id": location_id,
+            "name": location.name,
+            "latitude": lat_value,
+            "longitude": lng_value,
+            "directions_url": (
+                "https://www.google.com/maps/dir/?api=1&destination="
+                f"{lat_value},{lng_value}"
+            ),
+        }
+    locations = sorted(
+        locations_by_id.values(), key=lambda item: str(item["name"]).lower()
+    )
+    return render(
+        request,
+        "ocpp/charging_station_map.html",
+        {
+            "locations": locations,
+            "initial_location": locations[0] if locations else None,
+        },
+    )
 
 def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
@@ -572,4 +616,3 @@ def charger_log_page(request, cid, connector=None):
             "log_filename": download_filename,
         },
     )
-
