@@ -18,15 +18,7 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
-from apps.core import uptime_utils
-from apps.core.uptime_constants import SUITE_UPTIME_LOCK_NAME
-from apps.screens.startup_notifications import (
-    LCD_HIGH_LOCK_FILE,
-    LCD_LOW_LOCK_FILE,
-    lcd_feature_enabled,
-    queue_startup_message,
-    render_lcd_lock_file,
-)
+from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, lcd_feature_enabled, queue_startup_message
 from .models import NetMessage, Node, NodeRole, PendingNetMessage
 from apps.content.utils import capture_and_save_screenshot
 
@@ -79,11 +71,6 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
         logger.exception("Failed to queue startup Net Message")
         raise
 
-    _queue_boot_status_message(
-        base_dir=base_dir,
-        lock_dir=lock_dir,
-    )
-
     return f"queued:{target_lock}"
 
 
@@ -114,117 +101,6 @@ def _parse_suite_start_timestamp(raw_value: object) -> datetime | None:
     return parsed
 
 
-def _startup_duration_seconds(base_dir: Path) -> int | None:
-    lock_path = base_dir / ".locks" / SUITE_UPTIME_LOCK_NAME
-    now = django_timezone.now()
-
-    payload = None
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        payload = None
-
-    if payload:
-        started_at = _parse_suite_start_timestamp(
-            payload.get("started_at") or payload.get("boot_time")
-        )
-        if started_at:
-            seconds = int((now - started_at).total_seconds())
-            if seconds >= 0:
-                return seconds
-
-    try:
-        boot_timestamp = float(psutil.boot_time())
-    except Exception:
-        return None
-
-    if not boot_timestamp:
-        return None
-
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
-    if boot_time > now:
-        return None
-
-    seconds = int((now - boot_time.astimezone(now.tzinfo)).total_seconds())
-    return seconds if seconds >= 0 else None
-
-
-def _boot_delay_seconds(base_dir: Path) -> int | None:
-    return uptime_utils.boot_delay_seconds(base_dir, _parse_suite_start_timestamp)
-
-
-def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
-    if seconds is None or seconds < 0:
-        return None
-
-    minutes_total, _ = divmod(seconds, 60)
-    days, remaining_minutes = divmod(minutes_total, 24 * 60)
-    hours, minutes = divmod(remaining_minutes, 60)
-    return days, hours, minutes
-
-
-def _active_interface_label() -> str:
-    return uptime_utils.internet_interface_label()
-
-
-def _ap_mode_enabled() -> bool:
-    return uptime_utils.ap_mode_enabled(timeout=Node.NMCLI_TIMEOUT)
-
-
-def _duration_from_lock(base_dir: Path, lock_name: str) -> int | None:
-    return uptime_utils.duration_from_lock(base_dir, lock_name)
-
-
-def _availability_seconds(base_dir: Path) -> int | None:
-    return uptime_utils.availability_seconds(base_dir, _parse_suite_start_timestamp)
-
-
-def _format_duration_hms(seconds: int | None) -> str:
-    if seconds is None or seconds < 0:
-        return "?m?s"
-
-    minutes, secs = divmod(seconds, 60)
-    return f"{minutes}m{secs}s"
-
-
-def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
-    uptime_seconds = _startup_duration_seconds(base_dir)
-    on_seconds = _availability_seconds(base_dir)
-
-    def _format_duration(seconds: int | None) -> str:
-        parts = _uptime_components(seconds)
-        if parts is None:
-            return "?d?h?m"
-
-        days, hours, minutes = parts
-        return f"{days}d{hours}h{minutes}m"
-
-    uptime_label = _format_duration(uptime_seconds)
-    on_label = _format_duration_hms(on_seconds)
-
-    subject_parts = [f"UP {uptime_label}"]
-    if _ap_mode_enabled():
-        subject_parts.append("AP")
-    subject = " ".join(subject_parts).strip()
-
-    interface_label = _active_interface_label()
-    body_parts = [f"ON {on_label}"]
-    if interface_label:
-        body_parts.append(interface_label)
-    body = " ".join(body_parts).strip()
-
-    target = lock_dir / LCD_LOW_LOCK_FILE
-    try:
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        payload = render_lcd_lock_file(subject=subject, body=body)
-
-        # Write atomically to avoid transient empty reads while the LCD script polls
-        # the low-priority payload during rotation.
-        tmp_path = target.with_suffix(".tmp")
-        tmp_path.write_text(payload, encoding="utf-8")
-        tmp_path.replace(target)
-    except Exception:
-        logger.exception("Failed to queue boot status LCD message")
 
 
 PING_FAILURE_CACHE_KEY = "nodes:connectivity:wlan1_failures"
