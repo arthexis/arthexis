@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .debug import parse_debug_logging
 from .filenames import normalize_log_filename
 from .paths import select_log_dir
 from .rotation import TRANSACTIONAL_LOG_RETENTION_DAYS
@@ -46,12 +47,21 @@ def build_logging_settings(
         else f"{normalize_log_filename(socket.gethostname())}.log"
     )
 
+    debug_control = parse_debug_logging(os.environ.get("DEBUG"), debug_enabled)
+
     logging_config: dict[str, Any] = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "standard": {
                 "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            }
+        },
+        "filters": {
+            "debug_app_filter": {
+                "()": "apps.loggers.filters.DebugAppFilter",
+                "debug_value": os.environ.get("DEBUG"),
+                "debug_enabled": debug_control.enabled,
             }
         },
         "handlers": {
@@ -62,6 +72,7 @@ def build_logging_settings(
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
                 "formatter": "standard",
+                "filters": ["debug_app_filter"],
             },
             "error_file": {
                 "class": "apps.loggers.handlers.ErrorFileHandler",
@@ -94,6 +105,7 @@ def build_logging_settings(
                 "class": "logging.StreamHandler",
                 "level": "ERROR",
                 "formatter": "standard",
+                "filters": ["debug_app_filter"],
             },
         },
         "root": {
@@ -126,5 +138,5 @@ def build_logging_settings(
         "propagate": False,
     }
 
-    configure_library_loggers(debug_enabled, logging_config)
+    configure_library_loggers(debug_control.enabled, logging_config)
     return log_dir, log_file_name, logging_config
