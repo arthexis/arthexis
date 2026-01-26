@@ -68,11 +68,8 @@ def _redact_token_value(token: str | None) -> str:
 
     if not token:
         return ""
-    token_str = str(token)
-    if not token_str:
-        return "***REDACTED***"
     digest = hashes.Hash(hashes.SHA256())
-    digest.update(token_str.encode("utf-8"))
+    digest.update(token.encode("utf-8"))
     token_hash = digest.finalize().hex()
     return f"***REDACTED***-{token_hash[:12]}"
 
@@ -107,7 +104,7 @@ def _redact_url_token(url: str) -> str:
             )
         )
     except Exception:
-        return url
+        return "***REDACTED-URL-ON-PARSE-ERROR***"
 
 
 def _get_client_ip(request):
