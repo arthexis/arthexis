@@ -43,6 +43,7 @@
         data-network-error="{% trans 'Network error. Please try again.' %}"
         data-copy-success="{% trans 'Copied!' %}"
         data-copy-error="{% trans 'Copy failed. Please try again.' %}"
+        data-copy-aria-label="{% trans 'Copy feedback details to clipboard' %}"
       >
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
