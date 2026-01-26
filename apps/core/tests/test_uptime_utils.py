@@ -109,7 +109,7 @@ def test_boot_delay_seconds_ignores_future_start(tmp_path, monkeypatch):
     monkeypatch.setattr(uptime_utils.psutil, "boot_time", lambda: boot_time)
 
     def parse_start_timestamp(value):
-        return uptime_utils.datetime.fromisoformat(value)
+        return uptime_utils.datetime.fromisoformat(value) if isinstance(value, str) else None
 
     assert (
         uptime_utils.boot_delay_seconds(tmp_path, parse_start_timestamp, now=now) is None
