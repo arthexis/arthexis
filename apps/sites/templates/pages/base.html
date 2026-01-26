@@ -1272,8 +1272,17 @@
                   form.submit();
                   return;
                 }
-                const next = form.querySelector('input[name="next"]').value || '/';
-                window.location.href = next;
+                const rawNext = form.querySelector('input[name="next"]')?.value || '/';
+                let safeNext = '/';
+                try {
+                  const candidateUrl = new URL(rawNext, window.location.origin);
+                  if (candidateUrl.origin === window.location.origin) {
+                    safeNext = candidateUrl.pathname + candidateUrl.search + candidateUrl.hash;
+                  }
+                } catch (e) {
+                  safeNext = '/';
+                }
+                window.location.href = safeNext;
               })
               .catch(() => {
                 form.submit();
