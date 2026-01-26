@@ -194,6 +194,9 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
     views_pkg = app_dir / "views"
     if views_pkg.is_dir():
         candidate_files.extend(views_pkg.glob("*.py"))
+        actions_pkg = views_pkg / "actions"
+        if actions_pkg.is_dir():
+            candidate_files.extend(actions_pkg.glob("*.py"))
 
     for path in candidate_files:
         actions.update(_collect_csms_to_cp_actions(path.read_text(encoding="utf-8")))
