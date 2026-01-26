@@ -23,10 +23,7 @@
   };
 
   const sanitizeAvatarUrl = (raw) => {
-    if (!raw) {
-      return null;
-    }
-    const value = raw.toString().trim();
+    const value = String(raw || '').trim();
     if (!value) {
       return null;
     }
