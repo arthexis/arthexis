@@ -139,10 +139,9 @@ class WhatsAppChatBridge(ChatBridge):
         try:
             if response.status_code >= 400:
                 logger.warning(
-                    "WhatsApp API returned %s for session %s: %s",
+                    "WhatsApp API returned %s for session %s",
                     response.status_code,
                     getattr(session, "pk", None),
-                    getattr(response, "text", ""),
                 )
                 return False
             return True
