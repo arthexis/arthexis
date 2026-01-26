@@ -91,10 +91,27 @@ def _capture_db_blocker(django_db_blocker: Any) -> None:
     DB_BLOCKER = django_db_blocker
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _ensure_fixture_sigil_roots(
-    django_db_setup: Any, django_db_blocker: Any
-) -> None:
+def _requires_db(request: pytest.FixtureRequest) -> bool:
+    if request.node.get_closest_marker("django_db") is not None:
+        return True
+    if {"db", "transactional_db"}.intersection(request.node.fixturenames):
+        return True
+    test_class = getattr(request.node, "cls", None)
+    if test_class is None:
+        return False
+    from django.test import TransactionTestCase
+
+    return issubclass(test_class, TransactionTestCase)
+
+
+@pytest.fixture(autouse=True)
+def _ensure_fixture_sigil_roots(request: pytest.FixtureRequest) -> None:
+    if not _requires_db(request):
+        return
+
+    request.getfixturevalue("django_db_setup")
+    django_db_blocker = request.getfixturevalue("django_db_blocker")
+
     from apps.sigils.loader import load_fixture_sigil_roots
 
     with django_db_blocker.unblock():
