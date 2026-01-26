@@ -165,7 +165,7 @@ def admin_translate_url(language_tabs) -> str:
         return ""
 
     for url, _name, _code, status in language_tabs:
-        if status == "empty":
+        if url:
             return url
 
     return ""
