@@ -30,7 +30,7 @@ defusedxml==0.7.1
 Django==5.2.10
 django-celery-beat==2.8.1
 # Debug tooling for local runs
-django-debug-toolbar==6.1.0
+django-debug-toolbar==6.2.0
 django-mermaid==0.1.0
 django-import-export==4.4.0
 django-object-actions==5.0.0
