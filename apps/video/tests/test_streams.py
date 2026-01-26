@@ -93,6 +93,21 @@ def test_mjpeg_stream_stores_final_frame(client, video_device, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_mjpeg_stream_returns_no_content_when_no_frames(client, video_device, monkeypatch):
+    stream = MjpegStream.objects.create(name="Empty", slug="empty", video_device=video_device)
+
+    def empty_frames(self):
+        if False:
+            yield b"never"
+
+    monkeypatch.setattr(MjpegStream, "iter_frame_bytes", empty_frames)
+
+    response = client.get(reverse("video:mjpeg-stream", args=[stream.slug]))
+
+    assert response.status_code == 204
+
+
+@pytest.mark.django_db
 def test_camera_gallery_lists_streams(client, video_device):
     stream = MjpegStream.objects.create(name="Lobby", slug="lobby", video_device=video_device)
 
