@@ -8,6 +8,7 @@ from django.apps import apps
 from django.conf import settings
 from django.core import serializers
 from django.core.management.base import BaseCommand
+from parler.models import TranslatableModel
 
 from apps.core.fixtures import ensure_seed_data_flags
 
@@ -61,10 +62,37 @@ class Command(BaseCommand):
                                 instance = None
                 if instance is not None:
                     instances.append(instance)
+
+            def _collect_translations(instance):
+                if not isinstance(instance, TranslatableModel):
+                    return []
+                translations = []
+                for translations_model in instance._parler_meta.get_all_models():
+                    translations.extend(
+                        translations_model.objects.filter(master=instance)
+                    )
+                return translations
+
             if instances:
+                serialized_instances = []
+                seen = set()
+                for instance in instances:
+                    key = (instance._meta.label_lower, instance.pk)
+                    if key not in seen:
+                        seen.add(key)
+                        serialized_instances.append(instance)
+                    for translation in _collect_translations(instance):
+                        translation_key = (
+                            translation._meta.label_lower,
+                            translation.pk,
+                        )
+                        if translation_key not in seen:
+                            seen.add(translation_key)
+                            serialized_instances.append(translation)
+
                 content = serializers.serialize(
                     "json",
-                    instances,
+                    serialized_instances,
                     indent=2,
                     use_natural_foreign_keys=use_natural,
                     use_natural_primary_keys=use_natural,
