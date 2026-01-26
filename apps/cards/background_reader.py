@@ -32,6 +32,7 @@ _last_auto_detect_failure: float | None = None
 _last_not_configured_log = 0.0
 _auto_detect_lock = threading.Lock()
 _log_throttle_lock = threading.Lock()
+_irq_empty_lock = threading.Lock()
 _suite_marker = f"{os.getpid()}:{int(time.time())}"
 
 try:  # pragma: no cover - debugging helper not available on all platforms
@@ -49,6 +50,37 @@ _AUTO_DETECT_BACKOFF_SECONDS = float(
 _NOT_CONFIGURED_LOG_INTERVAL = float(
     os.environ.get("RFID_NOT_CONFIGURED_LOG_INTERVAL", "30")
 )
+_irq_empty_count = 0
+_irq_empty_since = 0.0
+
+
+def _record_irq_empty() -> None:
+    """Track consecutive empty IRQ queue polls."""
+    global _irq_empty_count, _irq_empty_since
+    now = time.monotonic()
+    with _irq_empty_lock:
+        if _irq_empty_count == 0:
+            _irq_empty_since = now
+        _irq_empty_count += 1
+
+
+def _log_irq_empty_summary(event: str) -> None:
+    """Log a summary of consecutive empty IRQ polls before a successful read."""
+    global _irq_empty_count, _irq_empty_since
+    with _irq_empty_lock:
+        if _irq_empty_count == 0:
+            return
+        count = _irq_empty_count
+        start = _irq_empty_since
+        _irq_empty_count = 0
+        _irq_empty_since = 0.0
+    waited = max(0.0, time.monotonic() - start)
+    logger.debug(
+        "IRQ queue empty; fell back to direct read %s times over %.2fs before %s",
+        count,
+        waited,
+        event,
+    )
 
 
 def _log_fd_snapshot(label: str) -> None:
@@ -438,10 +470,11 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
         result = _tag_queue.get(timeout=timeout)
         if result and result.get("rfid"):
             _mark_scanner_used()
+        _log_irq_empty_summary("queue read")
         return result
     except queue.Empty:
         _log_fd_snapshot("get_next_tag-empty")
-        logger.debug("IRQ queue empty; falling back to direct read")
+        _record_irq_empty()
         try:
             from .reader import read_rfid
 
@@ -449,6 +482,7 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
             remaining_timeout = max(0.0, timeout - elapsed)
             res = read_rfid(mfrc=_reader, cleanup=False, timeout=remaining_timeout)
             if res.get("rfid") or res.get("error"):
+                _log_irq_empty_summary("polling read")
                 logger.debug("Polling read result: %s", res)
                 if res.get("rfid"):
                     _mark_scanner_used()
