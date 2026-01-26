@@ -63,6 +63,53 @@ def _redact_mac(mac: str | None) -> str:
     return f"***REDACTED***-{token}"
 
 
+def _redact_token_value(token: str | None) -> str:
+    """Return a redacted representation of a token suitable for logging."""
+
+    if not token:
+        return ""
+    token_str = str(token)
+    if not token_str:
+        return "***REDACTED***"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(token_str.encode("utf-8"))
+    token_hash = digest.finalize().hex()
+    return f"***REDACTED***-{token_hash[:12]}"
+
+
+def _redact_url_token(url: str) -> str:
+    """Return the URL with any token query parameter redacted."""
+
+    if not url:
+        return ""
+    try:
+        parsed = urlsplit(url)
+        query_items = list(parse_qsl(parsed.query, keep_blank_values=True))
+        if not query_items:
+            return url
+        updated = []
+        changed = False
+        for key, value in query_items:
+            if key == "token":
+                updated.append((key, "***REDACTED***"))
+                changed = True
+            else:
+                updated.append((key, value))
+        if not changed:
+            return url
+        return urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(updated, doseq=True),
+                parsed.fragment,
+            )
+        )
+    except Exception:
+        return url
+
+
 def _get_client_ip(request):
     """Return the client IP from the request headers."""
 
@@ -1282,7 +1329,7 @@ def register_visitor_proxy(request):
     if visitor_info is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to fetch visitor info from %s: %s",
-            visitor_info_url,
+            _redact_url_token(visitor_info_url),
             last_error,
         )
         return JsonResponse({"detail": "visitor info unavailable"}, status=502)
@@ -1344,7 +1391,7 @@ def register_visitor_proxy(request):
     if visitor_register_body is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to notify visitor at %s: %s",
-            visitor_register_url,
+            _redact_url_token(visitor_register_url),
             last_error,
         )
         return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
@@ -1417,10 +1464,10 @@ def register_visitor_telemetry(request):
         extra_fields["route_ip"] = route_ip
 
     registration_logger.info(
-        "Visitor registration telemetry stage=%s target=%s token=%s client_ip=%s host_ip=%s user_agent=%s message=%s extra=%s",
+        "Visitor registration telemetry stage=%s target=%s token_redacted=%s client_ip=%s host_ip=%s user_agent=%s message=%s extra=%s",
         stage,
-        target,
-        token,
+        _redact_url_token(target),
+        _redact_token_value(token),
         _get_client_ip(request) or "",
         route_ip or _get_host_ip(request) or "",
         request.headers.get("User-Agent", ""),
