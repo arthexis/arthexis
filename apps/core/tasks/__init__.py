@@ -4,6 +4,7 @@ from apps.core.auto_upgrade import append_auto_upgrade_log
 from .auto_upgrade import (
     AutoUpgradeRepositoryState,
     AutoUpgradeMode,
+    _canary_gate,
     _ci_status_for_revision,
     _read_auto_upgrade_failure_count,
     check_github_updates,
@@ -40,6 +41,7 @@ from .utils import (
 
 __all__ = [
     "_ci_status_for_revision",
+    "_canary_gate",
     "_current_revision",
     "_extract_error_output",
     "_get_package_release_model",
