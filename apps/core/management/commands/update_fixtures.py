@@ -63,11 +63,18 @@ class Command(BaseCommand):
                 if instance is not None:
                     instances.append(instance)
 
+            def _supports_natural_key(model):
+                natural_key = getattr(model, "natural_key", None)
+                get_natural = getattr(model._default_manager, "get_by_natural_key", None)
+                return callable(natural_key) and callable(get_natural)
+
             def _collect_translations(instance):
                 if not isinstance(instance, TranslatableModel):
                     return []
                 translations = []
                 for translations_model in instance._parler_meta.get_all_models():
+                    if use_natural and not _supports_natural_key(translations_model):
+                        continue
                     translations.extend(
                         translations_model.objects.filter(master=instance)
                     )
