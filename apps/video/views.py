@@ -1,7 +1,7 @@
 from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 
-from .models import MjpegStream
+from .models import MjpegDependencyError, MjpegStream
 
 import logging
 
@@ -26,6 +26,9 @@ def mjpeg_stream(request, slug):
     except StopIteration:
         logger.info("No frames available for MJPEG stream %s", slug)
         return HttpResponse(status=204)
+    except MjpegDependencyError:
+        logger.warning("MJPEG dependencies unavailable for stream %s", slug)
+        return HttpResponse(status=204)
     except RuntimeError as exc:
         logger.exception("Runtime error while starting MJPEG stream %s", slug)
         return HttpResponse("Unable to start stream.", status=503)
@@ -45,6 +48,9 @@ def mjpeg_probe(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
     try:
         frame_bytes = stream.capture_frame_bytes()
+    except MjpegDependencyError:
+        logger.warning("MJPEG dependencies unavailable for probe %s", slug)
+        return HttpResponse(status=204)
     except RuntimeError:
         logger.exception("Runtime error while capturing MJPEG frame for %s", slug)
         return HttpResponse("Unable to capture frame.", status=503)

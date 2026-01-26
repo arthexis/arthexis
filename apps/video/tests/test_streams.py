@@ -4,7 +4,7 @@ import pytest
 from django.urls import reverse
 
 from apps.nodes.models import Node
-from apps.video.models import MjpegStream, VideoDevice
+from apps.video.models import MjpegDependencyError, MjpegStream, VideoDevice
 
 
 @pytest.fixture
@@ -107,6 +107,22 @@ def test_mjpeg_stream_returns_no_content_when_no_frames(client, video_device, mo
 
 
 @pytest.mark.django_db
+def test_mjpeg_stream_returns_no_content_when_dependency_missing(
+    client, video_device, monkeypatch
+):
+    stream = MjpegStream.objects.create(name="NoCV", slug="nocv", video_device=video_device)
+
+    def missing_cv(self):
+        raise MjpegDependencyError("cv2 missing")
+
+    monkeypatch.setattr(MjpegStream, "iter_frame_bytes", missing_cv)
+
+    response = client.get(reverse("video:mjpeg-stream", args=[stream.slug]))
+
+    assert response.status_code == 204
+
+
+@pytest.mark.django_db
 def test_mjpeg_probe_captures_frame(client, video_device, monkeypatch):
     stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
     captured: dict[str, bytes | bool] = {}
@@ -140,6 +156,22 @@ def test_mjpeg_probe_returns_error_on_capture_failure(client, video_device, monk
     response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
 
     assert response.status_code == 503
+
+
+@pytest.mark.django_db
+def test_mjpeg_probe_returns_no_content_when_dependency_missing(
+    client, video_device, monkeypatch
+):
+    stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
+
+    def missing_cv(self):
+        raise MjpegDependencyError("cv2 missing")
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", missing_cv)
+
+    response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
+
+    assert response.status_code == 204
 
 
 @pytest.mark.django_db
