@@ -5025,8 +5025,8 @@ msgstr "Screenshot aufnehmen"
 
 #: pages/templates/admin/includes/user_story_feedback.html:83
 #: pages/templates/pages/base.html:468
-msgid "Detailed comments / feedback"
-msgstr "Ausführliche Kommentare / Feedback"
+msgid "Comments"
+msgstr "Kommentare"
 
 #: pages/templates/admin/includes/user_story_feedback.html:90
 #: pages/templates/pages/base.html:475

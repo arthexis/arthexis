@@ -212,6 +212,13 @@
     return ratingMessages[ratingValue] || value;
   };
 
+  const getRatingCopyValue = value => {
+    const ratingValue = Number(value);
+    const actionLabel = getRatingLabel(value);
+    const displayValue = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : value;
+    return `${actionLabel} (${displayValue}/5)`;
+  };
+
   const getFormDetails = () => {
     const formData = new FormData(form);
     const details = [];
@@ -226,9 +233,12 @@
       if (!trimmedValue) {
         continue;
       }
+      if (name === 'rating') {
+        details.push(getRatingCopyValue(trimmedValue));
+        continue;
+      }
       const label = getFieldLabel(name);
-      const displayValue = name === 'rating' ? getRatingLabel(trimmedValue) : trimmedValue;
-      details.push(`${label}: ${displayValue}`);
+      details.push(`${label}: ${trimmedValue}`);
     }
     return details;
   };
@@ -239,7 +249,7 @@
     if (!details.length) {
       return baseValue;
     }
-    return `${baseValue}\n\nFeedback form:\n${details.map(detail => `- ${detail}`).join('\n')}`;
+    return `${baseValue}\n\nFeedback:\n${details.map(detail => `- ${detail}`).join('\n')}`;
   };
 
   if (copyLink) {
