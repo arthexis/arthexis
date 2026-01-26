@@ -1,5 +1,7 @@
 from django.utils.translation import gettext as _
 
+from apps.maps.models import Location
+
 from .common import *  # noqa: F401,F403
 from .common import (
     _charger_state,
@@ -22,38 +24,31 @@ from .common import (
 
 
 def charging_station_map(request):
-    chargers = (
+    location_ids = (
         _visible_chargers(request.user)
         .select_related("location")
-        .filter(location__isnull=False)
+        .filter(
+            location__isnull=False,
+            location__latitude__isnull=False,
+            location__longitude__isnull=False,
+        )
+        .values_list("location_id", flat=True)
+        .distinct()
     )
-    locations_by_id: dict[int, dict[str, object]] = {}
-    for charger in chargers:
-        location = charger.location
-        if not location:
-            continue
-        latitude = location.latitude
-        longitude = location.longitude
-        if latitude is None or longitude is None:
-            continue
-        location_id = location.pk
-        if location_id in locations_by_id:
-            continue
-        lat_value = float(latitude)
-        lng_value = float(longitude)
-        locations_by_id[location_id] = {
-            "id": location_id,
+    locations_qs = Location.objects.filter(pk__in=location_ids).order_by("name")
+    locations = [
+        {
+            "id": location.pk,
             "name": location.name,
-            "latitude": lat_value,
-            "longitude": lng_value,
+            "latitude": float(location.latitude),
+            "longitude": float(location.longitude),
             "directions_url": (
                 "https://www.google.com/maps/dir/?api=1&destination="
-                f"{lat_value},{lng_value}"
+                f"{float(location.latitude)},{float(location.longitude)}"
             ),
         }
-    locations = sorted(
-        locations_by_id.values(), key=lambda item: str(item["name"]).lower()
-    )
+        for location in locations_qs
+    ]
     return render(
         request,
         "ocpp/charging_station_map.html",
