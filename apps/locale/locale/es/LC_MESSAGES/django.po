@@ -6068,5 +6068,13 @@ msgstr "Elige la ventana de inicio y fin prevista para el trabajo."
 msgid "Enable email reminders to notify assigned contacts when available."
 msgstr "Habilita los recordatorios por correo electrónico para notificar a los contactos asignados cuando estén disponibles."
 
+#: pages/templates/pages/base.html:974
+msgid "Copied!"
+msgstr "¡Copiado!"
+
+#: pages/templates/pages/base.html:975
+msgid "Copy failed. Please try again."
+msgstr "Error al copiar. Por favor, inténtalo de nuevo."
+
 #~ msgid "Alt text"
 #~ msgstr "Texto alternativo"

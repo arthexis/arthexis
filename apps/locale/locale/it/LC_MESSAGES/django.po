@@ -5993,3 +5993,11 @@ msgstr "Scegli la finestra di inizio e fine prevista per il lavoro."
 #: ocpp/templates/ocpp/maintenance_request.html:79
 msgid "Enable email reminders to notify assigned contacts when available."
 msgstr "Abilita i promemoria email per avvisare i contatti assegnati quando disponibili."
+
+#: pages/templates/pages/base.html:974
+msgid "Copied!"
+msgstr "Copiato!"
+
+#: pages/templates/pages/base.html:975
+msgid "Copy failed. Please try again."
+msgstr "Copia non riuscita. Per favore riprova."

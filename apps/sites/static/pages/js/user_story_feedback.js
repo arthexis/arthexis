@@ -20,7 +20,10 @@
   const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
   const errorMessage = form.dataset.submitError;
   const networkErrorMessage = form.dataset.networkError;
+  const copySuccessMessage = form.dataset.copySuccess;
+  const copyErrorMessage = form.dataset.copyError;
   let previousFocus = null;
+  let copyFeedbackTimeout = null;
 
   const ratingMessages = Array.from({ length: 6 }, (_, index) => {
     if (!ratingHint) {
@@ -150,12 +153,8 @@
     });
   }
 
-  const copyText = value => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(value);
-    }
-
-    return new Promise((resolve, reject) => {
+  const fallbackCopyText = value =>
+    new Promise((resolve, reject) => {
       const textarea = document.createElement('textarea');
       textarea.value = value;
       textarea.setAttribute('readonly', '');
@@ -164,22 +163,28 @@
       document.body.appendChild(textarea);
       const selection = document.getSelection();
       const selected = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-      textarea.select();
 
       try {
+        textarea.select();
         document.execCommand('copy');
         resolve();
       } catch (error) {
         reject(error);
-      }
-
-      document.body.removeChild(textarea);
-
-      if (selected && selection) {
-        selection.removeAllRanges();
-        selection.addRange(selected);
+      } finally {
+        document.body.removeChild(textarea);
+        if (selected && selection) {
+          selection.removeAllRanges();
+          selection.addRange(selected);
+        }
       }
     });
+
+  const copyText = value => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(value).catch(() => fallbackCopyText(value));
+    }
+
+    return fallbackCopyText(value);
   };
 
   const getPageCopyValue = () => {
@@ -189,10 +194,7 @@
 
   const getFieldLabel = fieldName => {
     if (fieldName === 'rating') {
-      const ratingLabel = form
-        .querySelector('.user-story-feedback-options')
-        ?.closest('.mb-3')
-        ?.querySelector('.form-label');
+      const ratingLabel = document.getElementById('user-story-rating-group-label');
       return ratingLabel ? ratingLabel.textContent.trim() : 'Rating';
     }
     const field = form.querySelector(`[name="${fieldName}"]`);
@@ -240,9 +242,27 @@
   };
 
   if (copyLink) {
+    const defaultCopyText = copyLink.textContent;
+    const showCopyFeedback = message => {
+      if (!message) {
+        return;
+      }
+      if (copyFeedbackTimeout) {
+        clearTimeout(copyFeedbackTimeout);
+      }
+      copyLink.textContent = message;
+      copyFeedbackTimeout = window.setTimeout(() => {
+        copyLink.textContent = defaultCopyText;
+      }, 1500);
+    };
     copyLink.addEventListener('click', event => {
       event.preventDefault();
-      copyText(buildCopyValue());
+      copyText(buildCopyValue())
+        .then(() => showCopyFeedback(copySuccessMessage))
+        .catch(error => {
+          showCopyFeedback(copyErrorMessage);
+          console.error('Failed to copy feedback details:', error);
+        });
     });
   }
 
