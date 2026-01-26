@@ -12,6 +12,7 @@ from apps.ocpp.models import (
     CPFirmwareDeployment,
 )
 from apps.ocpp.views import actions
+from apps.ocpp.views.actions import charging_profiles
 from apps.ocpp.views.common import ActionContext, ActionCall
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -123,7 +124,9 @@ def test_set_charging_profile_supports_ocpp201(monkeypatch, ws):
         def first(self):
             return profile
 
-    monkeypatch.setattr(actions, "ChargingProfile", type("CPModel", (), {"objects": QueryStub()}))
+    monkeypatch.setattr(
+        charging_profiles, "ChargingProfile", type("CPModel", (), {"objects": QueryStub()})
+    )
 
     log_key = store.identity_key("CID", 1)
     context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
