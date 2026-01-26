@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const copyLabel = '{% translate "Copy" %}';
-    const copiedLabel = '{% translate "Copied" %}';
+    const copiedLabel = '{% translate "Copied!" %}';
     const copyErrorLabel = '{% translate "Copy failed" %}';
 
     function copyText(value) {
@@ -269,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function () {
         breadcrumbsCopyLink.textContent = label;
         window.setTimeout(function () {
             breadcrumbsCopyLink.textContent = copyLabel;
-        }, 2000);
+        }, 1500);
     }
 
     const breadcrumbsCopyLink = document.createElement('a');
