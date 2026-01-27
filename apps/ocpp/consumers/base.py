@@ -898,7 +898,7 @@ class CSMSConsumer(
                 msg = NetMessage.objects.filter(uuid=message_uuid).first()
                 if not msg:
                     return
-                msg.expires_at = timezone.now()
+                msg.expires_at = timezone.now() + timedelta(seconds=1)
                 msg.save(update_fields=["expires_at"])
                 msg.propagate()
 
