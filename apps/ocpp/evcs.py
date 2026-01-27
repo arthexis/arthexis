@@ -314,6 +314,11 @@ async def simulate_cp(
                             return
 
                         message_type = msg[0]
+                        if message_type in (3, 4):
+                            self.log(
+                                f"Received response message type {message_type} from CSMS; ignoring in command listener"
+                            )
+                            continue
                         if message_type != 2:
                             terminate(
                                 f"Received unsupported message type {message_type} from CSMS; terminating simulator"
