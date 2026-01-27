@@ -227,10 +227,7 @@ async def simulate_cp(
 
             scheme = resolve_ws_scheme(ws_scheme=ws_scheme, use_tls=use_tls)
             self._candidate_schemes = [scheme]
-            fallback_scheme = "ws" if scheme == "wss" else "wss"
-            if fallback_scheme != scheme:
-                self._candidate_schemes.append(fallback_scheme)
-            self.cp_path = self.cp_path.lstrip("/")
+            self._ws_path = self.cp_path.lstrip("/")
             self.uri = self._build_uri(scheme)
             self.connect_kwargs: dict[str, object] = {}
 
@@ -245,7 +242,7 @@ async def simulate_cp(
                 if self.ws_port
                 else f"{scheme}://{self.host}"
             )
-            return f"{base_uri}/{self.cp_path}"
+            return f"{base_uri}/{self._ws_path}"
 
         def log(self, message: str) -> None:
             store.add_log(self.cp_path, message, log_type="simulator")
@@ -266,7 +263,7 @@ async def simulate_cp(
         async def connect(self):
             ws = None
             last_error: Exception | None = None
-            for scheme in self._candidate_schemes:
+            for idx, scheme in enumerate(self._candidate_schemes):
                 uri = self._build_uri(scheme)
                 for attempt in range(2):
                     try:
@@ -288,10 +285,9 @@ async def simulate_cp(
                     except Exception as exc:
                         last_error = exc
                         self.log(f"Connection failed ({scheme}): {exc}")
-                        if scheme != self._candidate_schemes[-1]:
-                            self.log(
-                                f"Retrying connection with scheme {self._candidate_schemes[-1]}"
-                            )
+                        if idx < len(self._candidate_schemes) - 1:
+                            next_scheme = self._candidate_schemes[idx + 1]
+                            self.log(f"Retrying connection with scheme {next_scheme}")
                         continue
                 if ws:
                     break
