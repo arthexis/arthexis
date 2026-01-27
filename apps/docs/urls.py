@@ -21,5 +21,6 @@ urlpatterns = [
         {"prepend_docs": True},
         name="docs-document",
     ),
+    path("apps/docs/", views.readme, name="apps-docs-index"),
+    path("apps/docs/<path:doc>", views.readme, name="apps-docs-document"),
 ]
-
