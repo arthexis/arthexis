@@ -192,7 +192,7 @@ def cp_simulator(request):
             NetMessage.broadcast(
                 subject=subject,
                 body=body,
-                expires_at=timezone.now(),
+                expires_at=timezone.now() + timedelta(seconds=1),
                 lcd_channel_type=LcdChannel.LOW.value,
             )
             message = _("Simulator stop requested")
