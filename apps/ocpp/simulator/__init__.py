@@ -470,6 +470,10 @@ class ChargePointSimulator:
                                     log_type="simulator",
                                 )
                     if ws is None:
+                        if not last_error:
+                            raise RuntimeError(
+                                "Subprotocol connection attempts failed without a specific error."
+                            )
                         raise last_error
                 except Exception as exc:
                     try:
