@@ -370,7 +370,7 @@ def _simulator_running(
     *,
     state_file: Path | None = None,
     cache_seconds: float = 2.0,
-) -> bool:
+) -> bool | None:
     if state_file is None:
         state_file = SIMULATOR_STATE_FILE
     now = time.monotonic()
@@ -380,17 +380,16 @@ def _simulator_running(
     is_running = False
     try:
         payload = json.loads(state_file.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        is_running = False
-    except Exception:
-        logger.debug("Failed to read simulator state file", exc_info=True)
-        is_running = False
-    else:
         if isinstance(payload, dict):
             is_running = any(
                 isinstance(state, dict) and state.get("running")
                 for state in payload.values()
             )
+    except FileNotFoundError:
+        pass
+    except Exception:
+        logger.debug("Failed to read simulator state file", exc_info=True)
+        is_running = None
 
     _SIMULATOR_RUNNING_CACHE["checked_at"] = now
     _SIMULATOR_RUNNING_CACHE["is_running"] = is_running
@@ -407,20 +406,18 @@ def _read_lock_payload(lock_file: Path, *, now: datetime) -> LockPayload | None:
         except OSError:
             logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
         return None
-    if (
-        payload.expires_at is None
-        and payload.subject.strip().upper().startswith("SIM ")
-        and not _simulator_running()
-    ):
-        try:
-            lock_file.unlink()
-        except OSError:
-            logger.debug(
-                "Failed to remove stale simulator lock file: %s",
-                lock_file,
-                exc_info=True,
-            )
-        return None
+    if payload.expires_at is None and payload.subject.strip().upper().startswith("SIM "):
+        simulator_running = _simulator_running()
+        if simulator_running is False:
+            try:
+                lock_file.unlink()
+            except OSError:
+                logger.debug(
+                    "Failed to remove stale simulator lock file: %s",
+                    lock_file,
+                    exc_info=True,
+                )
+            return None
     return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
 
 
