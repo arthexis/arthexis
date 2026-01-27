@@ -120,7 +120,6 @@ def nav_links(request):
             normalized_path = landing.path.rstrip("/") or "/"
             if normalized_path in seen_paths:
                 continue
-            seen_paths.add(normalized_path)
             landing.nav_is_invalid = not landing.is_link_valid()
             landing.nav_is_locked = False
             landing.nav_lock_reason = None
@@ -128,6 +127,7 @@ def nav_links(request):
                 match = resolve(landing.path)
             except Resolver404:
                 landing.nav_is_invalid = True
+                seen_paths.add(normalized_path)
                 landings.append(landing)
                 continue
             view_func = match.func
@@ -139,9 +139,8 @@ def nav_links(request):
                     feature_checker.is_enabled(slug)
                     for slug in required_features_any
                 ):
-                    landing.nav_is_invalid = True
-                    landings.append(landing)
                     continue
+            seen_paths.add(normalized_path)
             requires_login = bool(getattr(view_func, "login_required", False))
             if not requires_login and hasattr(view_func, "login_url"):
                 requires_login = True
