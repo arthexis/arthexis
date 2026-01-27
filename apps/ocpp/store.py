@@ -1168,7 +1168,14 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^\w.-]", "_", name)
 
 
+def _charger_log_basename(cid: str) -> str:
+    serial = cid.split(IDENTITY_SEPARATOR, 1)[0]
+    return _safe_name(serial)
+
+
 def _file_path(cid: str, log_type: str = "charger") -> Path:
+    if log_type == "charger":
+        return LOG_DIR / f"{log_type}.{_charger_log_basename(cid)}.log"
     name = log_names[log_type].get(cid, cid)
     return LOG_DIR / f"{log_type}.{_safe_name(name)}.log"
 
@@ -1393,7 +1400,10 @@ def _resolve_log_identifier(cid: str, log_type: str) -> tuple[str, str | None]:
 def _log_file_for_identifier(cid: str, name: str | None, log_type: str) -> Path:
     path = _file_path(cid, log_type)
     if not path.exists():
-        candidates = [_safe_name(name or cid).lower()]
+        if log_type == "charger":
+            candidates = [_charger_log_basename(cid).lower()]
+        else:
+            candidates = [_safe_name(name or cid).lower()]
         cid_candidate = _safe_name(cid).lower()
         if cid_candidate not in candidates:
             candidates.append(cid_candidate)
