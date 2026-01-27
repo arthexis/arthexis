@@ -51,7 +51,7 @@ pytest-django==4.11.1
 hyperlink==21.0.0
 idna==3.11
 incremental==24.11.0
-jmespath==1.0.1
+jmespath==1.1.0
 kombu==5.5.4
 Markdown==3.10.1
 mdx_truly_sane_lists==1.3
