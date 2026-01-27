@@ -68,7 +68,7 @@ psycopg==3.3.2
 psycopg-binary==3.3.2
 pyasn1==0.6.2
 pyasn1_modules==0.4.2
-pycparser==2.23
+pycparser==3.0
 pyOpenSSL==25.1.0
 pyftpdlib==2.1.0
 PySocks==1.7.1
