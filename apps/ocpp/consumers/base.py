@@ -1,4 +1,4 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 import asyncio
 from collections import deque
 import inspect
@@ -13,6 +13,7 @@ from django.utils import timezone
 from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID
+from apps.core.notifications import LcdChannel
 from apps.nodes.models import NetMessage
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -64,6 +65,7 @@ from ..models import (
 )
 from ..services import certificate_signing
 from apps.links.reference_utils import host_is_local_loopback
+from apps.screens.startup_notifications import format_lcd_lines
 from ..evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
     HTTPS_PORTS,
@@ -883,6 +885,7 @@ class CSMSConsumer(
         """Stop any scheduled consumption message updates."""
 
         task = self._consumption_task
+        message_uuid = self._consumption_message_uuid
         self._consumption_task = None
         if task:
             task.cancel()
@@ -890,6 +893,16 @@ class CSMSConsumer(
                 await task
             except asyncio.CancelledError:
                 pass
+        if message_uuid:
+            def _expire() -> None:
+                msg = NetMessage.objects.filter(uuid=message_uuid).first()
+                if not msg:
+                    return
+                msg.expires_at = timezone.now()
+                msg.save(update_fields=["expires_at"])
+                msg.propagate()
+
+            await database_sync_to_async(_expire)()
         self._consumption_message_uuid = None
 
     async def _update_consumption_message(self, tx_id: int) -> str | None:
@@ -947,15 +960,35 @@ class CSMSConsumer(
                 energy_consumed *= 1000
             elapsed_label = _format_elapsed(tx.start_time)
             body_value = f"{energy_consumed:.1f}{unit} {elapsed_label}"[:256]
+            line1, line2 = format_lcd_lines(subject_value, body_value)
+            expires_at = timezone.now() + timedelta(
+                seconds=max(self.consumption_update_interval * 2, 30)
+            )
             if existing_uuid:
                 msg = NetMessage.objects.filter(uuid=existing_uuid).first()
                 if msg:
-                    msg.subject = subject_value
-                    msg.body = body_value
-                    msg.save(update_fields=["subject", "body"])
+                    msg.subject = line1
+                    msg.body = line2
+                    msg.expires_at = expires_at
+                    msg.lcd_channel_type = LcdChannel.HIGH.value
+                    msg.lcd_channel_num = 0
+                    msg.save(
+                        update_fields=[
+                            "subject",
+                            "body",
+                            "expires_at",
+                            "lcd_channel_type",
+                            "lcd_channel_num",
+                        ]
+                    )
                     msg.propagate()
                     return str(msg.uuid)
-            msg = NetMessage.broadcast(subject=subject_value, body=body_value)
+            msg = NetMessage.broadcast(
+                subject=line1,
+                body=line2,
+                expires_at=expires_at,
+                lcd_channel_type=LcdChannel.HIGH.value,
+            )
             return str(msg.uuid)
 
         try:

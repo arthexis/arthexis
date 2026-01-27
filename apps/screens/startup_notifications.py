@@ -19,6 +19,7 @@ LCD_UPTIME_LOCK_FILE = "uptime"
 LCD_CHANNELS_LOCK_FILE = "lcd-channels.lck"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
+LCD_COLUMNS = 16
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,19 @@ def render_lcd_lock_file(*, subject: str = "", body: str = "", expires_at=None) 
     if expires_line:
         lines.append(expires_line)
     return "\n".join(lines) + "\n"
+
+
+def format_lcd_line(text: str, *, width: int = LCD_COLUMNS) -> str:
+    normalized = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in (text or ""))
+    normalized = normalized.strip()
+    if len(normalized) <= width:
+        return normalized.ljust(width)
+    trimmed = normalized[: width - 3].rstrip()
+    return f"{trimmed}...".ljust(width)
+
+
+def format_lcd_lines(subject: str, body: str, *, width: int = LCD_COLUMNS) -> tuple[str, str]:
+    return format_lcd_line(subject, width=width), format_lcd_line(body, width=width)
 
 
 def ensure_lock_dir(lock_dir: Path) -> Path | None:

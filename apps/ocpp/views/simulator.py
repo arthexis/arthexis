@@ -1,6 +1,11 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from ..utils import resolve_ws_scheme
+from apps.core.notifications import LcdChannel
+from apps.screens.startup_notifications import format_lcd_lines
 
 from .common import *  # noqa: F401,F403
 from ..evcs import _start_simulator, _stop_simulator
@@ -13,13 +18,42 @@ def cp_simulator(request):
 
     ws_scheme = resolve_ws_scheme(request=request)
 
-    def _simulator_target_url(params: dict[str, object]) -> str:
-        cp_path = str(params.get("cp_path") or "")
-        host = str(params.get("host") or "")
+    def _lcd_simulator_lines(
+        name: str, params: dict[str, object], *, status: str = "running", delay: float | int | None = None
+    ) -> tuple[str, str]:
+        cp_path = str(params.get("cp_path") or "").strip()
+        host = str(params.get("host") or "").strip()
         ws_port = params.get("ws_port")
-        if ws_port:
-            return f"{ws_scheme}://{host}:{ws_port}/{cp_path}"
-        return f"{ws_scheme}://{host}/{cp_path}"
+        target = ""
+        if host:
+            target = f"{host}:{ws_port}" if ws_port else host
+        subject = f"SIM {cp_path or name}".strip()
+        if status == "delay":
+            delay_value: float | int | None = 0
+            if isinstance(delay, (int, float)):
+                delay_value = int(delay) if float(delay).is_integer() else delay
+            body = f"Delay {delay_value}s"
+        else:
+            body = target or "Running"
+        return format_lcd_lines(subject, body)
+
+    def _simulator_expires_at(params: dict[str, object]):
+        if params.get("repeat"):
+            return None
+        duration = params.get("duration")
+        delay = params.get("delay") or 0
+        try:
+            duration_value = int(duration) if duration is not None else 0
+        except (TypeError, ValueError):
+            return None
+        try:
+            delay_value = max(int(delay), 0)
+        except (TypeError, ValueError):
+            delay_value = 0
+        total_seconds = duration_value + delay_value
+        if total_seconds <= 0:
+            return None
+        return timezone.now() + timedelta(seconds=total_seconds)
 
     def _broadcast_simulator_started(
         name: str, delay: float | int | None, params: dict[str, object]
@@ -27,8 +61,18 @@ def cp_simulator(request):
         delay_value: float | int | None = 0
         if isinstance(delay, (int, float)):
             delay_value = int(delay) if float(delay).is_integer() else delay
-        subject = f"{name} {delay_value}s"
-        NetMessage.broadcast(subject=subject, body=_simulator_target_url(params))
+        subject, body = _lcd_simulator_lines(
+            name, params, status="delay", delay=delay_value
+        )
+        expires_at = None
+        if delay_value:
+            expires_at = timezone.now() + timedelta(seconds=float(delay_value))
+        NetMessage.broadcast(
+            subject=subject,
+            body=body,
+            expires_at=expires_at,
+            lcd_channel_type=LcdChannel.LOW.value,
+        )
 
     simulator_slot = 1
     host_header = request.get_host()
@@ -144,6 +188,13 @@ def cp_simulator(request):
         action = request.POST.get("action")
         if action == "stop":
             _stop_simulator(simulator_slot)
+            subject, body = format_lcd_lines("SIM STOP", "")
+            NetMessage.broadcast(
+                subject=subject,
+                body=body,
+                expires_at=timezone.now(),
+                lcd_channel_type=LcdChannel.LOW.value,
+            )
             message = _("Simulator stop requested")
         else:
             name = request.POST.get("simulator_name") or "Simulator"
@@ -157,8 +208,13 @@ def cp_simulator(request):
                 request.POST.get("meter_interval"), float, default_params["interval"]
             )
             _start_simulator(sim_params, cp=simulator_slot)
-            sim_details = {key: value for key, value in sim_params.items() if key != "password"}
-            NetMessage.broadcast(subject="simulator", body=json.dumps(sim_details))
+            subject, body = _lcd_simulator_lines(name, sim_params)
+            NetMessage.broadcast(
+                subject=subject,
+                body=body,
+                expires_at=_simulator_expires_at(sim_params),
+                lcd_channel_type=LcdChannel.LOW.value,
+            )
             message = _("Simulator start requested")
             if sim_params["demo_mode"]:
                 dashboard_link = reverse("ocpp:ocpp-dashboard")
