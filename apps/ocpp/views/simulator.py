@@ -227,9 +227,6 @@ def cp_simulator(request):
     form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
     form_params["password"] = ""
 
-    if not default_simulator:
-        message = message or "No default CP Simulator is configured; using local defaults."
-
     context = {
         "message": message,
         "dashboard_link": dashboard_link,
