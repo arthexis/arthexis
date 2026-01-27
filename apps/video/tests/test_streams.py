@@ -123,6 +123,22 @@ def test_mjpeg_stream_returns_no_content_when_dependency_missing(
 
 
 @pytest.mark.django_db
+def test_mjpeg_stream_handles_runtime_dependency_error(
+    client, video_device, monkeypatch
+):
+    stream = MjpegStream.objects.create(name="NoCV", slug="nocv", video_device=video_device)
+
+    def missing_cv(self):
+        raise RuntimeError("MJPEG streaming requires the OpenCV (cv2) package")
+
+    monkeypatch.setattr(MjpegStream, "iter_frame_bytes", missing_cv)
+
+    response = client.get(reverse("video:mjpeg-stream", args=[stream.slug]))
+
+    assert response.status_code == 204
+
+
+@pytest.mark.django_db
 def test_mjpeg_probe_captures_frame(client, video_device, monkeypatch):
     stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
     captured: dict[str, bytes | bool] = {}
@@ -168,6 +184,22 @@ def test_mjpeg_probe_returns_no_content_when_dependency_missing(
         raise MjpegDependencyError("cv2 missing")
 
     monkeypatch.setattr(MjpegStream, "_load_cv2", missing_cv)
+
+    response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
+
+    assert response.status_code == 204
+
+
+@pytest.mark.django_db
+def test_mjpeg_probe_handles_runtime_dependency_error(
+    client, video_device, monkeypatch
+):
+    stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
+
+    def missing_cv(self):
+        raise RuntimeError("MJPEG streaming requires the OpenCV (cv2) package")
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", missing_cv)
 
     response = client.get(reverse("video:mjpeg-probe", args=[stream.slug]))
 
