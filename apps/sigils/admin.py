@@ -31,6 +31,8 @@ class CustomSigilAdmin(EntityModelAdmin):
 
 @admin.register(SigilRoot)
 class SigilRootAdmin(EntityModelAdmin):
+    BUILTIN_PREFIXES = {"ENV", "CONF", "SYS", "REQ"}
+
     list_display = (
         "prefix",
         "context_type",
@@ -44,8 +46,7 @@ class SigilRootAdmin(EntityModelAdmin):
 
     @admin.display(boolean=True, description="Is Built-In")
     def is_built_in(self, obj):
-        builtin_prefixes = {"ENV", "CONF", "SYS", "REQ"}
-        return obj.prefix.upper() in builtin_prefixes
+        return obj.prefix.upper() in self.BUILTIN_PREFIXES
 
     def has_delete_permission(self, request, obj=None):
         return False
