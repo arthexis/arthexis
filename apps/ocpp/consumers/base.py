@@ -7,6 +7,7 @@ import logging
 import re
 import uuid
 from urllib.parse import parse_qs
+
 from django.conf import settings
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
