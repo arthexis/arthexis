@@ -24,14 +24,18 @@ class ArchiveTimedRotatingFileHandler(TimedRotatingFileHandler):
         return self._archive_dir
 
     def rotation_filename(self, default_name: str) -> str:
+        if callable(self.namer):
+            default_name = self.namer(default_name)
         archive_dir = self._ensure_archive_dir()
         return str(archive_dir / Path(default_name).name)
 
     def getFilesToDelete(self) -> list[str]:
+        if self.backupCount <= 0:
+            return []
         archive_dir = self._ensure_archive_dir()
         dir_name = str(archive_dir)
         base_name = Path(self.baseFilename).name
-        file_names = os.listdir(dir_name) if archive_dir.exists() else []
+        file_names = os.listdir(dir_name)
         result: list[str] = []
 
         if self.namer is None:
