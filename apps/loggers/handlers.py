@@ -5,16 +5,16 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from django.conf import settings
 
 from config.active_app import get_active_app
 from apps.loggers.filenames import normalize_log_filename
+from apps.loggers.rotation import ArchiveTimedRotatingFileHandler
 
 
-class ActiveAppFileHandler(TimedRotatingFileHandler):
+class ActiveAppFileHandler(ArchiveTimedRotatingFileHandler):
     """File handler that writes to a file named after the active app."""
 
     def _current_file(self) -> Path:
