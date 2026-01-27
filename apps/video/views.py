@@ -55,11 +55,8 @@ def mjpeg_probe(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
     try:
         frame_bytes = stream.capture_frame_bytes()
-    except MjpegDependencyError:
-        logger.warning("MJPEG dependencies unavailable for probe %s", slug)
-        return HttpResponse(status=204)
-    except RuntimeError as exc:
-        if _is_missing_mjpeg_dependency(exc):
+    except (MjpegDependencyError, RuntimeError) as exc:
+        if isinstance(exc, MjpegDependencyError) or _is_missing_mjpeg_dependency(exc):
             logger.warning("MJPEG dependencies unavailable for probe %s", slug)
             return HttpResponse(status=204)
         logger.exception("Runtime error while capturing MJPEG frame for %s", slug)
