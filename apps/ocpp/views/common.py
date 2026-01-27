@@ -735,6 +735,10 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
     )
     statuses: list[str] = []
     for sibling in siblings:
+        connected = store.is_connected(sibling.charger_id, sibling.connector_id)
+        if not connected:
+            statuses.append("offline")
+            continue
         tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
         if not tx_obj:
             tx_obj = (
@@ -758,7 +762,7 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
         if normalized_status:
             statuses.append(normalized_status)
             continue
-        if store.is_connected(sibling.charger_id, sibling.connector_id):
+        if connected:
             statuses.append("available")
 
     if not statuses:
@@ -769,6 +773,9 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
 
     if all(status == "charging" for status in statuses):
         return STATUS_BADGE_MAP["charging"]
+
+    if all(status == "offline" for status in statuses):
+        return _("Offline"), "grey"
 
     return None
 
