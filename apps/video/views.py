@@ -8,6 +8,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _is_missing_mjpeg_dependency(exc: Exception) -> bool:
+    return "OpenCV (cv2)" in str(exc)
+
+
 def stream_detail(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
     context = {
@@ -30,6 +34,9 @@ def mjpeg_stream(request, slug):
         logger.warning("MJPEG dependencies unavailable for stream %s", slug)
         return HttpResponse(status=204)
     except RuntimeError as exc:
+        if _is_missing_mjpeg_dependency(exc):
+            logger.warning("MJPEG dependencies unavailable for stream %s", slug)
+            return HttpResponse(status=204)
         logger.exception("Runtime error while starting MJPEG stream %s", slug)
         return HttpResponse("Unable to start stream.", status=503)
     except Exception as exc:
@@ -51,7 +58,10 @@ def mjpeg_probe(request, slug):
     except MjpegDependencyError:
         logger.warning("MJPEG dependencies unavailable for probe %s", slug)
         return HttpResponse(status=204)
-    except RuntimeError:
+    except RuntimeError as exc:
+        if _is_missing_mjpeg_dependency(exc):
+            logger.warning("MJPEG dependencies unavailable for probe %s", slug)
+            return HttpResponse(status=204)
         logger.exception("Runtime error while capturing MJPEG frame for %s", slug)
         return HttpResponse("Unable to capture frame.", status=503)
     except Exception:
