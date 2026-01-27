@@ -226,18 +226,26 @@ async def simulate_cp(
             self.state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 
             scheme = resolve_ws_scheme(ws_scheme=ws_scheme, use_tls=use_tls)
-            base_uri = (
-                f"{scheme}://{self.host}:{self.ws_port}"
-                if self.ws_port
-                else f"{scheme}://{self.host}"
-            )
-            self.uri = f"{base_uri}/{self.cp_path}"
+            self._candidate_schemes = [scheme]
+            fallback_scheme = "ws" if scheme == "wss" else "wss"
+            if fallback_scheme != scheme:
+                self._candidate_schemes.append(fallback_scheme)
+            self.cp_path = self.cp_path.lstrip("/")
+            self.uri = self._build_uri(scheme)
             self.connect_kwargs: dict[str, object] = {}
 
             if self.username and self.password:
                 userpass = f"{self.username}:{self.password}"
                 b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
                 self.connect_kwargs["additional_headers"] = {"Authorization": f"Basic {b64}"}
+
+        def _build_uri(self, scheme: str) -> str:
+            base_uri = (
+                f"{scheme}://{self.host}:{self.ws_port}"
+                if self.ws_port
+                else f"{scheme}://{self.host}"
+            )
+            return f"{base_uri}/{self.cp_path}"
 
         def log(self, message: str) -> None:
             store.add_log(self.cp_path, message, log_type="simulator")
@@ -256,13 +264,42 @@ async def simulate_cp(
             return value * random.uniform(0.95, 1.05)
 
         async def connect(self):
-            try:
-                ws = await websockets.connect(
-                    self.uri, subprotocols=["ocpp1.6"], **self.connect_kwargs
+            ws = None
+            last_error: Exception | None = None
+            for scheme in self._candidate_schemes:
+                uri = self._build_uri(scheme)
+                for attempt in range(2):
+                    try:
+                        ws = await websockets.connect(
+                            uri, subprotocols=["ocpp1.6"], **self.connect_kwargs
+                        )
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        self.log(
+                            "Connection with subprotocol failed "
+                            f"({scheme}, attempt {attempt + 1}): {exc}"
+                        )
+                        if attempt < 1:
+                            self.log("Retrying connection with subprotocol")
+                if ws is None:
+                    try:
+                        ws = await websockets.connect(uri, **self.connect_kwargs)
+                    except Exception as exc:
+                        last_error = exc
+                        self.log(f"Connection failed ({scheme}): {exc}")
+                        if scheme != self._candidate_schemes[-1]:
+                            self.log(
+                                f"Retrying connection with scheme {self._candidate_schemes[-1]}"
+                            )
+                        continue
+                if ws:
+                    break
+
+            if ws is None:
+                raise last_error if last_error else RuntimeError(
+                    "Unable to establish simulator websocket connection"
                 )
-            except Exception as exc:
-                self.log(f"Connection with subprotocol failed: {exc}")
-                ws = await websockets.connect(self.uri, **self.connect_kwargs)
 
             self.state.phase = "Connected"
             self.state.last_message = ""
