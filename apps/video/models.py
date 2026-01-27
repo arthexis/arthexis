@@ -40,6 +40,10 @@ class MjpegDependencyError(RuntimeError):
     """Raised when optional MJPEG streaming dependencies are unavailable."""
 
 
+class MjpegDeviceUnavailableError(RuntimeError):
+    """Raised when the configured MJPEG capture device cannot be opened."""
+
+
 @dataclass(frozen=True)
 class DetectedVideoDevice:
     identifier: str
@@ -368,7 +372,7 @@ class MjpegStream(VideoStream):
 
         if not capture.isOpened():
             capture.release()
-            raise RuntimeError(
+            raise MjpegDeviceUnavailableError(
                 _("Unable to open video device %(device)s")
                 % {"device": self.video_device.identifier}
             )
@@ -390,7 +394,7 @@ class MjpegStream(VideoStream):
         capture = cv2.VideoCapture(self.video_device.identifier)
         if not capture.isOpened():
             capture.release()
-            raise RuntimeError(
+            raise MjpegDeviceUnavailableError(
                 _("Unable to open video device %(device)s")
                 % {"device": self.video_device.identifier}
             )
@@ -414,13 +418,14 @@ class MjpegStream(VideoStream):
         boundary = b"--frame\r\n"
         content_type = b"Content-Type: image/jpeg\r\n\r\n"
         last_frame: bytes | None = None
+        active_iter = frame_iter
         try:
             if first_frame is not None:
                 last_frame = first_frame
                 yield boundary + content_type + first_frame + b"\r\n"
-            if frame_iter is None:
-                frame_iter = self.iter_frame_bytes()
-            for frame in frame_iter:
+            if active_iter is None:
+                active_iter = self.iter_frame_bytes()
+            for frame in active_iter:
                 last_frame = frame
                 yield boundary + content_type + frame + b"\r\n"
         finally:
@@ -429,6 +434,11 @@ class MjpegStream(VideoStream):
                     self.store_frame_bytes(last_frame, update_thumbnail=True)
                 except Exception as exc:  # pragma: no cover - best-effort storage
                     logger.warning("Unable to persist final MJPEG frame: %s", exc)
+            if active_iter is not None and hasattr(active_iter, "close"):
+                try:
+                    active_iter.close()
+                except Exception as exc:  # pragma: no cover - best-effort cleanup
+                    logger.warning("Unable to close MJPEG frame iterator: %s", exc)
 
 
 class VideoSnapshot(Entity):
