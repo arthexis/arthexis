@@ -1401,7 +1401,10 @@ def _log_file_for_identifier(cid: str, name: str | None, log_type: str) -> Path:
     path = _file_path(cid, log_type)
     if not path.exists():
         if log_type == "charger":
-            candidates = [_charger_log_basename(cid).lower()]
+            candidates = [
+                _charger_log_basename(cid).lower(),
+                _safe_name(name or cid).lower(),
+            ]
         else:
             candidates = [_safe_name(name or cid).lower()]
         cid_candidate = _safe_name(cid).lower()
