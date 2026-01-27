@@ -734,9 +734,10 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
         .exclude(connector_id__isnull=True)
     )
     statuses: list[str] = []
+    has_connection_data = bool(store.connections)
     for sibling in siblings:
         connected = store.is_connected(sibling.charger_id, sibling.connector_id)
-        if not connected:
+        if not connected and has_connection_data:
             statuses.append("offline")
             continue
         tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
