@@ -74,6 +74,17 @@ def _redact_token_value(token: str | None) -> str:
     return f"***REDACTED***-{token_hash[:12]}"
 
 
+def _redact_network_value(value: str | None) -> str:
+    """Return a redacted representation of a hostname or address for logging."""
+
+    if not value:
+        return ""
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(str(value).encode("utf-8"))
+    value_hash = digest.finalize().hex()
+    return f"***REDACTED***-{value_hash[:12]}"
+
+
 def _redact_url_token(url: str) -> str:
     """Return the URL with any token query parameter redacted."""
 
@@ -550,8 +561,8 @@ def node_info(request):
     role_name = getattr(node.role, "name", "")
     registration_logger.info(
         "Visitor registration: node_info response hostname=%s address=%s port=%s role=%s",
-        hostname or "",
-        address or "",
+        _redact_network_value(hostname),
+        _redact_network_value(address),
         advertised_port or "",
         role_name,
     )
