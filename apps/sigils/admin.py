@@ -35,11 +35,17 @@ class SigilRootAdmin(EntityModelAdmin):
         "prefix",
         "context_type",
         "content_type",
+        "is_built_in",
         "is_seed_data",
         "is_deleted",
     )
     list_filter = ("context_type", "is_seed_data", "is_deleted")
     search_fields = ("prefix",)
+
+    @admin.display(boolean=True, description="Is Built-In")
+    def is_built_in(self, obj):
+        builtin_prefixes = {"ENV", "CONF", "SYS", "REQ"}
+        return obj.prefix.upper() in builtin_prefixes
 
     def has_delete_permission(self, request, obj=None):
         return False
