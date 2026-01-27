@@ -1,7 +1,7 @@
 from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 
-from .models import MjpegDependencyError, MjpegStream
+from .models import MjpegDependencyError, MjpegDeviceUnavailableError, MjpegStream
 
 import logging
 
@@ -33,6 +33,9 @@ def mjpeg_stream(request, slug):
     except MjpegDependencyError:
         logger.warning("MJPEG dependencies unavailable for stream %s", slug)
         return HttpResponse(status=204)
+    except MjpegDeviceUnavailableError:
+        logger.info("MJPEG device unavailable for stream %s", slug)
+        return HttpResponse(status=204)
     except RuntimeError as exc:
         if _is_missing_mjpeg_dependency(exc):
             logger.warning("MJPEG dependencies unavailable for stream %s", slug)
@@ -55,9 +58,12 @@ def mjpeg_probe(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
     try:
         frame_bytes = stream.capture_frame_bytes()
-    except (MjpegDependencyError, RuntimeError) as exc:
+    except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
         if isinstance(exc, MjpegDependencyError) or _is_missing_mjpeg_dependency(exc):
             logger.warning("MJPEG dependencies unavailable for probe %s", slug)
+            return HttpResponse(status=204)
+        if isinstance(exc, MjpegDeviceUnavailableError):
+            logger.info("MJPEG device unavailable for probe %s", slug)
             return HttpResponse(status=204)
         logger.exception("Runtime error while capturing MJPEG frame for %s", slug)
         return HttpResponse("Unable to capture frame.", status=503)
