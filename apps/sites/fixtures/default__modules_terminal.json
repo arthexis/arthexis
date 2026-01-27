@@ -37,7 +37,12 @@
       "menu": "Charge Points",
       "priority": 0,
       "is_default": false,
-      "security_mode": "inclusive"
+      "security_mode": "inclusive",
+      "features": [
+        [
+          "charge-points"
+        ]
+      ]
     }
   },
   {
