@@ -8,18 +8,20 @@ NEW_DESCRIPTION = "Single vehicle residential charging"
 TEMPLATE_NAME = "EV Charger"
 
 
-def update_description(apps, schema_editor):
+def _update_template_description(apps, schema_editor, description):
     CalculatorTemplate = apps.get_model("awg", "CalculatorTemplate")
     CalculatorTemplate.objects.filter(name=TEMPLATE_NAME).update(
-        description=NEW_DESCRIPTION
+        description=description
     )
+
+
+def update_description(apps, schema_editor):
+    _update_template_description(apps, schema_editor, NEW_DESCRIPTION)
+
 
 
 def revert_description(apps, schema_editor):
-    CalculatorTemplate = apps.get_model("awg", "CalculatorTemplate")
-    CalculatorTemplate.objects.filter(name=TEMPLATE_NAME).update(
-        description=OLD_DESCRIPTION
-    )
+    _update_template_description(apps, schema_editor, OLD_DESCRIPTION)
 
 
 class Migration(migrations.Migration):
