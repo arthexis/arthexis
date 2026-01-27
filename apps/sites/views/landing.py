@@ -23,7 +23,12 @@ from utils.decorators import staff_required
 from utils.sites import get_site
 
 from ..forms import UserStoryForm
-from ..utils import get_original_referer, get_request_language_code, landing
+from ..utils import (
+    get_original_referer,
+    get_referrer_landing,
+    get_request_language_code,
+    landing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +63,17 @@ def footer_fragment(request):
 def index(request):
     site = get_site(request)
     if site:
+        referrer_landing = get_referrer_landing(request, site)
+        if referrer_landing:
+            referrer_page = referrer_landing.landing
+            if (
+                referrer_page
+                and not getattr(referrer_page, "is_deleted", False)
+                and referrer_page.enabled
+            ):
+                target_path = referrer_page.path
+                if target_path and target_path != request.path:
+                    return redirect(target_path)
         badge = getattr(site, "badge", None)
         landing_page = getattr(badge, "landing_override", None)
         if landing_page is None:

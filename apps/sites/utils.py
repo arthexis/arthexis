@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
+REFERRER_LANDING_SESSION_KEY = "pages:referrer_landing_id"
 
 
 def _safe_session_get(session, key, default=None):
@@ -143,3 +144,68 @@ def get_request_language_code(request) -> str:
         return ""
 
     return language_code.replace("_", "-").lower()[:15]
+
+
+def get_referrer_landing(request, site):
+    """Return the stored or resolved referrer landing for the site."""
+
+    if site is None:
+        return None
+
+    session = getattr(request, "session", None)
+    stored_id = None
+    if hasattr(session, "get"):
+        stored_id = _safe_session_get(session, REFERRER_LANDING_SESSION_KEY)
+
+    if stored_id:
+        try:
+            from .models import ReferrerLanding
+
+            referrer_landing = ReferrerLanding.objects.select_related("landing").get(
+                pk=stored_id,
+                site=site,
+                enabled=True,
+                is_deleted=False,
+            )
+        except Exception:
+            _clear_referrer_landing_session(session)
+        else:
+            request.referrer_landing = referrer_landing
+            return referrer_landing
+
+    referer = get_original_referer(request)
+    if not referer:
+        return None
+
+    try:
+        from .models import ReferrerLanding
+
+        referrer_landing = ReferrerLanding.objects.match_for_site(site, referer)
+    except Exception:  # pragma: no cover - best effort guard
+        logger.debug("Unable to resolve referrer landing", exc_info=True)
+        return None
+
+    if referrer_landing is None:
+        return None
+
+    _store_referrer_landing_session(session, referrer_landing.pk)
+    request.referrer_landing = referrer_landing
+    return referrer_landing
+
+
+def _store_referrer_landing_session(session, referrer_landing_id: int) -> None:
+    if not hasattr(session, "__setitem__"):
+        return
+    try:
+        session[REFERRER_LANDING_SESSION_KEY] = referrer_landing_id
+    except Exception:  # pragma: no cover - best effort guard
+        logger.debug("Unable to store referrer landing in session", exc_info=True)
+
+
+def _clear_referrer_landing_session(session) -> None:
+    if not hasattr(session, "pop"):
+        return
+    try:
+        session.pop(REFERRER_LANDING_SESSION_KEY, None)
+    except Exception:  # pragma: no cover - best effort guard
+        logger.debug("Unable to clear referrer landing from session", exc_info=True)

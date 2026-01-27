@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
 
-from ..models import Landing, LandingLead
+from ..models import Landing, LandingLead, ReferrerLanding
 from ..utils import landing_leads_supported
 
 
@@ -42,6 +42,20 @@ class LandingAdmin(EntityModelAdmin):
     )
     readonly_fields = ("validation_status", "validated_url_at")
     list_select_related = ("module", "module__application")
+
+
+@admin.register(ReferrerLanding)
+class ReferrerLandingAdmin(EntityModelAdmin):
+    list_display = ("referrer_domain", "site", "landing", "enabled")
+    list_filter = ("enabled",)
+    search_fields = (
+        "referrer_domain",
+        "landing__label",
+        "landing__path",
+        "site__domain",
+    )
+    fields = ("site", "referrer_domain", "landing", "enabled", "description")
+    list_select_related = ("landing", "site")
 
 
 @admin.register(LandingLead)
