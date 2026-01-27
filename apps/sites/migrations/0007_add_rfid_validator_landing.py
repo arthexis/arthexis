@@ -17,6 +17,7 @@ def add_rfid_validator_landing(apps, schema_editor):
             "enabled": True,
             "track_leads": False,
             "description": "",
+            "is_seed_data": True,
         },
     )
 
