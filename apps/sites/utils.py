@@ -158,16 +158,16 @@ def get_referrer_landing(request, site):
         stored_id = _safe_session_get(session, REFERRER_LANDING_SESSION_KEY)
 
     if stored_id:
-        try:
-            from .models import ReferrerLanding
+        from .models import ReferrerLanding
 
+        try:
             referrer_landing = ReferrerLanding.objects.select_related("landing").get(
                 pk=stored_id,
                 site=site,
                 enabled=True,
                 is_deleted=False,
             )
-        except Exception:
+        except ReferrerLanding.DoesNotExist:
             _clear_referrer_landing_session(session)
         else:
             request.referrer_landing = referrer_landing

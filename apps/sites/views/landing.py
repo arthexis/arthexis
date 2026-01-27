@@ -64,6 +64,7 @@ def index(request):
     site = get_site(request)
     if site:
         referrer_landing = get_referrer_landing(request, site)
+        skip_default_landing = False
         if referrer_landing:
             referrer_page = referrer_landing.landing
             if (
@@ -74,18 +75,21 @@ def index(request):
                 target_path = referrer_page.path
                 if target_path and target_path != request.path:
                     return redirect(target_path)
-        badge = getattr(site, "badge", None)
-        landing_page = getattr(badge, "landing_override", None)
-        if landing_page is None:
-            landing_page = getattr(site, "default_landing", None)
-        if (
-            landing_page
-            and not getattr(landing_page, "is_deleted", False)
-            and landing_page.enabled
-        ):
-            target_path = landing_page.path
-            if target_path and target_path != request.path:
-                return redirect(target_path)
+            else:
+                skip_default_landing = True
+        if not skip_default_landing:
+            badge = getattr(site, "badge", None)
+            landing_page = getattr(badge, "landing_override", None)
+            if landing_page is None:
+                landing_page = getattr(site, "default_landing", None)
+            if (
+                landing_page
+                and not getattr(landing_page, "is_deleted", False)
+                and landing_page.enabled
+            ):
+                target_path = landing_page.path
+                if target_path and target_path != request.path:
+                    return redirect(target_path)
     node = Node.get_local()
     role = node.role if node else None
     response = docs_views.render_readme_page(request, force_footer=True, role=role)
