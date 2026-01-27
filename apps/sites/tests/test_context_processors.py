@@ -55,3 +55,24 @@ def test_nav_links_hides_modules_with_disabled_features(monkeypatch):
     context = context_processors.nav_links(request)
 
     assert context["nav_modules"] == []
+
+
+@pytest.mark.django_db
+def test_nav_links_hides_landings_with_disabled_required_features(monkeypatch):
+    request = RequestFactory().get("/ocpp/")
+
+    monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(NodeFeature, "is_enabled", property(lambda self: False))
+
+    NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
+    NodeFeature.objects.create(slug="rpi-camera", display="RPI Camera")
+    module = Module.objects.create(path="ocpp")
+    Landing.objects.create(
+        module=module,
+        path="/ocpp/rfid/validator/",
+        label="RFID Card Validator",
+    )
+
+    context = context_processors.nav_links(request)
+
+    assert context["nav_modules"] == []
