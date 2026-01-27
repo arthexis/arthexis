@@ -19,6 +19,17 @@ from . import assets, rendering
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_DOC_EXTENSIONS = (
+    rendering.MARKDOWN_FILE_EXTENSIONS
+    | rendering.PLAINTEXT_FILE_EXTENSIONS
+    | rendering.CSV_FILE_EXTENSIONS
+    | {".rst"}
+)
+
+
+def _is_allowed_doc_path(path: Path) -> bool:
+    return path.suffix.lower() in ALLOWED_DOC_EXTENSIONS
+
 
 def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace:
     modules = (
@@ -75,12 +86,12 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
             add_localized_candidates(doc_path.with_suffix(".md"))
             add_localized_candidates(doc_path / "README.md")
 
-        search_roots = [readme_base]
-        if readme_base != root_base:
+        search_roots: list[Path] = []
+        if normalized.startswith(("docs/", "apps/docs/", "apps/locale/docs/")):
             search_roots.append(root_base)
-        if docs_app_base.exists():
+        if docs_app_base.exists() and not normalized.startswith("apps/docs/"):
             search_roots.append(docs_app_base)
-        if locale_docs_base.exists():
+        if locale_docs_base.exists() and not normalized.startswith("apps/locale/docs/"):
             search_roots.append(locale_docs_base)
 
         for relative in relative_candidates:
@@ -90,6 +101,8 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
                 try:
                     candidate.relative_to(base_resolved)
                 except ValueError:
+                    continue
+                if not _is_allowed_doc_path(candidate):
                     continue
                 candidates.append(candidate)
     else:
@@ -128,7 +141,10 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
         if root_default is not None:
             candidates.append(root_default)
 
-    readme_file = next((p for p in candidates if p.exists()), None)
+    readme_file = next(
+        (p for p in candidates if p.exists() and p.is_file() and _is_allowed_doc_path(p)),
+        None,
+    )
     if readme_file is None:
         raise Http404("Document not found")
 
@@ -138,6 +154,7 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
         title=title,
         root_base=root_base,
     )
+
 
 def _normalize_docs_path(doc: str | None, prepend_docs: bool) -> str | None:
     if not doc or not prepend_docs:
