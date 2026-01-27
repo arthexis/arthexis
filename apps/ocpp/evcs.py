@@ -203,6 +203,10 @@ async def simulate_cp(
     """
 
     class ChargePointSimulator:
+        CALL_MESSAGE = 2
+        CALL_RESULT_MESSAGE = 3
+        CALL_ERROR_MESSAGE = 4
+
         def __init__(self):
             self.cp_idx = cp_idx
             self.host = host
@@ -314,12 +318,15 @@ async def simulate_cp(
                             return
 
                         message_type = msg[0]
-                        if message_type in (3, 4):
+                        if message_type in (
+                            self.CALL_RESULT_MESSAGE,
+                            self.CALL_ERROR_MESSAGE,
+                        ):
                             self.log(
                                 f"Received response message type {message_type} from CSMS; ignoring in command listener"
                             )
                             continue
-                        if message_type != 2:
+                        if message_type != self.CALL_MESSAGE:
                             terminate(
                                 f"Received unsupported message type {message_type} from CSMS; terminating simulator"
                             )
@@ -331,13 +338,13 @@ async def simulate_cp(
                         action_name = str(action)
 
                         if action_name == "RemoteStopTransaction":
-                            await self.send(ws, [3, msg_id, {}])
+                            await self.send(ws, [self.CALL_RESULT_MESSAGE, msg_id, {}])
                             self.state.last_message = "RemoteStopTransaction"
                             stop_event.set()
                             continue
 
                         if action_name == "Reset":
-                            await self.send(ws, [3, msg_id, {}])
+                            await self.send(ws, [self.CALL_RESULT_MESSAGE, msg_id, {}])
                             self.state.last_message = "Reset"
                             reset_event.set()
                             stop_event.set()
@@ -346,7 +353,7 @@ async def simulate_cp(
                         await self.send(
                             ws,
                             [
-                                4,
+                                self.CALL_ERROR_MESSAGE,
                                 msg_id,
                                 "NotSupported",
                                 f"Simulator does not implement {action_name}",
