@@ -20,9 +20,9 @@ class ReferrerLandingManager(models.Manager):
             return None
 
         candidates = list(
-            self.filter(site=site, enabled=True, is_deleted=False)
-            .select_related("landing")
-            .order_by("-referrer_domain")
+            self.filter(site=site, enabled=True, is_deleted=False).select_related(
+                "landing"
+            )
         )
         candidates.sort(key=lambda item: len(item.referrer_domain or ""), reverse=True)
         for candidate in candidates:
@@ -103,7 +103,5 @@ class ReferrerLanding(Entity):
         return domain.endswith(f".{referrer_domain}")
 
     def save(self, *args, **kwargs):
-        self.referrer_domain = extract_referrer_domain(self.referrer_domain) or normalize_domain(
-            self.referrer_domain
-        )
+        self.referrer_domain = extract_referrer_domain(self.referrer_domain)
         super().save(*args, **kwargs)

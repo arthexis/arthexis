@@ -90,3 +90,34 @@ def test_index_redirects_to_referrer_landing(settings):
 
     assert response.status_code == 302
     assert response.url == "/apps/"
+
+
+@pytest.mark.django_db
+def test_index_allows_readme_referrer_mapping(settings):
+    settings.ALLOWED_HOSTS = ["referrer-landing-d.test"]
+    site, _ = Site.objects.get_or_create(
+        domain="referrer-landing-d.test",
+        defaults={"name": "Example"},
+    )
+    module = Module.objects.create(path="/apps/")
+    landing = Landing.objects.create(module=module, path="/apps/", label="Apps")
+    site.default_landing = landing
+    site.save(update_fields=["default_landing"])
+    ReferrerLanding.objects.create(
+        site=site,
+        referrer_domain="ref.example.com",
+        landing=None,
+    )
+
+    request = RequestFactory().get(
+        "/",
+        HTTP_HOST="referrer-landing-d.test",
+        HTTP_REFERER="https://ref.example.com/path",
+    )
+    SessionMiddleware(lambda req: None).process_request(request)
+    request.session.save()
+    request.user = AnonymousUser()
+
+    response = landing_views.index(request)
+
+    assert response.status_code == 200
