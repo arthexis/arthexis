@@ -1175,9 +1175,11 @@ def _charger_log_basename(cid: str) -> str:
 
 def _file_path(cid: str, log_type: str = "charger") -> Path:
     if log_type == "charger":
-        return LOG_DIR / f"{log_type}.{_charger_log_basename(cid)}.log"
-    name = log_names[log_type].get(cid, cid)
-    return LOG_DIR / f"{log_type}.{_safe_name(name)}.log"
+        basename = _charger_log_basename(cid)
+    else:
+        name = log_names[log_type].get(cid, cid)
+        basename = _safe_name(name)
+    return LOG_DIR / f"{log_type}.{basename}.log"
 
 
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
