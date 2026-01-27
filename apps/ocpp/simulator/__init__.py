@@ -447,15 +447,31 @@ class ChargePointSimulator:
             for ws_scheme in candidate_schemes:
                 uri = _build_uri(ws_scheme)
                 try:
-                    ws = await websockets.connect(
-                        uri, subprotocols=["ocpp1.6"], **connect_kwargs
-                    )
+                    for attempt in range(2):
+                        try:
+                            ws = await websockets.connect(
+                                uri, subprotocols=["ocpp1.6"], **connect_kwargs
+                            )
+                            break
+                        except Exception as exc:
+                            store.add_log(
+                                cfg.cp_path,
+                                (
+                                    "Connection with subprotocol failed "
+                                    f"({ws_scheme}, attempt {attempt + 1}): {exc}"
+                                ),
+                                log_type="simulator",
+                            )
+                            last_error = exc
+                            if attempt < 1:
+                                store.add_log(
+                                    cfg.cp_path,
+                                    "Retrying connection with subprotocol",
+                                    log_type="simulator",
+                                )
+                    if ws is None:
+                        raise last_error
                 except Exception as exc:
-                    store.add_log(
-                        cfg.cp_path,
-                        f"Connection with subprotocol failed ({ws_scheme}): {exc}",
-                        log_type="simulator",
-                    )
                     try:
                         ws = await websockets.connect(uri, **connect_kwargs)
                     except Exception as inner_exc:

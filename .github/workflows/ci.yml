@@ -378,7 +378,7 @@ jobs:
               .join('\n\n');
 
             const body = [
-              '@arthexis @codex CI failed for this PR.',
+              '@arthexis CI failed for this PR.',
               '',
               '### Failed job summary',
               summaryLines,
