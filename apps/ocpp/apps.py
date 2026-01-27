@@ -29,6 +29,7 @@ class OcppConfig(AppConfig):
             dispatch_uid="apps.ocpp.apps.clear_cached_statuses.request",
             weak=False,
         )
+        from . import signals  # noqa: F401
 
     def _clear_statuses_on_connection(self, sender, connection, **kwargs):
         if self._cleared_cached_statuses:

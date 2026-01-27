@@ -870,6 +870,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         if self.pk:
             if is_new:
                 self._apply_role_manual_features()
+            self._apply_role_auto_features()
             self.refresh_features()
 
     def send_mail(

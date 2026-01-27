@@ -197,6 +197,7 @@ class NodeFeatureMixin:
         "llm-summary",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture"}
+    ROLE_AUTO_FEATURE_SLUGS = {"charge-points"}
 
     def has_feature(self, slug: str) -> bool:
         """Return whether the node has the requested feature slug."""
@@ -210,6 +211,31 @@ class NodeFeatureMixin:
 
         role_features = self.role.features.filter(
             slug__in=self.MANUAL_FEATURE_SLUGS
+        ).values_list("slug", flat=True)
+        desired = set(role_features)
+        if not desired:
+            return
+
+        existing = set(
+            self.features.filter(slug__in=desired).values_list("slug", flat=True)
+        )
+        missing = desired - existing
+        if not missing:
+            return
+
+        for feature in NodeFeature.objects.filter(slug__in=missing):
+            NodeFeatureAssignment.objects.update_or_create(
+                node=self, feature=feature
+            )
+
+    def _apply_role_auto_features(self) -> None:
+        """Enable role features that should always be auto-enabled."""
+
+        if not self.role_id:
+            return
+
+        role_features = self.role.features.filter(
+            slug__in=self.ROLE_AUTO_FEATURE_SLUGS
         ).values_list("slug", flat=True)
         desired = set(role_features)
         if not desired:
