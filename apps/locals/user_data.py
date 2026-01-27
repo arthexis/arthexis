@@ -368,6 +368,23 @@ def _fixture_entry_targets_installed_apps(obj) -> bool:
     return True
 
 
+def _fixture_entry_targets_user_data_model(obj) -> bool:
+    """Return ``True`` when *obj* targets a model that supports user data."""
+
+    if not isinstance(obj, dict):
+        return False
+
+    label = obj.get("model")
+    if not isinstance(label, str):
+        return False
+    try:
+        model = apps.get_model(label)
+    except LookupError:
+        return False
+
+    return issubclass(model, Entity) or getattr(model, "supports_user_datum", False)
+
+
 def _filter_fixture_entries(data: object) -> tuple[object, bool]:
     """Return filtered fixture data and whether anything was removed."""
 
@@ -375,7 +392,10 @@ def _filter_fixture_entries(data: object) -> tuple[object, bool]:
         return data, False
 
     filtered = [
-        obj for obj in data if _fixture_entry_targets_installed_apps(obj)
+        obj
+        for obj in data
+        if _fixture_entry_targets_installed_apps(obj)
+        and _fixture_entry_targets_user_data_model(obj)
     ]
     return filtered, len(filtered) != len(data)
 
@@ -1325,17 +1345,17 @@ def _user_fixture_paths(user):
 
 def _read_fixture_entries(path: Path) -> list[dict]:
     try:
-        content = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        try:
-            content = path.read_bytes().decode("latin-1")
-        except Exception:
-            return []
-    except Exception:
+        content_bytes = path.read_bytes()
+    except (OSError, IOError):
         return []
+
+    try:
+        content = content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        content = content_bytes.decode("latin-1")
     try:
         data = json.loads(content)
-    except Exception:
+    except json.JSONDecodeError:
         return []
     filtered, _ = _filter_fixture_entries(data)
     if not isinstance(filtered, list):
@@ -1345,6 +1365,7 @@ def _read_fixture_entries(path: Path) -> list[dict]:
 
 def _fixture_has_unapplied_entries(path: Path) -> bool:
     entries = _read_fixture_entries(path)
+    pks_by_model: dict[type, list] = {}
     for obj in entries:
         label = obj.get("model")
         pk = obj.get("pk")
@@ -1354,8 +1375,19 @@ def _fixture_has_unapplied_entries(path: Path) -> bool:
             model = apps.get_model(label)
         except LookupError:
             continue
+        pks_by_model.setdefault(model, []).append(pk)
+
+    for model, pks in pks_by_model.items():
+        try:
+            unique_pks = set(pks)
+        except TypeError:
+            return True
         manager = getattr(model, "all_objects", model._default_manager)
-        if not manager.filter(pk=pk).exists():
+        try:
+            existing = manager.filter(pk__in=unique_pks).count()
+        except (ValueError, TypeError):
+            return True
+        if existing < len(unique_pks):
             return True
     return False
 
