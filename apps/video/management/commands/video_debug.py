@@ -231,11 +231,8 @@ class Command(BaseCommand):
         for stream in streams:
             try:
                 frame_bytes = stream.capture_frame_bytes()
-            except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
-                if isinstance(exc, MjpegDependencyError) or self._is_missing_mjpeg_dependency(exc):
-                    failed += 1
-                else:
-                    failed += 1
+            except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError):
+                failed += 1
                 continue
             except Exception:  # pragma: no cover - best-effort diagnostics
                 failed += 1
@@ -281,7 +278,3 @@ class Command(BaseCommand):
 
         stream = queryset.filter(slug=stream_identifier).first()
         return [stream] if stream else []
-
-    @staticmethod
-    def _is_missing_mjpeg_dependency(exc: Exception) -> bool:
-        return "OpenCV (cv2)" in str(exc)
