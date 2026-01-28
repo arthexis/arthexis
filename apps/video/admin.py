@@ -631,10 +631,6 @@ class MjpegStreamAdmin(EntityModelAdmin):
             request, object_id, form_url=form_url, extra_context=extra_context
         )
 
-    @staticmethod
-    def _is_missing_mjpeg_dependency(exc: Exception) -> bool:
-        return "OpenCV (cv2)" in str(exc)
-
     @admin.action(description=_("Take selected snapshots"))
     def take_selected_snapshots(self, request, queryset):
         captured = 0
@@ -644,11 +640,8 @@ class MjpegStreamAdmin(EntityModelAdmin):
         for stream in queryset:
             try:
                 frame_bytes = stream.capture_frame_bytes()
-            except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
-                if isinstance(exc, MjpegDependencyError) or self._is_missing_mjpeg_dependency(exc):
-                    failed += 1
-                else:
-                    failed += 1
+            except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError):
+                failed += 1
                 continue
             except Exception:
                 failed += 1
