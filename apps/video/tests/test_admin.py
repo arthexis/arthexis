@@ -94,9 +94,6 @@ def test_take_snapshot_discovers_device_and_redirects(
 
     snapshot_path = tmp_path / "snapshot.jpg"
     snapshot_path.write_bytes(b"snapshot")
-    monkeypatch.setattr(
-        video_admin, "capture_rpi_snapshot", lambda: snapshot_path
-    )
 
     sample = ContentSample.objects.create(
         kind=ContentSample.IMAGE,
@@ -105,20 +102,17 @@ def test_take_snapshot_discovers_device_and_redirects(
     )
     captured_kwargs = {}
 
-    def fake_save_screenshot(path, **kwargs):
-        captured_kwargs.update(kwargs)
-        return sample
-
-    monkeypatch.setattr(video_admin, "save_screenshot", fake_save_screenshot)
-
     refreshed = {"called": False}
 
     def fake_refresh_from_system(cls, *, node):
         refreshed["called"] = True
-        VideoDevice.objects.create(
+        device = VideoDevice.objects.create(
             node=node,
             identifier="/dev/video0",
             description="Raspberry Pi Camera",
+            is_default=True,
+            capture_width=1280,
+            capture_height=720,
         )
         return (1, 0)
 
@@ -127,6 +121,17 @@ def test_take_snapshot_discovers_device_and_redirects(
         "refresh_from_system",
         classmethod(fake_refresh_from_system),
     )
+    def fake_capture_snapshot(self, *, link_duplicates=False):
+        captured_kwargs["link_duplicates"] = link_duplicates
+        return VideoSnapshot.objects.create(
+            device=self,
+            sample=sample,
+            width=1280,
+            height=720,
+            image_format="JPEG",
+        )
+
+    monkeypatch.setattr(VideoDevice, "capture_snapshot", fake_capture_snapshot)
 
     response = admin_client.get(
         reverse("admin:video_videodevice_take_snapshot")
@@ -162,10 +167,10 @@ def test_take_snapshot_warns_when_no_devices(
         classmethod(fake_refresh_from_system),
     )
 
-    def fail_capture():
+    def fail_capture(self, *, link_duplicates=False):
         raise AssertionError("capture should not run without devices")
 
-    monkeypatch.setattr(video_admin, "capture_rpi_snapshot", fail_capture)
+    monkeypatch.setattr(VideoDevice, "capture_snapshot", fail_capture)
 
     response = admin_client.get(
         reverse("admin:video_videodevice_take_snapshot"),

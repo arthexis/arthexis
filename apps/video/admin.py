@@ -15,12 +15,10 @@ from django_object_actions import DjangoObjectActions
 from apps.core.admin.mixins import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.content.utils import save_screenshot
 
 from .models import MjpegStream, VideoDevice, VideoRecording, VideoSnapshot, YoutubeChannel
 from .utils import (
     DEFAULT_CAMERA_RESOLUTION,
-    capture_rpi_snapshot,
     get_camera_resolutions,
     has_rpi_camera_stack,
 )
@@ -440,29 +438,31 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 level=messages.WARNING,
             )
             return redirect("..")
-        try:
-            path = capture_rpi_snapshot()
-        except Exception as exc:  # pragma: no cover - depends on camera stack
-            self.message_user(request, str(exc), level=messages.ERROR)
-            return redirect("..")
-        sample = save_screenshot(
-            path,
-            node=node,
-            method="RPI_CAMERA",
-            link_duplicates=True,
+        device = (
+            VideoDevice.objects.filter(node=node)
+            .order_by("-is_default", "pk")
+            .first()
         )
-        if not sample:
+        if not device:
             self.message_user(
-                request, _("Duplicate snapshot; not saved"), level=messages.INFO
+                request,
+                _("No video devices were detected on this node."),
+                level=messages.WARNING,
             )
             return redirect("..")
-        self.message_user(
+        snapshot = self._capture_snapshot_for_device(
             request,
-            _("Snapshot saved to %(path)s") % {"path": sample.path},
-            level=messages.SUCCESS,
+            device,
+            auto_enable=True,
+            link_duplicates=True,
         )
+        if not snapshot:
+            return redirect("..")
         try:
-            change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
+            change_url = reverse(
+                "admin:content_contentsample_change",
+                args=[snapshot.sample.pk],
+            )
         except NoReverseMatch:  # pragma: no cover - admin URL always registered
             self.message_user(
                 request,
