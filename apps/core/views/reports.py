@@ -210,8 +210,10 @@ def _clean_redirect_path(raw_path: str) -> str:
 
     parsed = urlparse(raw_path or "")
     path = parsed.path or "/"
-    if not path.startswith("/"):
-        path = f"/{path}"
+    path = parsed.path or "/"
+    # if not path.startswith("/"):
+    #     path = f"/{path}"
+    return path
     return path
 
 
