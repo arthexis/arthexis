@@ -66,21 +66,23 @@ def _redact_mac(mac: str | None) -> str:
 def _redact_token_value(token: str | None) -> str:
     """Return a redacted representation of a token suitable for logging."""
 
-    if not token:
-        return ""
-    digest = hashes.Hash(hashes.SHA256())
-    digest.update(token.encode("utf-8"))
-    token_hash = digest.finalize().hex()
-    return f"***REDACTED***-{token_hash[:12]}"
+    return _redact_value(token)
 
 
 def _redact_network_value(value: str | None) -> str:
     """Return a redacted representation of a hostname or address for logging."""
 
+    return _redact_value(value)
+
+
+def _redact_value(value: str | None) -> str:
+    """Return a redacted representation of a value suitable for logging."""
+
     if not value:
         return ""
     digest = hashes.Hash(hashes.SHA256())
-    digest.update(str(value).encode("utf-8"))
+    digest.update(settings.SECRET_KEY.encode("utf-8"))
+    digest.update(value.encode("utf-8"))
     value_hash = digest.finalize().hex()
     return f"***REDACTED***-{value_hash[:12]}"
 
