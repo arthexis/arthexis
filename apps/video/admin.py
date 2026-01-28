@@ -16,7 +16,15 @@ from apps.core.admin.mixins import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
-from .models import MjpegStream, VideoDevice, VideoRecording, VideoSnapshot, YoutubeChannel
+from .models import (
+    MjpegDependencyError,
+    MjpegDeviceUnavailableError,
+    MjpegStream,
+    VideoDevice,
+    VideoRecording,
+    VideoSnapshot,
+    YoutubeChannel,
+)
 from .utils import (
     DEFAULT_CAMERA_RESOLUTION,
     get_camera_resolutions,
@@ -581,6 +589,7 @@ class MjpegStreamAdmin(EntityModelAdmin):
     search_fields = ("name", "slug", "video_device__name", "video_device__slug")
     list_filter = ("is_active",)
     change_form_template = "admin/video/mjpegstream/change_form.html"
+    actions = ("take_selected_snapshots",)
 
     def get_view_on_site_url(self, obj=None):
         if obj:
@@ -621,6 +630,62 @@ class MjpegStreamAdmin(EntityModelAdmin):
         return super().change_view(
             request, object_id, form_url=form_url, extra_context=extra_context
         )
+
+    @staticmethod
+    def _is_missing_mjpeg_dependency(exc: Exception) -> bool:
+        return "OpenCV (cv2)" in str(exc)
+
+    @admin.action(description=_("Take selected snapshots"))
+    def take_selected_snapshots(self, request, queryset):
+        captured = 0
+        skipped = 0
+        failed = 0
+
+        for stream in queryset:
+            try:
+                frame_bytes = stream.capture_frame_bytes()
+            except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
+                if isinstance(exc, MjpegDependencyError) or self._is_missing_mjpeg_dependency(exc):
+                    failed += 1
+                else:
+                    failed += 1
+                continue
+            except Exception:
+                failed += 1
+                continue
+
+            if not frame_bytes:
+                skipped += 1
+                continue
+
+            try:
+                stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
+            except Exception:
+                failed += 1
+                continue
+            captured += 1
+
+        if captured:
+            self.message_user(
+                request,
+                _("Captured snapshots for %(count)s stream(s).")
+                % {"count": captured},
+                level=messages.SUCCESS,
+            )
+        if skipped:
+            self.message_user(
+                request,
+                _("Skipped %(count)s stream(s) without frames.")
+                % {"count": skipped},
+                level=messages.WARNING,
+            )
+        if failed:
+            self.message_user(
+                request,
+                _("Failed to capture snapshots for %(count)s stream(s).")
+                % {"count": failed},
+                level=messages.ERROR,
+            )
 
 
 @admin.register(YoutubeChannel)
