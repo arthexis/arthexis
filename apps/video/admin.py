@@ -443,13 +443,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             .order_by("-is_default", "pk")
             .first()
         )
-        if not device:
-            self.message_user(
-                request,
-                _("No video devices were detected on this node."),
-                level=messages.WARNING,
-            )
-            return redirect("..")
         snapshot = self._capture_snapshot_for_device(
             request,
             device,
