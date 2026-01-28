@@ -205,6 +205,16 @@ def _ensure_template_name(template, name: str):
     return template
 
 
+def _clean_redirect_path(raw_path: str) -> str:
+    """Return a safe redirect path stripped to local path components."""
+
+    parsed = urlparse(raw_path or "")
+    path = parsed.path or "/"
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return path
+
+
 def _get_release_or_response(request, pk: int, action: str):
     try:
         release = PackageRelease.objects.get(pk=pk)
@@ -362,7 +372,7 @@ def _reset_release_progress(
         f.unlink()
     if message_text:
         messages.info(request, message_text)
-    return redirect(request.path)
+    return redirect(_clean_redirect_path(request.path))
 
 
 def _load_release_context(
@@ -402,7 +412,7 @@ def _update_publish_controls(
         if start_enabled:
             ctx["dry_run"] = bool(request.GET.get("dry_run"))
             request.session[session_key] = ctx
-        return ctx, False, redirect(request.path)
+        return ctx, False, redirect(_clean_redirect_path(request.path))
 
     if request.GET.get("start"):
         if start_enabled:
