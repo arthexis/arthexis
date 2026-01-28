@@ -300,7 +300,7 @@ async def simulate_cp(
             self.state.phase = "Connected"
             self.state.last_message = ""
             negotiated_subprotocol = ws.subprotocol or "ocpp1.6"
-            self.log(f"Connected (subprotocol={negotiated_subprotocol or 'none'})")
+            self.log(f"Connected (subprotocol={negotiated_subprotocol})")
             return ws
 
         async def handle_boot_and_authorize(self, ws) -> None:
