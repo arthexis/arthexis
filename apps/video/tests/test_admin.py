@@ -5,7 +5,7 @@ from django.urls import reverse
 from apps.content.models import ContentSample
 from apps.nodes.models import Node, NodeFeature
 from apps.video import admin as video_admin
-from apps.video.models import VideoDevice, VideoSnapshot
+from apps.video.models import MjpegStream, VideoDevice, VideoSnapshot
 
 
 @pytest.mark.django_db
@@ -286,3 +286,49 @@ def test_change_view_captures_missing_snapshot(admin_client, monkeypatch, tmp_pa
     assert captured["called"] is True
     assert VideoSnapshot.objects.filter(device=device).count() == 1
     assert "refresh_snapshot" in response.rendered_content
+
+
+@pytest.mark.django_db
+def test_mjpeg_stream_action_captures_snapshot(admin_client, monkeypatch):
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+    stream = MjpegStream.objects.create(
+        name="Stream",
+        slug="stream",
+        video_device=device,
+        is_active=True,
+    )
+
+    captured = {"frame": 0, "store": 0}
+
+    def fake_capture(self):
+        captured["frame"] += 1
+        return b"frame"
+
+    def fake_store(self, frame_bytes, *, update_thumbnail=True):
+        assert frame_bytes == b"frame"
+        assert update_thumbnail is True
+        captured["store"] += 1
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", fake_capture)
+    monkeypatch.setattr(MjpegStream, "store_frame_bytes", fake_store)
+
+    response = admin_client.post(
+        reverse("admin:video_mjpegstream_changelist"),
+        {"action": "take_selected_snapshots", "_selected_action": [stream.pk]},
+        follow=True,
+    )
+
+    messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("Captured snapshots for 1 stream" in msg for msg in messages)
+    assert response.status_code == 200
+    assert captured["frame"] == 1
+    assert captured["store"] == 1
