@@ -502,12 +502,13 @@ class ChargePointSimulator:
                     "Unable to establish simulator websocket connection"
                 )
 
+            negotiated_subprotocol = ws.subprotocol or "ocpp1.6"
             store.add_log(
                 cfg.cp_path,
-                f"Connected (subprotocol={ws.subprotocol or 'none'})",
+                f"Connected (subprotocol={negotiated_subprotocol or 'none'})",
                 log_type="simulator",
             )
-            self._last_ws_subprotocol = ws.subprotocol
+            self._last_ws_subprotocol = negotiated_subprotocol
 
             async def send(msg: str) -> None:
                 try:

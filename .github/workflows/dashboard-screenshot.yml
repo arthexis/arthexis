@@ -5,6 +5,8 @@ env:
   PLAYWRIGHT_VERSION: '1.45.2'
   NODE_OPTIONS: '--no-deprecation'
 
+permissions: read-all
+
 on:
   workflow_dispatch:
   push:

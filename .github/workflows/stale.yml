@@ -3,6 +3,8 @@ name: Close stale PRs
 env:
   NODE_OPTIONS: '--no-deprecation'
 
+permissions: read-all
+
 on:
   schedule:
     - cron: '0 0,8,16 * * *'
@@ -10,6 +12,10 @@ on:
 jobs:
   stale:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
       - uses: actions/stale@v10
         with:
