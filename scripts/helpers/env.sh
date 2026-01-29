@@ -59,7 +59,7 @@ with open(path, "r", encoding="utf-8") as handle:
         key, value = parse_env(raw)
         if key is None or value is None:
             continue
-        print(f"export {key}={shlex.quote(value)}")
+        print(f"export {shlex.quote(key)}={shlex.quote(value)}")
 PY
     )"; then
       if [ -n "$export_lines" ]; then
