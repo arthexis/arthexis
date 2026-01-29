@@ -8,7 +8,7 @@
       "volts": 220,
       "material": "cu",
       "max_lines": 1,
-      "phases": 2,
+      "phases": 1,
       "temperature": 60,
       "ground": 1,
       "show_in_pages": true,

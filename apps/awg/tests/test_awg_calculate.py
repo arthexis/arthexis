@@ -72,7 +72,7 @@ class AwgCalculateViewTests(SimpleTestCase):
             volts=220,
             material="cu",
             max_lines=1,
-            phases=2,
+            phases=1,
             ground=1,
             max_awg=None,
             temperature=None,
@@ -102,7 +102,7 @@ class AwgCalculateViewTests(SimpleTestCase):
                 "volts": 220,
                 "material": "cu",
                 "max_lines": 1,
-                "phases": 2,
+                "phases": 1,
                 "ground": 1,
             },
         )
@@ -127,7 +127,7 @@ class AwgCalculateViewTests(SimpleTestCase):
                 "volts": 220,
                 "material": "cu",
                 "max_lines": 1,
-                "phases": 2,
+                "phases": 1,
                 "ground": 1,
             },
         )
