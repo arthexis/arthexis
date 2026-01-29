@@ -1,5 +1,8 @@
-from django.http import HttpResponse, StreamingHttpResponse
+from django.contrib.admin.views.decorators import staff_member_required
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
+from django.utils import timezone
 
 from .models import MjpegDependencyError, MjpegDeviceUnavailableError, MjpegStream
 
@@ -21,29 +24,27 @@ def stream_detail(request, slug):
     return render(request, "video/stream_detail.html", context)
 
 
-def mjpeg_stream(request, slug):
-    stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
-
+def _build_mjpeg_stream_response(stream: MjpegStream):
     try:
         frame_iter = stream.iter_frame_bytes()
         first_frame = next(frame_iter)
     except StopIteration:
-        logger.info("No frames available for MJPEG stream %s", slug)
+        logger.info("No frames available for MJPEG stream %s", stream.slug)
         return HttpResponse(status=204)
     except MjpegDependencyError:
-        logger.warning("MJPEG dependencies unavailable for stream %s", slug)
+        logger.warning("MJPEG dependencies unavailable for stream %s", stream.slug)
         return HttpResponse(status=204)
     except MjpegDeviceUnavailableError:
-        logger.info("MJPEG device unavailable for stream %s", slug)
+        logger.info("MJPEG device unavailable for stream %s", stream.slug)
         return HttpResponse(status=204)
     except RuntimeError as exc:
         if _is_missing_mjpeg_dependency(exc):
-            logger.warning("MJPEG dependencies unavailable for stream %s", slug)
+            logger.warning("MJPEG dependencies unavailable for stream %s", stream.slug)
             return HttpResponse(status=204)
-        logger.exception("Runtime error while starting MJPEG stream %s", slug)
+        logger.exception("Runtime error while starting MJPEG stream %s", stream.slug)
         return HttpResponse("Unable to start stream.", status=503)
     except Exception as exc:
-        logger.exception("Unexpected error while starting MJPEG stream %s", slug)
+        logger.exception("Unexpected error while starting MJPEG stream %s", stream.slug)
         return HttpResponse("Unable to start stream.", status=503)
 
     generator = stream.mjpeg_stream(frame_iter, first_frame=first_frame)
@@ -52,6 +53,17 @@ def mjpeg_stream(request, slug):
         generator,
         content_type="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+def mjpeg_stream(request, slug):
+    stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
+    return _build_mjpeg_stream_response(stream)
+
+
+@staff_member_required
+def mjpeg_admin_stream(request, slug):
+    stream = get_object_or_404(MjpegStream, slug=slug)
+    return _build_mjpeg_stream_response(stream)
 
 
 def mjpeg_probe(request, slug):
@@ -79,6 +91,48 @@ def mjpeg_probe(request, slug):
             return HttpResponse("Unable to store frame.", status=503)
 
     return HttpResponse(status=204)
+
+
+@staff_member_required
+def mjpeg_debug(request, slug):
+    stream = get_object_or_404(MjpegStream, slug=slug)
+    context = {
+        "stream": stream,
+        "stream_url": stream.get_stream_url(),
+        "debug_stream_url": reverse("video:mjpeg-admin-stream", args=[stream.slug]),
+        "status_url": reverse("video:mjpeg-debug-status", args=[stream.slug]),
+        "probe_url": reverse("video:mjpeg-probe", args=[stream.slug]),
+    }
+    return render(request, "video/mjpeg_debug.html", context)
+
+
+@staff_member_required
+def mjpeg_debug_status(request, slug):
+    stream = get_object_or_404(MjpegStream, slug=slug)
+    data = {
+        "server_time": timezone.now().isoformat(),
+        "stream": {
+            "name": stream.name,
+            "slug": stream.slug,
+            "is_active": stream.is_active,
+        },
+        "video_device": {
+            "id": stream.video_device_id,
+            "name": stream.video_device.display_name,
+            "identifier": stream.video_device.identifier,
+        },
+        "last_frame_captured_at": _format_timestamp(stream.last_frame_captured_at),
+        "last_thumbnail_at": _format_timestamp(stream.last_thumbnail_at),
+        "last_frame_sample_id": stream.last_frame_sample_id,
+        "last_thumbnail_sample_id": stream.last_thumbnail_sample_id,
+    }
+    return JsonResponse(data)
+
+
+def _format_timestamp(value):
+    if not value:
+        return None
+    return timezone.localtime(value).isoformat()
 
 
 def camera_gallery(request):

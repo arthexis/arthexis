@@ -13,9 +13,14 @@
           <h1 class="h3 mb-0">{{ stream.name }}</h1>
         </div>
         {% if request.user.is_staff %}
-        <a class="btn btn-outline-primary" href="{{ stream.get_admin_url }}">
-          {% trans "Configure" %}
-        </a>
+        <div class="btn-group" role="group">
+          <a class="btn btn-outline-primary" href="{{ stream.get_admin_url }}">
+            {% trans "Configure" %}
+          </a>
+          <a class="btn btn-outline-secondary" href="{% url 'video:mjpeg-debug' stream.slug %}">
+            {% trans "Debug stream" %}
+          </a>
+        </div>
         {% endif %}
       </div>
       <div
