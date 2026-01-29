@@ -5,61 +5,26 @@ from django.db import migrations
 
 OLD_DESCRIPTION = "EV Charger - Residential charging for a single Electric Vehicle."
 NEW_DESCRIPTION = "Single vehicle residential charging"
-OLD_PHASES = 2
-NEW_PHASES = 1
 TEMPLATE_NAME = "EV Charger"
 
 
-def _update_template_fields(
-    apps,
-    schema_editor,
-    *,
-    description=None,
-    phases=None,
-    current_description=None,
-    current_phases=None,
-):
+def _update_template_description(apps, schema_editor, description, *, current=None):
     CalculatorTemplate = apps.get_model("awg", "CalculatorTemplate")
     filters = {"name": TEMPLATE_NAME}
-    if current_description is not None:
-        filters["description"] = current_description
-    if current_phases is not None:
-        filters["phases"] = current_phases
-    updates = {}
-    if description is not None:
-        updates["description"] = description
-    if phases is not None:
-        updates["phases"] = phases
-    CalculatorTemplate.objects.filter(**filters).update(**updates)
+    if current is not None:
+        filters["description"] = current
+    CalculatorTemplate.objects.filter(**filters).update(description=description)
 
 
 def update_description(apps, schema_editor):
-    _update_template_fields(
-        apps,
-        schema_editor,
-        description=NEW_DESCRIPTION,
-        current_description=OLD_DESCRIPTION,
-    )
-    _update_template_fields(
-        apps,
-        schema_editor,
-        phases=NEW_PHASES,
-        current_phases=OLD_PHASES,
+    _update_template_description(
+        apps, schema_editor, NEW_DESCRIPTION, current=OLD_DESCRIPTION
     )
 
 
 def revert_description(apps, schema_editor):
-    _update_template_fields(
-        apps,
-        schema_editor,
-        description=OLD_DESCRIPTION,
-        current_description=NEW_DESCRIPTION,
-    )
-    _update_template_fields(
-        apps,
-        schema_editor,
-        phases=OLD_PHASES,
-        current_phases=NEW_PHASES,
+    _update_template_description(
+        apps, schema_editor, OLD_DESCRIPTION, current=NEW_DESCRIPTION
     )
 
 
