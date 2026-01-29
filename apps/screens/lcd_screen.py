@@ -309,6 +309,8 @@ class LCDHealthMonitor:
         if self.base_delay <= 0:
             return self.max_delay
         max_multiplier = self.max_delay / self.base_delay
+        if not math.isfinite(max_multiplier):
+            return self.max_delay
         if max_multiplier <= 1:
             return self.max_delay
         exponent = self.failure_count - 1
