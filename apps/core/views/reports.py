@@ -597,15 +597,24 @@ def _manual_git_push_command(pending_push: dict) -> str:
     return "git push origin HEAD"
 
 
-def _validate_manual_git_push(pending_push: dict) -> bool:
+def _validate_manual_git_push(
+    pending_push: dict,
+) -> tuple[bool | None, str | None, bool]:
     head = (pending_push.get("head") or "").strip() or _current_git_revision()
     if not head:
-        return False
+        return False, None, False
     branch = pending_push.get("branch")
     if branch:
-        remote_commit = _git_remote_branch_commit("origin", branch)
-        return remote_commit == head
-    return _remote_contains_commit("origin", head)
+        remote_commit, details, auth_failed = _git_remote_branch_commit(
+            "origin", branch
+        )
+        if details:
+            return None if auth_failed else False, details, auth_failed
+        return remote_commit == head, None, False
+    contains_commit, details, auth_failed = _remote_contains_commit("origin", head)
+    if details:
+        return None if auth_failed else False, details, auth_failed
+    return bool(contains_commit), None, False
 
 
 def _handle_manual_git_push_action(
@@ -617,7 +626,9 @@ def _handle_manual_git_push_action(
     if not pending_push:
         ctx.pop("pending_git_push_error", None)
         return ctx
-    action = request.GET.get("manual_push_action")
+    if request.method != "POST":
+        return ctx
+    action = request.POST.get("manual_push_action")
     if not action:
         return ctx
     ctx.pop("pending_git_push_error", None)
@@ -635,14 +646,30 @@ def _handle_manual_git_push_action(
             _append_log(log_path, "Retry push completed")
         return ctx
     if action == "confirm":
-        if _validate_manual_git_push(pending_push):
+        validated, details, auth_failed = _validate_manual_git_push(pending_push)
+        if auth_failed:
+            ctx["paused"] = False
+            ctx.pop("pending_git_push", None)
+            message = (
+                "Manual push verification skipped because remote read "
+                "requires authentication; continuing release."
+            )
+            _append_log(log_path, message)
+            if details:
+                _append_log(log_path, f"Remote verification error: {details}")
+        elif validated:
             ctx["paused"] = False
             ctx.pop("pending_git_push", None)
             _append_log(log_path, "Manual push verified; continuing release")
         else:
-            ctx["pending_git_push_error"] = _(
-                "Manual push not detected on origin. Confirm the push completed and try again."
-            )
+            if details:
+                ctx["pending_git_push_error"] = _(
+                    "Manual push could not be verified: %(details)s"
+                ) % {"details": details}
+            else:
+                ctx["pending_git_push_error"] = _(
+                    "Manual push not detected on origin. Confirm the push completed and try again."
+                )
         return ctx
     return ctx
 
@@ -1188,8 +1215,8 @@ def _record_release_fixture_updates(
         _append_log(log_path, skipped_message)
 
 
-def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
-    message = (exc.stderr or exc.stdout or "").strip().lower()
+def _git_authentication_missing_message(message: str) -> bool:
+    message = (message or "").strip().lower()
     if not message:
         return False
     auth_markers = [
@@ -1201,7 +1228,14 @@ def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
     return any(marker in message for marker in auth_markers)
 
 
-def _git_remote_branch_commit(remote: str, branch: str) -> str | None:
+def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
+    message = (exc.stderr or exc.stdout or "").strip()
+    return _git_authentication_missing_message(message)
+
+
+def _git_remote_branch_commit(
+    remote: str, branch: str
+) -> tuple[str | None, str | None, bool]:
     proc = subprocess.run(
         ["git", "ls-remote", "--heads", remote, branch],
         capture_output=True,
@@ -1209,27 +1243,32 @@ def _git_remote_branch_commit(remote: str, branch: str) -> str | None:
         check=False,
     )
     if proc.returncode != 0:
-        return None
+        details = (proc.stderr or proc.stdout or "").strip()
+        auth_failed = _git_authentication_missing_message(details)
+        return None, details or None, auth_failed
     for line in (proc.stdout or "").splitlines():
         parts = line.strip().split()
         if len(parts) != 2:
             continue
         sha, ref = parts
         if ref.endswith(f"/{branch}"):
-            return sha
-    return None
+            return sha, None, False
+    return None, None, False
 
 
-def _remote_contains_commit(remote: str, commit: str) -> bool:
-    try:
-        subprocess.run(
-            ["git", "fetch", remote],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError:
-        return False
+def _remote_contains_commit(
+    remote: str, commit: str
+) -> tuple[bool | None, str | None, bool]:
+    fetch_proc = subprocess.run(
+        ["git", "fetch", remote],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if fetch_proc.returncode != 0:
+        details = (fetch_proc.stderr or fetch_proc.stdout or "").strip()
+        auth_failed = _git_authentication_missing_message(details)
+        return None, details or None, auth_failed
     proc = subprocess.run(
         ["git", "branch", "-r", "--contains", commit],
         check=False,
@@ -1237,10 +1276,16 @@ def _remote_contains_commit(remote: str, commit: str) -> bool:
         text=True,
     )
     if proc.returncode != 0:
-        return False
-    return any(
-        line.strip().startswith(f"{remote}/")
-        for line in (proc.stdout or "").splitlines()
+        details = (proc.stderr or proc.stdout or "").strip()
+        auth_failed = _git_authentication_missing_message(details)
+        return None, details or None, auth_failed
+    return (
+        any(
+            line.strip().startswith(f"{remote}/")
+            for line in (proc.stdout or "").splitlines()
+        ),
+        None,
+        False,
     )
 
 
@@ -1253,17 +1298,16 @@ def _register_manual_git_push(
     head: str,
     details: str | None,
 ) -> None:
-    ctx["pending_git_push"] = {
+    pending_push = {
         "step": step_name,
         "remote": "origin",
         "branch": branch,
         "head": head,
     }
+    ctx["pending_git_push"] = pending_push
     ctx["paused"] = True
     ctx.pop("pending_git_push_error", None)
-    command = "git push origin HEAD"
-    if branch:
-        command = f"git push origin {branch}"
+    command = _manual_git_push_command(pending_push)
     instructions = [
         "Authentication is required to push release changes to origin.",
         f"Run `{command}` from the repository root, then confirm the manual step.",

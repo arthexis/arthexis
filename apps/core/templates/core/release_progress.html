@@ -240,14 +240,16 @@
     <p class="error">{{ manual_git_push_error }}</p>
     {% endif %}
     <div class="progress-actions">
-      <form method="get">
+      <form method="post">
+        {% csrf_token %}
         <input type="hidden" name="step" value="{{ current_step }}">
         {% if dry_run %}
         <input type="hidden" name="dry_run" value="1">
         {% endif %}
         <button type="submit" name="manual_push_action" value="retry">🔁 {% trans 'Retry push' %}</button>
       </form>
-      <form method="get">
+      <form method="post">
+        {% csrf_token %}
         <input type="hidden" name="step" value="{{ current_step }}">
         {% if dry_run %}
         <input type="hidden" name="dry_run" value="1">
