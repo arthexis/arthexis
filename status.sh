@@ -2,12 +2,15 @@
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/helpers/env.sh
+. "$BASE_DIR/scripts/helpers/env.sh"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
+arthexis_load_env_file "$BASE_DIR"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
