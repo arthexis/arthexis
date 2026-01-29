@@ -1253,17 +1253,16 @@ def _register_manual_git_push(
     head: str,
     details: str | None,
 ) -> None:
-    ctx["pending_git_push"] = {
+    pending_push = {
         "step": step_name,
         "remote": "origin",
         "branch": branch,
         "head": head,
     }
+    ctx["pending_git_push"] = pending_push
     ctx["paused"] = True
     ctx.pop("pending_git_push_error", None)
-    command = "git push origin HEAD"
-    if branch:
-        command = f"git push origin {branch}"
+    command = _manual_git_push_command(pending_push)
     instructions = [
         "Authentication is required to push release changes to origin.",
         f"Run `{command}` from the repository root, then confirm the manual step.",
