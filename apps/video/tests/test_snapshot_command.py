@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -14,7 +14,6 @@ def _mock_feature(is_enabled: bool = True):
 
 @patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.save_screenshot")
-@patch("apps.video.management.commands.snapshot.capture_rpi_snapshot")
 @patch("apps.video.management.commands.snapshot.VideoDevice")
 @patch("apps.video.management.commands.snapshot.NodeFeatureAssignment")
 @patch("apps.video.management.commands.snapshot.NodeFeature")
@@ -24,7 +23,6 @@ def test_snapshot_command_success(
     feature_model_mock,
     assignment_mock,
     video_device_mock,
-    capture_mock,
     save_mock,
     test_server_mock,
     capsys,
@@ -33,14 +31,17 @@ def test_snapshot_command_success(
     node_mock.get_local.return_value = node_instance
     feature_model_mock.objects.get.return_value = _mock_feature()
     video_device_mock.objects.filter.return_value.exists.return_value = True
-    capture_mock.return_value = Path("/tmp/snapshot.jpg")
+    device_instance = SimpleNamespace(
+        capture_snapshot_path=Mock(return_value=Path("/tmp/snapshot.jpg"))
+    )
+    video_device_mock.get_default_for_node.return_value = device_instance
     save_mock.return_value = SimpleNamespace(path="/tmp/snapshot.jpg")
 
     result = call_command("snapshot")
 
     video_device_mock.objects.filter.assert_called_with(node=node_instance)
     assignment_mock.objects.update_or_create.assert_not_called()
-    capture_mock.assert_called_once_with()
+    device_instance.capture_snapshot_path.assert_called_once_with()
     save_mock.assert_called_once_with(
         Path("/tmp/snapshot.jpg"), node=node_instance, method="RPI_CAMERA", link_duplicates=True
     )
@@ -51,7 +52,6 @@ def test_snapshot_command_success(
 @patch("apps.video.management.commands.snapshot._is_test_server_active", return_value=True)
 @patch("apps.video.management.commands.snapshot.has_rpi_camera_stack", return_value=False)
 @patch("apps.video.management.commands.snapshot.save_screenshot")
-@patch("apps.video.management.commands.snapshot.capture_rpi_snapshot")
 @patch("apps.video.management.commands.snapshot.VideoDevice")
 @patch("apps.video.management.commands.snapshot.NodeFeatureAssignment")
 @patch("apps.video.management.commands.snapshot.NodeFeature")
@@ -61,7 +61,6 @@ def test_snapshot_command_enables_feature_and_refreshes_devices(
     feature_model_mock,
     assignment_mock,
     video_device_mock,
-    capture_mock,
     save_mock,
     stack_mock,
     test_server_mock,
@@ -73,7 +72,10 @@ def test_snapshot_command_enables_feature_and_refreshes_devices(
     filter_mock = video_device_mock.objects.filter.return_value
     filter_mock.exists.side_effect = [False, True]
     video_device_mock.refresh_from_system.return_value = (1, 0)
-    capture_mock.return_value = Path("/tmp/snapshot2.jpg")
+    device_instance = SimpleNamespace(
+        capture_snapshot_path=Mock(return_value=Path("/tmp/snapshot2.jpg"))
+    )
+    video_device_mock.get_default_for_node.return_value = device_instance
     save_mock.return_value = SimpleNamespace(path="/tmp/snapshot2.jpg")
 
     result = call_command("snapshot")
@@ -82,7 +84,7 @@ def test_snapshot_command_enables_feature_and_refreshes_devices(
         node=node_instance, feature=feature_model_mock.objects.get.return_value
     )
     video_device_mock.refresh_from_system.assert_called_once_with(node=node_instance)
-    capture_mock.assert_called_once_with()
+    device_instance.capture_snapshot_path.assert_called_once_with()
     assert "Enabled the rpi-camera feature" in capsys.readouterr().out
     assert result == "/tmp/snapshot2.jpg"
 
@@ -114,11 +116,9 @@ def test_snapshot_command_errors_without_feature(
 @patch("apps.video.management.commands.snapshot.NodeFeature")
 @patch("apps.video.management.commands.snapshot.VideoDevice")
 @patch("apps.video.management.commands.snapshot.has_rpi_camera_stack", return_value=True)
-@patch("apps.video.management.commands.snapshot.capture_rpi_snapshot")
 @patch("apps.video.management.commands.snapshot.save_screenshot")
 def test_snapshot_command_errors_without_devices(
     save_mock,
-    capture_mock,
     stack_mock,
     video_device_mock,
     node_feature_mock,
@@ -134,7 +134,6 @@ def test_snapshot_command_errors_without_devices(
     with pytest.raises(CommandError):
         call_command("snapshot")
 
-    capture_mock.assert_not_called()
     save_mock.assert_not_called()
 
 

@@ -56,6 +56,12 @@ class VideoDevice(Ownable):
 
     owner_required = False
     DEFAULT_NAME = "BASE"
+    AUTO_ROTATE_CHOICES = (
+        (0, "0°"),
+        (90, "90°"),
+        (180, "180°"),
+        (270, "270°"),
+    )
 
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.CASCADE, related_name="video_devices"
@@ -68,6 +74,11 @@ class VideoDevice(Ownable):
     is_default = models.BooleanField(default=False)
     capture_width = models.PositiveIntegerField(null=True, blank=True)
     capture_height = models.PositiveIntegerField(null=True, blank=True)
+    auto_rotate = models.PositiveSmallIntegerField(
+        default=0,
+        choices=AUTO_ROTATE_CHOICES,
+        help_text=_("Rotate captured frames counterclockwise."),
+    )
 
     class Meta:
         ordering = ["identifier"]
@@ -153,6 +164,14 @@ class VideoDevice(Ownable):
         )
 
     @classmethod
+    def get_default_for_node(cls, node) -> "VideoDevice | None":
+        return (
+            cls.objects.filter(node=node).order_by("-is_default", "pk").first()
+            if node
+            else None
+        )
+
+    @classmethod
     def has_video_device(cls) -> bool:
         """Return ``True`` when a Raspberry Pi video device is available."""
 
@@ -161,8 +180,13 @@ class VideoDevice(Ownable):
     def get_latest_snapshot(self):
         return self.snapshots.select_related("sample").order_by("-captured_at", "-pk").first()
 
-    def capture_snapshot(self, *, link_duplicates: bool = False):
+    def capture_snapshot_path(self) -> Path:
         path = capture_rpi_snapshot(width=self.capture_width, height=self.capture_height)
+        self._apply_rotation(path)
+        return path
+
+    def capture_snapshot(self, *, link_duplicates: bool = False):
+        path = self.capture_snapshot_path()
         sample = save_screenshot(
             path,
             node=self.node,
@@ -187,6 +211,29 @@ class VideoDevice(Ownable):
             if updates:
                 snapshot.save(update_fields=list(updates.keys()))
         return snapshot
+
+    def _apply_rotation(self, path: Path) -> None:
+        angle = int(self.auto_rotate or 0)
+        if angle % 360 == 0:
+            return
+        transpose_map = {
+            90: Image.Transpose.ROTATE_90,
+            180: Image.Transpose.ROTATE_180,
+            270: Image.Transpose.ROTATE_270,
+        }
+        operation = transpose_map.get(angle)
+        if operation is None:
+            return
+        try:
+            with Image.open(path) as image:
+                fmt = image.format
+                rotated = image.transpose(operation)
+                if fmt:
+                    rotated.save(path, format=fmt)
+                else:
+                    rotated.save(path)
+        except Exception as exc:  # pragma: no cover - best-effort rotation
+            logger.warning("Unable to auto-rotate snapshot %s: %s", path, exc)
 
 
 class VideoStream(Entity):
@@ -382,6 +429,7 @@ class MjpegStream(VideoStream):
                 success, frame = capture.read()
                 if not success:
                     break
+                frame = self._rotate_frame(frame, cv2)
                 success, buffer = cv2.imencode(".jpg", frame)
                 if not success:
                     continue
@@ -402,12 +450,25 @@ class MjpegStream(VideoStream):
             success, frame = capture.read()
             if not success:
                 return None
+            frame = self._rotate_frame(frame, cv2)
             success, buffer = cv2.imencode(".jpg", frame)
             if not success:
                 return None
             return buffer.tobytes()
         finally:  # pragma: no cover - release resource
             capture.release()
+
+    def _rotate_frame(self, frame, cv2):
+        angle = int(self.video_device.auto_rotate or 0)
+        if angle % 360 == 0:
+            return frame
+        if angle == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        if angle == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        if angle == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        return frame
 
     def mjpeg_stream(
         self,

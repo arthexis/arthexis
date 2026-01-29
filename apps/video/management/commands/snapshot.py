@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.content.utils import save_screenshot
 from apps.video.models import VideoDevice
-from apps.video.utils import capture_rpi_snapshot, has_rpi_camera_stack
+from apps.video.utils import has_rpi_camera_stack
 
 
 class Command(BaseCommand):
@@ -56,8 +56,12 @@ class Command(BaseCommand):
         if not VideoDevice.objects.filter(node=node).exists():
             raise CommandError("No video devices were detected on this node.")
 
+        device = VideoDevice.get_default_for_node(node)
+        if not device:
+            raise CommandError("No video devices were detected on this node.")
+
         try:
-            path = capture_rpi_snapshot()
+            path = device.capture_snapshot_path()
         except Exception as exc:  # pragma: no cover - depends on camera stack
             raise CommandError(str(exc)) from exc
 
