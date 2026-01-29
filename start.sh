@@ -5,10 +5,13 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOCK_DIR="$BASE_DIR/.locks"
 mkdir -p "$LOCK_DIR"
 
+# shellcheck source=scripts/helpers/env.sh
+. "$BASE_DIR/scripts/helpers/env.sh"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/suite-uptime-lock.sh
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
+arthexis_load_env_file "$BASE_DIR"
 STARTUP_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "start" "invoked"
 

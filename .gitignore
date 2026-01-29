@@ -175,6 +175,8 @@ celerybeat.pid
 # Environments
 .env
 *.env
+.arthexis.env
+arthexis.env
 .env.*
 .envrc
 .venv
