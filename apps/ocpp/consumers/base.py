@@ -1976,10 +1976,10 @@ class CSMSConsumer(
             details.append(f"requestId={request_id}")
         if seq_no is not None:
             details.append(f"seqNo={seq_no}")
-        details.append(f"items={items}")
-        details.append(f"tbc={tbc}")
         if generated_at is not None:
             details.append(f"generatedAt={generated_at.isoformat()}")
+        details.append(f"tbc={tbc}")
+        details.append(f"items={items}")
         message = "NotifyMonitoringReport"
         if details:
             message += f": {', '.join(details)}"
