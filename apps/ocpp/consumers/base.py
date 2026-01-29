@@ -1962,6 +1962,29 @@ class CSMSConsumer(
                 message += f": {payload_text}"
         store.add_log(self.store_key, message, log_type="charger")
 
+    def _log_notify_monitoring_report(
+        self,
+        *,
+        request_id: int | None,
+        seq_no: int | None,
+        generated_at: datetime | None,
+        tbc: bool,
+        items: int,
+    ) -> None:
+        details: list[str] = []
+        if request_id is not None:
+            details.append(f"requestId={request_id}")
+        if seq_no is not None:
+            details.append(f"seqNo={seq_no}")
+        details.append(f"items={items}")
+        details.append(f"tbc={tbc}")
+        if generated_at is not None:
+            details.append(f"generatedAt={generated_at.isoformat()}")
+        message = "NotifyMonitoringReport"
+        if details:
+            message += f": {', '.join(details)}"
+        store.add_log(self.store_key, message, log_type="charger")
+
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
         self._log_ocpp201_notification("CostUpdated", payload)
@@ -2876,7 +2899,13 @@ class CSMSConsumer(
             )
         if request_id is not None and not tbc:
             store.pop_monitoring_report_request(request_id)
-        self._log_ocpp201_notification("NotifyMonitoringReport", payload)
+        self._log_notify_monitoring_report(
+            request_id=request_id,
+            seq_no=seq_no,
+            generated_at=generated_at,
+            tbc=tbc,
+            items=len(monitoring_data),
+        )
         return {}
 
     @protocol_call(
