@@ -344,7 +344,9 @@ def _handle_release_restart(
     restart_path: Path,
     log_dir: Path,
 ):
-    if not request.GET.get("restart"):
+    if request.method != "POST":
+        return None
+    if not request.POST.get("restart"):
         return None
 
     return _reset_release_progress(
@@ -426,21 +428,23 @@ def _update_publish_controls(
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
 
-    if request.GET.get("set_dry_run") is not None:
+    post_data = request.POST if request.method == "POST" else {}
+
+    if post_data.get("set_dry_run") is not None:
         if start_enabled:
-            ctx["dry_run"] = bool(request.GET.get("dry_run"))
+            ctx["dry_run"] = bool(post_data.get("dry_run"))
             request.session[session_key] = ctx
         return ctx, False, redirect(_clean_redirect_path(request.path))
 
-    if request.GET.get("start"):
+    if post_data.get("start"):
         if start_enabled:
-            ctx["dry_run"] = bool(request.GET.get("dry_run"))
+            ctx["dry_run"] = bool(post_data.get("dry_run"))
         ctx["started"] = True
         ctx["paused"] = False
 
-    resume_requested = bool(request.GET.get("resume"))
+    resume_requested = bool(post_data.get("resume"))
 
-    if request.GET.get("pause") and ctx.get("started"):
+    if post_data.get("pause") and ctx.get("started"):
         ctx["paused"] = True
 
     if resume_requested:
@@ -466,6 +470,8 @@ def _prepare_step_progress(
             restart_count = 0
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
+    if request.method == "POST" and request.POST.get("step") is not None:
+        step_param = request.POST.get("step")
     if resume_requested and step_param is None:
         step_param = str(step_count)
     return restart_count, step_param
@@ -551,7 +557,9 @@ def _broadcast_release_message(release: PackageRelease) -> None:
 
 
 def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
-    dirty_action = request.GET.get("dirty_action")
+    if request.method != "POST":
+        return ctx
+    dirty_action = request.POST.get("dirty_action")
     if dirty_action and ctx.get("dirty_files"):
         if dirty_action == "discard":
             _clean_repo()
@@ -565,7 +573,7 @@ def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
                 ctx.pop("dirty_log_message", None)
                 _append_log(log_path, "Discarded local changes before publish")
         elif dirty_action == "commit":
-            message = request.GET.get("dirty_message", "").strip()
+            message = request.POST.get("dirty_message", "").strip()
             if not message:
                 message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
             ctx["dirty_commit_message"] = message
@@ -647,29 +655,27 @@ def _handle_manual_git_push_action(
         return ctx
     if action == "confirm":
         validated, details, auth_failed = _validate_manual_git_push(pending_push)
-        if auth_failed:
+        if auth_failed or validated:
             ctx["paused"] = False
             ctx.pop("pending_git_push", None)
-            message = (
-                "Manual push verification skipped because remote read "
-                "requires authentication; continuing release."
-            )
-            _append_log(log_path, message)
-            if details:
-                _append_log(log_path, f"Remote verification error: {details}")
-        elif validated:
-            ctx["paused"] = False
-            ctx.pop("pending_git_push", None)
-            _append_log(log_path, "Manual push verified; continuing release")
-        else:
-            if details:
-                ctx["pending_git_push_error"] = _(
-                    "Manual push could not be verified: %(details)s"
-                ) % {"details": details}
-            else:
-                ctx["pending_git_push_error"] = _(
-                    "Manual push not detected on origin. Confirm the push completed and try again."
+            if auth_failed:
+                message = (
+                    "Manual push verification skipped because remote read "
+                    "requires authentication; continuing release."
                 )
+                _append_log(log_path, message)
+                if details:
+                    _append_log(log_path, f"Remote verification error: {details}")
+            else:
+                _append_log(log_path, "Manual push verified; continuing release")
+        elif details:
+            ctx["pending_git_push_error"] = _(
+                "Manual push could not be verified: %(details)s"
+            ) % {"details": details}
+        else:
+            ctx["pending_git_push_error"] = _(
+                "Manual push not detected on origin. Confirm the push completed and try again."
+            )
         return ctx
     return ctx
 
@@ -2117,7 +2123,7 @@ def release_progress(request, pk: int, action: str):
     done_flag = step_count >= total_steps and not error_flag
     start_enabled = (not started_flag or paused_flag) and not done_flag and not error_flag
 
-    start_requested = bool(request.GET.get("start")) and start_enabled
+    start_requested = bool(request.POST.get("start")) and start_enabled
     ctx, resume_requested, redirect_response = _update_publish_controls(
         request,
         ctx,

@@ -190,14 +190,16 @@
 <div class="release-progress-layout">
   <div class="progress-column">
     <div class="progress-actions">
-      <form method="get" class="dry-run-form">
+      <form method="post" class="dry-run-form">
+        {% csrf_token %}
         <input type="hidden" name="set_dry_run" value="1">
         <label class="dry-run-toggle">
           <input type="checkbox" name="dry_run" value="1" {% if dry_run %}checked{% endif %} {% if not dry_run_toggle_enabled %}disabled{% endif %} onchange="this.form.submit()">
           {% trans "Dry Run" %}
         </label>
       </form>
-      <form method="get">
+      <form method="post">
+        {% csrf_token %}
         <input type="hidden" name="step" value="{{ current_step }}">
         {% if dry_run %}
         <input type="hidden" name="dry_run" value="1">
@@ -210,11 +212,13 @@
           {% endif %}
         </button>
       </form>
-      <form method="get">
+      <form method="post">
+        {% csrf_token %}
         <button type="submit" name="pause" value="1" {% if not is_running %}disabled{% endif %}>⏸️ {% trans 'Pause Publish' %}</button>
       </form>
       {% if resume_available %}
-      <form method="get">
+      <form method="post">
+        {% csrf_token %}
         <input type="hidden" name="step" value="{{ current_step }}">
         {% if dry_run %}
         <input type="hidden" name="dry_run" value="1">
@@ -223,7 +227,8 @@
       </form>
       {% endif %}
       {% if started %}
-      <form method="get">
+      <form method="post">
+        {% csrf_token %}
         <button type="submit" name="restart" value="1">🔄 {% trans 'Restart Publish' %}</button>
       </form>
       {% endif %}
@@ -335,11 +340,13 @@
         </tbody>
       </table>
       <div class="dirty-actions">
-        <form method="get">
+        <form method="post">
+          {% csrf_token %}
           <input type="hidden" name="step" value="{{ current_step }}">
           <button type="submit" name="dirty_action" value="discard">🧹 {% trans 'Discard local changes' %}</button>
         </form>
-        <form method="get">
+        <form method="post">
+          {% csrf_token %}
           <input type="hidden" name="step" value="{{ current_step }}">
           <input type="text" name="dirty_message" value="{{ dirty_commit_message }}" aria-label="{% trans 'Commit message' %}">
           <button type="submit" name="dirty_action" value="commit">💾 {% trans 'Commit changes and continue' %}</button>
