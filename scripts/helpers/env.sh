@@ -23,43 +23,22 @@ arthexis_load_env_file() {
     local export_lines
     if export_lines="$(
       "$python_bin" - "$env_file" <<'PY'
+import re
 import shlex
 import sys
 
+from dotenv import dotenv_values
+
 path = sys.argv[1]
+valid_key = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-def parse_env(line):
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return None, None
-    if stripped.startswith("export "):
-        stripped = stripped[7:].lstrip()
-    if "=" not in stripped:
-        return None, None
-    key, value = stripped.split("=", 1)
-    key = key.strip()
-    if not key:
-        return None, None
-    value = value.strip()
-    if value and value[0] in ("'", '"'):
-        quote = value[0]
-        if value.endswith(quote):
-            value = value[1:-1]
-        else:
-            value = value[1:]
-        if quote == '"':
-            value = bytes(value, "utf-8").decode("unicode_escape")
-    else:
-        if "#" in value:
-            value = value.split("#", 1)[0].rstrip()
-    return key, value
-
-with open(path, "r", encoding="utf-8") as handle:
-    for raw in handle:
-        key, value = parse_env(raw)
-        if key is None or value is None:
-            continue
-        print(f"export {shlex.quote(key)}={shlex.quote(value)}")
+for key, value in dotenv_values(path).items():
+    if key is None or value is None:
+        continue
+    if not valid_key.match(key):
+        continue
+    value = value.replace("\\$", "$").replace("\\`", "`").replace("\\!", "!")
+    print(f"export {shlex.quote(key)}={shlex.quote(value)}")
 PY
     )"; then
       if [ -n "$export_lines" ]; then
