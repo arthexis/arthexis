@@ -181,19 +181,29 @@ def _sync_release_with_revision(
                 version_path.write_text(normalized_version + "\n", encoding="utf-8")
                 current_version = normalized_version
         if current_version and current_version != release.version:
-            conflicting_release = (
-                PackageRelease.objects.filter(
-                    package=release.package, version=current_version
+            if release.version:
+                try:
+                    if Version(release.version) > Version(current_version):
+                        version_path.write_text(
+                            release.version + "\n", encoding="utf-8"
+                        )
+                        current_version = release.version
+                except InvalidVersion:
+                    pass
+            if current_version != release.version:
+                conflicting_release = (
+                    PackageRelease.objects.filter(
+                        package=release.package, version=current_version
+                    )
+                    .exclude(pk=release.pk)
+                    .first()
                 )
-                .exclude(pk=release.pk)
-                .first()
-            )
-            if conflicting_release:
-                return updated, previous_version, conflicting_release
-            release.version = current_version
-            release.revision = revision.get_revision()
-            release.save(update_fields=["version", "revision"])
-            updated = True
+                if conflicting_release:
+                    return updated, previous_version, conflicting_release
+                release.version = current_version
+                release.revision = revision.get_revision()
+                release.save(update_fields=["version", "revision"])
+                updated = True
     return updated, previous_version, conflicting_release
 
 
