@@ -1,21 +1,22 @@
 [
   {
+    "model": "release.packagerelease",
     "fields": {
-      "github_url": "",
-      "is_deleted": false,
       "is_seed_data": true,
       "is_user_data": false,
+      "is_deleted": false,
       "package": [
         "arthexis"
       ],
-      "pypi_url": "https://pypi.org/project/arthexis/0.1.32/",
-      "release_on": "2025-11-12T03:42:46.447Z",
-      "revision": "d685a356f0d253e068548fa3deb9c448f240ee1d",
-      "scheduled_date": null,
-      "scheduled_time": null,
+      "version": "0.1.32",
+      "revision": "d8dbde4a65000a34dfbd04142b691c2831d37b3b",
       "severity": "normal",
-      "version": "0.1.32"
-    },
-    "model": "core.packagerelease"
+      "pypi_url": "https://pypi.org/project/arthexis/0.1.32/",
+      "github_url": "",
+      "pypi_publish_log": "",
+      "release_on": "2025-11-12T03:42:41.870Z",
+      "scheduled_date": null,
+      "scheduled_time": null
+    }
   }
 ]

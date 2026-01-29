@@ -8,13 +8,13 @@
       "package": [
         "arthexis"
       ],
-      "version": "0.1.4",
+      "version": "0.1.34",
       "revision": "d8dbde4a65000a34dfbd04142b691c2831d37b3b",
       "severity": "normal",
-      "pypi_url": "https://pypi.org/project/arthexis/0.1.4/",
+      "pypi_url": "https://pypi.org/project/arthexis/0.1.34/",
       "github_url": "",
       "pypi_publish_log": "",
-      "release_on": "2025-09-02T04:58:29.859Z",
+      "release_on": "2025-11-26T03:47:43.980Z",
       "scheduled_date": null,
       "scheduled_time": null
     }
