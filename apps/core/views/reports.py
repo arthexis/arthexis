@@ -189,7 +189,13 @@ def _sync_release_with_revision(
                         )
                         current_version = release.version
                 except InvalidVersion:
-                    pass
+                    logger.debug(
+                        "Invalid version format prevented comparison: "
+                        "release.version=%r, current_version=%r",
+                        release.version,
+                        current_version,
+                        exc_info=True,
+                    )
             if current_version != release.version:
                 conflicting_release = (
                     PackageRelease.objects.filter(
