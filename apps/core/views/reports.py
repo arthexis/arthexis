@@ -590,6 +590,63 @@ def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
     return ctx
 
 
+def _manual_git_push_command(pending_push: dict) -> str:
+    branch = pending_push.get("branch")
+    if branch:
+        return f"git push origin {branch}"
+    return "git push origin HEAD"
+
+
+def _validate_manual_git_push(pending_push: dict) -> bool:
+    head = (pending_push.get("head") or "").strip() or _current_git_revision()
+    if not head:
+        return False
+    branch = pending_push.get("branch")
+    if branch:
+        remote_commit = _git_remote_branch_commit("origin", branch)
+        return remote_commit == head
+    return _remote_contains_commit("origin", head)
+
+
+def _handle_manual_git_push_action(
+    request,
+    ctx: dict,
+    log_path: Path,
+) -> dict:
+    pending_push = ctx.get("pending_git_push")
+    if not pending_push:
+        ctx.pop("pending_git_push_error", None)
+        return ctx
+    action = request.GET.get("manual_push_action")
+    if not action:
+        return ctx
+    ctx.pop("pending_git_push_error", None)
+    if action == "retry":
+        try:
+            _push_release_changes(
+                log_path,
+                ctx,
+                step_name=pending_push.get("step", "Release push"),
+            )
+        except PublishPending:
+            pass
+        else:
+            ctx["paused"] = False
+            _append_log(log_path, "Retry push completed")
+        return ctx
+    if action == "confirm":
+        if _validate_manual_git_push(pending_push):
+            ctx["paused"] = False
+            ctx.pop("pending_git_push", None)
+            _append_log(log_path, "Manual push verified; continuing release")
+        else:
+            ctx["pending_git_push_error"] = _(
+                "Manual push not detected on origin. Confirm the push completed and try again."
+            )
+        return ctx
+    return ctx
+
+
 def _run_release_step(
     request,
     steps,
@@ -1097,16 +1154,23 @@ def _truncate_publish_log(
 
 def _record_release_fixture_updates(
     log_path: Path,
+    ctx: dict,
     *,
     commit_message: str,
     staged_message: str,
     committed_message: str,
     skipped_message: str,
+    step_name: str,
 ) -> None:
     fixture_paths = [
         str(path) for path in Path("apps/core/fixtures").glob("releases__*.json")
     ]
     if not fixture_paths:
+        return
+    pending_push = ctx.get("pending_git_push")
+    if pending_push and pending_push.get("step") == step_name:
+        _append_log(log_path, "Retrying push of release changes to origin")
+        _push_release_changes(log_path, ctx, step_name=step_name)
         return
     status = subprocess.run(
         ["git", "status", "--porcelain", "--", *fixture_paths],
@@ -1119,7 +1183,7 @@ def _record_release_fixture_updates(
         _append_log(log_path, staged_message)
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
         _append_log(log_path, committed_message)
-        _push_release_changes(log_path)
+        _push_release_changes(log_path, ctx, step_name=step_name)
     else:
         _append_log(log_path, skipped_message)
 
@@ -1137,7 +1201,79 @@ def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
     return any(marker in message for marker in auth_markers)
 
 
-def _push_release_changes(log_path: Path) -> bool:
+def _git_remote_branch_commit(remote: str, branch: str) -> str | None:
+    proc = subprocess.run(
+        ["git", "ls-remote", "--heads", remote, branch],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    for line in (proc.stdout or "").splitlines():
+        parts = line.strip().split()
+        if len(parts) != 2:
+            continue
+        sha, ref = parts
+        if ref.endswith(f"/{branch}"):
+            return sha
+    return None
+
+
+def _remote_contains_commit(remote: str, commit: str) -> bool:
+    try:
+        subprocess.run(
+            ["git", "fetch", remote],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return False
+    proc = subprocess.run(
+        ["git", "branch", "-r", "--contains", commit],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return False
+    return any(
+        line.strip().startswith(f"{remote}/")
+        for line in (proc.stdout or "").splitlines()
+    )
+
+
+def _register_manual_git_push(
+    ctx: dict,
+    log_path: Path,
+    *,
+    step_name: str,
+    branch: str | None,
+    head: str,
+    details: str | None,
+) -> None:
+    ctx["pending_git_push"] = {
+        "step": step_name,
+        "remote": "origin",
+        "branch": branch,
+        "head": head,
+    }
+    ctx["paused"] = True
+    ctx.pop("pending_git_push_error", None)
+    command = "git push origin HEAD"
+    if branch:
+        command = f"git push origin {branch}"
+    instructions = [
+        "Authentication is required to push release changes to origin.",
+        f"Run `{command}` from the repository root, then confirm the manual step.",
+    ]
+    if details:
+        instructions.append(f"Git reported: {details}")
+    _append_log(log_path, "\n".join(instructions))
+
+
+def _push_release_changes(log_path: Path, ctx: dict, *, step_name: str) -> bool:
     """Push release commits to ``origin`` and log the outcome."""
 
     if not _has_remote("origin"):
@@ -1146,8 +1282,8 @@ def _push_release_changes(log_path: Path) -> bool:
         )
         return False
 
+    branch = _current_branch()
     try:
-        branch = _current_branch()
         if branch is None:
             push_cmd = ["git", "push", "origin", "HEAD"]
         elif _has_upstream(branch):
@@ -1158,19 +1294,26 @@ def _push_release_changes(log_path: Path) -> bool:
     except subprocess.CalledProcessError as exc:
         details = _format_subprocess_error(exc)
         if _git_authentication_missing(exc):
-            _append_log(
+            head = _current_git_revision()
+            _register_manual_git_push(
+                ctx,
                 log_path,
-                "Authentication is required to push release changes to origin; skipping push",
+                step_name=step_name,
+                branch=branch,
+                head=head,
+                details=details or None,
             )
-            if details:
-                _append_log(log_path, details)
-            return False
+            raise PublishPending()
         _append_log(
             log_path, f"Failed to push release changes to origin: {details}"
         )
         raise Exception("Failed to push release changes") from exc
 
     _append_log(log_path, "Pushed release changes to origin")
+    pending_push = ctx.get("pending_git_push")
+    if pending_push and pending_push.get("step") == step_name:
+        ctx.pop("pending_git_push", None)
+        ctx.pop("pending_git_push_error", None)
     return True
 
 
@@ -1488,6 +1631,15 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping build promotion")
         return
+    if ctx.get("build_promoted"):
+        _append_log(log_path, "Retrying push of release changes to origin")
+        _push_release_changes(
+            log_path, ctx, step_name="Build release artifacts"
+        )
+        ctx.pop("build_promoted", None)
+        PackageRelease.dump_fixture()
+        _append_log(log_path, "Updated release fixtures")
+        return
     try:
         _ensure_origin_main_unchanged(log_path)
         status_result = subprocess.run(
@@ -1536,9 +1688,15 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
                 log_path,
                 f"Committed release metadata for v{release.version}",
             )
-        _push_release_changes(log_path)
+        ctx["build_promoted"] = True
+        _push_release_changes(
+            log_path, ctx, step_name="Build release artifacts"
+        )
+        ctx.pop("build_promoted", None)
         PackageRelease.dump_fixture()
         _append_log(log_path, "Updated release fixtures")
+    except PublishPending:
+        raise
     except Exception:
         _clean_repo()
         raise
@@ -1712,12 +1870,14 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         _append_log(log_path, f"Recorded GitHub URL: {release.github_url}")
     _record_release_fixture_updates(
         log_path,
+        ctx,
         commit_message=f"chore: record publish metadata for v{release.version}",
         staged_message="Staged publish metadata updates",
         committed_message=f"Committed publish metadata for v{release.version}",
         skipped_message=(
             "No release metadata updates detected after publish; skipping commit"
         ),
+        step_name="Record publish metadata",
     )
     _append_log(log_path, "Publish metadata recorded")
 
@@ -1813,10 +1973,12 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Recorded PyPI publish logs")
         _record_release_fixture_updates(
             log_path,
+            ctx,
             commit_message=f"chore: record publish logs for v{release.version}",
             staged_message="Staged publish log updates",
             committed_message=f"Committed publish log updates for v{release.version}",
             skipped_message="Publish logs already recorded; skipping commit",
+            step_name="Capture PyPI publish logs",
         )
     else:
         _append_log(log_path, "Publish logs already recorded")
@@ -1948,6 +2110,7 @@ def release_progress(request, pk: int, action: str):
     )
 
     ctx = _handle_dirty_repository_action(request, ctx, log_path)
+    ctx = _handle_manual_git_push_action(request, ctx, log_path)
 
     fixtures_step_index = next(
         (
@@ -2042,6 +2205,10 @@ def release_progress(request, pk: int, action: str):
     oidc_enabled = release.uses_oidc_publishing()
     pypi_credentials_missing = not oidc_enabled and release.to_credentials() is None
     github_credentials_missing = release.get_github_token() is None
+    manual_git_push = ctx.get("pending_git_push")
+    manual_git_push_command = ""
+    if manual_git_push:
+        manual_git_push_command = _manual_git_push_command(manual_git_push)
 
     fixtures_summary = ctx.get("fixtures")
     if (
@@ -2084,6 +2251,9 @@ def release_progress(request, pk: int, action: str):
         "dry_run": dry_run_active,
         "dry_run_toggle_enabled": dry_run_toggle_enabled,
         "warnings": ctx.get("warnings", []),
+        "manual_git_push": manual_git_push,
+        "manual_git_push_command": manual_git_push_command,
+        "manual_git_push_error": ctx.get("pending_git_push_error"),
     }
     request.session[session_key] = ctx
     if done or ctx.get("error"):

@@ -228,6 +228,34 @@
       </form>
       {% endif %}
     </div>
+    {% if manual_git_push %}
+    <p class="status-message paused">
+      {% blocktrans with step=manual_git_push.step %}Manual git push required to continue "{{ step }}".{% endblocktrans %}
+    </p>
+    <p>
+      {% trans 'Run' %} <code>{{ manual_git_push_command }}</code>
+      {% trans 'then confirm or retry the push below.' %}
+    </p>
+    {% if manual_git_push_error %}
+    <p class="error">{{ manual_git_push_error }}</p>
+    {% endif %}
+    <div class="progress-actions">
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        {% if dry_run %}
+        <input type="hidden" name="dry_run" value="1">
+        {% endif %}
+        <button type="submit" name="manual_push_action" value="retry">🔁 {% trans 'Retry push' %}</button>
+      </form>
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        {% if dry_run %}
+        <input type="hidden" name="dry_run" value="1">
+        {% endif %}
+        <button type="submit" name="manual_push_action" value="confirm">✅ {% trans 'Manual push completed' %}</button>
+      </form>
+    </div>
+    {% endif %}
     <ol class="progress-steps">
     {% for step in step_states %}
       <li class="status-{{ step.status }}">
