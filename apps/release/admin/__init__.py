@@ -15,7 +15,6 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EntityModelAdmin, SaveBeforeChangeAction
-from apps.release import release as release_utils
 from apps.release.admin.package_actions import (
     PackageAdminActionsMixin,
     prepare_package_release,
@@ -48,8 +47,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "published_status",
     )
     list_display_links = ("version",)
-    actions = ["publish_release", "validate_releases", "test_pypi_connection"]
-    change_actions = ["publish_action", "test_pypi_connection_action"]
+    actions = ["publish_release", "validate_releases"]
+    change_actions = ["publish_action"]
     changelist_actions = ["refresh_from_pypi", "prepare_next"]
     readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
     search_fields = ("version", "package__name")
@@ -232,7 +231,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return
         return redirect(reverse("release-progress", args=[release.pk, "publish"]))
 
-    @admin.action(description="Publish selected release(s)")
+    @admin.action(description="Publish release")
     def publish_release(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(
@@ -244,46 +243,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     def publish_action(self, request, obj):
         return self._publish_release(request, obj)
 
-    publish_action.label = "Publish selected Release"
+    publish_action.label = "Publish Release"
     publish_action.short_description = "Publish this release"
-
-    def _emit_pypi_check_messages(
-        self, request, release, result: release_utils.PyPICheckResult
-    ) -> None:
-        level_map = {
-            "success": messages.SUCCESS,
-            "warning": messages.WARNING,
-            "error": messages.ERROR,
-        }
-        prefix = f"{release}: "
-        for level, message in result.messages:
-            self.message_user(request, prefix + message, level_map.get(level, messages.INFO))
-        if result.ok:
-            self.message_user(
-                request,
-                f"{release}: PyPI connectivity check passed",
-                messages.SUCCESS,
-            )
-
-    @admin.action(description="Test PyPI connectivity")
-    def test_pypi_connection(self, request, queryset):
-        if not queryset:
-            self.message_user(
-                request,
-                "Select at least one release to test",
-                messages.ERROR,
-            )
-            return
-        for release in queryset:
-            result = release_utils.check_pypi_readiness(release=release)
-            self._emit_pypi_check_messages(request, release, result)
-
-    def test_pypi_connection_action(self, request, obj):
-        result = release_utils.check_pypi_readiness(release=obj)
-        self._emit_pypi_check_messages(request, obj, result)
-
-    test_pypi_connection_action.label = "Test PyPI connectivity"
-    test_pypi_connection_action.short_description = "Test PyPI connectivity"
 
     @admin.action(description="Validate selected Releases")
     def validate_releases(self, request, queryset):
