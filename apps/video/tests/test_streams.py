@@ -245,6 +245,7 @@ def test_mjpeg_debug_renders_for_staff(client, django_user_model, video_device):
     content = response.content.decode()
     assert reverse("video:mjpeg-admin-stream", args=[stream.slug]) in content
     assert reverse("video:mjpeg-debug-status", args=[stream.slug]) in content
+    assert reverse("video:mjpeg-admin-probe", args=[stream.slug]) in content
 
 
 @pytest.mark.django_db
@@ -269,6 +270,26 @@ def test_mjpeg_admin_stream_allows_inactive_for_staff(
     assert response["Content-Type"].startswith("multipart/x-mixed-replace")
     list(itertools.islice(response.streaming_content, 1))
     response.close()
+
+
+@pytest.mark.django_db
+def test_mjpeg_admin_probe_allows_inactive_for_staff(
+    client, django_user_model, video_device, monkeypatch
+):
+    stream = MjpegStream.objects.create(
+        name="Inactive", slug="inactive", video_device=video_device, is_active=False
+    )
+    user = django_user_model.objects.create_user("staff", password="pass", is_staff=True)
+    client.force_login(user)
+
+    def fake_capture(self):
+        return b"fresh-frame"
+
+    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", fake_capture)
+
+    response = client.get(reverse("video:mjpeg-admin-probe", args=[stream.slug]))
+
+    assert response.status_code == 204
 
 
 @pytest.mark.django_db

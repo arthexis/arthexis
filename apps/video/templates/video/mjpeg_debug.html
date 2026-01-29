@@ -136,8 +136,13 @@
     appendLog("INFO", "Debug session started");
     updateStatus();
     sendProbe();
-    window.setInterval(updateStatus, 10000);
-    window.setInterval(sendProbe, 15000);
+    const statusInterval = window.setInterval(updateStatus, 10000);
+    const probeInterval = window.setInterval(sendProbe, 15000);
+
+    window.addEventListener("beforeunload", () => {
+      clearInterval(statusInterval);
+      clearInterval(probeInterval);
+    });
   })();
 </script>
 {% endblock %}
