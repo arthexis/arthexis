@@ -68,29 +68,13 @@ def mjpeg_admin_stream(request, slug):
 
 def mjpeg_probe(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
-    try:
-        frame_bytes = stream.capture_frame_bytes()
-    except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
-        if isinstance(exc, MjpegDependencyError) or _is_missing_mjpeg_dependency(exc):
-            logger.warning("MJPEG dependencies unavailable for probe %s", slug)
-            return HttpResponse(status=204)
-        if isinstance(exc, MjpegDeviceUnavailableError):
-            logger.info("MJPEG device unavailable for probe %s", slug)
-            return HttpResponse(status=204)
-        logger.exception("Runtime error while capturing MJPEG frame for %s", slug)
-        return HttpResponse("Unable to capture frame.", status=503)
-    except Exception:
-        logger.exception("Unexpected error while capturing MJPEG frame for %s", slug)
-        return HttpResponse("Unable to capture frame.", status=503)
+    return _build_mjpeg_probe_response(stream)
 
-    if frame_bytes:
-        try:
-            stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
-        except Exception:
-            logger.exception("Unable to store MJPEG frame for %s", slug)
-            return HttpResponse("Unable to store frame.", status=503)
 
-    return HttpResponse(status=204)
+@staff_member_required
+def mjpeg_admin_probe(request, slug):
+    stream = get_object_or_404(MjpegStream, slug=slug)
+    return _build_mjpeg_probe_response(stream)
 
 
 @staff_member_required
@@ -101,7 +85,7 @@ def mjpeg_debug(request, slug):
         "stream_url": stream.get_stream_url(),
         "debug_stream_url": reverse("video:mjpeg-admin-stream", args=[stream.slug]),
         "status_url": reverse("video:mjpeg-debug-status", args=[stream.slug]),
-        "probe_url": reverse("video:mjpeg-probe", args=[stream.slug]),
+        "probe_url": reverse("video:mjpeg-admin-probe", args=[stream.slug]),
     }
     return render(request, "video/mjpeg_debug.html", context)
 
@@ -133,6 +117,32 @@ def _format_timestamp(value):
     if not value:
         return None
     return timezone.localtime(value).isoformat()
+
+
+def _build_mjpeg_probe_response(stream: MjpegStream):
+    try:
+        frame_bytes = stream.capture_frame_bytes()
+    except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
+        if isinstance(exc, MjpegDependencyError) or _is_missing_mjpeg_dependency(exc):
+            logger.warning("MJPEG dependencies unavailable for probe %s", stream.slug)
+            return HttpResponse(status=204)
+        if isinstance(exc, MjpegDeviceUnavailableError):
+            logger.info("MJPEG device unavailable for probe %s", stream.slug)
+            return HttpResponse(status=204)
+        logger.exception("Runtime error while capturing MJPEG frame for %s", stream.slug)
+        return HttpResponse("Unable to capture frame.", status=503)
+    except Exception:
+        logger.exception("Unexpected error while capturing MJPEG frame for %s", stream.slug)
+        return HttpResponse("Unable to capture frame.", status=503)
+
+    if frame_bytes:
+        try:
+            stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
+        except Exception:
+            logger.exception("Unable to store MJPEG frame for %s", stream.slug)
+            return HttpResponse("Unable to store frame.", status=503)
+
+    return HttpResponse(status=204)
 
 
 def camera_gallery(request):
