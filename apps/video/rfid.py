@@ -9,7 +9,8 @@ from typing import Any
 from django.db import close_old_connections
 from django.utils import timezone
 
-from apps.nodes.models import NodeFeature
+from apps.nodes.models import Node, NodeFeature
+from .models import VideoDevice
 from .utils import capture_rpi_snapshot
 from apps.content.utils import save_screenshot
 
@@ -50,7 +51,11 @@ def _capture_snapshot_worker(metadata: dict[str, Any]) -> None:
 
     close_old_connections()
     try:
-        path = capture_rpi_snapshot()
+        device = VideoDevice.get_default_for_node(Node.get_local())
+        if device:
+            path = device.capture_snapshot_path()
+        else:
+            path = capture_rpi_snapshot()
     except Exception as exc:  # pragma: no cover - depends on camera stack
         logger.warning("RFID snapshot capture failed: %s", exc)
         close_old_connections()
@@ -111,7 +116,11 @@ def scan_camera_qr(*, endianness: str | None = None) -> dict[str, Any]:
 
     snapshot: Path | None = None
     try:
-        snapshot = capture_rpi_snapshot()
+        device = VideoDevice.get_default_for_node(Node.get_local())
+        if device:
+            snapshot = device.capture_snapshot_path()
+        else:
+            snapshot = capture_rpi_snapshot()
     except Exception as exc:  # pragma: no cover - depends on camera stack
         logger.warning("Camera scan failed: %s", exc)
         return {"error": str(exc)}

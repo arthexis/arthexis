@@ -162,6 +162,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                     "resolution_choice",
                     "capture_width",
                     "capture_height",
+                    "auto_rotate",
                 )
             },
         ),
