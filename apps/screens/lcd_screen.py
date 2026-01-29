@@ -304,7 +304,17 @@ class LCDHealthMonitor:
 
     def record_failure(self) -> float:
         self.failure_count += 1
-        return min(self.base_delay * (2 ** (self.failure_count - 1)), self.max_delay)
+        if self.max_delay <= 0:
+            return 0.0
+        if self.base_delay <= 0:
+            return self.max_delay
+        max_multiplier = self.max_delay / self.base_delay
+        if max_multiplier <= 1:
+            return self.max_delay
+        exponent = self.failure_count - 1
+        if exponent >= math.log2(max_multiplier):
+            return self.max_delay
+        return self.base_delay * (2 ** exponent)
 
     def record_success(self) -> None:
         self.failure_count = 0
