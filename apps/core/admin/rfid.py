@@ -57,9 +57,6 @@ def _feature_enabled(slug: str) -> bool:
 
     try:
         feature = NodeFeature.objects.filter(slug=slug).first()
-    except (OperationalError, ProgrammingError):
-        feature = None
-    try:
         return bool(feature and feature.is_enabled)
     except (OperationalError, ProgrammingError):
         return False
