@@ -999,8 +999,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "deep_read_url": reverse("rfid-scan-deep"),
             }
         )
-        context["title"] = _("Scanner")
-        context["opts"] = self.model._meta
         context["show_release_info"] = True
         context["default_endianness"] = RFID.BIG_ENDIAN
         return render(request, "admin/cards/rfid/scan.html", context)
