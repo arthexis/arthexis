@@ -1,9 +1,11 @@
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 
+from .frame_cache import get_frame, mjpeg_frame_stream
 from .models import MjpegDependencyError, MjpegDeviceUnavailableError, MjpegStream
 
 import logging
@@ -25,6 +27,17 @@ def stream_detail(request, slug):
 
 
 def _build_mjpeg_stream_response(stream: MjpegStream):
+    if settings.VIDEO_FRAME_REDIS_URL:
+        cached = get_frame(stream)
+        if not cached:
+            logger.info("No cached frames available for MJPEG stream %s", stream.slug)
+            return HttpResponse(status=204)
+        generator = mjpeg_frame_stream(stream, first_frame=cached)
+        return StreamingHttpResponse(
+            generator,
+            content_type="multipart/x-mixed-replace; boundary=frame",
+        )
+
     try:
         frame_iter = stream.iter_frame_bytes()
         first_frame = next(frame_iter)
@@ -120,6 +133,18 @@ def _format_timestamp(value):
 
 
 def _build_mjpeg_probe_response(stream: MjpegStream):
+    if settings.VIDEO_FRAME_REDIS_URL:
+        cached = get_frame(stream)
+        if not cached:
+            logger.info("No cached frames available for probe %s", stream.slug)
+            return HttpResponse(status=204)
+        try:
+            stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
+        except Exception:
+            logger.exception("Unable to store cached MJPEG frame for %s", stream.slug)
+            return HttpResponse("Unable to store frame.", status=503)
+        return HttpResponse(status=204)
+
     try:
         frame_bytes = stream.capture_frame_bytes()
     except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
