@@ -169,16 +169,15 @@ if now - initial_mtime <= recent_window:
     sys.exit(0)
 
 deadline = now + listen_seconds
-while time.time() < deadline:
-    time.sleep(1)
-    try:
-        current_mtime = os.path.getmtime(lock_path)
-    except FileNotFoundError:
-        print("inactive")
-        sys.exit(0)
-    if current_mtime != initial_mtime:
-        print("active")
-        sys.exit(0)
+        while time.time() < deadline:
+            time.sleep(1)
+            try:
+                if os.path.getmtime(lock_path) != initial_mtime:
+                    print("active")
+                    sys.exit(0)
+            except FileNotFoundError:
+                print("inactive")
+                sys.exit(0)
 
 print("inactive")
 PY
