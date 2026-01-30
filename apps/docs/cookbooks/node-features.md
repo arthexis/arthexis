@@ -38,7 +38,7 @@ Use the search field to find features by slug or display string. The queryset pr
 | GUI Toast | `gui-toast` | Terminal, Control | Auto-managed feature that surfaces GUI toast notifications when supported. |
 | LCD Screen | `lcd-screen` | Control | Auto-managed flag for nodes driving an attached LCD panel. |
 | NGINX Server | `nginx-server` | Satellite, Control, Watchtower | Auto-managed flag for nodes running the bundled NGINX front end. |
-| RFID Scanner | `rfid-scanner` | Control, Satellite | Auto-managed feature with a **Scan RFIDs** admin action. |
+| RFID Scanner | `rfid-scanner` | Control, Satellite | Auto-managed feature with a **Scanner** admin action. |
 | Raspberry Pi Camera | `rpi-camera` | Control, Satellite | Auto-managed feature with built-in eligibility checks, **Take a Snapshot**/**View stream** default actions, and RFID/QR snapshot and scan integrations. |
 | Screenshot Poll | `screenshot-poll` | (manual enablement) | Manual feature providing a **Take Screenshot** admin action. |
 

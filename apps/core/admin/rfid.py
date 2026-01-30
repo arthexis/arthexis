@@ -278,7 +278,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     def scan_rfids(self, request, queryset):
         return redirect("admin:cards_rfid_scan")
 
-    scan_rfids.short_description = "Scan RFIDs"
+    scan_rfids.short_description = "Scanner"
 
     @staticmethod
     def _build_unique_account_name(base: str) -> str:
@@ -990,7 +990,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "admin_change_url_template": reverse(
                     "admin:cards_rfid_change", args=[0]
                 ),
-                "title": _("Scan RFIDs"),
+                "title": _("Scanner"),
                 "opts": self.model._meta,
                 "table_mode": table_mode,
                 "toggle_url": toggle_url,
@@ -999,7 +999,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "deep_read_url": reverse("rfid-scan-deep"),
             }
         )
-        context["title"] = _("Scan RFIDs")
+        context["title"] = _("Scanner")
         context["opts"] = self.model._meta
         context["show_release_info"] = True
         context["default_endianness"] = RFID.BIG_ENDIAN
