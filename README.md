@@ -1,7 +1,7 @@
 # Constellation
 
 [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE) ![Watchtowers](https://raw.githubusercontent.com/arthexis/arthexis/main/media/watchtowers.svg)
+[![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE) ![Watchtowers](https://raw.githubusercontent.com/arthexis/arthexis/main/media/watchtowers.svg)
 
 
 ## Purpose
@@ -103,18 +103,18 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
    - Press the green start button. Stop the server with the red square button (`Shift+F5`).
 
 - **Shell**
-   - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
-   - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
+   - Linux: run [`./start.sh`](https://github.com/arthexis/arthexis/blob/main/start.sh) and stop with [`./stop.sh`](https://github.com/arthexis/arthexis/blob/main/stop.sh).
+   - Windows: run [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
 - **Linux:**
   - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback) and control Celery with `--celery` or `--no-celery`. Use `./install.sh --help` to see every available option.
-  - Use [`./upgrade.sh`](upgrade.sh) with `--stable` (weekly) or `--latest`/`-l`/`--unstable` (daily) to follow the preferred release cadence.
-   - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
-   - Review the [Auto-Upgrade Flow](docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
+  - Use [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh) with `--stable` (weekly) or `--latest`/`-l`/`--unstable` (daily) to follow the preferred release cadence.
+   - Consult the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
+   - Review the [Auto-Upgrade Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
 
 - **Windows:**
-   - Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
+   - Run [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) to install (Terminal role) and [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat) to upgrade.
    - Installation is not required to start in Terminal mode (the default).
 
 Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgrade.sh`):
@@ -128,15 +128,15 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 ### 4. Administration
 - Access the Django admin at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
 - Browse the admindocs at `localhost:8888/admindocs/` for API documentation that is generated from your models.
-- Follow the [Install & Administration Guide](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
-- Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
-- Configure payment gateways with the [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
-- Reference the [Sigils Cookbook](apps/docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
-- Understand seed fixtures and per-user files with [Managing Local Node Data](apps/docs/cookbooks/managing-local-node-data.md).
-- Manage exports, imports, and audit trails with the [User Data Cookbook](apps/docs/cookbooks/user-data.md).
-- Plan feature rollout strategies using the [Node Features Cookbook](apps/docs/cookbooks/node-features.md).
-- Curate shortcuts for power users through the [Favorites Cookbook](apps/docs/cookbooks/favorites.md).
-- Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](apps/docs/cookbooks/slack-bot-onboarding.md).
+- Follow the [Install & Administration Guide](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
+- Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md).
+- Configure payment gateways with the [Payment Processors Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
+- Reference the [Sigils Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
+- Understand seed fixtures and per-user files with [Managing Local Node Data](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/managing-local-node-data.md).
+- Manage exports, imports, and audit trails with the [User Data Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
+- Plan feature rollout strategies using the [Node Features Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
+- Curate shortcuts for power users through the [Favorites Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
+- Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 
