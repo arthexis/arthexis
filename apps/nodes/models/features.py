@@ -87,20 +87,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:nodes_nodefeature_take_screenshot",
             ),
         ),
-        "rpi-camera": (
-            NodeFeatureDefaultAction(
-                label="Find Video Devices",
-                url_name="admin:video_videodevice_find_devices",
-            ),
-            NodeFeatureDefaultAction(
-                label="Take Snapshot",
-                url_name="admin:video_videodevice_take_snapshot",
-            ),
-            NodeFeatureDefaultAction(
-                label="Test Camera",
-                url_name="admin:video_videodevice_test_camera",
-            ),
-        ),
+        "rpi-camera": (),
     }
 
     class Meta:
