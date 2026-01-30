@@ -4,27 +4,33 @@
 
 .export-menu__trigger {
   align-items: center;
+  background: transparent;
+  border: 0;
   display: inline-flex;
+  font: inherit;
   gap: 0.35rem;
+  cursor: pointer;
+  padding: 0;
 }
 
 .export-menu__arrow {
-  border-left: 1px solid currentColor;
-  padding-left: 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .export-menu__options {
-  background: #ffffff;
-  border: 1px solid #ccc;
+  background: var(--body-bg, #ffffff);
+  border: 1px solid var(--hairline-color, #ccc);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   display: none;
   list-style: none;
-  margin: 0.25rem 0 0;
+  margin: 0.35rem 0 0;
   min-width: 160px;
   padding: 0.25rem 0;
   position: absolute;
-  right: 0;
+  left: 0;
+  top: 100%;
   z-index: 2;
 }
 
@@ -35,10 +41,9 @@
 }
 
 .export-menu__options a:hover {
-  background: #f2f2f2;
+  background: var(--darkened-bg, #f2f2f2);
 }
 
-.export-menu:hover .export-menu__options,
-.export-menu:focus-within .export-menu__options {
+.export-menu.is-open .export-menu__options {
   display: block;
 }

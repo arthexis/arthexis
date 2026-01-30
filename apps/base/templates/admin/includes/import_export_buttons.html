@@ -2,11 +2,11 @@
 
 {% if model_export_url %}
     <li class="export-menu">
-        <a href="{{ model_export_url }}" class="historylink export-menu__trigger" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}">
+        <button type="button" class="historylink export-menu__trigger" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}" aria-haspopup="true" aria-expanded="false">
             <span aria-hidden="true">{% trans "EXPORT" %}</span>
             <span class="export-menu__arrow" aria-hidden="true">▾</span>
             <span class="visually-hidden">{% trans "Export" %}</span>
-        </a>
+        </button>
         <ul class="export-menu__options" aria-label="{% trans 'Export options' %}">
             <li>
                 <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=json">
