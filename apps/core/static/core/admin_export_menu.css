@@ -47,3 +47,7 @@
 .export-menu.is-open .export-menu__options {
   display: block;
 }
+
+.export-menu:focus-within .export-menu__options {
+  display: block;
+}
