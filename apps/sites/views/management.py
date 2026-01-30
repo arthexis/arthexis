@@ -469,7 +469,6 @@ class CustomLoginView(LoginView):
                 node.has_feature(feature) for feature in rfid_features
             )
             ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
-            ensure_feature_enabled("rfid", node=node, logger=logger)
             has_rfid_feature = (
                 any(node.has_feature(feature) for feature in rfid_features)
                 or had_rfid_feature
@@ -499,7 +498,6 @@ login_view = CustomLoginView.as_view()
 def rfid_login_page(request):
     node = Node.get_local()
     ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
-    ensure_feature_enabled("rfid", node=node, logger=logger)
     if not node or not any(
         node.has_feature(feature) for feature in ("rfid", "rfid-scanner")
     ):

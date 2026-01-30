@@ -4,7 +4,7 @@ from pathlib import Path
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.content import utils as content_utils
-from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.models import Node, NodeFeature
 
 SCREENSHOT_DIR = content_utils.SCREENSHOT_DIR
 DEFAULT_SCREENSHOT_RESOLUTION = content_utils.DEFAULT_SCREENSHOT_RESOLUTION
@@ -53,22 +53,7 @@ def ensure_feature_enabled(
     except Exception:
         if logger:
             logger.exception("Unable to refresh features for %s", slug)
-
-    if target.has_feature(slug):
-        return True
-
-    try:
-        enabled = bool(feature.is_enabled)
-    except Exception:
-        enabled = False
-
-    if enabled:
-        NodeFeatureAssignment.objects.update_or_create(
-            node=target, feature=feature
-        )
-        return True
-
-    return False
+    return target.has_feature(slug)
 
 
 def capture_screenshot(
