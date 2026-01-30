@@ -5,7 +5,7 @@ from pathlib import Path
 from django.contrib import admin, messages
 from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponseNotAllowed
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -41,6 +41,11 @@ class SiteConfigurationViewMixin:
     def get_urls(self):  # pragma: no cover - admin hook
         custom = [
             path(
+                "load-local/",
+                self.admin_site.admin_view(self.load_local_view),
+                name="nginx_siteconfiguration_load_local",
+            ),
+            path(
                 "preview/",
                 self.admin_site.admin_view(self.preview_view),
                 name="nginx_siteconfiguration_preview",
@@ -73,7 +78,42 @@ class SiteConfigurationViewMixin:
         extra_context["default_preview_url"] = reverse(
             "admin:nginx_siteconfiguration_preview_default"
         )
+        extra_context["load_local_url"] = reverse(
+            "admin:nginx_siteconfiguration_load_local"
+        )
+        extra_context["can_load_local"] = self.has_change_permission(request)
         return super().changelist_view(request, extra_context=extra_context)
+
+    def load_local_view(self, request: HttpRequest):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+
+        result = self.model.load_local_configurations()
+        created = int(result.get("created", 0))
+        updated = int(result.get("updated", 0))
+        errors = result.get("errors", [])
+
+        if created or updated:
+            self.message_user(
+                request,
+                _("Loaded %(created)s new and %(updated)s existing site configurations.")
+                % {"created": created, "updated": updated},
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("No local site configurations were loaded."),
+                messages.INFO,
+            )
+
+        for error in errors:
+            self.message_user(request, error, messages.ERROR)
+
+        return self._http_redirect(reverse("admin:nginx_siteconfiguration_changelist"))
 
     @admin.action(description=_("Validate selected configurations"))
     def validate_configurations(self, request, queryset):

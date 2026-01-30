@@ -224,3 +224,49 @@ def test_default_certificate_domain_skips_cidr_and_ports(settings):
     admin_view = SiteConfigurationAdmin(SiteConfiguration, AdminSite())
 
     assert admin_view._get_default_certificate_domain() == "admin.example.com"
+
+
+@pytest.mark.django_db
+def test_load_local_creates_site_configuration(admin_client, settings, tmp_path):
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    lock_dir = base_dir / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / "nginx_mode.lck").write_text("public", encoding="utf-8")
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+    (lock_dir / "backend_port.lck").write_text("9001", encoding="utf-8")
+
+    config_path = tmp_path / "arthexis.conf"
+    config_path.write_text(
+        """
+        server {
+            listen 80;
+            listen [::]:80;
+            server_name example.com;
+            location / {
+                proxy_pass http://127.0.0.1:9999/;
+                proxy_set_header Connection $connection_upgrade;
+            }
+        }
+
+        server {
+            listen 443 ssl;
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    settings.BASE_DIR = base_dir
+    settings.NGINX_SITE_PATH = str(config_path)
+
+    url = reverse("admin:nginx_siteconfiguration_load_local")
+    response = admin_client.post(url)
+
+    assert response.status_code == 302
+    config = SiteConfiguration.objects.get(name="example.com")
+    assert config.mode == "public"
+    assert config.role == "Control"
+    assert config.port == 9999
+    assert config.protocol == "https"
+    assert config.include_ipv6 is True
+    assert config.external_websockets is True
