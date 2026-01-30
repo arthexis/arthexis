@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import urllib.parse
 
@@ -7,6 +9,7 @@ import pytest
 from django.urls import reverse
 
 from apps.repos.models.events import GitHubEvent
+from apps.repos.models.github_apps import GitHubApp
 from apps.repos.models.repositories import GitHubRepository
 
 
@@ -61,3 +64,54 @@ def test_github_webhook_header_lookup_is_case_insensitive(client):
     assert event.signature == "sha1=abc"
     assert event.signature_256 == "sha256=def"
     assert event.user_agent == "GitHub-Hookshot/1.0"
+
+
+@pytest.mark.django_db
+def test_github_webhook_app_signature_verifies(client):
+    app = GitHubApp.objects.create(
+        display_name="Example App",
+        app_id=1234,
+        webhook_secret="topsecret",
+        webhook_slug="example-app",
+    )
+    url = reverse("repos:github-webhook-app", kwargs={"app_slug": app.webhook_slug})
+    payload = {"action": "opened"}
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = client.post(
+        url,
+        data=body,
+        content_type="application/json",
+        **{"HTTP_X_HUB_SIGNATURE_256": signature},
+    )
+
+    assert response.status_code == 200
+    event = GitHubEvent.objects.get()
+    assert event.payload == payload
+
+
+@pytest.mark.django_db
+def test_github_webhook_app_rejects_invalid_signature(client):
+    app = GitHubApp.objects.create(
+        display_name="Example App",
+        app_id=5678,
+        webhook_secret="topsecret",
+        webhook_slug="example-app",
+    )
+    url = reverse("repos:github-webhook-app", kwargs={"app_slug": app.webhook_slug})
+    payload = {"action": "opened"}
+
+    response = client.post(
+        url,
+        data=json.dumps(payload),
+        content_type="application/json",
+        **{"HTTP_X_HUB_SIGNATURE_256": "sha256=invalid"},
+    )
+
+    assert response.status_code == 401
+    assert GitHubEvent.objects.count() == 0

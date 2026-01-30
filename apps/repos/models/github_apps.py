@@ -88,10 +88,10 @@ class GitHubWebhook(Entity):
             return "/repos/webhooks/github/"
 
     def webhook_full_url(self) -> str:
-        if self.webhook_slug:
-            return f"{self.instance_base_url()}{self.webhook_path(self.webhook_slug)}"
         if self.webhook_url:
             return self.webhook_url
+        if self.webhook_slug:
+            return f"{self.instance_base_url()}{self.webhook_path(self.webhook_slug)}"
         return f"{self.instance_base_url()}{self.webhook_path()}"
 
     def webhook_config(self) -> dict[str, object]:
