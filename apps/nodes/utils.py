@@ -4,7 +4,7 @@ from pathlib import Path
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.content import utils as content_utils
-from apps.nodes.models import NodeFeature
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 SCREENSHOT_DIR = content_utils.SCREENSHOT_DIR
 DEFAULT_SCREENSHOT_RESOLUTION = content_utils.DEFAULT_SCREENSHOT_RESOLUTION
@@ -27,6 +27,48 @@ class FeatureChecker:
             enabled = False
         self._cache[slug] = enabled
         return enabled
+
+
+def ensure_feature_enabled(
+    slug: str,
+    *,
+    node: Node | None = None,
+    logger: logging.Logger | None = None,
+) -> bool:
+    """Attempt to enable a node feature if it is available."""
+
+    target = node or Node.get_local()
+    if not target:
+        return False
+
+    feature = NodeFeature.objects.filter(slug=slug).first()
+    if not feature:
+        return False
+
+    if target.has_feature(slug):
+        return True
+
+    try:
+        target.refresh_features()
+    except Exception:
+        if logger:
+            logger.exception("Unable to refresh features for %s", slug)
+
+    if target.has_feature(slug):
+        return True
+
+    try:
+        enabled = bool(feature.is_enabled)
+    except Exception:
+        enabled = False
+
+    if enabled:
+        NodeFeatureAssignment.objects.update_or_create(
+            node=target, feature=feature
+        )
+        return True
+
+    return False
 
 
 def capture_screenshot(
@@ -108,4 +150,5 @@ __all__ = [
     "SCREENSHOT_DIR",
     "DEFAULT_SCREENSHOT_RESOLUTION",
     "FeatureChecker",
+    "ensure_feature_enabled",
 ]
