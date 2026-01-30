@@ -441,6 +441,36 @@ def _update_publish_controls(
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
 
+    if request.GET.get("ack_error"):
+        ctx.pop("error", None)
+        dirty_entries = _collect_dirty_files()
+        if dirty_entries:
+            ctx["dirty_files"] = dirty_entries
+            ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
+        else:
+            ctx.pop("dirty_files", None)
+            ctx.pop("dirty_log_message", None)
+            ctx.pop("dirty_commit_error", None)
+        pending_push = ctx.get("pending_git_push")
+        if pending_push:
+            if _validate_manual_git_push(pending_push):
+                ctx.pop("pending_git_push", None)
+                ctx.pop("pending_git_push_error", None)
+            else:
+                ctx["pending_git_push_error"] = _(
+                    "Manual push not detected on origin. Confirm the push completed and try again."
+                )
+        if not ctx.get("started"):
+            ctx["started"] = True
+        if ctx.get("pending_git_push") or ctx.get("dirty_files"):
+            ctx["paused"] = True
+        else:
+            ctx["paused"] = False
+        request.session[session_key] = ctx
+        return ctx, False, redirect(
+            _clean_redirect_path(request, request.path),
+        )
+
     if request.GET.get("set_dry_run") is not None:
         if start_enabled:
             ctx["dry_run"] = bool(request.GET.get("dry_run"))
