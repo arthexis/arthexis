@@ -32,14 +32,6 @@ def register_sponsor(
 ) -> SponsorRegistrationResult:
     """Create a new sponsor account, sponsorship, and payment entry."""
 
-    user_model = get_user_model()
-    existing = user_model.objects.filter(username=username).first()
-    if existing is not None:
-        raise ValidationError({"username": _("This username is already in use.")})
-    existing_email = user_model.objects.filter(email=email).first()
-    if existing_email is not None:
-        raise ValidationError({"email": _("This email is already in use.")})
-
     if tier is None or not tier.is_active:
         raise ValidationError({"tier": _("Selected sponsor tier is unavailable.")})
     if payment_processor is None:
@@ -48,6 +40,7 @@ def register_sponsor(
         )
 
     now = timezone.now()
+    user_model = get_user_model()
 
     with transaction.atomic():
         user = user_model.objects.create_user(
@@ -62,18 +55,17 @@ def register_sponsor(
             tier=tier,
             renewal_mode=renewal_mode,
             started_at=now,
+            status=Sponsorship.Status.PAST_DUE,
         )
         payment = SponsorshipPayment.objects.create(
             sponsorship=sponsorship,
             amount=tier.amount,
             currency=tier.currency,
-            status=SponsorshipPayment.Status.PAID,
+            status=SponsorshipPayment.Status.PENDING,
             kind=SponsorshipPayment.Kind.INITIAL,
             processor=payment_processor,
             external_reference=payment_reference or "",
-            processed_at=now,
         )
-        sponsorship.apply_tier_groups()
 
     return SponsorRegistrationResult(
         user=user, sponsorship=sponsorship, payment=payment
