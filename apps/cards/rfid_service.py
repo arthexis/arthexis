@@ -107,6 +107,7 @@ class RFIDServiceState:
                 if not result:
                     continue
                 if result.get("error") or result.get("rfid"):
+                    logger.debug("RFID service queued scan result: %s", result)
                     self.queue.put(result)
                     self._notify_lcd_event(result)
                     write_rfid_scan_lock(result)
@@ -155,16 +156,19 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
         try:
             payload = json.loads(data.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
+            logger.debug("RFID service received invalid payload")
             response = {"error": "invalid request", "service_mode": "service"}
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
 
         if not isinstance(payload, dict):
+            logger.debug("RFID service received non-dict payload: %s", payload)
             response = {"error": "invalid request", "service_mode": "service"}
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
 
         action = str(payload.get("action") or "scan")
+        logger.debug("RFID service received action=%s payload=%s", action, payload)
         state: RFIDServiceState = self.server.state
         if action == "ping":
             status = state.status()
@@ -181,6 +185,7 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
             return
 
         if not is_configured():
+            logger.debug("RFID service scan requested but no scanner configured")
             response = {"error": "no scanner available", "service_mode": "service"}
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
@@ -198,6 +203,7 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
                     tag = get_next_tag(timeout=DEFAULT_SCAN_TIMEOUT) or None
                 if tag:
                     response["scan"] = tag
+                logger.debug("RFID service deep read response: %s", response)
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
 
@@ -210,6 +216,7 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
         tag = state.queue.get(timeout=timeout_value)
         if tag is None:
             tag = {"rfid": None, "label_id": None}
+            logger.debug("RFID service scan timed out after %.2fs", timeout_value)
         tag["service_mode"] = "service"
         socket_out.sendto(json.dumps(tag).encode("utf-8"), self.client_address)
 
