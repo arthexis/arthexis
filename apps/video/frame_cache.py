@@ -114,9 +114,9 @@ def get_frame(stream: MjpegStream) -> CachedFrame | None:
     ts_key = _cache_key(stream, "captured_at")
     id_key = _cache_key(stream, "frame_id")
     try:
-        frame_bytes = client.get(frame_key)
-        ts_bytes = client.get(ts_key)
-        frame_id_bytes = client.get(id_key)
+        frame_bytes, ts_bytes, frame_id_bytes = client.mget(
+            [frame_key, ts_key, id_key]
+        )
     except RedisError as exc:  # pragma: no cover - runtime dependency
         logger.warning("Unable to read MJPEG frame for %s: %s", stream.slug, exc)
         return None
