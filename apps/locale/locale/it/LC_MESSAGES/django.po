@@ -923,8 +923,8 @@ msgid "No RFID cards marked as valid are available to print."
 msgstr ""
 
 #: core/admin.py:3546 core/admin.py:3554
-msgid "Scan RFIDs"
-msgstr ""
+msgid "Scanner"
+msgstr "Scanner"
 
 #: core/admindocs.py:66 pages/templates/pages/manual_list.html:6
 msgid "User Manuals"
