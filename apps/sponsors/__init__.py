@@ -1,0 +1,2 @@
+"""Sponsor app."""
+

@@ -420,6 +420,7 @@ LOCAL_APPS = [
     "apps.release",
     "apps.emails",
     "apps.payments",
+    "apps.sponsors",
     "apps.links",
     "apps.docs",
     "apps.maps",

@@ -1,0 +1,62 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Become a Sponsor" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h1 class="h3 mb-3">{% trans "Become a Sponsor" %}</h1>
+          <p class="text-muted">{% trans "Join the arthexis constellation by choosing a sponsor tier and completing your sponsorship payment." %}</p>
+          <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            <div class="mb-3">
+              <label class="form-label" for="id_username">{% trans "Username" %}</label>
+              {{ form.username }}
+              {{ form.username.errors }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="id_email">{% trans "Email" %}</label>
+              {{ form.email }}
+              {{ form.email.errors }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="id_password">{% trans "Password" %}</label>
+              {{ form.password }}
+              {{ form.password.errors }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="id_tier">{% trans "Sponsor tier" %}</label>
+              {{ form.tier }}
+              {{ form.tier.errors }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="id_renewal_mode">{% trans "Renewal frequency" %}</label>
+              {{ form.renewal_mode }}
+              {{ form.renewal_mode.errors }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="id_payment_processor">{% trans "Payment processor" %}</label>
+              {{ form.payment_processor }}
+              {{ form.payment_processor.errors }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="id_payment_reference">{% trans "Payment reference" %}</label>
+              {{ form.payment_reference }}
+              {{ form.payment_reference.errors }}
+              {% if form.payment_reference.help_text %}
+                <div class="form-text">{{ form.payment_reference.help_text }}</div>
+              {% endif %}
+            </div>
+            <button class="btn btn-primary w-100" type="submit">{% trans "Become a Sponsor" %}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

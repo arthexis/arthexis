@@ -1,0 +1,20 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Sponsorship confirmed" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <h1 class="h3 mb-3">{% trans "Welcome to the Constellation" %}</h1>
+          <p class="text-muted">{% trans "Your sponsorship is active. Check your email for next steps." %}</p>
+          <a class="btn btn-outline-primary" href="/">{% trans "Return to Home" %}</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
