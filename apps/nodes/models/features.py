@@ -89,7 +89,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
         ),
         "rpi-camera": (
             NodeFeatureDefaultAction(
-                label="Find Video Devices",
+                label="Find Devices",
                 url_name="admin:video_videodevice_find_devices",
             ),
             NodeFeatureDefaultAction(
