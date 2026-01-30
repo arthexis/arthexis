@@ -103,8 +103,19 @@ class Sponsorship(Entity):
             raise ValidationError({"user": _("Staff accounts cannot be sponsors.")})
 
     def save(self, *args, **kwargs):
-        if self.next_renewal_at is None:
-            self.next_renewal_at = next_renewal_date(self.started_at, self.renewal_mode)
+        is_new = self._state.adding
+        if is_new:
+            if self.next_renewal_at is None:
+                self.next_renewal_at = next_renewal_date(self.started_at, self.renewal_mode)
+        else:
+            try:
+                previous = Sponsorship.all_objects.get(pk=self.pk)
+                if previous.renewal_mode != self.renewal_mode:
+                    base_date = self.last_renewed_at or self.started_at
+                    self.next_renewal_at = next_renewal_date(base_date, self.renewal_mode)
+            except Sponsorship.DoesNotExist:
+                pass  # Should not happen on an update, but defensive.
+
         super().save(*args, **kwargs)
 
     def apply_tier_groups(self) -> None:
