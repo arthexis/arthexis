@@ -24,21 +24,30 @@ class Command(BaseCommand):
             help="UDP port to bind the RFID service",
         )
         parser.add_argument(
-            "-v",
-            "--verbose",
+            "--debug",
             action="store_true",
-            help="Enable verbose logging for interactive troubleshooting",
+            help="Enable debug logging for interactive troubleshooting",
         )
 
     def handle(self, *args, **options):
         host = options.get("host")
         port = options.get("port")
-        if options.get("verbose"):
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-            )
-            logging.getLogger("apps.cards.rfid_service").setLevel(logging.DEBUG)
+        if options.get("debug"):
+            rfid_logger = logging.getLogger("apps.cards.rfid_service")
+            rfid_logger.setLevel(logging.DEBUG)
+            if not any(
+                getattr(handler, "name", "") == "rfid-debug"
+                for handler in rfid_logger.handlers
+            ):
+                handler = logging.StreamHandler()
+                handler.name = "rfid-debug"
+                handler.setLevel(logging.DEBUG)
+                handler.setFormatter(
+                    logging.Formatter(
+                        "%(asctime)s %(levelname)s %(name)s: %(message)s"
+                    )
+                )
+                rfid_logger.addHandler(handler)
         self.stdout.write(
             self.style.SUCCESS(f"Starting RFID service on {host}:{port}")
         )
