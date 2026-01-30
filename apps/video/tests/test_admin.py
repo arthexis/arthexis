@@ -1,11 +1,26 @@
 import pytest
+from django.contrib import admin
+from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory
+from django.utils.text import slugify
 from django.urls import reverse
 
 from apps.content.models import ContentSample
 from apps.nodes.models import Node, NodeFeature
 from apps.video import admin as video_admin
 from apps.video.models import MjpegStream, VideoDevice, VideoSnapshot
+
+
+@pytest.fixture
+def admin_user(db):
+    User = get_user_model()
+    return User.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="password",
+    )
 
 
 @pytest.mark.django_db
@@ -332,3 +347,63 @@ def test_mjpeg_stream_action_captures_snapshot(admin_client, monkeypatch):
     assert response.status_code == 200
     assert captured["frame"] == 1
     assert captured["store"] == 1
+
+
+@pytest.mark.django_db
+def test_goto_stream_creates_default_stream(admin_user):
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+        slug="camera",
+    )
+    admin_view = video_admin.VideoDeviceAdmin(VideoDevice, admin.site)
+    request = RequestFactory().get("/")
+    request.user = admin_user
+    request.session = {}
+    setattr(request, "_messages", FallbackStorage(request))
+
+    response = admin_view.goto_stream(request, device)
+
+    stream = MjpegStream.objects.get(video_device=device)
+    assert response.status_code == 302
+    assert response.url == stream.get_admin_url()
+    messages = [str(message) for message in request._messages]
+    assert any("Created MJPEG stream" in msg for msg in messages)
+
+
+@pytest.mark.django_db
+def test_create_default_stream_truncates_and_uniques_slug(admin_user):
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    long_slug = "camera-" + ("x" * 80)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+        slug=long_slug,
+    )
+    admin_view = video_admin.VideoDeviceAdmin(VideoDevice, admin.site)
+    slug_field = MjpegStream._meta.get_field("slug")
+    max_length = slug_field.max_length or 50
+    existing_slug = slugify(long_slug)[:max_length].rstrip("-")
+    MjpegStream.objects.create(
+        name="Existing",
+        slug=existing_slug,
+        video_device=device,
+        is_active=True,
+    )
+
+    stream = admin_view._create_default_stream(device)
+
+    assert len(stream.slug) <= max_length
+    assert stream.slug != existing_slug
+    assert stream.slug.startswith(existing_slug[: max_length - 2])

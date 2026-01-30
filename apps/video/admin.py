@@ -286,14 +286,38 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     set_admin_action_label(goto_stream, "Goto Stream")
 
     def _create_default_stream(self, device: VideoDevice) -> MjpegStream:
+        slug_field = MjpegStream._meta.get_field("slug")
+        max_length = slug_field.max_length or 50
         base_slug = slugify(device.slug or device.name or f"device-{device.pk}") or (
             f"device-{device.pk}"
         )
-        slug = base_slug
+        base_slug = base_slug[:max_length].rstrip("-") or base_slug[:max_length]
+        if not base_slug:
+            base_slug = f"device-{device.pk}"[:max_length]
+        prefix = base_slug
+        if max_length > 2:
+            prefix = base_slug[: max_length - 2].rstrip("-") or base_slug
+        existing_slugs = set(
+            MjpegStream.objects.filter(slug__startswith=prefix).values_list(
+                "slug", flat=True
+            )
+        )
+
+        def build_slug(counter: int) -> str:
+            if counter <= 1:
+                return base_slug
+            suffix = f"-{counter}"
+            available = max_length - len(suffix)
+            trimmed = base_slug[:available].rstrip("-")
+            if not trimmed:
+                trimmed = f"device-{device.pk}"[:available].rstrip("-")
+            return f"{trimmed}{suffix}"
+
         counter = 1
-        while MjpegStream.objects.filter(slug=slug).exists():
+        slug = build_slug(counter)
+        while slug in existing_slugs:
             counter += 1
-            slug = f"{base_slug}-{counter}"
+            slug = build_slug(counter)
         name = _("%(device)s Stream") % {"device": device.display_name}
         return MjpegStream.objects.create(
             name=name,
