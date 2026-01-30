@@ -65,7 +65,12 @@ def _extract_repository(payload: dict[str, Any]) -> tuple[str, str]:
 
 
 @csrf_exempt
-def github_webhook(request: HttpRequest, owner: str = "", name: str = "") -> JsonResponse:
+def github_webhook(
+    request: HttpRequest,
+    owner: str = "",
+    name: str = "",
+    app_slug: str = "",
+) -> JsonResponse:
     payload, raw_body = _extract_payload(request)
     payload_owner, payload_name = _extract_repository(payload)
 

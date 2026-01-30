@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
@@ -166,6 +167,7 @@ class GitHubEventAdmin(admin.ModelAdmin):
 
 @admin.register(GitHubApp)
 class GitHubAppAdmin(admin.ModelAdmin):
+    form = GitHubAppAdminForm
     list_display = ("display_name", "app_id", "app_slug", "auth_method")
     search_fields = ("display_name", "app_slug", "=app_id")
     list_filter = ("auth_method",)
