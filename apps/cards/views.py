@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import Mapping
 
 from django.http import JsonResponse
@@ -9,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
+from apps.nodes.utils import ensure_feature_enabled
 from apps.sites.utils import landing
 from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
@@ -18,6 +20,8 @@ from .reader import validate_rfid_value
 from apps.cards.models import RFID
 from .utils import build_mode_toggle
 from apps.video.rfid import scan_camera_qr
+
+logger = logging.getLogger(__name__)
 
 
 def _request_wants_json(request):
@@ -48,6 +52,7 @@ def scan_next(request):
     node = Node.get_local()
     role_name = node.role.name if node and node.role else ""
     allow_anonymous = role_name == "Control"
+    ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")
     camera_feature_enabled = _feature_enabled("rpi-camera")
     prefer_camera = request.GET.get("source") == "camera"
@@ -197,6 +202,7 @@ def reader(request):
     node = Node.get_local()
     role_name = node.role.name if node and node.role else ""
     allow_anonymous = role_name == "Control"
+    ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
 
     if not request.user.is_authenticated and not allow_anonymous:
         return redirect_to_login(

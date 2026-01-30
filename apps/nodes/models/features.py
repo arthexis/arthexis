@@ -337,12 +337,34 @@ class NodeFeatureMixin:
     ) -> bool:
         """Detect whether an auto-managed feature is active for the node."""
         lock = self.FEATURE_LOCK_MAP.get(slug)
+        lock_found = False
         if lock:
             project_lock_dir = base_dir / ".locks"
             lock_dirs = [base_path / ".locks"]
             if project_lock_dir not in lock_dirs:
                 lock_dirs.append(project_lock_dir)
-            return any((lock_dir / lock).exists() for lock_dir in lock_dirs)
+            lock_found = any((lock_dir / lock).exists() for lock_dir in lock_dirs)
+            if lock_found:
+                return True
+        if slug == "rfid-scanner":
+            try:
+                from apps.cards.rfid_service import (
+                    rfid_service_enabled,
+                    service_available,
+                )
+            except Exception:
+                logger.exception("RFID service detection import failed")
+                return lock_found
+            lock_dir = base_dir / ".locks"
+            if rfid_service_enabled(lock_dir=lock_dir):
+                return True
+            try:
+                return service_available()
+            except Exception:
+                logger.exception("RFID service availability check failed")
+                return lock_found
+        if lock:
+            return lock_found
         if slug == "lcd-screen":
             return lcd_feature_enabled_for_paths(
                 base_dir=base_dir, node_base_path=base_path

@@ -1,6 +1,7 @@
 from collections import defaultdict
 from io import BytesIO
 import json
+import logging
 
 from django import forms
 from django.conf import settings
@@ -40,10 +41,13 @@ from apps.cards.utils import build_mode_toggle
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.links.models import ExperienceReference, Reference
 from apps.locals.user_data import EntityModelAdmin
+from apps.nodes.utils import ensure_feature_enabled
 from apps.ocpp.models import Transaction
 from apps.core.widgets import RFIDDataWidget
 
 from .forms import RFIDConfirmImportForm, RFIDExportForm, RFIDImportForm
+
+logger = logging.getLogger(__name__)
 
 
 class RFIDResource(resources.ModelResource):
@@ -980,6 +984,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
+        ensure_feature_enabled("rfid-scanner", logger=logger)
         table_mode, toggle_url, toggle_label = build_mode_toggle(request)
         public_view_url = reverse("rfid-reader")
         if table_mode:
@@ -1007,6 +1012,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         from apps.cards.scanner import scan_sources
         from apps.cards.reader import validate_rfid_value
 
+        ensure_feature_enabled("rfid-scanner", logger=logger)
         if request.method == "POST":
             try:
                 payload = json.loads(request.body.decode("utf-8") or "{}")
