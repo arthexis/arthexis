@@ -98,10 +98,13 @@ class SponsorRegistrationForm(forms.Form):
         user_model = get_user_model()
         username = cleaned.get("username")
         email = cleaned.get("email")
-        if username and user_model.objects.filter(username=username).exists():
-            raise ValidationError({"username": _("This username is already in use.")})
-        if email and user_model.objects.filter(email=email).exists():
-            raise ValidationError({"email": _("This email is already in use.")})
+        errors = {}
+        if username and user_model.objects.filter(username__iexact=username).exists():
+            errors["username"] = _("This username is already in use.")
+        if email and user_model.objects.filter(email__iexact=email).exists():
+            errors["email"] = _("This email is already in use.")
+        if errors:
+            raise ValidationError(errors)
         processor = resolve_processor(cleaned.get("payment_processor"))
         cleaned["payment_processor_instance"] = processor
         return cleaned
