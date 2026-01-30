@@ -18,6 +18,7 @@ SUBDOMAIN_PREFIX_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 NGINX_PROXY_PASS_RE = re.compile(r"proxy_pass\s+https?://[^:]+:(\d+)")
 NGINX_SSL_LISTEN_RE = re.compile(r"listen\s+[^;]*\b443\b[^;]*ssl", re.IGNORECASE)
 NGINX_SSL_CERTIFICATE_RE = re.compile(r"ssl_certificate\s+[^;]+;", re.IGNORECASE)
+NGINX_IPV6_LISTEN_RE = re.compile(r"listen\s+\[::\][^;]*;", re.IGNORECASE)
 NGINX_SERVER_NAME_RE = re.compile(r"server_name\s+([^;]+);")
 NGINX_EXTERNAL_WEBSOCKETS_TOKEN = "proxy_set_header Connection $connection_upgrade;"
 DEFAULT_SITE_DESTINATION = "/etc/nginx/sites-enabled/arthexis-sites.conf"
