@@ -150,7 +150,7 @@ arthexis_install_camera_service_unit() {
   local camera_service_user
   camera_service_user="$(arthexis_detect_service_user "$base_dir")"
 
-  sudo bash -c "cat > '$camera_service_file'" <<SERVICEEOF
+  sudo tee "$camera_service_file" > /dev/null <<SERVICEEOF
 [Unit]
 Description=Camera capture service for Arthexis
 After=${service_name}.service network-online.target redis.service
