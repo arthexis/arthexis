@@ -10,7 +10,12 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from .models import SponsorTier, Sponsorship, configured_payment_processors
+from .models import (
+    PAYMENT_PROCESSOR_MODELS,
+    SponsorTier,
+    Sponsorship,
+    configured_payment_processors,
+)
 
 
 @dataclass(frozen=True)
@@ -49,12 +54,19 @@ def resolve_processor(selection: str):
         raise ValidationError(_("Selected payment processor is not available.")) from exc
 
     model_class = content_type.model_class()
-    if model_class is None:
+    if model_class is None or model_class not in PAYMENT_PROCESSOR_MODELS:
         raise ValidationError(_("Selected payment processor is not available."))
     try:
-        return model_class.objects.get(pk=int(object_id))
+        processor = model_class.objects.get(pk=int(object_id))
     except model_class.DoesNotExist as exc:  # type: ignore[attr-defined]
         raise ValidationError(_("Selected payment processor is not available.")) from exc
+    allowed_ids = {
+        (ContentType.objects.get_for_model(p.__class__).pk, p.pk)
+        for p in configured_payment_processors()
+    }
+    if (content_type.pk, processor.pk) not in allowed_ids:
+        raise ValidationError(_("Selected payment processor is not available."))
+    return processor
 
 
 class SponsorRegistrationForm(forms.Form):

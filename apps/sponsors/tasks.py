@@ -42,8 +42,8 @@ def process_sponsorship_renewals() -> dict[str, int]:
                     kind=SponsorshipPayment.Kind.RENEWAL,
                     processor=processor,
                 )
-                sponsorship.mark_renewed(now)
-                sponsorship.apply_tier_groups()
+                sponsorship.status = Sponsorship.Status.PAST_DUE
+                sponsorship.save(update_fields=["status"])
             processed += 1
         except Exception:  # pragma: no cover - defensive logging
             logger.exception("Failed to renew sponsorship %s", sponsorship.pk)
