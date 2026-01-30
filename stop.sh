@@ -192,6 +192,12 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       $SUDO systemctl status "$RFID_SERVICE" --no-pager || true
     fi
 
+    CAMERA_SERVICE="camera-$SERVICE_NAME"
+    if [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ] || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${CAMERA_SERVICE}.service"; then
+      $SUDO systemctl stop "$CAMERA_SERVICE" || true
+      $SUDO systemctl status "$CAMERA_SERVICE" --no-pager || true
+    fi
+
     exit 0
   fi
 fi
@@ -215,6 +221,9 @@ fi
 pkill -f "celery -A config" || true
 if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
   pkill -f "manage.py rfid_service" || true
+fi
+if [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
+  pkill -f "manage.py camera_service" || true
 fi
 if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
   if arthexis_lcd_feature_enabled "$LOCK_DIR"; then

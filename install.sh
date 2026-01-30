@@ -49,6 +49,8 @@ ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 ENABLE_RFID_SERVICE=false
 DISABLE_RFID_SERVICE=false
+ENABLE_CAMERA_SERVICE=false
+DISABLE_CAMERA_SERVICE=false
 CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
@@ -57,7 +59,7 @@ START_SERVICES=false
 REPAIR=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -65,7 +67,7 @@ usage() {
 stop_existing_units_for_repair() {
     local service_name="$1"
 
-    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE"
+    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE" "$ENABLE_CAMERA_SERVICE"
 }
 
 clean_previous_installation_state() {
@@ -95,7 +97,7 @@ clean_previous_installation_state() {
     fi
 
     if [ -n "$service_name" ]; then
-        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true
+        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true true
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.timer"
     fi
@@ -157,7 +159,7 @@ reset_service_units_for_repair() {
         return 0
     fi
 
-    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE"
+    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE" "$ENABLE_CAMERA_SERVICE"
 
     if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
         while IFS= read -r recorded_unit; do
@@ -266,6 +268,16 @@ while [[ $# -gt 0 ]]; do
             DISABLE_RFID_SERVICE=true
             shift
             ;;
+        --camera-service)
+            ENABLE_CAMERA_SERVICE=true
+            DISABLE_CAMERA_SERVICE=false
+            shift
+            ;;
+        --no-camera-service)
+            ENABLE_CAMERA_SERVICE=false
+            DISABLE_CAMERA_SERVICE=true
+            shift
+            ;;
         --clean)
             CLEAN=true
             shift
@@ -323,6 +335,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
+    REQUIRES_REDIS=true
+fi
+
 if [ "$REPAIR" = true ]; then
     LOCK_DIR_PATH="$SCRIPT_DIR/.locks"
     if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR_PATH/service.lck" ]; then
@@ -354,6 +370,10 @@ if [ "$REPAIR" = true ]; then
     if [ "$ENABLE_RFID_SERVICE" = false ] && [ -f "$LOCK_DIR_PATH/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
         ENABLE_RFID_SERVICE=true
         DISABLE_RFID_SERVICE=false
+    fi
+    if [ "$ENABLE_CAMERA_SERVICE" = false ] && [ -f "$LOCK_DIR_PATH/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
+        ENABLE_CAMERA_SERVICE=true
+        DISABLE_CAMERA_SERVICE=false
     fi
     if [ "$ENABLE_CONTROL" = false ] && [ -f "$LOCK_DIR_PATH/control.lck" ]; then
         ENABLE_CONTROL=true
@@ -449,6 +469,13 @@ if [ "$ENABLE_RFID_SERVICE" = true ]; then
     touch "$RFID_SERVICE_LOCK"
 elif [ "$DISABLE_RFID_SERVICE" = true ]; then
     rm -f "$RFID_SERVICE_LOCK"
+fi
+
+CAMERA_SERVICE_LOCK="$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK"
+if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
+    touch "$CAMERA_SERVICE_LOCK"
+elif [ "$DISABLE_CAMERA_SERVICE" = true ]; then
+    rm -f "$CAMERA_SERVICE_LOCK"
 fi
 
 CONTROL_LOCK="$LOCK_DIR/control.lck"
@@ -609,6 +636,7 @@ fi
 if [ -n "$SERVICE" ]; then
     LCD_SERVICE="lcd-$SERVICE"
     RFID_SERVICE="rfid-$SERVICE"
+    CAMERA_SERVICE="camera-$SERVICE"
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         if [ "$DISABLE_LCD_SCREEN" = true ]; then
             if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
@@ -643,9 +671,27 @@ if [ -n "$SERVICE" ]; then
         else
             arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
         fi
+
+        if [ "$DISABLE_CAMERA_SERVICE" = true ]; then
+            if systemctl list-unit-files | grep -Fq "${CAMERA_SERVICE}.service"; then
+                sudo systemctl stop "$CAMERA_SERVICE" || true
+                sudo systemctl disable "$CAMERA_SERVICE" || true
+                CAMERA_SERVICE_FILE="/etc/systemd/system/${CAMERA_SERVICE}.service"
+                if [ -f "$CAMERA_SERVICE_FILE" ]; then
+                    sudo rm "$CAMERA_SERVICE_FILE"
+                fi
+                sudo systemctl daemon-reload
+            fi
+            arthexis_remove_systemd_unit_record "$LOCK_DIR" "${CAMERA_SERVICE}.service"
+        elif [ "$ENABLE_CAMERA_SERVICE" = true ]; then
+            arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+        else
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CAMERA_SERVICE}.service"
+        fi
     else
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CAMERA_SERVICE}.service"
     fi
 fi
 

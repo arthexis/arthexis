@@ -133,6 +133,53 @@ SERVICEEOF
   arthexis_record_systemd_unit "$lock_dir" "${rfid_service}.service"
 }
 
+arthexis_install_camera_service_unit() {
+  local base_dir="$1"
+  local lock_dir="$2"
+  local service_name="$3"
+
+  if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+  local camera_service
+  camera_service="camera-${service_name}"
+  local camera_service_file
+  camera_service_file="${systemd_dir}/${camera_service}.service"
+  local camera_service_user
+  camera_service_user="$(arthexis_detect_service_user "$base_dir")"
+
+  sudo bash -c "cat > '$camera_service_file'" <<SERVICEEOF
+[Unit]
+Description=Camera capture service for Arthexis
+After=${service_name}.service network-online.target redis.service
+Wants=${service_name}.service
+PartOf=${service_name}.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$base_dir
+EnvironmentFile=-$base_dir/redis.env
+EnvironmentFile=-$base_dir/debug.env
+ExecStart=$base_dir/.venv/bin/python manage.py camera_service
+Restart=always
+TimeoutStartSec=500
+StandardOutput=journal
+StandardError=journal
+User=$camera_service_user
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=${service_name}.service
+SERVICEEOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable "$camera_service"
+  arthexis_record_systemd_unit "$lock_dir" "${camera_service}.service"
+}
+
 arthexis_remove_systemd_unit_record() {
   local lock_dir="$1"
   local unit_name="$2"
