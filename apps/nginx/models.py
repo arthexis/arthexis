@@ -89,7 +89,7 @@ def _extract_server_name(content: str) -> str:
 def _detect_https_enabled(content: str) -> bool:
     if NGINX_SSL_LISTEN_RE.search(content):
         return True
-    return "ssl_certificate" in content
+    return bool(NGINX_SSL_CERTIFICATE_RE.search(content))
 
 
 def _detect_ipv6_enabled(content: str) -> bool:
