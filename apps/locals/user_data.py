@@ -669,6 +669,9 @@ class ImportExportAdminMixin:
 
     import_template = "admin/base/model_import.html"
 
+    class Media:
+        css = {"all": ("core/admin_export_menu.css",)}
+
     def _admin_view_name(self, suffix: str) -> str:
         opts = self.model._meta
         return f"{opts.app_label}_{opts.model_name}_{suffix}"
@@ -721,6 +724,28 @@ class ImportExportAdminMixin:
             extra_context.setdefault("model_import_url", self._import_url())
         return super().changelist_view(request, extra_context=extra_context)
 
+    def _get_export_fields(self, request):
+        opts = self.model._meta
+        field_names = list(self.get_fields(request))
+        if not field_names:
+            return list(opts.fields)
+        field_map = {field.name: field for field in opts.fields}
+        export_fields = []
+        for name in field_names:
+            field = field_map.get(name)
+            if field and field not in export_fields:
+                export_fields.append(field)
+        return export_fields or list(opts.fields)
+
+    @staticmethod
+    def _sanitize_csv_value(value):
+        if value is None:
+            return ""
+        text = str(value)
+        if text.startswith(("=", "+", "-", "@")):
+            return f"'{text}"
+        return text
+
     def export_view(self, request):
         if not self.has_view_permission(request):
             raise PermissionDenied
@@ -735,22 +760,26 @@ class ImportExportAdminMixin:
         finally:
             request.GET = original_get
         opts = self.model._meta
+        export_fields = self._get_export_fields(request)
+        export_field_names = [field.name for field in export_fields]
         if export_format == "csv":
-            field_names = [field.name for field in opts.fields]
             response = HttpResponse(content_type="text/csv")
             response["Content-Disposition"] = (
                 f"attachment; filename={opts.app_label}_{opts.model_name}.csv"
             )
             writer = csv.writer(response)
-            writer.writerow(field_names)
+            writer.writerow(export_field_names)
             for obj in queryset:
                 writer.writerow(
-                    [field.value_from_object(obj) for field in opts.fields]
+                    [
+                        self._sanitize_csv_value(field.value_from_object(obj))
+                        for field in export_fields
+                    ]
                 )
             return response
         if export_format != "json":
             return HttpResponseBadRequest(_("Unsupported export format."))
-        payload = serialize("json", queryset)
+        payload = serialize("json", queryset, fields=export_field_names)
         response = HttpResponse(payload, content_type="application/json")
         response["Content-Disposition"] = (
             f"attachment; filename={opts.app_label}_{opts.model_name}.json"
