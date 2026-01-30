@@ -25,6 +25,18 @@
       transform: scale(1.4);
       transform-origin: right center;
     }
+
+    .mjpeg-streams__table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .mjpeg-streams__table th,
+    .mjpeg-streams__table td {
+      padding: 0.35rem 0.5rem;
+      text-align: left;
+      border-bottom: 1px solid var(--hairline-color);
+    }
   </style>
 {% endblock %}
 
@@ -92,6 +104,43 @@
           <em>{% trans "Snapshot unavailable" %}</em>
         {% endif %}
       </div>
+    </fieldset>
+    <fieldset class="module aligned">
+      <h2>{% trans "MJPEG Streams" %}</h2>
+      {% if mjpeg_streams %}
+        <table class="mjpeg-streams__table">
+          <thead>
+            <tr>
+              <th scope="col">{% trans "Stream" %}</th>
+              <th scope="col">{% trans "Last snapshot" %}</th>
+              <th scope="col">{% trans "Public URL" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in mjpeg_streams %}
+              <tr>
+                <td>
+                  <a href="{{ entry.admin_url }}">{{ entry.stream.name }}</a>
+                </td>
+                <td>
+                  {% if entry.last_snapshot_at %}
+                    {{ entry.last_snapshot_at|date:"DATETIME_FORMAT" }}
+                  {% else %}
+                    <em>{% trans "Never" %}</em>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="{{ entry.public_url }}" target="_blank" rel="noopener">
+                    {{ entry.public_url }}
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <em>{% trans "No MJPEG streams are configured for this device." %}</em>
+      {% endif %}
     </fieldset>
   {% endif %}
 {% endblock %}
