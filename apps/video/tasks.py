@@ -33,7 +33,6 @@ def capture_mjpeg_thumbnails() -> dict[str, int]:
             continue
         if settings.VIDEO_FRAME_REDIS_URL:
             logger.warning("No cached frame available for MJPEG stream %s", stream)
-            continue
         try:
             frame_bytes = stream.capture_frame_bytes()
         except Exception as exc:  # pragma: no cover - depends on device stack
