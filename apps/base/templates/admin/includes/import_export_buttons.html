@@ -1,12 +1,71 @@
 {% load i18n %}
 
 {% if model_export_url %}
-    <li>
-        <a href="{{ model_export_url }}" class="historylink" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}">
+    <li class="export-menu">
+        <a href="{{ model_export_url }}" class="historylink export-menu__trigger" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}">
             <span aria-hidden="true">{% trans "EXPORT" %}</span>
+            <span class="export-menu__arrow" aria-hidden="true">▾</span>
             <span class="visually-hidden">{% trans "Export" %}</span>
         </a>
+        <ul class="export-menu__options" aria-label="{% trans 'Export options' %}">
+            <li>
+                <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=json">
+                    {% trans "JSON" %}
+                </a>
+            </li>
+            <li>
+                <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=csv">
+                    {% trans "CSV" %}
+                </a>
+            </li>
+        </ul>
     </li>
+    <style>
+      .export-menu {
+        position: relative;
+      }
+
+      .export-menu__trigger {
+        align-items: center;
+        display: inline-flex;
+        gap: 0.35rem;
+      }
+
+      .export-menu__arrow {
+        border-left: 1px solid currentColor;
+        padding-left: 0.35rem;
+      }
+
+      .export-menu__options {
+        background: #ffffff;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        display: none;
+        list-style: none;
+        margin: 0.25rem 0 0;
+        min-width: 160px;
+        padding: 0.25rem 0;
+        position: absolute;
+        right: 0;
+        z-index: 2;
+      }
+
+      .export-menu__options a {
+        display: block;
+        padding: 0.4rem 0.75rem;
+        white-space: nowrap;
+      }
+
+      .export-menu__options a:hover {
+        background: #f2f2f2;
+      }
+
+      .export-menu:hover .export-menu__options,
+      .export-menu:focus-within .export-menu__options {
+        display: block;
+      }
+    </style>
 {% endif %}
 {% if model_import_url %}
     <li>
