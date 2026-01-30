@@ -1,8 +1,10 @@
 import logging
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
+from .frame_cache import get_frame
 from .models import MjpegStream
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,14 @@ def capture_mjpeg_thumbnails() -> dict[str, int]:
         last = stream.last_thumbnail_at
         if last and (now - last).total_seconds() < frequency:
             skipped += 1
+            continue
+        cached = get_frame(stream)
+        if cached:
+            stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
+            captured += 1
+            continue
+        if settings.VIDEO_FRAME_REDIS_URL:
+            logger.warning("No cached frame available for MJPEG stream %s", stream)
             continue
         try:
             frame_bytes = stream.capture_frame_bytes()
