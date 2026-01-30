@@ -12,7 +12,8 @@ import websockets
 from config.offline import requires_network
 
 from .. import store
-from ..utils import resolve_ws_scheme
+from ..consumers import OCPP_VERSION_16
+from ..utils import resolve_ws_scheme, validate_ws_host
 
 
 class UnsupportedMessageError(RuntimeError):
@@ -424,7 +425,18 @@ class ChargePointSimulator:
         candidate_schemes = [scheme]
         if fallback_scheme != scheme:
             candidate_schemes.append(fallback_scheme)
-        requested_subprotocol = "ocpp1.6"
+        requested_subprotocol = OCPP_VERSION_16
+
+        host_valid, host_error = validate_ws_host(cfg.host)
+        if not host_valid:
+            message = host_error or "Simulator host is invalid."
+            store.add_log(cfg.cp_path, message, log_type="simulator")
+            self._connect_error = message
+            self.status = "error"
+            self._stop_event.set()
+            if not self._connected.is_set():
+                self._connected.set()
+            return
 
         def _build_uri(ws_scheme: str) -> str:
             if cfg.ws_port:
@@ -510,7 +522,7 @@ class ChargePointSimulator:
                 f"Connected (subprotocol={ws.subprotocol or 'none'})",
                 log_type="simulator",
             )
-            self._last_ws_subprotocol = ws.subprotocol or requested_subprotocol
+            self._last_ws_subprotocol = ws.subprotocol
 
             async def send(msg: str) -> None:
                 try:

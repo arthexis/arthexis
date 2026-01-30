@@ -49,7 +49,8 @@ from typing import Dict, Optional
 
 import websockets
 from . import store
-from .utils import resolve_ws_scheme
+from .consumers import OCPP_VERSION_16
+from .utils import resolve_ws_scheme, validate_ws_host
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -263,12 +264,21 @@ async def simulate_cp(
         async def connect(self):
             ws = None
             last_error: Exception | None = None
+            host_valid, host_error = validate_ws_host(self.host)
+            if not host_valid:
+                message = host_error or "Simulator host is invalid."
+                self.state.last_error = message
+                self.state.last_status = message
+                self.state.phase = "Error"
+                self.state.running = False
+                self.log(message)
+                raise RuntimeError(message)
             for idx, scheme in enumerate(self._candidate_schemes):
                 uri = self._build_uri(scheme)
                 for attempt in range(2):
                     try:
                         ws = await websockets.connect(
-                            uri, subprotocols=["ocpp1.6"], **self.connect_kwargs
+                            uri, subprotocols=[OCPP_VERSION_16], **self.connect_kwargs
                         )
                         break
                     except Exception as exc:
