@@ -23,6 +23,7 @@ from django.template.loader import get_template
 from django.test import signals
 from django.utils import timezone
 from django.utils.translation import gettext as _
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.loggers.paths import select_log_dir
 from apps.nodes.models import NetMessage, Node
@@ -221,16 +222,30 @@ def _ensure_template_name(template, name: str):
     return template
 
 
-def _clean_redirect_path(raw_path: str) -> str:
-    """Return a safe redirect path stripped to local path components."""
+def _clean_redirect_path(request, raw_path: str) -> str:
+    """Return a safe redirect path restricted to local path components."""
 
-    parsed = urlparse(raw_path or "")
+    # Normalize backslashes to forward slashes to avoid browser-specific quirks.
+    raw_path = (raw_path or "").replace("\\", "/")
+
+    parsed = urlparse(raw_path)
     path = parsed.path or "/"
-    path = parsed.path or "/"
-    # if not path.startswith("/"):
-    #     path = f"/{path}"
-    return path
-    return path
+
+    # Ensure the path is absolute.
+    if not path.startswith("/"):
+        path = f"/{path}"
+
+    # Validate that the URL is safe to redirect to. We treat the path as a relative
+    # URL and only allow redirects to the current host.
+    if url_has_allowed_host_and_scheme(
+        url=path,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return path
+
+    # Fallback to home page if the path is not considered safe.
+    return "/"
 
 
 def _get_release_or_response(request, pk: int, action: str):
@@ -430,7 +445,7 @@ def _update_publish_controls(
         if start_enabled:
             ctx["dry_run"] = bool(request.GET.get("dry_run"))
             request.session[session_key] = ctx
-        return ctx, False, redirect(_clean_redirect_path(request.path))
+        return ctx, False, redirect(_clean_redirect_path(request, request.path))
 
     if request.GET.get("start"):
         if start_enabled:
