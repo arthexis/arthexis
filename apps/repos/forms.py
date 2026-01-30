@@ -71,7 +71,7 @@ class GitHubAppAdminForm(forms.ModelForm):
 
         slug_source = self.data if self.is_bound else self.initial
         slug = slug_source.get("webhook_slug") or default_slug
-        full_webhook_url = f"{base_url}{GitHubApp.webhook_path(slug)}"
+        full_webhook_url = self._compute_full_webhook_url(slug)
         self.fields["webhook_url_preview"].initial = full_webhook_url
 
         if self.is_bound:
@@ -85,6 +85,10 @@ class GitHubAppAdminForm(forms.ModelForm):
         self.initial.setdefault("setup_url", base_url)
         self.initial.setdefault("redirect_url", base_url)
 
+    def _compute_full_webhook_url(self, slug: str) -> str:
+        base_url = GitHubApp.instance_base_url()
+        return f"{base_url}{GitHubApp.webhook_path(slug)}"
+
     def _reorder_webhook_preview(self) -> None:
         if "webhook_url_preview" not in self.fields or "webhook_url" not in self.fields:
             return
@@ -97,8 +101,7 @@ class GitHubAppAdminForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("webhook_slug") and not cleaned.get("webhook_url"):
-            cleaned["webhook_url"] = (
-                f"{GitHubApp.instance_base_url()}"
-                f"{GitHubApp.webhook_path(cleaned.get('webhook_slug'))}"
+            cleaned["webhook_url"] = self._compute_full_webhook_url(
+                cleaned.get("webhook_slug")
             )
         return cleaned

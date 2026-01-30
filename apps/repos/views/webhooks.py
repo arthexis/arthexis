@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from urllib.parse import parse_qs
 from typing import Any
 
 from django.http import HttpRequest, JsonResponse
+from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.repos.models.events import GitHubEvent
+from apps.repos.models.github_apps import GitHubApp
 from apps.repos.models.repositories import GitHubRepository
 
 
@@ -64,6 +68,32 @@ def _extract_repository(payload: dict[str, Any]) -> tuple[str, str]:
     return "", ""
 
 
+def _verify_signature(request: HttpRequest, secret: str) -> bool:
+    if not secret:
+        return False
+
+    raw_bytes = request.body or b""
+    signature_256 = request.headers.get("X-Hub-Signature-256", "")
+    if signature_256:
+        expected = "sha256=" + hmac.new(
+            secret.encode("utf-8"),
+            raw_bytes,
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(signature_256, expected)
+
+    signature = request.headers.get("X-Hub-Signature", "")
+    if signature:
+        expected = "sha1=" + hmac.new(
+            secret.encode("utf-8"),
+            raw_bytes,
+            hashlib.sha1,
+        ).hexdigest()
+        return hmac.compare_digest(signature, expected)
+
+    return False
+
+
 @csrf_exempt
 def github_webhook(
     request: HttpRequest,
@@ -71,6 +101,13 @@ def github_webhook(
     name: str = "",
     app_slug: str = "",
 ) -> JsonResponse:
+    if app_slug:
+        app = GitHubApp.objects.filter(
+            Q(webhook_slug=app_slug) | Q(app_slug=app_slug)
+        ).first()
+        if not app or not _verify_signature(request, app.webhook_secret):
+            return JsonResponse({"status": "unauthorized"}, status=401)
+
     payload, raw_body = _extract_payload(request)
     payload_owner, payload_name = _extract_repository(payload)
 
