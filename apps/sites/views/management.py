@@ -460,17 +460,23 @@ class CustomLoginView(LoginView):
             }
         )
         node = Node.get_local()
-        has_rfid_scanner = False
+        has_rfid_feature = False
         had_rfid_feature = False
         if node:
-            had_rfid_feature = node.has_feature("rfid-scanner")
+            had_rfid_feature = node.has_feature("rfid") or node.has_feature(
+                "rfid-scanner"
+            )
             try:
                 node.refresh_features()
             except Exception:
                 logger.exception("Unable to refresh node features for login page")
-            has_rfid_scanner = node.has_feature("rfid-scanner") or had_rfid_feature
-        context["show_rfid_login"] = has_rfid_scanner
-        if has_rfid_scanner:
+            has_rfid_feature = (
+                node.has_feature("rfid")
+                or node.has_feature("rfid-scanner")
+                or had_rfid_feature
+            )
+        context["show_rfid_login"] = has_rfid_feature
+        if has_rfid_feature:
             context["rfid_login_url"] = reverse("pages:rfid-login")
         return context
 
@@ -493,7 +499,9 @@ login_view = CustomLoginView.as_view()
 @ensure_csrf_cookie
 def rfid_login_page(request):
     node = Node.get_local()
-    if not node or not node.has_feature("rfid-scanner"):
+    if not node or not (
+        node.has_feature("rfid") or node.has_feature("rfid-scanner")
+    ):
         raise Http404
     if request.user.is_authenticated:
         return redirect(reverse("admin:index") if request.user.is_staff else "/")
