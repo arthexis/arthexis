@@ -59,6 +59,7 @@ fi
 
 ALL=false
 FORCE=false
+CONFIRM=false
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 
@@ -72,6 +73,10 @@ while [[ $# -gt 0 ]]; do
         FORCE=true
         shift
         ;;
+      --confirm)
+        CONFIRM=true
+        shift
+        ;;
       *)
         PORT="$1"
         shift
@@ -80,13 +85,22 @@ while [[ $# -gt 0 ]]; do
   done
 
 CHARGING_LOCK="$LOCK_DIR/charging.lck"
+LOCK_MAX_AGE=${CHARGING_LOCK_MAX_AGE_SECONDS:-300}
+STALE_AFTER=${CHARGING_SESSION_STALE_AFTER_SECONDS:-86400}
+LISTEN_SECONDS=${CHARGING_SESSION_LISTEN_SECONDS:-5}
+LOCK_RECENT_WINDOW=${CHARGING_LOCK_ACTIVE_WINDOW_SECONDS:-120}
 
-if [ -n "${ARTHEXIS_STOP_DB_PATH:-}" ]; then
-  DB_PATH="$ARTHEXIS_STOP_DB_PATH"
-  LOCK_MAX_AGE=${CHARGING_LOCK_MAX_AGE_SECONDS:-300}
-  STALE_AFTER=${CHARGING_SESSION_STALE_AFTER_SECONDS:-86400}
+DB_PATH="${ARTHEXIS_STOP_DB_PATH:-}"
+if [ -z "$DB_PATH" ]; then
+  if [ -n "${ARTHEXIS_SQLITE_PATH:-}" ]; then
+    DB_PATH="$ARTHEXIS_SQLITE_PATH"
+  else
+    DB_PATH="$BASE_DIR/db.sqlite3"
+  fi
+fi
+export ARTHEXIS_STOP_DB_PATH="$DB_PATH"
 
-  SESSION_COUNTS=$(python3 - <<'PY'
+SESSION_COUNTS=$(python3 - <<'PY'
 import os
 import sqlite3
 import time
@@ -122,25 +136,88 @@ if db_path and os.path.exists(db_path):
 
 print(f"{active} {stale}")
 PY
-  )
-  read -r ACTIVE_COUNT STALE_COUNT <<<"$SESSION_COUNTS"
+)
+read -r ACTIVE_COUNT STALE_COUNT <<<"$SESSION_COUNTS"
 
-  if [ "${ACTIVE_COUNT:-0}" -gt 0 ]; then
+if [ "${ACTIVE_COUNT:-0}" -gt 0 ]; then
+  ACTIVE_SESSIONS_DETECTED=true
+  if [ "${STALE_COUNT:-0}" -ge "${ACTIVE_COUNT:-0}" ]; then
+    ACTIVE_SESSIONS_DETECTED=false
     if [ -f "$CHARGING_LOCK" ]; then
       LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$CHARGING_LOCK") ))
       if [ "$LOCK_MAX_AGE" -ge 0 ] && [ "$LOCK_AGE" -gt "$LOCK_MAX_AGE" ]; then
         echo "Charging lock appears stale; continuing shutdown."
-      elif [ "${STALE_COUNT:-0}" -gt 0 ]; then
-        echo "Found ${STALE_COUNT} session(s) without recent activity; removing charging lock."
-        rm -f "$CHARGING_LOCK"
-      elif [ "$FORCE" = true ]; then
-        echo "Active charging sessions detected but --force supplied; continuing shutdown."
       else
-        echo "Active charging sessions detected; aborting stop." >&2
-        exit 1
+        LOCK_ACTIVITY=$(python3 - "$CHARGING_LOCK" "$LISTEN_SECONDS" "$LOCK_RECENT_WINDOW" <<'PY'
+import os
+import sys
+import time
+
+lock_path = sys.argv[1]
+listen_seconds = int(sys.argv[2])
+recent_window = int(sys.argv[3])
+
+try:
+    initial_mtime = os.path.getmtime(lock_path)
+except FileNotFoundError:
+    print("inactive")
+    sys.exit(0)
+
+now = time.time()
+if now - initial_mtime <= recent_window:
+    print("active")
+    sys.exit(0)
+
+deadline = now + listen_seconds
+while time.time() < deadline:
+    time.sleep(1)
+    try:
+        current_mtime = os.path.getmtime(lock_path)
+    except FileNotFoundError:
+        print("inactive")
+        sys.exit(0)
+    if current_mtime != initial_mtime:
+        print("active")
+        sys.exit(0)
+
+print("inactive")
+PY
+        )
+        if [ "$LOCK_ACTIVITY" = "active" ]; then
+          ACTIVE_SESSIONS_DETECTED=true
+          echo "Charging lock updated recently; treating stale sessions as active."
+        else
+          echo "No recent charging activity detected; removing charging lock."
+          rm -f "$CHARGING_LOCK"
+        fi
       fi
     else
       echo "Active charging sessions detected but no charging lock present; assuming the sessions are stale."
+    fi
+  fi
+
+  if [ "$ACTIVE_SESSIONS_DETECTED" = true ]; then
+    if [ "$FORCE" = true ]; then
+      if [ "$CONFIRM" = true ]; then
+        echo "Active charging sessions detected but --force and --confirm supplied; continuing shutdown."
+      elif [ -t 0 ]; then
+        read -r -p "Active charging sessions detected. Proceed with shutdown? [y/N] " response
+        case "$response" in
+          [yY]|[yY][eE][sS])
+            echo "Shutdown confirmed; continuing despite active charging sessions."
+            ;;
+          *)
+            echo "Shutdown aborted by user." >&2
+            exit 1
+            ;;
+        esac
+      else
+        echo "Active charging sessions detected; rerun with --confirm to override in non-interactive shells." >&2
+        exit 1
+      fi
+    else
+      echo "Active charging sessions detected; aborting stop." >&2
+      exit 1
     fi
   fi
 fi
