@@ -1,5 +1,3 @@
-import shutil
-import subprocess
 from urllib.parse import urlsplit, urlunsplit
 
 from django import forms
@@ -135,8 +133,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     changelist_actions = [
         "find_devices",
         "take_snapshot",
-        "power_off",
-        "power_on",
     ]
     change_list_template = "django_object_actions/change_list.html"
     change_form_template = "admin/video/videodevice/change_form.html"
@@ -186,16 +182,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 self.admin_site.admin_view(self.view_stream),
                 name="video_videodevice_view_stream",
             ),
-            path(
-                "power-off/",
-                self.admin_site.admin_view(self.power_off_camera_view),
-                name="video_videodevice_power_off_camera",
-            ),
-            path(
-                "power-on/",
-                self.admin_site.admin_view(self.power_on_camera_view),
-                name="video_videodevice_power_on_camera",
-            ),
         ]
         return custom + super().get_urls()
 
@@ -241,12 +227,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     def take_snapshot(self, request, queryset=None):
         return self._redirect_admin("video_videodevice_take_snapshot")
 
-    def power_off(self, request, queryset=None):
-        return self._redirect_admin("video_videodevice_power_off_camera")
-
-    def power_on(self, request, queryset=None):
-        return self._redirect_admin("video_videodevice_power_on_camera")
-
     def refresh_snapshot(self, request, obj):
         self._capture_snapshot_for_device(
             request, obj, auto_enable=True, link_duplicates=True
@@ -280,8 +260,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
     set_admin_action_label(find_devices, "Find", changelist=True)
     set_admin_action_label(take_snapshot, "Snapshot", changelist=True)
-    set_admin_action_label(power_off, "Off", changelist=True)
-    set_admin_action_label(power_on, "On", changelist=True)
     set_admin_action_label(refresh_snapshot, "Snapshot")
     set_admin_action_label(goto_stream, "Goto Stream")
 
@@ -328,30 +306,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
     def _redirect_admin(self, url_name):
         return redirect(f"admin:{url_name}")
-
-    def _get_camera_power_doc_url(self):
-        try:
-            return reverse("docs:docs-document", args=["usb-camera-power-off.md"])
-        except NoReverseMatch:
-            return "/docs/usb-camera-power-off.md"
-
-    def _warn_camera_power_docs(self, request, *, reason: str):
-        doc_link = format_html(
-            '<a href="{}" target="_blank" rel="noopener">{}</a>',
-            self._get_camera_power_doc_url(),
-            _("USB Camera Power-Off guide"),
-        )
-        message = format_html(
-            "{} {}",
-            reason,
-            format_html(_("Review the {}."), doc_link),
-        )
-        self.message_user(request, message, level=messages.WARNING)
-
-    def _get_camera_power_settings(self):
-        bus = getattr(settings, "USB_CAMERA_POWER_BUS", "")
-        port = getattr(settings, "USB_CAMERA_POWER_PORT", "")
-        return bus.strip(), port.strip()
 
     def _ensure_video_feature_enabled(
         self,
@@ -582,64 +536,6 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             "admin/video/view_stream.html",
             context,
         )
-
-    def _toggle_camera_power(self, request, *, action: str):
-        node = self._get_local_node(request)
-        if node is None:
-            return redirect("..")
-
-        bus, port = self._get_camera_power_settings()
-        if not bus or not port:
-            self._warn_camera_power_docs(
-                request,
-                reason=_("USB camera power control is not configured."),
-            )
-            return redirect("..")
-
-        uhubctl_path = shutil.which("uhubctl")
-        if not uhubctl_path:
-            self._warn_camera_power_docs(
-                request,
-                reason=_("The uhubctl utility is not available on this node."),
-            )
-            return redirect("..")
-
-        result = subprocess.run(
-            [uhubctl_path, "-l", bus, "-p", port, "-a", action],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            details = " ".join(
-                entry.strip()
-                for entry in (result.stdout, result.stderr)
-                if entry.strip()
-            )
-            if details:
-                message = _(
-                    "Unable to toggle USB camera power: %(details)s"
-                ) % {"details": details}
-            else:
-                message = _("Unable to toggle USB camera power.")
-            self.message_user(request, message, level=messages.ERROR)
-            return redirect("..")
-
-        self.message_user(
-            request,
-            _(
-                "USB camera power turned %(state)s on bus %(bus)s port %(port)s."
-            )
-            % {"state": action, "bus": bus, "port": port},
-            level=messages.SUCCESS,
-        )
-        return redirect("..")
-
-    def power_off_camera_view(self, request):
-        return self._toggle_camera_power(request, action="off")
-
-    def power_on_camera_view(self, request):
-        return self._toggle_camera_power(request, action="on")
 
 
 @admin.register(VideoRecording)
