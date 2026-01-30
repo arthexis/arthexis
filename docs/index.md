@@ -11,4 +11,5 @@ This site aggregates operator guides, architecture notes, and development refere
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)
+- [Modeling System Proposal](modeling-system-proposal.md)
 - [Recipes](recipes.md)
