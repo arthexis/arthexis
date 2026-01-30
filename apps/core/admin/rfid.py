@@ -9,6 +9,7 @@ from django.contrib import admin, messages
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
@@ -42,12 +43,26 @@ from apps.energy.models import ClientReport, CustomerAccount
 from apps.links.models import ExperienceReference, Reference
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.utils import ensure_feature_enabled
+from apps.nodes.models import NodeFeature
 from apps.ocpp.models import Transaction
 from apps.core.widgets import RFIDDataWidget
 
 from .forms import RFIDConfirmImportForm, RFIDExportForm, RFIDImportForm
 
 logger = logging.getLogger(__name__)
+
+
+def _feature_enabled(slug: str) -> bool:
+    """Return ``True`` when the feature identified by ``slug`` is active."""
+
+    try:
+        feature = NodeFeature.objects.filter(slug=slug).first()
+    except (OperationalError, ProgrammingError):
+        feature = None
+    try:
+        return bool(feature and feature.is_enabled)
+    except (OperationalError, ProgrammingError):
+        return False
 
 
 class RFIDResource(resources.ModelResource):
@@ -985,6 +1000,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
         ensure_feature_enabled("rfid-scanner", logger=logger)
+        rfid_feature_enabled = _feature_enabled("rfid-scanner")
+        camera_feature_enabled = _feature_enabled("rpi-camera")
+        camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
         table_mode, toggle_url, toggle_label = build_mode_toggle(request)
         public_view_url = reverse("rfid-reader")
         if table_mode:
@@ -1002,6 +1020,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "toggle_label": toggle_label,
                 "public_view_url": public_view_url,
                 "deep_read_url": reverse("rfid-scan-deep"),
+                "camera_enabled": camera_feature_enabled,
+                "rfid_feature_enabled": rfid_feature_enabled,
+                "camera_only_mode": camera_only_mode,
             }
         )
         context["show_release_info"] = True
