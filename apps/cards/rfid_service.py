@@ -25,6 +25,8 @@ from .reader import toggle_deep_read
 
 logger = logging.getLogger(__name__)
 
+SENSITIVE_RFID_KEYS = {"keys", "dump"}
+
 DEFAULT_SERVICE_HOST = os.environ.get("RFID_SERVICE_HOST", "127.0.0.1")
 DEFAULT_SERVICE_PORT = int(os.environ.get("RFID_SERVICE_PORT", "29801"))
 DEFAULT_SCAN_TIMEOUT = float(os.environ.get("RFID_SERVICE_SCAN_TIMEOUT", "0.3"))
@@ -107,7 +109,10 @@ class RFIDServiceState:
                 if not result:
                     continue
                 if result.get("error") or result.get("rfid"):
-                    logger.debug("RFID service queued scan result: %s", result)
+                    logger.debug(
+                        "RFID service queued scan result: %s",
+                        sanitize_rfid_payload(result),
+                    )
                     self.queue.put(result)
                     self._notify_lcd_event(result)
                     write_rfid_scan_lock(result)
@@ -162,13 +167,19 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
             return
 
         if not isinstance(payload, dict):
-            logger.debug("RFID service received non-dict payload: %s", payload)
+            logger.debug(
+                "RFID service received non-dict payload: %s", type(payload).__name__
+            )
             response = {"error": "invalid request", "service_mode": "service"}
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
 
         action = str(payload.get("action") or "scan")
-        logger.debug("RFID service received action=%s payload=%s", action, payload)
+        logger.debug(
+            "RFID service received action=%s payload=%s",
+            action,
+            sanitize_rfid_payload(payload),
+        )
         state: RFIDServiceState = self.server.state
         if action == "ping":
             status = state.status()
@@ -203,7 +214,10 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
                     tag = get_next_tag(timeout=DEFAULT_SCAN_TIMEOUT) or None
                 if tag:
                     response["scan"] = tag
-                logger.debug("RFID service deep read response: %s", response)
+                logger.debug(
+                    "RFID service deep read response: %s",
+                    sanitize_rfid_payload(response),
+                )
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
 
@@ -257,6 +271,31 @@ def get_lock_dir(base_dir: Path | None = None) -> Path:
 
 def rfid_scan_lock_path(base_dir: Path | None = None) -> Path:
     return get_lock_dir(base_dir) / RFID_SCAN_LOCK_FILE
+
+
+def sanitize_rfid_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key in SENSITIVE_RFID_KEYS:
+            sanitized[key] = "[redacted]"
+            continue
+        if key == "rfid":
+            sanitized[key] = mask_rfid(value)
+            continue
+        if key == "scan" and isinstance(value, dict):
+            sanitized[key] = sanitize_rfid_payload(value)
+            continue
+        sanitized[key] = value
+    return sanitized
+
+
+def mask_rfid(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{'*' * (len(text) - 4)}{text[-4:]}"
 
 
 def write_rfid_scan_lock(result: dict[str, Any], base_dir: Path | None = None) -> None:
