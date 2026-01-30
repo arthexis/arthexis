@@ -405,7 +405,7 @@ def _reset_release_progress(
         f.unlink()
     if message_text:
         messages.info(request, message_text)
-    return redirect(_clean_redirect_path(request.path))
+    return redirect(_clean_redirect_path(request, request.path))
 
 
 def _load_release_context(
