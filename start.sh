@@ -9,6 +9,8 @@ mkdir -p "$LOCK_DIR"
 . "$BASE_DIR/scripts/helpers/env.sh"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/suite-uptime-lock.sh
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
 arthexis_load_env_file "$BASE_DIR"
@@ -181,8 +183,7 @@ RFID_UNIT_PRESENT=false
 if [ -n "$SERVICE_NAME" ]; then
   RFID_SERVICE_UNIT="rfid-$SERVICE_NAME"
 fi
-if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && [ -n "$RFID_SERVICE_UNIT" ] && \
-  "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${RFID_SERVICE_UNIT}.service"; then
+if [ -n "$RFID_SERVICE_UNIT" ] && _arthexis_systemd_unit_present "${RFID_SERVICE_UNIT}.service"; then
   RFID_UNIT_PRESENT=true
 fi
 CAMERA_SERVICE_UNIT=""
@@ -190,8 +191,7 @@ CAMERA_UNIT_PRESENT=false
 if [ -n "$SERVICE_NAME" ]; then
   CAMERA_SERVICE_UNIT="camera-$SERVICE_NAME"
 fi
-if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && [ -n "$CAMERA_SERVICE_UNIT" ] && \
-  "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${CAMERA_SERVICE_UNIT}.service"; then
+if [ -n "$CAMERA_SERVICE_UNIT" ] && _arthexis_systemd_unit_present "${CAMERA_SERVICE_UNIT}.service"; then
   CAMERA_UNIT_PRESENT=true
 fi
 
@@ -222,7 +222,7 @@ fi
 
 if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
   && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
-  && "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
+  && _arthexis_systemd_unit_present "${SERVICE_NAME}.service"; then
   "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
   if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
     "${SYSTEMCTL_CMD[@]}" restart "$RFID_SERVICE_UNIT"

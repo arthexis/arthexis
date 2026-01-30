@@ -374,6 +374,7 @@ if [ "$REPAIR" = true ]; then
     if [ "$ENABLE_CAMERA_SERVICE" = false ] && [ -f "$LOCK_DIR_PATH/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
         ENABLE_CAMERA_SERVICE=true
         DISABLE_CAMERA_SERVICE=false
+        REQUIRES_REDIS=true
     fi
     if [ "$ENABLE_CONTROL" = false ] && [ -f "$LOCK_DIR_PATH/control.lck" ]; then
         ENABLE_CONTROL=true
@@ -642,7 +643,7 @@ if [ -n "$SERVICE" ]; then
             if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
                 sudo systemctl stop "$LCD_SERVICE" || true
                 sudo systemctl disable "$LCD_SERVICE" || true
-                LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
+                LCD_SERVICE_FILE="/etc/systemd/system/$(basename "${LCD_SERVICE}").service"
                 if [ -f "$LCD_SERVICE_FILE" ]; then
                     sudo rm "$LCD_SERVICE_FILE"
                 fi
@@ -659,7 +660,7 @@ if [ -n "$SERVICE" ]; then
             if systemctl list-unit-files | grep -Fq "${RFID_SERVICE}.service"; then
                 sudo systemctl stop "$RFID_SERVICE" || true
                 sudo systemctl disable "$RFID_SERVICE" || true
-                RFID_SERVICE_FILE="/etc/systemd/system/${RFID_SERVICE}.service"
+                RFID_SERVICE_FILE="/etc/systemd/system/$(basename "${RFID_SERVICE}").service"
                 if [ -f "$RFID_SERVICE_FILE" ]; then
                     sudo rm "$RFID_SERVICE_FILE"
                 fi
@@ -676,7 +677,7 @@ if [ -n "$SERVICE" ]; then
             if systemctl list-unit-files | grep -Fq "${CAMERA_SERVICE}.service"; then
                 sudo systemctl stop "$CAMERA_SERVICE" || true
                 sudo systemctl disable "$CAMERA_SERVICE" || true
-                CAMERA_SERVICE_FILE="/etc/systemd/system/${CAMERA_SERVICE}.service"
+                CAMERA_SERVICE_FILE="/etc/systemd/system/$(basename "${CAMERA_SERVICE}").service"
                 if [ -f "$CAMERA_SERVICE_FILE" ]; then
                     sudo rm "$CAMERA_SERVICE_FILE"
                 fi
