@@ -1,24 +1,17 @@
 {% load i18n %}
 
 {% if model_export_url %}
-    <li class="export-menu">
-        <button type="button" class="historylink export-menu__trigger" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}" aria-haspopup="true" aria-expanded="false">
-            <span aria-hidden="true">{% trans "EXPORT" %}</span>
-            <span class="export-menu__arrow" aria-hidden="true">▾</span>
-            <span class="visually-hidden">{% trans "Export" %}</span>
-        </button>
-        <ul class="export-menu__options" aria-label="{% trans 'Export options' %}">
-            <li>
-                <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=json">
-                    {% trans "JSON" %}
-                </a>
-            </li>
-            <li>
-                <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=csv">
-                    {% trans "CSV" %}
-                </a>
-            </li>
-        </ul>
+    <li>
+        <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=json" class="historylink" title="{% trans 'Export JSON' %}" aria-label="{% trans 'Export JSON' %}">
+            <span aria-hidden="true">{% trans "EXPORT JSON" %}</span>
+            <span class="visually-hidden">{% trans "Export JSON" %}</span>
+        </a>
+    </li>
+    <li>
+        <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=csv" class="historylink" title="{% trans 'Export CSV' %}" aria-label="{% trans 'Export CSV' %}">
+            <span aria-hidden="true">{% trans "EXPORT CSV" %}</span>
+            <span class="visually-hidden">{% trans "Export CSV" %}</span>
+        </a>
     </li>
 {% endif %}
 {% if model_import_url %}

@@ -669,10 +669,6 @@ class ImportExportAdminMixin:
 
     import_template = "admin/base/model_import.html"
 
-    class Media:
-        css = {"all": ("core/admin_export_menu.css",)}
-        js = ("core/admin_export_menu.js",)
-
     def _admin_view_name(self, suffix: str) -> str:
         opts = self.model._meta
         return f"{opts.app_label}_{opts.model_name}_{suffix}"
