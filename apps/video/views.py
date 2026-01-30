@@ -27,16 +27,16 @@ def stream_detail(request, slug):
 
 
 def _build_mjpeg_stream_response(stream: MjpegStream):
+    cached = None
     if settings.VIDEO_FRAME_REDIS_URL:
         cached = get_frame(stream)
-        if not cached:
-            logger.info("No cached frames available for MJPEG stream %s", stream.slug)
-            return HttpResponse(status=204)
-        generator = mjpeg_frame_stream(stream, first_frame=cached)
-        return StreamingHttpResponse(
-            generator,
-            content_type="multipart/x-mixed-replace; boundary=frame",
-        )
+        if cached:
+            generator = mjpeg_frame_stream(stream, first_frame=cached)
+            return StreamingHttpResponse(
+                generator,
+                content_type="multipart/x-mixed-replace; boundary=frame",
+            )
+        logger.info("No cached frames available for MJPEG stream %s", stream.slug)
 
     try:
         frame_iter = stream.iter_frame_bytes()
@@ -135,15 +135,14 @@ def _format_timestamp(value):
 def _build_mjpeg_probe_response(stream: MjpegStream):
     if settings.VIDEO_FRAME_REDIS_URL:
         cached = get_frame(stream)
-        if not cached:
-            logger.info("No cached frames available for probe %s", stream.slug)
+        if cached:
+            try:
+                stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
+            except Exception:
+                logger.exception("Unable to store cached MJPEG frame for %s", stream.slug)
+                return HttpResponse("Unable to store frame.", status=503)
             return HttpResponse(status=204)
-        try:
-            stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
-        except Exception:
-            logger.exception("Unable to store cached MJPEG frame for %s", stream.slug)
-            return HttpResponse("Unable to store frame.", status=503)
-        return HttpResponse(status=204)
+        logger.info("No cached frames available for probe %s", stream.slug)
 
     try:
         frame_bytes = stream.capture_frame_bytes()
