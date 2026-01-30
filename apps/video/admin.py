@@ -10,6 +10,7 @@ from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html
+from django.utils.text import slugify
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin.mixins import OwnableAdminMixin
@@ -139,7 +140,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     ]
     change_list_template = "django_object_actions/change_list.html"
     change_form_template = "admin/video/videodevice/change_form.html"
-    change_actions = ("refresh_snapshot",)
+    change_actions = ("refresh_snapshot", "goto_stream")
     fieldsets = (
         (
             None,
@@ -219,6 +220,17 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 )
             except NoReverseMatch:
                 extra_context["latest_snapshot_sample_url"] = None
+        if obj:
+            extra_context["mjpeg_streams"] = [
+                {
+                    "stream": stream,
+                    "admin_url": stream.get_admin_url(),
+                    "public_url": stream.get_stream_url(),
+                    "last_snapshot_at": stream.last_frame_captured_at
+                    or stream.last_thumbnail_at,
+                }
+                for stream in obj.mjpeg_streams.order_by("name", "pk")
+            ]
         return super().changeform_view(
             request, object_id, form_url=form_url, extra_context=extra_context
         )
@@ -243,6 +255,17 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             reverse(f"admin:{self._admin_view_name('change')}", args=[obj.pk])
         )
 
+    def goto_stream(self, request, obj):
+        stream = obj.mjpeg_streams.order_by("-is_active", "pk").first()
+        if stream is None:
+            stream = self._create_default_stream(obj)
+            self.message_user(
+                request,
+                _("Created MJPEG stream %(name)s.") % {"name": stream.name},
+                level=messages.SUCCESS,
+            )
+        return redirect(stream.get_admin_url())
+
     @admin.action(description=_("Reload resolution defaults"))
     def reload_resolution_defaults(self, request, queryset):
         width, height = DEFAULT_CAMERA_RESOLUTION
@@ -260,6 +283,24 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     set_admin_action_label(power_off, "Off", changelist=True)
     set_admin_action_label(power_on, "On", changelist=True)
     set_admin_action_label(refresh_snapshot, "Snapshot")
+    set_admin_action_label(goto_stream, "Goto Stream")
+
+    def _create_default_stream(self, device: VideoDevice) -> MjpegStream:
+        base_slug = slugify(device.slug or device.name or f"device-{device.pk}") or (
+            f"device-{device.pk}"
+        )
+        slug = base_slug
+        counter = 1
+        while MjpegStream.objects.filter(slug=slug).exists():
+            counter += 1
+            slug = f"{base_slug}-{counter}"
+        name = _("%(device)s Stream") % {"device": device.display_name}
+        return MjpegStream.objects.create(
+            name=name,
+            slug=slug,
+            video_device=device,
+            is_active=True,
+        )
 
     def _redirect_admin(self, url_name):
         return redirect(f"admin:{url_name}")
