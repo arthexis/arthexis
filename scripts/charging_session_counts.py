@@ -13,11 +13,11 @@ def to_epoch(value: str | None) -> float | None:
 
 
 def main() -> None:
-    db_path = os.environ.get("ARTHEXIS_STOP_DB_PATH")
-    if not db_path:
-        db_path = os.environ.get("ARTHEXIS_SQLITE_PATH", "")
-    if not db_path:
-        db_path = os.path.join(os.getcwd(), "db.sqlite3")
+    db_path = (
+        os.environ.get("ARTHEXIS_STOP_DB_PATH")
+        or os.environ.get("ARTHEXIS_SQLITE_PATH")
+        or os.path.join(os.getcwd(), "db.sqlite3")
+    )
     stale_after = int(os.environ.get("CHARGING_SESSION_STALE_AFTER_SECONDS", "86400"))
     now = time.time()
     active = 0
