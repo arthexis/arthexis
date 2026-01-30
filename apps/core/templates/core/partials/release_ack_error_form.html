@@ -1,0 +1,9 @@
+{% load i18n %}
+<form method="post" class="error-actions">
+  {% csrf_token %}
+  <input type="hidden" name="step" value="{{ current_step }}">
+  {% if dry_run %}
+  <input type="hidden" name="dry_run" value="1">
+  {% endif %}
+  <button type="submit" name="ack_error" value="1">✅ {% trans 'Continue after fix' %}</button>
+</form>

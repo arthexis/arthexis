@@ -441,7 +441,7 @@ def _update_publish_controls(
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
 
-    if request.GET.get("ack_error"):
+    if request.method == "POST" and request.POST.get("ack_error"):
         ctx.pop("error", None)
         dirty_entries = _collect_dirty_files()
         if dirty_entries:
@@ -462,10 +462,7 @@ def _update_publish_controls(
                 )
         if not ctx.get("started"):
             ctx["started"] = True
-        if ctx.get("pending_git_push") or ctx.get("dirty_files"):
-            ctx["paused"] = True
-        else:
-            ctx["paused"] = False
+        ctx["paused"] = bool(ctx.get("pending_git_push") or ctx.get("dirty_files"))
         request.session[session_key] = ctx
         return ctx, False, redirect(
             _clean_redirect_path(request, request.path),
