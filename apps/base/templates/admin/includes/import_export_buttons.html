@@ -2,15 +2,15 @@
 
 {% if model_export_url %}
     <li>
-        <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=json" class="historylink" title="{% trans 'Export JSON' %}" aria-label="{% trans 'Export JSON' %}">
-            <span aria-hidden="true">{% trans "EXPORT JSON" %}</span>
-            <span class="visually-hidden">{% trans "Export JSON" %}</span>
+        <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=json" class="historylink" title="{% trans 'JSON' %}" aria-label="{% trans 'JSON' %}">
+            <span aria-hidden="true">{% trans "JSON" %}</span>
+            <span class="visually-hidden">{% trans "JSON" %}</span>
         </a>
     </li>
     <li>
-        <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=csv" class="historylink" title="{% trans 'Export CSV' %}" aria-label="{% trans 'Export CSV' %}">
-            <span aria-hidden="true">{% trans "EXPORT CSV" %}</span>
-            <span class="visually-hidden">{% trans "Export CSV" %}</span>
+        <a href="{{ model_export_url }}?{% if export_querystring %}{{ export_querystring }}&{% endif %}format=csv" class="historylink" title="{% trans 'CSV' %}" aria-label="{% trans 'CSV' %}">
+            <span aria-hidden="true">{% trans "CSV" %}</span>
+            <span class="visually-hidden">{% trans "CSV" %}</span>
         </a>
     </li>
 {% endif %}
