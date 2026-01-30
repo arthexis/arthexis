@@ -186,6 +186,14 @@
     {% endif %}
     {% if error %}
     <p class="error">{{ error }}</p>
+    <p class="status-message">{% trans 'Resolve the issue above, then continue to retry this step without restarting.' %}</p>
+    <form method="get" class="error-actions">
+      <input type="hidden" name="step" value="{{ current_step }}">
+      {% if dry_run %}
+      <input type="hidden" name="dry_run" value="1">
+      {% endif %}
+      <button type="submit" name="ack_error" value="1">✅ {% trans 'Continue after fix' %}</button>
+    </form>
     {% elif not done %}
     {% if started and next_step is not None %}
     <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
