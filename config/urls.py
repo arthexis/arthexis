@@ -11,6 +11,7 @@ from pathlib import Path
 
 from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import AppRegistryNotReady
 from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.contrib import admin
@@ -59,7 +60,12 @@ def autodiscovered_urlpatterns():
 
     patterns = []
     base_dir = Path(settings.BASE_DIR).resolve()
-    for app_config in apps.get_app_configs():
+    try:
+        app_configs = apps.get_app_configs()
+    except AppRegistryNotReady:
+        return patterns
+
+    for app_config in app_configs:
         app_path = Path(app_config.path).resolve()
         try:
             app_path.relative_to(base_dir)
