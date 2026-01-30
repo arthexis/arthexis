@@ -69,7 +69,11 @@ class GitHubWebhook(Entity):
                 break
 
         if not domain:
-            domain = socket.gethostname() or "localhost"
+            try:
+                domain = socket.gethostname()
+            except OSError:
+                domain = ""
+            domain = domain or "localhost"
 
         scheme = getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")
         return f"{scheme}://{domain}"
