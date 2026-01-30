@@ -101,20 +101,26 @@ def _detect_external_websockets(content: str) -> bool:
 
 
 def _discover_site_config_paths(site_path: Path | None) -> list[Path]:
+    candidates: set[Path] = set()
     if site_path and site_path.exists():
-        return [site_path]
+        if site_path.is_dir():
+            candidates.update(site_path.glob("arthexis*.conf"))
+        else:
+            candidates.add(site_path)
 
-    candidates = [
+    enabled_candidates = [
         path
         for path in services.SITES_ENABLED_DIR.glob("arthexis*.conf")
         if not path.name.endswith("-sites.conf")
     ]
-    if not candidates:
-        candidates = [
+    candidates.update(enabled_candidates)
+    if not enabled_candidates:
+        available_candidates = [
             path
             for path in services.SITES_AVAILABLE_DIR.glob("arthexis*.conf")
             if not path.name.endswith("-sites.conf")
         ]
+        candidates.update(available_candidates)
     return sorted(candidates)
 
 
