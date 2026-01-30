@@ -28,6 +28,7 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost, ImproperlyConfigured
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
+from django.db.models import URLField as DjangoURLField
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 from apps.celery.utils import resolve_celery_shutdown_timeout
@@ -48,6 +49,16 @@ if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatib
 
     encoding.force_text = force_str
 install_validate_host_with_subnets()
+
+_original_urlfield_formfield = DjangoURLField.formfield
+
+
+def _urlfield_formfield_with_https_default(self, **kwargs):
+    kwargs.setdefault("assume_scheme", "https")
+    return _original_urlfield_formfield(self, **kwargs)
+
+
+DjangoURLField.formfield = _urlfield_formfield_with_https_default
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

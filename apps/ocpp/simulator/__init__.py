@@ -424,6 +424,7 @@ class ChargePointSimulator:
         candidate_schemes = [scheme]
         if fallback_scheme != scheme:
             candidate_schemes.append(fallback_scheme)
+        requested_subprotocol = "ocpp1.6"
 
         def _build_uri(ws_scheme: str) -> str:
             if cfg.ws_port:
@@ -450,7 +451,9 @@ class ChargePointSimulator:
                     for attempt in range(2):
                         try:
                             ws = await websockets.connect(
-                                uri, subprotocols=["ocpp1.6"], **connect_kwargs
+                                uri,
+                                subprotocols=[requested_subprotocol],
+                                **connect_kwargs,
                             )
                             break
                         except Exception as exc:
@@ -507,7 +510,7 @@ class ChargePointSimulator:
                 f"Connected (subprotocol={ws.subprotocol or 'none'})",
                 log_type="simulator",
             )
-            self._last_ws_subprotocol = ws.subprotocol
+            self._last_ws_subprotocol = ws.subprotocol or requested_subprotocol
 
             async def send(msg: str) -> None:
                 try:
