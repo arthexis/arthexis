@@ -171,6 +171,11 @@ RFID_SERVICE_CONFIGURED=false
 if [ -f "$RFID_SERVICE_LOCK" ]; then
   RFID_SERVICE_CONFIGURED=true
 fi
+CAMERA_SERVICE_LOCK="$LOCK_DIR/camera-service.lck"
+CAMERA_SERVICE_CONFIGURED=false
+if [ -f "$CAMERA_SERVICE_LOCK" ]; then
+  CAMERA_SERVICE_CONFIGURED=true
+fi
 RFID_SERVICE_UNIT=""
 RFID_UNIT_PRESENT=false
 if [ -n "$SERVICE_NAME" ]; then
@@ -179,6 +184,15 @@ fi
 if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && [ -n "$RFID_SERVICE_UNIT" ] && \
   "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${RFID_SERVICE_UNIT}.service"; then
   RFID_UNIT_PRESENT=true
+fi
+CAMERA_SERVICE_UNIT=""
+CAMERA_UNIT_PRESENT=false
+if [ -n "$SERVICE_NAME" ]; then
+  CAMERA_SERVICE_UNIT="camera-$SERVICE_NAME"
+fi
+if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && [ -n "$CAMERA_SERVICE_UNIT" ] && \
+  "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${CAMERA_SERVICE_UNIT}.service"; then
+  CAMERA_UNIT_PRESENT=true
 fi
 
 if [ "$RFID_SERVICE_CONFIGURED" = true ]; then
@@ -193,6 +207,18 @@ if [ "$RFID_SERVICE_CONFIGURED" = true ]; then
   echo "RFID service initial status: $RFID_INITIAL_STATUS"
   arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "rfid-status" "initial_status=$RFID_INITIAL_STATUS"
 fi
+if [ "$CAMERA_SERVICE_CONFIGURED" = true ]; then
+  CAMERA_INITIAL_STATUS="unknown"
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    CAMERA_INITIAL_STATUS="systemctl-unavailable"
+  elif [ "$CAMERA_UNIT_PRESENT" = true ]; then
+    CAMERA_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$CAMERA_SERVICE_UNIT" 2>/dev/null || echo "unknown")
+  else
+    CAMERA_INITIAL_STATUS="not-registered"
+  fi
+  echo "Camera service initial status: $CAMERA_INITIAL_STATUS"
+  arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "camera-status" "initial_status=$CAMERA_INITIAL_STATUS"
+fi
 
 if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
   && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
@@ -201,12 +227,20 @@ if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = 
   if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
     "${SYSTEMCTL_CMD[@]}" restart "$RFID_SERVICE_UNIT"
   fi
+  if [ "$CAMERA_SERVICE_CONFIGURED" = true ] && [ "$CAMERA_UNIT_PRESENT" = true ]; then
+    "${SYSTEMCTL_CMD[@]}" restart "$CAMERA_SERVICE_UNIT"
+  fi
   if [ "$SILENT" = true ]; then
     exit 0
   fi
   if wait_for_systemd_service "$SERVICE_NAME"; then
     if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
       if ! wait_for_systemd_service "$RFID_SERVICE_UNIT"; then
+        exit 1
+      fi
+    fi
+    if [ "$CAMERA_SERVICE_CONFIGURED" = true ] && [ "$CAMERA_UNIT_PRESENT" = true ]; then
+      if ! wait_for_systemd_service "$CAMERA_SERVICE_UNIT"; then
         exit 1
       fi
     fi

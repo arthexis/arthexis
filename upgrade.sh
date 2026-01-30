@@ -564,7 +564,7 @@ if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
         celery-*.service|celery-beat-*.service)
           arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
           ;;
-        lcd-*.service)
+        lcd-*.service|camera-*.service)
           arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
           ;;
       esac
@@ -614,6 +614,14 @@ rfid_service_configured() {
 
 rfid_systemd_unit_present() {
   _prefixed_systemd_unit_present "rfid" "$1"
+}
+
+camera_service_configured() {
+  [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]
+}
+
+camera_systemd_unit_present() {
+  _prefixed_systemd_unit_present "camera" "$1"
 }
 
 _prefixed_systemd_unit_present() {
@@ -1284,6 +1292,10 @@ restart_services() {
     if rfid_service_configured && rfid_systemd_unit_present "$service_name"; then
       include_rfid=1
     fi
+    local include_camera=0
+    if camera_service_configured && camera_systemd_unit_present "$service_name"; then
+      include_camera=1
+    fi
     local restart_via_systemd=0
     local systemctl_available=0
     local -a systemctl_cmd=()
@@ -1321,6 +1333,16 @@ restart_services() {
           "${systemctl_cmd[@]}" start "$rfid_service" || true
         fi
       fi
+      if [ "$include_camera" -eq 1 ]; then
+        local camera_service="camera-$service_name"
+        if "${systemctl_cmd[@]}" is-active --quiet "$camera_service"; then
+          echo "Signaling $camera_service for restart via systemd..."
+          "${systemctl_cmd[@]}" kill --signal=TERM "$camera_service" || true
+        else
+          echo "Starting $camera_service via systemd..."
+          "${systemctl_cmd[@]}" start "$camera_service" || true
+        fi
+      fi
     fi
     if [ "$restart_via_systemd" -eq 1 ]; then
       if ! wait_for_service_active "$service_name" 1; then
@@ -1348,6 +1370,10 @@ restart_services() {
         local rfid_service="rfid-$service_name"
         _ensure_service_active "$rfid_service" "RFID" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
       fi
+      if [ "$include_camera" -eq 1 ]; then
+        local camera_service="camera-$service_name"
+        _ensure_service_active "$camera_service" "Camera" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
+      fi
       return 0
     fi
     if ! ./start.sh; then
@@ -1365,6 +1391,10 @@ restart_services() {
     if [ "$include_rfid" -eq 1 ]; then
       local rfid_service="rfid-$service_name"
       _check_service_active "$rfid_service" "RFID" || return 1
+    fi
+    if [ "$include_camera" -eq 1 ]; then
+      local camera_service="camera-$service_name"
+      _check_service_active "$camera_service" "Camera" || return 1
     fi
     return 0
   fi
