@@ -104,7 +104,7 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
 
 - **Shell**
    - Linux: run [`./start.sh`](https://github.com/arthexis/arthexis/blob/main/start.sh) and stop with [`./stop.sh`](https://github.com/arthexis/arthexis/blob/main/stop.sh).
-   - Windows: run [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) and stop with `Ctrl+C`.
+   - Windows: run [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) and stop with [`stop.bat`](https://github.com/arthexis/arthexis/blob/main/stop.bat).
 
 ### 3. Install and upgrade
 - **Linux:**
