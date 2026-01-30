@@ -15,6 +15,12 @@ from apps.nginx.config_utils import default_certificate_domain_from_settings
 
 
 SUBDOMAIN_PREFIX_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+NGINX_PROXY_PASS_RE = re.compile(r"proxy_pass\s+https?://[^:]+:(\d+)")
+NGINX_SSL_LISTEN_RE = re.compile(r"listen\s+[^;]*\b443\b[^;]*ssl", re.IGNORECASE)
+NGINX_IPV6_LISTEN_RE = re.compile(r"listen\s+\[::\]")
+NGINX_SERVER_NAME_RE = re.compile(r"server_name\s+([^;]+);")
+NGINX_EXTERNAL_WEBSOCKETS_TOKEN = "proxy_set_header Connection $connection_upgrade;"
+DEFAULT_SITE_DESTINATION = "/etc/nginx/sites-enabled/arthexis-sites.conf"
 
 
 def parse_subdomain_prefixes(raw: str, *, strict: bool = True) -> list[str]:
@@ -57,6 +63,70 @@ def _read_int_lock(lock_dir: Path, name: str, fallback: int) -> int:
     if parsed < 1 or parsed > 65535:
         return fallback
     return parsed
+
+
+def _extract_proxy_port(content: str) -> int | None:
+    for match in NGINX_PROXY_PASS_RE.findall(content):
+        try:
+            port = int(match)
+        except ValueError:
+            continue
+        if 1 <= port <= 65535:
+            return port
+    return None
+
+
+def _extract_server_name(content: str) -> str:
+    for match in NGINX_SERVER_NAME_RE.findall(content):
+        for token in match.split():
+            token = token.strip()
+            if not token or token == "_" or "*" in token or token.startswith("."):
+                continue
+            return token
+    return ""
+
+
+def _detect_https_enabled(content: str) -> bool:
+    if NGINX_SSL_LISTEN_RE.search(content):
+        return True
+    return "ssl_certificate" in content
+
+
+def _detect_ipv6_enabled(content: str) -> bool:
+    return bool(NGINX_IPV6_LISTEN_RE.search(content))
+
+
+def _detect_external_websockets(content: str) -> bool:
+    return NGINX_EXTERNAL_WEBSOCKETS_TOKEN in content
+
+
+def _discover_site_config_paths(site_path: Path | None) -> list[Path]:
+    if site_path and site_path.exists():
+        return [site_path]
+
+    candidates = [
+        path
+        for path in services.SITES_ENABLED_DIR.glob("arthexis*.conf")
+        if not path.name.endswith("-sites.conf")
+    ]
+    if not candidates:
+        candidates = [
+            path
+            for path in services.SITES_AVAILABLE_DIR.glob("arthexis*.conf")
+            if not path.name.endswith("-sites.conf")
+        ]
+    return sorted(candidates)
+
+
+def _resolve_site_destination() -> str:
+    candidates = [
+        services.SITES_ENABLED_DIR / "arthexis-sites.conf",
+        services.SITES_AVAILABLE_DIR / "arthexis-sites.conf",
+    ]
+    for path in candidates:
+        if path.exists():
+            return str(path)
+    return DEFAULT_SITE_DESTINATION
 
 
 class SiteConfiguration(models.Model):
@@ -149,6 +219,7 @@ class SiteConfiguration(models.Model):
     def clean(self):
         super().clean()
         parse_subdomain_prefixes(self.managed_subdomains)
+
     def apply(self, *, reload: bool = True, remove: bool = False) -> services.ApplyResult:
         """Apply or remove the managed nginx configuration."""
 
@@ -199,3 +270,74 @@ class SiteConfiguration(models.Model):
 
         obj, _created = cls.objects.get_or_create(name=default_name, defaults=defaults)
         return obj
+
+    @classmethod
+    def load_local_configurations(
+        cls,
+        *,
+        base_dir: Path | None = None,
+        site_path: Path | None = None,
+    ) -> dict[str, object]:
+        resolved_base = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
+        lock_dir = resolved_base / ".locks"
+        mode = _read_lock(lock_dir, "nginx_mode.lck", "internal").lower()
+        if mode not in {"internal", "public"}:
+            mode = "internal"
+        role = _read_lock(lock_dir, "role.lck", "Terminal")
+        default_port = _read_int_lock(lock_dir, "backend_port.lck", 8888)
+        site_entries_path = cls._meta.get_field("site_entries_path").get_default()
+        resolved_site_path = site_path or Path(
+            getattr(settings, "NGINX_SITE_PATH", "") or "/etc/nginx/sites-enabled/arthexis.conf"
+        )
+        candidate_paths = _discover_site_config_paths(resolved_site_path)
+
+        results: dict[str, object] = {"created": 0, "updated": 0, "errors": []}
+        seen_names: set[str] = set()
+
+        if not candidate_paths:
+            results["errors"].append("No local nginx site configurations found.")
+            return results
+
+        for path in candidate_paths:
+            try:
+                content = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                results["errors"].append(f"{path}: {exc}")
+                continue
+
+            name = _extract_server_name(content) or default_certificate_domain_from_settings(settings)
+            if not name:
+                name = path.stem
+
+            base_name = name
+            counter = 2
+            while name in seen_names:
+                name = f"{base_name}-{counter}"
+                counter += 1
+            seen_names.add(name)
+
+            port = _extract_proxy_port(content) or default_port
+            protocol = "https" if _detect_https_enabled(content) else "http"
+            include_ipv6 = _detect_ipv6_enabled(content)
+            external_websockets = _detect_external_websockets(content)
+
+            defaults = {
+                "enabled": True,
+                "mode": mode,
+                "protocol": protocol,
+                "role": role,
+                "port": port,
+                "include_ipv6": include_ipv6,
+                "external_websockets": external_websockets,
+                "expected_path": str(path),
+                "site_entries_path": site_entries_path,
+                "site_destination": _resolve_site_destination(),
+            }
+
+            obj, created = cls.objects.update_or_create(name=name, defaults=defaults)
+            if created:
+                results["created"] += 1
+            else:
+                results["updated"] += 1
+
+        return results

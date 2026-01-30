@@ -80,6 +80,14 @@
             {% if default_preview_url %}
               <li><a href="{{ default_preview_url }}">{% translate "Preview Default Sites" %}</a></li>
             {% endif %}
+            {% if load_local_url and can_load_local %}
+              <li>
+                <form method="post" action="{{ load_local_url }}">
+                  {% csrf_token %}
+                  <button type="submit" class="button">{% translate "Load Local" %}</button>
+                </form>
+              </li>
+            {% endif %}
           {% endblock %}
         </ul>
     {% endblock %}
