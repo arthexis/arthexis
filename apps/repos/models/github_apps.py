@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import socket
+
 from django.conf import settings
+from django.contrib.sites.models import Site
 from django.db import models
+from django.urls import NoReverseMatch, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
@@ -19,6 +23,14 @@ class GitHubWebhook(Entity):
 
     name = models.CharField(max_length=255, blank=True)
     webhook_url = models.URLField(blank=True)
+    webhook_slug = models.SlugField(
+        max_length=255,
+        blank=True,
+        help_text=_(
+            "Optional URL slug for the webhook endpoint. When provided, the full "
+            "webhook URL is derived from the current site configuration."
+        ),
+    )
     webhook_secret = SigilShortAutoField(max_length=255, blank=True)
     webhook_events = models.JSONField(default=list, blank=True)
     webhook_active = models.BooleanField(default=True)
@@ -32,9 +44,55 @@ class GitHubWebhook(Entity):
     class Meta:
         abstract = True
 
+    @classmethod
+    def instance_base_url(cls) -> str:
+        try:
+            domain = Site.objects.get_current().domain.strip()
+        except Site.DoesNotExist:
+            domain = ""
+
+        if not domain:
+            fallback = getattr(settings, "DEFAULT_SITE_DOMAIN", "") or getattr(
+                settings, "DEFAULT_DOMAIN", ""
+            )
+            if fallback:
+                domain = fallback.strip()
+
+        if not domain:
+            for host in getattr(settings, "ALLOWED_HOSTS", []):
+                if not isinstance(host, str):
+                    continue
+                host = host.strip()
+                if not host or host.startswith("*") or "/" in host:
+                    continue
+                domain = host
+                break
+
+        if not domain:
+            domain = socket.gethostname() or "localhost"
+
+        scheme = getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")
+        return f"{scheme}://{domain}"
+
+    @classmethod
+    def webhook_path(cls, slug: str | None = None) -> str:
+        try:
+            if slug:
+                return reverse("repos:github-webhook-app", kwargs={"app_slug": slug})
+            return reverse("repos:github-webhook")
+        except NoReverseMatch:  # pragma: no cover - defensive
+            return "/repos/webhooks/github/"
+
+    def webhook_full_url(self) -> str:
+        if self.webhook_slug:
+            return f"{self.instance_base_url()}{self.webhook_path(self.webhook_slug)}"
+        if self.webhook_url:
+            return self.webhook_url
+        return f"{self.instance_base_url()}{self.webhook_path()}"
+
     def webhook_config(self) -> dict[str, object]:
         return {
-            "url": self.webhook_url,
+            "url": self.webhook_full_url(),
             "secret": self.webhook_secret,
             "content_type": self.webhook_content_type,
             "insecure_ssl": "1" if self.webhook_insecure_ssl else "0",
