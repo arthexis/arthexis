@@ -911,6 +911,7 @@ auto_realign_branch_for_role() {
 
 CHANNEL="stable"
 FORCE_STOP=0
+STOP_CONFIRM=0
 FORCE_UPGRADE=0
 FORCE_ENV_REFRESH=0
 CLEAN=0
@@ -939,6 +940,11 @@ while [[ $# -gt 0 ]]; do
       FORCE_STOP=1
       FORCE_UPGRADE=1
       FORWARDED_ARGS+=("--force")
+      shift
+      ;;
+    --confirm)
+      STOP_CONFIRM=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --stash)
@@ -1718,6 +1724,9 @@ stop_running_instance() {
     STOP_ARGS=(--all)
     if [[ $FORCE_STOP -eq 1 ]]; then
       STOP_ARGS+=(--force)
+    fi
+    if [[ $STOP_CONFIRM -eq 1 ]]; then
+      STOP_ARGS+=(--confirm)
     fi
     if ! ARTHEXIS_SKIP_LCD_STOP=1 ./stop.sh "${STOP_ARGS[@]}"; then
       if [[ $FORCE_STOP -eq 1 ]]; then
