@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import tempfile
@@ -24,6 +25,7 @@ from django.dispatch import receiver
 from django.http import (
     Http404,
     HttpResponse,
+    HttpResponseBadRequest,
     HttpResponseForbidden,
     HttpResponseNotAllowed,
     HttpResponseRedirect,
@@ -710,8 +712,11 @@ class ImportExportAdminMixin:
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
+        export_querystring = request.GET.copy()
+        export_querystring.pop("format", None)
         if self.has_view_permission(request):
             extra_context.setdefault("model_export_url", self._export_url())
+            extra_context.setdefault("export_querystring", export_querystring.urlencode())
         if self.has_add_permission(request) or self.has_change_permission(request):
             extra_context.setdefault("model_import_url", self._import_url())
         return super().changelist_view(request, extra_context=extra_context)
@@ -719,9 +724,33 @@ class ImportExportAdminMixin:
     def export_view(self, request):
         if not self.has_view_permission(request):
             raise PermissionDenied
-        queryset = self.get_queryset(request)
-        payload = serialize("json", queryset)
+        export_format = request.GET.get("format", "json").lower()
+        original_get = request.GET
+        filtered_get = request.GET.copy()
+        filtered_get.pop("format", None)
+        request.GET = filtered_get
+        try:
+            changelist = self.get_changelist_instance(request)
+            queryset = changelist.get_queryset(request)
+        finally:
+            request.GET = original_get
         opts = self.model._meta
+        if export_format == "csv":
+            field_names = [field.name for field in opts.fields]
+            response = HttpResponse(content_type="text/csv")
+            response["Content-Disposition"] = (
+                f"attachment; filename={opts.app_label}_{opts.model_name}.csv"
+            )
+            writer = csv.writer(response)
+            writer.writerow(field_names)
+            for obj in queryset:
+                writer.writerow(
+                    [field.value_from_object(obj) for field in opts.fields]
+                )
+            return response
+        if export_format != "json":
+            return HttpResponseBadRequest(_("Unsupported export format."))
+        payload = serialize("json", queryset)
         response = HttpResponse(payload, content_type="application/json")
         response["Content-Disposition"] = (
             f"attachment; filename={opts.app_label}_{opts.model_name}.json"
