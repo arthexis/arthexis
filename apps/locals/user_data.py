@@ -671,6 +671,7 @@ class ImportExportAdminMixin:
 
     class Media:
         css = {"all": ("core/admin_export_menu.css",)}
+        js = ("core/admin_export_menu.js",)
 
     def _admin_view_name(self, suffix: str) -> str:
         opts = self.model._meta
