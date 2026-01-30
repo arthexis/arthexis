@@ -11,7 +11,7 @@ The approach centers on:
 - **Observability and governance** to keep the system trustworthy and evolvable.
 
 ## Background and current challenge
-We currently rely on several communication surfaces (e.g., CLI, OCPP websocket) to interact with the system. Each surface has its own schema and semantics, which makes multi-model interaction brittle. Because no channel should be “primary,” the system needs to support multiple sources of truth while preserving consistency, and it needs to allow models of different problem dimensions to communicate through defined transformations.
+We currently rely on several communication surfaces (e.g., CLI, OCPP websocket), each with its own schema and semantics. This makes multi-model interaction brittle. As no single channel is primary, the system must support multiple sources of truth while preserving consistency. It also needs to enable communication between models of different problem dimensions through defined transformations.
 
 ### Key problems to address
 1. **Schema drift:** Each surface uses its own data structures, making translation ad hoc.
