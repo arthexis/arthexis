@@ -25,6 +25,21 @@ def prepare_package_release(admin_view, request, package):
     if request.method not in {"POST", "GET"}:
         return HttpResponseNotAllowed(["GET", "POST"])
 
+    existing_releases = list(PackageRelease.all_objects.filter(package=package))
+    if existing_releases:
+        latest_release = max(
+            existing_releases, key=lambda release: Version(release.version)
+        )
+        if not latest_release.is_published:
+            if latest_release.is_deleted:
+                latest_release.is_deleted = False
+                latest_release.save(update_fields=["is_deleted"])
+            return redirect(
+                reverse(
+                    "admin:release_packagerelease_change", args=[latest_release.pk]
+                )
+            )
+
     ver_file = Path("VERSION")
     if ver_file.exists():
         raw_version = ver_file.read_text().strip()
