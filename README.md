@@ -143,8 +143,3 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 Arthexis Constellation is still under very active development and new features are added every day.
 
 If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.
-
-## About Me
-
-> "What, you want to know about me too? Well, I enjoy developing software, role-playing games, long walks on the beach and a fourth secret thing above all else."
-> --Arthexis
