@@ -64,6 +64,7 @@ def _persist_release_context(
     _store_release_context(request, session_key, ctx)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+    lock_path.chmod(0o600)
 
 
 class DirtyRepository(Exception):
@@ -462,7 +463,12 @@ def _load_release_context(
     if lock_path.exists():
         try:
             lock_ctx = json.loads(lock_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(
+                "Failed to load release context from lock file %s: %s",
+                lock_path,
+                exc,
+            )
             lock_ctx = None
     if ctx is None and lock_ctx is not None:
         ctx = lock_ctx
@@ -486,6 +492,7 @@ def _update_publish_controls(
     ctx: dict,
     start_enabled: bool,
     session_key: str,
+    lock_path: Path,
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
 
@@ -507,7 +514,7 @@ def _update_publish_controls(
         else:
             ctx.pop("github_token", None)
             messages.error(request, _("Enter a GitHub token to continue."))
-        _store_release_context(request, session_key, ctx)
+        _persist_release_context(request, session_key, ctx, lock_path)
         return ctx, False, redirect(_clean_redirect_path(request, request.path))
 
     if request.method == "POST" and request.POST.get("ack_error"):
@@ -2191,6 +2198,7 @@ def release_progress(request, pk: int, action: str):
         ctx,
         start_enabled,
         session_key,
+        lock_path,
     )
     if redirect_response:
         return redirect_response
