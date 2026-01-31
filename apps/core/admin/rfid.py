@@ -294,7 +294,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     def scan_rfids(self, request, queryset):
         return redirect("admin:cards_rfid_scan")
 
-    scan_rfids.short_description = "Scanner"
+    scan_rfids.short_description = _("Admin Scanner")
 
     @staticmethod
     def _build_unique_account_name(base: str) -> str:
