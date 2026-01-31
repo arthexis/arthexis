@@ -66,13 +66,13 @@ class RecordingDevice(Entity):
 
     def save(self, *args, **kwargs) -> None:
         with transaction.atomic():
-            super().save(*args, **kwargs)
             if self.is_default:
                 (
                     RecordingDevice.objects.filter(node=self.node, is_default=True)
                     .exclude(pk=self.pk)
                     .update(is_default=False)
                 )
+            super().save(*args, **kwargs)
 
     @classmethod
     def default_for_node(cls, node) -> "RecordingDevice | None":

@@ -34,9 +34,8 @@ def record_microphone_sample(
         raise RuntimeError("arecord is not available")
     if device_identifier is None and node is not None:
         default_device = RecordingDevice.default_for_node(node)
-        device_identifier = (
-            default_device.identifier if default_device else device_identifier
-        )
+        if default_device:
+            device_identifier = default_device.identifier
     if device_identifier is None:
         preferred_device = RecordingDevice.preferred_device(pcm_path=pcm_path)
         device_identifier = preferred_device.identifier if preferred_device else None
