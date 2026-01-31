@@ -442,6 +442,7 @@ class ChargePointSimulator:
         ws = None
         last_error: Exception | None = None
         requested_subprotocol = "ocpp1.6"
+        self._last_ws_subprotocol = requested_subprotocol
         try:
             self._unsupported_message = False
             self._unsupported_message_reason = ""
@@ -472,6 +473,7 @@ class ChargePointSimulator:
                                     "Retrying connection with subprotocol",
                                     log_type="simulator",
                                 )
+                                await asyncio.sleep(0.1)
                     if ws is None:
                         if not last_error:
                             raise RuntimeError(
