@@ -165,7 +165,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def start_simulator(self, request, queryset):
         self._start_simulators(request, queryset)
 
-    @admin.action(description="Start Default")
+    @admin.action(description=_("Start Default"))
     def start_default(self, request, queryset=None):
         from django.urls import reverse
         from django.utils.html import format_html

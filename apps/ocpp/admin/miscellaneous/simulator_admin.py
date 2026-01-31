@@ -212,7 +212,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def start_simulator(self, request, queryset):
         self._start_simulators(request, queryset)
 
-    @admin.action(description="Start Default")
+    @admin.action(description=_("Start Default"))
     def start_default(self, request, queryset=None):
         default_simulator = (
             Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()

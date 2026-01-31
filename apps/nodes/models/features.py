@@ -89,7 +89,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
         ),
         "video-cam": (
             NodeFeatureDefaultAction(
-                label="Discover",
+                label=_("Discover"),
                 url_name="admin:video_videodevice_find_devices",
             ),
             NodeFeatureDefaultAction(
