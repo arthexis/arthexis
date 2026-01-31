@@ -64,7 +64,9 @@ class Command(BaseCommand):
 
         sample_rate = options["sample_rate"]
         channels = options["channels"]
-        preferred_device = RecordingDevice.preferred_device()
+        preferred_device = (
+            RecordingDevice.default_for_node(node) or RecordingDevice.preferred_device()
+        )
         path = self._record_until_keypress(
             sample_rate=sample_rate,
             channels=channels,

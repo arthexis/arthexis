@@ -71,6 +71,10 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:audio_recordingdevice_test_microphone",
             ),
             NodeFeatureDefaultAction(
+                label=_("Take Sample"),
+                url_name="admin:audio_recordingdevice_take_sample",
+            ),
+            NodeFeatureDefaultAction(
                 label=_("Discover"),
                 url_name="admin:audio_recordingdevice_find_devices",
             ),
