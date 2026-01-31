@@ -137,8 +137,8 @@ class RecordingDevice(Entity):
 
     @classmethod
     def refresh_from_system(
-        cls, *, node, pcm_path: Path = PCM_PATH
-    ) -> tuple[int, int]:
+        cls, *, node, pcm_path: Path = PCM_PATH, return_objects: bool = False
+    ) -> tuple[int, int] | tuple[int, int, list["RecordingDevice"], list["RecordingDevice"]]:
         """Synchronize :class:`RecordingDevice` entries for ``node``.
 
         Returns a ``(created, updated)`` tuple.
@@ -155,6 +155,7 @@ class RecordingDevice(Entity):
                 "capture_channels": device.capture_channels,
                 "raw_info": device.raw_info,
             },
+            return_objects=return_objects,
         )
 
     @classmethod

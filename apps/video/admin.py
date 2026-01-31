@@ -11,6 +11,7 @@ from django.utils.html import format_html
 from django.utils.text import slugify
 from django_object_actions import DjangoObjectActions
 
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.core.admin.mixins import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
@@ -36,6 +37,8 @@ def set_admin_action_label(action, label, *, changelist=False):
     action.short_description = action.label
     if changelist:
         action.changelist = True
+    if label == "Discover":
+        action.is_discover_action = True
 
 
 class VideoDeviceAdminForm(forms.ModelForm):
@@ -429,7 +432,38 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             )
             return redirect("..")
 
-        created, updated = VideoDevice.refresh_from_system(node=node)
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "video_find_devices"},
+        )
+        created, updated, created_devices, updated_devices = (
+            VideoDevice.refresh_from_system(node=node, return_objects=True)
+        )
+        if discovery:
+            for device in created_devices:
+                record_discovery_item(
+                    discovery,
+                    obj=device,
+                    label=device.identifier,
+                    created=True,
+                    overwritten=False,
+                )
+            for device in updated_devices:
+                record_discovery_item(
+                    discovery,
+                    obj=device,
+                    label=device.identifier,
+                    created=False,
+                    overwritten=True,
+                )
+            discovery.metadata = {
+                "action": "video_find_devices",
+                "created": created,
+                "updated": updated,
+            }
+            discovery.save(update_fields=["metadata"])
 
         NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
 

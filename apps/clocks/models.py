@@ -49,7 +49,8 @@ class ClockDevice(Entity):
         node,
         bus_numbers: Iterable[int] | None = None,
         scanner=None,
-    ) -> tuple[int, int]:
+        return_objects: bool = False,
+    ) -> tuple[int, int] | tuple[int, int, list["ClockDevice"], list["ClockDevice"]]:
         """Synchronize :class:`ClockDevice` entries for ``node``.
 
         Returns a ``(created, updated)`` tuple.
@@ -62,6 +63,8 @@ class ClockDevice(Entity):
         )
         created = 0
         updated = 0
+        created_objects: list[ClockDevice] = []
+        updated_objects: list[ClockDevice] = []
         existing = {
             (device.bus, device.address): device
             for device in cls.objects.filter(node=node)
@@ -76,13 +79,15 @@ class ClockDevice(Entity):
                 "raw_info": device.raw_info,
             }
             if obj is None:
-                cls.objects.create(
+                obj = cls.objects.create(
                     node=node,
                     bus=device.bus,
                     address=device.address,
                     **defaults,
                 )
                 created += 1
+                if return_objects:
+                    created_objects.append(obj)
             else:
                 dirty = False
                 for field, value in defaults.items():
@@ -92,9 +97,13 @@ class ClockDevice(Entity):
                 if dirty:
                     obj.save(update_fields=list(defaults.keys()))
                     updated += 1
+                    if return_objects:
+                        updated_objects.append(obj)
         for obj in cls.objects.filter(node=node):
             if (obj.bus, obj.address) not in seen:
                 obj.delete()
+        if return_objects:
+            return created, updated, created_objects, updated_objects
         return created, updated
 
     @classmethod

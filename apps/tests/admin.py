@@ -17,7 +17,7 @@ class TestResultAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at",)
     actions = ["run_all_tests"]
 
-    @admin.action(description=_("Run All Tests"))
+    @admin.action(description=_("Run Suite"))
     def run_all_tests(self, request, queryset):
         deleted_count, _ = TestResult.objects.all().delete()
         self.message_user(

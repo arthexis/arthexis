@@ -6,6 +6,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.discovery.services import record_discovery_item, start_discovery
+
 from .models import NetworkConnection
 from .services import NMCLIScanError, scan_nmcli_connections
 
@@ -96,11 +98,12 @@ class NetworkConnectionAdmin(DjangoObjectActions, admin.ModelAdmin):
     def run_nmcli_scan(self, request, queryset=None):
         return HttpResponseRedirect(self._scan_url())
 
-    run_nmcli_scan.label = _("Run NMCLI Scan")
-    run_nmcli_scan.short_description = _("Run NMCLI Scan")
+    run_nmcli_scan.label = _("Discover")
+    run_nmcli_scan.short_description = _("Discover")
     run_nmcli_scan.requires_queryset = False
+    run_nmcli_scan.is_discover_action = True
 
-    def _sync_connections(self, request):
+    def _sync_connections(self, request, *, discovery=None):
         scanned, errors = scan_nmcli_connections()
         now = timezone.now()
         created = 0
@@ -153,6 +156,19 @@ class NetworkConnectionAdmin(DjangoObjectActions, admin.ModelAdmin):
                 created += 1
             else:
                 updated += 1
+            if discovery:
+                record_discovery_item(
+                    discovery,
+                    obj=obj,
+                    label=defaults["connection_id"] or defaults["uuid"] or "",
+                    created=created_flag,
+                    overwritten=not created_flag,
+                    data={
+                        "connection_id": defaults["connection_id"],
+                        "uuid": defaults["uuid"],
+                        "interface_name": defaults["interface_name"],
+                    },
+                )
 
         return {"created": created, "updated": updated, "errors": errors, "count": len(scanned)}
 
@@ -162,7 +178,7 @@ class NetworkConnectionAdmin(DjangoObjectActions, admin.ModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             "opts": opts,
-            "title": _("Run NMCLI Scan"),
+            "title": _("Discover"),
             "changelist_url": changelist_url,
             "scan_url": self._scan_url(),
             "result": None,
@@ -170,11 +186,26 @@ class NetworkConnectionAdmin(DjangoObjectActions, admin.ModelAdmin):
 
         if request.method == "POST":
             try:
-                result = self._sync_connections(request)
+                discovery = start_discovery(
+                    _("Discover"),
+                    request,
+                    model=self.model,
+                    metadata={"action": "nmcli_scan"},
+                )
+                result = self._sync_connections(request, discovery=discovery)
             except NMCLIScanError as exc:
                 self.message_user(request, str(exc), messages.ERROR)
             else:
                 context["result"] = result
+                if discovery:
+                    discovery.metadata = {
+                        "action": "nmcli_scan",
+                        "created": result["created"],
+                        "updated": result["updated"],
+                        "count": result["count"],
+                        "errors": result.get("errors") or [],
+                    }
+                    discovery.save(update_fields=["metadata"])
                 if result["created"] or result["updated"]:
                     self.message_user(
                         request,

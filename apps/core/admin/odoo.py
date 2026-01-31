@@ -7,6 +7,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 from apps.odoo.models import OdooEmployee, OdooProduct
 
@@ -107,7 +108,7 @@ class OdooProductAdmin(EntityModelAdmin):
         ]
         return custom + urls
 
-    @admin.action(description="Register from Odoo")
+    @admin.action(description=_("Discover"))
     def register_from_odoo(self, request, queryset=None):  # pragma: no cover - simple redirect
         return HttpResponseRedirect(
             reverse(
@@ -115,13 +116,15 @@ class OdooProductAdmin(EntityModelAdmin):
             )
         )
 
+    register_from_odoo.is_discover_action = True
+
     def _build_register_context(self, request):
         opts = self.model._meta
         context = self.admin_site.each_context(request)
         context.update(
             {
                 "opts": opts,
-                "title": _("Register from Odoo"),
+                "title": _("Discover"),
                 "has_credentials": False,
                 "profile_url": None,
                 "products": [],
@@ -226,6 +229,24 @@ class OdooProductAdmin(EntityModelAdmin):
                                 odoo_product__id=odoo_id
                             ).first()
                             if existing:
+                                discovery = start_discovery(
+                                    _("Discover"),
+                                    request,
+                                    model=self.model,
+                                    metadata={"source": "odoo", "odoo_id": odoo_id},
+                                )
+                                if discovery:
+                                    record_discovery_item(
+                                        discovery,
+                                        obj=existing,
+                                        label=existing.name,
+                                        created=False,
+                                        overwritten=False,
+                                        data={
+                                            "source": "odoo",
+                                            "odoo_id": odoo_id,
+                                        },
+                                    )
                                 self.message_user(
                                     request,
                                     _(
@@ -253,6 +274,24 @@ class OdooProductAdmin(EntityModelAdmin):
                                     "name": match.get("name", ""),
                                 },
                             )
+                            discovery = start_discovery(
+                                _("Discover"),
+                                request,
+                                model=self.model,
+                                metadata={"source": "odoo", "odoo_id": odoo_id},
+                            )
+                            if discovery:
+                                record_discovery_item(
+                                    discovery,
+                                    obj=product,
+                                    label=product.name,
+                                    created=True,
+                                    overwritten=False,
+                                    data={
+                                        "source": "odoo",
+                                        "odoo_id": odoo_id,
+                                    },
+                                )
                             self.log_addition(
                                 request, product, "Registered product from Odoo"
                             )

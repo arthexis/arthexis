@@ -6,6 +6,7 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 
 from .models import OdooDeployment, OdooQuery, OdooQueryVariable
@@ -86,6 +87,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
     discover_instances.label = _("Discover")
     discover_instances.short_description = _("Discover")
     discover_instances.requires_queryset = False
+    discover_instances.is_discover_action = True
 
     def discover_instances_view(self, request):
         opts = self.model._meta
@@ -106,6 +108,42 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
             ):
                 raise PermissionDenied
             result = sync_odoo_deployments(scan_filesystem=False)
+            discovery = start_discovery(
+                _("Discover"),
+                request,
+                model=self.model,
+                metadata={
+                    "action": "odoo_deployment_discovery",
+                    "found": result.get("found"),
+                },
+            )
+            if discovery:
+                for instance in result.get("created_instances", []):
+                    record_discovery_item(
+                        discovery,
+                        obj=instance,
+                        label=instance.name,
+                        created=True,
+                        overwritten=False,
+                        data={"config_path": instance.config_path},
+                    )
+                for instance in result.get("updated_instances", []):
+                    record_discovery_item(
+                        discovery,
+                        obj=instance,
+                        label=instance.name,
+                        created=False,
+                        overwritten=True,
+                        data={"config_path": instance.config_path},
+                    )
+                discovery.metadata = {
+                    "action": "odoo_deployment_discovery",
+                    "created": result["created"],
+                    "updated": result["updated"],
+                    "found": result["found"],
+                    "errors": result.get("errors") or [],
+                }
+                discovery.save(update_fields=["metadata"])
             context["result"] = result
             if result["created"] or result["updated"]:
                 message = _(

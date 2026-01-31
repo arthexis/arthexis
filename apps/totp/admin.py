@@ -81,8 +81,8 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
     def registration_wizard(self, request, queryset=None):
         return HttpResponseRedirect(reverse("admin:totp_totpdevice_register"))
 
-    registration_wizard.label = _("Register via QR")
-    registration_wizard.short_description = _("Register via QR")
+    registration_wizard.label = _("Register")
+    registration_wizard.short_description = _("Register")
     registration_wizard.changelist = True
 
     def registration_wizard_view(self, request: HttpRequest) -> HttpResponse:
