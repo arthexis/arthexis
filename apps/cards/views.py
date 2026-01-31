@@ -51,21 +51,25 @@ def scan_next(request):
 
     node = Node.get_local()
     role_name = node.role.name if node and node.role else ""
-    allow_anonymous = role_name == "Control"
+    allow_anonymous_read = role_name == "Control"
     ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")
     camera_feature_enabled = _feature_enabled("video-cam")
     prefer_camera = request.GET.get("source") == "camera"
     camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
 
-    if request.method != "POST" and not request.user.is_authenticated and not allow_anonymous:
+    if (
+        request.method != "POST"
+        and not request.user.is_authenticated
+        and not allow_anonymous_read
+    ):
         if _request_wants_json(request):
             return JsonResponse({"error": "Authentication required"}, status=401)
         return redirect_to_login(
             request.get_full_path(), reverse("pages:login")
         )
     if request.method == "POST":
-        if not request.user.is_authenticated and not allow_anonymous:
+        if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required"}, status=401)
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
