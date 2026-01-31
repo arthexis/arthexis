@@ -352,7 +352,7 @@ class Command(BaseCommand):
     @staticmethod
     def _session_transaction_id(filename: str) -> str | None:
         stem = filename.rsplit(".", 1)[0]
-        parts = stem.split("_", 1)
+        parts = stem.rsplit("_", 1)
         if len(parts) == 2 and parts[1]:
             return parts[1]
         return None
