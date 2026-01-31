@@ -10,6 +10,16 @@ from apps.screens.startup_notifications import format_lcd_lines
 from .common import *  # noqa: F401,F403
 from ..evcs import _start_simulator, _stop_simulator, parse_repeat
 
+REPEAT_TRUE_STRINGS = {
+    "true",
+    "1",
+    "yes",
+    "on",
+    "forever",
+    "infinite",
+    "loop",
+}
+
 
 @login_required(login_url="pages:login")
 @landing("Charge Point Simulator")
@@ -39,15 +49,7 @@ def cp_simulator(request):
 
     def _normalize_repeat(value: object) -> bool:
         if isinstance(value, str):
-            return value.strip().lower() in {
-                "true",
-                "1",
-                "yes",
-                "on",
-                "forever",
-                "infinite",
-                "loop",
-            }
+            return value.strip().lower() in REPEAT_TRUE_STRINGS
         return bool(value)
 
     def _simulator_expires_at(params: dict[str, object]):
