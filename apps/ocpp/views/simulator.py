@@ -8,7 +8,7 @@ from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
 
 from .common import *  # noqa: F401,F403
-from ..evcs import _start_simulator, _stop_simulator
+from ..evcs import _start_simulator, _stop_simulator, parse_repeat
 
 
 @login_required(login_url="pages:login")
@@ -37,8 +37,21 @@ def cp_simulator(request):
             body = target or "Running"
         return format_lcd_lines(subject, body)
 
+    def _normalize_repeat(value: object) -> bool:
+        if isinstance(value, str):
+            return value.strip().lower() in {
+                "true",
+                "1",
+                "yes",
+                "on",
+                "forever",
+                "infinite",
+                "loop",
+            }
+        return bool(value)
+
     def _simulator_expires_at(params: dict[str, object]):
-        if params.get("repeat"):
+        if parse_repeat(params.get("repeat")) == float("inf"):
             return None
         duration = params.get("duration")
         delay = params.get("delay") or 0
@@ -148,7 +161,7 @@ def cp_simulator(request):
     dashboard_link: str | None = None
     if request.method == "POST":
         action = request.POST.get("action")
-        repeat_value = request.POST.get("repeat")
+        repeat_value = _normalize_repeat(request.POST.get("repeat"))
         sim_params = {
             "host": request.POST.get("host") or default_params["host"],
             "ws_port": _port_value(request.POST.get("ws_port")),
@@ -175,7 +188,7 @@ def cp_simulator(request):
             "amperage": _cast_value(
                 request.POST.get("amperage"), float, default_params["amperage"]
             ),
-            "repeat": bool(repeat_value),
+            "repeat": repeat_value,
             "username": request.POST.get("username", ""),
             "password": request.POST.get("password", ""),
             "ws_scheme": ws_scheme,
@@ -225,6 +238,7 @@ def cp_simulator(request):
     state_params = state.get("params") or {}
 
     form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
+    form_params["repeat"] = _normalize_repeat(form_params.get("repeat"))
     form_params["password"] = ""
 
     context = {
