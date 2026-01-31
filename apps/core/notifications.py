@@ -24,6 +24,7 @@ from apps.screens.startup_notifications import (
     LCD_CLOCK_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    LCD_STATS_LOCK_FILE,
     LCD_UPTIME_LOCK_FILE,
     lcd_feature_enabled,
     render_lcd_lock_file,
@@ -43,6 +44,7 @@ class LcdChannel(str, Enum):
     LOW = "low"
     CLOCK = "clock"
     UPTIME = "uptime"
+    STATS = "stats"
 
 
 def get_base_dir() -> Path:
@@ -85,6 +87,7 @@ class NotificationManager:
         LcdChannel.HIGH.value: LCD_HIGH_LOCK_FILE,
         LcdChannel.CLOCK.value: LCD_CLOCK_LOCK_FILE,
         LcdChannel.UPTIME.value: LCD_UPTIME_LOCK_FILE,
+        LcdChannel.STATS.value: LCD_STATS_LOCK_FILE,
     }
 
     def __init__(
