@@ -112,16 +112,16 @@ def _check_audio_capture(feature: "NodeFeature", node: Optional["Node"]):
             f"No audio recording device detected on {target.hostname} for {feature.display}.",
             messages.WARNING,
         )
-    if not target.has_feature("audio-capture"):
+    if target.has_feature("audio-capture"):
         return FeatureCheckResult(
-            False,
-            f"{feature.display} is not enabled on {target.hostname}.",
-            messages.WARNING,
+            True,
+            f"{feature.display} is enabled on {target.hostname} and a recording device is available.",
+            messages.SUCCESS,
         )
     return FeatureCheckResult(
         True,
-        f"{feature.display} is enabled on {target.hostname} and a recording device is available.",
-        messages.SUCCESS,
+        f"{feature.display} is eligible on {target.hostname}; a recording device is available.",
+        messages.INFO,
     )
 
 
@@ -142,16 +142,16 @@ def _check_gpio_rtc(feature: "NodeFeature", node: Optional["Node"]):
             f"No I2C clock device detected on {target.hostname} for {feature.display}.",
             messages.WARNING,
         )
-    if not target.has_feature("gpio-rtc"):
+    if target.has_feature("gpio-rtc"):
         return FeatureCheckResult(
-            False,
-            f"{feature.display} is not enabled on {target.hostname}.",
-            messages.WARNING,
+            True,
+            f"{feature.display} is enabled on {target.hostname} and an RTC is available.",
+            messages.SUCCESS,
         )
     return FeatureCheckResult(
         True,
-        f"{feature.display} is enabled on {target.hostname} and an RTC is available.",
-        messages.SUCCESS,
+        f"{feature.display} is eligible on {target.hostname}; an RTC is available.",
+        messages.INFO,
     )
 
 
