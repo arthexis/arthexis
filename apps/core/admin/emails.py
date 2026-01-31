@@ -155,23 +155,20 @@ class EmailInboxAdmin(
     test_collectors_action.label = "Test collectors"
     test_collectors_action.short_description = "Test collectors"
 
-    @admin.action(description="Search selected inbox")
+    @admin.action(description="Search target inboxes")
     def search_inbox(self, request, queryset):
-        if queryset.count() != 1:
-            self.message_user(
-                request, "Please select exactly one inbox.", level=messages.ERROR
-            )
-            return None
-        inbox = queryset.first()
         if request.POST.get("apply"):
             form = EmailSearchForm(request.POST)
             if form.is_valid():
-                results = inbox.search_messages(
-                    subject=form.cleaned_data["subject"],
-                    from_address=form.cleaned_data["from_address"],
-                    body=form.cleaned_data["body"],
-                    use_regular_expressions=False,
-                )
+                results = []
+                for inbox in queryset:
+                    messages = inbox.search_messages(
+                        subject=form.cleaned_data["subject"],
+                        from_address=form.cleaned_data["from_address"],
+                        body=form.cleaned_data["body"],
+                        use_regular_expressions=False,
+                    )
+                    results.append({"inbox": inbox, "messages": messages})
                 context = {
                     "form": form,
                     "results": results,
