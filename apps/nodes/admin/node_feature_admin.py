@@ -7,6 +7,8 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
+import logging
+
 from apps.locals.user_data import EntityModelAdmin
 from apps.discovery.services import record_discovery_item, start_discovery
 
@@ -225,8 +227,12 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
 
             result = feature_checks.run(feature, node=node)
         except Exception as exc:  # pragma: no cover - defensive
+            logging.exception("Error while running feature check for %s", feature.display)
             status = "error"
-            message = f"{feature.display}: {exc} {enablement_message}"
+            message = (
+                f"An error occurred while checking eligibility for {feature.display}. "
+                f"{enablement_message}"
+            )
             level = messages.ERROR
         else:
             if result is None:
