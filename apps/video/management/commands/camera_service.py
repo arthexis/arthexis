@@ -130,11 +130,13 @@ class Command(BaseCommand):
                     try:
                         frame_bytes = capture.capture_frame(interval=interval)
                     except MjpegDependencyError as exc:
+                        capture._last_error = str(exc)
                         logger.warning("MJPEG dependency error for %s: %s", stream.slug, exc)
                         store_status(stream, capture.status_payload())
                         capture.log_status()
                         continue
                     except Exception as exc:  # pragma: no cover - runtime device error
+                        capture._last_error = str(exc)
                         logger.warning("Camera capture error for %s: %s", stream.slug, exc)
                         store_status(stream, capture.status_payload())
                         capture.log_status()
