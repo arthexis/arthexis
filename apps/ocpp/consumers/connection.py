@@ -122,13 +122,13 @@ class SubprotocolConnectionMixin:
 
         headers = self.scope.get("headers") or []
         for raw_name, raw_value in headers:
-            if isinstance(raw_name, (bytes, bytearray)):
-                name_value = raw_name.decode("latin1")
-            else:
-                try:
+            try:
+                if isinstance(raw_name, (bytes, bytearray)):
+                    name_value = raw_name.decode("latin1")
+                else:
                     name_value = str(raw_name)
-                except (TypeError, ValueError):
-                    continue
+            except (TypeError, ValueError, UnicodeDecodeError):
+                continue
             if name_value.lower() != "sec-websocket-protocol":
                 continue
             try:
