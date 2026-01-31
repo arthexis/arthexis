@@ -40,13 +40,16 @@
 
   {% if results is not None %}
   <h2>{% trans 'Results' %}</h2>
-  <ul>
-    {% for msg in results %}
-      <li><strong>{{ msg.subject }}</strong> - {{ msg.from }}<br>{{ msg.body|linebreaksbr }}</li>
-    {% empty %}
-      <li>{% trans 'No messages found.' %}</li>
-    {% endfor %}
-  </ul>
+  {% for result in results %}
+    <h3>{{ result.inbox }}</h3>
+    <ul>
+      {% for msg in result.messages %}
+        <li><strong>{{ msg.subject }}</strong> - {{ msg.from }}<br>{{ msg.body|linebreaksbr }}</li>
+      {% empty %}
+        <li>{% trans 'No messages found.' %}</li>
+      {% endfor %}
+    </ul>
+  {% endfor %}
   {% endif %}
 </div>
 {% endblock %}
