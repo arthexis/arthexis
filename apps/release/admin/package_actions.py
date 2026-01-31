@@ -74,7 +74,7 @@ def prepare_package_release(admin_view, request, package):
             {
                 "opts": Package._meta,
                 "original": package,
-                "title": _("Prepare next release"),
+                "title": _("Prepare Next release"),
                 "cancel_url": request.META.get("HTTP_REFERER")
                 or reverse("admin:index"),
             }
@@ -165,8 +165,8 @@ class PackageAdminActionsMixin:
     def prepare_next_release_action(self, request, obj):
         return prepare_package_release(self, request, obj)
 
-    prepare_next_release_action.label = _("Prepare next")
-    prepare_next_release_action.short_description = _("Prepare next")
+    prepare_next_release_action.label = _("Prepare Next")
+    prepare_next_release_action.short_description = _("Prepare Next")
 
     @admin.action(description=_("Create GitHub repository"))
     def create_repository_bulk_action(self, request, queryset):

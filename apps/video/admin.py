@@ -258,7 +258,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 level=messages.SUCCESS,
             )
 
-    set_admin_action_label(find_devices, "Find Devices", changelist=True)
+    set_admin_action_label(find_devices, "Discover", changelist=True)
     set_admin_action_label(take_snapshot, "Take Snapshot", changelist=True)
     set_admin_action_label(refresh_snapshot, "Snapshot")
     set_admin_action_label(goto_stream, "Goto Stream")

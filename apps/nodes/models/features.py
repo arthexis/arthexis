@@ -71,7 +71,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:audio_recordingdevice_test_microphone",
             ),
             NodeFeatureDefaultAction(
-                label=_("Find Devices"),
+                label=_("Discover"),
                 url_name="admin:audio_recordingdevice_find_devices",
             ),
         ),
@@ -89,7 +89,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
         ),
         "rpi-camera": (
             NodeFeatureDefaultAction(
-                label="Find Devices",
+                label="Discover",
                 url_name="admin:video_videodevice_find_devices",
             ),
             NodeFeatureDefaultAction(

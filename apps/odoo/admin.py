@@ -83,8 +83,8 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
     def discover_instances(self, request, queryset=None):  # pragma: no cover - admin action
         return HttpResponseRedirect(self._discover_url())
 
-    discover_instances.label = _("Discover Odoo Instances")
-    discover_instances.short_description = _("Discover Odoo Instances")
+    discover_instances.label = _("Discover")
+    discover_instances.short_description = _("Discover")
     discover_instances.requires_queryset = False
 
     def discover_instances_view(self, request):
@@ -93,7 +93,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             "opts": opts,
-            "title": _("Discover Odoo Instances"),
+            "title": _("Discover"),
             "changelist_url": changelist_url,
             "action_url": self._discover_url(),
             "result": None,

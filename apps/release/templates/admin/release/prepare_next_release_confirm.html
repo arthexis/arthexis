@@ -2,7 +2,7 @@
 {% load i18n %}
 
 {% block content %}
-  <h1>{% translate "Prepare next release" %}</h1>
+  <h1>{% translate "Prepare Next release" %}</h1>
   <form method="post">
     {% csrf_token %}
     <p>
@@ -11,7 +11,7 @@
       {% endblocktranslate %}
     </p>
     <div class="submit-row">
-      <input type="submit" value="{% translate 'Prepare next release' %}" class="default">
+      <input type="submit" value="{% translate 'Prepare Next release' %}" class="default">
       <a href="{{ cancel_url }}">{% translate "Cancel" %}</a>
     </div>
   </form>

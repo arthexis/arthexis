@@ -212,7 +212,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def start_simulator(self, request, queryset):
         self._start_simulators(request, queryset)
 
-    @admin.action(description="Start Default Simulator")
+    @admin.action(description="Start Default")
     def start_default(self, request, queryset=None):
         default_simulator = (
             Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
@@ -255,7 +255,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
         return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
 
-    start_default.label = _("Start Default Simulator")
+    start_default.label = _("Start Default")
     start_default.requires_queryset = False
 
     def stop_simulator(self, request, queryset):

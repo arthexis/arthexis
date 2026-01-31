@@ -92,8 +92,8 @@ class SlackBotProfileAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAd
             reverse("admin:teams_slackbotprofile_bot_creation_wizard")
         )
 
-    bot_creation_wizard.label = _("Bot Creation Wizard")
-    bot_creation_wizard.short_description = _("Bot Creation Wizard")
+    bot_creation_wizard.label = _("Wizard")
+    bot_creation_wizard.short_description = _("Wizard")
 
     def _is_ip_address(self, host: str) -> bool:
         try:
