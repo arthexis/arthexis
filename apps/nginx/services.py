@@ -146,22 +146,22 @@ def _remove_nginx_configs(*, keep: set[Path], sudo: str = "sudo") -> None:
         "/etc/nginx/conf.d/arthexis-*.conf",
     )
     for pattern in patterns:
-        quoted_pattern = shlex.quote(pattern)
-        if keep_paths:
-            keep_list = " ".join(shlex.quote(path) for path in sorted(keep_paths))
-            remove_cmd = (
-                f"for file in {quoted_pattern}; do "
-                "[ -e \"$file\" ] || continue; "
-                "skip=0; "
-                f"for keep in {keep_list}; do "
-                "[ \"$file\" = \"$keep\" ] && skip=1; "
-                "done; "
-                "[ $skip -eq 0 ] && rm -f \"$file\"; "
-                "done"
-            )
-        else:
-            remove_cmd = f"for file in {quoted_pattern}; do [ -e \"$file\" ] || continue; rm -f \"$file\"; done"
-        subprocess.run([sudo, "sh", "-c", remove_cmd], check=False)
+        for pattern in patterns:
+            if keep_paths:
+                keep_list = " ".join(shlex.quote(path) for path in sorted(keep_paths))
+                remove_cmd = (
+                    f"for file in {pattern}; do "
+                    "[ -e \"$file\" ] || continue; "
+                    "skip=0; "
+                    f"for keep in {keep_list}; do "
+                    "[ \"$file\" = \"$keep\" ] && skip=1; "
+                    "done; "
+                    "[ $skip -eq 0 ] && rm -f \"$file\"; "
+                    "done"
+                )
+            else:
+                remove_cmd = f"for file in {pattern}; do [ -e \"$file\" ] || continue; rm -f \"$file\"; done"
+            subprocess.run([sudo, "sh", "-c", remove_cmd], check=False)
 
 
 def _ensure_maintenance_assets(*, sudo: str = "sudo") -> None:
