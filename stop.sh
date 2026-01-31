@@ -179,13 +179,12 @@ if db_path and os.path.exists(db_path):
             "ocpp_transaction.connector_id"
             f"{select_charger} "
             "FROM ocpp_transaction "
-            f"{join_clause}"
+            f"{join_clause} "
+            "WHERE ocpp_transaction.stop_time IS NULL AND ocpp_transaction.connector_id IS NOT NULL"
         )
         for start_time, received_start_time, stop_time, connector_id, charger_id in conn.execute(
             query
         ).fetchall():
-            if connector_id is None or stop_time is not None:
-                continue
             if (
                 charger_id
                 and simulator_ids
