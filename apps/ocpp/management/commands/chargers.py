@@ -331,12 +331,18 @@ class Command(BaseCommand):
         return entries
 
     def _session_folders_for_charger(self, charger: Charger) -> list[Path]:
-        candidates = {
-            charger.charger_id,
-            store.identity_key(charger.charger_id, charger.connector_id),
-        }
+        identity_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        candidates = {charger.charger_id, identity_key, pending_key}
         if charger.display_name:
             candidates.add(charger.display_name)
+        if charger.name:
+            candidates.add(charger.name)
+        log_names = store.log_names.get("charger", {})
+        for key in (charger.charger_id, identity_key, pending_key):
+            registered = log_names.get(key)
+            if registered:
+                candidates.add(registered)
         folders = []
         for name in candidates:
             safe_name = self._safe_session_name(name)
