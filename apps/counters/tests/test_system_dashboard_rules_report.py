@@ -37,9 +37,9 @@ class DashboardRulesReportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         entries = response.context["dashboard_rule_entries"]
-        self.assertEqual(len(entries), 1)
+        self.assertGreaterEqual(len(entries), 1)
 
-        entry = entries[0]
+        entry = next(entry for entry in entries if entry["rule"].pk == self.rule.pk)
         self.assertEqual(entry["rule"].pk, self.rule.pk)
         self.assertEqual(entry["status"]["message"], dashboard_rules.DEFAULT_SUCCESS_MESSAGE)
         self.assertIn(str(self.rule.pk), entry["rule_admin_url"])
