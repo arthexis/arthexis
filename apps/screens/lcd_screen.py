@@ -583,7 +583,7 @@ def _compact_stats_line(variants: list[str]) -> str:
 def _stats_payload() -> LockPayload:
     try:
         available_ram = psutil.virtual_memory().available
-    except Exception:
+    except (psutil.Error, OSError) as e:
         available_ram = None
 
     try:
