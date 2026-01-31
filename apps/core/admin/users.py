@@ -294,7 +294,7 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
             else:
                 from apps.cards.reader import write_rfid_cell_value
 
-                key_choice = user.login_rfid_key or user.LOGIN_RFID_KEY_A
+                key_choice = user.login_rfid_key
                 key_value = tag.key_a if key_choice == user.LOGIN_RFID_KEY_A else tag.key_b
                 write_result = write_rfid_cell_value(
                     block=user.login_rfid_block,
