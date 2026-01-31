@@ -998,7 +998,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         context = self.admin_site.each_context(request)
         ensure_feature_enabled("rfid-scanner", logger=logger)
         rfid_feature_enabled = _feature_enabled("rfid-scanner")
-        camera_feature_enabled = _feature_enabled("rpi-camera")
+        camera_feature_enabled = _feature_enabled("video-cam")
         camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
         table_mode, toggle_url, toggle_label = build_mode_toggle(request)
         public_view_url = reverse("rfid-reader")
@@ -1033,7 +1033,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
         ensure_feature_enabled("rfid-scanner", logger=logger)
         rfid_feature_enabled = _feature_enabled("rfid-scanner")
-        camera_feature_enabled = _feature_enabled("rpi-camera")
+        camera_feature_enabled = _feature_enabled("video-cam")
         prefer_camera = request.GET.get("source") == "camera"
         camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
         if request.method == "POST":

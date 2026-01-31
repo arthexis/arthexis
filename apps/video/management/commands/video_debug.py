@@ -42,7 +42,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--auto-enable",
             action="store_true",
-            help="Enable the rpi-camera feature if it is disabled.",
+            help="Enable the Video Camera feature if it is disabled.",
         )
         parser.add_argument(
             "--mjpeg",
@@ -135,9 +135,11 @@ class Command(BaseCommand):
             raise CommandError("No local node is registered; cannot capture snapshots.")
 
         try:
-            feature = NodeFeature.objects.get(slug="rpi-camera")
+            feature = NodeFeature.objects.get(slug="video-cam")
         except NodeFeature.DoesNotExist as exc:
-            raise CommandError("The rpi-camera node feature is not configured.") from exc
+            raise CommandError(
+                "The Video Camera node feature is not configured."
+            ) from exc
 
         if not feature.is_enabled:
             if auto_enable:
@@ -151,11 +153,11 @@ class Command(BaseCommand):
                     node=node, feature=feature
                 )
                 self.stdout.write(
-                    self.style.SUCCESS("Enabled the rpi-camera feature for the node.")
+                    self.style.SUCCESS("Enabled the Video Camera feature for the node.")
                 )
             else:
                 self.stdout.write(
-                    self.style.WARNING("rpi-camera feature is currently disabled.")
+                    self.style.WARNING("Video Camera feature is currently disabled.")
                 )
 
         if refresh_devices:

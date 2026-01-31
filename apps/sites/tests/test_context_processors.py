@@ -65,7 +65,7 @@ def test_nav_links_hides_landings_with_disabled_required_features(monkeypatch):
     monkeypatch.setattr(NodeFeature, "is_enabled", property(lambda self: False))
 
     NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
-    NodeFeature.objects.create(slug="rpi-camera", display="RPI Camera")
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
     module = Module.objects.create(path="ocpp")
     Landing.objects.create(
         module=module,
