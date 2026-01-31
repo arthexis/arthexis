@@ -249,14 +249,12 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 )
                 message = f"{message} {enablement_message}"
                 level = result.level
-                if level == messages.SUCCESS:
-                    status = "success"
-                elif level == messages.WARNING:
-                    status = "warning"
-                elif level == messages.ERROR:
-                    status = "error"
-                else:
-                    status = "info"
+                status_map = {
+                    messages.SUCCESS: "success",
+                    messages.WARNING: "warning",
+                    messages.ERROR: "error",
+                }
+                status = status_map.get(level, "info")
 
         enablement = {"status": "skipped", "message": "Not enabled."}
         assignment_created = False
@@ -289,7 +287,10 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         if discovery_id:
             from apps.discovery.models import Discovery
 
-            discovery = Discovery.objects.filter(pk=discovery_id).first()
+            try:
+                discovery = Discovery.objects.get(pk=discovery_id)
+            except (Discovery.DoesNotExist, ValueError, TypeError):
+                discovery = None
             if discovery:
                 record_discovery_item(
                     discovery,
