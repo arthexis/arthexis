@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 
-from .frame_cache import get_frame, mjpeg_frame_stream
+from .frame_cache import get_frame, get_status, mjpeg_frame_stream
 from .models import MjpegDependencyError, MjpegDeviceUnavailableError, MjpegStream
 
 import logging
@@ -37,6 +37,14 @@ def _build_mjpeg_stream_response(stream: MjpegStream):
                 content_type="multipart/x-mixed-replace; boundary=frame",
             )
         logger.info("No cached frames available for MJPEG stream %s", stream.slug)
+        status_payload = get_status(stream)
+        if status_payload and status_payload.get("last_error"):
+            logger.warning(
+                "Camera service error for stream %s: %s",
+                stream.slug,
+                status_payload.get("last_error"),
+            )
+        return HttpResponse("Camera service unavailable.", status=503)
 
     try:
         frame_iter = stream.iter_frame_bytes()
@@ -122,6 +130,7 @@ def mjpeg_debug_status(request, slug):
         "last_thumbnail_at": _format_timestamp(stream.last_thumbnail_at),
         "last_frame_sample_id": stream.last_frame_sample_id,
         "last_thumbnail_sample_id": stream.last_thumbnail_sample_id,
+        "camera_service": get_status(stream) if settings.VIDEO_FRAME_REDIS_URL else None,
     }
     return JsonResponse(data)
 
@@ -143,6 +152,14 @@ def _build_mjpeg_probe_response(stream: MjpegStream):
                 return HttpResponse("Unable to store frame.", status=503)
             return HttpResponse(status=204)
         logger.info("No cached frames available for probe %s", stream.slug)
+        status_payload = get_status(stream)
+        if status_payload and status_payload.get("last_error"):
+            logger.warning(
+                "Camera service error for probe %s: %s",
+                stream.slug,
+                status_payload.get("last_error"),
+            )
+        return HttpResponse("Camera service unavailable.", status=503)
 
     try:
         frame_bytes = stream.capture_frame_bytes()
