@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import shlex
 import subprocess
 import tempfile
 import textwrap
@@ -375,7 +376,12 @@ def write_if_changed(path: Path, content: str, *, sudo: str | None = None) -> bo
 
         try:
             subprocess.run([sudo, "mkdir", "-p", str(path.parent)], check=True)
-            subprocess.run([sudo, "cp", str(temp_path), str(path)], check=True)
+            quoted_temp = shlex.quote(str(temp_path))
+            quoted_dest = shlex.quote(str(path))
+            subprocess.run(
+                [sudo, "sh", "-c", f"cat {quoted_temp} > {quoted_dest}"],
+                check=True,
+            )
         finally:
             temp_path.unlink(missing_ok=True)
         return True

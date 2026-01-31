@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -125,9 +126,42 @@ def _write_config_with_sudo(dest: Path, content: str, *, sudo: str = "sudo") -> 
         temp_file.write(content)
         temp_path = Path(temp_file.name)
 
-    subprocess.run([sudo, "mkdir", "-p", str(dest.parent)], check=True)
-    subprocess.run([sudo, "cp", str(temp_path), str(dest)], check=True)
-    temp_path.unlink(missing_ok=True)
+    try:
+        subprocess.run([sudo, "mkdir", "-p", str(dest.parent)], check=True)
+        quoted_temp = shlex.quote(str(temp_path))
+        quoted_dest = shlex.quote(str(dest))
+        subprocess.run(
+            [sudo, "sh", "-c", f"cat {quoted_temp} > {quoted_dest}"],
+            check=True,
+        )
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+def _remove_nginx_configs(*, keep: set[Path], sudo: str = "sudo") -> None:
+    keep_paths = {str(path) for path in keep if path}
+    patterns = (
+        "/etc/nginx/sites-enabled/arthexis*.conf",
+        "/etc/nginx/sites-available/arthexis*.conf",
+        "/etc/nginx/conf.d/arthexis-*.conf",
+    )
+    for pattern in patterns:
+        quoted_pattern = shlex.quote(pattern)
+        if keep_paths:
+            keep_list = " ".join(shlex.quote(path) for path in sorted(keep_paths))
+            remove_cmd = (
+                f"for file in {quoted_pattern}; do "
+                "[ -e \"$file\" ] || continue; "
+                "skip=0; "
+                f"for keep in {keep_list}; do "
+                "[ \"$file\" = \"$keep\" ] && skip=1; "
+                "done; "
+                "[ $skip -eq 0 ] && rm -f \"$file\"; "
+                "done"
+            )
+        else:
+            remove_cmd = f"for file in {quoted_pattern}; do [ -e \"$file\" ] || continue; rm -f \"$file\"; done"
+        subprocess.run([sudo, "sh", "-c", remove_cmd], check=False)
 
 
 def _ensure_maintenance_assets(*, sudo: str = "sudo") -> None:
@@ -167,12 +201,14 @@ def apply_nginx_configuration(
 
     proxy_target = None
 
-    subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
-    subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-enabled/arthexis*.conf"], check=False)
-    subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-available/default"], check=False)
-    subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/conf.d/arthexis-*.conf"], check=False)
-
     primary_dest = destination or Path("/etc/nginx/sites-enabled/arthexis.conf")
+    keep_paths = {primary_dest}
+    if site_destination:
+        keep_paths.add(site_destination)
+
+    subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
+    _remove_nginx_configs(keep=keep_paths, sudo=sudo)
+    subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-available/default"], check=False)
     config_content = generate_primary_config(
         mode,
         port,
