@@ -3,9 +3,10 @@
 
 {% block object-tools-items %}
   {{ block.super }}
-  {% if has_add_permission %}
-    <li><a href="{% url opts|admin_urlname:'register_from_odoo' %}" class="addlink">{% translate "Register from Odoo" %}</a></li>
-  {% else %}
-    <li><a href="{% url opts|admin_urlname:'register_from_odoo' %}">{% translate "Register from Odoo" %}</a></li>
-  {% endif %}
+  <li>
+    <a href="{% url opts|admin_urlname:'register_from_odoo' %}" class="addlink discover-action">
+      {% translate "Discover" %}
+      <span class="discover-action__icon" aria-hidden="true">+</span>
+    </a>
+  </li>
 {% endblock %}

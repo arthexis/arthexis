@@ -29,6 +29,15 @@ def register_visitor(modeladmin, request, queryset):
     return modeladmin.register_visitor_view(request)
 
 
+@admin.action(description=_("Discover"))
+def discover_local_node(modeladmin, request, queryset):
+    return modeladmin.register_current(request)
+
+
+discover_local_node.requires_queryset = False
+discover_local_node.is_discover_action = True
+
+
 @admin.action(description=_("Update selected nodes"))
 def update_selected_nodes(modeladmin, request, queryset):
     node_ids = list(queryset.values_list("pk", flat=True))

@@ -246,7 +246,15 @@ def model_admin_actions(context, app_label, model_name):
     def add_action(action_name, func, label, url):
         if not url:
             return
-        actions.append({"url": url, "label": label})
+        label_text = str(label)
+        actions.append(
+            {
+                "url": url,
+                "label": label,
+                "is_discover": getattr(func, "is_discover_action", False)
+                or label_text.strip().lower() == "discover",
+            }
+        )
         seen.add(action_name)
 
     for action_name, (func, _name, description) in model_admin.get_actions(

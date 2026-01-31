@@ -19,7 +19,8 @@ def sync_detected_devices(
     identifier_getter: Callable[[DetectedType], str],
     defaults_getter: Callable[[DetectedType], dict[str, object]],
     identifier_field: str = "identifier",
-) -> tuple[int, int]:
+    return_objects: bool = False,
+) -> tuple[int, int] | tuple[int, int, list[ModelType], list[ModelType]]:
     """Create, update, and remove device rows for ``node`` based on detection."""
 
     detected_devices = list(detected)
@@ -30,6 +31,8 @@ def sync_detected_devices(
     seen: set[str] = set()
     created = 0
     updated = 0
+    created_objects: list[ModelType] = []
+    updated_objects: list[ModelType] = []
 
     for device in detected_devices:
         identifier = identifier_getter(device)
@@ -38,8 +41,10 @@ def sync_detected_devices(
         defaults = defaults_getter(device)
         if obj is None:
             create_kwargs = {identifier_field: identifier, **defaults}
-            model_cls.objects.create(node=node, **create_kwargs)
+            obj = model_cls.objects.create(node=node, **create_kwargs)
             created += 1
+            if return_objects:
+                created_objects.append(obj)
         else:
             update_fields: list[str] = []
             for field, value in defaults.items():
@@ -49,9 +54,13 @@ def sync_detected_devices(
             if update_fields:
                 obj.save(update_fields=update_fields)
                 updated += 1
+                if return_objects:
+                    updated_objects.append(obj)
 
     model_cls.objects.filter(node=node).exclude(
         **{f"{identifier_field}__in": seen}
     ).delete()
 
+    if return_objects:
+        return created, updated, created_objects, updated_objects
     return created, updated

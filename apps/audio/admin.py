@@ -6,6 +6,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
@@ -41,6 +42,7 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     find_devices.label = _("Discover")
     find_devices.short_description = _("Discover")
     find_devices.changelist = True
+    find_devices.is_discover_action = True
 
     def _ensure_audio_feature_enabled(
         self,
@@ -106,7 +108,20 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         if not feature:
             return redirect("..")
 
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "audio_find_devices"},
+        )
+
         if not has_audio_capture_device():
+            if discovery:
+                discovery.metadata = {
+                    "action": "audio_find_devices",
+                    "result": "no_devices",
+                }
+                discovery.save(update_fields=["metadata"])
             self.message_user(
                 request,
                 _("No audio recording devices were detected on this node."),
@@ -114,7 +129,32 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return redirect("..")
 
-        created, updated = RecordingDevice.refresh_from_system(node=node)
+        created, updated, created_devices, updated_devices = (
+            RecordingDevice.refresh_from_system(node=node, return_objects=True)
+        )
+        if discovery:
+            for device in created_devices:
+                record_discovery_item(
+                    discovery,
+                    obj=device,
+                    label=device.identifier,
+                    created=True,
+                    overwritten=False,
+                )
+            for device in updated_devices:
+                record_discovery_item(
+                    discovery,
+                    obj=device,
+                    label=device.identifier,
+                    created=False,
+                    overwritten=True,
+                )
+            discovery.metadata = {
+                "action": "audio_find_devices",
+                "created": created,
+                "updated": updated,
+            }
+            discovery.save(update_fields=["metadata"])
         if created or updated:
             self.message_user(
                 request,

@@ -7,6 +7,7 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
@@ -37,6 +38,7 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     find_devices.label = _("Discover")
     find_devices.short_description = _("Discover")
     find_devices.changelist = True
+    find_devices.is_discover_action = True
 
     @admin.display(description=_("Public View"))
     def public_view(self, obj):
@@ -111,7 +113,20 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         if not feature:
             return redirect("..")
 
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "clock_find_devices"},
+        )
+
         if not has_clock_device():
+            if discovery:
+                discovery.metadata = {
+                    "action": "clock_find_devices",
+                    "result": "no_devices",
+                }
+                discovery.save(update_fields=["metadata"])
             self.message_user(
                 request,
                 _("No I2C clock devices were detected on this node."),
@@ -119,7 +134,32 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return redirect("..")
 
-        created, updated = ClockDevice.refresh_from_system(node=node)
+        created, updated, created_devices, updated_devices = (
+            ClockDevice.refresh_from_system(node=node, return_objects=True)
+        )
+        if discovery:
+            for device in created_devices:
+                record_discovery_item(
+                    discovery,
+                    obj=device,
+                    label=str(device),
+                    created=True,
+                    overwritten=False,
+                )
+            for device in updated_devices:
+                record_discovery_item(
+                    discovery,
+                    obj=device,
+                    label=str(device),
+                    created=False,
+                    overwritten=True,
+                )
+            discovery.metadata = {
+                "action": "clock_find_devices",
+                "created": created,
+                "updated": updated,
+            }
+            discovery.save(update_fields=["metadata"])
         if created or updated:
             self.message_user(
                 request,

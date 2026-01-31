@@ -10,6 +10,8 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.discovery.services import record_discovery_item, start_discovery
+
 from .forms import FetchDatabaseForm, FetchInstanceForm
 from .models import AWSCredentials, LightsailDatabase, LightsailInstance
 from .services import (
@@ -112,6 +114,7 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     fetch.label = _("Discover")
     fetch.short_description = _("Discover")
     fetch.requires_queryset = False
+    fetch.is_discover_action = True
 
     def fetch_view(self, request):
         if not self.has_view_or_change_permission(request):
@@ -154,6 +157,24 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
                     region=form.cleaned_data["region"],
                     defaults=defaults,
                 )
+                discovery = start_discovery(
+                    _("Discover"),
+                    request,
+                    model=self.model,
+                    metadata={
+                        "action": "aws_lightsail_instance",
+                        "region": form.cleaned_data["region"],
+                    },
+                )
+                if discovery:
+                    record_discovery_item(
+                        discovery,
+                        obj=instance,
+                        label=instance.name,
+                        created=created,
+                        overwritten=not created,
+                        data={"region": instance.region},
+                    )
                 if created:
                     self.message_user(
                         request,
@@ -231,6 +252,7 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
     fetch.label = _("Discover")
     fetch.short_description = _("Discover")
     fetch.requires_queryset = False
+    fetch.is_discover_action = True
 
     def fetch_view(self, request):
         if not self.has_view_or_change_permission(request):
@@ -273,6 +295,24 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
                     region=form.cleaned_data["region"],
                     defaults=defaults,
                 )
+                discovery = start_discovery(
+                    _("Discover"),
+                    request,
+                    model=self.model,
+                    metadata={
+                        "action": "aws_lightsail_database",
+                        "region": form.cleaned_data["region"],
+                    },
+                )
+                if discovery:
+                    record_discovery_item(
+                        discovery,
+                        obj=database,
+                        label=database.name,
+                        created=created,
+                        overwritten=not created,
+                        data={"region": database.region},
+                    )
                 if created:
                     self.message_user(
                         request,

@@ -249,6 +249,8 @@ def sync_odoo_deployments(
     created = 0
     updated = 0
     instances: list[OdooDeployment] = []
+    created_instances: list[OdooDeployment] = []
+    updated_instances: list[OdooDeployment] = []
 
     for entry in discovered:
         defaults = _deployment_defaults(entry)
@@ -258,11 +260,15 @@ def sync_odoo_deployments(
         instances.append(obj)
         if created_flag:
             created += 1
+            created_instances.append(obj)
         else:
             updated += 1
+            updated_instances.append(obj)
 
     return {
         "instances": instances,
+        "created_instances": created_instances,
+        "updated_instances": updated_instances,
         "created": created,
         "updated": updated,
         "found": len(discovered),

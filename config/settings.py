@@ -404,6 +404,7 @@ LOCAL_APPS = [
     "apps.credentials",
     "apps.celery",
     "apps.nodes",
+    "apps.discovery",
     "apps.ftp",
     "apps.dns",
     "apps.screens",

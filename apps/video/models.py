@@ -144,7 +144,9 @@ class VideoDevice(Ownable):
         ]
 
     @classmethod
-    def refresh_from_system(cls, *, node) -> tuple[int, int]:
+    def refresh_from_system(
+        cls, *, node, return_objects: bool = False
+    ) -> tuple[int, int] | tuple[int, int, list["VideoDevice"], list["VideoDevice"]]:
         """Synchronize :class:`VideoDevice` entries for ``node``.
 
         Returns a ``(created, updated)`` tuple.
@@ -161,6 +163,7 @@ class VideoDevice(Ownable):
                 "raw_info": device.raw_info,
                 "is_default": True,
             },
+            return_objects=return_objects,
         )
 
     @classmethod

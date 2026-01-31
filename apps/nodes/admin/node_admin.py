@@ -49,6 +49,7 @@ from apps.users import temp_passwords
 from ..models import Node, NodeRole, _format_upgrade_body
 from .actions import (
     create_charge_point_forwarder,
+    discover_local_node,
     download_evcs_firmware,
     export_rfids_to_selected,
     import_rfids_from_selected,
@@ -135,6 +136,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         ),
     )
     actions = [
+        discover_local_node,
         update_selected_nodes,
         register_visitor,
         run_task,
@@ -265,6 +267,23 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if not request.user.is_superuser:
             raise PermissionDenied
         node, created = Node.register_current()
+        from apps.discovery.services import record_discovery_item, start_discovery
+
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "register_current"},
+        )
+        if discovery:
+            record_discovery_item(
+                discovery,
+                obj=node,
+                label=str(node),
+                created=created,
+                overwritten=not created,
+                data={"action": "register_current"},
+            )
         if created:
             self.message_user(
                 request, f"Current host registered as {node}", messages.SUCCESS
