@@ -317,7 +317,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         silent: bool = False,
     ):
         try:
-            feature = NodeFeature.objects.get(slug="rpi-camera")
+            feature = NodeFeature.objects.get(slug="video-cam")
         except NodeFeature.DoesNotExist:
             if not silent:
                 self.message_user(
@@ -527,7 +527,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
         context = {
             **self.admin_site.each_context(request),
-            "title": _("Raspberry Pi Camera Stream"),
+            "title": _("Video Camera Stream"),
             "stream_url": stream_url,
             "stream_embed": embed_mode,
         }

@@ -87,7 +87,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:nodes_nodefeature_take_screenshot",
             ),
         ),
-        "rpi-camera": (
+        "video-cam": (
             NodeFeatureDefaultAction(
                 label="Find Devices",
                 url_name="admin:video_videodevice_find_devices",
@@ -188,7 +188,7 @@ class NodeFeatureMixin:
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
         "lcd-screen",
         "gui-toast",
-        "rpi-camera",
+        "video-cam",
         "ap-router",
         "llm-summary",
     }
@@ -373,7 +373,7 @@ class NodeFeatureMixin:
             except Exception:
                 logger.exception("GUI toast detection failed")
                 return False
-        if slug == "rpi-camera":
+        if slug == "video-cam":
             return self._has_rpi_camera()
         if slug == "ap-router":
             return self._hosts_gelectriic_ap()

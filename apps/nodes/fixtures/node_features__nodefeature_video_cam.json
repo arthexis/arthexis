@@ -4,8 +4,8 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "slug": "rpi-camera",
-      "display": "Raspberry Pi Camera",
+      "slug": "video-cam",
+      "display": "Video Camera",
       "roles": []
     }
   }

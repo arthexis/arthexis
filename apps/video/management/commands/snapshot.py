@@ -28,9 +28,9 @@ class Command(BaseCommand):
             raise CommandError("No local node is registered; cannot take a snapshot.")
 
         try:
-            feature = NodeFeature.objects.get(slug="rpi-camera")
+            feature = NodeFeature.objects.get(slug="video-cam")
         except NodeFeature.DoesNotExist:
-            raise CommandError("The rpi-camera node feature is not configured.")
+            raise CommandError("The Video Camera node feature is not configured.")
 
         if not feature.is_enabled:
             if not has_rpi_camera_stack():
@@ -41,7 +41,7 @@ class Command(BaseCommand):
                 )
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
             self.stdout.write(
-                self.style.SUCCESS("Enabled the rpi-camera feature for the local node.")
+                self.style.SUCCESS("Enabled the Video Camera feature for the local node.")
             )
 
         if not VideoDevice.objects.filter(node=node).exists():
