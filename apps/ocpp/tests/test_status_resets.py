@@ -4,16 +4,14 @@ from tempfile import mkdtemp
 from unittest.mock import MagicMock, patch
 
 from django.db.utils import OperationalError
-from django.test import TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase
 from django.utils import timezone
 
 from apps.ocpp import status_resets
 from apps.ocpp.models import Charger
 
 
-class StatusResetTests(TransactionTestCase):
-    reset_sequences = True
-
+class StatusResetNoDatabaseTests(SimpleTestCase):
     def test_charger_table_check_handles_missing_table(self):
         connection = MagicMock()
         connection.introspection.table_names.return_value = []
@@ -35,6 +33,10 @@ class StatusResetTests(TransactionTestCase):
             updated = status_resets.clear_stale_cached_statuses()
 
         assert updated == 0
+
+
+class StatusResetTests(TransactionTestCase):
+    reset_sequences = True
 
     def test_clear_stale_cached_statuses_resets_expected_fields(self):
         now = timezone.now()
