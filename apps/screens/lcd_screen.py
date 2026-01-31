@@ -554,7 +554,7 @@ def _format_storage_value(value: int) -> str:
             if formatted.endswith(".0"):
                 formatted = formatted[:-2]
             return f"{formatted}{unit}"
-    return "0B"
+    return f"{value}B"
 
 
 def _format_count(value: int) -> str:
