@@ -3178,8 +3178,9 @@ msgstr ""
 #: nodes/admin.py:1696
 #: nodes/templates/admin/nodes/netmessage/change_list.html:6
 #: nodes/templates/admin/nodes/netmessage/send.html:44
+#: nodes/templates/admin/nodes/netmessage/send.html:70
 msgid "Send Message"
-msgstr ""
+msgstr "Invia messaggio"
 
 #: nodes/admin.py:1682
 msgid "Net Message sent to the network."
@@ -3235,9 +3236,6 @@ msgstr ""
 msgid "Reply Message"
 msgstr ""
 
-#: nodes/templates/admin/nodes/netmessage/send.html:70
-msgid "Send message"
-msgstr ""
 
 #: nodes/templates/admin/nodes/nmclitemplate/change_list.html:7
 msgid "Import active connections"
