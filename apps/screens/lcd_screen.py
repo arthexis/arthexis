@@ -2,10 +2,10 @@
 
 The script polls ``.locks/lcd-high`` and ``.locks/lcd-low`` (plus numbered
 variants like ``lcd-low-1``) for payload text and writes it to the attached
-LCD1602 display. The screen rotates every 10 seconds across three states in
-a fixed order: High, Low, and Time/Temp. ``clock`` and ``uptime`` lock files
-override the automatic time/uptime payloads, and ``lcd-channels.lck`` can
-reorder the channel rotation. By default, rows are truncated to the 16x2
+LCD1602 display. The screen rotates every 10 seconds across four states in
+a fixed order: High, Low, Stats, and Time/Temp. ``clock`` and ``uptime`` lock
+files override the automatic time/uptime payloads, and ``lcd-channels.lck``
+can reorder the channel rotation. By default, rows are truncated to the 16x2
 display; scrolling is only enabled when a payload specifies a positive
 scroll interval.
 """
@@ -88,6 +88,7 @@ from apps.screens.startup_notifications import (
     LCD_CLOCK_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    LCD_STATS_LOCK_FILE,
     LCD_UPTIME_LOCK_FILE,
     read_lcd_lock_file,
 )
@@ -534,11 +535,104 @@ def _apply_low_payload_fallback(payload: LockPayload) -> LockPayload:
     )
 
 
+def _format_storage_value(value: int) -> str:
+    if value <= 0:
+        return "0B"
+
+    for unit, factor in (
+        ("T", 1024**4),
+        ("G", 1024**3),
+        ("M", 1024**2),
+        ("K", 1024),
+    ):
+        if value >= factor:
+            amount = value / factor
+            if amount >= 10:
+                formatted = f"{amount:.0f}"
+            else:
+                formatted = f"{amount:.1f}"
+            if formatted.endswith(".0"):
+                formatted = formatted[:-2]
+            return f"{formatted}{unit}"
+    return "0B"
+
+
+def _format_count(value: int) -> str:
+    if value < 0:
+        return "0"
+    if value >= 1_000_000:
+        formatted = f"{value / 1_000_000:.1f}M"
+    elif value >= 10_000:
+        formatted = f"{value / 1000:.0f}k"
+    elif value >= 1000:
+        formatted = f"{value / 1000:.1f}k"
+    else:
+        return str(value)
+    if formatted.endswith(".0M") or formatted.endswith(".0k"):
+        return formatted[:-2] + formatted[-1]
+    return formatted
+
+
+def _compact_stats_line(variants: list[str]) -> str:
+    for variant in variants:
+        if len(variant) <= LCD_COLUMNS:
+            return variant
+    return variants[-1][:LCD_COLUMNS]
+
+
+def _stats_payload() -> LockPayload:
+    try:
+        available_ram = psutil.virtual_memory().available
+    except Exception:
+        available_ram = None
+
+    try:
+        free_disk = psutil.disk_usage(str(BASE_DIR)).free
+    except Exception:
+        free_disk = None
+
+    try:
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+    except Exception:
+        cpu_percent = None
+
+    try:
+        proc_count = len(psutil.pids())
+    except Exception:
+        proc_count = None
+
+    ram_label = _format_storage_value(available_ram) if available_ram is not None else "?"
+    disk_label = _format_storage_value(free_disk) if free_disk is not None else "?"
+    cpu_label = str(int(round(cpu_percent))) if cpu_percent is not None else "?"
+    proc_label = _format_count(proc_count) if proc_count is not None else "?"
+
+    line1 = _compact_stats_line(
+        [
+            f"RAM {ram_label} CPU{cpu_label}%",
+            f"RAM{ram_label} CPU{cpu_label}%",
+            f"RAM{ram_label} C{cpu_label}%",
+            f"R{ram_label} C{cpu_label}%",
+            f"R{ram_label} {cpu_label}%",
+        ]
+    )
+    line2 = _compact_stats_line(
+        [
+            f"DSK {disk_label} P{proc_label}",
+            f"DSK{disk_label} P{proc_label}",
+            f"DSK{disk_label}P{proc_label}",
+            f"D{disk_label} P{proc_label}",
+            f"D{disk_label}P{proc_label}",
+        ]
+    )
+    return LockPayload(line1, line2, DEFAULT_SCROLL_MS)
+
+
 CHANNEL_BASE_NAMES = {
     "high": LCD_HIGH_LOCK_FILE,
     "low": LCD_LOW_LOCK_FILE,
     "clock": CLOCK_LOCK_NAME,
     "uptime": UPTIME_LOCK_NAME,
+    "stats": LCD_STATS_LOCK_FILE,
 }
 
 
@@ -1260,7 +1354,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     event_lock_file: Path | None = None
     rotation_deadline = 0.0
     scroll_scheduler = ScrollScheduler()
-    state_order = ("high", "low", "clock")
+    state_order = ("high", "low", "stats", "clock")
     state_index = 0
     history_recorder = LCDHistoryRecorder(base_dir=BASE_DIR, history_dir_name="work")
     clock_cycle = 0
@@ -1367,6 +1461,17 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 )
                 clock_cycle += 1
                 return LockPayload(line1, line2, speed)
+        if state_label == "stats":
+            if channel_state and channel_text[state_label]:
+                payload = (
+                    channel_state.next_payload()
+                    if advance
+                    else channel_state.payloads[0]
+                    if channel_state.payloads
+                    else None
+                )
+                return payload or LockPayload("", "", DEFAULT_SCROLL_MS)
+            return _stats_payload()
         return LockPayload("", "", DEFAULT_SCROLL_MS)
 
     try:
@@ -1479,6 +1584,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             return channel_text[label] or _lcd_clock_enabled()
                         if label in {"low", "uptime"}:
                             return True
+                        if label == "stats":
+                            return True
                         return False
 
                     previous_order = state_order
@@ -1495,12 +1602,16 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         low_available = _channel_available("low")
                         if high_available:
                             state_order = (
-                                ("high", "low", "clock")
+                                ("high", "low", "stats", "clock")
                                 if low_available
-                                else ("high", "clock")
+                                else ("high", "stats", "clock")
                             )
                         else:
-                            state_order = ("low", "clock") if low_available else ("clock",)
+                            state_order = (
+                                ("low", "stats", "clock")
+                                if low_available
+                                else ("stats", "clock")
+                            )
 
                     if previous_order and 0 <= state_index < len(previous_order):
                         current_label = previous_order[state_index]

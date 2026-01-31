@@ -16,6 +16,7 @@ LCD_HIGH_LOCK_FILE = "lcd-high"
 LCD_LOW_LOCK_FILE = "lcd-low"
 LCD_CLOCK_LOCK_FILE = "clock"
 LCD_UPTIME_LOCK_FILE = "uptime"
+LCD_STATS_LOCK_FILE = "stats"
 LCD_CHANNELS_LOCK_FILE = "lcd-channels.lck"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
@@ -123,6 +124,7 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
         LCD_LOW_LOCK_FILE,
         LCD_CLOCK_LOCK_FILE,
         LCD_UPTIME_LOCK_FILE,
+        LCD_STATS_LOCK_FILE,
         LCD_CHANNELS_LOCK_FILE,
         LCD_LEGACY_FEATURE_LOCK,
         LCD_RUNTIME_LOCK_FILE,
