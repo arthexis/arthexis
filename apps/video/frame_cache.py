@@ -143,6 +143,27 @@ def get_frame(stream: MjpegStream) -> CachedFrame | None:
     return CachedFrame(frame_bytes=frame_bytes, frame_id=frame_id, captured_at=captured_at)
 
 
+def get_status(stream: MjpegStream) -> dict[str, object] | None:
+    client = get_frame_cache()
+    if not client:
+        return None
+    status_key = _cache_key(stream, "status")
+    try:
+        status_body = client.get(status_key)
+    except RedisError as exc:  # pragma: no cover - runtime dependency
+        logger.debug("Unable to read MJPEG status for %s: %s", stream.slug, exc)
+        return None
+    if not status_body:
+        return None
+    try:
+        payload = json.loads(status_body)
+    except (TypeError, ValueError):  # pragma: no cover - bad status payload
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
 def mjpeg_frame_stream(
     stream: MjpegStream,
     *,

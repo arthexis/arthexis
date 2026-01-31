@@ -10,7 +10,7 @@ from django.utils import timezone
 from apps.video.frame_cache import store_frame, store_status
 from apps.video.models import MjpegDependencyError, MjpegStream
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("apps.video.camera_service")
 
 
 class _StreamCapture:
@@ -20,6 +20,7 @@ class _StreamCapture:
         self._capture = None
         self._last_capture = 0.0
         self._last_error: str | None = None
+        self._last_logged_error: str | None = None
 
     def _ensure_capture(self) -> bool:
         if self._cv2 is None:
@@ -64,6 +65,24 @@ class _StreamCapture:
             "last_error": self._last_error,
             "updated_at": timezone.now().isoformat(),
         }
+
+    def log_status(self) -> None:
+        if self._last_error == self._last_logged_error:
+            return
+        self._last_logged_error = self._last_error
+        if self._last_error:
+            logger.warning(
+                "Camera service error for %s (%s): %s",
+                self.stream.slug,
+                self.stream.video_device.identifier,
+                self._last_error,
+            )
+        else:
+            logger.info(
+                "Camera service recovered for %s (%s)",
+                self.stream.slug,
+                self.stream.video_device.identifier,
+            )
 
 
 class Command(BaseCommand):
@@ -113,14 +132,19 @@ class Command(BaseCommand):
                     except MjpegDependencyError as exc:
                         logger.warning("MJPEG dependency error for %s: %s", stream.slug, exc)
                         store_status(stream, capture.status_payload())
+                        capture.log_status()
                         continue
                     except Exception as exc:  # pragma: no cover - runtime device error
                         logger.warning("Camera capture error for %s: %s", stream.slug, exc)
                         store_status(stream, capture.status_payload())
+                        capture.log_status()
                         continue
+                    payload = capture.status_payload()
                     if frame_bytes:
                         store_frame(stream, frame_bytes)
-                        store_status(stream, capture.status_payload())
+                    if frame_bytes or payload.get("last_error"):
+                        store_status(stream, payload)
+                        capture.log_status()
                 time.sleep(sleep)
         except KeyboardInterrupt:
             self.stdout.write(self.style.WARNING("Camera service stopped."))
