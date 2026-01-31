@@ -51,6 +51,10 @@ The script also:
 
 The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally.【F:install.bat†L1-L20】 No flags are accepted—Windows nodes rely on Terminal defaults (development server at port 8888, no system services). Run `install.bat` again whenever dependencies change.
 
+### 1.3 Git remotes for preloaded environments
+
+If this repository is provided without Git remotes configured, `configure.sh`, `install.sh`, and `upgrade.sh` automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
+
 ## 2. Runtime helpers
 
 ### 2.1 Linux: `start.sh`
