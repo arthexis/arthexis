@@ -47,6 +47,24 @@ DIRTY_STATUS_LABELS = {
     "??": _("Untracked"),
 }
 
+SENSITIVE_CONTEXT_KEYS = {"github_token"}
+
+
+def _sanitize_release_context(ctx: dict) -> dict:
+    return {key: value for key, value in ctx.items() if key not in SENSITIVE_CONTEXT_KEYS}
+
+
+def _store_release_context(request, session_key: str, ctx: dict) -> None:
+    request.session[session_key] = _sanitize_release_context(ctx)
+
+
+def _persist_release_context(
+    request, session_key: str, ctx: dict, lock_path: Path
+) -> None:
+    _store_release_context(request, session_key, ctx)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+
 
 class DirtyRepository(Exception):
     """Raised when the Git workspace has uncommitted changes."""
@@ -124,6 +142,29 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
     )
     logger.warning(warning)
     return fallback, warning
+
+
+def _resolve_github_token(release: PackageRelease, ctx: dict) -> str | None:
+    token = (ctx.get("github_token") or "").strip()
+    if token:
+        return token
+    return release.get_github_token()
+
+
+def _require_github_token(
+    release: PackageRelease,
+    ctx: dict,
+    log_path: Path,
+    *,
+    message: str,
+) -> str:
+    token = _resolve_github_token(release, ctx)
+    if token:
+        return token
+    ctx["paused"] = True
+    ctx["github_token_required"] = True
+    _append_log(log_path, message)
+    raise PublishPending()
 
 
 def _render_release_progress_error(
@@ -416,15 +457,22 @@ def _load_release_context(
     log_dir_warning_message: str | None,
 ):
     ctx = request.session.get(session_key)
-    if ctx is None and lock_path.exists():
+    lock_ctx = None
+    new_ctx = False
+    if lock_path.exists():
         try:
-            ctx = json.loads(lock_path.read_text(encoding="utf-8"))
+            lock_ctx = json.loads(lock_path.read_text(encoding="utf-8"))
         except Exception:
-            ctx = {"step": 0}
-    if ctx is None:
+            lock_ctx = None
+    if ctx is None and lock_ctx is not None:
+        ctx = lock_ctx
+    elif ctx is None:
         ctx = {"step": 0}
-        if restart_path.exists():
-            restart_path.unlink()
+        new_ctx = True
+    elif lock_ctx is not None and "github_token" in lock_ctx:
+        ctx.setdefault("github_token", lock_ctx["github_token"])
+    if new_ctx and restart_path.exists():
+        restart_path.unlink()
     if log_dir_warning_message:
         ctx["log_dir_warning_message"] = log_dir_warning_message
     else:
@@ -440,6 +488,27 @@ def _update_publish_controls(
     session_key: str,
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
+
+    if request.method == "POST" and request.POST.get("set_github_token"):
+        token = (request.POST.get("github_token") or "").strip()
+        if token:
+            ctx["github_token"] = token
+            ctx.pop("github_token_required", None)
+            if (
+                ctx.get("paused")
+                and not ctx.get("dirty_files")
+                and not ctx.get("pending_git_push")
+            ):
+                ctx["paused"] = False
+            messages.success(
+                request,
+                _("GitHub token stored for this publish session."),
+            )
+        else:
+            ctx.pop("github_token", None)
+            messages.error(request, _("Enter a GitHub token to continue."))
+        _store_release_context(request, session_key, ctx)
+        return ctx, False, redirect(_clean_redirect_path(request, request.path))
 
     if request.method == "POST" and request.POST.get("ack_error"):
         ctx.pop("error", None)
@@ -463,7 +532,7 @@ def _update_publish_controls(
         if not ctx.get("started"):
             ctx["started"] = True
         ctx["paused"] = bool(ctx.get("pending_git_push") or ctx.get("dirty_files"))
-        request.session[session_key] = ctx
+        _store_release_context(request, session_key, ctx)
         return ctx, False, redirect(
             _clean_redirect_path(request, request.path),
         )
@@ -471,7 +540,7 @@ def _update_publish_controls(
     if request.GET.get("set_dry_run") is not None:
         if start_enabled:
             ctx["dry_run"] = bool(request.GET.get("dry_run"))
-            request.session[session_key] = ctx
+            _store_release_context(request, session_key, ctx)
         return ctx, False, redirect(_clean_redirect_path(request, request.path))
 
     if request.GET.get("start"):
@@ -721,15 +790,11 @@ def _run_release_step(
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
-                request.session[session_key] = ctx
-                lock_path.parent.mkdir(parents=True, exist_ok=True)
-                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+                _persist_release_context(request, session_key, ctx, lock_path)
             else:
                 step_count += 1
                 ctx["step"] = step_count
-                request.session[session_key] = ctx
-                lock_path.parent.mkdir(parents=True, exist_ok=True)
-                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+                _persist_release_context(request, session_key, ctx, lock_path)
 
     return ctx, step_count
 
@@ -1769,15 +1834,14 @@ def _step_verify_release_environment(
             )
         )
 
-    token = release.get_github_token()
-    if not token:
-        raise RuntimeError(
-            _(
-                "GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN in the release "
-                "environment so the workflow can create releases, upload artifacts, "
-                "and monitor publish status."
-            )
-        )
+    _require_github_token(
+        release,
+        ctx,
+        log_path,
+        message=_(
+            "GitHub token missing. Provide a token to continue publishing."
+        ),
+    )
 
     _append_log(
         log_path,
@@ -1813,7 +1877,14 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
 
     artifacts = _collect_release_artifacts()
     owner, repo = _resolve_github_repository(release)
-    token = release.get_github_token()
+    token = _require_github_token(
+        release,
+        ctx,
+        log_path,
+        message=_(
+            "GitHub token missing. Provide a token to continue publishing."
+        ),
+    )
     tag_name = _ensure_release_tag(release, log_path)
     release_data = _ensure_github_release(
         owner=owner,
@@ -1882,7 +1953,7 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         _append_publish_workflow_status(
             release,
             log_path,
-            token=release.get_github_token(),
+            token=_resolve_github_token(release, ctx),
             message="Publish not detected on PyPI yet; resume after GitHub Actions completes.",
         )
         raise PublishPending()
@@ -1928,7 +1999,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Dry run: skipped capture of publish logs")
         return
 
-    token = release.get_github_token()
+    token = _resolve_github_token(release, ctx)
     if not token:
         ctx.setdefault("warnings", []).append(
             {
@@ -1937,7 +2008,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
                 ),
                 "followups": [
                     _(
-                        "Set GITHUB_TOKEN or GH_TOKEN in the environment."
+                        "Provide a GitHub token in the publish workflow to capture logs."
                     )
                 ],
             }
@@ -2245,7 +2316,7 @@ def release_progress(request, pk: int, action: str):
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
     oidc_enabled = release.uses_oidc_publishing()
     pypi_credentials_missing = not oidc_enabled and release.to_credentials() is None
-    github_credentials_missing = release.get_github_token() is None
+    github_credentials_missing = _resolve_github_token(release, ctx) is None
     manual_git_push = ctx.get("pending_git_push")
     manual_git_push_command = ""
     if manual_git_push:
@@ -2296,13 +2367,12 @@ def release_progress(request, pk: int, action: str):
         "manual_git_push_command": manual_git_push_command,
         "manual_git_push_error": ctx.get("pending_git_push_error"),
     }
-    request.session[session_key] = ctx
     if done or ctx.get("error"):
+        _store_release_context(request, session_key, ctx)
         if lock_path.exists():
             lock_path.unlink()
     else:
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+        _persist_release_context(request, session_key, ctx, lock_path)
     template = _ensure_template_name(
         get_template("core/release_progress.html"),
         "core/release_progress.html",
