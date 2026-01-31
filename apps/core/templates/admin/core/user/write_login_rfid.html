@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div id="content-main">
+    <h1>{% trans "Write RFID login data" %}</h1>
+    <p class="help">
+      {% blocktrans with username=user_obj.username %}Write the configured login data to the RFID card assigned to {{ username }}.{% endblocktrans %}
+    </p>
+    <div class="module">
+      <table>
+        <tr>
+          <th>{% trans "User" %}</th>
+          <td>{{ user_obj.username }}</td>
+        </tr>
+        <tr>
+          <th>{% trans "RFID" %}</th>
+          <td>{% if login_rfid %}{{ login_rfid.rfid }} ({{ login_rfid.label_id }}){% else %}—{% endif %}</td>
+        </tr>
+        <tr>
+          <th>{% trans "Key" %}</th>
+          <td>{{ login_rfid_key }}</td>
+        </tr>
+        <tr>
+          <th>{% trans "Block" %}</th>
+          <td>{{ login_rfid_block|default:"—" }}</td>
+        </tr>
+        <tr>
+          <th>{% trans "Offset" %}</th>
+          <td>{{ login_rfid_offset|default:"—" }}</td>
+        </tr>
+        <tr>
+          <th>{% trans "Value" %}</th>
+          <td>{{ login_rfid_value|default:"—" }}</td>
+        </tr>
+      </table>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="errornote">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="form-row">
+        {{ form.confirm_write.errors }}
+        <label for="{{ form.confirm_write.id_for_label }}">
+          {{ form.confirm_write }} {{ form.confirm_write.label }}
+        </label>
+        {% if form.confirm_write.help_text %}
+          <p class="help">{{ form.confirm_write.help_text }}</p>
+        {% endif %}
+      </div>
+      <div class="submit-row">
+        <button type="submit" class="button default"{% if not write_enabled %} disabled{% endif %}>
+          {% trans "Write to card" %}
+        </button>
+        <a href="{% url 'admin:core_user_change' user_obj.pk %}" class="button cancel-link">
+          {% trans "Cancel" %}
+        </a>
+      </div>
+    </form>
+    {% if not write_enabled %}
+      <p class="help">
+        {% trans "Configure the login RFID, key, block, offset, and value on the user before writing to the card." %}
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}

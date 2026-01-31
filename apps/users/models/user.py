@@ -4,7 +4,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_ipv46_address
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator, validate_ipv46_address
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -69,6 +69,49 @@ class User(Entity, AbstractUser):
         null=True,
         blank=True,
         help_text=_("Automatically deactivate this account after the selected date and time."),
+    )
+    login_rfid = models.ForeignKey(
+        "cards.RFID",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="login_users",
+        help_text=_("RFID card assigned to this user for RFID logins."),
+    )
+    LOGIN_RFID_KEY_A = "A"
+    LOGIN_RFID_KEY_B = "B"
+    LOGIN_RFID_KEY_CHOICES = [
+        (LOGIN_RFID_KEY_A, _("Key 1 (A)")),
+        (LOGIN_RFID_KEY_B, _("Key 2 (B)")),
+    ]
+    login_rfid_key = models.CharField(
+        max_length=1,
+        choices=LOGIN_RFID_KEY_CHOICES,
+        default=LOGIN_RFID_KEY_A,
+        help_text=_("Select which RFID key should be used to read the login data cell."),
+    )
+    login_rfid_block = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(63)],
+        help_text=_("Data block number used for RFID login verification."),
+    )
+    login_rfid_offset = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(15)],
+        help_text=_("Byte offset within the data block (0-15)."),
+    )
+    login_rfid_value = models.CharField(
+        max_length=2,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r"^[0-9A-Fa-f]{2}$",
+                message=_("Login RFID value must be two hexadecimal digits."),
+            )
+        ],
+        help_text=_("Hex value expected in the RFID data cell for login validation."),
     )
 
     def __str__(self):

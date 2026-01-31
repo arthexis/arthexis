@@ -16,6 +16,7 @@ from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 
 from apps.cards.models import RFID
+from apps.cards.reader import read_rfid_cell_value
 from apps.energy.models import CustomerAccount
 from . import temp_passwords
 from .system import ensure_system_user
@@ -78,6 +79,32 @@ class RFIDBackend:
             update_fields.append("rfid")
         if update_fields:
             tag.save(update_fields=update_fields)
+
+        User = get_user_model()
+        login_user = (
+            User.objects.filter(login_rfid=tag, is_active=True).first()
+        )
+        if login_user:
+            block = getattr(login_user, "login_rfid_block", None)
+            offset = getattr(login_user, "login_rfid_offset", None)
+            expected_value = (getattr(login_user, "login_rfid_value", "") or "").strip().upper()
+            if block is not None and offset is not None and expected_value:
+                key_choice = getattr(login_user, "login_rfid_key", login_user.LOGIN_RFID_KEY_A)
+                key_value = tag.key_a if key_choice == login_user.LOGIN_RFID_KEY_A else tag.key_b
+                result = read_rfid_cell_value(
+                    block=block,
+                    offset=offset,
+                    key=key_value,
+                    key_type=key_choice,
+                )
+                if result.get("error"):
+                    return None
+                cell_value = result.get("value")
+                if cell_value is None:
+                    return None
+                if f"{int(cell_value):02X}" != expected_value:
+                    return None
+            return login_user
 
         command = (tag.external_command or "").strip()
         if command:
