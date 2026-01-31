@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.app.models import Application, ApplicationModel, refresh_application_models
@@ -28,6 +29,7 @@ class ApplicationAdmin(EntityModelAdmin):
         "order",
         "importance",
         "app_verbose_name",
+        "code_updated_short",
         "description",
         "installed",
     )
@@ -51,6 +53,13 @@ class ApplicationAdmin(EntityModelAdmin):
     @admin.display(boolean=True)
     def installed(self, obj):
         return obj.installed
+
+    @admin.display(description="Code updated")
+    def code_updated_short(self, obj):
+        updated_on = obj.code_updated_on
+        if not updated_on:
+            return "-"
+        return date_format(updated_on, format="SHORT_DATE_FORMAT")
 
     @admin.action(description=_("Discover App Models"))
     def discover_app_models(self, request, queryset):

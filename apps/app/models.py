@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Iterable
 
 from django.apps import apps as django_apps
@@ -8,6 +9,8 @@ from django.db import connections, models, transaction
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
+
+from .code_updates import get_application_code_update_date
 
 DEFAULT_MODEL_WIKI_URLS: dict[tuple[str, str], str] = {
     ("app", "app.Application"): "https://en.wikipedia.org/wiki/Application_software",
@@ -76,6 +79,10 @@ class Application(Entity):
         verbose_name = self.verbose_name
         formatted_verbose = self.format_display_name(str(verbose_name))
         return formatted_verbose or self.name
+
+    @property
+    def code_updated_on(self) -> date | None:
+        return get_application_code_update_date(self.name)
 
     class Meta:
         db_table = "pages_application"
