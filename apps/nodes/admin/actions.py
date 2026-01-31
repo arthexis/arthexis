@@ -46,7 +46,7 @@ def update_selected_nodes(modeladmin, request, queryset):
     return TemplateResponse(request, "admin/nodes/node/update_selected.html", context)
 
 
-@admin.action(description=_("Send Net Message"))
+@admin.action(description=_("Send Message"))
 def send_net_message(modeladmin, request, queryset):
     is_submit = "apply" in request.POST
     form = SendNetMessageForm(request.POST if is_submit else None)
@@ -99,7 +99,7 @@ def send_net_message(modeladmin, request, queryset):
     context = {
         **modeladmin.admin_site.each_context(request),
         "opts": modeladmin.model._meta,
-        "title": _("Send Net Message"),
+        "title": _("Send Message"),
         "nodes": nodes,
         "selected_ids": selected_ids,
         "action_name": request.POST.get("action", "send_net_message"),
