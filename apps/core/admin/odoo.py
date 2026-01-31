@@ -225,16 +225,16 @@ class OdooProductAdmin(EntityModelAdmin):
                                 "The selected product was not found. Reload the page and try again."
                             )
                         else:
+                            discovery = start_discovery(
+                                _("Discover"),
+                                request,
+                                model=self.model,
+                                metadata={"source": "odoo", "odoo_id": odoo_id},
+                            )
                             existing = self.model.objects.filter(
                                 odoo_product__id=odoo_id
                             ).first()
                             if existing:
-                                discovery = start_discovery(
-                                    _("Discover"),
-                                    request,
-                                    model=self.model,
-                                    metadata={"source": "odoo", "odoo_id": odoo_id},
-                                )
                                 if discovery:
                                     record_discovery_item(
                                         discovery,
@@ -273,12 +273,6 @@ class OdooProductAdmin(EntityModelAdmin):
                                     "id": odoo_id,
                                     "name": match.get("name", ""),
                                 },
-                            )
-                            discovery = start_discovery(
-                                _("Discover"),
-                                request,
-                                model=self.model,
-                                metadata={"source": "odoo", "odoo_id": odoo_id},
                             )
                             if discovery:
                                 record_discovery_item(

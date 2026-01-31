@@ -176,7 +176,10 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             RecordingDevice.refresh_from_system(node=node, return_objects=True)
         )
         if discovery:
-            for device_list, is_created in [(created_devices, True), (updated_devices, False)]:
+            for device_list, is_created in [
+                (created_devices, True),
+                (updated_devices, False),
+            ]:
                 for device in device_list:
                     record_discovery_item(
                         discovery,

@@ -138,22 +138,18 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             ClockDevice.refresh_from_system(node=node, return_objects=True)
         )
         if discovery:
-            for device in created_devices:
-                record_discovery_item(
-                    discovery,
-                    obj=device,
-                    label=str(device),
-                    created=True,
-                    overwritten=False,
-                )
-            for device in updated_devices:
-                record_discovery_item(
-                    discovery,
-                    obj=device,
-                    label=str(device),
-                    created=False,
-                    overwritten=True,
-                )
+            for device_list, is_created in [
+                (created_devices, True),
+                (updated_devices, False),
+            ]:
+                for device in device_list:
+                    record_discovery_item(
+                        discovery,
+                        obj=device,
+                        label=str(device),
+                        created=is_created,
+                        overwritten=not is_created,
+                    )
             discovery.metadata = {
                 "action": "clock_find_devices",
                 "created": created,
