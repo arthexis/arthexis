@@ -350,8 +350,17 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
             _reader.dev_write(_reader.ComIrqReg, 0x7F)
         except Exception:
             pass
-        GPIO.add_event_detect(IRQ_PIN, GPIO.FALLING, callback=_irq_callback)
-        logger.info("RFID IRQ listener active on pin %s", IRQ_PIN)
+        try:
+            GPIO.add_event_detect(IRQ_PIN, GPIO.FALLING, callback=_irq_callback)
+        except Exception as exc:
+            logger.warning(
+                "Failed to add RFID IRQ edge detection on pin %s: %s; "
+                "falling back to polling reads",
+                IRQ_PIN,
+                exc,
+            )
+        else:
+            logger.info("RFID IRQ listener active on pin %s", IRQ_PIN)
     except Exception as exc:
         logger.warning("Failed to initialize RFID hardware: %s", exc)
         try:
