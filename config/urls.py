@@ -35,7 +35,12 @@ from apps.sites import views as pages_views
 
 # Ensure admin registrations (e.g., OCPP chargers) are loaded before URL
 # resolution to avoid missing admin views such as /admin/ocpp/charger/.
-admin.autodiscover()
+try:
+    admin.autodiscover()
+except AppRegistryNotReady:
+    # Some CI preflight checks import URL configuration before app registry setup.
+    # Defer autodiscovery until Django finishes loading apps.
+    pass
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
