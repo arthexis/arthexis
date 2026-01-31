@@ -34,13 +34,12 @@ def _git_last_updated_on(path: Path) -> str | None:
 
 
 def _fallback_last_updated_on(path: Path) -> str | None:
-    try:
-        if path.is_file():
-            return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date().isoformat()
-    except OSError:
-        return None
     latest_mtime: float | None = None
     try:
+        if path.is_file():
+            mtime = path.stat().st_mtime
+            return datetime.fromtimestamp(mtime, tz=timezone.utc).date().isoformat()
+
         for entry in path.rglob("*"):
             if not entry.is_file():
                 continue
