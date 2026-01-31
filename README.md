@@ -89,7 +89,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **Linux**: open a terminal and run `git clone https://github.com/arthexis/arthexis.git`.
 - **Windows**: open PowerShell or Git Bash and run the same command.
 
-For preloaded environments without Git remotes configured, see the remotes note in the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md).
+For preloaded environments without Git remotes configured, see the remotes note in the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md#git-remotes-for-preloaded-environments).
 
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
