@@ -2,6 +2,10 @@
 
 This manual explains how to deploy, operate, and retire an Arthexis node with the platform's shell and batch helpers. It is organised in the order you typically run them: installation, runtime start/stop helpers, upgrades, and uninstallation. Each section includes all supported flags and highlights how the scripts interact with services, lock files, and other subsystems.
 
+## Git remotes for preloaded environments
+
+> If this repository is provided without Git remotes configured, `configure.sh`, `install.sh`, and `upgrade.sh` automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
+
 ## 1. Installation helpers
 
 ### 1.1 Linux: `install.sh`
@@ -50,10 +54,6 @@ The script also:
 ### 1.2 Windows: `install.bat`
 
 The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally.【F:install.bat†L1-L20】 No flags are accepted—Windows nodes rely on Terminal defaults (development server at port 8888, no system services). Run `install.bat` again whenever dependencies change.
-
-### 1.3 Git remotes for preloaded environments
-
-If this repository is provided without Git remotes configured, `configure.sh`, `install.sh`, and `upgrade.sh` automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
 
 ## 2. Runtime helpers
 
