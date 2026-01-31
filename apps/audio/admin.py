@@ -133,22 +133,15 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             RecordingDevice.refresh_from_system(node=node, return_objects=True)
         )
         if discovery:
-            for device in created_devices:
-                record_discovery_item(
-                    discovery,
-                    obj=device,
-                    label=device.identifier,
-                    created=True,
-                    overwritten=False,
-                )
-            for device in updated_devices:
-                record_discovery_item(
-                    discovery,
-                    obj=device,
-                    label=device.identifier,
-                    created=False,
-                    overwritten=True,
-                )
+            for device_list, is_created in [(created_devices, True), (updated_devices, False)]:
+                for device in device_list:
+                    record_discovery_item(
+                        discovery,
+                        obj=device,
+                        label=device.identifier,
+                        created=is_created,
+                        overwritten=not is_created,
+                    )
             discovery.metadata = {
                 "action": "audio_find_devices",
                 "created": created,
