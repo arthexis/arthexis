@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
@@ -31,9 +32,9 @@ class RecordingDeviceSampleForm(forms.Form):
             "-is_default", "identifier", "pk"
         )
         self.fields["device"].queryset = queryset
-        default_device = queryset.filter(is_default=True).first()
-        if default_device:
-            self.initial.setdefault("device", default_device)
+        first_device = queryset.first()
+        if first_device and first_device.is_default:
+            self.initial.setdefault("device", first_device)
 
 
 @admin.register(RecordingDevice)
@@ -222,6 +223,9 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         return redirect(change_url)
 
     def take_sample_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
         feature = self._ensure_audio_feature_enabled(
             request, _("Take Sample"), auto_enable=True
         )
@@ -263,9 +267,7 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
                 try:
                     path = record_microphone_sample(
                         duration_seconds=6,
-                        device_identifier=(
-                            selected_device.identifier if selected_device else None
-                        ),
+                        device_identifier=selected_device.identifier,
                         node=node,
                     )
                 except Exception as exc:  # pragma: no cover - depends on audio stack
