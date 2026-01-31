@@ -85,7 +85,7 @@ def test_snapshot_command_enables_feature_and_refreshes_devices(
     )
     video_device_mock.refresh_from_system.assert_called_once_with(node=node_instance)
     device_instance.capture_snapshot_path.assert_called_once_with()
-    assert "Enabled the rpi-camera feature" in capsys.readouterr().out
+    assert "Enabled the Video Camera feature" in capsys.readouterr().out
     assert result == "/tmp/snapshot2.jpg"
 
 

@@ -54,7 +54,7 @@ def scan_next(request):
     allow_anonymous = role_name == "Control"
     ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")
-    camera_feature_enabled = _feature_enabled("rpi-camera")
+    camera_feature_enabled = _feature_enabled("video-cam")
     prefer_camera = request.GET.get("source") == "camera"
     camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
 
@@ -211,7 +211,7 @@ def reader(request):
 
     table_mode, toggle_url, toggle_label = build_mode_toggle(request)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")
-    camera_feature_enabled = _feature_enabled("rpi-camera")
+    camera_feature_enabled = _feature_enabled("video-cam")
     camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
 
     context = {
@@ -234,4 +234,4 @@ def reader(request):
     return render(request, "cards/reader.html", context)
 
 
-reader.required_features_any = frozenset({"rfid-scanner", "rpi-camera"})
+reader.required_features_any = frozenset({"rfid-scanner", "video-cam"})

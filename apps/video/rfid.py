@@ -17,11 +17,11 @@ from apps.content.utils import save_screenshot
 logger = logging.getLogger(__name__)
 
 
-def is_rpi_camera_feature_active() -> bool:
-    """Return ``True`` if the Raspberry Pi camera feature is active."""
+def is_video_camera_feature_active() -> bool:
+    """Return ``True`` if the Video Camera feature is active."""
 
     try:
-        feature = NodeFeature.objects.filter(slug="rpi-camera").first()
+        feature = NodeFeature.objects.filter(slug="video-cam").first()
     except Exception:  # pragma: no cover - database may be unavailable early
         logger.debug(
             "RFID snapshot skipped: unable to query node features", exc_info=True
@@ -109,7 +109,7 @@ def _decode_qr_payload(image: Path, *, timeout: int = 8) -> str | None:
 
 
 def scan_camera_qr(*, endianness: str | None = None) -> dict[str, Any]:
-    """Capture a QR code using the Raspberry Pi camera when enabled."""
+    """Capture a QR code using the video camera when enabled."""
 
     if not is_rpi_camera_feature_active():
         return {"rfid": None, "label_id": None}

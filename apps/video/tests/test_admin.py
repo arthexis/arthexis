@@ -33,7 +33,7 @@ def test_take_snapshot_discovers_device_and_redirects(
         mac_address=Node.get_current_mac(),
         current_relation=Node.Relation.SELF,
     )
-    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
     monkeypatch.setattr(video_admin, "has_rpi_camera_stack", lambda: True)
 
     snapshot_path = tmp_path / "snapshot.jpg"
@@ -99,7 +99,7 @@ def test_take_snapshot_warns_when_no_devices(
         mac_address=Node.get_current_mac(),
         current_relation=Node.Relation.SELF,
     )
-    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
     monkeypatch.setattr(video_admin, "has_rpi_camera_stack", lambda: True)
 
     def fake_refresh_from_system(cls, *, node):
@@ -137,7 +137,7 @@ def test_change_view_shows_latest_snapshot(admin_client, monkeypatch, tmp_path):
         mac_address=Node.get_current_mac(),
         current_relation=Node.Relation.SELF,
     )
-    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
 
     image_path = tmp_path / "snapshot.jpg"
 
@@ -188,7 +188,7 @@ def test_change_view_captures_missing_snapshot(admin_client, monkeypatch, tmp_pa
         mac_address=Node.get_current_mac(),
         current_relation=Node.Relation.SELF,
     )
-    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
 
     device = VideoDevice.objects.create(
         node=node,

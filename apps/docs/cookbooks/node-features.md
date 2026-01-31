@@ -39,7 +39,7 @@ Use the search field to find features by slug or display string. The queryset pr
 | LCD Screen | `lcd-screen` | Control | Auto-managed flag for nodes driving an attached LCD panel. |
 | NGINX Server | `nginx-server` | Satellite, Control, Watchtower | Auto-managed flag for nodes running the bundled NGINX front end. |
 | RFID Scanner | `rfid-scanner` | Control, Satellite | Auto-managed feature with a **Scanner** admin action. |
-| Raspberry Pi Camera | `rpi-camera` | Control, Satellite | Auto-managed feature with built-in eligibility checks, **Take a Snapshot**/**View stream** default actions, and RFID/QR snapshot and scan integrations. |
+| Video Camera | `video-cam` | Control, Satellite | Auto-managed feature with built-in eligibility checks, **Take a Snapshot**/**View stream** default actions, and RFID/QR snapshot and scan integrations. |
 | Screenshot Poll | `screenshot-poll` | (manual enablement) | Manual feature providing a **Take Screenshot** admin action. |
 
 Manual features (those without default roles) still appear in the changelist and can be enabled through the admin action once local hardware or environment checks pass.
