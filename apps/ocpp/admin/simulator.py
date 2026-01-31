@@ -165,7 +165,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def start_simulator(self, request, queryset):
         self._start_simulators(request, queryset)
 
-    @admin.action(description="Start Default Simulator")
+    @admin.action(description="Start Default")
     def start_default(self, request, queryset=None):
         from django.urls import reverse
         from django.utils.html import format_html
@@ -211,7 +211,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
         return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
 
-    start_default.label = _("Start Default Simulator")
+    start_default.label = _("Start Default")
     start_default.requires_queryset = False
 
     def stop_simulator(self, request, queryset):

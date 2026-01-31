@@ -109,8 +109,8 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     def fetch(self, request, queryset=None):  # pragma: no cover - admin action
         return HttpResponseRedirect(self._action_url())
 
-    fetch.label = _("Fetch Instance")
-    fetch.short_description = _("Fetch Instance")
+    fetch.label = _("Discover")
+    fetch.short_description = _("Discover")
     fetch.requires_queryset = False
 
     def fetch_view(self, request):
@@ -228,8 +228,8 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
     def fetch(self, request, queryset=None):  # pragma: no cover - admin action
         return HttpResponseRedirect(self._action_url())
 
-    fetch.label = _("Fetch Database")
-    fetch.short_description = _("Fetch Database")
+    fetch.label = _("Discover")
+    fetch.short_description = _("Discover")
     fetch.requires_queryset = False
 
     def fetch_view(self, request):
