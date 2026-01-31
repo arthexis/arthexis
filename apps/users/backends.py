@@ -99,6 +99,11 @@ class RFIDBackend:
                 )
                 if result.get("error"):
                     return None
+                scanned_rfid = result.get("rfid")
+                if scanned_rfid:
+                    expected_rfid = (tag.rfid or rfid_value).strip().upper()
+                    if expected_rfid and scanned_rfid.strip().upper() != expected_rfid:
+                        return None
                 cell_value = result.get("value")
                 if cell_value is None:
                     return None

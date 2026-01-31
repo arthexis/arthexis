@@ -186,34 +186,20 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         if obj is not None and fieldsets:
             name, options = fieldsets[0]
             fields = list(options.get("fields", ()))
-            if "login_rfid" not in fields:
-                fields.append("login_rfid")
-            for extra_field in (
+            rfid_fields_to_add = (
+                "login_rfid",
                 "login_rfid_key",
                 "login_rfid_block",
                 "login_rfid_offset",
                 "login_rfid_value",
-            ):
-                if extra_field not in fields:
-                    fields.append(extra_field)
+            )
+            for field in rfid_fields_to_add:
+                if field not in fields:
+                    fields.append(field)
             options = options.copy()
             options["fields"] = tuple(fields)
             fieldsets[0] = (name, options)
         return fieldsets
-
-    def render_change_form(
-        self, request, context, add=False, change=False, form_url="", obj=None
-    ):
-        payload = None
-        if obj is not None:
-            direct, via = get_owned_objects_for_user(obj)
-            payload = self._build_owned_object_context(
-                direct, via, _("Owned via security group")
-            )
-        self._attach_owned_objects(context, payload)
-        return super().render_change_form(
-            request, context, add=add, change=change, form_url=form_url, obj=obj
-        )
 
     def _get_operate_as_profile_template(self):
         opts = self.model._meta
@@ -235,6 +221,13 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
+        payload = None
+        if obj is not None:
+            direct, via = get_owned_objects_for_user(obj)
+            payload = self._build_owned_object_context(
+                direct, via, _("Owned via security group")
+            )
+        self._attach_owned_objects(context, payload)
         response = super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
