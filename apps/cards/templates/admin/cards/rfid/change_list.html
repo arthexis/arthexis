@@ -4,5 +4,6 @@
 {{ block.super }}
 <li><a href="{% url 'admin:cards_rfid_report' %}">Report</a></li>
 <li><a href="{% url 'admin:cards_rfid_scan' %}">{% trans "Admin Scanner" %}</a></li>
-<li><a href="{% url 'pages:rfid-login' %}">{% trans "Public Scanner" %}</a></li>
+<li><a href="{% url 'rfid-reader' %}">{% trans "Public Scanner" %}</a></li>
+<li><a href="{% url 'pages:rfid-login' %}">{% trans "Public Login" %}</a></li>
 {% endblock %}

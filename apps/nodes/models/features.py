@@ -59,7 +59,10 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 label=_("Admin Scanner"), url_name="admin:cards_rfid_scan"
             ),
             NodeFeatureDefaultAction(
-                label=_("Public Scanner"), url_name="pages:rfid-login"
+                label=_("Public Scanner"), url_name="rfid-reader"
+            ),
+            NodeFeatureDefaultAction(
+                label=_("Public Login"), url_name="pages:rfid-login"
             ),
         ),
         "celery-queue": (

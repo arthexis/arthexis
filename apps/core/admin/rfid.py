@@ -17,7 +17,6 @@ from django.urls import path, reverse
 from django.utils import timezone, translation
 from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _, ngettext
-from django.views.decorators.csrf import csrf_exempt
 from import_export import fields, resources
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
@@ -978,12 +977,12 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             ),
             path(
                 "scan/",
-                self.admin_site.admin_view(csrf_exempt(self.scan_view)),
+                self.admin_site.admin_view(self.scan_view),
                 name="cards_rfid_scan",
             ),
             path(
                 "scan/next/",
-                self.admin_site.admin_view(csrf_exempt(self.scan_next)),
+                self.admin_site.admin_view(self.scan_next),
                 name="cards_rfid_scan_next",
             ),
         ]
