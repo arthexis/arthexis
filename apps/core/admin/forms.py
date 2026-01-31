@@ -160,8 +160,14 @@ class UserChangeRFIDForm(forms.ModelForm):
         return CustomerAccount.objects.create(user=user, name=candidate)
 
     def save(self, commit=True):
-        user = super().save(commit)
+        user = super().save(commit=False)
         rfid = self.cleaned_data.get("login_rfid")
+        if rfid is None and user.pk:
+            user.login_rfid = _raw_instance_value(user, "login_rfid")
+        else:
+            user.login_rfid = rfid
+        if commit:
+            user.save()
         if not rfid:
             return user
         account = self._ensure_customer_account(user)

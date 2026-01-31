@@ -31,6 +31,15 @@ class User(Entity, AbstractUser):
         blank=True,
         validators=[validate_ipv46_address],
     )
+    login_rfid = models.ForeignKey(
+        "cards.RFID",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="login_users",
+        db_column="login_rfid_key",
+        help_text=_("RFID card assigned for RFID logins."),
+    )
     operate_as = models.ForeignKey(
         "self",
         null=True,
