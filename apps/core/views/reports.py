@@ -511,10 +511,11 @@ def _update_publish_controls(
                 request,
                 _("GitHub token stored for this publish session."),
             )
+            _persist_release_context(request, session_key, ctx, lock_path)
         else:
             ctx.pop("github_token", None)
             messages.error(request, _("Enter a GitHub token to continue."))
-        _persist_release_context(request, session_key, ctx, lock_path)
+            _store_release_context(request, session_key, ctx)
         return ctx, False, redirect(_clean_redirect_path(request, request.path))
 
     if request.method == "POST" and request.POST.get("ack_error"):
