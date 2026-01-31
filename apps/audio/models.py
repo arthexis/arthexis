@@ -9,7 +9,8 @@ from pathlib import Path
 import wave
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -43,19 +44,39 @@ class RecordingDevice(Entity):
     description = models.CharField(max_length=255, blank=True)
     capture_channels = models.PositiveIntegerField(default=0)
     raw_info = models.TextField(blank=True)
+    is_default = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["identifier"]
         constraints = [
             models.UniqueConstraint(
                 fields=["node", "identifier"], name="audio_recordingdevice_unique"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["node"],
+                condition=Q(is_default=True),
+                name="audio_recordingdevice_default_per_node",
+            ),
         ]
         verbose_name = _("Recording Device")
         verbose_name_plural = _("Recording Devices")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.identifier} ({self.node})"
+
+    def save(self, *args, **kwargs) -> None:
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if self.is_default:
+                (
+                    RecordingDevice.objects.filter(node=self.node, is_default=True)
+                    .exclude(pk=self.pk)
+                    .update(is_default=False)
+                )
+
+    @classmethod
+    def default_for_node(cls, node) -> "RecordingDevice | None":
+        return cls.objects.filter(node=node, is_default=True).first()
 
     @classmethod
     def parse_devices(cls, *, pcm_path: Path = PCM_PATH) -> list[DetectedRecordingDevice]:

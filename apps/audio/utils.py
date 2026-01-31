@@ -24,6 +24,7 @@ def record_microphone_sample(
     sample_rate: int = 16_000,
     channels: int = 1,
     device_identifier: str | None = None,
+    node=None,
     pcm_path: Path = PCM_PATH,
 ) -> Path:
     """Record audio from the default microphone and return the saved path."""
@@ -31,6 +32,11 @@ def record_microphone_sample(
     tool_path = shutil.which("arecord")
     if not tool_path:
         raise RuntimeError("arecord is not available")
+    if device_identifier is None and node is not None:
+        default_device = RecordingDevice.default_for_node(node)
+        device_identifier = (
+            default_device.identifier if default_device else device_identifier
+        )
     if device_identifier is None:
         preferred_device = RecordingDevice.preferred_device(pcm_path=pcm_path)
         device_identifier = preferred_device.identifier if preferred_device else None
