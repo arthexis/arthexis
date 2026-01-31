@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import re
+from datetime import datetime, timezone as dt_timezone
+from pathlib import Path
 from typing import Iterable
 
 from django.core.management.base import BaseCommand, CommandError
@@ -50,6 +52,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--sessions",
+            dest="sessions",
+            type=int,
+            nargs="?",
+            const=10,
+            help=(
+                "Show the last N session logs for the selected chargers. Defaults to "
+                "10 sessions when no value is provided."
+            ),
+        )
+        parser.add_argument(
             "--rfid-enable",
             action="store_true",
             help="Enable the RFID authentication requirement for the matched chargers.",
@@ -67,6 +80,7 @@ class Command(BaseCommand):
         serial = options.get("serial")
         cp_raw = options.get("cp")
         tail = options.get("tail")
+        sessions = options.get("sessions")
         enable_rfid = options.get("rfid_enable")
         disable_rfid = options.get("rfid_disable")
 
@@ -75,6 +89,9 @@ class Command(BaseCommand):
 
         if tail is not None and tail <= 0:
             raise CommandError("--tail requires a positive number of log entries.")
+
+        if sessions is not None and sessions <= 0:
+            raise CommandError("--sessions requires a positive number of sessions.")
 
         queryset = (
             Charger.objects.all()
@@ -153,6 +170,10 @@ class Command(BaseCommand):
                 )
             self._render_details(chargers)
             self._render_tail(chargers[0], tail)
+            return
+
+        if sessions is not None:
+            self._render_sessions(chargers, sessions)
             return
 
         if serial or cp_raw:
@@ -259,6 +280,82 @@ class Command(BaseCommand):
 
         for line in entries[-limit:]:
             self.stdout.write(line)
+
+    def _render_sessions(self, chargers: Iterable[Charger], limit: int) -> None:
+        entries = self._collect_session_entries(chargers)
+        if not entries:
+            self.stdout.write("No session logs found.")
+            return
+
+        entries.sort(key=lambda item: item["timestamp"], reverse=True)
+        selected = entries[:limit]
+        total_count = len(entries)
+        heading = "Recent sessions"
+        if total_count > limit:
+            heading += f" (showing {len(selected)} of {total_count})"
+        self.stdout.write(self.style.MIGRATE_HEADING(heading))
+        for entry in selected:
+            charger = entry["charger"]
+            connector_label = self._connector_descriptor(charger)
+            label = charger.display_name or charger.charger_id
+            timestamp = self._format_dt(entry["timestamp"]) or "-"
+            tx_id = entry["tx_id"] or "-"
+            self.stdout.write(
+                f"{timestamp}  {label} ({connector_label})  tx={tx_id}  {entry['path']}"
+            )
+
+    def _collect_session_entries(
+        self, chargers: Iterable[Charger]
+    ) -> list[dict[str, object]]:
+        entries: list[dict[str, object]] = []
+        for charger in chargers:
+            for folder in self._session_folders_for_charger(charger):
+                for path in folder.glob("*.json"):
+                    if not path.is_file():
+                        continue
+                    try:
+                        stat = path.stat()
+                    except FileNotFoundError:
+                        continue
+                    timestamp = datetime.fromtimestamp(
+                        stat.st_mtime, tz=dt_timezone.utc
+                    )
+                    entries.append(
+                        {
+                            "timestamp": timezone.localtime(timestamp),
+                            "charger": charger,
+                            "tx_id": self._session_transaction_id(path.name),
+                            "path": path,
+                        }
+                    )
+        return entries
+
+    def _session_folders_for_charger(self, charger: Charger) -> list[Path]:
+        candidates = {
+            charger.charger_id,
+            store.identity_key(charger.charger_id, charger.connector_id),
+        }
+        if charger.display_name:
+            candidates.add(charger.display_name)
+        folders = []
+        for name in candidates:
+            safe_name = self._safe_session_name(name)
+            path = store.SESSION_DIR / safe_name
+            if path.exists() and path.is_dir():
+                folders.append(path)
+        return folders
+
+    @staticmethod
+    def _safe_session_name(name: str) -> str:
+        return re.sub(r"[^\w.-]", "_", name)
+
+    @staticmethod
+    def _session_transaction_id(filename: str) -> str | None:
+        stem = filename.rsplit(".", 1)[0]
+        parts = stem.split("_", 1)
+        if len(parts) == 2 and parts[1]:
+            return parts[1]
+        return None
 
     def _transaction_prefetch(self) -> Prefetch:
         return Prefetch(
