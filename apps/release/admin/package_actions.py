@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from apps.release.models import Package, PackageRelease
 from apps.repos.forms import PackageRepositoryForm
@@ -21,49 +21,104 @@ from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_p
 logger = logging.getLogger(__name__)
 
 
-def prepare_package_release(admin_view, request, package):
-    if request.method not in {"POST", "GET"}:
-        return HttpResponseNotAllowed(["GET", "POST"])
+def _safe_version(text: str) -> Version | None:
+    try:
+        return Version(text)
+    except InvalidVersion:
+        return None
 
-    existing_releases = list(PackageRelease.all_objects.filter(package=package))
-    if existing_releases:
-        latest_release = max(
-            existing_releases, key=lambda release: Version(release.version)
-        )
-        if not latest_release.is_published:
-            if latest_release.is_deleted:
-                latest_release.is_deleted = False
-                latest_release.save(update_fields=["is_deleted"])
-            return redirect(
-                reverse(
-                    "admin:release_packagerelease_change", args=[latest_release.pk]
-                )
-            )
 
-    ver_file = Path("VERSION")
-    if ver_file.exists():
-        raw_version = ver_file.read_text().strip()
-        repo_version_text = PackageRelease.normalize_version(raw_version) or "0.0.0"
-        repo_version = Version(repo_version_text)
-    else:
-        repo_version = Version("0.0.0")
+def _latest_release(
+    existing_releases: list[PackageRelease],
+) -> tuple[Version, PackageRelease] | None:
+    candidates: list[tuple[Version, PackageRelease]] = []
+    for release in existing_releases:
+        parsed = _safe_version(release.version)
+        if parsed is None:
+            continue
+        candidates.append((parsed, release))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])
 
-    pypi_latest = Version("0.0.0")
+
+def _fetch_latest_pypi_version(package_name: str) -> Version | None:
     resp = None
     try:
-        resp = requests.get(f"https://pypi.org/pypi/{package.name}/json", timeout=10)
-        if resp.ok:
-            releases = resp.json().get("releases", {})
-            if releases:
-                pypi_latest = max(Version(v) for v in releases)
+        resp = requests.get(f"https://pypi.org/pypi/{package_name}/json", timeout=10)
+        if not resp.ok:
+            return None
+        releases = resp.json().get("releases", {})
+        candidates = [
+            parsed
+            for version in releases
+            if (parsed := _safe_version(version)) is not None
+        ]
+        if not candidates:
+            return None
+        return max(candidates)
     except Exception:
-        pass
+        return None
     finally:
         if resp is not None:
             close = getattr(resp, "close", None)
             if callable(close):
                 with contextlib.suppress(Exception):
                     close()
+
+
+def prepare_package_release(admin_view, request, package):
+    if request.method == "GET":
+        context = admin_view.admin_site.each_context(request)
+        context.update(
+            {
+                "opts": Package._meta,
+                "original": package,
+                "title": _("Prepare next release"),
+                "cancel_url": request.META.get("HTTP_REFERER")
+                or reverse("admin:index"),
+            }
+        )
+        return TemplateResponse(
+            request,
+            "admin/release/prepare_next_release_confirm.html",
+            context,
+        )
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST", "GET"])
+
+    existing_releases = list(PackageRelease.all_objects.filter(package=package))
+    pypi_latest_version = _fetch_latest_pypi_version(package.name)
+    if existing_releases:
+        latest_release_info = _latest_release(existing_releases)
+        if latest_release_info is not None:
+            latest_version, latest_release = latest_release_info
+            if (
+                not latest_release.is_published
+                and (
+                    pypi_latest_version is None
+                    or latest_version >= pypi_latest_version
+                )
+            ):
+                if latest_release.is_deleted:
+                    latest_release.is_deleted = False
+                    latest_release.save(update_fields=["is_deleted"])
+                return redirect(
+                    reverse(
+                        "admin:release_packagerelease_change",
+                        args=[latest_release.pk],
+                    )
+                )
+
+    ver_file = Path("VERSION")
+    if ver_file.exists():
+        raw_version = ver_file.read_text().strip()
+        repo_version_text = PackageRelease.normalize_version(raw_version) or "0.0.0"
+        repo_version = _safe_version(repo_version_text) or Version("0.0.0")
+    else:
+        repo_version = Version("0.0.0")
+
+    pypi_latest = pypi_latest_version or Version("0.0.0")
     pypi_plus_one = Version(PackageRelease._format_patch_with_epoch(pypi_latest))
     next_version = max(repo_version, pypi_plus_one)
     release, _created = PackageRelease.all_objects.update_or_create(
