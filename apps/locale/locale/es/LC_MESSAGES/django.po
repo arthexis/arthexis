@@ -3223,7 +3223,7 @@ msgstr "Transacción"
 #: nodes/admin.py:1696
 #: nodes/templates/admin/nodes/netmessage/change_list.html:6
 #: nodes/templates/admin/nodes/netmessage/send.html:44
-msgid "Send Net Message"
+msgid "Send Message"
 msgstr ""
 
 #: nodes/admin.py:1682

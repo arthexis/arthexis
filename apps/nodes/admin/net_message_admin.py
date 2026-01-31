@@ -97,7 +97,7 @@ class NetMessageAdmin(EntityModelAdmin):
                 actions["send"] = (
                     action,
                     "send",
-                    getattr(action, "short_description", _("Send Net Message")),
+                    getattr(action, "short_description", _("Send Message")),
                 )
         return actions
 
@@ -108,8 +108,8 @@ class NetMessageAdmin(EntityModelAdmin):
             )
         )
 
-    send.label = _("Send Net Message")
-    send.short_description = _("Send Net Message")
+    send.label = _("Send Message")
+    send.short_description = _("Send Message")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -203,7 +203,7 @@ class NetMessageAdmin(EntityModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
-            "title": _("Send Net Message"),
+            "title": _("Send Message"),
             "adminform": admin_form,
             "media": self.media + form.media,
         }
@@ -271,5 +271,4 @@ class NetMessageAdmin(EntityModelAdmin):
         if not created:
             return ""
         return timezone.localtime(created).date().isoformat()
-
 
