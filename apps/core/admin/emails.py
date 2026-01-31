@@ -163,9 +163,9 @@ class EmailInboxAdmin(
                 results = []
                 for inbox in queryset:
                     messages = inbox.search_messages(
-                        subject=form.cleaned_data["subject"],
-                        from_address=form.cleaned_data["from_address"],
-                        body=form.cleaned_data["body"],
+                        subject=form.cleaned_data["subject"].replace("\r", "").replace("\n", ""),
+                        from_address=form.cleaned_data["from_address"].replace("\r", "").replace("\n", ""),
+                        body=form.cleaned_data["body"].replace("\r", "").replace("\n", ""),
                         use_regular_expressions=False,
                     )
                     results.append({"inbox": inbox, "messages": messages})
