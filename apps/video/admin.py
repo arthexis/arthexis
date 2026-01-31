@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit, urlunsplit
 
+import requests
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
@@ -678,6 +679,7 @@ class YoutubeChannelAdmin(EntityModelAdmin):
     list_display = ("title", "handle_display", "channel_id", "channel_url")
     search_fields = ("title", "channel_id", "handle", "description")
     readonly_fields = ("channel_url",)
+    actions = ("test_selected_channel",)
 
     @admin.display(description=_("Handle"))
     def handle_display(self, obj):
@@ -686,3 +688,70 @@ class YoutubeChannelAdmin(EntityModelAdmin):
     @admin.display(description=_("Channel URL"))
     def channel_url(self, obj):
         return obj.get_channel_url()
+
+    @admin.action(description=_("Test selected channel"))
+    def test_selected_channel(self, request, queryset):
+        if not queryset.exists():
+            self.message_user(
+                request,
+                _("No channels were selected."),
+                level=messages.WARNING,
+            )
+            return
+
+        tested = 0
+        failed = 0
+        missing = 0
+
+        for channel in queryset:
+            url = channel.get_channel_url()
+            if not url:
+                missing += 1
+                self.message_user(
+                    request,
+                    _("Channel %(channel)s is missing a handle or channel ID.")
+                    % {"channel": channel},
+                    level=messages.WARNING,
+                )
+                continue
+            try:
+                response = requests.get(url, timeout=5)
+            except requests.RequestException as exc:
+                failed += 1
+                self.message_user(
+                    request,
+                    _("Failed to reach %(channel)s: %(error)s")
+                    % {"channel": channel, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+            if response.ok:
+                tested += 1
+                continue
+            failed += 1
+            self.message_user(
+                request,
+                _("Channel %(channel)s returned HTTP %(status)s.")
+                % {"channel": channel, "status": response.status_code},
+                level=messages.ERROR,
+            )
+
+        if tested:
+            self.message_user(
+                request,
+                _("Tested %(count)s channel(s).") % {"count": tested},
+                level=messages.SUCCESS,
+            )
+        if failed:
+            self.message_user(
+                request,
+                _("Failed to test %(count)s channel(s).") % {"count": failed},
+                level=messages.ERROR,
+            )
+        if missing:
+            self.message_user(
+                request,
+                _("Skipped %(count)s channel(s) without identifiers.")
+                % {"count": missing},
+                level=messages.WARNING,
+            )
