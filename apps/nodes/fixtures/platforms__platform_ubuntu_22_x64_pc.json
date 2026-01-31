@@ -1,0 +1,14 @@
+[
+  {
+    "model": "nodes.platform",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Ubuntu 22 x64-based PC",
+      "hardware": "PC",
+      "architecture": "x64",
+      "os_name": "Ubuntu",
+      "os_version": "22.04"
+    }
+  }
+]
