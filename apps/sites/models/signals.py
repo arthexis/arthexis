@@ -14,10 +14,23 @@ def _queue_low_rating_user_story_issue(
     instance.handle_post_save(created=created, raw=raw)
 
 
-@receiver(post_save, sender=UserStory)
 @receiver(post_delete, sender=UserStory)
-def _invalidate_user_story_dashboard_rule(
-    sender, instance: UserStory, **_kwargs
-) -> None:
+def _invalidate_user_story_dashboard_rule_on_delete(sender, **_kwargs) -> None:
     DashboardRule = django_apps.get_model("counters", "DashboardRule")
     DashboardRule.invalidate_model_cache(sender)
+
+
+@receiver(post_save, sender=UserStory)
+def _invalidate_user_story_dashboard_rule_on_save(
+    sender,
+    created: bool,
+    update_fields: frozenset[str] | None,
+    **_kwargs,
+) -> None:
+    # Invalidate if a new story is created, if all fields are saved (update_fields is None),
+    # or if one of the relevant fields for the rule has been updated.
+    if created or not update_fields or {"status", "assign_to", "owner"}.intersection(
+        update_fields
+    ):
+        DashboardRule = django_apps.get_model("counters", "DashboardRule")
+        DashboardRule.invalidate_model_cache(sender)
