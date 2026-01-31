@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arthexis"
-version = "0.2.1"
+version = "0.2.2"
 description = "Energy & Power Infrastructure"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
@@ -32,6 +32,7 @@ config = [ "**/*",]
 "apps.mermaid" = [ "**/*",]
 "apps.ftp" = [ "**/*",]
 "apps.vehicle" = [ "**/*",]
+"apps.sponsors" = [ "**/*",]
 "apps.users" = [ "**/*",]
 "apps.sensors" = [ "**/*",]
 "apps.leads" = [ "**/*",]
@@ -106,6 +107,7 @@ config = [ "**/*",]
 "apps.ftp.management" = [ "**/*",]
 "apps.ftp.management.commands" = [ "**/*",]
 "apps.vehicle.migrations" = [ "**/*",]
+"apps.sponsors.migrations" = [ "**/*",]
 "apps.users.models" = [ "**/*",]
 "apps.users.migrations" = [ "**/*",]
 "apps.users.tests" = [ "**/*",]
@@ -182,6 +184,7 @@ config = [ "**/*",]
 "apps.core.templatetags" = [ "**/*",]
 "apps.core.models" = [ "**/*",]
 "apps.core.migrations" = [ "**/*",]
+"apps.core.modeling" = [ "**/*",]
 "apps.core.tests" = [ "**/*",]
 "apps.core.management" = [ "**/*",]
 "apps.core.management.commands" = [ "**/*",]
