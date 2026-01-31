@@ -654,6 +654,22 @@
         font-size: 0.75rem;
         opacity: 0.7;
       }
+      .skip-link {
+        position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.25rem;
+        background: var(--bs-dark);
+        color: var(--bs-white);
+        text-decoration: none;
+        transform: translateY(-200%);
+        transition: transform 0.2s ease;
+        z-index: 1100;
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+      }
       body.chat-open {
         overflow: hidden;
       }
@@ -679,12 +695,14 @@
     {% block extra_head %}{% endblock %}
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
+    <a class="visually-hidden-focusable skip-link" href="#main-content">{% trans "Skip to main content" %}</a>
     <div class="container flex-grow-1 mb-5">
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2 m-0">
         <div class="container-fluid">
           <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
+            <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
@@ -792,16 +810,18 @@
                 </li>
               {% endif %}
             </ul>
-            <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
+            <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar" aria-label="{% trans 'Site tools' %}">
               <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()" aria-label="{% trans "Light Mode" %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-sun"></use>
                 </svg>
+                <span class="visually-hidden" data-theme-label>{% trans "Light Mode" %}</span>
               </button>
               <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
                 {% csrf_token %}
                 <input name="next" type="hidden" value="{{ request.get_full_path }}">
-                <select name="language" class="form-select form-select-sm d-inline w-auto language-select">
+                <label class="visually-hidden" for="language-select">{% trans "Language" %}</label>
+                <select name="language" id="language-select" class="form-select form-select-sm d-inline w-auto language-select">
                   {% for lang_code, lang_name in LANGUAGES %}
                     <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
                   {% endfor %}
@@ -811,6 +831,13 @@
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
+                <span class="visually-hidden">
+                  {% if request.user.is_authenticated %}
+                    {% trans "Admin" %}
+                  {% else %}
+                    {% trans "Login" %}
+                  {% endif %}
+                </span>
                 {% if request.user.is_authenticated %}
                 <div class="user-info-tooltip">
                   {{ request.user.username }}{% if request.user.is_staff %} - {% trans "Staff" %}{% endif %}
@@ -821,12 +848,15 @@
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
+                <span class="visually-hidden">{% trans "Share" %}</span>
               </button>
             </div>
           </div>
         </div>
       </nav>
-      {% block content %}{% endblock %}
+      <main id="main-content" role="main">
+        {% block content %}{% endblock %}
+      </main>
     </div>
     {% if chat_enabled %}
     <div
@@ -1105,9 +1135,14 @@
         }
         const toggle = document.getElementById('theme-toggle');
         const icon = toggle.querySelector('use');
-        toggle.setAttribute('aria-label', theme === 'dark' ? '{% trans "Light Mode" %}' : '{% trans "Dark Mode" %}');
+        const label = theme === 'dark' ? '{% trans "Light Mode" %}' : '{% trans "Dark Mode" %}';
+        toggle.setAttribute('aria-label', label);
         icon.setAttribute('href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
         icon.setAttribute('xlink:href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
+        const text = toggle.querySelector('[data-theme-label]');
+        if (text) {
+          text.textContent = label;
+        }
 
         const navbar = document.querySelector('nav.navbar');
         const buttons = document.querySelectorAll('.toolbar .btn');
