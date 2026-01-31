@@ -31,6 +31,7 @@ import requests
 
 from apps.nodes.logging import get_register_visitor_logger
 
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.cards.models import RFID
 from apps.cards.sync import apply_rfid_payload
 from apps.core.admin import SaveBeforeChangeAction
@@ -267,7 +268,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if not request.user.is_superuser:
             raise PermissionDenied
         node, created = Node.register_current()
-        from apps.discovery.services import record_discovery_item, start_discovery
 
         discovery = start_discovery(
             _("Discover"),
