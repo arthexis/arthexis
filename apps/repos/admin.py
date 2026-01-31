@@ -66,8 +66,8 @@ class RepositoryIssueAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
         self.message_user(request, message, level=level)
         return self._redirect_to_changelist()
 
-    fetch_open_issues.label = _("Fetch Open Issues")
-    fetch_open_issues.short_description = _("Fetch Open Issues")
+    fetch_open_issues.label = _("Fetch Open")
+    fetch_open_issues.short_description = _("Fetch Open")
     fetch_open_issues.requires_queryset = False
 
 
@@ -118,8 +118,8 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
         self.message_user(request, message, level=level)
         return self._redirect_to_changelist()
 
-    fetch_open_pull_requests.label = _("Fetch Open Pull Requests")
-    fetch_open_pull_requests.short_description = _("Fetch Open Pull Requests")
+    fetch_open_pull_requests.label = _("Fetch Open")
+    fetch_open_pull_requests.short_description = _("Fetch Open")
     fetch_open_pull_requests.requires_queryset = False
 
 

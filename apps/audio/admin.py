@@ -38,8 +38,8 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     def find_devices(self, request, queryset=None):
         return redirect("admin:audio_recordingdevice_find_devices")
 
-    find_devices.label = _("Find Devices")
-    find_devices.short_description = _("Find Devices")
+    find_devices.label = _("Discover")
+    find_devices.short_description = _("Discover")
     find_devices.changelist = True
 
     def _ensure_audio_feature_enabled(

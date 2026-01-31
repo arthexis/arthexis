@@ -34,8 +34,8 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     def find_devices(self, request, queryset=None):
         return redirect("admin:clocks_clockdevice_find_devices")
 
-    find_devices.label = _("Find Devices")
-    find_devices.short_description = _("Find Devices")
+    find_devices.label = _("Discover")
+    find_devices.short_description = _("Discover")
     find_devices.changelist = True
 
     @admin.display(description=_("Public View"))
@@ -104,7 +104,7 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
 
         feature = self._ensure_rtc_feature_enabled(
             request,
-            _("Find Devices"),
+            _("Discover"),
             node=node,
             auto_enable=True,
         )

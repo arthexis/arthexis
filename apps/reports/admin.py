@@ -39,8 +39,8 @@ class SQLReportAdmin(admin.ModelAdmin):
     def open_system(self, request, queryset=None):
         return HttpResponseRedirect(reverse("admin:system-sql-report"))
 
-    open_system.short_description = _("System SQL report")
-    open_system.label = _("System SQL report")
+    open_system.short_description = _("Run SQL")
+    open_system.label = _("Run SQL")
     open_system.requires_queryset = False
 
 

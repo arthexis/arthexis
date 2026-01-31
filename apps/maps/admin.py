@@ -74,7 +74,7 @@ class LocationAdmin(EntityModelAdmin):
         if not self.has_add_permission(request):
             raise PermissionDenied
 
-        title = _("Add Current Location")
+        title = _("Add Current")
         opts = self.model._meta
 
         if request.method == "POST":
@@ -120,8 +120,8 @@ class LocationAdmin(EntityModelAdmin):
         }
         return TemplateResponse(request, "admin/maps/location/add_current.html", context)
 
-    add_current.label = _("Add Current Location")
-    add_current.short_description = _("Add Current Location")
+    add_current.label = _("Add Current")
+    add_current.short_description = _("Add Current")
     add_current.requires_queryset = False
 
 
