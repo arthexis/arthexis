@@ -56,7 +56,10 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
     DEFAULT_ACTIONS: dict[str, tuple[NodeFeatureDefaultAction, ...]] = {
         "rfid-scanner": (
             NodeFeatureDefaultAction(
-                label="Scanner", url_name="admin:cards_rfid_scan"
+                label=_("Admin Scanner"), url_name="admin:cards_rfid_scan"
+            ),
+            NodeFeatureDefaultAction(
+                label=_("Public Scanner"), url_name="pages:rfid-login"
             ),
         ),
         "celery-queue": (
