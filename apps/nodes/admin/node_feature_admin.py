@@ -1,14 +1,22 @@
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.shortcuts import redirect
+from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
+from apps.discovery.services import record_discovery_item, start_discovery
 
-from ..models import Node, NodeFeature
+from ..models import Node, NodeFeature, NodeFeatureAssignment
 from apps.content.utils import capture_screenshot, save_screenshot
-from .actions import check_features_for_eligibility, enable_selected_features
+from .actions import (
+    check_features_for_eligibility,
+    discover_node_features,
+    enable_selected_features,
+)
 from .forms import NodeFeatureAdminForm
 from .reports_admin import CeleryReportAdminMixin
 
@@ -27,7 +35,11 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         "is_enabled_display",
         "available_actions",
     )
-    actions = [check_features_for_eligibility, enable_selected_features]
+    actions = [
+        discover_node_features,
+        check_features_for_eligibility,
+        enable_selected_features,
+    ]
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
 
@@ -91,6 +103,16 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         urls = super().get_urls()
         custom = [
             path(
+                "discover/",
+                self.admin_site.admin_view(self.discover_features),
+                name="nodes_nodefeature_discover",
+            ),
+            path(
+                "discover/progress/",
+                self.admin_site.admin_view(self.discover_features_progress),
+                name="nodes_nodefeature_discover_progress",
+            ),
+            path(
                 "take-screenshot/",
                 self.admin_site.admin_view(self.take_screenshot),
                 name="nodes_nodefeature_take_screenshot",
@@ -151,6 +173,143 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             )
             return redirect("..")
         return redirect(change_url)
+
+    def discover_features(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        features = list(self.get_queryset(request))
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "node_feature_discover"},
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Discover node features"),
+            "features": features,
+            "feature_ids": [str(feature.pk) for feature in features],
+            "progress_url": reverse("admin:nodes_nodefeature_discover_progress"),
+            "discovery_id": discovery.pk if discovery else "",
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/nodefeature/discover.html",
+            context,
+        )
+
+    def discover_features_progress(self, request):
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        try:
+            feature_id = int(request.POST.get("feature_id", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "Invalid feature id"}, status=400)
+        discovery_id = request.POST.get("discovery_id") or ""
+        feature = self.get_queryset(request).filter(pk=feature_id).first()
+        if not feature:
+            return JsonResponse({"detail": "Feature not found"}, status=404)
+
+        node = Node.get_local()
+        enablement_message = self._manual_enablement_message(feature, node)
+
+        status = "skipped"
+        message = ""
+        eligible = False
+        level = messages.INFO
+        try:
+            from ..feature_checks import feature_checks
+
+            result = feature_checks.run(feature, node=node)
+        except Exception as exc:  # pragma: no cover - defensive
+            status = "error"
+            message = f"{feature.display}: {exc} {enablement_message}"
+            level = messages.ERROR
+        else:
+            if result is None:
+                status = "skipped"
+                message = (
+                    f"No check is configured for {feature.display}. {enablement_message}"
+                )
+                level = messages.WARNING
+            else:
+                eligible = bool(result.success)
+                message = (
+                    result.message
+                    or f"{feature.display} check {'passed' if result.success else 'failed'}."
+                )
+                message = f"{message} {enablement_message}"
+                level = result.level
+                if level == messages.SUCCESS:
+                    status = "success"
+                elif level == messages.WARNING:
+                    status = "warning"
+                elif level == messages.ERROR:
+                    status = "error"
+                else:
+                    status = "info"
+
+        enablement = {"status": "skipped", "message": "Not enabled."}
+        assignment_created = False
+        if eligible and node:
+            assignment, created = NodeFeatureAssignment.objects.update_or_create(
+                node=node, feature=feature
+            )
+            assignment_created = created
+            if created:
+                enablement = {
+                    "status": "enabled",
+                    "message": f"{feature.display} enabled.",
+                }
+            else:
+                enablement = {
+                    "status": "already_enabled",
+                    "message": f"{feature.display} already enabled.",
+                }
+        elif eligible and not node:
+            enablement = {
+                "status": "skipped",
+                "message": "No local node is registered; unable to enable features.",
+            }
+        elif not eligible and status == "error":
+            enablement = {
+                "status": "failed",
+                "message": "Eligibility check failed; feature not enabled.",
+            }
+
+        if discovery_id:
+            from apps.discovery.models import Discovery
+
+            discovery = Discovery.objects.filter(pk=discovery_id).first()
+            if discovery:
+                record_discovery_item(
+                    discovery,
+                    obj=feature,
+                    label=str(feature.display),
+                    created=assignment_created,
+                    overwritten=not assignment_created and eligible,
+                    data={
+                        "eligible": eligible,
+                        "status": status,
+                        "message": message,
+                        "enablement": enablement,
+                        "level": level,
+                    },
+                )
+
+        return JsonResponse(
+            {
+                "feature": feature.display,
+                "slug": feature.slug,
+                "status": status,
+                "message": message,
+                "eligible": eligible,
+                "enablement": enablement,
+            }
+        )
 
     def _report_prereq_checks(self, request, feature):
         from ..feature_checks import feature_checks
