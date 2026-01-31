@@ -17,7 +17,7 @@ from apps.content.utils import save_screenshot
 logger = logging.getLogger(__name__)
 
 
-def is_rpi_camera_feature_active() -> bool:
+def is_video_camera_feature_active() -> bool:
     """Return ``True`` if the Video Camera feature is active."""
 
     try:
