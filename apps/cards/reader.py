@@ -139,20 +139,7 @@ def _write_block(
     return write_status == mfrc.MI_OK
 
 
-def read_rfid_cell_value(
-    *,
-    block: int,
-    offset: int,
-    key: str,
-    key_type: str = "A",
-    timeout: float = 1.0,
-) -> dict:
-    """Read a single byte from the specified RFID block and offset."""
-
-    key_bytes = _key_to_bytes(_normalize_key(key) or "")
-    if not key_bytes:
-        return {"error": "Invalid RFID key"}
-
+def _with_detected_rfid_card(timeout: float, handler) -> dict:
     try:
         from mfrc522 import MFRC522  # type: ignore
 
@@ -185,14 +172,7 @@ def read_rfid_cell_value(
             except Exception:
                 selected = False
             rfid = "".join(f"{x:02X}" for x in uid)
-            data = _read_block(
-                mfrc, block=block, key_type=key_type.upper(), key_bytes=key_bytes, uid=uid
-            )
-            if data is None:
-                return {"error": "Unable to read RFID block", "rfid": rfid}
-            if offset < 0 or offset >= len(data):
-                return {"error": "Invalid offset", "rfid": rfid}
-            return {"rfid": rfid, "block": block, "offset": offset, "value": data[offset]}
+            return handler(mfrc, uid, rfid)
         return {"error": "No RFID card detected"}
     except Exception as exc:  # pragma: no cover - hardware dependent
         payload = {"error": str(exc)}
@@ -206,6 +186,33 @@ def read_rfid_cell_value(
                 mfrc.MFRC522_StopCrypto1()
             except Exception:
                 pass
+
+
+def read_rfid_cell_value(
+    *,
+    block: int,
+    offset: int,
+    key: str,
+    key_type: str = "A",
+    timeout: float = 1.0,
+) -> dict:
+    """Read a single byte from the specified RFID block and offset."""
+
+    key_bytes = _key_to_bytes(_normalize_key(key) or "")
+    if not key_bytes:
+        return {"error": "Invalid RFID key"}
+
+    def _read(mfrc, uid, rfid):
+        data = _read_block(
+            mfrc, block=block, key_type=key_type.upper(), key_bytes=key_bytes, uid=uid
+        )
+        if data is None:
+            return {"error": "Unable to read RFID block", "rfid": rfid}
+        if offset < 0 or offset >= len(data):
+            return {"error": "Invalid offset", "rfid": rfid}
+        return {"rfid": rfid, "block": block, "offset": offset, "value": data[offset]}
+
+    return _with_detected_rfid_card(timeout, _read)
 
 
 def write_rfid_cell_value(
@@ -222,7 +229,7 @@ def write_rfid_cell_value(
     key_bytes = _key_to_bytes(_normalize_key(key) or "")
     if not key_bytes:
         return {"error": "Invalid RFID key"}
-    if not isinstance(value, str) or not _HEX_RE.fullmatch(value.strip().upper()):
+    if not isinstance(value, str):
         return {"error": "Invalid RFID value"}
     normalized_value = value.strip().upper()
     if len(normalized_value) != 2:
@@ -232,75 +239,33 @@ def write_rfid_cell_value(
     except ValueError:
         return {"error": "Invalid RFID value"}
 
-    try:
-        from mfrc522 import MFRC522  # type: ignore
-
-        spi_bus, spi_device = resolve_spi_bus_device()
-        mfrc = MFRC522(
-            bus=spi_bus,
-            device=spi_device,
-            pin_mode=GPIO_PIN_MODE_BCM,
-            pin_rst=DEFAULT_RST_PIN,
+    def _write(mfrc, uid, rfid):
+        data = _read_block(
+            mfrc, block=block, key_type=key_type.upper(), key_bytes=key_bytes, uid=uid
         )
-    except Exception as exc:  # pragma: no cover - hardware dependent
-        payload = {"error": str(exc)}
-        errno_value = getattr(exc, "errno", None)
-        if errno_value is not None:
-            payload["errno"] = errno_value
-        return payload
+        if data is None:
+            return {"error": "Unable to read RFID block", "rfid": rfid}
+        if offset < 0 or offset >= len(data):
+            return {"error": "Invalid offset", "rfid": rfid}
+        data[offset] = byte_value
+        success = _write_block(
+            mfrc,
+            block=block,
+            key_type=key_type.upper(),
+            key_bytes=key_bytes,
+            uid=uid,
+            data=data,
+        )
+        if not success:
+            return {"error": "Unable to write RFID block", "rfid": rfid}
+        return {
+            "rfid": rfid,
+            "block": block,
+            "offset": offset,
+            "value": normalized_value,
+        }
 
-    selected = False
-    try:
-        end = time.time() + timeout
-        while time.time() < end:  # pragma: no cover - hardware loop
-            status, _tag_type = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
-            if status != mfrc.MI_OK:
-                continue
-            status, uid = mfrc.MFRC522_Anticoll()
-            if status != mfrc.MI_OK or not uid:
-                continue
-            try:
-                selected = bool(mfrc.MFRC522_SelectTag(uid))
-            except Exception:
-                selected = False
-            rfid = "".join(f"{x:02X}" for x in uid)
-            data = _read_block(
-                mfrc, block=block, key_type=key_type.upper(), key_bytes=key_bytes, uid=uid
-            )
-            if data is None:
-                return {"error": "Unable to read RFID block", "rfid": rfid}
-            if offset < 0 or offset >= len(data):
-                return {"error": "Invalid offset", "rfid": rfid}
-            data[offset] = byte_value
-            success = _write_block(
-                mfrc,
-                block=block,
-                key_type=key_type.upper(),
-                key_bytes=key_bytes,
-                uid=uid,
-                data=data,
-            )
-            if not success:
-                return {"error": "Unable to write RFID block", "rfid": rfid}
-            return {
-                "rfid": rfid,
-                "block": block,
-                "offset": offset,
-                "value": normalized_value,
-            }
-        return {"error": "No RFID card detected"}
-    except Exception as exc:  # pragma: no cover - hardware dependent
-        payload = {"error": str(exc)}
-        errno_value = getattr(exc, "errno", None)
-        if errno_value is not None:
-            payload["errno"] = errno_value
-        return payload
-    finally:  # pragma: no cover - cleanup hardware
-        if "mfrc" in locals() and mfrc is not None and selected:
-            try:
-                mfrc.MFRC522_StopCrypto1()
-            except Exception:
-                pass
+    return _with_detected_rfid_card(timeout, _write)
 
 
 def _build_key_candidates(tag, key_attr: str, verified_attr: str) -> list[tuple[str, list[int]]]:
