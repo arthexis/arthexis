@@ -139,7 +139,7 @@ def load_simulator_state() -> bool:
         return False
     try:
         payload = json.loads(state_file.read_text("utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return False
     for entry in payload.values():
         if isinstance(entry, dict) and entry.get("running"):
