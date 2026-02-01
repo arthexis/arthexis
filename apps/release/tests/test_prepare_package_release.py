@@ -24,7 +24,7 @@ class DummyResponse:
 
 
 @pytest.mark.django_db
-def test_prepare_package_release_get_restores_deleted_release(monkeypatch):
+def test_prepare_package_release_post_restores_deleted_release(monkeypatch):
     package = Package.objects.create(name="test-package")
     release = PackageRelease.all_objects.create(
         package=package,
@@ -36,7 +36,7 @@ def test_prepare_package_release_get_restores_deleted_release(monkeypatch):
         return DummyResponse({})
 
     monkeypatch.setattr(package_actions.requests, "get", fake_get)
-    request = RequestFactory().get("/admin/release/package/prepare-next-release/")
+    request = RequestFactory().post("/admin/release/package/prepare-next-release/")
     request.user = SimpleNamespace(is_active=True, is_staff=True)
     admin_view = SimpleNamespace(admin_site=AdminSite())
 
@@ -47,6 +47,18 @@ def test_prepare_package_release_get_restores_deleted_release(monkeypatch):
     )
     release.refresh_from_db()
     assert release.is_deleted is False
+
+
+@pytest.mark.django_db
+def test_prepare_package_release_rejects_get():
+    package = Package.objects.create(name="test-package")
+    request = RequestFactory().get("/admin/release/package/prepare-next-release/")
+    request.user = SimpleNamespace(is_active=True, is_staff=True)
+    admin_view = SimpleNamespace(admin_site=AdminSite())
+
+    response = package_actions.prepare_package_release(admin_view, request, package)
+
+    assert response.status_code == 405
 
 
 @pytest.mark.django_db

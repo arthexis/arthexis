@@ -67,8 +67,8 @@ def _fetch_latest_pypi_version(package_name: str) -> Version | None:
 
 
 def prepare_package_release(admin_view, request, package):
-    if request.method not in {"GET", "POST"}:
-        return HttpResponseNotAllowed(["POST", "GET"])
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
 
     existing_releases = list(PackageRelease.all_objects.filter(package=package))
     pypi_latest_version = _fetch_latest_pypi_version(package.name)
@@ -150,6 +150,8 @@ class PackageAdminActionsMixin:
 
     prepare_next_release_action.label = _("Prepare Next")
     prepare_next_release_action.short_description = _("Prepare Next")
+    prepare_next_release_action.methods = ["POST"]
+    prepare_next_release_action.button_type = "form"
 
     @admin.action(description=_("Create GitHub repository"))
     def create_repository_bulk_action(self, request, queryset):

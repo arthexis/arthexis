@@ -222,6 +222,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     prepare_next.label = _("Prepare Next")
     prepare_next.short_description = _("Prepare Next")
+    prepare_next.methods = ["POST"]
+    prepare_next.button_type = "form"
 
     def _publish_release(self, request, release):
         try:
