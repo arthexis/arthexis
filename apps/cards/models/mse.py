@@ -49,6 +49,7 @@ class CardSet(Entity):
     def __str__(self) -> str:  # pragma: no cover - representation
         return self.name
 
+    @transaction.atomic
     def replace_card_designs(self, cards: list[dict]):
         CardDesign.objects.filter(card_set=self).delete()
         if not cards:
