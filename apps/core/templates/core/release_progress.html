@@ -330,6 +330,12 @@
     <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
     {% endif %}
     {% endif %}
+    {% with show_publish_pending_ui=publish_pending and paused and started and not done and not error %}
+    {% if show_publish_pending_ui %}
+    <p class="status-message paused" id="publish-pending-message" data-poll-url="{{ publish_poll_url }}">
+      {% trans "Waiting for GitHub Actions publish to complete. We'll keep checking and notify you when it's done." %}
+    </p>
+    {% endif %}
     {% if fixtures %}
     <h2>{% trans 'Fixture changes' %}</h2>
     <table>
@@ -459,4 +465,53 @@
     observer.observe(logEl, { childList: true, characterData: true, subtree: true });
   })();
 </script>
+{% if show_publish_pending_ui %}
+<script>
+  (function () {
+    const notice = document.getElementById('publish-pending-message');
+    if (!notice) {
+      return;
+    }
+
+    const pollUrl = notice.dataset.pollUrl;
+    if (!pollUrl) {
+      return;
+    }
+
+    const pollDelayMs = 15000;
+    let pollTimer = null;
+
+    const schedulePoll = () => {
+      pollTimer = window.setTimeout(runPoll, pollDelayMs);
+    };
+
+    const runPoll = () => {
+      fetch(pollUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (!data) {
+            schedulePoll();
+            return;
+          }
+          if (data.error) {
+            notice.textContent = data.error;
+            return;
+          }
+          if (!data.publish_pending) {
+            notice.textContent = "{% trans 'GitHub Actions publish completed. Refreshing…' %}";
+            window.location = data.refresh_url || window.location.href;
+            return;
+          }
+          schedulePoll();
+        })
+        .catch(() => {
+          schedulePoll();
+        });
+    };
+
+    schedulePoll();
+  })();
+</script>
+{% endif %}
+{% endwith %}
 {% endblock %}
