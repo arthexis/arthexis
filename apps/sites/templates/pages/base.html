@@ -683,7 +683,7 @@
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2 m-0">
         <div class="container-fluid">
           <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
-          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false">
             <span class="navbar-toggler-icon"></span>
             <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
           </button>
@@ -794,7 +794,7 @@
               {% endif %}
             </ul>
             <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
-              <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()" aria-label="{% trans "Light Mode" %}">
+              <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-sun"></use>
                 </svg>
@@ -809,7 +809,7 @@
                   {% endfor %}
                 </select>
               </form>
-              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{{ login_url }}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
+              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{{ login_url }}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
@@ -826,7 +826,7 @@
                 </div>
                 {% endif %}
               </a>
-              <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button" aria-label="{% trans 'Share' %}">
+              <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
@@ -900,7 +900,7 @@
               <h2 class="mb-0" id="chat-title">{% trans "Support" %}</h2>
               <small data-chat-status>{% trans "Connecting…" %}</small>
             </div>
-            <button type="button" class="btn-close" data-chat-close aria-label="{% trans 'Close chat' %}">
+            <button type="button" class="btn-close" data-chat-close>
               <span class="visually-hidden">{% trans "Close chat" %}</span>
             </button>
           </header>
@@ -938,7 +938,6 @@
       aria-haspopup="dialog"
       aria-controls="user-story-overlay"
       aria-expanded="false"
-      aria-label="{% trans 'Share your feedback' %}"
     >
       <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
         <path
@@ -964,7 +963,7 @@
             <h5 class="card-title mb-1" id="user-story-title">{% trans 'Please provide feedback!' %}</h5>
             <p class="card-subtitle text-muted small mb-0">{% trans 'Tell us how this page worked for you.' %}</p>
           </div>
-          <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close>
+          <button type="button" class="btn-close" data-feedback-close>
             <span class="visually-hidden">{% trans "Close" %}</span>
           </button>
         </div>
@@ -1074,7 +1073,7 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="shareModalLabel">{% trans 'Share' %}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}">
+            <button type="button" class="btn-close" data-bs-dismiss="modal">
               <span class="visually-hidden">{% trans "Close" %}</span>
             </button>
           </div>
