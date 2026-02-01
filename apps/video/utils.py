@@ -146,7 +146,9 @@ def capture_rpi_snapshot(
     if not acquired:
         raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
 
-    def _build_ffmpeg_command() -> tuple[list[str], str]:
+    def _build_ffmpeg_command(
+        resolution: tuple[int, int] | None = None,
+    ) -> tuple[list[str], str]:
         tool_path = shutil.which("ffmpeg")
         if not tool_path:
             raise RuntimeError("ffmpeg is not available")
@@ -157,11 +159,10 @@ def capture_rpi_snapshot(
             "error",
             "-f",
             "v4l2",
-            "-i",
-            str(RPI_CAMERA_DEVICE),
         ]
-        if width and height:
-            command.extend(["-video_size", f"{width}x{height}"])
+        if resolution:
+            command.extend(["-video_size", f"{resolution[0]}x{resolution[1]}"])
+        command.extend(["-i", str(RPI_CAMERA_DEVICE)])
         command.extend(["-frames:v", "1", "-y", str(filename)])
         return (command, tool_path)
 
@@ -199,8 +200,40 @@ def capture_rpi_snapshot(
 
         if result is None:
             if _has_ffmpeg_capture_support():
-                command, tool_path = _build_ffmpeg_command()
-                result = _run_command(command, tool_path)
+                candidate_resolutions: list[tuple[int, int] | None]
+                if width and height:
+                    candidate_resolutions = [(width, height)]
+                    for resolution in FALLBACK_CAMERA_RESOLUTIONS:
+                        if resolution != (width, height):
+                            candidate_resolutions.append(resolution)
+                else:
+                    candidate_resolutions = [None]
+                ffmpeg_error: RuntimeError | None = None
+                for resolution in candidate_resolutions:
+                    command, tool_path = _build_ffmpeg_command(resolution)
+                    try:
+                        result = _run_command(command, tool_path)
+                    except RuntimeError as exc:
+                        logger.warning(
+                            "ffmpeg snapshot failed for resolution %s: %s",
+                            resolution or "default",
+                            exc,
+                        )
+                        ffmpeg_error = exc
+                        result = None
+                        continue
+                    if result.returncode == 0:
+                        break
+                    error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
+                    logger.warning(
+                        "ffmpeg snapshot failed for resolution %s (%s)",
+                        resolution or "default",
+                        error,
+                    )
+                    ffmpeg_error = RuntimeError(error)
+                    result = None
+                if result is None and ffmpeg_error:
+                    raise ffmpeg_error
             else:
                 raise RuntimeError("No supported camera stack is available")
     finally:
