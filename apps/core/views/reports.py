@@ -801,7 +801,7 @@ def _run_release_step(
         and step_param is not None
         and not error
         and step_count < len(steps)
-    ):
+                ctx["error"] = _("An internal error occurred while running this step.")
         to_run = int(step_param)
         if to_run == step_count:
             name, func = steps[to_run]
