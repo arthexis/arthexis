@@ -1,0 +1,35 @@
+name: Documentation update
+description: Report missing or incorrect documentation
+labels:
+  - documentation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us keep the docs accurate! Share the page and what needs updating.
+  - type: input
+    id: page
+    attributes:
+      label: Documentation page
+      description: Link to the docs page or file path.
+      placeholder: https://github.com/arthexis/arthexis/blob/main/docs/... or docs/...
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What needs to change?
+      description: Describe the corrections or additions needed.
+      placeholder: The command flag is outdated.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested update
+      description: Provide the wording or details you recommend.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs, or references that help.
