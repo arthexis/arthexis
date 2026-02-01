@@ -49,6 +49,7 @@ httpx==0.28.1
 pytest==9.0.2
 pytest-timeout==2.4.0
 pytest-django==4.11.1
+mypy==1.10.0
 hyperlink==21.0.0
 idna==3.11
 incremental==24.11.0

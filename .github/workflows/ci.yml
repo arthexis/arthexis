@@ -89,6 +89,14 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/lint_seed_fixtures.py
+      - name: Check formatting
+        run: |
+          source .venv/bin/activate
+          python -m black --check .
+      - name: Check for invisible characters
+        run: |
+          source .venv/bin/activate
+          python scripts/check_invisible_characters.py
       - name: Run tests
         run: |
           set -o pipefail
@@ -146,6 +154,10 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
+      - name: Build documentation (strict)
+        run: |
+          source .venv/bin/activate
+          mkdocs build --strict
       - name: Check documentation links use HTTPS
         run: |
           source .venv/bin/activate
