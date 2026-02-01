@@ -105,6 +105,9 @@ from pathlib import Path
 db_path = os.environ.get("ARTHEXIS_STOP_DB_PATH")
 base_dir = os.environ.get("ARTHEXIS_STOP_BASE_DIR", "")
 stale_after = int(os.environ.get("CHARGING_SESSION_STALE_AFTER_SECONDS", "86400"))
+heartbeat_window = int(
+    os.environ.get("CHARGING_SESSION_HEARTBEAT_ACTIVE_WINDOW_SECONDS", "300")
+)
 now = time.time()
 active = 0
 stale = 0
@@ -146,6 +149,14 @@ def load_simulator_state() -> bool:
             return True
     return False
 
+def is_recent_heartbeat(value: str | None) -> bool:
+    if heartbeat_window < 0:
+        return True
+    ts = to_epoch(value)
+    if ts is None:
+        return False
+    return now - ts <= heartbeat_window
+
 if db_path and os.path.exists(db_path):
     conn = sqlite3.connect(db_path)
     if table_exists(conn, "ocpp_simulator"):
@@ -166,25 +177,38 @@ if db_path and os.path.exists(db_path):
             column_names(conn, charger_table) if table_exists(conn, charger_table) else set()
         )
         charger_id_col = "charger_id" if "charger_id" in charger_columns else None
+        heartbeat_col = "last_heartbeat" if "last_heartbeat" in charger_columns else None
         join_clause = ""
         if charger_id_col:
             join_clause = f"LEFT JOIN {charger_table} ON ocpp_transaction.charger_id = {charger_table}.id"
             select_charger = f", {charger_table}.{charger_id_col}"
         else:
             select_charger = ", NULL"
+        if heartbeat_col:
+            select_heartbeat = f", {charger_table}.{heartbeat_col}"
+        else:
+            select_heartbeat = ", NULL"
         query = (
             "SELECT ocpp_transaction.start_time, "
             "ocpp_transaction.received_start_time, "
             "ocpp_transaction.stop_time, "
             "ocpp_transaction.connector_id"
             f"{select_charger} "
+            f"{select_heartbeat} "
             "FROM ocpp_transaction "
             f"{join_clause} "
             "WHERE ocpp_transaction.stop_time IS NULL AND ocpp_transaction.connector_id IS NOT NULL"
         )
-        for start_time, received_start_time, stop_time, connector_id, charger_id in conn.execute(
-            query
-        ).fetchall():
+        for (
+            start_time,
+            received_start_time,
+            stop_time,
+            connector_id,
+            charger_id,
+            charger_heartbeat,
+        ) in conn.execute(query).fetchall():
+            if heartbeat_col and not is_recent_heartbeat(charger_heartbeat):
+                continue
             if (
                 charger_id
                 and simulator_ids
