@@ -149,7 +149,8 @@ def _resolve_github_token(release: PackageRelease, ctx: dict) -> str | None:
     token = (ctx.get("github_token") or "").strip()
     if token:
         return token
-    return release.get_github_token()
+    token = release.get_github_token()
+    return token.strip() if token else None
 
 
 def _require_github_token(
