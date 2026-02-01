@@ -10,9 +10,6 @@
       class="{{ tool.standard_attrs.class }}{% if tool_label == 'discover' %} addlink discover-action{% endif %}"
     >
       {{ tool.label|capfirst }}
-      {% if tool_label == 'discover' %}
-        <span class="discover-action__icon" aria-hidden="true">+</span>
-      {% endif %}
     </a>
   {% elif tool.button_type == 'form' %}
     <form method="post" action="{% add_preserved_filters action_url %}">
@@ -25,9 +22,6 @@
         class="{{ tool.standard_attrs.class }}{% if tool_label == 'discover' %} addlink discover-action{% endif %}"
       >
         {{ tool.label|capfirst }}
-        {% if tool_label == 'discover' %}
-          <span class="discover-action__icon" aria-hidden="true">+</span>
-        {% endif %}
       </a>
     </form>
   {% endif %}
