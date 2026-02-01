@@ -1,6 +1,15 @@
+import hashlib
+
+from django.conf import settings
+from django.db.utils import OperationalError, ProgrammingError
+from django.http import Http404
+from django.utils import translation
 from django.utils.translation import gettext as _
 
 from apps.maps.models import Location
+from apps.docs import rendering
+from apps.locale.models import Language
+from apps.sites.utils import get_request_language_code
 
 from .common import *  # noqa: F401,F403
 from .common import (
@@ -21,6 +30,23 @@ from .common import (
     _visible_error_code,
     _visible_chargers,
 )
+from ..models import PublicConnectorPage, PublicScanEvent
+
+
+def _get_client_ip(request) -> str:
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        for value in forwarded_for.split(","):
+            candidate = value.strip()
+            if candidate:
+                return candidate
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _hash_ip(value: str) -> str:
+    secret = getattr(settings, "SECRET_KEY", "")
+    payload = f"{value}:{secret}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def charging_station_map(request):
@@ -171,6 +197,92 @@ def charger_page(request, cid, connector=None):
             "preferred_language": preferred_language,
             "state": state,
             "color": color,
+            "charger_error_code": _visible_error_code(charger.last_error_code),
+        },
+    )
+
+
+def public_connector_page(request, slug):
+    """Public landing page for a connector QR code."""
+    _clear_stale_statuses_for_view()
+    page = get_object_or_404(
+        PublicConnectorPage.objects.select_related("charger", "language"),
+        slug=slug,
+        enabled=True,
+    )
+    charger = page.charger
+    if not charger.public_display or not charger.is_visible_to(request.user):
+        raise Http404("Public page not found")
+
+    connectors = _connector_set(charger)
+    sessions = _live_sessions(charger, connectors=connectors)
+    tx = None
+    if charger.connector_id is not None and sessions:
+        tx = sessions[0][1]
+    state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
+    state, color = _charger_state(charger, state_source)
+
+    instructions_html, _ = rendering.render_markdown_with_toc(
+        page.instructions_markdown or ""
+    )
+    rules_html, _ = rendering.render_markdown_with_toc(page.rules_markdown or "")
+
+    available_languages = _supported_language_codes()
+    language_options = []
+    try:
+        languages_qs = Language.objects.filter(code__in=available_languages)
+        for language in languages_qs:
+            label = language.native_name or language.english_name or language.code
+            language_options.append({"code": language.code, "label": label})
+    except (OperationalError, ProgrammingError):
+        language_options = [
+            {"code": code, "label": code} for code in available_languages
+        ]
+    language_candidates = []
+    page_language = page.language_code()
+    if page_language:
+        language_candidates.append(page_language)
+    charger_language = charger.language_code()
+    if charger_language:
+        language_candidates.append(charger_language)
+    request_language = get_request_language_code(request)
+    if request_language:
+        language_candidates.append(request_language)
+    fallback_language = _default_language_code()
+    if fallback_language:
+        language_candidates.append(fallback_language)
+    preferred_language = ""
+    for code in language_candidates:
+        if code in available_languages:
+            preferred_language = code
+            break
+    if preferred_language:
+        translation.activate(preferred_language)
+        request.LANGUAGE_CODE = preferred_language
+
+    try:
+        ip_value = _get_client_ip(request)
+        PublicScanEvent.objects.create(
+            page=page,
+            user_agent=(request.META.get("HTTP_USER_AGENT") or "")[:255],
+            referrer=(request.META.get("HTTP_REFERER") or "")[:2000],
+            ip_hash=_hash_ip(ip_value) if ip_value else "",
+        )
+    except (OperationalError, ProgrammingError):
+        pass
+
+    return render(
+        request,
+        "ocpp/public_connector_page.html",
+        {
+            "page": page,
+            "charger": charger,
+            "state": state,
+            "color": color,
+            "instructions_html": instructions_html,
+            "rules_html": rules_html,
+            "available_languages": language_options,
+            "preferred_language": preferred_language,
             "charger_error_code": _visible_error_code(charger.last_error_code),
         },
     )

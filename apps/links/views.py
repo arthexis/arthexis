@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import base64
 import logging
-from io import BytesIO
 from urllib.parse import urlparse
 
-import qrcode
+from .qr_utils import build_qr_png_bytes
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -28,13 +27,14 @@ def _resolve_target_url(request: HttpRequest, target_url: str) -> str:
 
 
 def _encode_qr_image(url: str) -> str:
-    qr = qrcode.QRCode(box_size=6, border=2)
-    qr.add_data(url)
-    qr.make(fit=True)
-    image = qr.make_image(fill_color="#0b1420", back_color="white")
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
+    png_bytes = build_qr_png_bytes(
+        url,
+        box_size=6,
+        border=2,
+        fill_color="#0b1420",
+        back_color="white",
+    )
+    return base64.b64encode(png_bytes).decode("ascii")
 
 
 def _extract_client_ip(request: HttpRequest) -> str:
