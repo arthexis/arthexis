@@ -213,6 +213,7 @@ class CopyRFIDForm(forms.Form):
 
 class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     change_list_template = "admin/cards/rfid/change_list.html"
+    import_export_change_list_template = None
     resource_class = RFIDResource
     import_form_class = RFIDImportForm
     confirm_form_class = RFIDConfirmImportForm

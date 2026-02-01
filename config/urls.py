@@ -90,6 +90,10 @@ urlpatterns = [
     ),
     path(
         "admin/doc/commands/",
+        RedirectView.as_view(pattern_name="django-admindocs-commands"),
+    ),
+    path(
+        "admindocs/commands/",
         CommandsView.as_view(),
         name="django-admindocs-commands",
     ),
