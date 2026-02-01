@@ -53,6 +53,8 @@ def test_card_face_rejects_invalid_modes_and_size():
 
 @pytest.mark.django_db
 def test_fixed_back_relations_are_mutual():
+    # background_media is omitted to speed up the test. This works because
+    # CardFace.objects.create() bypasses model validation which would require it.
     face_a = CardFace.objects.create(name="Front")
     face_b = CardFace.objects.create(name="Back")
 
