@@ -14,12 +14,41 @@ from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.admin import EntityModelAdmin, SaveBeforeChangeAction
+from apps.core.admin import EntityModelAdmin, OwnableAdminMixin, SaveBeforeChangeAction
 from apps.release.admin.package_actions import (
     PackageAdminActionsMixin,
     prepare_package_release,
 )
-from apps.release.models import Package, PackageRelease
+from apps.release.models import GithubToken, Package, PackageRelease
+
+
+class GithubTokenAdmin(OwnableAdminMixin, EntityModelAdmin):
+    list_display = (
+        "token_preview",
+        "package",
+        "owner_display",
+        "expires_at",
+        "is_expired",
+    )
+    list_filter = ("package", "expires_at")
+    search_fields = ("token", "package__name")
+    fields = ("token", "package", "user", "group", "expires_at")
+
+    @admin.display(description="Token")
+    def token_preview(self, obj):
+        token = (obj.token or "").strip()
+        if not token:
+            return "—"
+        suffix = token[-4:] if len(token) >= 4 else token
+        return f"••••{suffix}"
+
+    @admin.display(description="Owner")
+    def owner_display(self, obj):
+        return obj.owner_display() or "—"
+
+    @admin.display(boolean=True, description="Expired")
+    def is_expired(self, obj):
+        return obj.is_expired
 
 
 class PackageAdmin(PackageAdminActionsMixin, SaveBeforeChangeAction, EntityModelAdmin):
@@ -299,11 +328,13 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return self._boolean_icon(obj.is_current)
 
 
+admin.site.register(GithubToken, GithubTokenAdmin)
 admin.site.register(Package, PackageAdmin)
 admin.site.register(PackageRelease, PackageReleaseAdmin)
 
 
 __all__ = [
+    "GithubTokenAdmin",
     "PackageAdmin",
     "PackageReleaseAdmin",
 ]

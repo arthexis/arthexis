@@ -291,9 +291,9 @@
     <div class="token-card">
       <h2>🔑 {% trans "GitHub token required" %}</h2>
       {% if github_token_required %}
-      <p>{% trans "Publishing paused. Enter a GitHub token to continue. The token is used for this publish session and is not stored in the database." %}</p>
+      <p>{% trans "Publishing paused. Enter a GitHub token to continue. The token will be stored for this package and your account for 30 days." %}</p>
       {% else %}
-      <p>{% trans "Enter a GitHub token before starting the publish. The token is used for this publish session and is not stored in the database." %}</p>
+      <p>{% trans "Enter a GitHub token before starting the publish. The token will be stored for this package and your account for 30 days." %}</p>
       {% endif %}
       <form method="post">
         {% csrf_token %}

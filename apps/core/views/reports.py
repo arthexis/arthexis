@@ -28,7 +28,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from apps.loggers.paths import select_log_dir
 from apps.nodes.models import NetMessage, Node
 from apps.release import release as release_utils
-from apps.release.models import PackageRelease
+from apps.release.models import GithubToken, PackageRelease
 from utils import revision
 
 logger = logging.getLogger(__name__)
@@ -145,10 +145,18 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
     return fallback, warning
 
 
-def _resolve_github_token(release: PackageRelease, ctx: dict) -> str | None:
+def _resolve_github_token(
+    release: PackageRelease, ctx: dict, user=None
+) -> str | None:
     token = (ctx.get("github_token") or "").strip()
     if token:
         return token
+    stored_token = GithubToken.resolve_for_release(
+        package=release.package,
+        user=user,
+    )
+    if stored_token:
+        return stored_token
     return release.get_github_token()
 
 
@@ -158,8 +166,9 @@ def _require_github_token(
     log_path: Path,
     *,
     message: str,
+    user=None,
 ) -> str:
-    token = _resolve_github_token(release, ctx)
+    token = _resolve_github_token(release, ctx, user)
     if token:
         return token
     ctx["paused"] = True
@@ -493,6 +502,7 @@ def _update_publish_controls(
     start_enabled: bool,
     session_key: str,
     lock_path: Path,
+    release: PackageRelease,
 ):
     ctx["dry_run"] = bool(ctx.get("dry_run"))
 
@@ -501,6 +511,11 @@ def _update_publish_controls(
         if token:
             ctx["github_token"] = token
             ctx.pop("github_token_required", None)
+            GithubToken.store_token(
+                token,
+                package=release.package,
+                user=request.user,
+            )
             if (
                 ctx.get("paused")
                 and not ctx.get("dirty_files")
@@ -1849,6 +1864,7 @@ def _step_verify_release_environment(
         message=_(
             "GitHub token missing. Provide a token to continue publishing."
         ),
+        user=user,
     )
 
     _append_log(
@@ -1892,6 +1908,7 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
         message=_(
             "GitHub token missing. Provide a token to continue publishing."
         ),
+        user=user,
     )
     tag_name = _ensure_release_tag(release, log_path)
     release_data = _ensure_github_release(
@@ -1961,7 +1978,7 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         _append_publish_workflow_status(
             release,
             log_path,
-            token=_resolve_github_token(release, ctx),
+            token=_resolve_github_token(release, ctx, user),
             message="Publish not detected on PyPI yet; resume after GitHub Actions completes.",
         )
         raise PublishPending()
@@ -2007,7 +2024,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Dry run: skipped capture of publish logs")
         return
 
-    token = _resolve_github_token(release, ctx)
+    token = _resolve_github_token(release, ctx, user)
     if not token:
         ctx.setdefault("warnings", []).append(
             {
@@ -2200,6 +2217,7 @@ def release_progress(request, pk: int, action: str):
         start_enabled,
         session_key,
         lock_path,
+        release,
     )
     if redirect_response:
         return redirect_response
@@ -2325,7 +2343,9 @@ def release_progress(request, pk: int, action: str):
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
     oidc_enabled = release.uses_oidc_publishing()
     pypi_credentials_missing = not oidc_enabled and release.to_credentials() is None
-    github_credentials_missing = _resolve_github_token(release, ctx) is None
+    github_credentials_missing = (
+        _resolve_github_token(release, ctx, request.user) is None
+    )
     manual_git_push = ctx.get("pending_git_push")
     manual_git_push_command = ""
     if manual_git_push:
