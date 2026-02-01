@@ -2366,6 +2366,7 @@ def release_progress(request, pk: int, action: str):
         "oidc_enabled": oidc_enabled,
         "pypi_credentials_missing": pypi_credentials_missing,
         "github_credentials_missing": github_credentials_missing,
+        "github_token_required": ctx.get("github_token_required", False),
         "is_running": is_running,
         "resume_available": resume_available,
         "can_resume": can_resume,
