@@ -178,12 +178,14 @@ if db_path and os.path.exists(db_path):
         )
         charger_id_col = "charger_id" if "charger_id" in charger_columns else None
         heartbeat_col = "last_heartbeat" if "last_heartbeat" in charger_columns else None
-        join_clause = ""
-        if charger_id_col:
+        if charger_id_col or heartbeat_col:
             join_clause = f"LEFT JOIN {charger_table} ON ocpp_transaction.charger_id = {charger_table}.id"
+
+        if charger_id_col:
             select_charger = f", {charger_table}.{charger_id_col}"
         else:
             select_charger = ", NULL"
+
         if heartbeat_col:
             select_heartbeat = f", {charger_table}.{heartbeat_col}"
         else:
