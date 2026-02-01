@@ -330,7 +330,8 @@
     <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
     {% endif %}
     {% endif %}
-    {% if publish_pending and paused and started and not done and not error %}
+    {% with show_publish_pending_ui=publish_pending and paused and started and not done and not error %}
+    {% if show_publish_pending_ui %}
     <p class="status-message paused" id="publish-pending-message" data-poll-url="{{ publish_poll_url }}">
       {% trans "Waiting for GitHub Actions publish to complete. We'll keep checking and notify you when it's done." %}
     </p>
@@ -464,7 +465,7 @@
     observer.observe(logEl, { childList: true, characterData: true, subtree: true });
   })();
 </script>
-{% if publish_pending and paused and started and not done and not error %}
+{% if show_publish_pending_ui %}
 <script>
   (function () {
     const notice = document.getElementById('publish-pending-message');
@@ -512,4 +513,5 @@
   })();
 </script>
 {% endif %}
+{% endwith %}
 {% endblock %}

@@ -54,6 +54,18 @@ def _sanitize_release_context(ctx: dict) -> dict:
     return {key: value for key, value in ctx.items() if key not in SENSITIVE_CONTEXT_KEYS}
 
 
+def _sanitize_release_error_message(error: str | None, ctx: dict) -> str | None:
+    if not error:
+        return None
+
+    sanitized = str(error)
+    for key in SENSITIVE_CONTEXT_KEYS:
+        value = ctx.get(key)
+        if value:
+            sanitized = sanitized.replace(str(value), "[redacted]")
+    return sanitized
+
+
 def _store_release_context(request, session_key: str, ctx: dict) -> None:
     request.session[session_key] = _sanitize_release_context(ctx)
 
@@ -807,9 +819,10 @@ def _run_release_step(
             else:
                 step_count += 1
                 ctx["step"] = step_count
-                if allow_when_paused and was_paused:
+                if allow_when_paused and was_paused and not ctx.get("publish_pending"):
                     ctx["paused"] = False
-                ctx.pop("publish_pending", None)
+                if not ctx.get("publish_pending"):
+                    ctx.pop("publish_pending", None)
                 _persist_release_context(request, session_key, ctx, lock_path)
 
     return ctx, step_count
@@ -2405,22 +2418,24 @@ def release_progress(request, pk: int, action: str):
         poll_query = {"step": step_count, "poll": "1"}
         if dry_run_active:
             poll_query["dry_run"] = "1"
-        context["publish_poll_url"] = f"{request.path}?{urlencode(poll_query)}"
+        poll_base = _clean_redirect_path(request, request.path)
+        context["publish_poll_url"] = f"{poll_base}?{urlencode(poll_query)}"
     if poll_requested:
         refresh_query = {}
         if not done and not ctx.get("error"):
             refresh_query["step"] = step_count
         if dry_run_active:
             refresh_query["dry_run"] = "1"
+        refresh_base = _clean_redirect_path(request, request.path)
         refresh_url = (
-            f"{request.path}?{urlencode(refresh_query)}"
+            f"{refresh_base}?{urlencode(refresh_query)}"
             if refresh_query
-            else request.path
+            else refresh_base
         )
         return JsonResponse(
             {
                 "done": done,
-                "error": ctx.get("error"),
+                "error": _sanitize_release_error_message(ctx.get("error"), ctx),
                 "paused": paused,
                 "publish_pending": publish_pending,
                 "current_step": step_count,
