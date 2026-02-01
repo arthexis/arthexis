@@ -34,19 +34,51 @@ shift
 :parse
 if "%~1"=="" goto run
 if /I "%~1"=="--name" (
+    if "%~2"=="" (
+        echo Missing value for --name.
+        set EXIT_CODE=1
+        goto cleanup
+    )
     set "SERVICE_NAME=%~2"
+    echo(%SERVICE_NAME%| findstr /R "^[A-Za-z0-9_-][A-Za-z0-9_-]*$" >nul
+    if errorlevel 1 (
+        echo Invalid service name: %~2
+        set EXIT_CODE=1
+        goto cleanup
+    )
     shift
     shift
     goto parse
 )
 if /I "%~1"=="--port" (
+    if "%~2"=="" (
+        echo Missing value for --port.
+        set EXIT_CODE=1
+        goto cleanup
+    )
     set "PORT=%~2"
+    echo(%PORT%| findstr /R "^[0-9][0-9]*$" >nul
+    if errorlevel 1 (
+        echo Invalid port: %~2
+        set EXIT_CODE=1
+        goto cleanup
+    )
     shift
     shift
     goto parse
 )
 if /I "%~1"=="--nssm" (
+    if "%~2"=="" (
+        echo Missing value for --nssm.
+        set EXIT_CODE=1
+        goto cleanup
+    )
     set "NSSM=%~2"
+    if not exist "%NSSM%" (
+        echo NSSM path not found: %~2
+        set EXIT_CODE=1
+        goto cleanup
+    )
     shift
     shift
     goto parse
@@ -80,6 +112,18 @@ if /I "%ACTION%"=="status" goto status
 goto usage
 
 :install
+echo(%SERVICE_NAME%| findstr /R "^[A-Za-z0-9_-][A-Za-z0-9_-]*$" >nul
+if errorlevel 1 (
+    echo Invalid service name: %SERVICE_NAME%
+    set EXIT_CODE=1
+    goto cleanup
+)
+echo(%PORT%| findstr /R "^[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    echo Invalid port: %PORT%
+    set EXIT_CODE=1
+    goto cleanup
+)
 sc query "%SERVICE_NAME%" >nul 2>&1
 if "%ERRORLEVEL%"=="0" (
     echo Service "%SERVICE_NAME%" already exists.
@@ -88,7 +132,7 @@ if "%ERRORLEVEL%"=="0" (
 )
 
 set "CMD=%COMSPEC%"
-set "RUNNER_ARGS=/c \"\"%SCRIPT_DIR%start.bat\" --port %PORT%\""
+set "RUNNER_ARGS=/c """%SCRIPT_DIR%start.bat"" --port %PORT%"""
 
 "%NSSM%" install "%SERVICE_NAME%" "%CMD%" %RUNNER_ARGS%
 if errorlevel 1 (
@@ -106,6 +150,7 @@ if errorlevel 1 (
 "%NSSM%" set "%SERVICE_NAME%" Start SERVICE_AUTO_START
 
 >"%LOCK_DIR%\service.lck" echo %SERVICE_NAME%
+>"%LOCK_DIR%\backend_port.lck" echo %PORT%
 echo Installed service "%SERVICE_NAME%".
 if defined AUTO_START (
     "%NSSM%" start "%SERVICE_NAME%"
@@ -146,7 +191,7 @@ goto cleanup
 goto cleanup
 
 :usage
-echo Usage: %~nx0 ^<install^|remove^|start^|stop^|restart^|status^> [--name NAME] [--port PORT] [--nssm PATH] [--no-start]
+echo Usage: %~nx0 ^<install^|remove^|uninstall^|start^|stop^|restart^|status^> [--name NAME] [--port PORT] [--nssm PATH] [--no-start]
 set EXIT_CODE=1
 goto cleanup
 
