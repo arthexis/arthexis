@@ -10,14 +10,14 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Optional, Sequence
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import requests
 from packaging.version import InvalidVersion, Version
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import get_template
 from django.test import signals
@@ -776,12 +776,16 @@ def _run_release_step(
     log_path: Path,
     session_key: str,
     lock_path: Path,
+    *,
+    allow_when_paused: bool = False,
 ):
     error = ctx.get("error")
 
+    was_paused = bool(ctx.get("paused"))
+
     if (
         ctx.get("started")
-        and not ctx.get("paused")
+        and (not ctx.get("paused") or allow_when_paused)
         and step_param is not None
         and not error
         and step_count < len(steps)
@@ -798,10 +802,14 @@ def _run_release_step(
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
+                ctx.pop("publish_pending", None)
                 _persist_release_context(request, session_key, ctx, lock_path)
             else:
                 step_count += 1
                 ctx["step"] = step_count
+                if allow_when_paused and was_paused:
+                    ctx["paused"] = False
+                ctx.pop("publish_pending", None)
                 _persist_release_context(request, session_key, ctx, lock_path)
 
     return ctx, step_count
@@ -1958,6 +1966,7 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
 
     if not _pypi_release_available(release):
         ctx["paused"] = True
+        ctx["publish_pending"] = True
         _append_publish_workflow_status(
             release,
             log_path,
@@ -2034,6 +2043,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     )
     if not run:
         ctx["paused"] = True
+        ctx["publish_pending"] = True
         _append_publish_workflow_status(
             release,
             log_path,
@@ -2045,6 +2055,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     status = run.get("status")
     if status != "completed":
         ctx["paused"] = True
+        ctx["publish_pending"] = True
         run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
         if run_url:
             _append_log(
@@ -2067,6 +2078,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     )
     if not raw_log:
         ctx["paused"] = True
+        ctx["publish_pending"] = True
         _append_publish_workflow_status(
             release,
             log_path,
@@ -2242,6 +2254,9 @@ def release_progress(request, pk: int, action: str):
         None,
     )
 
+    poll_requested = request.GET.get("poll") == "1"
+    publish_poll_allowed = poll_requested and ctx.get("publish_pending")
+
     if not start_requested:
         ctx, step_count = _run_release_step(
             request,
@@ -2253,6 +2268,7 @@ def release_progress(request, pk: int, action: str):
             log_path,
             session_key,
             lock_path,
+            allow_when_paused=publish_poll_allowed,
         )
 
     error = ctx.get("error")
@@ -2279,6 +2295,7 @@ def release_progress(request, pk: int, action: str):
     if dirty_files:
         next_step = None
     paused = ctx.get("paused", False)
+    publish_pending = bool(ctx.get("publish_pending"))
 
     step_names = [s[0] for s in steps]
     step_states = []
@@ -2376,6 +2393,7 @@ def release_progress(request, pk: int, action: str):
         "manual_git_push": manual_git_push,
         "manual_git_push_command": manual_git_push_command,
         "manual_git_push_error": ctx.get("pending_git_push_error"),
+        "publish_pending": publish_pending,
     }
     if done or ctx.get("error"):
         _store_release_context(request, session_key, ctx)
@@ -2383,6 +2401,33 @@ def release_progress(request, pk: int, action: str):
             lock_path.unlink()
     else:
         _persist_release_context(request, session_key, ctx, lock_path)
+    if publish_pending:
+        poll_query = {"step": step_count, "poll": "1"}
+        if dry_run_active:
+            poll_query["dry_run"] = "1"
+        context["publish_poll_url"] = f"{request.path}?{urlencode(poll_query)}"
+    if poll_requested:
+        refresh_query = {}
+        if not done and not ctx.get("error"):
+            refresh_query["step"] = step_count
+        if dry_run_active:
+            refresh_query["dry_run"] = "1"
+        refresh_url = (
+            f"{request.path}?{urlencode(refresh_query)}"
+            if refresh_query
+            else request.path
+        )
+        return JsonResponse(
+            {
+                "done": done,
+                "error": ctx.get("error"),
+                "paused": paused,
+                "publish_pending": publish_pending,
+                "current_step": step_count,
+                "next_step": next_step,
+                "refresh_url": refresh_url,
+            }
+        )
     template = _ensure_template_name(
         get_template("core/release_progress.html"),
         "core/release_progress.html",
