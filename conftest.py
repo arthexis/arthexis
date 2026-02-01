@@ -115,8 +115,13 @@ def _load_sigil_roots_once(django_db_setup: Any, django_db_blocker: Any) -> None
 
 @pytest.fixture(autouse=True)
 def _ensure_fixture_sigil_roots(request: pytest.FixtureRequest) -> None:
-    if _requires_db(request):
+    if _requires_db(request) and request.node.get_closest_marker("sigil_roots"):
         request.getfixturevalue("_load_sigil_roots_once")
+
+
+@pytest.fixture
+def sigil_roots(request: pytest.FixtureRequest) -> None:
+    request.getfixturevalue("_load_sigil_roots_once")
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
