@@ -1,0 +1,100 @@
+name: Bug report
+description: Report a bug in Arthexis Constellation
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Arthexis Constellation! Please fill out the details below so we can triage quickly.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I have searched existing issues and this bug has not been reported yet.
+          required: true
+        - label: I can reproduce this issue on the latest main branch or release.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Paste the version, release tag, or commit SHA.
+      placeholder: e.g. v0.0.0 or a1b2c3d
+    validations:
+      required: true
+  - type: dropdown
+    id: node-role
+    attributes:
+      label: Node role
+      description: Which node role is affected?
+      options:
+        - Terminal
+        - Control
+        - Satellite
+        - Watchtower
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: ocpp-version
+    attributes:
+      label: OCPP protocol version
+      description: If applicable, choose the protocol version involved.
+      options:
+        - OCPP 1.6
+        - OCPP 2.0.1
+        - OCPP 2.1
+        - Not sure / Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: Tell us what you observed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: Tell us what you expected to see.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the exact steps to reproduce the behavior.
+      placeholder: |
+        1. Go to ...
+        2. Click on ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant logs, stack traces, or screenshots (redact sensitive data).
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Docker/VM details, and anything else relevant.
+      placeholder: |
+        OS:
+        Python:
+        Deployment:
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add any other context about the problem.

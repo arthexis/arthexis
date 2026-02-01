@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security reports
+    url: https://github.com/arthexis/arthexis/blob/main/SECURITY.md
+    about: Report security vulnerabilities privately.
+  - name: Documentation hub
+    url: https://github.com/arthexis/arthexis/blob/main/docs/
+    about: Browse operational guides and cookbooks.
+  - name: Commercial support
+    url: mailto:tecnologia@gelectriic.com
+    about: Contact the Arthexis team for professional support.
