@@ -144,6 +144,6 @@ class CardSetAdminForm(forms.ModelForm):
         if commit:
             instance.save()
             self.save_m2m()
-        if upload and self._parsed_payload:
-            instance.replace_card_designs(self._parsed_payload.cards)
+            if upload and self._parsed_payload:
+                instance.replace_card_designs(self._parsed_payload.cards)
         return instance
