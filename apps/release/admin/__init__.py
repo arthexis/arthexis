@@ -23,6 +23,7 @@ from apps.release.models import GithubToken, Package, PackageRelease
 
 
 class GithubTokenAdmin(OwnableAdminMixin, EntityModelAdmin):
+    actions = ["verify_selected_tokens"]
     list_display = (
         "token_preview",
         "package",
@@ -32,7 +33,22 @@ class GithubTokenAdmin(OwnableAdminMixin, EntityModelAdmin):
     )
     list_filter = ("package", "expires_at")
     search_fields = ("token", "package__name")
-    fields = ("token", "package", "user", "group", "expires_at")
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": ("token", "package", "user", "group", "expires_at"),
+                "description": _(
+                    "Generate a classic personal access token in GitHub with the "
+                    "repo scope (or the minimum permissions required by your release "
+                    "workflow). Store it here to reuse for release publishing. "
+                    "You can scope a token to a package or leave the package blank "
+                    "to use it across all packages. Tokens expire after 30 days by "
+                    "default and should be rotated regularly."
+                ),
+            },
+        ),
+    )
 
     @admin.display(description="Token")
     def token_preview(self, obj):
@@ -49,6 +65,52 @@ class GithubTokenAdmin(OwnableAdminMixin, EntityModelAdmin):
     @admin.display(boolean=True, description="Expired")
     def is_expired(self, obj):
         return obj.is_expired
+
+    @admin.action(description="Verify selected tokens")
+    def verify_selected_tokens(self, request, queryset):
+        success_count = 0
+        failed_count = 0
+        expired_count = 0
+        for token_obj in queryset:
+            if token_obj.is_expired:
+                expired_count += 1
+                continue
+            token_value = (token_obj.token or "").strip()
+            if not token_value:
+                failed_count += 1
+                continue
+            try:
+                response = requests.get(
+                    "https://api.github.com/user",
+                    headers={"Authorization": f"Bearer {token_value}"},
+                    timeout=10,
+                )
+            except requests.RequestException:
+                failed_count += 1
+                continue
+            if response.status_code == 200:
+                success_count += 1
+            else:
+                failed_count += 1
+
+        if success_count:
+            self.message_user(
+                request,
+                f"Verified {success_count} token{'s' if success_count != 1 else ''}.",
+                messages.SUCCESS,
+            )
+        if expired_count:
+            self.message_user(
+                request,
+                f"{expired_count} token{'s' if expired_count != 1 else ''} expired.",
+                messages.WARNING,
+            )
+        if failed_count:
+            self.message_user(
+                request,
+                f"{failed_count} token{'s' if failed_count != 1 else ''} failed verification.",
+                messages.ERROR,
+            )
 
 
 class PackageAdmin(PackageAdminActionsMixin, SaveBeforeChangeAction, EntityModelAdmin):
