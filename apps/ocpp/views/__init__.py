@@ -8,6 +8,7 @@ from .public import (
     charger_session_search,
     charger_status,
     charging_station_map,
+    public_connector_page,
 )
 from .simulator import cp_simulator
 from .firmware import firmware_download
