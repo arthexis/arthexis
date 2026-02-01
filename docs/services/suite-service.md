@@ -31,3 +31,4 @@ The Suite service is the primary systemd unit that runs the Arthexis web applica
 
 ## Notes
 - If the suite service name is missing, the Suite Services Report still lists the service rows as **Not configured** for reference.
+- On Windows, use `service.bat install --name <service-name>` after running `install.bat`. The helper relies on NSSM to register the Windows service.
