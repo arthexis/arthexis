@@ -238,51 +238,58 @@
     }
   </style>
   <p>{% trans "Confirm details before starting registration." %}</p>
-  <div class="registration-grid">
-    <div class="registration-card" aria-label="{% trans 'Local node information' %}">
-      <h2>{% trans "Local confirmation node" %}</h2>
-      <div class="field-row">
-        <label>{% trans "Host" %}</label>
-        <span>{{ local_node.hostname|default:"—" }}</span>
+  <form id="registration-form" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    <div class="registration-grid">
+      <div class="registration-card" aria-label="{% trans 'Local node information' %}">
+        <h2>{% trans "Local confirmation node" %}</h2>
+        <div class="field-row">
+          <label>{% trans "Host" %}</label>
+          <span>{{ local_node.hostname|default:"—" }}</span>
+        </div>
+        <div class="field-row">
+          <label>{% trans "Address" %}</label>
+          <span>{{ local_node.address|default:"—" }}</span>
+        </div>
+        <div class="field-row">
+          <label>{% trans "Port" %}</label>
+          <span>{{ local_node.port|default:"—" }}</span>
+        </div>
       </div>
-      <div class="field-row">
-        <label>{% trans "Address" %}</label>
-        <span>{{ local_node.address|default:"—" }}</span>
-      </div>
-      <div class="field-row">
-        <label>{% trans "Port" %}</label>
-        <span>{{ local_node.port|default:"—" }}</span>
+      <div class="registration-card" aria-label="{% trans 'Visitor node target' %}">
+        <h2>{% trans "Visitor node" %}</h2>
+        <div class="field-row">
+          <label for="visitor-host">{% trans "Host" %}</label>
+          <input id="visitor-host" name="visitor_host" type="text" value="{{ visitor_host|default:visitor_info_url|default:'127.0.0.1'|cut:'/nodes/info/' }}" placeholder="{% trans '127.0.0.1' %}">
+        </div>
+        <div class="field-row">
+          <label for="visitor-port">{% trans "Port" %}</label>
+          <input id="visitor-port" name="visitor_port" type="number" min="1" max="65535" value="{{ visitor_port|default:8888 }}">
+        </div>
+        <p class="field-help">{% trans "The visitor port defaults to 8888 but can be adjusted before starting registration." %}</p>
+        <noscript>
+          <p class="field-help">{% trans "JavaScript is disabled. Submitting this form will run the server-side registration flow and refresh this page with the results." %}</p>
+        </noscript>
       </div>
     </div>
-    <div class="registration-card" aria-label="{% trans 'Visitor node target' %}">
-      <h2>{% trans "Visitor node" %}</h2>
-      <div class="field-row">
-        <label for="visitor-host">{% trans "Host" %}</label>
-        <input id="visitor-host" type="text" value="{{ visitor_host|default:visitor_info_url|default:'127.0.0.1'|cut:'/nodes/info/' }}" placeholder="{% trans '127.0.0.1' %}">
-      </div>
-      <div class="field-row">
-        <label for="visitor-port">{% trans "Port" %}</label>
-        <input id="visitor-port" type="number" min="1" max="65535" value="{{ visitor_port|default:8888 }}">
-      </div>
-      <p class="field-help">{% trans "The visitor port defaults to 8888 but can be adjusted before starting registration." %}</p>
+    <div class="start-actions">
+      <button id="start-registration" class="button button-default" type="submit">{% trans "Start registration" %}</button>
     </div>
-  </div>
-  <div class="start-actions">
-    <button id="start-registration" class="button button-default" type="button">{% trans "Start registration" %}</button>
-  </div>
-  <div id="registration-log" hidden>
-    <div id="result" class="status-banner" role="status" aria-live="polite" aria-busy="false" data-status="pending">
+  </form>
+  <div id="registration-log" {% if not log_visible %}hidden{% endif %}>
+    <div id="result" class="status-banner{% if server_summary and server_summary.status == 'error' %} errornote{% endif %}" role="status" aria-live="polite" aria-busy="false" data-status="{{ server_summary.status|default:'pending' }}">
         <span class="status-indicator" aria-hidden="true"></span>
-        <span class="status-text">{% trans "Waiting to start registration." %}</span>
+        <span class="status-text">{{ server_summary.message|default:_("Waiting to start registration.") }}</span>
     </div>
     <ul class="status-list">
-        <li id="host-result" class="status-item" data-status="idle">
+        <li id="host-result" class="status-item{% if server_host and server_host.status == 'error' %} errornote{% endif %}" data-status="{{ server_host.status|default:'idle' }}" {% if server_host.id %}data-id="{{ server_host.id }}"{% endif %}>
             <span class="status-indicator" aria-hidden="true"></span>
-            <span class="status-text">{% trans "Ready to register the visiting node on this server." %}</span>
+            <span class="status-text">{{ server_host.message|default:_("Ready to register the visiting node on this server.") }}</span>
         </li>
-        <li id="visitor-result" class="status-item" data-status="idle">
+        <li id="visitor-result" class="status-item{% if server_visitor and server_visitor.status == 'error' %} errornote{% endif %}" data-status="{{ server_visitor.status|default:'idle' }}" {% if server_visitor.id %}data-id="{{ server_visitor.id }}"{% endif %}>
             <span class="status-indicator" aria-hidden="true"></span>
-            <span class="status-text">{% trans "Ready to register this server on the visiting node." %}</span>
+            <span class="status-text">{{ server_visitor.message|default:_("Ready to register this server on the visiting node.") }}</span>
         </li>
     </ul>
   </div>
@@ -300,6 +307,7 @@
     const visitorResult = document.getElementById("visitor-result");
     const summary = document.getElementById("result");
     const startButton = document.getElementById("start-registration");
+    const registrationForm = document.getElementById("registration-form");
     const logSection = document.getElementById("registration-log");
     const visitorHostInput = document.getElementById("visitor-host");
     const visitorPortInput = document.getElementById("visitor-port");
@@ -824,7 +832,7 @@
         });
     }
 
-    startButton?.addEventListener("click", async (event) => {
+    registrationForm?.addEventListener("submit", async (event) => {
         event.preventDefault();
         const base = buildVisitorBase();
         if (!base) {
