@@ -112,6 +112,7 @@ def test_restart_handles_missing_systemctl(temp_base_dir: Path):
 
 
 @pytest.mark.django_db
+@pytest.mark.sigil_roots
 def test_resolves_sigils_by_default(monkeypatch, temp_base_dir: Path):
     monkeypatch.setenv("LCD_SUBJECT", "Resolved")
 
@@ -129,6 +130,7 @@ def test_resolves_sigils_by_default(monkeypatch, temp_base_dir: Path):
 
 
 @pytest.mark.django_db
+@pytest.mark.sigil_roots
 def test_disables_resolving_sigils_when_requested(monkeypatch, temp_base_dir: Path):
     monkeypatch.setenv("LCD_SUBJECT", "Resolved")
 

@@ -27,6 +27,7 @@ def test_ownable_clean_requires_owner():
 
 
 @pytest.mark.django_db
+@pytest.mark.sigil_roots
 def test_object_sigils_resolve_owner_and_members():
     user = get_user_model().objects.create(username="sigil-user")
     group = SecurityGroup.objects.create(name="Sigil Group")
