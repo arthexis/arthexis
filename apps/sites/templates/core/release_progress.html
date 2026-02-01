@@ -186,11 +186,19 @@
     {% if github_credentials_missing and not done %}
     <div class="token-card">
       <h2>🔑 {% trans "GitHub token required" %}</h2>
-      <p>{% trans "Enter a GitHub token to continue publishing. The token is used for this publish session and is not stored in the database." %}</p>
+      {% if github_token_required %}
+      <p>{% trans "Publishing paused. Enter a GitHub token to continue. The token is used for this publish session and is not stored in the database." %}</p>
+      {% else %}
+      <p>{% trans "Enter a GitHub token before starting the publish. The token is used for this publish session and is not stored in the database." %}</p>
+      {% endif %}
       <form method="post">
         {% csrf_token %}
         <input type="password" name="github_token" autocomplete="off" placeholder="{% trans 'GitHub token' %}" aria-label="{% trans 'GitHub token' %}">
+        {% if github_token_required %}
         <button type="submit" name="set_github_token" value="1">🔁 {% trans "Retry with token" %}</button>
+        {% else %}
+        <button type="submit" name="set_github_token" value="1">🔑 {% trans "Save token" %}</button>
+        {% endif %}
       </form>
     </div>
     {% endif %}
