@@ -45,6 +45,7 @@ from .certificates import (
 from .monitoring import Variable, MonitoringRule, MonitoringReport
 from .device_report import DeviceInventorySnapshot, DeviceInventoryItem
 from .charging_limit_event import ClearedChargingLimitEvent
+from .public_pages import PublicConnectorPage, PublicScanEvent
 
 __all__ = [
     "Charger",
@@ -98,4 +99,6 @@ __all__ = [
     "DeviceInventorySnapshot",
     "DeviceInventoryItem",
     "ClearedChargingLimitEvent",
+    "PublicConnectorPage",
+    "PublicScanEvent",
 ]

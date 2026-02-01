@@ -9,6 +9,7 @@ urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path("charging-map/", views.charging_station_map, name="charging-station-map"),
+    path("c/<uuid:slug>/", views.public_connector_page, name="public-connector-page"),
     path(
         "firmware/<int:deployment_id>/<slug:token>/",
         views.firmware_download,

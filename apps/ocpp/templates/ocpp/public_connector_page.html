@@ -1,0 +1,108 @@
+{% extends "ocpp/landing_base.html" %}
+{% load i18n %}
+
+{% block title %}{{ page.display_title }}{% endblock %}
+
+{% block content %}
+<div class="container px-3 px-sm-4">
+  <div class="row justify-content-center mt-2 mt-sm-4">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header">
+          <div class="d-flex flex-column flex-sm-row gap-3 align-items-stretch align-items-sm-start justify-content-between">
+            <div class="flex-grow-1">
+              <h1 class="h4 mb-2 text-break">{{ page.display_title }}</h1>
+              <dl class="landing-meta-list">
+                <div>
+                  <dt>{% trans "Serial Number" %}</dt>
+                  <dd class="text-break">{{ charger.charger_id }}</dd>
+                </div>
+                <div>
+                  <dt>{% trans "Connector" %}</dt>
+                  <dd class="text-break">{{ charger.connector_label }}</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="d-flex flex-column align-items-stretch align-items-sm-end gap-2">
+              <span class="badge text-uppercase fw-semibold px-3 py-2 shadow-sm" style="background-color: {{ color }}; color: #fff;">{{ state }}</span>
+              {% if available_languages|length > 1 %}
+              <form action="{% url 'set_language' %}" method="post" class="d-flex gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <select name="language" class="form-select form-select-sm" aria-label="{% trans 'Language' %}">
+                  {% for option in available_languages %}
+                    <option value="{{ option.code }}" {% if option.code == preferred_language %}selected{% endif %}>{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline-primary btn-sm">{% trans "Apply" %}</button>
+              </form>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if charger.last_status or charger_error_code or charger.last_status_timestamp %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title mb-1">{% trans "Latest report" %}</p>
+            <div class="text-muted small">
+            {% if charger.last_status %}
+            <p class="mb-1"><span>{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
+            {% endif %}
+            {% if charger_error_code %}
+            <p class="mb-1"><span>{% trans "Error code" %}</span>: {{ charger_error_code }}</p>
+            {% endif %}
+            {% if charger.last_status_timestamp %}
+            <p class="mb-1"><span>{% trans "Last status update" %}</span>: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+            {% endif %}
+            </div>
+          </div>
+          {% endif %}
+          {% if instructions_html %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "How to charge" %}</p>
+            <div class="markdown-body">{{ instructions_html|safe }}</div>
+          </div>
+          {% endif %}
+          {% if rules_html %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Site rules" %}</p>
+            <div class="markdown-body">{{ rules_html|safe }}</div>
+          </div>
+          {% endif %}
+          {% if page.support_phone or page.support_whatsapp or page.support_email or page.support_url %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Support" %}</p>
+            <ul class="list-unstyled mb-0">
+              {% if page.support_phone %}
+              <li><strong>{% trans "Phone" %}:</strong> <a href="tel:{{ page.support_phone }}">{{ page.support_phone }}</a></li>
+              {% endif %}
+              {% if page.support_whatsapp %}
+              <li><strong>{% trans "WhatsApp" %}:</strong> <a href="https://wa.me/{{ page.support_whatsapp|cut:'+' }}">{{ page.support_whatsapp }}</a></li>
+              {% endif %}
+              {% if page.support_email %}
+              <li><strong>{% trans "Email" %}:</strong> <a href="mailto:{{ page.support_email }}">{{ page.support_email }}</a></li>
+              {% endif %}
+              {% if page.support_url %}
+              <li><strong>{% trans "Website" %}:</strong> <a href="{{ page.support_url }}" rel="noopener" target="_blank">{{ page.support_url }}</a></li>
+              {% endif %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .markdown-body > :first-child {
+    margin-top: 0;
+  }
+  .markdown-body ul,
+  .markdown-body ol {
+    padding-left: 1.25rem;
+  }
+</style>
+{% endblock %}
