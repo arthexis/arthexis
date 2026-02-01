@@ -697,9 +697,7 @@
                         <li class="nav-item dropdown">
                           <a class="nav-link" href="#" role="button">
                             <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
-                            {% if module.agent_notes %}
-                              <span class="visually-hidden" data-agent-role="module" data-agent-notes="{{ module.agent_notes|escape }}"></span>
-                            {% endif %}
+                            {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                           </a>
                           <ul class="dropdown-menu">
                             {% for landing in landings %}
@@ -722,10 +720,8 @@
                                       </span>
                                     {% endif %}
                                   </span>
+                                  {% include "pages/_agent_notes.html" with notes=landing.agent_notes role="landing" %}
                                 </a>
-                                {% if landing.agent_notes %}
-                                  <span class="visually-hidden" data-agent-role="landing" data-agent-notes="{{ landing.agent_notes|escape }}"></span>
-                                {% endif %}
                                 {% if landing.description %}
                                   <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
                                 {% endif %}
@@ -737,12 +733,8 @@
                         <li class="nav-item">
                           <a class="nav-link" href="{{ landings.0.path }}">
                             <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
-                            {% if module.agent_notes %}
-                              <span class="visually-hidden" data-agent-role="module" data-agent-notes="{{ module.agent_notes|escape }}"></span>
-                            {% endif %}
-                            {% if landings.0.agent_notes %}
-                              <span class="visually-hidden" data-agent-role="landing" data-agent-notes="{{ landings.0.agent_notes|escape }}"></span>
-                            {% endif %}
+                            {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
+                            {% include "pages/_agent_notes.html" with notes=landings.0.agent_notes role="landing" %}
                           </a>
                         </li>
                       {% endif %}
@@ -750,9 +742,7 @@
                       <li class="nav-item dropdown">
                         <a class="nav-link" href="#" role="button">
                           <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
-                          {% if module.agent_notes %}
-                            <span class="visually-hidden" data-agent-role="module" data-agent-notes="{{ module.agent_notes|escape }}"></span>
-                          {% endif %}
+                          {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                         </a>
                         <ul class="dropdown-menu">
                           {% for landing in landings %}
@@ -775,9 +765,7 @@
                                     </span>
                                   {% endif %}
                                 </span>
-                                {% if landing.agent_notes %}
-                                  <span class="visually-hidden" data-agent-role="landing" data-agent-notes="{{ landing.agent_notes|escape }}"></span>
-                                {% endif %}
+                                {% include "pages/_agent_notes.html" with notes=landing.agent_notes role="landing" %}
                               </a>
                               {% if landing.description %}
                                 <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
