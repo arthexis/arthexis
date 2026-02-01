@@ -5,7 +5,7 @@ import uuid
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.recipes.models import Recipe
+from apps.recipes.models import Recipe, RecipeStep
 from apps.recipes.utils import parse_recipe_arguments
 
 
@@ -16,7 +16,11 @@ def test_execute_resolves_arg_sigils():
         user=user,
         slug="greet",
         display="Greeter",
-        script="result = '[ARG.0]-[ARG.color]'",
+    )
+    RecipeStep.objects.create(
+        recipe=recipe,
+        order=1,
+        command="result = '[ARG.0]-[ARG.color]'",
     )
 
     execution = recipe.execute("hello", color="blue")
@@ -31,9 +35,9 @@ def test_execute_honors_result_variable():
         user=user,
         slug="flag",
         display="Flag Recipe",
-        script="output = True",
         result_variable="output",
     )
+    RecipeStep.objects.create(recipe=recipe, order=1, command="output = True")
 
     execution = recipe.execute()
 
@@ -48,9 +52,9 @@ def test_execute_preserves_none_result_variable():
         user=user,
         slug="empty-output",
         display="Empty Output",
-        script="output = None",
         result_variable="output",
     )
+    RecipeStep.objects.create(recipe=recipe, order=1, command="output = None")
 
     execution = recipe.execute()
 
@@ -65,8 +69,8 @@ def test_execute_raises_for_runtime_error():
         user=user,
         slug="boom",
         display="Runtime Error",
-        script="result = 1 / 0",
     )
+    RecipeStep.objects.create(recipe=recipe, order=1, command="result = 1 / 0")
 
     with pytest.raises(RuntimeError):
         recipe.execute()
@@ -79,8 +83,8 @@ def test_execute_raises_for_syntax_error():
         user=user,
         slug="syntax",
         display="Syntax Error",
-        script="result =",
     )
+    RecipeStep.objects.create(recipe=recipe, order=1, command="result =")
 
     with pytest.raises(RuntimeError):
         recipe.execute()
@@ -93,7 +97,11 @@ def test_execute_blocks_imports():
         user=user,
         slug="malicious",
         display="Malicious",
-        script="import os\nresult = os.name",
+    )
+    RecipeStep.objects.create(
+        recipe=recipe,
+        order=1,
+        command="import os\nresult = os.name",
     )
 
     with pytest.raises(RuntimeError):

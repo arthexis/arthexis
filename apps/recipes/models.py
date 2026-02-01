@@ -4,6 +4,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -23,6 +24,14 @@ class RecipeExecutionResult:
     resolved_script: str
 
 
+def validate_command_line_count(value: str) -> None:
+    lines = [line for line in value.splitlines() if line.strip() != ""]
+    if not lines:
+        raise ValidationError(_("Commands must include at least 1 line."))
+    if len(lines) > 3:
+        raise ValidationError(_("Commands must be between 1 and 3 lines long."))
+
+
 class Recipe(Ownable):
     objects = RecipeManager()
 
@@ -38,11 +47,6 @@ class Recipe(Ownable):
         help_text=_("Unique slug used to call this recipe from CLI helpers."),
     )
     display = models.CharField(max_length=150, verbose_name=_("Verbose name"))
-    script = models.TextField(
-        help_text=_(
-            "Python script contents. [SIGILS] and [ARG.*] tokens are resolved before execution."
-        )
-    )
     result_variable = models.CharField(
         max_length=64,
         default="result",
@@ -64,8 +68,14 @@ class Recipe(Ownable):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.display
 
+    def script_text(self) -> str:
+        return "\n".join(
+            step.command
+            for step in self.steps.order_by("order")
+        )
+
     def resolve_script(self, *args: Any, **kwargs: Any) -> str:
-        resolved = resolve_arg_sigils(self.script or "", args, kwargs)
+        resolved = resolve_arg_sigils(self.script_text(), args, kwargs)
         # Local import to avoid circular dependency with the sigils app.
         from apps.sigils.sigil_resolver import resolve_sigils
 
@@ -126,5 +136,26 @@ class Recipe(Ownable):
             resolved_script=resolved_script,
         )
 
+class RecipeStep(models.Model):
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        related_name="steps",
+    )
+    order = models.PositiveIntegerField(default=1)
+    command = models.TextField(
+        help_text=_("Commands to execute (1-3 lines)."),
+        validators=[validate_command_line_count],
+    )
 
-__all__ = ["Recipe", "RecipeExecutionResult"]
+    class Meta:
+        ordering = ("recipe", "order")
+        unique_together = (("recipe", "order"),)
+        verbose_name = _("Recipe step")
+        verbose_name_plural = _("Recipe steps")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.recipe.display} (step {self.order})"
+
+
+__all__ = ["Recipe", "RecipeExecutionResult", "RecipeStep"]
