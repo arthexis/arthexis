@@ -31,3 +31,10 @@ The RFID scanner service is a lightweight UDP server that brokers RFID reads for
 
 ## Notes
 - The Suite Services Report lists the RFID service row even if it is not installed so operators know the expected unit name.
+
+## Troubleshooting
+- Use the interactive RFID doctor command to verify the service, lock files, and scan path:
+  ```bash
+  python manage.py rfid_doctor --scan
+  ```
+- Add `--deep-read` to toggle deep read mode or `--no-input` to skip prompts.
