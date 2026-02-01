@@ -24,23 +24,29 @@ class DummyResponse:
 
 
 @pytest.mark.django_db
-def test_prepare_package_release_get_does_not_restore_deleted_release():
+def test_prepare_package_release_get_restores_deleted_release(monkeypatch):
     package = Package.objects.create(name="test-package")
     release = PackageRelease.all_objects.create(
         package=package,
         version="1.0.0",
         is_deleted=True,
     )
+
+    def fake_get(url: str, timeout: int = 10) -> DummyResponse:
+        return DummyResponse({})
+
+    monkeypatch.setattr(package_actions.requests, "get", fake_get)
     request = RequestFactory().get("/admin/release/package/prepare-next-release/")
     request.user = SimpleNamespace(is_active=True, is_staff=True)
     admin_view = SimpleNamespace(admin_site=AdminSite())
 
     response = package_actions.prepare_package_release(admin_view, request, package)
 
-    assert response.status_code == 200
-    assert response.template_name == "admin/release/prepare_next_release_confirm.html"
+    assert response.url == reverse(
+        "admin:release_packagerelease_change", args=[release.pk]
+    )
     release.refresh_from_db()
-    assert release.is_deleted is True
+    assert release.is_deleted is False
 
 
 @pytest.mark.django_db

@@ -9,7 +9,6 @@ import requests
 from django.contrib import admin, messages
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
-from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 from packaging.version import InvalidVersion, Version
@@ -68,23 +67,7 @@ def _fetch_latest_pypi_version(package_name: str) -> Version | None:
 
 
 def prepare_package_release(admin_view, request, package):
-    if request.method == "GET":
-        context = admin_view.admin_site.each_context(request)
-        context.update(
-            {
-                "opts": Package._meta,
-                "original": package,
-                "title": _("Prepare next release"),
-                "cancel_url": request.META.get("HTTP_REFERER")
-                or reverse("admin:index"),
-            }
-        )
-        return TemplateResponse(
-            request,
-            "admin/release/prepare_next_release_confirm.html",
-            context,
-        )
-    if request.method != "POST":
+    if request.method not in {"GET", "POST"}:
         return HttpResponseNotAllowed(["POST", "GET"])
 
     existing_releases = list(PackageRelease.all_objects.filter(package=package))
