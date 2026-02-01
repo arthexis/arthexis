@@ -615,8 +615,8 @@ def _stats_payload() -> LockPayload:
             f"RAM {ram_label} IDL{cpu_label}%",
             f"RAM{ram_label} IDL{cpu_label}%",
             f"RAM{ram_label} I{cpu_label}%",
-            f"R{ram_label}I{cpu_label}%",
             f"R{ram_label} I{cpu_label}%",
+            f"R{ram_label}I{cpu_label}%",
         ]
     )
     line2 = _compact_stats_line(
