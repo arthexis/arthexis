@@ -18,6 +18,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals
+from django.test.client import RequestFactory
 from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -30,6 +31,7 @@ from requests import RequestException
 import requests
 
 from apps.nodes.logging import get_register_visitor_logger
+from apps.nodes.views.registration import register_visitor_proxy
 
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.cards.models import RFID
@@ -934,6 +936,45 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         return urlunsplit((scheme, host_part, "", "", "")), hostname, port, scheme
 
+    def _build_visitor_base_from_input(
+        self,
+        *,
+        host_value: str,
+        port_value: int | None,
+        scheme: str | None = None,
+    ) -> str | None:
+        cleaned_host = (host_value or "").strip()
+        if not cleaned_host:
+            return None
+
+        candidate = cleaned_host
+        if "://" not in candidate:
+            normalized_scheme = (scheme or "https").replace(":", "")
+            candidate = f"{normalized_scheme}://{candidate}"
+
+        try:
+            parsed = urlsplit(candidate)
+        except ValueError:
+            return None
+
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return None
+
+        normalized_scheme = (parsed.scheme or scheme or "https").lower()
+        if normalized_scheme != "https":
+            normalized_scheme = "https"
+
+        port = port_value or parsed.port or 8888
+        host_part = hostname
+        if ":" in hostname and not hostname.startswith("["):
+            host_part = f"[{hostname}]"
+
+        if port:
+            host_part = f"{host_part}:{port}"
+
+        return urlunsplit((normalized_scheme, host_part, "", "", ""))
+
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
 
@@ -949,11 +990,15 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 request, f"Current host registered as {node}", messages.SUCCESS
             )
 
-        token = uuid.uuid4().hex
+        token = (request.POST.get("token") if request.method == "POST" else None) or uuid.uuid4().hex
         visitor_base, visitor_host, visitor_port, visitor_scheme = self._resolve_visitor_base(request)
         visitor_info_url = ""
         visitor_register_url = ""
         visitor_error = None
+        server_summary = None
+        server_host = None
+        server_visitor = None
+        log_visible = False
         if visitor_base:
             visitor_base = visitor_base.rstrip("/")
             visitor_info_url = f"{visitor_base}/nodes/info/"
@@ -962,6 +1007,89 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             visitor_error = _(
                 "Visitor address missing or invalid. Append a ?visitor=host[:port] query string to continue."
             )
+
+        if request.method == "POST":
+            submitted_host = str(request.POST.get("visitor_host") or "").strip()
+            submitted_port = request.POST.get("visitor_port")
+            parsed_port: int | None = None
+            if submitted_port not in (None, ""):
+                try:
+                    parsed_port = int(submitted_port)
+                except (TypeError, ValueError):
+                    parsed_port = None
+
+            visitor_host = submitted_host or visitor_host
+            visitor_port = parsed_port or visitor_port
+            visitor_base = self._build_visitor_base_from_input(
+                host_value=submitted_host,
+                port_value=parsed_port,
+                scheme=visitor_scheme,
+            )
+            log_visible = True
+
+            if not visitor_base:
+                visitor_error = _(
+                    "Visitor address missing. Reload with ?visitor=host[:port]."
+                )
+                server_summary = {
+                    "status": "error",
+                    "message": visitor_error,
+                }
+                server_host = {
+                    "status": "error",
+                    "message": _("Registration aborted."),
+                }
+                server_visitor = {
+                    "status": "error",
+                    "message": visitor_error,
+                }
+            else:
+                visitor_info_url = f"{visitor_base}/nodes/info/"
+                visitor_register_url = f"{visitor_base}/nodes/register/"
+                proxy_payload = json.dumps(
+                    {
+                        "token": token,
+                        "visitor_info_url": visitor_info_url,
+                        "visitor_register_url": visitor_register_url,
+                    }
+                )
+                proxy_request = RequestFactory().post(
+                    reverse("register-visitor-proxy"),
+                    data=proxy_payload,
+                    content_type="application/json",
+                )
+                proxy_request.user = request.user
+                proxy_request._cached_user = request.user
+                proxy_response = register_visitor_proxy(proxy_request)
+
+                try:
+                    proxy_body = json.loads(proxy_response.content.decode() or "{}")
+                except json.JSONDecodeError:
+                    proxy_body = {}
+
+                if proxy_response.status_code == 200 and proxy_body.get("host") and proxy_body.get("visitor"):
+                    host_body = proxy_body.get("host", {}) or {}
+                    visitor_body = proxy_body.get("visitor", {}) or {}
+                    server_summary = {
+                        "status": "success",
+                        "message": _("Both nodes registered successfully."),
+                    }
+                    server_host = {
+                        "status": "success",
+                        "message": host_body.get("detail") or _("Visitor node registered with this server."),
+                        "id": host_body.get("id"),
+                    }
+                    server_visitor = {
+                        "status": "success",
+                        "message": visitor_body.get("detail") or _("Host node registered with visitor."),
+                        "id": visitor_body.get("id"),
+                    }
+                else:
+                    error_message = proxy_body.get("detail") or _("Registration aborted.")
+                    server_summary = {"status": "error", "message": error_message}
+                    server_host = {"status": "error", "message": _("Registration aborted.")}
+                    server_visitor = {"status": "error", "message": error_message}
+
         registration_logger.info(
             "Visitor registration: admin flow initialized visitor_base=%s token=%s",
             visitor_base or "",
@@ -983,6 +1111,10 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "visitor_host": visitor_host,
             "visitor_port": visitor_port,
             "visitor_scheme": visitor_scheme,
+            "server_summary": server_summary,
+            "server_host": server_host,
+            "server_visitor": server_visitor,
+            "log_visible": log_visible,
             "local_node": {
                 "hostname": node.get_preferred_hostname(),
                 "address": node.get_base_domain() or node.address or node.network_hostname,
