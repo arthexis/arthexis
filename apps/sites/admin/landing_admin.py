@@ -37,6 +37,7 @@ class LandingAdmin(EntityModelAdmin):
         "enabled",
         "track_leads",
         "description",
+        "agent_notes",
         "validation_status",
         "validated_url_at",
     )

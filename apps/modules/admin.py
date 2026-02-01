@@ -46,6 +46,7 @@ class ModuleAdminForm(forms.ModelForm):
             "is_default",
             "favicon_media",
             "favicon_upload",
+            "agent_notes",
             "security_group",
             "security_mode",
         )
@@ -107,6 +108,7 @@ class ModuleAdmin(EntityModelAdmin):
         "favicon_media",
         "favicon_upload",
         "favicon_metadata",
+        "agent_notes",
         "security_group",
         "security_mode",
     )
