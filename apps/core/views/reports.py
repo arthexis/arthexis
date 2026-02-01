@@ -795,13 +795,16 @@ def _run_release_step(
 
     was_paused = bool(ctx.get("paused"))
 
-    if (
-        ctx.get("started")
-        and (not ctx.get("paused") or allow_when_paused)
-        and step_param is not None
-        and not error
-        and step_count < len(steps)
-    ):
+    should_run_step = all(
+        [
+            ctx.get("started"),
+            (not ctx.get("paused") or allow_when_paused),
+            step_param is not None,
+            not error,
+            step_count < len(steps),
+        ]
+    )
+    if should_run_step:
         try:
             to_run = int(step_param)
         except (TypeError, ValueError):
