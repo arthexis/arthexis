@@ -294,7 +294,7 @@
       <form method="post">
         {% csrf_token %}
         <input type="password" name="github_token" autocomplete="off" placeholder="{% trans 'GitHub token' %}" aria-label="{% trans 'GitHub token' %}">
-        <button type="submit" name="set_github_token" value="1">✅ {% trans "Use token" %}</button>
+        <button type="submit" name="set_github_token" value="1">🔁 {% trans "Retry with token" %}</button>
       </form>
     </div>
     {% endif %}
@@ -318,7 +318,9 @@
     </div>
     {% endif %}
     {% if paused and started and not done and not error %}
+    {% if not github_token_required %}
     <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
+    {% endif %}
     {% endif %}
     {% if fixtures %}
     <h2>{% trans 'Fixture changes' %}</h2>

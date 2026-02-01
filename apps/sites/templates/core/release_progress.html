@@ -32,6 +32,29 @@
   .progress-actions button {
     min-width: 8rem;
   }
+  .token-card {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 6px;
+    background: rgba(13, 110, 253, 0.08);
+  }
+  .token-card h2 {
+    margin: 0 0 0.5rem;
+  }
+  .token-card p {
+    margin: 0.4rem 0 0.8rem;
+  }
+  .token-card form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .token-card input[type="password"] {
+    min-width: 18rem;
+    padding: 0.35rem 0.5rem;
+  }
   .progress-steps {
     margin: 0 0 1.5rem;
     padding-left: 1.5rem;
@@ -160,8 +183,21 @@
       </li>
     {% endfor %}
     </ol>
+    {% if github_credentials_missing and not done %}
+    <div class="token-card">
+      <h2>🔑 {% trans "GitHub token required" %}</h2>
+      <p>{% trans "Enter a GitHub token to continue publishing. The token is used for this publish session and is not stored in the database." %}</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="password" name="github_token" autocomplete="off" placeholder="{% trans 'GitHub token' %}" aria-label="{% trans 'GitHub token' %}">
+        <button type="submit" name="set_github_token" value="1">🔁 {% trans "Retry with token" %}</button>
+      </form>
+    </div>
+    {% endif %}
     {% if paused and started and not done and not error %}
+    {% if not github_token_required %}
     <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
+    {% endif %}
     {% endif %}
     {% if fixtures %}
     <h2>{% trans 'Fixture changes' %}</h2>
