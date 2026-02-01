@@ -202,10 +202,7 @@ def capture_rpi_snapshot(
             if _has_ffmpeg_capture_support():
                 candidate_resolutions: list[tuple[int, int] | None]
                 if width and height:
-                    candidate_resolutions = [(width, height)]
-                    for resolution in FALLBACK_CAMERA_RESOLUTIONS:
-                        if resolution != (width, height):
-                            candidate_resolutions.append(resolution)
+                    candidate_resolutions = list(dict.fromkeys([(width, height)] + list(FALLBACK_CAMERA_RESOLUTIONS)))
                 else:
                     candidate_resolutions = [None]
                 ffmpeg_error: RuntimeError | None = None
