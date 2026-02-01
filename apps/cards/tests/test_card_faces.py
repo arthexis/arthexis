@@ -53,14 +53,8 @@ def test_card_face_rejects_invalid_modes_and_size():
 
 @pytest.mark.django_db
 def test_fixed_back_relations_are_mutual():
-    face_a = CardFace.objects.create(
-        name="Front",
-        background_media=_media_file(_image_file(name="front.png")),
-    )
-    face_b = CardFace.objects.create(
-        name="Back",
-        background_media=_media_file(_image_file(name="back.png")),
-    )
+    face_a = CardFace.objects.create(name="Front")
+    face_b = CardFace.objects.create(name="Back")
 
     face_a.fixed_back = face_b
     face_a.save()
