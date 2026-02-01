@@ -1,0 +1,49 @@
+name: Support request
+description: Ask for help with setup, operations, or troubleshooting
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please share enough detail so we can help. For security issues, use the security contact link instead.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: A short description of what you need help with.
+      placeholder: e.g. Unable to start Terminal node after upgrade
+    validations:
+      required: true
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Install / upgrade
+        - Operations / monitoring
+        - Configuration
+        - Integrations
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Include steps taken, logs, and any relevant configuration (redact secrets).
+      placeholder: Describe what you've tried and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, deployment role, and any relevant infrastructure details.
+      placeholder: |
+        OS:
+        Python:
+        Role:
+        Deployment:
+    validations:
+      required: true
