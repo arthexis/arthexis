@@ -148,16 +148,24 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
 def _resolve_github_token(
     release: PackageRelease, ctx: dict, user=None
 ) -> str | None:
-    token = (ctx.get("github_token") or "").strip()
+    def _clean_token(value: str | None) -> str | None:
+        cleaned = (value or "").strip()
+        return cleaned or None
+
+    token = _clean_token(ctx.get("github_token"))
     if token:
         return token
-    stored_token = GithubToken.resolve_for_release(
-        package=release.package,
-        user=user,
+
+    env_token = _clean_token(release.get_github_token())
+    if env_token:
+        return env_token
+
+    return _clean_token(
+        GithubToken.resolve_for_release(
+            package=release.package,
+            user=user,
+        )
     )
-    if stored_token:
-        return stored_token
-    return release.get_github_token()
 
 
 def _require_github_token(
