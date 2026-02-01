@@ -5,6 +5,7 @@ from django.contrib.auth import login
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -21,7 +22,11 @@ from apps.core.models import get_owned_objects_for_user
 from apps.users import temp_passwords
 from apps.users.models import User
 
-from .forms import UserChangeRFIDForm, UserCreationWithExpirationForm
+from .forms import (
+    UserChangeRFIDForm,
+    UserCreationWithExpirationForm,
+    UserRFIDWriteForm,
+)
 from .inlines import USER_PROFILE_INLINES, UserPhoneNumberInline
 from .site import (
     _append_operate_as,
@@ -112,6 +117,13 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                 name="core_user_login_as_guest_user",
             )
         ]
+        custom += [
+            path(
+                "<path:user_id>/write-login-rfid/",
+                self.admin_site.admin_view(self.write_login_rfid),
+                name="core_user_write_login_rfid",
+            ),
+        ]
         return custom + urls
 
     def get_changelist_actions(self, request):
@@ -174,26 +186,20 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         if obj is not None and fieldsets:
             name, options = fieldsets[0]
             fields = list(options.get("fields", ()))
-            if "login_rfid" not in fields:
-                fields.append("login_rfid")
-                options = options.copy()
-                options["fields"] = tuple(fields)
-                fieldsets[0] = (name, options)
-        return fieldsets
-
-    def render_change_form(
-        self, request, context, add=False, change=False, form_url="", obj=None
-    ):
-        payload = None
-        if obj is not None:
-            direct, via = get_owned_objects_for_user(obj)
-            payload = self._build_owned_object_context(
-                direct, via, _("Owned via security group")
+            rfid_fields_to_add = (
+                "login_rfid",
+                "login_rfid_key",
+                "login_rfid_block",
+                "login_rfid_offset",
+                "login_rfid_value",
             )
-        self._attach_owned_objects(context, payload)
-        return super().render_change_form(
-            request, context, add=add, change=change, form_url=form_url, obj=obj
-        )
+            for field in rfid_fields_to_add:
+                if field not in fields:
+                    fields.append(field)
+            options = options.copy()
+            options["fields"] = tuple(fields)
+            fieldsets[0] = (name, options)
+        return fieldsets
 
     def _get_operate_as_profile_template(self):
         opts = self.model._meta
@@ -215,6 +221,13 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
+        payload = None
+        if obj is not None:
+            direct, via = get_owned_objects_for_user(obj)
+            payload = self._build_owned_object_context(
+                direct, via, _("Owned via security group")
+            )
+        self._attach_owned_objects(context, payload)
         response = super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
@@ -242,7 +255,93 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
             context_data["operate_as_user"] = operate_as_user
             context_data["operate_as_profile_url_template"] = operate_as_template
             context_data["operate_as_profile_url"] = operate_as_url
+            if obj and obj.pk:
+                context_data["rfid_write_url"] = reverse(
+                    "admin:core_user_write_login_rfid", args=[obj.pk]
+                )
         return response
+
+    def write_login_rfid(self, request, user_id):
+        user = self.get_object(request, user_id)
+        if user is None:
+            raise PermissionDenied
+        if not self.has_change_permission(request, user):
+            raise PermissionDenied
+
+        tag = getattr(user, "login_rfid", None)
+        form = UserRFIDWriteForm(request.POST or None)
+        write_enabled = all(
+            [
+                tag,
+                user.login_rfid_block is not None,
+                user.login_rfid_offset is not None,
+                user.login_rfid_value,
+            ]
+        )
+        if request.method == "POST" and form.is_valid():
+            if not write_enabled:
+                form.add_error(
+                    None,
+                    _("Configure the login RFID, block, offset, and value before writing."),
+                )
+            else:
+                from apps.cards.reader import write_rfid_cell_value
+
+                key_choice = user.login_rfid_key
+                key_value = tag.key_a if key_choice == user.LOGIN_RFID_KEY_A else tag.key_b
+                write_result = write_rfid_cell_value(
+                    block=user.login_rfid_block,
+                    offset=user.login_rfid_offset,
+                    value=user.login_rfid_value,
+                    key=key_value,
+                    key_type=key_choice,
+                )
+                if write_result.get("error"):
+                    form.add_error(None, write_result["error"])
+                else:
+                    scanned = write_result.get("rfid")
+                    if scanned and tag and tag.rfid and scanned.upper() != tag.rfid.upper():
+                        form.add_error(
+                            None,
+                            _(
+                                "Scanned RFID %(scanned)s does not match the assigned tag "
+                                "%(expected)s."
+                            )
+                            % {"scanned": scanned, "expected": tag.rfid},
+                        )
+                    else:
+                        self.message_user(
+                            request,
+                            _("RFID login data written successfully."),
+                            level=messages.SUCCESS,
+                        )
+                        return HttpResponseRedirect(
+                            reverse(
+                                "admin:core_user_change",
+                                args=[user.pk],
+                            )
+                        )
+
+        context = dict(self.admin_site.each_context(request))
+        context.update(
+            {
+                "title": _("Write RFID login data"),
+                "user_obj": user,
+                "form": form,
+                "login_rfid": tag,
+                "write_enabled": write_enabled,
+                "login_rfid_key": user.login_rfid_key,
+                "login_rfid_block": user.login_rfid_block,
+                "login_rfid_offset": user.login_rfid_offset,
+                "login_rfid_value": user.login_rfid_value,
+                "opts": self.model._meta,
+                "original": user,
+                "media": self.media + form.media,
+            }
+        )
+        return TemplateResponse(
+            request, "admin/core/user/write_login_rfid.html", context
+        )
 
     def get_inline_instances(self, request, obj=None):
         inline_instances = super().get_inline_instances(request, obj)

@@ -1,10 +1,6 @@
-import uuid
-
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
-from django.db.models import Q
 from django.forms.models import BaseInlineFormSet
-from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from import_export.forms import (
     ConfirmImportForm,
@@ -117,62 +113,21 @@ class UserChangeRFIDForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         user = self.instance
         field = self.fields["login_rfid"]
-        account = getattr(user, "customer_account", None)
-        if account is not None:
-            queryset = RFID.objects.filter(
-                Q(energy_accounts__isnull=True) | Q(energy_accounts=account)
-            )
-            current = account.rfids.order_by("label_id").first()
-            if current:
-                field.initial = current.pk
-        else:
-            queryset = RFID.objects.filter(energy_accounts__isnull=True)
-        field.queryset = queryset.order_by("label_id")
+        queryset = RFID.objects.all().order_by("label_id")
+        if getattr(user, "login_rfid_id", None):
+            field.initial = user.login_rfid_id
+        field.queryset = queryset
         field.empty_label = _("Keep current assignment")
 
-    def _ensure_customer_account(self, user):
-        account = getattr(user, "customer_account", None)
-        if account is not None:
-            if account.user_id != user.pk:
-                account.user = user
-                account.save(update_fields=["user"])
-            return account
-        account = CustomerAccount.objects.filter(user=user).first()
-        if account is not None:
-            if account.user_id != user.pk:
-                account.user = user
-                account.save(update_fields=["user"])
-            return account
-        base_slug = slugify(
-            user.username
-            or user.get_full_name()
-            or user.email
-            or (str(user.pk) if user.pk is not None else "")
-        )
-        if not base_slug:
-            base_slug = f"user-{uuid.uuid4().hex[:8]}"
-        base_name = base_slug.upper()
-        candidate = base_name
-        suffix = 1
-        while CustomerAccount.objects.filter(name=candidate).exists():
-            suffix += 1
-            candidate = f"{base_name}-{suffix}"
-        return CustomerAccount.objects.create(user=user, name=candidate)
 
-    def save(self, commit=True):
-        user = super().save(commit)
-        rfid = self.cleaned_data.get("login_rfid")
-        if not rfid:
-            return user
-        account = self._ensure_customer_account(user)
-        if account.pk is None:
-            account.save()
-        other_accounts = list(rfid.energy_accounts.exclude(pk=account.pk))
-        if other_accounts:
-            rfid.energy_accounts.remove(*other_accounts)
-        if not account.rfids.filter(pk=rfid.pk).exists():
-            account.rfids.add(rfid)
-        return user
+class UserRFIDWriteForm(forms.Form):
+    """Confirm writing RFID login metadata to a card."""
+
+    confirm_write = forms.BooleanField(
+        required=True,
+        label=_("Confirm write"),
+        help_text=_("Write the configured login value to the RFID card."),
+    )
 
 
 class OdooEmployeeAdminForm(forms.ModelForm):

@@ -11,6 +11,7 @@ from django.utils.translation import gettext, gettext_lazy as _, ngettext
 from apps.ocpp.models import Charger, ChargerConfiguration, CPFirmware
 from apps.nodes.models import Node
 from apps.nginx.models import SiteConfiguration
+from apps.sites.models import UserStory
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,24 @@ def evaluate_nginx_site_configuration_rules() -> dict[str, object] | None:
 
     if not recent_validation:
         return rule_failure(_("Site validation is stale."))
+
+    return rule_success()
+
+
+def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
+    unassigned = UserStory.objects.filter(
+        status=UserStory.Status.OPEN,
+        assign_to__isnull=True,
+        owner__isnull=True,
+    )
+    count = unassigned.count()
+    if count:
+        message = ngettext(
+            "Open unassigned user story: %(count)s.",
+            "Open unassigned user stories: %(count)s.",
+            count,
+        ) % {"count": count}
+        return rule_failure(message)
 
     return rule_success()
 

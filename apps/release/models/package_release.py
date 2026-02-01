@@ -231,7 +231,11 @@ class PackageRelease(Entity):
 
     def get_github_token(self) -> str | None:
         """Return GitHub token from the environment."""
-        return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if token is None:
+            return None
+        token = token.strip()
+        return token or None
 
     def uses_oidc_publishing(self) -> bool:
         """Return True when the package should publish via GitHub OIDC."""

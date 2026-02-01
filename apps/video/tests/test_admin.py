@@ -1,8 +1,10 @@
 import pytest
+import requests
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 from django.utils.text import slugify
 from django.urls import reverse
@@ -10,7 +12,7 @@ from django.urls import reverse
 from apps.content.models import ContentSample
 from apps.nodes.models import Node, NodeFeature
 from apps.video import admin as video_admin
-from apps.video.models import MjpegStream, VideoDevice, VideoSnapshot
+from apps.video.models import MjpegStream, VideoDevice, VideoSnapshot, YoutubeChannel
 
 
 @pytest.fixture
@@ -336,3 +338,69 @@ def test_create_default_stream_truncates_and_uniques_slug(admin_user):
     assert len(stream.slug) <= max_length
     assert stream.slug != existing_slug
     assert stream.slug.startswith(existing_slug[: max_length - 2])
+
+
+def build_admin_request(factory, user):
+    request = factory.post("/admin/")
+    request.user = user
+    middleware = SessionMiddleware(lambda req: None)
+    middleware.process_request(request)
+    request.session.save()
+    messages_storage = FallbackStorage(request)
+    setattr(request, "_messages", messages_storage)
+    return request
+
+
+@pytest.mark.django_db
+def test_youtube_channel_action_reports_success(monkeypatch, admin_user):
+    channel = YoutubeChannel.objects.create(
+        title="Arthexis",
+        channel_id="UC1234abcd",
+    )
+    request = build_admin_request(RequestFactory(), admin_user)
+    admin_view = video_admin.YoutubeChannelAdmin(YoutubeChannel, admin.site)
+    captured = {}
+
+    def fake_get(url, timeout):
+        captured["url"] = url
+
+        class Response:
+            ok = True
+            status_code = 200
+
+        return Response()
+
+    monkeypatch.setattr(video_admin.requests, "get", fake_get)
+
+    admin_view.test_selected_channel(
+        request,
+        YoutubeChannel.objects.filter(pk=channel.pk),
+    )
+
+    messages = [str(message) for message in request._messages]
+    assert channel.get_channel_url() == captured["url"]
+    assert any("Tested 1 channel" in message for message in messages)
+
+
+@pytest.mark.django_db
+def test_youtube_channel_action_reports_failure(monkeypatch, admin_user):
+    channel = YoutubeChannel.objects.create(
+        title="Arthexis",
+        channel_id="UC9999fail",
+    )
+    request = build_admin_request(RequestFactory(), admin_user)
+    admin_view = video_admin.YoutubeChannelAdmin(YoutubeChannel, admin.site)
+
+    def fake_get(url, timeout):
+        raise requests.RequestException("network down")
+
+    monkeypatch.setattr(video_admin.requests, "get", fake_get)
+
+    admin_view.test_selected_channel(
+        request,
+        YoutubeChannel.objects.filter(pk=channel.pk),
+    )
+
+    messages = [str(message) for message in request._messages]
+    assert any("Failed to reach" in message for message in messages)
+    assert any("Failed to test 1 channel" in message for message in messages)

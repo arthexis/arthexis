@@ -47,6 +47,15 @@
 </div>
 {% endblock %}
 
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if rfid_write_url %}
+    <li>
+      <a href="{{ rfid_write_url }}" class="historylink">{% trans "Write RFID login data" %}</a>
+    </li>
+  {% endif %}
+{% endblock %}
+
 {% block extrajs %}
 {{ block.super }}
 {% if operate_as_profile_url_template %}
@@ -106,4 +115,3 @@
 {{ block.super }}
 {% include "admin/includes/ownable_links.html" %}
 {% endblock %}
-

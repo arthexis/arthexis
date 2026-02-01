@@ -1,0 +1,175 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo;
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo;
+    <a href="{% url 'admin:nodes_nodefeature_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo;
+    {% trans 'Discover node features' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="module" id="discover-node-features">
+    <h2>{% trans 'Discover node features' %}</h2>
+    <p>{% trans 'Checking eligibility and enabling available features for the local node.' %}</p>
+    <p id="discover-summary"
+       data-complete="{% blocktrans %}Finished discovering {{ features|length }} feature(s).{% endblocktrans %}"
+       data-progress="{% blocktrans %}Discovering feature __CURRENT__ of __TOTAL__…{% endblocktrans %}">
+        {% blocktrans with count=features|length %}Preparing to discover {{ count }} feature(s)...{% endblocktrans %}
+    </p>
+    <form id="discover-features-form" style="display: none;">
+        {% csrf_token %}
+    </form>
+    <table class="admin-table" id="discover-features-table">
+        <thead>
+            <tr>
+                <th scope="col">{% trans 'Feature' %}</th>
+                <th scope="col">{% trans 'Eligibility' %}</th>
+                <th scope="col">{% trans 'Enablement' %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for feature in features %}
+            <tr data-feature-id="{{ feature.pk }}">
+                <th scope="row">{{ feature.display }}</th>
+                <td data-field="eligibility">{% trans 'Pending…' %}</td>
+                <td data-field="enablement">{% trans 'Pending…' %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="module" id="discover-report">
+        <h3>{% trans 'Discovery report' %}</h3>
+        <ul>
+            <li>{% trans 'Eligible features:' %} <strong id="discover-report-eligible">0</strong></li>
+            <li>{% trans 'Enabled features:' %} <strong id="discover-report-enabled">0</strong></li>
+            <li>{% trans 'Warnings/errors:' %} <strong id="discover-report-errors">0</strong></li>
+        </ul>
+    </div>
+    <p class="submit-row">
+        <a class="button" href="{% url 'admin:nodes_nodefeature_changelist' %}">{% trans 'Back to node features' %}</a>
+    </p>
+</div>
+<script>
+(function () {
+    const progressUrl = "{{ progress_url }}";
+    const discoveryId = "{{ discovery_id }}";
+    const form = document.getElementById("discover-features-form");
+    const tokenInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    const csrfToken = tokenInput ? tokenInput.value : "";
+    const rows = Array.from(document.querySelectorAll('#discover-features-table tbody tr'));
+    const summary = document.getElementById('discover-summary');
+    const eligibleCount = document.getElementById('discover-report-eligible');
+    const enabledCount = document.getElementById('discover-report-enabled');
+    const errorCount = document.getElementById('discover-report-errors');
+    const total = rows.length;
+    let completed = 0;
+    let eligible = 0;
+    let enabled = 0;
+    let errors = 0;
+
+    function setCellText(cell, text) {
+        if (!cell) {
+            return;
+        }
+        cell.textContent = text || '';
+    }
+
+    function updateSummary() {
+        if (!summary) {
+            return;
+        }
+        if (completed >= total) {
+            summary.textContent = summary.dataset.complete;
+        } else {
+            const template = summary.dataset.progress || 'Discovering feature __CURRENT__ of __TOTAL__…';
+            summary.textContent = template
+                .replace('__CURRENT__', completed + 1)
+                .replace('__TOTAL__', total);
+        }
+    }
+
+    function updateReport() {
+        if (eligibleCount) {
+            eligibleCount.textContent = eligible.toString();
+        }
+        if (enabledCount) {
+            enabledCount.textContent = enabled.toString();
+        }
+        if (errorCount) {
+            errorCount.textContent = errors.toString();
+        }
+    }
+
+    function runDiscover(index) {
+        if (index >= rows.length) {
+            updateSummary();
+            updateReport();
+            return;
+        }
+        const row = rows[index];
+        const featureId = row.getAttribute('data-feature-id');
+        const eligibilityCell = row.querySelector('[data-field="eligibility"]');
+        const enablementCell = row.querySelector('[data-field="enablement"]');
+        updateSummary();
+        const body = new FormData();
+        body.append('feature_id', featureId);
+        if (discoveryId) {
+            body.append('discovery_id', discoveryId);
+        }
+
+        fetch(progressUrl, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: body
+        }).then(function (response) {
+            if (!response.ok) {
+                setCellText(eligibilityCell, response.status + ' ' + response.statusText);
+                setCellText(enablementCell, response.status + ' ' + response.statusText);
+                errors += 1;
+                return null;
+            }
+            return response.json();
+        }).then(function (data) {
+            if (!data) {
+                return;
+            }
+            setCellText(eligibilityCell, data.message || '');
+            if (data.eligible) {
+                eligible += 1;
+            }
+            if (data.status === 'error' || data.status === 'warning') {
+                errors += 1;
+            }
+            if (data.enablement && data.enablement.status === 'enabled') {
+                enabled += 1;
+            }
+            setCellText(enablementCell, data.enablement ? data.enablement.message : '');
+        }).catch(function (error) {
+            setCellText(eligibilityCell, error.toString());
+            setCellText(enablementCell, error.toString());
+            errors += 1;
+        }).finally(function () {
+            completed += 1;
+            updateSummary();
+            updateReport();
+            runDiscover(index + 1);
+        });
+    }
+
+    if (rows.length) {
+        runDiscover(0);
+    } else {
+        updateSummary();
+        updateReport();
+    }
+})();
+</script>
+{% endblock %}
