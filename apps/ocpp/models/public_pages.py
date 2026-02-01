@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from io import BytesIO
 
-import qrcode
-from qrcode.image.svg import SvgImage
+from apps.links.qr_utils import build_qr_png_bytes, build_qr_svg_text
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
@@ -72,19 +70,15 @@ class PublicConnectorPage(models.Model):
         return (language.code or "").strip() if language else ""
 
     def generate_qr_assets(self, url: str) -> tuple[str, bytes]:
-        qr = qrcode.QRCode(box_size=6, border=2)
-        qr.add_data(url)
-        qr.make(fit=True)
-
-        svg_image = qr.make_image(image_factory=SvgImage)
-        svg_buffer = BytesIO()
-        svg_image.save(svg_buffer)
-        svg_text = svg_buffer.getvalue().decode("utf-8")
-
-        png_image = qr.make_image(fill_color="black", back_color="white")
-        png_buffer = BytesIO()
-        png_image.save(png_buffer, format="PNG")
-        return svg_text, png_buffer.getvalue()
+        svg_text = build_qr_svg_text(url, box_size=6, border=2)
+        png_bytes = build_qr_png_bytes(
+            url,
+            box_size=6,
+            border=2,
+            fill_color="black",
+            back_color="white",
+        )
+        return svg_text, png_bytes
 
     def refresh_qr_assets(self, url: str) -> None:
         svg_text, png_bytes = self.generate_qr_assets(url)
