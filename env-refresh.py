@@ -281,6 +281,8 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
         priority = -2
     elif filename.startswith("group__"):
         priority = -1
+    elif filename.startswith("security_groups__"):
+        priority = -1
     elif filename.startswith("users__"):
         priority = 0
     elif "__application_" in filename or "__noderole_" in filename:
