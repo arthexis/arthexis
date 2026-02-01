@@ -29,7 +29,10 @@ class FTPServerAdmin(admin.ModelAdmin):
                     hosts.append(candidate)
 
         if not hosts and bind_address in wildcard_hosts:
-            hosts.append("127.0.0.1")
+            if bind_address in {"::", "0:0:0:0:0:0:0:0"}:
+                hosts.append("::1")
+            else:
+                hosts.append("127.0.0.1")
 
         return hosts
 
