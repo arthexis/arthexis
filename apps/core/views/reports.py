@@ -803,27 +803,32 @@ def _run_release_step(
         and step_count < len(steps)
     ):
         to_run = int(step_param)
-        if to_run == step_count:
-            name, func = steps[to_run]
-            try:
-                func(release, ctx, log_path, user=request.user)
-            except DirtyRepository:
-                pass
-            except PublishPending:
-                pass
-            except Exception as exc:  # pragma: no cover - best effort logging
-                _append_log(log_path, f"{name} failed: {exc}")
-                ctx["error"] = str(exc)
+    except (TypeError, ValueError):
+        ctx["error"] = _("An internal error occurred while running this step.")
+        _append_log(log_path, "Invalid step parameter; aborting publish step.")
+        _persist_release_context(request, session_key, ctx, lock_path)
+        return ctx, step_count
+    if to_run == step_count:
+        name, func = steps[to_run]
+        try:
+            func(release, ctx, log_path, user=request.user)
+        except DirtyRepository:
+            pass
+        except PublishPending:
+            pass
+        except Exception as exc:  # pragma: no cover - best effort logging
+            _append_log(log_path, f"{name} failed: {exc}")
+            ctx["error"] = str(exc)
+            ctx.pop("publish_pending", None)
+            _persist_release_context(request, session_key, ctx, lock_path)
+        else:
+            step_count += 1
+            ctx["step"] = step_count
+            if allow_when_paused and was_paused and not ctx.get("publish_pending"):
+                ctx["paused"] = False
+            if not ctx.get("publish_pending"):
                 ctx.pop("publish_pending", None)
-                _persist_release_context(request, session_key, ctx, lock_path)
-            else:
-                step_count += 1
-                ctx["step"] = step_count
-                if allow_when_paused and was_paused and not ctx.get("publish_pending"):
-                    ctx["paused"] = False
-                if not ctx.get("publish_pending"):
-                    ctx.pop("publish_pending", None)
-                _persist_release_context(request, session_key, ctx, lock_path)
+            _persist_release_context(request, session_key, ctx, lock_path)
 
     return ctx, step_count
 
