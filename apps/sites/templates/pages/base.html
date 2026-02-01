@@ -685,6 +685,7 @@
           <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
+            <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
@@ -797,6 +798,7 @@
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-sun"></use>
                 </svg>
+                <span class="visually-hidden">{% trans "Light Mode" %}</span>
               </button>
               <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
                 {% csrf_token %}
@@ -811,6 +813,13 @@
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
+                <span class="visually-hidden">
+                  {% if request.user.is_authenticated %}
+                    {% trans "Admin" %}
+                  {% else %}
+                    {% trans "Login" %}
+                  {% endif %}
+                </span>
                 {% if request.user.is_authenticated %}
                 <div class="user-info-tooltip">
                   {{ request.user.username }}{% if request.user.is_staff %} - {% trans "Staff" %}{% endif %}
@@ -821,6 +830,7 @@
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
+                <span class="visually-hidden">{% trans "Share" %}</span>
               </button>
             </div>
           </div>
@@ -890,7 +900,9 @@
               <h2 class="mb-0" id="chat-title">{% trans "Support" %}</h2>
               <small data-chat-status>{% trans "Connecting…" %}</small>
             </div>
-            <button type="button" class="btn-close" data-chat-close aria-label="{% trans 'Close chat' %}"></button>
+            <button type="button" class="btn-close" data-chat-close aria-label="{% trans 'Close chat' %}">
+              <span class="visually-hidden">{% trans "Close chat" %}</span>
+            </button>
           </header>
           <div
             class="chat-messages"
@@ -952,7 +964,9 @@
             <h5 class="card-title mb-1" id="user-story-title">{% trans 'Please provide feedback!' %}</h5>
             <p class="card-subtitle text-muted small mb-0">{% trans 'Tell us how this page worked for you.' %}</p>
           </div>
-          <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close></button>
+          <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close>
+            <span class="visually-hidden">{% trans "Close" %}</span>
+          </button>
         </div>
         <div class="card-body">
           <form
@@ -1060,7 +1074,9 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="shareModalLabel">{% trans 'Share' %}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}">
+              <span class="visually-hidden">{% trans "Close" %}</span>
+            </button>
           </div>
           <div class="modal-body">
             <p class="mb-3">{% trans 'Copy and paste this embed code to share this page on your own site.' %}</p>
