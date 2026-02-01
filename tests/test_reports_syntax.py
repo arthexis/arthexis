@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
 import py_compile
+from pathlib import Path
+
+from django.conf import settings
 
 
 def test_reports_module_syntax() -> None:
-    reports_path = Path(__file__).resolve().parents[1] / "apps/core/views/reports.py"
+    reports_path = Path(settings.BASE_DIR) / "apps/core/views/reports.py"
     py_compile.compile(str(reports_path), doraise=True)
