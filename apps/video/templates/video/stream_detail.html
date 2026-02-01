@@ -51,6 +51,9 @@
     const streamUrl = streamImage?.dataset.streamUrl || streamImage?.getAttribute("src");
     let probeTimer = null;
     let retryTimer = null;
+    let retryDelay = 3000;
+    const maxRetryDelay = 30000;
+    const initialRetryDelay = 3000;
 
     const sendProbe = () => {
       if (!probeUrl) {
@@ -115,11 +118,16 @@
 
     if (streamImage) {
       streamImage.addEventListener("error", () => {
-        scheduleRetry();
+        if (document.visibilityState !== "visible") {
+          return;
+        }
+        scheduleRetry(retryDelay);
+        retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
         startProbing();
       });
       streamImage.addEventListener("load", () => {
         stopRetry();
+        retryDelay = initialRetryDelay;
       });
     }
 
