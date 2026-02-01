@@ -612,20 +612,20 @@ def _stats_payload() -> LockPayload:
 
     line1 = _compact_stats_line(
         [
-            f"RAM {ram_label} IDL{cpu_label}%",
-            f"RAM{ram_label} IDL{cpu_label}%",
-            f"RAM{ram_label} I{cpu_label}%",
-            f"R{ram_label} I{cpu_label}%",
-            f"R{ram_label}I{cpu_label}%",
+            f"FRAM{ram_label} IDL{cpu_label}%",
+            f"FRAM{ram_label} I{cpu_label}%",
+            f"FR{ram_label} I{cpu_label}%",
+            f"FR{ram_label}I{cpu_label}%",
+            f"F{ram_label}I{cpu_label}%",
         ]
     )
     line2 = _compact_stats_line(
         [
-            f"DSK {disk_label} SWP{swap_label}",
-            f"DSK{disk_label} SWP{swap_label}",
-            f"DSK{disk_label}SWP{swap_label}",
-            f"D{disk_label} SWP{swap_label}",
-            f"D{disk_label}SWP{swap_label}",
+            f"FDSK{disk_label} SWP{swap_label}",
+            f"FDSK{disk_label}SWP{swap_label}",
+            f"FD{disk_label} SWP{swap_label}",
+            f"FD{disk_label}SWP{swap_label}",
+            f"F{disk_label}SWP{swap_label}",
         ]
     )
     return LockPayload(line1, line2, DEFAULT_SCROLL_MS)
