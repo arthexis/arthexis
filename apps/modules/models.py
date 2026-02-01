@@ -87,6 +87,12 @@ class Module(Entity):
         blank=True,
         help_text="Require these node features to be enabled for this module to appear.",
     )
+    agent_notes = models.TextField(
+        blank=True,
+        help_text=(
+            "Hidden, agent-facing guidance about what this module is best used for."
+        ),
+    )
 
     objects = ModuleManager()
 

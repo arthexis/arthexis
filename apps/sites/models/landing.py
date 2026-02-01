@@ -22,6 +22,12 @@ class Landing(Entity):
     enabled = models.BooleanField(default=True)
     track_leads = models.BooleanField(default=False)
     description = models.TextField(blank=True)
+    agent_notes = models.TextField(
+        blank=True,
+        help_text=_(
+            "Hidden, agent-facing guidance about what this landing is best used for."
+        ),
+    )
     validation_status = models.IntegerField(
         null=True,
         blank=True,
