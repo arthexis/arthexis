@@ -597,31 +597,35 @@ def _stats_payload() -> LockPayload:
         cpu_percent = None
 
     try:
-        proc_count = len(psutil.pids())
+        free_swap = psutil.swap_memory().free
     except Exception:
-        proc_count = None
+        free_swap = None
 
     ram_label = _format_storage_value(available_ram) if available_ram is not None else "?"
     disk_label = _format_storage_value(free_disk) if free_disk is not None else "?"
-    cpu_label = str(int(round(cpu_percent))) if cpu_percent is not None else "?"
-    proc_label = _format_count(proc_count) if proc_count is not None else "?"
+    if cpu_percent is not None:
+        cpu_idle = max(0.0, min(100.0, 100.0 - cpu_percent))
+        cpu_label = str(int(round(cpu_idle)))
+    else:
+        cpu_label = "?"
+    swap_label = _format_storage_value(free_swap) if free_swap is not None else "?"
 
     line1 = _compact_stats_line(
         [
-            f"RAM {ram_label} CPU{cpu_label}%",
-            f"RAM{ram_label} CPU{cpu_label}%",
-            f"RAM{ram_label} C{cpu_label}%",
-            f"R{ram_label} C{cpu_label}%",
-            f"R{ram_label} {cpu_label}%",
+            f"RAM {ram_label} IDL{cpu_label}%",
+            f"RAM{ram_label} IDL{cpu_label}%",
+            f"RAM{ram_label} I{cpu_label}%",
+            f"R{ram_label}I{cpu_label}%",
+            f"R{ram_label} I{cpu_label}%",
         ]
     )
     line2 = _compact_stats_line(
         [
-            f"DSK {disk_label} P{proc_label}",
-            f"DSK{disk_label} P{proc_label}",
-            f"DSK{disk_label}P{proc_label}",
-            f"D{disk_label} P{proc_label}",
-            f"D{disk_label}P{proc_label}",
+            f"DSK {disk_label} SWP{swap_label}",
+            f"DSK{disk_label} SWP{swap_label}",
+            f"DSK{disk_label}SWP{swap_label}",
+            f"D{disk_label} SWP{swap_label}",
+            f"D{disk_label}SWP{swap_label}",
         ]
     )
     return LockPayload(line1, line2, DEFAULT_SCROLL_MS)
