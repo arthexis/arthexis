@@ -53,7 +53,7 @@ The script also:
 
 ### 1.2 Windows: `install.bat`
 
-The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally.【F:install.bat†L1-L20】 No flags are accepted—Windows nodes rely on Terminal defaults (development server at port 8888, no system services). Run `install.bat` again whenever dependencies change.
+The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally.【F:install.bat†L1-L20】 Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change.
 
 ## 2. Runtime helpers
 
@@ -82,6 +82,12 @@ On Control nodes with LCD support, it also sends a farewell notification before 
 ### 2.3 Windows: `start.bat`
 
 The Windows starter mirrors the Linux workflow without service management: it validates `.venv`, reruns `collectstatic` only when the static hash changes, and starts Django at the requested port (default 8888). Flags: `--port PORT` and `--reload`. Any other argument prints usage and aborts.【F:start.bat†L1-L57】 Use `Ctrl+C` to stop the server.
+
+For background operation, install the suite as a Windows service with `service.bat install`. The helper uses NSSM (the Non-Sucking Service Manager); install `nssm.exe` and make sure it is on your PATH (or pass `--nssm` with the full path). Example:
+
+```
+service.bat install --name arthexis --port 8888
+```
 
 ## 3. Upgrades
 
@@ -118,7 +124,7 @@ The Windows upgrade helper focuses on Git safety and dependency refreshes. It pu
 
 ### 4.2 Windows
 
-Windows nodes do not have a dedicated uninstaller. Remove the project directory manually when you no longer need it and delete the virtual environment folder if disk space matters.
+Use `service.bat remove --name <service-name>` to uninstall the Windows service when you no longer need it. After removing the service, you can delete the project directory manually and remove the virtual environment folder if disk space matters.
 
 ---
 

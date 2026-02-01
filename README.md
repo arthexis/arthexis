@@ -114,6 +114,7 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
 
 - **Windows:**
    - Run [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) to install (Terminal role) and [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat) to upgrade.
+   - To run as a background service, install [NSSM](https://nssm.cc/) and use [`service.bat install --name arthexis`](https://github.com/arthexis/arthexis/blob/main/service.bat) (add `--port` if needed).
    - Installation is not required to start in Terminal mode (the default).
 
 Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgrade.sh`):
