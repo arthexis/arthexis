@@ -1,0 +1,10 @@
+[
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Site Operator",
+      "permissions": [],
+      "parent": null
+    }
+  }
+]
