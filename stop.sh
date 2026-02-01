@@ -92,18 +92,27 @@ LOCK_RECENT_WINDOW=${CHARGING_LOCK_ACTIVE_WINDOW_SECONDS:-120}
 
 DB_PATH="${ARTHEXIS_STOP_DB_PATH:-${ARTHEXIS_SQLITE_PATH:-$BASE_DIR/db.sqlite3}}"
 export ARTHEXIS_STOP_DB_PATH="$DB_PATH"
+export ARTHEXIS_STOP_BASE_DIR="$BASE_DIR"
 
 SESSION_COUNTS=$(python3 - <<'PY'
+import json
 import os
 import sqlite3
 import time
 from datetime import datetime
+from pathlib import Path
 
 db_path = os.environ.get("ARTHEXIS_STOP_DB_PATH")
+base_dir = os.environ.get("ARTHEXIS_STOP_BASE_DIR", "")
 stale_after = int(os.environ.get("CHARGING_SESSION_STALE_AFTER_SECONDS", "86400"))
+heartbeat_window = int(
+    os.environ.get("CHARGING_SESSION_HEARTBEAT_ACTIVE_WINDOW_SECONDS", "300")
+)
 now = time.time()
 active = 0
 stale = 0
+simulator_running = False
+simulator_ids = set()
 
 def to_epoch(value: str | None):
     if not value:
@@ -113,18 +122,106 @@ def to_epoch(value: str | None):
     except Exception:
         return None
 
+def table_exists(connection: sqlite3.Connection, name: str) -> bool:
+    return (
+        connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
+        is not None
+    )
+
+def column_names(connection: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+
+def load_simulator_state() -> bool:
+    if not base_dir:
+        return False
+    state_file = Path(base_dir) / "apps" / "ocpp" / "simulator.json"
+    if not state_file.exists():
+        return False
+    try:
+        payload = json.loads(state_file.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    for entry in payload.values():
+        if isinstance(entry, dict) and entry.get("running"):
+            return True
+    return False
+
+def is_recent_heartbeat(value: str | None) -> bool:
+    if heartbeat_window < 0:
+        return True
+    ts = to_epoch(value)
+    if ts is None:
+        return False
+    return now - ts <= heartbeat_window
+
 if db_path and os.path.exists(db_path):
     conn = sqlite3.connect(db_path)
-    cur = conn.execute(
-        "SELECT start_time, received_start_time, stop_time, connector_id FROM ocpp_transaction"
-    )
-    for start_time, received_start_time, stop_time, connector_id in cur.fetchall():
-        if connector_id is None or stop_time is not None:
-            continue
-        active += 1
-        ts = to_epoch(received_start_time) or to_epoch(start_time)
-        if ts is not None and now - ts > stale_after:
-            stale += 1
+    if table_exists(conn, "ocpp_simulator"):
+        sim_columns = column_names(conn, "ocpp_simulator")
+        select_fields = [field for field in ("cp_path", "serial_number") if field in sim_columns]
+        if select_fields:
+            query = "SELECT " + ", ".join(select_fields) + " FROM ocpp_simulator"
+            if "is_deleted" in sim_columns:
+                query += " WHERE is_deleted = 0"
+            for row in conn.execute(query):
+                for val in row:
+                    if val:
+                        simulator_ids.add(str(val))
+    simulator_running = load_simulator_state()
+    if table_exists(conn, "ocpp_transaction"):
+        charger_table = "ocpp_charger"
+        charger_columns = (
+            column_names(conn, charger_table) if table_exists(conn, charger_table) else set()
+        )
+        charger_id_col = "charger_id" if "charger_id" in charger_columns else None
+        heartbeat_col = "last_heartbeat" if "last_heartbeat" in charger_columns else None
+        if charger_id_col or heartbeat_col:
+            join_clause = f"LEFT JOIN {charger_table} ON ocpp_transaction.charger_id = {charger_table}.id"
+
+        if charger_id_col:
+            select_charger = f", {charger_table}.{charger_id_col}"
+        else:
+            select_charger = ", NULL"
+
+        if heartbeat_col:
+            select_heartbeat = f", {charger_table}.{heartbeat_col}"
+        else:
+            select_heartbeat = ", NULL"
+        query = (
+            "SELECT ocpp_transaction.start_time, "
+            "ocpp_transaction.received_start_time, "
+            "ocpp_transaction.stop_time, "
+            "ocpp_transaction.connector_id"
+            f"{select_charger} "
+            f"{select_heartbeat} "
+            "FROM ocpp_transaction "
+            f"{join_clause} "
+            "WHERE ocpp_transaction.stop_time IS NULL AND ocpp_transaction.connector_id IS NOT NULL"
+        )
+        for (
+            start_time,
+            received_start_time,
+            stop_time,
+            connector_id,
+            charger_id,
+            charger_heartbeat,
+        ) in conn.execute(query).fetchall():
+            if heartbeat_col and not is_recent_heartbeat(charger_heartbeat):
+                continue
+            if (
+                charger_id
+                and simulator_ids
+                and not simulator_running
+                and str(charger_id) in simulator_ids
+            ):
+                continue
+            active += 1
+            ts = to_epoch(received_start_time) or to_epoch(start_time)
+            if ts is not None and now - ts > stale_after:
+                stale += 1
     conn.close()
 
 print(f"{active} {stale}")

@@ -27,7 +27,12 @@
         class="ratio ratio-16x9 bg-dark rounded shadow-sm d-flex align-items-center justify-content-center overflow-hidden"
         data-mjpeg-probe-url="{% url 'video:mjpeg-probe' stream.slug %}"
       >
-        <img src="{{ stream_url }}" class="img-fluid w-100 h-100 object-fit-cover" alt="{% trans 'Live video stream' %}">
+        <img
+          src="{{ stream_url }}"
+          class="img-fluid w-100 h-100 object-fit-cover"
+          alt="{% trans 'Live video stream' %}"
+          data-stream-url="{{ stream_url }}"
+        >
       </div>
       <p class="mt-3 text-muted">
         {% trans "This stream serves Motion JPEG frames directly from the configured device." %}
@@ -42,7 +47,13 @@
       return;
     }
     const probeUrl = container.dataset.mjpegProbeUrl;
+    const streamImage = container.querySelector("img");
+    const streamUrl = streamImage?.dataset.streamUrl || streamImage?.getAttribute("src");
     let probeTimer = null;
+    let retryTimer = null;
+    let retryDelay = 3000;
+    const maxRetryDelay = 30000;
+    const initialRetryDelay = 3000;
 
     const sendProbe = () => {
       if (!probeUrl) {
@@ -69,17 +80,63 @@
       probeTimer = null;
     };
 
+    const stopRetry = () => {
+      if (!retryTimer) {
+        return;
+      }
+      window.clearTimeout(retryTimer);
+      retryTimer = null;
+    };
+
+    const refreshStream = () => {
+      if (!streamImage || !streamUrl) {
+        return;
+      }
+      const separator = streamUrl.includes("?") ? "&" : "?";
+      streamImage.src = `${streamUrl}${separator}reload=${Date.now()}`;
+    };
+
+    const scheduleRetry = (delay = 3000) => {
+      if (retryTimer) {
+        return;
+      }
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        refreshStream();
+      }, delay);
+    };
+
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         startProbing();
+        refreshStream();
       } else {
         stopProbing();
+        stopRetry();
       }
     };
 
+    if (streamImage) {
+      streamImage.addEventListener("error", () => {
+        if (document.visibilityState !== "visible") {
+          return;
+        }
+        scheduleRetry(retryDelay);
+        retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+        startProbing();
+      });
+      streamImage.addEventListener("load", () => {
+        stopRetry();
+        retryDelay = initialRetryDelay;
+      });
+    }
+
     handleVisibility();
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("beforeunload", stopProbing);
+    window.addEventListener("beforeunload", () => {
+      stopRetry();
+      stopProbing();
+    });
   })();
 </script>
 {% endblock %}
