@@ -750,7 +750,7 @@ async def test_notify_event_registered_for_ocpp201_and_ocpp21():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db
 async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -781,7 +781,7 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
     hash_data = {"hashAlgorithm": "SHA256", "issuerNameHash": "abc"}
