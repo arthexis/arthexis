@@ -4,7 +4,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.models import CardFace, get_cardface_bucket
+from apps.cards.models import CardFace, CardSet, get_cardface_bucket, get_cardset_bucket
+from apps.cards.mse import parse_mse_set
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 
@@ -91,4 +92,58 @@ class CardFaceAdminForm(forms.ModelForm):
         if commit:
             instance.save()
             self.save_m2m()
+        return instance
+
+
+class CardSetAdminForm(forms.ModelForm):
+    set_upload = forms.FileField(
+        required=False,
+        label=_("Set upload"),
+        help_text=_("Upload a .mse-set (zip) file to populate this card set."),
+    )
+
+    class Meta:
+        model = CardSet
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        self._parsed_payload = None
+        super().__init__(*args, **kwargs)
+        bucket = get_cardset_bucket()
+        self.fields["source_media"].queryset = MediaFile.objects.filter(bucket=bucket)
+
+    def clean(self):
+        cleaned = super().clean()
+        upload = cleaned.get("set_upload")
+        if upload:
+            bucket = get_cardset_bucket()
+            if not bucket.allows_filename(upload.name):
+                raise ValidationError({"set_upload": _("File type is not allowed.")})
+            if not bucket.allows_size(upload.size):
+                raise ValidationError({"set_upload": _("File exceeds the allowed size.")})
+            self._parsed_payload = parse_mse_set(upload)
+            cleaned["raw_data"] = self._parsed_payload.raw_text
+            cleaned["game"] = cleaned.get("game") or self._parsed_payload.game
+            cleaned["style"] = cleaned.get("style") or self._parsed_payload.style
+            cleaned["name"] = cleaned.get("name") or self._parsed_payload.title or _("Imported Card Set")
+            cleaned["code"] = cleaned.get("code") or self._parsed_payload.code
+            cleaned["language"] = cleaned.get("language") or self._parsed_payload.language
+            cleaned["set_info"] = self._parsed_payload.set_info or {}
+            cleaned["style_settings"] = self._parsed_payload.style_settings or {}
+        elif not cleaned.get("raw_data") and not self.instance.pk:
+            raise ValidationError(_("Upload an MSE set file to create this card set."))
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        upload = self.cleaned_data.get("set_upload")
+        if upload:
+            bucket = get_cardset_bucket()
+            media_file = create_media_file(bucket=bucket, uploaded_file=upload)
+            instance.source_media = media_file
+        if commit:
+            instance.save()
+            self.save_m2m()
+        if upload and self._parsed_payload:
+            instance.replace_card_designs(self._parsed_payload.cards)
         return instance

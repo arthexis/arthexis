@@ -4,8 +4,8 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm
-from apps.cards.models import CardFace, RFID
+from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm, CardSetAdminForm
+from apps.cards.models import CardDesign, CardFace, CardSet, RFID
 from apps.core.admin import RFIDAdmin
 
 
@@ -165,3 +165,67 @@ class CardFaceAdmin(admin.ModelAdmin):
 
 
 admin.site.register(RFID, RFIDAdmin)
+
+
+class CardDesignInline(admin.TabularInline):
+    model = CardDesign
+    extra = 0
+    fields = ("sequence", "name")
+    readonly_fields = ("sequence", "name")
+    can_delete = False
+
+
+@admin.register(CardSet)
+class CardSetAdmin(admin.ModelAdmin):
+    form = CardSetAdminForm
+    list_display = ("name", "code", "game", "style", "language", "card_design_count")
+    search_fields = ("name", "code", "game", "style")
+    readonly_fields = ("card_design_count",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "code",
+                    "game",
+                    "style",
+                    "language",
+                    "source_media",
+                    "set_upload",
+                    "card_design_count",
+                )
+            },
+        ),
+        (
+            _("Set Info"),
+            {
+                "fields": ("set_info",),
+            },
+        ),
+        (
+            _("Style Settings"),
+            {
+                "fields": ("style_settings",),
+            },
+        ),
+        (
+            _("Raw Data"),
+            {
+                "fields": ("raw_data",),
+            },
+        ),
+    )
+    inlines = [CardDesignInline]
+
+    @admin.display(description=_("Card designs"))
+    def card_design_count(self, obj: CardSet) -> int:
+        return obj.card_designs.count()
+
+
+@admin.register(CardDesign)
+class CardDesignAdmin(admin.ModelAdmin):
+    list_display = ("name", "card_set", "sequence")
+    search_fields = ("name", "card_set__name")
+    list_filter = ("card_set",)
+    readonly_fields = ("card_set", "sequence")

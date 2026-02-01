@@ -145,6 +145,12 @@ class RFID(Entity):
         related_name="rfids",
         help_text="Optional reference for this RFID.",
     )
+    card_designs = models.ManyToManyField(
+        "cards.CardDesign",
+        blank=True,
+        related_name="rfids",
+        help_text="Card designs associated with this RFID.",
+    )
     origin_node = models.ForeignKey(
         "nodes.Node",
         null=True,
@@ -485,4 +491,3 @@ class RFID(Entity):
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
         db_table = "core_rfid"
-
