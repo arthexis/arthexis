@@ -802,7 +802,13 @@ def _run_release_step(
         and not error
         and step_count < len(steps)
     ):
-        to_run = int(step_param)
+        try:
+            to_run = int(step_param)
+        except (TypeError, ValueError):
+            ctx["error"] = _("An internal error occurred while running this step.")
+            _append_log(log_path, "Invalid step parameter; aborting publish step.")
+            _persist_release_context(request, session_key, ctx, lock_path)
+            return ctx, step_count
         if to_run == step_count:
             name, func = steps[to_run]
             try:
