@@ -41,11 +41,8 @@
     {% model_admin_actions app_label model.object_name as extra_actions %}
     <td class="actions">
       {% for action in extra_actions %}
-        <a href="{{ action.url }}" class="actionlink{% if action.is_discover %} actionlink--discover{% endif %}" aria-describedby="{{ row_dom_id }}">
+        <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ row_dom_id }}">
           {{ action.label }}
-          {% if action.is_discover %}
-            <span class="actionlink__icon" aria-hidden="true">+</span>
-          {% endif %}
         </a>{% if not forloop.last %}&nbsp;{% endif %}
       {% endfor %}
     </td>
