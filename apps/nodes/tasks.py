@@ -93,7 +93,7 @@ def apply_upgrade_policies() -> str:
         assignments = list(
             NodeUpgradePolicyAssignment.objects.select_related("policy").filter(
                 node=local
-            )
+            ).order_by("policy__interval_minutes")
         )
     except DatabaseError:
         return "skipped:db-unavailable"
@@ -125,6 +125,7 @@ def apply_upgrade_policies() -> str:
             update_fields=["last_checked_at", "last_status", "last_applied_at"]
         )
         results.append(f"{policy.name}:{status or 'UNKNOWN'}")
+        break
 
     if not results:
         return "skipped:not-due"

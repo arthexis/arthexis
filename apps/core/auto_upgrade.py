@@ -318,6 +318,7 @@ def ensure_auto_upgrade_periodic_task(
             parsed_interval = None
         else:
             if parsed_interval and parsed_interval > 0:
+                # Global override: applies to all policies (including fast lane).
                 interval_minutes = parsed_interval
 
     try:

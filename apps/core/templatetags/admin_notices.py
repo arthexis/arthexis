@@ -11,10 +11,12 @@ register = template.Library()
 @register.simple_tag
 def latest_admin_notice():
     try:
-        notice = AdminNotice.objects.order_by("-created_at").first()
+        notice = (
+            AdminNotice.objects.filter(dismissed_at__isnull=True)
+            .order_by("-created_at")
+            .first()
+        )
     except DatabaseError:
         return None
 
-    if not notice or notice.dismissed_at:
-        return None
     return notice
