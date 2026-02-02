@@ -1084,12 +1084,22 @@
             </button>
           </div>
           <div class="modal-body">
-            <p class="mb-3">{% trans 'Copy and paste this embed code to share this page on your own site.' %}</p>
+            <p class="mb-3">{% trans 'Share this page using the short link below.' %}</p>
             <div class="mb-3">
-              <label class="form-label" for="share-embed-code">{% trans 'Embed code' %}</label>
-              <textarea class="form-control" id="share-embed-code" rows="3" readonly></textarea>
+              <label class="form-label" for="share-short-url">{% trans 'Short URL' %}</label>
+              <div class="input-group">
+                <input
+                  class="form-control"
+                  id="share-short-url"
+                  type="text"
+                  value="{{ share_short_url }}"
+                  readonly
+                />
+                <button type="button" class="btn btn-primary" id="copy-short-url">
+                  {% trans 'Copy link' %}
+                </button>
+              </div>
             </div>
-            <button type="button" class="btn btn-primary w-100 mb-3" id="copy-embed-code">{% trans 'Copy embed code' %}</button>
           </div>
         </div>
       </div>
@@ -1333,30 +1343,23 @@
             return;
           }
           const modal = new bootstrap.Modal(modalEl);
-          const embedCodeInput = document.getElementById('share-embed-code');
-          const copyButton = document.getElementById('copy-embed-code');
+          const shortUrlInput = document.getElementById('share-short-url');
+          const copyButton = document.getElementById('copy-short-url');
           btn.addEventListener('click', () => {
             modal.show();
           });
           modalEl.addEventListener('shown.bs.modal', () => {
-            const url = window.location.href;
-            const embedUrl = new URL('/embeds/', window.location.origin);
-            embedUrl.searchParams.set('target', url);
-            const embedCode = `<iframe src="${embedUrl.toString()}" title="Arthexis embed" style="border:0;width:100%;height:320px;" loading="lazy"></iframe>`;
-            if (embedCodeInput) {
-              embedCodeInput.value = embedCode;
-            }
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(embedCode).catch(() => {});
+            if (shortUrlInput && !shortUrlInput.value) {
+              shortUrlInput.value = window.location.href;
             }
           });
-          if (copyButton && embedCodeInput) {
+          if (copyButton && shortUrlInput) {
             copyButton.addEventListener('click', () => {
-              const value = embedCodeInput.value;
+              const value = shortUrlInput.value;
               if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(value).catch(() => {});
               } else {
-                embedCodeInput.select();
+                shortUrlInput.select();
                 document.execCommand('copy');
               }
             });
