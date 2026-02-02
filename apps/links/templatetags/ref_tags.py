@@ -4,12 +4,15 @@ from pathlib import Path
 from django import template
 from django.conf import settings
 from django.urls import reverse
+from django.db.models.functions import Length
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 from django.utils.html import format_html
 
 from apps.release.models import PackageRelease
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
+from apps.modules.models import Module
 from apps.release.release import DEFAULT_PACKAGE
 from utils import revision
 
@@ -19,12 +22,48 @@ register = template.Library()
 INSTANCE_START = timezone.now()
 
 
-def build_footer_context(*, request=None, badge_site=None, badge_node=None, force_footer=False):
+def _get_current_module(request):
+    if not request:
+        return None
+    current = getattr(request, "current_module", None)
+    if current is not None:
+        return current
+    path = getattr(request, "path", "")
+    if not path:
+        return None
+    try:
+        modules = (
+            Module.objects.filter(is_deleted=False)
+            .only("id", "path")
+            .annotate(path_length=Length("path"))
+            .order_by("-path_length")
+        )
+    except (OperationalError, ProgrammingError):
+        return None
+    for module in modules:
+        if path.startswith(module.path):
+            return module
+    return None
+
+
+def build_footer_context(
+    *, request=None, badge_site=None, badge_node=None, force_footer=False, module=None
+):
     """Return footer rendering context shared across templates and API views."""
 
     refs = Reference.objects.filter(include_in_footer=True).prefetch_related(
-        "roles", "features", "sites"
+        "roles", "features", "sites", "footer_modules"
     )
+    current_module = module or _get_current_module(request)
+    if current_module is not None:
+        module_refs = refs.filter(footer_modules=current_module).distinct()
+        if module_refs.exists():
+            refs = module_refs
+        else:
+            refs = refs.filter(footer_modules__isnull=True)
+    else:
+        refs = refs.filter(footer_modules__isnull=True)
+
     visible_refs = filter_visible_references(
         refs,
         request=request,
@@ -119,6 +158,7 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
     return {
         "footer_refs": visible_refs,
         "show_footer": True,
+        "current_module": current_module,
         "release_name": release_name,
         "release_url": release_url,
         "request": request,
@@ -157,4 +197,5 @@ def render_footer(context):
         badge_site=context.get("badge_site"),
         badge_node=context.get("badge_node"),
         force_footer=bool(context.get("force_footer")),
+        module=context.get("current_module"),
     )
