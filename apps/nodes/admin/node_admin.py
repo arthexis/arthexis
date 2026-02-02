@@ -1068,8 +1068,8 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     proxy_body = {}
 
                 if proxy_response.status_code == 200 and proxy_body.get("host") and proxy_body.get("visitor"):
-                    host_body = proxy_body.get("host", {}) or {}
-                    visitor_body = proxy_body.get("visitor", {}) or {}
+                    host_body = proxy_body.get("host", {})
+                    visitor_body = proxy_body.get("visitor", {})
                     server_summary = {
                         "status": "success",
                         "message": _("Both nodes registered successfully."),
