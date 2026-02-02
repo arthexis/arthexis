@@ -351,12 +351,16 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                     scroll_scheduler.sleep_until_ready()
                     frame_timestamp = datetime.now(datetime_timezone.utc)
-                    event_state, write_success = _advance_display(
+                    event_state, write_success, shutdown_triggered = _advance_display(
                         event_state,
                         frame_writer,
+                        shutdown_requested=_shutdown_requested,
                         label="event",
                         timestamp=frame_timestamp,
                     )
+                    if shutdown_triggered:
+                        _handle_shutdown_request(lcd)
+                        break
                     if write_success:
                         health.record_success()
                         if lcd and watchdog.tick():
@@ -468,12 +472,16 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     scroll_scheduler.sleep_until_ready()
                     frame_timestamp = datetime.now(datetime_timezone.utc)
                     label = state_order[state_index] if state_order else None
-                    display_state, write_success = _advance_display(
+                    display_state, write_success, shutdown_triggered = _advance_display(
                         display_state,
                         frame_writer,
+                        shutdown_requested=_shutdown_requested,
                         label=label,
                         timestamp=frame_timestamp,
                     )
+                    if shutdown_triggered:
+                        _handle_shutdown_request(lcd)
+                        break
                     next_scroll_sec = display_state.scroll_sec
                     if write_success:
                         health.record_success()
@@ -543,3 +551,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
         _blank_display(lcd)
         _reset_shutdown_flag()
         _reset_event_interrupt_flag()
+
+
+if __name__ == "__main__":  # pragma: no cover - module entrypoint
+    main()

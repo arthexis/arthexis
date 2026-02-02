@@ -288,7 +288,7 @@ class Command(BaseCommand):
 
             if event_state is not None:
                 label = "event"
-                event_state, _ = lcd_screen._advance_display(
+                event_state, _, _ = lcd_screen._advance_display(
                     event_state,
                     writer,
                     label=label,
@@ -308,7 +308,7 @@ class Command(BaseCommand):
                 label = state_order[state_index] if state_order else "clock"
                 if display_state is None:
                     break
-                display_state, _ = lcd_screen._advance_display(
+                display_state, _, _ = lcd_screen._advance_display(
                     display_state,
                     writer,
                     label=label,
