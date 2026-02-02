@@ -1366,12 +1366,42 @@ def main() -> None:  # pragma: no cover - hardware dependent
     watchdog = LCDWatchdog()
     channel_states: dict[str, ChannelCycle] = {}
     frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
+    lcd_disabled = False
     _clear_low_lock_file()
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
     signal.signal(signal.SIGHUP, _request_shutdown)
     signal.signal(signal.SIGUSR1, _request_event_interrupt)
+
+    def _disable_lcd(
+        reason: str, exc: Exception | None = None, *, exc_info: bool = False
+    ) -> None:
+        nonlocal lcd
+        nonlocal display_state
+        nonlocal next_display_state
+        nonlocal event_state
+        nonlocal event_deadline
+        nonlocal event_lock_file
+        nonlocal frame_writer
+        nonlocal lcd_disabled
+        if lcd_disabled:
+            return
+        lcd_disabled = True
+        if exc is None:
+            logger.warning("Disabling LCD feature: %s", reason)
+        else:
+            logger.warning(
+                "Disabling LCD feature: %s: %s", reason, exc, exc_info=exc_info
+            )
+        _blank_display(lcd)
+        lcd = None
+        display_state = None
+        next_display_state = None
+        event_state = None
+        event_deadline = None
+        event_lock_file = None
+        frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
 
     def _load_channel_states(
         now_dt: datetime,
@@ -1484,13 +1514,17 @@ def main() -> None:  # pragma: no cover - hardware dependent
             frame_writer = LCDFrameWriter(lcd, history_recorder=history_recorder)
             health.record_success()
         except LCDUnavailableError as exc:
-            logger.warning("LCD unavailable during startup: %s", exc)
+            _disable_lcd("LCD unavailable during startup", exc)
         except Exception as exc:
-            logger.warning("LCD startup failed: %s", exc, exc_info=True)
+            _disable_lcd("LCD startup failed", exc, exc_info=True)
 
         while True:
             if _handle_shutdown_request(lcd):
                 break
+            if lcd_disabled:
+                scroll_scheduler.advance(DEFAULT_FALLBACK_SCROLL_SEC)
+                scroll_scheduler.sleep_until_ready()
+                continue
 
             try:
                 now = time.monotonic()
@@ -1564,10 +1598,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             watchdog.reset()
                     else:
                         if lcd is not None and frame_writer.lcd is None:
-                            lcd = None
-                            frame_writer = LCDFrameWriter(
-                                None, history_recorder=history_recorder
-                            )
+                            _disable_lcd("LCD write failed during event display")
+                            continue
                         delay = health.record_failure()
                         time.sleep(delay)
                     scroll_scheduler.advance(
@@ -1684,13 +1716,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             watchdog.reset()
                     else:
                         if lcd is not None and frame_writer.lcd is None:
-                            lcd = None
-                            frame_writer = LCDFrameWriter(
-                                None, history_recorder=history_recorder
-                            )
-                            display_state = None
-                            next_display_state = None
-                            next_scroll_sec = DEFAULT_FALLBACK_SCROLL_SEC
+                            _disable_lcd("LCD write failed during rotation display")
+                            continue
                         delay = health.record_failure()
                         time.sleep(delay)
                     scroll_scheduler.advance(
@@ -1738,22 +1765,13 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         next_display_state = None
                     rotation_deadline = time.monotonic() + ROTATION_SECONDS
             except LCDUnavailableError as exc:
-                logger.warning("LCD unavailable: %s", exc)
-                lcd = None
-                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
-                display_state = None
-                next_display_state = None
-                delay = health.record_failure()
-                time.sleep(delay)
-            except Exception as exc:
-                logger.warning("LCD update failed: %s", exc)
-                _blank_display(lcd)
-                lcd = None
-                display_state = None
-                next_display_state = None
-                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
-                delay = health.record_failure()
-                time.sleep(delay)
+                _disable_lcd("LCD unavailable", exc)
+                continue
+            except Exception:
+                logger.exception(
+                    "Unexpected error while updating LCD state; keeping LCD enabled"
+                )
+                continue
 
     finally:
         _blank_display(lcd)
