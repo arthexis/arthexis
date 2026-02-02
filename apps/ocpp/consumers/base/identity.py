@@ -2,6 +2,7 @@ import ipaddress
 import re
 from urllib.parse import parse_qs
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 from ... import store
@@ -74,8 +75,44 @@ def _parse_ip(value: str | None):
     return parsed
 
 
+def _get_trusted_proxy_networks() -> tuple[ipaddress._BaseNetwork, ...]:
+    """Return configured trusted proxy networks for client IP resolution."""
+
+    raw_value = getattr(settings, "OCPP_TRUSTED_PROXY_IPS", None)
+    if not raw_value:
+        return ()
+    if isinstance(raw_value, str):
+        raw_values = [entry.strip() for entry in raw_value.split(",") if entry.strip()]
+    else:
+        raw_values = [str(entry).strip() for entry in raw_value if str(entry).strip()]
+    networks: list[ipaddress._BaseNetwork] = []
+    for entry in raw_values:
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            continue
+    return tuple(networks)
+
+
+def _is_trusted_proxy(client_ip: ipaddress._BaseAddress) -> bool:
+    """Return True when the client IP is a configured trusted proxy."""
+
+    for network in _get_trusted_proxy_networks():
+        if client_ip in network:
+            return True
+    return False
+
+
 def _resolve_client_ip(scope: dict) -> str | None:
     """Return the most useful client IP for the provided ASGI scope."""
+
+    client = scope.get("client")
+    connection_ip = _parse_ip((client[0] or "").strip()) if client else None
+    if not connection_ip:
+        return None
+
+    if not _is_trusted_proxy(connection_ip):
+        return str(connection_ip)
 
     headers = scope.get("headers") or []
     header_map: dict[str, list[str]] = {}
@@ -93,28 +130,26 @@ def _resolve_client_ip(scope: dict) -> str | None:
     candidates: list[str] = []
     for raw in header_map.get("x-forwarded-for", []):
         candidates.extend(part.strip() for part in raw.split(","))
-    for raw in header_map.get("forwarded", []):
-        for segment in raw.split(","):
-            match = FORWARDED_PAIR_RE.search(segment)
-            if match:
-                candidates.append(match.group("value"))
-    candidates.extend(header_map.get("x-real-ip", []))
-    client = scope.get("client")
-    if client:
-        candidates.append((client[0] or "").strip())
+    if not candidates:
+        for raw in header_map.get("forwarded", []):
+            for segment in raw.split(","):
+                match = FORWARDED_PAIR_RE.search(segment)
+                if match:
+                    candidates.append(match.group("value"))
+    if not candidates:
+        candidates.extend(header_map.get("x-real-ip", []))
 
-    fallback: str | None = None
+    chain: list[ipaddress._BaseAddress] = []
     for raw in candidates:
         parsed = _parse_ip(raw)
-        if not parsed:
-            continue
-        ip_text = str(parsed)
-        if parsed.is_loopback:
-            if fallback is None:
-                fallback = ip_text
-            continue
-        return ip_text
-    return fallback
+        if parsed:
+            chain.append(parsed)
+    chain.append(connection_ip)
+
+    for parsed in reversed(chain):
+        if not _is_trusted_proxy(parsed):
+            return str(parsed)
+    return str(connection_ip)
 
 
 class IdentityMixin:
@@ -197,6 +232,8 @@ __all__ = [
     "FORWARDED_PAIR_RE",
     "IdentityMixin",
     "_extract_vehicle_identifier",
+    "_get_trusted_proxy_networks",
+    "_is_trusted_proxy",
     "_parse_ip",
     "_register_log_names_for_identity",
     "_resolve_client_ip",
