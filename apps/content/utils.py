@@ -4,7 +4,10 @@ from datetime import datetime
 from pathlib import Path
 import hashlib
 import logging
+import os
 import platform
+import re
+import subprocess
 
 from django.conf import settings
 
@@ -20,6 +23,8 @@ except Exception:  # pragma: no cover - fallback when dependency is unavailable
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 DEFAULT_SCREENSHOT_RESOLUTION = (1280, 720)
+_RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
+_RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
 
 
 def save_content_sample(
@@ -185,7 +190,7 @@ def capture_local_screenshot() -> Path:
 
 def capture_and_save_screenshot(
     url: str | None = None,
-    port: int = 8888,
+    port: int | None = None,
     method: str = "TASK",
     local: bool = False,
     *,
@@ -208,7 +213,8 @@ def capture_and_save_screenshot(
 
     if target_url is None and not local:
         scheme = node.get_preferred_scheme() if node else "http"
-        target_url = f"{scheme}://localhost:{port}"
+        port_value = _resolve_screenshot_port(port=port, node=node)
+        target_url = f"{scheme}://localhost:{port_value}"
 
     try:
         if local:
@@ -228,6 +234,64 @@ def capture_and_save_screenshot(
 
     save_screenshot(path, node=node, method=method)
     return path
+
+
+def _resolve_screenshot_port(*, port: int | None, node) -> int:
+    if port is not None:
+        return _normalize_port(port) or 8888
+    if node is not None:
+        node_port = _normalize_port(getattr(node, "port", None))
+        if node_port is not None:
+            return node_port
+        return 8888
+    env_port = _normalize_port(os.environ.get("PORT"))
+    if env_port is not None:
+        return env_port
+    if settings.DEBUG:
+        runserver_port = _detect_runserver_port()
+        if runserver_port is not None:
+            return runserver_port
+    return 8888
+
+
+def _normalize_port(value) -> int | None:
+    if value is None:
+        return None
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return None
+    if 1 <= port <= 65535:
+        return port
+    return None
+
+
+def _detect_runserver_port() -> int | None:
+    try:
+        result = subprocess.run(
+            ["pgrep", "-af", "manage.py runserver"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    output = result.stdout.strip()
+    if not output:
+        return None
+
+    for line in output.splitlines():
+        for pattern in (_RUNSERVER_PORT_PATTERN, _RUNSERVER_PORT_FLAG_PATTERN):
+            match = pattern.search(line)
+            if match:
+                return _normalize_port(match.group(1))
+    return None
 
 
 def save_screenshot(
