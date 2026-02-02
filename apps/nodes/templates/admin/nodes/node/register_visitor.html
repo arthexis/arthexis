@@ -267,7 +267,8 @@
           <label for="visitor-port">{% trans "Port" %}</label>
           <input id="visitor-port" name="visitor_port" type="number" min="1" max="65535" value="{{ visitor_port|default:8888 }}">
         </div>
-        <p class="field-help">{% trans "The visitor port defaults to 8888 but can be adjusted before starting registration." %}</p>
+        <p class="field-help">{% trans "Use port 8888 unless the visitor node is configured to listen on a different port." %}</p>
+        <p class="field-help">{% trans "Reminder: To complete the registration handshake, open the visitor node in another browser tab using its https:// address (for example https://host:8888)." %}</p>
         <noscript>
           <p class="field-help">{% trans "JavaScript is disabled. Submitting this form will run the server-side registration flow and refresh this page with the results." %}</p>
         </noscript>

@@ -13,11 +13,20 @@ class SensorsConfig(AppConfig):
         if not is_celery_enabled():
             return
 
-        from .scheduling import ensure_thermometer_sampling_task
+        from .scheduling import (
+            ensure_thermometer_sampling_task,
+            ensure_usb_tracker_poll_task,
+        )
 
         post_migrate.connect(
             ensure_thermometer_sampling_task,
             sender=self,
             dispatch_uid="sensors_thermometer_sampling_post_migrate",
+            weak=False,
+        )
+        post_migrate.connect(
+            ensure_usb_tracker_poll_task,
+            sender=self,
+            dispatch_uid="sensors_usb_tracker_poll_post_migrate",
             weak=False,
         )

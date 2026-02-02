@@ -28,14 +28,30 @@
       $lng.val(lng.toFixed(6));
     }
 
+    function setMarker(lat, lng) {
+      var coords = [lat, lng];
+      marker.setLatLng(coords);
+      map.setView(coords);
+      updateInputs(lat, lng);
+    }
+
+    $lat.add($lng).on('change', function() {
+      var latValue = parseFloat($lat.val());
+      var lngValue = parseFloat($lng.val());
+      if (!isNaN(latValue) && !isNaN(lngValue)) {
+        setMarker(latValue, lngValue);
+      }
+    });
+
     marker.on('dragend', function(e) {
       var pos = e.target.getLatLng();
       updateInputs(pos.lat, pos.lng);
     });
 
     map.on('click', function(e) {
-      marker.setLatLng(e.latlng);
-      updateInputs(e.latlng.lat, e.latlng.lng);
+      setMarker(e.latlng.lat, e.latlng.lng);
     });
+
+    window.chargerMapSetLocation = setMarker;
   });
 })(django.jQuery);
