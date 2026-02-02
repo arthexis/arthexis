@@ -152,6 +152,16 @@ def dashboard(request):
             charger.connector_slug,
         )
 
+    def _last_session_date(tx_obj: Transaction | None) -> datetime | None:
+        if not tx_obj:
+            return None
+        last_time = getattr(tx_obj, "stop_time", None) or getattr(
+            tx_obj, "start_time", None
+        )
+        if last_time and timezone.is_naive(last_time):
+            return timezone.make_aware(last_time, tz)
+        return last_time
+
     latest_tx_ids = [
         tx_id
         for tx_id in {getattr(charger, "latest_tx_id", None) for charger in visible_chargers}
@@ -190,6 +200,7 @@ def dashboard(request):
             "color": color,
             "display_name": _charger_display_name(charger),
             "last_seen": _charger_last_seen(charger),
+            "last_session": _last_session_date(tx_obj),
             "stats": _charger_stats(charger, tx_obj),
             "charging_limit": _charging_limit_details(charger),
             "status_url": _status_url(charger),
