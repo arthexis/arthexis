@@ -202,7 +202,7 @@ class NodeFeatureMixin:
         "ap-router",
         "llm-summary",
     }
-    MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture"}
+    MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
     ROLE_AUTO_FEATURE_SLUGS = {"charge-points"}
 
     def has_feature(self, slug: str) -> bool:

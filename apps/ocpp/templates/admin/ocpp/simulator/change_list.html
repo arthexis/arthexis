@@ -1,0 +1,83 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .cpsim-service-banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--hairline-color, #d9d9d9);
+      border-radius: 6px;
+      background: var(--body-bg, #fff);
+    }
+
+    .cpsim-service-banner__label {
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--body-quiet-color, #6b6b6b);
+      margin-bottom: 0.25rem;
+    }
+
+    .cpsim-service-banner__status {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--body-fg, #1d1d1d);
+    }
+
+    .cpsim-service-banner__status--enabled {
+      color: var(--success-fg, #1a7f37);
+    }
+
+    .cpsim-service-banner__status--disabled {
+      color: var(--error-fg, #b42318);
+    }
+
+    .cpsim-service-banner__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .cpsim-service-banner__actions form {
+      margin: 0;
+    }
+  </style>
+{% endblock %}
+
+{% block result_list %}
+  <div class="cpsim-service-banner">
+    <div>
+      <span class="cpsim-service-banner__label">{% trans "CP Simulator Service" %}</span>
+      {% if cpsim_feature %}
+        <span class="cpsim-service-banner__status {% if cpsim_service_enabled %}cpsim-service-banner__status--enabled{% else %}cpsim-service-banner__status--disabled{% endif %}">
+          {{ cpsim_service_status }}
+        </span>
+      {% else %}
+        <span class="cpsim-service-banner__status cpsim-service-banner__status--disabled">
+          {% trans "Not configured" %}
+        </span>
+      {% endif %}
+    </div>
+    <div class="cpsim-service-banner__actions">
+      {% if cpsim_feature %}
+        <form method="post" action="{{ cpsim_toggle_url }}">
+          {% csrf_token %}
+          <button type="submit" class="button">{% trans cpsim_toggle_label %}</button>
+        </form>
+      {% endif %}
+      <a class="button" href="{% url 'admin:nodes_nodefeature_changelist' %}">
+        {% trans "Manage node features" %}
+      </a>
+    </div>
+  </div>
+  {{ block.super }}
+{% endblock %}

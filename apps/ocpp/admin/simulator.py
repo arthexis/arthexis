@@ -1,7 +1,11 @@
 from .common_imports import *
 from .common import LogViewAdminMixin
+from django.core.exceptions import PermissionDenied
+
+from ..cpsim_service import cpsim_service_enabled, get_cpsim_feature, queue_cpsim_request
 
 class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin):
+    change_list_template = "admin/ocpp/simulator/change_list.html"
     list_display = (
         "name",
         "default",
@@ -51,6 +55,73 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     change_actions = ["start_action", "stop_action"]
 
     log_type = "simulator"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "cpsim-toggle/",
+                self.admin_site.admin_view(self.toggle_cpsim_service),
+                name="ocpp_simulator_cpsim_toggle",
+            ),
+        ]
+        return custom + urls
+
+    def _cpsim_context(self):
+        feature = get_cpsim_feature()
+        enabled = bool(feature and feature.is_enabled)
+        return {
+            "cpsim_feature": feature,
+            "cpsim_service_enabled": enabled,
+            "cpsim_service_status": _("Enabled") if enabled else _("Disabled"),
+            "cpsim_toggle_label": _("Disable") if enabled else _("Enable"),
+            "cpsim_toggle_url": reverse("admin:ocpp_simulator_cpsim_toggle"),
+        }
+
+    def changelist_view(self, request, extra_context=None):
+        context = extra_context or {}
+        context.update(self._cpsim_context())
+        return super().changelist_view(request, extra_context=context)
+
+    def toggle_cpsim_service(self, request):
+        if request.method != "POST":
+            raise PermissionDenied
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        node = Node.get_local()
+        if node is None:
+            self.message_user(
+                request,
+                "No local node is registered; unable to toggle the CP simulator service.",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
+        feature = get_cpsim_feature()
+        if not feature:
+            self.message_user(
+                request,
+                "CP simulator service feature is not configured.",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
+        current = set(
+            node.features.filter(slug__in=Node.MANUAL_FEATURE_SLUGS).values_list(
+                "slug", flat=True
+            )
+        )
+        if feature.is_enabled:
+            current.discard(feature.slug)
+            action = "disabled"
+        else:
+            current.add(feature.slug)
+            action = "enabled"
+        node.update_manual_features(current)
+        self.message_user(
+            request,
+            f"{feature.display} {action} for this node.",
+            level=messages.SUCCESS,
+        )
+        return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
 
     @admin.display(description="Average kWh", ordering="average_kwh")
     def average_kwh_display(self, obj):
@@ -145,10 +216,21 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
             type(obj).objects.filter(pk=obj.pk).update(door_open=False)
             obj.door_open = False
             store.register_log_name(obj.cp_path, obj.name, log_type="simulator")
-            sim = ChargePointSimulator(obj.as_config())
-            started, status, log_file = sim.start()
-            if started:
-                store.simulators[obj.pk] = sim
+            if cpsim_service_enabled():
+                queue_cpsim_request(
+                    action="start",
+                    params=obj.as_config(),
+                    simulator_id=obj.pk,
+                    name=obj.name,
+                    source="admin",
+                )
+                started, status = True, "cpsim-service start requested"
+                log_file = str(store._file_path(obj.cp_path, log_type="simulator"))
+            else:
+                sim = ChargePointSimulator(obj.as_config())
+                started, status, log_file = sim.start()
+                if started:
+                    store.simulators[obj.pk] = sim
             log_url = reverse("admin:ocpp_simulator_log", args=[obj.pk])
             self.message_user(
                 request,
@@ -193,10 +275,23 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                 store.register_log_name(
                     default_simulator.cp_path, default_simulator.name, log_type="simulator"
                 )
-                simulator = ChargePointSimulator(default_simulator.as_config())
-                started, status, log_file = simulator.start()
-                if started:
-                    store.simulators[default_simulator.pk] = simulator
+                if cpsim_service_enabled():
+                    queue_cpsim_request(
+                        action="start",
+                        params=default_simulator.as_config(),
+                        simulator_id=default_simulator.pk,
+                        name=default_simulator.name,
+                        source="admin",
+                    )
+                    started, status = True, "cpsim-service start requested"
+                    log_file = str(
+                        store._file_path(default_simulator.cp_path, log_type="simulator")
+                    )
+                else:
+                    simulator = ChargePointSimulator(default_simulator.as_config())
+                    started, status, log_file = simulator.start()
+                    if started:
+                        store.simulators[default_simulator.pk] = simulator
                 log_url = reverse("admin:ocpp_simulator_log", args=[default_simulator.pk])
                 self.message_user(
                     request,
@@ -217,9 +312,18 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def stop_simulator(self, request, queryset):
         async def _stop(objs):
             for obj in objs:
-                sim = store.simulators.pop(obj.pk, None)
-                if sim:
-                    await sim.stop()
+                if cpsim_service_enabled():
+                    queue_cpsim_request(
+                        action="stop",
+                        params=obj.as_config(),
+                        simulator_id=obj.pk,
+                        name=obj.name,
+                        source="admin",
+                    )
+                else:
+                    sim = store.simulators.pop(obj.pk, None)
+                    if sim:
+                        await sim.stop()
 
         objs = list(queryset)
         try:
