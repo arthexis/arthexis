@@ -339,7 +339,7 @@ def admin_model_graph(request, app_label: str):
 
     if engine_path is None:
         graph_error = _(
-            "Graphviz executables are required to render this diagram. Install Graphviz on the server and try again."
+            "Graphviz executables are required to render this diagram. Install the Graphviz system package on the server (for example: apt-get install graphviz) and ensure the Python 'graphviz' requirement is installed, then try again."
         )
     else:
         try:
