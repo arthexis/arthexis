@@ -1037,7 +1037,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 }
                 server_host = {
                     "status": "error",
-                    "message": _("Registration aborted."),
+                    "message": visitor_error,
                 }
                 server_visitor = {
                     "status": "error",
