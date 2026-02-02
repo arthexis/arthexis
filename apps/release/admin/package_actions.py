@@ -42,12 +42,15 @@ def _latest_release(
     return max(candidates, key=lambda item: item[0])
 
 
-def _fetch_latest_pypi_version(package_name: str) -> Version | None:
+def _fetch_latest_pypi_version(package_name: str) -> tuple[Version | None, str | None]:
     resp = None
     try:
         resp = requests.get(f"https://pypi.org/pypi/{package_name}/json", timeout=10)
         if not resp.ok:
-            return None
+            return None, _("PyPI returned status %(status)s for %(package)s.") % {
+                "status": resp.status_code,
+                "package": package_name,
+            }
         releases = resp.json().get("releases", {})
         candidates = [
             parsed
@@ -55,10 +58,14 @@ def _fetch_latest_pypi_version(package_name: str) -> Version | None:
             if (parsed := _safe_version(version)) is not None
         ]
         if not candidates:
-            return None
-        return max(candidates)
-    except Exception:
-        return None
+            return None, _("No releases found on PyPI for %(package)s.") % {
+                "package": package_name
+            }
+        return max(candidates), None
+    except Exception as exc:
+        return None, _("Unable to load releases from PyPI: %(error)s") % {
+            "error": exc
+        }
     finally:
         if resp is not None:
             close = getattr(resp, "close", None)
@@ -67,28 +74,19 @@ def _fetch_latest_pypi_version(package_name: str) -> Version | None:
                     close()
 
 
+def _prepare_next_release_redirect(request):
+    return redirect(request.META.get("HTTP_REFERER") or reverse("admin:index"))
+
+
 def prepare_package_release(admin_view, request, package):
-    if request.method == "GET":
-        context = admin_view.admin_site.each_context(request)
-        context.update(
-            {
-                "opts": Package._meta,
-                "original": package,
-                "title": _("Prepare next release"),
-                "cancel_url": request.META.get("HTTP_REFERER")
-                or reverse("admin:index"),
-            }
-        )
-        return TemplateResponse(
-            request,
-            "admin/release/prepare_next_release_confirm.html",
-            context,
-        )
-    if request.method != "POST":
+    if request.method not in {"GET", "POST"}:
         return HttpResponseNotAllowed(["POST", "GET"])
 
     existing_releases = list(PackageRelease.all_objects.filter(package=package))
-    pypi_latest_version = _fetch_latest_pypi_version(package.name)
+    pypi_latest_version, pypi_error = _fetch_latest_pypi_version(package.name)
+    if pypi_error:
+        admin_view.message_user(request, pypi_error, messages.ERROR)
+        return _prepare_next_release_redirect(request)
     if existing_releases:
         latest_release_info = _latest_release(existing_releases)
         if latest_release_info is not None:
@@ -96,8 +94,8 @@ def prepare_package_release(admin_view, request, package):
             if (
                 not latest_release.is_published
                 and (
-                    pypi_latest_version is None
-                    or latest_version >= pypi_latest_version
+                    pypi_latest_version is not None
+                    and latest_version >= pypi_latest_version
                 )
             ):
                 if latest_release.is_deleted:
@@ -118,7 +116,14 @@ def prepare_package_release(admin_view, request, package):
     else:
         repo_version = Version("0.0.0")
 
-    pypi_latest = pypi_latest_version or Version("0.0.0")
+    pypi_latest = pypi_latest_version
+    if pypi_latest is None:
+        admin_view.message_user(
+            request,
+            _("Unable to determine the latest release from PyPI."),
+            messages.ERROR,
+        )
+        return _prepare_next_release_redirect(request)
     pypi_plus_one = Version(PackageRelease._format_patch_with_epoch(pypi_latest))
     next_version = max(repo_version, pypi_plus_one)
     release, _created = PackageRelease.all_objects.update_or_create(
