@@ -15,6 +15,7 @@ from django.contrib.sites.models import Site
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_node_info_registers_missing_local(client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
@@ -40,6 +41,7 @@ def test_node_info_registers_missing_local(client, monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_node_info_uses_site_domain_port(monkeypatch, client):
     domain = f"{uuid4().hex}.example.com"
     site = Site.objects.create(domain=domain, name="Example", require_https=False)
@@ -83,6 +85,7 @@ def test_resolve_visitor_base_defaults_to_loopback():
 
 
 
+@pytest.mark.critical
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
@@ -161,6 +164,7 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
@@ -253,6 +257,7 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_register_visitor_telemetry_logs(client, caplog):
     url = reverse("register-telemetry")
     payload = {
@@ -277,6 +282,7 @@ def test_register_visitor_telemetry_logs(client, caplog):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
     url = reverse("register-telemetry")
     payload = {

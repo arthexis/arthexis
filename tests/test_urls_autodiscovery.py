@@ -5,6 +5,7 @@ from pathlib import Path
 from types import ModuleType
 import sys
 
+import pytest
 from django.apps import AppConfig, apps
 from django.conf import settings
 
@@ -32,6 +33,7 @@ def _project_app_admin_modules():
     return modules
 
 
+@pytest.mark.critical
 def test_autodiscovery_includes_known_apps_with_app_namespaces():
     routes = _pattern_routes()
 
@@ -42,6 +44,7 @@ def test_autodiscovery_includes_known_apps_with_app_namespaces():
     assert "rfid/" not in routes
 
 
+@pytest.mark.critical
 def test_pages_and_docs_are_excluded_from_autodiscovery():
     routes = _pattern_routes()
 
@@ -69,6 +72,7 @@ def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
     assert "core/" in routes
 
 
+@pytest.mark.critical
 def test_api_modules_are_namespaced_under_their_app(monkeypatch):
     app_config = apps.get_app_config("core")
 
@@ -88,6 +92,7 @@ def test_api_modules_are_namespaced_under_their_app(monkeypatch):
     assert f"{app_config.label}/api/" in routes
 
 
+@pytest.mark.critical
 def test_apps_without_urls_do_not_raise(monkeypatch):
     app_without_urls = apps.get_app_config("aws")
     monkeypatch.setattr(apps, "get_app_configs", lambda: [app_without_urls])
@@ -120,6 +125,7 @@ def test_api_routes_are_only_namespaced_by_app():
     assert all(any(route.startswith(prefix) for prefix in app_api_prefixes) for route in api_routes)
 
 
+@pytest.mark.critical
 def test_admin_modules_are_loaded_during_url_configuration(monkeypatch):
     import config.urls as urls
 
