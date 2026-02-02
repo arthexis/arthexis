@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import time
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from glob import glob
@@ -68,6 +69,13 @@ _SUITE_AVAILABILITY_STATE = {"is_up": False, "duration_seconds": None, "locked":
 _SIMULATOR_RUNNING_CACHE = {"checked_at": 0.0, "is_running": False}
 
 
+def _package_override(name: str, default):
+    package = sys.modules.get("apps.screens.lcd_screen")
+    if package is None:
+        return default
+    return getattr(package, name, default)
+
+
 def _channel_lock_entries(lock_dir: Path, base_name: str) -> list[tuple[int, Path, float]]:
     entries: list[tuple[int, Path, float]] = []
     if not lock_dir.exists():
@@ -99,10 +107,11 @@ def _simulator_running(
     cache_seconds: float = 2.0,
 ) -> bool | None:
     if state_file is None:
-        state_file = SIMULATOR_STATE_FILE
+        state_file = _package_override("SIMULATOR_STATE_FILE", SIMULATOR_STATE_FILE)
+    cache = _package_override("_SIMULATOR_RUNNING_CACHE", _SIMULATOR_RUNNING_CACHE)
     now = time.monotonic()
-    if now - _SIMULATOR_RUNNING_CACHE["checked_at"] <= cache_seconds:
-        return _SIMULATOR_RUNNING_CACHE["is_running"]
+    if now - cache["checked_at"] <= cache_seconds:
+        return cache["is_running"]
 
     is_running = False
     try:
@@ -118,14 +127,12 @@ def _simulator_running(
         logger.debug("Failed to read simulator state file", exc_info=True)
         is_running = None
 
-    _SIMULATOR_RUNNING_CACHE["checked_at"] = now
-    _SIMULATOR_RUNNING_CACHE["is_running"] = is_running
+    cache["checked_at"] = now
+    cache["is_running"] = is_running
     return is_running
 
 
 def _read_lock_payload(lock_file: Path, *, now: datetime) -> LockPayload | None:
-    from apps.screens import lcd_screen
-
     payload = read_lcd_lock_file(lock_file)
     if payload is None:
         return None
@@ -136,7 +143,7 @@ def _read_lock_payload(lock_file: Path, *, now: datetime) -> LockPayload | None:
             logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
         return None
     if payload.expires_at is None and payload.subject.strip().upper().startswith("SIM "):
-        simulator_running = lcd_screen._simulator_running()
+        simulator_running = _simulator_running()
         if simulator_running is False:
             try:
                 lock_file.unlink()
@@ -383,11 +390,9 @@ def _suite_reachable(
 def _boot_elapsed_seconds(
     *, now: datetime | None = None
 ) -> int | None:
-    from apps.screens import lcd_screen
-
     now_value = now or datetime.now(datetime_timezone.utc)
     try:
-        boot_time = float(lcd_screen.psutil.boot_time())
+        boot_time = float(psutil.boot_time())
     except Exception:
         return None
 
@@ -400,14 +405,16 @@ def _boot_elapsed_seconds(
 
 
 def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> int | None:
-    from apps.screens import lcd_screen
-
     now_value = now or datetime.now(datetime_timezone.utc)
-    is_up = lcd_screen._suite_reachable(base_dir)
-    elapsed_seconds = lcd_screen._boot_elapsed_seconds(now=now_value)
+    suite_reachable = _package_override("_suite_reachable", _suite_reachable)
+    boot_elapsed = _package_override("_boot_elapsed_seconds", _boot_elapsed_seconds)
+    availability_seconds = _package_override("_availability_seconds", _availability_seconds)
+
+    is_up = suite_reachable(base_dir)
+    elapsed_seconds = boot_elapsed(now=now_value)
 
     if is_up:
-        available_seconds = lcd_screen._availability_seconds(base_dir, now=now_value)
+        available_seconds = availability_seconds(base_dir, now=now_value)
         if available_seconds is not None:
             _SUITE_AVAILABILITY_STATE["is_up"] = True
             _SUITE_AVAILABILITY_STATE["duration_seconds"] = available_seconds
@@ -433,8 +440,6 @@ def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> in
 def _uptime_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
-    from apps.screens import lcd_screen
-
     lock_path = Path(base_dir) / ".locks" / SUITE_UPTIME_LOCK_NAME
     now_value = now or datetime.now(datetime_timezone.utc)
 
@@ -464,7 +469,7 @@ def _uptime_seconds(
                     return seconds
 
     try:
-        boot_time = float(lcd_screen.psutil.boot_time())
+        boot_time = float(psutil.boot_time())
     except Exception:
         return None
 

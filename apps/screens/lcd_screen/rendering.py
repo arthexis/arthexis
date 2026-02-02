@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import random
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone as datetime_timezone
@@ -41,6 +42,13 @@ except AnimationLoadError:
     GAP_ANIMATION_FRAMES = [" " * (LCD_COLUMNS * LCD_ROWS)]
 
 GAP_ANIMATION_CYCLE = cycle(GAP_ANIMATION_FRAMES)
+
+
+def _package_override(name: str, default):
+    package = sys.modules.get("apps.screens.lcd_screen")
+    if package is None:
+        return default
+    return getattr(package, name, default)
 
 
 class FateDeck:
@@ -158,18 +166,25 @@ def _select_low_payload(
 
     now_value = now or datetime.now(datetime_timezone.utc)
     locks._install_date(base_dir, now=now_value)
-    uptime_secs = locks._uptime_seconds(base_dir, now=now_value)
+    uptime_seconds = _package_override("_uptime_seconds", locks._uptime_seconds)
+    uptime_secs = uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
-    on_label = _format_on_label(locks._on_seconds(base_dir, now=now_value)) or "?m?s"
+    on_seconds = _package_override("_on_seconds", locks._on_seconds)
+    on_label = _format_on_label(on_seconds(base_dir, now=now_value)) or "?m?s"
     subject_parts = [f"UP {uptime_label}"]
-    if _ap_mode_enabled():
-        ap_client_count = _ap_client_count()
+    ap_mode_enabled = _package_override("_ap_mode_enabled", _ap_mode_enabled)
+    ap_client_count_func = _package_override("_ap_client_count", _ap_client_count)
+    if ap_mode_enabled():
+        ap_client_count = ap_client_count_func()
         if ap_client_count is None:
             subject_parts.append("AP")
         else:
             subject_parts.append(f"AP{ap_client_count}")
     subject = " ".join(subject_parts).strip()
-    interface_label = lcd_screen._internet_interface_label()
+    interface_label_func = _package_override(
+        "_internet_interface_label", _internet_interface_label
+    )
+    interface_label = interface_label_func()
     body_parts = [f"ON {on_label}"]
     if interface_label:
         body_parts.append(interface_label)
@@ -326,11 +341,11 @@ def _use_fate_vector() -> bool:
 
 def _draw_fate_vector(deck: FateDeck | None = None) -> str:
     global FATE_VECTOR
-    from apps.screens import lcd_screen
-
     card = (deck or _fate_deck).draw()
     FATE_VECTOR = card
-    lcd_screen.FATE_VECTOR = card
+    package = sys.modules.get("apps.screens.lcd_screen")
+    if package is not None:
+        setattr(package, "FATE_VECTOR", card)
     return card
 
 
@@ -379,10 +394,9 @@ def _refresh_uptime_payload(
     if not has_uptime:
         return payload
 
-    from apps.screens import lcd_screen
-
     now_value = now or datetime.now(datetime_timezone.utc)
-    uptime_secs = lcd_screen._uptime_seconds(base_dir, now=now_value)
+    uptime_seconds = _package_override("_uptime_seconds", locks._uptime_seconds)
+    uptime_secs = uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs)
     if not uptime_label:
         return payload
@@ -397,7 +411,8 @@ def _refresh_uptime_payload(
     if line2.startswith("ON "):
         suffix = line2[len("ON ") :].strip()
         extra = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-        on_label = _format_on_label(lcd_screen._on_seconds(base_dir, now=now_value)) or "?m?s"
+        on_seconds = _package_override("_on_seconds", locks._on_seconds)
+        on_label = _format_on_label(on_seconds(base_dir, now=now_value)) or "?m?s"
         line2 = f"ON {on_label}"
         if extra:
             line2 = f"{line2} {extra}"
@@ -449,9 +464,10 @@ def _clock_payload(
     fate_deck: FateDeck | None = None,
     choose_fate: Callable[[], bool] | None = None,
 ) -> tuple[str, str, int, str]:
-    from apps.screens import lcd_screen
-
-    temperature = lcd_screen._lcd_temperature_label()
+    lcd_temperature_label = _package_override(
+        "_lcd_temperature_label", _lcd_temperature_label
+    )
+    temperature = lcd_temperature_label()
     temp_value, unit = _parse_temperature_label(temperature or "")
     if temp_value is not None:
         if use_fahrenheit and unit.upper() == "C":
@@ -523,9 +539,13 @@ def _advance_display(
     state: DisplayState,
     frame_writer: LCDFrameWriter,
     *,
+    shutdown_requested: Callable[[], bool] | None = None,
     label: str | None = None,
     timestamp: datetime | None = None,
-) -> tuple[DisplayState, bool]:
+) -> tuple[DisplayState, bool, bool]:
+    if shutdown_requested and shutdown_requested():
+        return state, True, True
+
     segment1 = state.pad1[state.index1 : state.index1 + LCD_COLUMNS]
     segment2 = state.pad2[state.index2 : state.index2 + LCD_COLUMNS]
 
@@ -549,6 +569,7 @@ def _advance_display(
             last_segment2=segment2,
         ),
         write_success,
+        False,
     )
 
 
