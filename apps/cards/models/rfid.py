@@ -156,6 +156,12 @@ class RFID(Entity):
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
     last_seen_on = models.DateTimeField(null=True, blank=True)
+    card_designs = models.ManyToManyField(
+        "cards.CardDesign",
+        blank=True,
+        related_name="rfids",
+        help_text="Card designs linked to this RFID.",
+    )
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
@@ -485,4 +491,3 @@ class RFID(Entity):
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
         db_table = "core_rfid"
-
