@@ -93,20 +93,7 @@ def _capture_db_blocker(django_db_blocker: Any) -> None:
     DB_BLOCKER = django_db_blocker
 
 
-def _requires_db(request: pytest.FixtureRequest) -> bool:
-    if request.node.get_closest_marker("django_db") is not None:
-        return True
-    if {"db", "transactional_db"}.intersection(request.node.fixturenames):
-        return True
-    test_class = getattr(request.node, "cls", None)
-    if test_class is None:
-        return False
-    from django.test import TransactionTestCase
-
-    return issubclass(test_class, TransactionTestCase)
-
-
-def _item_requires_db(item: pytest.Item) -> bool:
+def _requires_db(item: pytest.Item) -> bool:
     if item.get_closest_marker("django_db") is not None:
         return True
     if {"db", "transactional_db"}.intersection(item.fixturenames):
@@ -121,7 +108,7 @@ def _item_requires_db(item: pytest.Item) -> bool:
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     global REQUIRES_DB
-    REQUIRES_DB = any(_item_requires_db(item) for item in items)
+    REQUIRES_DB = any(_requires_db(item) for item in items)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -130,8 +117,6 @@ def _setup_db_for_django_tests(request: pytest.FixtureRequest, django_db_blocker
     if not REQUIRES_DB:
         return
     request.getfixturevalue("django_db_setup")
-    with django_db_blocker.unblock():
-        pass
 
 
 @pytest.fixture(scope="session")
@@ -145,7 +130,7 @@ def _load_sigil_roots_once(django_db_setup: Any, django_db_blocker: Any) -> None
 
 @pytest.fixture(autouse=True)
 def _ensure_fixture_sigil_roots(request: pytest.FixtureRequest) -> None:
-    if _requires_db(request) and request.node.get_closest_marker("sigil_roots"):
+    if _requires_db(request.node) and request.node.get_closest_marker("sigil_roots"):
         request.getfixturevalue("_load_sigil_roots_once")
 
 
