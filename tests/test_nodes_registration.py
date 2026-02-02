@@ -81,8 +81,8 @@ def test_resolve_visitor_base_defaults_to_loopback():
     assert visitor_port == 443
     assert visitor_scheme == "https"
 
-
-
+@pytest.mark.django_db
+@pytest.mark.critical
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
