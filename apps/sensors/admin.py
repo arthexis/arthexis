@@ -10,7 +10,7 @@ from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from .models import Thermometer, ThermometerReading
+from .models import Thermometer, ThermometerReading, UsbTracker
 from .thermometers import read_w1_temperature
 
 
@@ -203,3 +203,27 @@ class ThermometerAdmin(admin.ModelAdmin):
             )
 
         return {"labels": labels, "datasets": datasets, "meta": meta}
+
+
+@admin.register(UsbTracker)
+class UsbTrackerAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "slug",
+        "required_file_path",
+        "recipe",
+        "cooldown_seconds",
+        "last_triggered_at",
+        "is_active",
+    )
+    search_fields = ("name", "slug", "required_file_path")
+    list_filter = ("is_active",)
+    readonly_fields = (
+        "last_checked_at",
+        "last_matched_at",
+        "last_triggered_at",
+        "last_match_path",
+        "last_match_signature",
+        "last_recipe_result",
+        "last_error",
+    )
