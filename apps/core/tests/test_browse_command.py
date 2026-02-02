@@ -60,10 +60,8 @@ def test_browse_command_uses_lynx_without_ui(monkeypatch, settings):
         calls["args"] = args
         calls["check"] = check
 
-        class Result:
-            returncode = 0
-
-        return Result()
+        from types import SimpleNamespace
+        return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(browse_command.subprocess, "run", _fake_run)
 
