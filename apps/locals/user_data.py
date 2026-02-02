@@ -747,11 +747,8 @@ class ImportExportAdminMixin:
     def export_view(self, request):
         if not self.has_view_permission(request):
             raise PermissionDenied
-        export_format = None
-        if request.method == "POST":
-            export_format = request.POST.get("format", "").lower()
-        else:
-            export_format = request.GET.get("format", "").lower()
+        params = request.POST if request.method == "POST" else request.GET
+        export_format = params.get("format", "").lower()
         original_get = request.GET
         filtered_get = request.GET.copy()
         filtered_get.pop("format", None)
@@ -780,14 +777,14 @@ class ImportExportAdminMixin:
                         ]
                     )
                 return response
-            if export_format != "json":
-                return HttpResponseBadRequest(_("Unsupported export format."))
-            payload = serialize("json", queryset, fields=export_field_names)
-            response = HttpResponse(payload, content_type="application/json")
-            response["Content-Disposition"] = (
-                f"attachment; filename={opts.app_label}_{opts.model_name}.json"
-            )
-            return response
+            if export_format == "json":
+                payload = serialize("json", queryset, fields=export_field_names)
+                response = HttpResponse(payload, content_type="application/json")
+                response["Content-Disposition"] = (
+                    f"attachment; filename={opts.app_label}_{opts.model_name}.json"
+                )
+                return response
+            return HttpResponseBadRequest(_("Unsupported export format."))
         changelist_url = reverse(
             f"admin:{opts.app_label}_{opts.model_name}_changelist"
         )
