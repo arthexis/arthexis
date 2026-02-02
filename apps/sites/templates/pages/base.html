@@ -47,8 +47,8 @@
       }
       {% endwith %}
       html[data-bs-theme='light'] {
-        --bs-body-bg: #d4d4d4;
-        --bs-body-bg-rgb: 212, 212, 212;
+        --bs-body-bg: #ffffff;
+        --bs-body-bg-rgb: 255, 255, 255;
       }
       html {
         font-size: clamp(16px, 1.2vw, 24px);
@@ -1134,13 +1134,13 @@
         const buttons = document.querySelectorAll('.toolbar .btn');
         if (theme === 'light') {
           navbar.classList.remove('navbar-dark', 'bg-dark');
-          navbar.classList.add('navbar-light', 'bg-body');
+          navbar.classList.add('navbar-light', 'bg-white');
           buttons.forEach(btn => {
             btn.classList.remove('btn-outline-light');
             btn.classList.add('btn-outline-dark');
           });
         } else {
-          navbar.classList.remove('navbar-light', 'bg-body');
+          navbar.classList.remove('navbar-light', 'bg-white');
           navbar.classList.add('navbar-dark', 'bg-dark');
           buttons.forEach(btn => {
             btn.classList.remove('btn-outline-dark');
