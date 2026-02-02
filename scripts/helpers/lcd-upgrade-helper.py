@@ -114,7 +114,7 @@ def _lcd_service_active(base_dir: Path) -> bool:
     if not pgrep:
         return False
 
-    for pattern in ("python -m apps.screens.lcd_screen", "apps/screens/lcd_screen.py"):
+    for pattern in ("python -m apps.screens.lcd_screen.runner",):
         result = subprocess.run(
             [pgrep, "-f", pattern],
             stdout=subprocess.DEVNULL,
