@@ -306,8 +306,11 @@ def charger_status(request, cid, connector=None):
             (item for item in connectors if item.connector_id is None), None
         )
         if aggregate is not None:
-            charger = aggregate
-            connector_slug = Charger.AGGREGATE_CONNECTOR_SLUG
+            # Ensure the user has access to the aggregate view before swapping.
+            # If access is denied, fall back to the single connector view.
+            if _ensure_charger_access(request.user, aggregate, request=request) is None:
+                charger = aggregate
+                connector_slug = Charger.AGGREGATE_CONNECTOR_SLUG
     session_id = request.GET.get("session")
     sessions = _live_sessions(charger, connectors=connectors)
     live_tx = None
