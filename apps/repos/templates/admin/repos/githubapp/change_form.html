@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block form_top %}
+  <div class="seed-data-warning" role="status" aria-live="polite">
+    <strong>{% translate "HTTPS and domain required" %}</strong>
+    <div>
+      {% translate "GitHub App callbacks require an HTTPS URL and a publicly accessible domain name." %}
+      {% translate "This setup will not work with a plain HTTP URL or an IP-only host." %}
+    </div>
+  </div>
+  {{ block.super }}
+{% endblock %}
