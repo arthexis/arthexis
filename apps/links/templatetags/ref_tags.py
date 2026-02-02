@@ -55,21 +55,32 @@ def build_footer_context(
         "roles", "features", "sites", "footer_modules"
     )
     current_module = module or _get_current_module(request)
+    visible_refs = []
     if current_module is not None:
         module_refs = refs.filter(footer_modules=current_module).distinct()
         if module_refs.exists():
-            refs = module_refs
-        else:
+            visible_refs = filter_visible_references(
+                module_refs,
+                request=request,
+                site=badge_site,
+                node=badge_node,
+            )
+        if not visible_refs:
             refs = refs.filter(footer_modules__isnull=True)
+            visible_refs = filter_visible_references(
+                refs,
+                request=request,
+                site=badge_site,
+                node=badge_node,
+            )
     else:
         refs = refs.filter(footer_modules__isnull=True)
-
-    visible_refs = filter_visible_references(
-        refs,
-        request=request,
-        site=badge_site,
-        node=badge_node,
-    )
+        visible_refs = filter_visible_references(
+            refs,
+            request=request,
+            site=badge_site,
+            node=badge_node,
+        )
 
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"
