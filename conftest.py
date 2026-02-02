@@ -16,7 +16,7 @@ os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 os.environ.setdefault(
     "ARTHEXIS_SQLITE_TEST_PATH",
-    str(Path(tempfile.gettempdir()) / "arthexis-test-db.sqlite3"),
+    str(Path(tempfile.gettempdir()) / f"arthexis-test-db-{os.getpid()}.sqlite3"),
 )
 
 
