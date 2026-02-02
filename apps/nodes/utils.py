@@ -81,7 +81,7 @@ def capture_local_screenshot() -> Path:
 
 def capture_and_save_screenshot(
     url: str | None = None,
-    port: int = 8888,
+    port: int | None = None,
     method: str = "TASK",
     local: bool = False,
     *,
