@@ -11,6 +11,7 @@ from apps.core.tasks import _project_base_dir
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_project_base_dir_prefers_environment(monkeypatch, settings, tmp_path):
     env_base = tmp_path / "runtime"
     env_base.mkdir()
@@ -22,6 +23,7 @@ def test_project_base_dir_prefers_environment(monkeypatch, settings, tmp_path):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path):
     env_base = tmp_path / "runtime"
     log_dir = env_base / "logs"
@@ -41,6 +43,7 @@ def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
     monkeypatch, settings, tmp_path
 ):
@@ -67,6 +70,7 @@ def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tmp_path):
     env_base = tmp_path / "runtime"
     log_dir = env_base / "logs"
@@ -136,6 +140,7 @@ def test_health_check_failure_without_revision(monkeypatch, tmp_path):
     assert not skip_lock.exists()
 
 
+@pytest.mark.critical
 def test_health_check_failure_records_revision(monkeypatch, tmp_path):
     revision = "abc123"
     monkeypatch.setattr(tasks, "get_revision", lambda: revision)

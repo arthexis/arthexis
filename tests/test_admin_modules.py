@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import importlib
 
-import pytest
-
 from django.conf import settings
 
 
@@ -11,7 +9,6 @@ def _admin_module_names() -> list[str]:
     return [f"{app_path}.admin" for app_path in settings.LOCAL_APPS]
 
 
-@pytest.mark.critical
 def test_local_apps_define_importable_admin_modules():
     missing_modules: list[str] = []
     import_errors: list[tuple[str, Exception]] = []

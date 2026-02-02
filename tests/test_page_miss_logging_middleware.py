@@ -14,7 +14,6 @@ def request_factory() -> RequestFactory:
     return RequestFactory()
 
 
-@pytest.mark.critical
 def test_page_miss_logging_middleware_records_404(
     caplog: pytest.LogCaptureFixture, request_factory: RequestFactory
 ) -> None:
@@ -34,7 +33,6 @@ def test_page_miss_logging_middleware_records_404(
     assert "GET /missing?page=2 -> 404" in caplog.text
 
 
-@pytest.mark.critical
 def test_page_miss_logging_middleware_records_500_on_exception(
     caplog: pytest.LogCaptureFixture, request_factory: RequestFactory
 ) -> None:
