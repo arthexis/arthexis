@@ -60,14 +60,9 @@ arthexis__secure_mkdir() {
         return 1
     fi
 
-    local old_umask
-    old_umask=$(umask)
-    umask 077
-    if ! mkdir -p -m 700 "$candidate" >/dev/null 2>&1; then
-        umask "$old_umask"
+    if ! (umask 077; mkdir -p -m 700 "$candidate" >/dev/null 2>&1); then
         return 1
     fi
-    umask "$old_umask"
 
     if arthexis__path_has_symlink "$candidate"; then
         return 1
