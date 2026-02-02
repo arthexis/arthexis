@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.conf import settings
 from django.contrib.admin.utils import quote
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
 from django.db.models.deletion import ProtectedError
@@ -121,6 +121,26 @@ class ChargerLocationSetupForm(forms.Form):
             "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
             "ocpp/charger_map.js",
         )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is None:
+            return
+        if getattr(user, "is_superuser", False):
+            return
+        location_field = self.fields.get("location")
+        if not location_field:
+            return
+        if not hasattr(Location, "assigned_to"):
+            return
+        if getattr(user, "is_authenticated", False):
+            location_field.queryset = location_field.queryset.filter(
+                Q(assigned_to__isnull=True) | Q(assigned_to=user)
+            )
+        else:
+            location_field.queryset = location_field.queryset.filter(
+                assigned_to__isnull=True
+            )
 
     def clean(self):
         cleaned = super().clean()
@@ -388,6 +408,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         for charger in chargers:
             grouped.setdefault(charger.charger_id, []).append(charger)
 
+        chargers_to_update = []
         for group in grouped.values():
             main = [c for c in group if c.connector_id is None]
             connectors = sorted(
@@ -396,26 +417,29 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             )
             for charger in main:
                 charger.display_name = location_name
-                charger.save(update_fields=["display_name"])
+                chargers_to_update.append(charger)
             for index, charger in enumerate(connectors, start=1):
                 suffix = self._location_suffix(index)
                 charger.display_name = f"{location_name} {suffix}".strip()
-                charger.save(update_fields=["display_name"])
+                chargers_to_update.append(charger)
+
+        if chargers_to_update:
+            Charger.objects.bulk_update(chargers_to_update, ["display_name"])
 
     def setup_location_view(self, request):
-        if request.method == "POST":
-            raw_ids = request.POST.get("ids")
-        else:
-            raw_ids = request.GET.get("ids")
-        if not raw_ids:
-            self.message_user(
-                request,
-                _("No chargers selected."),
-                level=messages.WARNING,
-            )
-            return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
+        if not self.has_change_permission(request):
+            raise PermissionDenied
 
-        ids = [int(value) for value in raw_ids.split(",") if value.isdigit()]
+        raw_ids = (
+            request.POST.get("ids")
+            if request.method == "POST"
+            else request.GET.get("ids")
+        )
+        ids = (
+            [int(value) for value in raw_ids.split(",") if value.isdigit()]
+            if raw_ids
+            else []
+        )
         if not ids:
             self.message_user(
                 request,
@@ -425,7 +449,9 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
 
         selected = list(
-            Charger.objects.filter(pk__in=ids).select_related("location")
+            Charger.visible_for_user(request.user)
+            .filter(pk__in=ids)
+            .select_related("location")
         )
         if not selected:
             self.message_user(
@@ -437,11 +463,15 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
         charger_ids = {charger.charger_id for charger in selected}
         chargers = list(
-            Charger.objects.filter(charger_id__in=charger_ids).select_related("location")
+            Charger.visible_for_user(request.user)
+            .filter(charger_id__in=charger_ids)
+            .select_related("location")
         )
 
         initial = {}
-        existing_locations = {charger.location_id for charger in chargers if charger.location_id}
+        existing_locations = {
+            charger.location_id for charger in chargers if charger.location_id
+        }
         if len(existing_locations) == 1:
             location_obj = chargers[0].location
             if location_obj:
@@ -451,7 +481,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 initial["longitude"] = location_obj.longitude
 
         if request.method == "POST":
-            form = ChargerLocationSetupForm(request.POST)
+            form = ChargerLocationSetupForm(request.POST, user=request.user)
             if form.is_valid():
                 location = form.cleaned_data["location"]
                 location_name = form.cleaned_data["location_name"]
@@ -479,9 +509,9 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                             location.longitude = longitude
                         location.save()
 
-                    for charger in chargers:
-                        charger.location = location
-                        charger.save(update_fields=["location"])
+                    charger_pks = [charger.pk for charger in chargers]
+                    if charger_pks:
+                        Charger.objects.filter(pk__in=charger_pks).update(location=location)
 
                     self._apply_location_names(chargers, location.name)
 
@@ -495,7 +525,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 )
                 return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
         else:
-            form = ChargerLocationSetupForm(initial=initial)
+            form = ChargerLocationSetupForm(initial=initial, user=request.user)
 
         context = {
             **self.admin_site.each_context(request),
