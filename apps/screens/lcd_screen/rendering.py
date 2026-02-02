@@ -156,16 +156,14 @@ def _select_low_payload(
     if _payload_has_text(payload):
         return payload
 
-    from apps.screens import lcd_screen
-
     now_value = now or datetime.now(datetime_timezone.utc)
-    lcd_screen._install_date(base_dir, now=now_value)
-    uptime_secs = lcd_screen._uptime_seconds(base_dir, now=now_value)
+    locks._install_date(base_dir, now=now_value)
+    uptime_secs = locks._uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
-    on_label = _format_on_label(lcd_screen._on_seconds(base_dir, now=now_value)) or "?m?s"
+    on_label = _format_on_label(locks._on_seconds(base_dir, now=now_value)) or "?m?s"
     subject_parts = [f"UP {uptime_label}"]
-    if lcd_screen._ap_mode_enabled():
-        ap_client_count = lcd_screen._ap_client_count()
+    if _ap_mode_enabled():
+        ap_client_count = _ap_client_count()
         if ap_client_count is None:
             subject_parts.append("AP")
         else:
