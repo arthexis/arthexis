@@ -1,9 +1,11 @@
+from datetime import timedelta
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.ocpp.models import Charger
+from apps.ocpp.models import Charger, Transaction
 
 
 pytestmark = pytest.mark.django_db
@@ -36,6 +38,22 @@ def test_dashboard_includes_last_seen(client, django_user_model):
 
     assert response.status_code == 200
     assert response.context["chargers"][0]["last_seen"] == heartbeat
+
+
+def test_dashboard_includes_last_session_date(client, django_user_model):
+    user = django_user_model.objects.create_user(
+        username="dashboard-user-4", email="dashboard4@example.com", password="pass"
+    )
+    client.force_login(user)
+
+    charger = Charger.objects.create(charger_id="DASH-SESSION")
+    session_start = timezone.now() - timedelta(days=1)
+    Transaction.objects.create(charger=charger, start_time=session_start)
+
+    response = client.get(reverse("ocpp:ocpp-dashboard"))
+
+    assert response.status_code == 200
+    assert response.context["chargers"][0]["last_session"] == session_start
 
 
 def test_dashboard_allows_anonymous_terminal_role(client, monkeypatch):
