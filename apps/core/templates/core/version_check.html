@@ -3,7 +3,10 @@
 {% translate "Refresh" as refresh_label %}
 {% translate "Version" as version_label %}
 {% translate "Revision" as revision_label %}
-{% version_check_info as local_version_info %}
+{% with local_version_info=None %}
+  {% if request.user.is_staff %}
+    {% version_check_info as local_version_info %}
+  {% endif %}
 <script>
 (function () {
   const CHECK_URL = "{% url 'version-info' %}";
@@ -295,3 +298,4 @@
   }
 })();
 </script>
+{% endwith %}
