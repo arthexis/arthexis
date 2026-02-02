@@ -92,14 +92,12 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return "—"
         return format_html_join(" | ", "{}", ((link,) for link in links))
 
-    def _manual_enablement_message(self, feature, node):
+    def _manual_enablement_data(self, feature, node):
         if node is None:
-            return (
-                "Manual enablement is unavailable without a registered local node."
-            )
+            return {"status": "unavailable", "label": "Unavailable"}
         if feature.slug in Node.MANUAL_FEATURE_SLUGS:
-            return "This feature can be enabled manually."
-        return "This feature cannot be enabled manually."
+            return {"status": "manual", "label": "Manual"}
+        return {"status": "auto", "label": "Auto"}
 
     def get_urls(self):
         urls = super().get_urls()
@@ -216,7 +214,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return JsonResponse({"detail": "Feature not found"}, status=404)
 
         node = Node.get_local()
-        enablement_message = self._manual_enablement_message(feature, node)
+        manual_enablement = self._manual_enablement_data(feature, node)
 
         status = "skipped"
         message = ""
@@ -230,16 +228,13 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             logging.exception("Error while running feature check for %s", feature.display)
             status = "error"
             message = (
-                f"An error occurred while checking eligibility for {feature.display}. "
-                f"{enablement_message}"
+                f"An error occurred while checking eligibility for {feature.display}."
             )
             level = messages.ERROR
         else:
             if result is None:
                 status = "skipped"
-                message = (
-                    f"No check is configured for {feature.display}. {enablement_message}"
-                )
+                message = f"No check is configured for {feature.display}."
                 level = messages.WARNING
             else:
                 eligible = bool(result.success)
@@ -247,7 +242,6 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                     result.message
                     or f"{feature.display} check {'passed' if result.success else 'failed'}."
                 )
-                message = f"{message} {enablement_message}"
                 level = result.level
                 status_map = {
                     messages.SUCCESS: "success",
@@ -314,6 +308,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 "status": status,
                 "message": message,
                 "eligible": eligible,
+                "manual_enablement": manual_enablement,
                 "enablement": enablement,
             }
         )
