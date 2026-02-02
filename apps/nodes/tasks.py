@@ -11,6 +11,7 @@ import requests
 import psutil
 from celery import shared_task
 from django.conf import settings
+from django.db import DatabaseError
 from django.core.cache import cache
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -18,9 +19,10 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
+from apps.core.tasks import check_github_updates
 from apps.core import uptime_constants, uptime_utils
 from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, lcd_feature_enabled, queue_startup_message
-from .models import NetMessage, Node, NodeRole, PendingNetMessage
+from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
 from apps.content.utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,62 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
         raise
 
     return f"queued:{target_lock}"
+
+
+@shared_task
+def apply_upgrade_policies() -> str:
+    """Apply upgrade policies for the local node when they are due."""
+
+    try:
+        local = Node.get_local()
+    except (DatabaseError, Node.DoesNotExist):
+        return "skipped:db-unavailable"
+
+    if not local:
+        return "skipped:no-local-node"
+
+    try:
+        assignments = list(
+            NodeUpgradePolicyAssignment.objects.select_related("policy").filter(
+                node=local
+            ).order_by("policy__interval_minutes")
+        )
+    except DatabaseError:
+        return "skipped:db-unavailable"
+
+    if not assignments:
+        return "skipped:manual"
+
+    now = django_timezone.now()
+    results: list[str] = []
+
+    for assignment in assignments:
+        policy = assignment.policy
+        if not policy:
+            continue
+        interval_minutes = int(getattr(policy, "interval_minutes", 0) or 0)
+        if assignment.last_checked_at and interval_minutes > 0:
+            if assignment.last_checked_at > now - timedelta(minutes=interval_minutes):
+                continue
+
+        status = check_github_updates(
+            channel_override=policy.channel,
+            policy_id=policy.pk,
+        )
+        assignment.last_checked_at = now
+        assignment.last_status = status or ""
+        if status == "APPLIED":
+            assignment.last_applied_at = now
+        assignment.save(
+            update_fields=["last_checked_at", "last_status", "last_applied_at"]
+        )
+        results.append(f"{policy.name}:{status or 'UNKNOWN'}")
+        break
+
+    if not results:
+        return "skipped:not-due"
+
+    return ", ".join(results)
 
 
 def _parse_suite_start_timestamp(raw_value: object) -> datetime | None:

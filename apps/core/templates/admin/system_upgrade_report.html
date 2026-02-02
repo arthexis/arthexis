@@ -146,6 +146,40 @@
     padding: 0.15rem 0.35rem;
   }
 
+  .upgrade-report .upgrade-policy-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .upgrade-report .upgrade-policy-item {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .upgrade-report .upgrade-policy-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .upgrade-report .upgrade-policy-requirements {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .upgrade-report .upgrade-policy-requirements span {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: var(--upgrade-code-bg, #f1f5f9);
+    color: var(--upgrade-code-fg, #0f172a);
+  }
+
   .upgrade-report .upgrade-report-collapsible summary {
     cursor: pointer;
     font-size: 1.05rem;
@@ -192,7 +226,7 @@
         <div class="upgrade-report-action-group">
           <form method="post" action="{% url 'admin:system-upgrade-run-check' %}" class="upgrade-report-trigger">
             {% csrf_token %}
-            {% if report.settings.is_stable_mode %}
+            {% if auto_upgrade_report.settings.stable_only %}
             {% blocktrans trimmed asvar unstable_confirm_message %}
               This node is configured for stable updates. Continue with an unstable upgrade?
             {% endblocktrans %}
@@ -203,7 +237,7 @@
                 name="channel"
                 value="unstable"
                 class="button default upgrade-action-button"
-                {% if report.settings.is_stable_mode %}
+                {% if auto_upgrade_report.settings.stable_only %}
                 onclick="return confirm('{{ unstable_confirm_message|escapejs }}');"
                 {% endif %}
               >
@@ -225,23 +259,6 @@
             {% csrf_token %}
             <button type="submit" class="button upgrade-action-button precheck-button">
               {% trans "Pre-Upgrade Checks" %}
-            </button>
-          </form>
-        </div>
-        <div class="upgrade-report-action-group">
-          <form method="post" action="{% url 'admin:system-upgrade-toggle-fast-lane' %}">
-            {% csrf_token %}
-            <input
-              type="hidden"
-              name="fast_lane_action"
-              value="{% if auto_upgrade_report.settings.fast_lane_enabled %}disable{% else %}enable{% endif %}"
-            />
-            <button type="submit" class="button upgrade-action-button">
-              {% if auto_upgrade_report.settings.fast_lane_enabled %}
-                {% trans "Disable Fast Lane" %}
-              {% else %}
-                {% trans "Enable Fast Lane" %}
-              {% endif %}
             </button>
           </form>
         </div>
@@ -267,17 +284,47 @@
         {% endif %}
       </div>
       <div class="upgrade-summary-card">
-        <h4>{% trans "Current channel" %}</h4>
-        <p class="upgrade-summary-value"><code>{{ report.settings.channel }}</code></p>
+        <h4>{% trans "Upgrade policies" %}</h4>
+        {% if report.settings.policies %}
+          <ul class="upgrade-policy-list">
+            {% for policy in report.settings.policies %}
+            <li class="upgrade-policy-item">
+              <strong>{{ policy.name }}</strong>
+              <div class="upgrade-policy-meta">
+                <span class="upgrade-status-chip state-{{ policy.channel_state }}">
+                  {{ policy.channel_label }}
+                </span>
+                {% if policy.interval_label %}
+                  <span class="help">{{ policy.interval_label }}</span>
+                {% endif %}
+                {% if policy.last_checked_label %}
+                  <span class="help">{% blocktrans %}Last checked {{ policy.last_checked_label }}{% endblocktrans %}</span>
+                {% endif %}
+              </div>
+              <div class="upgrade-policy-requirements">
+                {% if policy.requires_canaries %}
+                  <span>{% trans "Canaries required" %}</span>
+                {% endif %}
+                {% if policy.requires_pypi %}
+                  <span>{% trans "PyPI required" %}</span>
+                {% endif %}
+                {% if policy.last_status %}
+                  <span>{% blocktrans %}Last status {{ policy.last_status }}{% endblocktrans %}</span>
+                {% endif %}
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="upgrade-summary-value"><em>{% trans "Manual" %}</em></p>
+          <p class="help">{% trans "No upgrade policies apply to this node." %}</p>
+        {% endif %}
         {% if report.settings.revision_status_label %}
           <p class="upgrade-summary-value">
             <span class="upgrade-status-chip state-{{ report.settings.revision_status_state }}">
               {{ report.settings.revision_status_label }}
             </span>
           </p>
-        {% endif %}
-        {% if report.settings.raw_mode and report.settings.raw_mode|lower != report.settings.channel %}
-          <p class="help">{% blocktrans %}Legacy mode value: {{ report.settings.raw_mode }}{% endblocktrans %}</p>
         {% endif %}
         {% if report.settings.revision_checked_label %}
           <p class="help">{% blocktrans %}Revision last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
@@ -311,41 +358,20 @@
     <div class="upgrade-report-section">
       <h3>{% trans "Settings" %}</h3>
       <dl>
-        <dt>{% trans "Auto-upgrade status" %}</dt>
+        <dt>{% trans "Upgrade policy status" %}</dt>
         <dd>
-          {% if report.settings.enabled %}
-            {% if report.settings.is_unstable_mode or report.settings.is_stable_mode %}
-              {% if report.settings.is_unstable_mode %}
-                {% trans "tracking the unstable channel" as mode_description %}
-              {% else %}
-                {% trans "tracking the stable release channel" as mode_description %}
-              {% endif %}
-
-              {% if report.settings.fast_lane_enabled %}
-                {% blocktrans with description=mode_description %}Enabled ({{ description }}; Fast Lane enabled){% endblocktrans %}
-              {% else %}
-                {% blocktrans with description=mode_description %}Enabled ({{ description }}){% endblocktrans %}
-              {% endif %}
-            {% else %}
-              {% if report.settings.fast_lane_enabled %}
-                {% blocktrans %}Enabled (mode "{{ report.settings.mode }}"; Fast Lane enabled){% endblocktrans %}
-              {% else %}
-                {% blocktrans %}Enabled (mode "{{ report.settings.mode }}"){% endblocktrans %}
-              {% endif %}
-            {% endif %}
+          {% if report.settings.manual %}
+            {% trans "Manual (no policies configured)" %}
           {% else %}
-            {% if report.settings.lock_exists %}
-              {% trans "Disabled (mode file present but unreadable)" %}
-            {% else %}
-              {% trans "Disabled" %}
-            {% endif %}
+            {% blocktrans %}Enabled ({{ report.settings.policies|length }} policy{{ report.settings.policies|length|pluralize }}){% endblocktrans %}
           {% endif %}
         </dd>
-        <dt>{% trans "Channel" %}</dt>
+        <dt>{% trans "Channels" %}</dt>
         <dd>
-          <code>{{ report.settings.channel }}</code>
-          {% if report.settings.raw_mode and report.settings.raw_mode|lower != report.settings.channel %}
-            <p class="help">{% blocktrans %}Legacy mode value: {{ report.settings.raw_mode }}{% endblocktrans %}</p>
+          {% if report.settings.channels %}
+            <code>{{ report.settings.channels|join:", " }}</code>
+          {% else %}
+            <em>{% trans "Manual" %}</em>
           {% endif %}
         </dd>
         <dt>{% trans "Local revision" %}</dt>
@@ -434,9 +460,6 @@
           {% endif %}
         </dd>
       </dl>
-      {% if report.settings.read_error %}
-        <p class="errornote">{% trans "The auto-upgrade mode could not be read; verify the lock file permissions." %}</p>
-      {% endif %}
     </div>
     <div class="upgrade-report-section">
       <details class="upgrade-report-collapsible">

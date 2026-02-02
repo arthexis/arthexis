@@ -6,7 +6,10 @@
       "is_deleted": false,
       "name": "Control",
       "acronym": "CTRL",
-      "description": "Single-Device Testing & Special Task Appliances"
+      "description": "Single-Device Testing & Special Task Appliances",
+      "default_upgrade_policy": [
+        "Fast Lane"
+      ]
     }
   }
 ]

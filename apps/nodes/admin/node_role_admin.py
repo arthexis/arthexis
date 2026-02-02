@@ -10,7 +10,14 @@ from .forms import NodeRoleAdminForm
 @admin.register(NodeRole)
 class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
-    list_display = ("name", "acronym", "description", "registered", "default_features")
+    list_display = (
+        "name",
+        "acronym",
+        "description",
+        "default_upgrade_policy",
+        "registered",
+        "default_features",
+    )
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
