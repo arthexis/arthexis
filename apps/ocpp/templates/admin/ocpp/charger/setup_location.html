@@ -1,0 +1,148 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  {{ form.media.css }}
+  <style>
+    .charger-location-panel {
+      max-width: 980px;
+    }
+    .charger-location-panel .help {
+      color: var(--body-quiet-color);
+      margin-bottom: 1rem;
+    }
+    .charger-location-panel .charger-list {
+      margin-top: 0.75rem;
+      padding-left: 1.25rem;
+    }
+    .charger-location-panel .map-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .charger-location-panel .map-actions .loading-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--body-quiet-color);
+      font-size: 0.85rem;
+    }
+    .charger-location-panel .map-actions .loading-note.hidden {
+      display: none;
+    }
+    .charger-location-panel .loading-note .loader-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 1s infinite ease-in-out;
+    }
+    .charger-location-panel .loading-note .loader-dot:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+    .charger-location-panel .loading-note .loader-dot:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+    @keyframes blink {
+      0%,
+      100% {
+        opacity: 0.25;
+      }
+      50% {
+        opacity: 1;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {{ form.media.js }}
+{% endblock %}
+
+{% block content_title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <div class="module charger-location-panel">
+    <h2>{% trans "Assign a location to selected charge points" %}</h2>
+    <p class="help">
+      {% trans "Choose an existing location or create a new one. The selected charge points will adopt the location name, and each connector will be suffixed A, B, C, etc." %}
+    </p>
+
+    <div class="map-actions">
+      <button type="button" class="button" id="use-current-location">
+        {% trans "Use my current location" %}
+      </button>
+      <span class="loading-note hidden" id="location-loading">
+        <span class="loader-dot" aria-hidden="true"></span>
+        <span class="loader-dot" aria-hidden="true"></span>
+        <span class="loader-dot" aria-hidden="true"></span>
+        <span>{% trans "Reading location from your browser…" %}</span>
+      </span>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="ids" value="{{ ids }}">
+      {{ form.as_p }}
+      <div class="submit-row">
+        <button type="submit" class="button default">{% trans "Save location" %}</button>
+        <a href="{% url 'admin:ocpp_charger_changelist' %}" class="button cancel-link">{% trans "Cancel" %}</a>
+      </div>
+    </form>
+
+    <h3>{% trans "Selected charge points" %}</h3>
+    <ul class="charger-list">
+      {% for charger in chargers %}
+        <li>{{ charger.display_name|default:charger.charger_id }}{% if charger.connector_id %} (CP{{ charger.connector_id }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endblock %}
+
+{% block extrafooter %}
+  {{ block.super }}
+  <script>
+    (function() {
+      const button = document.getElementById('use-current-location');
+      const loading = document.getElementById('location-loading');
+      const latInput = document.getElementById('id_latitude');
+      const lonInput = document.getElementById('id_longitude');
+
+      const setLoading = (active) => {
+        loading.classList.toggle('hidden', !active);
+      };
+
+      const setCoords = (coords) => {
+        latInput.value = coords.latitude.toFixed(6);
+        lonInput.value = coords.longitude.toFixed(6);
+        if (window.chargerMapSetLocation) {
+          window.chargerMapSetLocation(coords.latitude, coords.longitude);
+        }
+      };
+
+      if (!navigator.geolocation) {
+        button.disabled = true;
+        button.title = gettext('Geolocation is not supported by this browser.');
+        return;
+      }
+
+      button.addEventListener('click', function() {
+        setLoading(true);
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setCoords(position.coords);
+            setLoading(false);
+          },
+          () => {
+            setLoading(false);
+            alert(gettext('Unable to read your location. Please allow location access and try again.'));
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+    })();
+  </script>
+{% endblock %}
