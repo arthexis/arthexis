@@ -1512,7 +1512,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
         except LCDUnavailableError as exc:
             _disable_lcd("LCD unavailable during startup", exc)
         except Exception as exc:
-            _disable_lcd("LCD startup failed", exc)
+            _disable_lcd("LCD startup failed", exc, exc_info=True)
 
         while True:
             if _handle_shutdown_request(lcd):
