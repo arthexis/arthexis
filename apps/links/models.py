@@ -110,6 +110,15 @@ class Reference(Entity):
         default=FOOTER_PUBLIC,
         verbose_name="Footer Visibility",
     )
+    footer_modules = models.ManyToManyField(
+        "modules.Module",
+        blank=True,
+        related_name="footer_references",
+        help_text=(
+            "Optional module-specific footer rules. Leave blank to show in the "
+            "general footer."
+        ),
+    )
     transaction_uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=True,
