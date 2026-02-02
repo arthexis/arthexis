@@ -440,6 +440,9 @@ def _get_request_ip(request) -> str:
 _shared_fixtures_loaded = False
 
 
+def are_shared_fixtures_loaded() -> bool:
+    return _shared_fixtures_loaded
+
 
 def load_shared_user_fixtures(*, force: bool = False, user=None) -> None:
     global _shared_fixtures_loaded

@@ -10,7 +10,7 @@ class LocalsConfig(AppConfig):
         from .user_data.admin_views import patch_admin_user_data_views
         from .user_data.transfer import patch_admin_import_export
         from .user_data.core import patch_admin_user_datum
-        from .user_data import signals as user_data_signals
+        from .user_data import signals  # noqa: F401
 
         patch_admin_user_datum()
         patch_admin_import_export()

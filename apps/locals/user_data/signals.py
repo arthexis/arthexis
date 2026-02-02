@@ -5,13 +5,16 @@ from django.contrib.auth.signals import user_logged_in
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from . import core
-from .core import load_shared_user_fixtures, load_user_fixtures
+from .core import (
+    are_shared_fixtures_loaded,
+    load_shared_user_fixtures,
+    load_user_fixtures,
+)
 
 
 @receiver(user_logged_in)
 def _on_login(sender, request, user, **kwargs):
-    load_user_fixtures(user, include_shared=not core._shared_fixtures_loaded)
+    load_user_fixtures(user, include_shared=not are_shared_fixtures_loaded())
 
     if not (
         getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
