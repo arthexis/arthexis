@@ -1087,7 +1087,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 else:
                     error_message = proxy_body.get("detail") or _("Registration aborted.")
                     server_summary = {"status": "error", "message": error_message}
-                    server_host = {"status": "error", "message": _("Registration aborted.")}
+                    server_host = {"status": "error", "message": error_message}
                     server_visitor = {"status": "error", "message": error_message}
 
         registration_logger.info(
