@@ -76,7 +76,6 @@ def _build_mjpeg_stream_response(stream: MjpegStream):
             )
             return HttpResponse("Camera service unavailable.", status=503)
         logger.info("Falling back to direct MJPEG capture for stream %s", stream.slug)
-        return _build_direct_mjpeg_stream_response(stream)
 
     return _build_direct_mjpeg_stream_response(stream)
 
