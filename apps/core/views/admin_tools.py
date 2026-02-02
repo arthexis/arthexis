@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from django.conf import settings
 from django.contrib.admin.sites import site as admin_site
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
@@ -14,6 +11,7 @@ from django.views.decorators.http import require_GET
 
 from apps.users import temp_passwords
 from utils import revision
+from utils.version import get_version
 
 
 @staff_member_required
@@ -50,13 +48,9 @@ def request_temp_password(request):
 def version_info(request):
     """Return the running application version and Git revision."""
 
-    version = ""
-    version_path = Path(settings.BASE_DIR) / "VERSION"
-    if version_path.exists():
-        version = version_path.read_text(encoding="utf-8").strip()
     return JsonResponse(
         {
-            "version": version,
+            "version": get_version(),
             "revision": revision.get_revision(),
         }
     )
