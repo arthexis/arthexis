@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% translate "Export" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <form method="post" class="module aligned">
+      {% csrf_token %}
+      <fieldset class="module aligned">
+        <div class="form-row">
+          <label for="id_export_format">{% trans "Export format" %}</label>
+          <select name="format" id="id_export_format" required>
+            {% for export_format in export_formats %}
+              <option value="{{ export_format.value }}">{{ export_format.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </fieldset>
+      <fieldset class="module aligned">
+        <div class="form-row">
+          <p>
+            {% blocktrans with record_count=export_count column_count=export_columns|length %}
+              You are about to export {{ record_count }} record(s) with {{ column_count }} column(s).
+            {% endblocktrans %}
+          </p>
+        </div>
+        <div class="form-row">
+          <label>{% trans "Columns to export" %}</label>
+          <ul class="admin-select-list">
+            {% for column in export_columns %}
+              <li>{{ column.label }} <span class="quiet">({{ column.name }})</span></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Export' %}" class="default" />
+        <a href="{{ changelist_url }}" class="button cancel-link">{% trans 'Cancel' %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
