@@ -124,6 +124,7 @@ class ReferenceAdmin(EntityModelAdmin):
         "roles",
         "features",
         "sites",
+        "footer_modules",
         "include_in_footer",
         "show_in_header",
         "footer_visibility",
@@ -135,7 +136,7 @@ class ReferenceAdmin(EntityModelAdmin):
         "image_upload",
         "image_metadata",
     )
-    filter_horizontal = ("roles", "features", "sites")
+    filter_horizontal = ("roles", "features", "sites", "footer_modules")
 
     def get_readonly_fields(self, request, obj=None):
         ro = list(super().get_readonly_fields(request, obj))

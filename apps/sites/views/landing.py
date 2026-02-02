@@ -55,6 +55,7 @@ def footer_fragment(request):
         badge_site=getattr(request, "badge_site", None),
         badge_node=getattr(request, "badge_node", None),
         force_footer=force_footer,
+        module=getattr(request, "current_module", None),
     )
     return TemplateResponse(request, "core/footer.html", context)
 
