@@ -62,7 +62,10 @@ def build_logging_settings(
                 "()": "apps.loggers.filters.DebugAppFilter",
                 "debug_value": os.environ.get("DEBUG"),
                 "debug_enabled": debug_control.enabled,
-            }
+            },
+            "ignore_static_asset_requests": {
+                "()": "apps.loggers.filters.IgnoreStaticAssetRequestsFilter",
+            },
         },
         "handlers": {
             "file": {
@@ -135,6 +138,12 @@ def build_logging_settings(
         "handlers": ["page_misses_file"],
         "level": "INFO",
         "propagate": False,
+    }
+
+    logging_config["loggers"]["django.channels.server"] = {
+        "level": "INFO",
+        "filters": ["ignore_static_asset_requests"],
+        "propagate": True,
     }
 
     configure_library_loggers(debug_control.enabled, logging_config)
