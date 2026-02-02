@@ -5,6 +5,7 @@ from .node_admin import NodeAdmin
 from .node_feature_admin import NodeFeatureAdmin
 from .node_role_admin import NodeRoleAdmin
 from .platform_admin import PlatformAdmin
+from .upgrade_policy_admin import UpgradePolicyAdmin
 
 __all__ = [
     "EmailOutboxAdmin",
@@ -14,4 +15,5 @@ __all__ = [
     "NodeRoleAdmin",
     "PlatformAdmin",
     "NodeFeatureAssignmentInline",
+    "UpgradePolicyAdmin",
 ]

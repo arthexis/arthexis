@@ -139,6 +139,14 @@ class NodeRole(NameRepresentationMixin, Entity):
     name = models.CharField(max_length=50, unique=True)
     acronym = models.CharField(max_length=4, unique=True, null=True, blank=True)
     description = models.CharField(max_length=200, blank=True)
+    default_upgrade_policy = models.ForeignKey(
+        "nodes.UpgradePolicy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_roles",
+        help_text="Upgrade policy assigned by default to nodes with this role.",
+    )
 
     objects = NodeRoleManager()
 
@@ -234,6 +242,13 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             "Nodes that must be running and upgraded before this node can "
             "auto-upgrade."
         ),
+    )
+    upgrade_policies = models.ManyToManyField(
+        "nodes.UpgradePolicy",
+        through="nodes.NodeUpgradePolicyAssignment",
+        related_name="nodes",
+        blank=True,
+        help_text="Upgrade policies applied to this node.",
     )
     features = models.ManyToManyField(
         "nodes.NodeFeature",
@@ -870,8 +885,28 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         if self.pk:
             if is_new:
                 self._apply_role_manual_features()
+                self._apply_role_upgrade_policy()
             self._apply_role_auto_features()
             self.refresh_features()
+
+    def _apply_role_upgrade_policy(self) -> None:
+        """Assign the default upgrade policy for this node's role."""
+        if not self.role_id:
+            return
+        try:
+            if self.upgrade_policies.exists():
+                return
+        except DatabaseError:
+            return
+
+        policy_id = getattr(self.role, "default_upgrade_policy_id", None)
+        if not policy_id:
+            return
+
+        assignment_model = apps.get_model("nodes", "NodeUpgradePolicyAssignment")
+        if assignment_model is None:
+            return
+        assignment_model.objects.get_or_create(node_id=self.pk, policy_id=policy_id)
 
     def send_mail(
         self,

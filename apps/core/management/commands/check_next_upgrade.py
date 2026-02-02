@@ -7,7 +7,6 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.core.system.filesystem import _auto_upgrade_mode_file
 from apps.core.system.ui import _format_timestamp
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
@@ -53,7 +52,6 @@ class Command(BaseCommand):
 
         skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
         blockers = self._collect_blockers(
-            base_dir,
             available,
             error,
             task,
@@ -148,7 +146,6 @@ class Command(BaseCommand):
 
     def _collect_blockers(
         self,
-        base_dir: Path,
         available: bool,
         error: str,
         task,
@@ -167,16 +164,8 @@ class Command(BaseCommand):
             elif schedule is None:
                 blockers.append("The auto-upgrade schedule configuration could not be read.")
 
-        mode_file = _auto_upgrade_mode_file(base_dir)
         if not mode_info.get("enabled"):
-            if not mode_info.get("lock_exists"):
-                blockers.append(
-                    f"Auto-upgrade is disabled because {mode_file} does not exist."
-                )
-            elif mode_info.get("read_error"):
-                blockers.append(
-                    f"Auto-upgrade mode file {mode_file} exists but could not be read."
-                )
+            blockers.append("No upgrade policies apply; manual upgrades required.")
 
         return blockers
 

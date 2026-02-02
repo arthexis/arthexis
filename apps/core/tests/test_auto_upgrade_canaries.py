@@ -25,6 +25,7 @@ def test_canary_gate_blocks_when_canary_offline(monkeypatch, tmp_path: Path):
         remote_revision="rev-1",
         release_version=None,
         release_revision=None,
+        release_pypi_url=None,
         remote_version="1.0.0",
         local_version="0.9.0",
         local_revision="rev-0",
@@ -37,6 +38,8 @@ def test_canary_gate_blocks_when_canary_offline(monkeypatch, tmp_path: Path):
         mode_file_exists=True,
         mode_file_physical=True,
         interval_minutes=60,
+        requires_canaries=True,
+        requires_pypi=False,
     )
 
     assert tasks._canary_gate(tmp_path, repo_state, mode, now=now) is False
@@ -56,6 +59,7 @@ def test_canary_gate_allows_when_canary_ready(monkeypatch, tmp_path: Path):
         remote_revision="rev-2",
         release_version=None,
         release_revision=None,
+        release_pypi_url=None,
         remote_version="1.2.0",
         local_version="1.1.0",
         local_revision="rev-1",
@@ -68,6 +72,8 @@ def test_canary_gate_allows_when_canary_ready(monkeypatch, tmp_path: Path):
         mode_file_exists=True,
         mode_file_physical=True,
         interval_minutes=60,
+        requires_canaries=True,
+        requires_pypi=False,
     )
 
     assert tasks._canary_gate(tmp_path, repo_state, mode, now=now) is True
@@ -87,6 +93,7 @@ def test_canary_gate_blocks_when_canary_version_mismatch(monkeypatch, tmp_path: 
         remote_revision="rev-3",
         release_version="2.1.0",
         release_revision=None,
+        release_pypi_url=None,
         remote_version="2.1.0",
         local_version="2.0.0",
         local_revision="rev-2",
@@ -99,6 +106,8 @@ def test_canary_gate_blocks_when_canary_version_mismatch(monkeypatch, tmp_path: 
         mode_file_exists=True,
         mode_file_physical=True,
         interval_minutes=60,
+        requires_canaries=True,
+        requires_pypi=False,
     )
 
     assert tasks._canary_gate(tmp_path, repo_state, mode, now=now) is False

@@ -16,17 +16,14 @@ from apps.celery.utils import enqueue_task, is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
-    AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
     auto_upgrade_failure_guide,
-    auto_upgrade_fast_lane_enabled,
-    auto_upgrade_fast_lane_lock_file,
     auto_upgrade_base_dir,
     auto_upgrade_log_file,
     ensure_auto_upgrade_periodic_task,
 )
 from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
 
-from .filesystem import _auto_upgrade_mode_file, _auto_upgrade_skip_file
+from .filesystem import _auto_upgrade_skip_file
 from .ui import _format_datetime, _format_timestamp, _suite_uptime_details
 
 
@@ -187,32 +184,108 @@ def _auto_upgrade_next_check() -> str:
     return _predict_auto_upgrade_next_run(task)
 
 
-def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
-    """Return metadata describing the configured auto-upgrade mode."""
+def _format_interval_minutes(interval_minutes: int) -> str:
+    """Return a readable interval label for policy cadence."""
+    if interval_minutes <= 0:
+        return ""
+    if interval_minutes % 1440 == 0:
+        days = interval_minutes // 1440
+        return str(ngettext("Every %(count)s day", "Every %(count)s days", days) % {"count": days})
+    if interval_minutes % 60 == 0:
+        hours = interval_minutes // 60
+        return str(ngettext("Every %(count)s hour", "Every %(count)s hours", hours) % {"count": hours})
+    return str(
+        ngettext(
+            "Every %(count)s minute",
+            "Every %(count)s minutes",
+            interval_minutes,
+        )
+        % {"count": interval_minutes}
+    )
 
-    mode_file = _auto_upgrade_mode_file(base_dir)
-    info: dict[str, object] = {
-        "mode": "stable",
-        "enabled": False,
-        "lock_exists": mode_file.exists(),
-        "read_error": False,
-    }
 
-    if not info["lock_exists"]:
-        return info
-
-    info["enabled"] = True
+def _load_upgrade_policy_report() -> dict[str, object]:
+    """Return policy metadata for the local node."""
+    try:  # pragma: no cover - optional dependency
+        from apps.nodes.models import Node, NodeUpgradePolicyAssignment
+    except Exception:
+        return {"policies": [], "manual": True, "error": str(_("Upgrade policy data unavailable."))}
 
     try:
-        raw_value = mode_file.read_text(encoding="utf-8").strip()
-    except OSError:
-        info["read_error"] = True
-        return info
+        local = Node.get_local()
+    except DatabaseError:
+        return {"policies": [], "manual": True, "error": str(_("Upgrade policy data unavailable."))}
 
-    mode = raw_value or "stable"
-    info["mode"] = mode
-    info["enabled"] = True
-    return info
+    if not local:
+        return {"policies": [], "manual": True, "error": ""}
+
+    try:
+        assignments = (
+            NodeUpgradePolicyAssignment.objects.select_related("policy")
+            .filter(node=local)
+            .order_by("policy__name")
+        )
+    except DatabaseError:
+        return {"policies": [], "manual": True, "error": str(_("Upgrade policy data unavailable."))}
+
+    policies: list[dict[str, object]] = []
+    channels: set[str] = set()
+    for assignment in assignments:
+        policy = assignment.policy
+        if not policy:
+            continue
+        channel = (policy.channel or "stable").lower()
+        channel_label = str(getattr(policy, "get_channel_display", lambda: policy.channel)())
+        channel_state = "ok" if channel == "stable" else "warning"
+        channels.add(channel)
+        policies.append(
+            {
+                "name": policy.name,
+                "channel": channel,
+                "channel_label": channel_label,
+                "channel_state": channel_state,
+                "interval_minutes": policy.interval_minutes,
+                "interval_label": _format_interval_minutes(policy.interval_minutes),
+                "requires_canaries": policy.requires_canaries,
+                "requires_pypi": policy.requires_pypi_packages,
+                "last_checked_at": assignment.last_checked_at,
+                "last_checked_label": _format_timestamp(assignment.last_checked_at),
+                "last_status": assignment.last_status,
+            }
+        )
+
+    normalized_channels = {
+        "unstable" if channel in {"unstable", "latest"} else "stable"
+        for channel in channels
+    }
+    return {
+        "policies": policies,
+        "manual": not policies,
+        "channels": sorted(normalized_channels),
+        "stable_only": normalized_channels == {"stable"} if policies else False,
+        "unstable_only": normalized_channels == {"unstable"} if policies else False,
+        "error": "",
+    }
+
+
+def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
+    """Return metadata describing the configured upgrade policy state."""
+
+    del base_dir
+    policy_info = _load_upgrade_policy_report()
+    channels = policy_info.get("channels") or []
+    mode = "manual"
+    if len(channels) == 1:
+        mode = channels[0]
+    elif channels:
+        mode = "mixed"
+
+    return {
+        "mode": mode,
+        "enabled": not policy_info.get("manual", True),
+        "lock_exists": False,
+        "read_error": False,
+    }
 
 
 def _load_auto_upgrade_skip_revisions(base_dir: Path) -> list[str]:
@@ -668,12 +741,10 @@ def _build_auto_upgrade_report(
     """Assemble the composite auto-upgrade report for the admin view."""
 
     base_dir = auto_upgrade_base_dir()
-    fast_lane_enabled = auto_upgrade_fast_lane_enabled(base_dir)
-    mode_info = _read_auto_upgrade_mode(base_dir)
+    policy_info = _load_upgrade_policy_report()
     log_info = _load_auto_upgrade_log_entries(base_dir, limit=limit)
     skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
     schedule_info = _load_auto_upgrade_schedule()
-    schedule_info["fast_lane_enabled"] = fast_lane_enabled
 
     used_log_last_run = False
     entries = log_info.get("entries") or []
@@ -686,37 +757,9 @@ def _build_auto_upgrade_report(
             schedule_info["last_run_at"] = last_log_entry["timestamp"]
             used_log_last_run = True
 
-    if fast_lane_enabled and not schedule_info.get("description"):
-        schedule_info["description"] = _(
-            "Fast Lane enabled: upgrade checks run hourly."
-        )
     schedule_disabled = schedule_info.get("enabled") is False
     if schedule_info.get("next_run") == str(_("Disabled")):
         schedule_disabled = True
-
-    if (
-        fast_lane_enabled
-        and used_log_last_run
-        and last_log_timestamp_raw is not None
-        and not schedule_disabled
-    ):
-        schedule_info["next_run"] = _format_next_run_from_reference(
-            last_log_timestamp_raw,
-            interval_minutes=AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
-        )
-
-    raw_mode_value = str(mode_info.get("mode", "stable"))
-    normalized_mode = raw_mode_value.lower() or "stable"
-    resolved_mode = {
-        "version": "stable",
-        "normal": "stable",
-        "regular": "stable",
-    }.get(normalized_mode, normalized_mode)
-    if not resolved_mode:
-        resolved_mode = "stable"
-    is_unstable_mode = resolved_mode in {"unstable", "latest"}
-    is_stable_mode = resolved_mode == "stable"
-    is_latest_mode = normalized_mode == "latest"
 
     revision_details = _prepare_revision_info(revision_info)
 
@@ -725,18 +768,12 @@ def _build_auto_upgrade_report(
     suite_lock_started_at = suite_details.get("lock_started_at")
 
     settings_info = {
-        "enabled": bool(mode_info.get("enabled", False)),
-        "mode": resolved_mode,
-        "raw_mode": raw_mode_value,
-        "channel": resolved_mode,
-        "is_unstable_mode": is_unstable_mode,
-        "is_stable_mode": is_stable_mode,
-        "is_latest": is_latest_mode,
-        "lock_exists": bool(mode_info.get("lock_exists", False)),
-        "read_error": bool(mode_info.get("read_error", False)),
-        "mode_file": str(_auto_upgrade_mode_file(base_dir)),
-        "fast_lane_enabled": fast_lane_enabled,
-        "fast_lane_lock": str(auto_upgrade_fast_lane_lock_file(base_dir)),
+        "enabled": bool(not policy_info.get("manual", True)),
+        "manual": bool(policy_info.get("manual", True)),
+        "policies": policy_info.get("policies", []),
+        "channels": policy_info.get("channels", []),
+        "stable_only": bool(policy_info.get("stable_only", False)),
+        "unstable_only": bool(policy_info.get("unstable_only", False)),
         "skip_revisions": skip_revisions,
         "task_name": AUTO_UPGRADE_TASK_NAME,
         "task_path": AUTO_UPGRADE_TASK_PATH,
@@ -776,15 +813,12 @@ def _build_auto_upgrade_report(
     if log_info.get("error"):
         note(str(log_info["error"]), severity="error")
 
-    if settings_info.get("read_error"):
-        note(
-            str(
-                _("The auto-upgrade mode could not be read; verify the lock file permissions.")),
-            severity="error",
-        )
+    policy_error = policy_info.get("error")
+    if policy_error:
+        note(str(policy_error), severity="error")
 
-    if not settings_info.get("enabled"):
-        note(str(_("Auto-upgrades are currently disabled.")), severity="warning")
+    if settings_info.get("manual"):
+        note(str(_("No upgrade policies apply; upgrades require manual action.")), severity="warning")
 
     if schedule_info.get("available"):
         if not schedule_info.get("configured"):
