@@ -110,7 +110,9 @@ def _match_usb_tracker(
     relative_path = tracker.required_file_path.lstrip("/")
     if not relative_path:
         return None
-    candidate = mount / relative_path
+    candidate = (mount / relative_path).resolve()
+    if not candidate.is_relative_to(mount):
+        return None
     if not candidate.exists():
         return None
 
