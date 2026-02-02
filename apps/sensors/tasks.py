@@ -67,23 +67,18 @@ def _usb_mount_roots() -> tuple[Path, ...]:
 
 
 def _iter_usb_mounts(roots: tuple[Path, ...]) -> list[Path]:
-    mounts: list[Path] = []
+    mounts: set[Path] = set()
     for root in roots:
-        try:
-            entries = list(root.iterdir())
-        except OSError:
+        if not root.is_dir():
             continue
-        for entry in entries:
-            if not entry.is_dir():
-                continue
-            mounts.append(entry)
+        for pattern in ("*", "*/*"):
             try:
-                for child in entry.iterdir():
-                    if child.is_dir():
-                        mounts.append(child)
+                for path in root.glob(pattern):
+                    if path.is_dir():
+                        mounts.add(path)
             except OSError:
                 continue
-    return mounts
+    return list(mounts)
 
 
 def _read_match_file(path: Path) -> str | None:
@@ -101,6 +96,12 @@ def _format_recipe_result(result: object) -> str:
         return str(result)
     except Exception:
         return repr(result)
+
+
+def _escape_recipe_arg(value: str) -> str:
+    escaped = value.encode("unicode_escape").decode("ascii")
+    escaped = escaped.replace('"', '\\"')
+    return escaped.replace("'", "\\'")
 
 
 def _match_usb_tracker(
@@ -189,8 +190,8 @@ def scan_usb_trackers() -> dict[str, int]:
             try:
                 result = tracker.recipe.execute(
                     tracker=tracker,
-                    mount_path=str(mount),
-                    file_path=str(match_path),
+                    mount_path=_escape_recipe_arg(str(mount)),
+                    file_path=_escape_recipe_arg(str(match_path)),
                 )
                 tracker.last_recipe_result = _format_recipe_result(result.result)
                 tracker.last_error = ""
@@ -198,8 +199,9 @@ def scan_usb_trackers() -> dict[str, int]:
                 update_fields.extend(["last_recipe_result", "last_error"])
             except Exception as exc:  # pragma: no cover - defensive logging
                 tracker.last_error = str(exc)
+                tracker.last_recipe_result = ""
                 failed += 1
-                update_fields.append("last_error")
+                update_fields.extend(["last_error", "last_recipe_result"])
         else:
             tracker.last_recipe_result = ""
             tracker.last_error = ""
