@@ -819,7 +819,7 @@ def _run_release_step(
             pass
         except Exception as exc:  # pragma: no cover - best effort logging
             _append_log(log_path, f"{name} failed: {exc}")
-            ctx["error"] = str(exc)
+            ctx["error"] = _("An internal error occurred while running this step.")
             ctx.pop("publish_pending", None)
             _persist_release_context(request, session_key, ctx, lock_path)
         else:
