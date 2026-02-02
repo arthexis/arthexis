@@ -4,6 +4,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
+from apps.cards import mse
 from apps.cards.models import CardFace, CardSet, get_cardface_bucket
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
@@ -100,6 +101,29 @@ class CardSetUploadForm(forms.Form):
         help_text=_("Upload a .mse-set file or a plain text set file."),
     )
 
+    def clean_mse_set(self):
+        uploaded_file = self.cleaned_data.get("mse_set")
+        if not uploaded_file:
+            return uploaded_file
+
+        try:
+            payload = uploaded_file.read()
+            uploaded_file.seek(0)
+
+            set_text = mse.extract_set_text(payload)
+            parsed = mse.parse_mse_set(set_text)
+
+            self.cleaned_data["set_text"] = set_text
+            self.cleaned_data["parsed_data"] = parsed
+            return uploaded_file
+        except (ValueError, TypeError) as exc:
+            raise ValidationError(
+                _("Failed to parse MSE set file: %(error)s") % {"error": exc}
+            ) from exc
+
     def save(self) -> CardSet:
         uploaded = self.cleaned_data["mse_set"]
-        return CardSet.create_from_upload(uploaded)
+        set_text = self.cleaned_data["set_text"]
+        parsed_data = self.cleaned_data["parsed_data"]
+        filename = getattr(uploaded, "name", "") or ""
+        return CardSet.create_from_parsed(parsed_data, set_text, filename=filename)
