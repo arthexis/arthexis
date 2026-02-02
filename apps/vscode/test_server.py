@@ -174,10 +174,15 @@ def _migration_merge_required(base_dir: Path) -> bool:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Checking for merge migrations:", " ".join(command))
-    result = subprocess.run(command, cwd=base_dir, env=env, capture_output=True, text=True)
-    output = "\n".join(
-        part.strip() for part in (result.stdout, result.stderr) if part and part.strip()
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
+    output = result.stdout or ""
     if "Conflicting migrations detected" in output:
         print(f"{PREFIX} Migration merge required. Stopping.")
         NOTIFY(
