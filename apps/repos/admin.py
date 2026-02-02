@@ -181,11 +181,12 @@ class GitHubAppAdmin(admin.ModelAdmin):
         parsed = urlparse(base_url)
         host = parsed.hostname or ""
         needs_https = parsed.scheme != "https"
-        needs_domain = not host
-        if host:
+        if not host:
+            needs_domain = True
+        else:
             try:
                 ipaddress.ip_address(host)
-                needs_domain = True
+                needs_domain = True  # Host is an IP address.
             except ValueError:
                 needs_domain = host.lower() == "localhost"
 
