@@ -583,6 +583,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "config.context_processors.site_and_node",
                 "apps.sites.context_processors.nav_links",
+                "apps.links.context_processors.share_short_url",
             ],
         },
     },

@@ -19,6 +19,7 @@ from .models import (
     QRRedirect,
     QRRedirectLead,
     Reference,
+    ShortURL,
     get_reference_file_bucket,
     get_reference_qr_bucket,
 )
@@ -262,6 +263,13 @@ class ReferenceAdmin(EntityModelAdmin):
             "type": media.content_type or _("unknown"),
             "size": media.size,
         }
+
+
+@admin.register(ShortURL)
+class ShortURLAdmin(EntityModelAdmin):
+    list_display = ("slug", "original_url", "target_url", "updated_on", "created_on")
+    readonly_fields = ("slug", "original_url", "created_on", "updated_on")
+    fields = ("slug", "original_url", "target_url", "created_on", "updated_on")
 
 
 @admin.register(QRRedirect)
