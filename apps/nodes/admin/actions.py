@@ -388,7 +388,11 @@ def check_features_for_eligibility(modeladmin, request, queryset):
     successes = 0
     node = Node.get_local()
     for feature in features:
-        enablement_message = modeladmin._manual_enablement_message(feature, node)
+        manual_enablement = modeladmin._manual_enablement_data(feature, node)
+        enablement_label = manual_enablement.get("label")
+        enablement_message = (
+            f"Manual enablement: {enablement_label}." if enablement_label else ""
+        )
         try:
             result = feature_checks.run(feature, node=node)
         except Exception as exc:  # pragma: no cover - defensive

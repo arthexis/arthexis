@@ -57,7 +57,7 @@ Changes to assignments are applied immediately after saving the node or feature 
 
 Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`apps/nodes/feature_checks.py`](../../apps/nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages with success, warning, or error levels.
 
-Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_message` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
+Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_data` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
 
 ## Declaring feature setup hooks
 
