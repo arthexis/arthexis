@@ -48,10 +48,11 @@ def extract_set_text(payload: bytes) -> str:
                 None,
             )
             if not set_name:
-                raise KeyError("set")
+                raise ValueError("Uploaded .mse-set archive must contain a 'set' file.")
             raw = archive.read(set_name)
             return raw.decode("utf-8", errors="replace")
-    except (BadZipFile, KeyError):
+    except BadZipFile:
+        # If it's not a zip file, treat it as a plaintext payload
         return payload.decode("utf-8", errors="replace")
 
 
