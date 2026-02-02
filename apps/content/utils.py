@@ -276,7 +276,8 @@ def _detect_runserver_port() -> int | None:
         )
     except FileNotFoundError:
         return None
-    except Exception:
+    except Exception as exc:
+        logger.warning("Error detecting runserver port: %s", exc)
         return None
 
     if result.returncode != 0:
