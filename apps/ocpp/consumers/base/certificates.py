@@ -25,17 +25,16 @@ class CertificatesMixin:
             if found:
                 return found
 
-        charger_id = ""
-        if target and getattr(target, "charger_id", ""):
-            charger_id = target.charger_id
-        elif getattr(self, "charger_id", ""):
-            charger_id = self.charger_id
+        charger_id = getattr(target, "charger_id", "") or getattr(self, "charger_id", "")
 
         if charger_id:
-            found = Charger.objects.filter(charger_id=charger_id).first()
-            if found:
-                return found
-            return Charger.objects.create(charger_id=charger_id)
+            # This logic is intended to find or create the aggregate charger record,
+            # which should have `connector_id=None`. Using `get_or_create`
+            # makes this more explicit and atomic.
+            charger, _ = Charger.objects.get_or_create(
+                charger_id=charger_id, connector_id=None
+            )
+            return charger
 
         return None
 
