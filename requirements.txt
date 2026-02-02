@@ -64,7 +64,7 @@ pillow==12.1.0
 opencv-python==4.12.0.88
 pyxel==2.6.1
 prompt_toolkit==3.0.52
-psutil==7.2.1
+psutil==7.2.2
 psycopg==3.3.2
 psycopg-binary==3.3.2
 pyasn1==0.6.2
