@@ -203,12 +203,13 @@ def _user_data_import(request):
             paths = []
             data_dir = _data_dir(request.user)
             for name in zf.namelist():
-                basename = name.replace("\\", "/").split("/")[-1]
-                if not basename.endswith(".json") or not basename:
+            for name in zf.namelist():
+                basename = name.replace('\\', '/').split('/')[-1]
+                if not basename.endswith('.json') or not basename:
                     continue
                 content = zf.read(name)
                 target = data_dir / basename
-                with target.open("wb") as f:
+                with target.open('wb') as f:
                     f.write(content)
                 paths.append(target)
         if paths:
