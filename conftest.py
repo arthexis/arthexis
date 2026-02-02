@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List
@@ -13,6 +14,10 @@ import pytest
 # connection attempts when checking availability inside config.settings.
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault(
+    "ARTHEXIS_SQLITE_TEST_PATH",
+    str(Path(tempfile.gettempdir()) / "arthexis-test-db.sqlite3"),
+)
 
 
 def _ensure_clean_test_databases() -> None:

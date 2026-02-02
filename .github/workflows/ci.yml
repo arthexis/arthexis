@@ -14,10 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
   pull_request:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * 1'
   workflow_dispatch:
     inputs:
       run_slow_tests:
@@ -26,7 +25,39 @@ on:
         default: 'false'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs || steps.fallback.outputs.docs }}
+      app: ${{ steps.filter.outputs.app || steps.fallback.outputs.app }}
+    steps:
+      - uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          clean: false
+      - id: filter
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+              - 'README.md'
+              - 'mkdocs.yml'
+            app:
+              - '**'
+              - '!docs/**'
+              - '!README.md'
+              - '!mkdocs.yml'
+      - id: fallback
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          echo "docs=true" >> "$GITHUB_OUTPUT"
+          echo "app=true" >> "$GITHUB_OUTPUT"
+
   install:
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.app == 'true' }}
+    needs: changes
     runs-on: ubuntu-latest
     services:
       redis:
@@ -101,25 +132,9 @@ jobs:
           name: install-pytest-log
           path: pytest.log
           if-no-files-found: warn
-  docs-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      docs: ${{ steps.filter.outputs.docs }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          clean: false
-      - id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            docs:
-              - 'docs/**'
-              - 'README.md'
-              - 'mkdocs.yml'
   docs-links:
-    if: ${{ github.event_name == 'schedule' || needs.docs-changes.outputs.docs == 'true' }}
-    needs: docs-changes
+    if: ${{ github.event_name == 'schedule' || needs.changes.outputs.docs == 'true' }}
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
@@ -151,6 +166,7 @@ jobs:
           source .venv/bin/activate
           python scripts/check_no_http_links.py
   upgrade:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -232,7 +248,7 @@ jobs:
           path: pytest.log
           if-no-files-found: warn
   slow-tests:
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true' }}
     runs-on: ubuntu-latest
     env:
       RUN_SLOW_TESTS: '1'
