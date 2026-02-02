@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +72,7 @@ def generate_self_signed_certificate(
     certificate_key_path: Path,
     days_valid: int,
     key_length: int,
+    subject_alt_names: list[str] | None = None,
     sudo: str = "sudo",
 ) -> str:
     """Generate a self-signed certificate using openssl."""
@@ -80,6 +83,13 @@ def generate_self_signed_certificate(
     if sudo:
         subprocess.run([sudo, "mkdir", "-p", str(cert_parent)], check=True)
         subprocess.run([sudo, "mkdir", "-p", str(key_parent)], check=True)
+
+    config_path: Path | None = None
+    config_contents = _build_self_signed_config(domain, subject_alt_names or [])
+    if config_contents:
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp_file:
+            temp_file.write(config_contents)
+            config_path = Path(temp_file.name)
 
     command = [
         sudo,
@@ -98,11 +108,86 @@ def generate_self_signed_certificate(
         "-out",
         str(certificate_path),
     ]
+    if config_path:
+        command.extend(["-config", str(config_path), "-extensions", "v3_req"])
 
     try:
         return _run_command(command)
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         raise SelfSignedError(str(exc)) from exc
+    finally:
+        if config_path:
+            config_path.unlink(missing_ok=True)
+
+
+def _build_self_signed_config(domain: str, subject_alt_names: list[str]) -> str:
+    entries = _format_subject_alt_name_entries(subject_alt_names)
+    if not entries:
+        return ""
+    entries_block = "\n".join(entries)
+    return "\n".join(
+        [
+            "[req]",
+            "distinguished_name = req_distinguished_name",
+            "x509_extensions = v3_req",
+            "prompt = no",
+            "",
+            "[req_distinguished_name]",
+            f"CN = {domain}",
+            "",
+            "[v3_req]",
+            "subjectAltName = @alt_names",
+            "",
+            "[alt_names]",
+            entries_block,
+            "",
+        ]
+    )
+
+
+def _format_subject_alt_name_entries(subject_alt_names: list[str]) -> list[str]:
+    entries: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    dns_index = 1
+    ip_index = 1
+
+    for raw in subject_alt_names:
+        value = str(raw or "").strip()
+        if not value:
+            continue
+
+        prefix = ""
+        candidate = value
+        if ":" in value:
+            prefix, candidate = value.split(":", 1)
+            if prefix.lower() not in {"dns", "ip"}:
+                prefix = ""
+                candidate = value
+            else:
+                prefix = prefix.lower()
+                candidate = candidate.strip()
+
+        if not prefix:
+            try:
+                ipaddress.ip_address(candidate)
+            except ValueError:
+                prefix = "dns"
+            else:
+                prefix = "ip"
+
+        key = (prefix, candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if prefix == "ip":
+            entries.append(f"IP.{ip_index} = {candidate}")
+            ip_index += 1
+        else:
+            entries.append(f"DNS.{dns_index} = {candidate}")
+            dns_index += 1
+
+    return entries
 
 
 def _with_sudo(command: list[str], sudo: str) -> list[str]:

@@ -124,7 +124,12 @@ class SelfSignedCertificate(CertificateBase):
         verbose_name = _("Self-signed certificate")
         verbose_name_plural = _("Self-signed certificates")
 
-    def generate(self, *, sudo: str = "sudo") -> str:
+    def generate(
+        self,
+        *,
+        sudo: str = "sudo",
+        subject_alt_names: list[str] | None = None,
+    ) -> str:
         """Generate a self-signed certificate for this domain."""
 
         message = services.generate_self_signed_certificate(
@@ -133,6 +138,7 @@ class SelfSignedCertificate(CertificateBase):
             certificate_key_path=self.certificate_key_file,
             days_valid=self.valid_days,
             key_length=self.key_length,
+            subject_alt_names=subject_alt_names,
             sudo=sudo,
         )
         self.last_generated_at = timezone.now()

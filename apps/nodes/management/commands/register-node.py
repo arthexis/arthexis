@@ -1,5 +1,6 @@
 import base64
 import json
+from urllib.parse import urlsplit
 
 import requests
 from django.contrib.auth import get_user_model
@@ -50,6 +51,11 @@ class Command(BaseCommand):
                 f"Request to {url} failed with status {response.status_code}: {detail}"
             )
         return data
+
+    def _ensure_https_url(self, url: str, *, label: str) -> None:
+        parsed = urlsplit(url)
+        if parsed.scheme != "https":
+            raise CommandError(f"{label} URL must use https: {url}")
 
     def _load_local_info(self) -> dict:
         factory = RequestFactory()
@@ -119,11 +125,26 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         payload = self._decode_token(options["token"])
+        self._ensure_https_url(payload["info"], label="Host info")
+        self._ensure_https_url(payload["register"], label="Host registration")
         session = requests.Session()
         session.auth = (payload["username"], payload["password"])
 
         host_info = self._request_json(session, payload["info"])
         visitor_info = self._load_local_info()
+
+        if not host_info.get("base_site_requires_https", False):
+            self.stdout.write(
+                self.style.WARNING(
+                    "Host node is not configured to require HTTPS. Update its Sites settings."
+                )
+            )
+        if not visitor_info.get("base_site_requires_https", False):
+            self.stdout.write(
+                self.style.WARNING(
+                    "Local node is not configured to require HTTPS. Update its Sites settings."
+                )
+            )
 
         visitor_payload = self._build_payload(visitor_info, "Downstream")
         visitor_payload["deactivate_user"] = True
