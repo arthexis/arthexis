@@ -40,7 +40,7 @@ from apps.cards.rfid_import_export import (
 from apps.cards.utils import build_mode_toggle
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.links.models import ExperienceReference, Reference
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.nodes.utils import ensure_feature_enabled
 from apps.nodes.models import NodeFeature
 from apps.ocpp.models import Transaction

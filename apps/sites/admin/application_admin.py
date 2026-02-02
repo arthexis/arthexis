@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.app.models import Application, ApplicationModel, refresh_application_models
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from .filters import ApplicationInstalledListFilter
 from .forms import ApplicationForm

@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from apps.core.admin import OwnableAdminMixin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.recipes.models import Recipe
 
 

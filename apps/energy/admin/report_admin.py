@@ -12,7 +12,7 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.emails.utils import normalize_recipients
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.ocpp.models import Charger
 
 from ..models import ClientReport, ClientReportSchedule

@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from ..models import UserStory
 

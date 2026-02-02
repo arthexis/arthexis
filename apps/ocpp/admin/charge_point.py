@@ -41,7 +41,7 @@ from apps.cards.models import RFID as CoreRFID
 from apps.core.admin import SaveBeforeChangeAction
 from apps.core.form_fields import SchedulePeriodsField
 from apps.energy.models import EnergyTariff
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.nodes.models import Node
 from apps.protocols.decorators import protocol_call
 from apps.maps.models import Location

@@ -14,7 +14,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.core.admin.mixins import OwnableAdminMixin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 from .models import (

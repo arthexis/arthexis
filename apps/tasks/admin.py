@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.tasks.forms import TaskCategoryAdminForm
 from apps.tasks.models import ManualSkill, ManualTaskReport, ManualTaskRequest, TaskCategory
 

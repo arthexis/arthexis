@@ -9,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 
 import logging
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.discovery.services import record_discovery_item, start_discovery
 
 from ..models import Node, NodeFeature, NodeFeatureAssignment

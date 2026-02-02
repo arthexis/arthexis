@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
 
 from .forms import (

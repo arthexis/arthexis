@@ -10,7 +10,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import (
+from apps.locals.user_data.core import (
     UserDatumAdminMixin,
     delete_user_fixture,
     dump_user_fixture,

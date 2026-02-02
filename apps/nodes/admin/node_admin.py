@@ -37,7 +37,7 @@ from apps.discovery.services import record_discovery_item, start_discovery
 from apps.cards.models import RFID
 from apps.cards.sync import apply_rfid_payload
 from apps.core.admin import SaveBeforeChangeAction
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.ocpp import store
 from apps.ocpp.models import (
     Charger,

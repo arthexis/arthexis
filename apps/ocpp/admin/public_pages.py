@@ -14,7 +14,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from ..models import PublicConnectorPage
 

@@ -1,4 +1,4 @@
-from apps.locals.user_data import (
+from apps.locals.user_data.core import (
     EntityModelAdmin,
     UserDatumAdminMixin,
     delete_user_fixture,

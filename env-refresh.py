@@ -49,7 +49,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from apps.release.models import PackageRelease
 from apps.sigils.sigil_builder import generate_model_sigils
-from apps.locals.user_data import load_shared_user_fixtures, load_user_fixtures
+from apps.locals.user_data.core import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 from scripts.fixtures_changed import fixtures_changed
 from django.utils import timezone

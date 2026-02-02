@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.db.models import Count
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 from apps.nodes.forms import NodeRoleMultipleChoiceField

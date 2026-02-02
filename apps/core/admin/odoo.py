@@ -8,7 +8,7 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.discovery.services import record_discovery_item, start_discovery
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.odoo.models import OdooEmployee, OdooProduct
 
 from .forms import OdooEmployeeAdminForm, OdooProductAdminForm

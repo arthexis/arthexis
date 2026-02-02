@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from ..models import Landing, LandingLead, ReferrerLanding
 from ..utils import landing_leads_supported

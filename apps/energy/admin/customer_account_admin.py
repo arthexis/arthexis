@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.cards.models import RFID
 from apps.groups.models import SecurityGroup
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.odoo.models import OdooEmployee
 from apps.vehicle.models import ElectricVehicle
 

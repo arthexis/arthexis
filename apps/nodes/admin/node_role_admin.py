@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db.models import Count
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from ..models import NodeRole, Node
 from .forms import NodeRoleAdminForm

@@ -10,7 +10,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from unittest import mock
 
 from apps.locals.models import Favorite
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 
 class FavoriteToggleViewTests(TestCase):

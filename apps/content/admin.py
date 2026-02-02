@@ -20,7 +20,7 @@ from apps.content.models import (
     WebSample,
     WebSampleAttachment,
 )
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.core.admin import OwnableAdminMixin
 from apps.nodes.models import Node
 from apps.content.utils import capture_screenshot, save_screenshot

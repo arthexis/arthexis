@@ -14,7 +14,7 @@ from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from ..models import ViewHistory
 

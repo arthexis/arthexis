@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from apps.core.admin import EmailCollectorAdmin, EmailInboxAdmin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 from apps.nodes.admin import EmailOutboxAdmin
 
 from .models import EmailBridge, EmailCollector, EmailInbox, EmailOutbox

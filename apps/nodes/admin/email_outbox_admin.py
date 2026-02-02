@@ -4,7 +4,7 @@ from django.urls import path, reverse
 
 from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
 from apps.emails.models import EmailOutbox
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 
 class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):

@@ -1,4 +1,4 @@
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from . import site as site  # noqa: F401
 from .emails import EmailCollectorAdmin, EmailInboxAdmin, EmailSearchForm

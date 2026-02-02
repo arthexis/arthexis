@@ -4,7 +4,7 @@ from django.shortcuts import render
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import OwnableAdminMixin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 from . import godaddy as dns_utils
 from .models import DNSProviderCredential, GoDaddyDNSRecord

@@ -3,7 +3,7 @@ from django import forms
 
 from .constants import CONDUIT_CHOICES
 from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.user_data.core import EntityModelAdmin
 
 
 @admin.register(CableSize)
