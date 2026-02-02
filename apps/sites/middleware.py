@@ -8,6 +8,7 @@ from http import HTTPStatus
 
 from django.conf import settings
 from django.urls import Resolver404, resolve
+from django.utils import translation
 
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
@@ -31,7 +32,14 @@ class LanguagePreferenceMiddleware:
         language_code = get_request_language_code(request)
         request.selected_language_code = language_code
         request.selected_language = language_code
-        return self.get_response(request)
+        if language_code:
+            translation.activate(language_code)
+            request.LANGUAGE_CODE = language_code
+        try:
+            return self.get_response(request)
+        finally:
+            if language_code:
+                translation.deactivate()
 
 
 class ViewHistoryMiddleware:
