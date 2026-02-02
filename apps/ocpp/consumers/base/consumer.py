@@ -6,7 +6,6 @@ import json
 import logging
 import re
 import uuid
-from urllib.parse import parse_qs
 
 from django.conf import settings
 from django.utils import timezone
@@ -17,7 +16,6 @@ from apps.core.notifications import LcdChannel
 from apps.nodes.models import NetMessage
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-from django.core.exceptions import ValidationError
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -25,14 +23,12 @@ from asgiref.sync import sync_to_async
 from apps.rates.mixins import RateLimitedConsumerMixin
 from config.offline import requires_network
 
-from .. import store
-from ..forwarder import forwarder
-from ..status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
-from ..call_error_handlers import dispatch_call_error
-from ..call_result_handlers import dispatch_call_result
 from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
-from ..models import (
+from ... import store
+from ...forwarder import forwarder
+from ...status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
+from ...models import (
     Transaction,
     Charger,
     ChargerConfiguration,
@@ -48,10 +44,6 @@ from ..models import (
     ChargerLogRequest,
     PowerProjection,
     ChargingProfile,
-    CertificateRequest,
-    CertificateOperation,
-    CertificateStatusCheck,
-    InstalledCertificate,
     Variable,
     MonitoringRule,
     MonitoringReport,
@@ -63,35 +55,36 @@ from ..models import (
     DisplayMessage,
     ClearedChargingLimitEvent,
 )
-from ..services import certificate_signing
 from apps.links.reference_utils import host_is_local_loopback
 from apps.screens.startup_notifications import format_lcd_lines
-from ..evcs_discovery import (
+from ...evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
     HTTPS_PORTS,
     build_console_url,
     prioritise_ports,
     scan_open_ports,
 )
-from .connection import (
+from ..connection import (
     RateLimitedConnectionMixin,
     SubprotocolConnectionMixin,
     WebsocketAuthMixin,
 )
-from .constants import (
+from ..constants import (
     OCPP_CONNECT_RATE_LIMIT_FALLBACK,
     OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS,
     OCPP_VERSION_16,
     OCPP_VERSION_201,
     OCPP_VERSION_21,
-    SERIAL_QUERY_PARAM_NAMES,
 )
+from .certificates import CertificatesMixin
+from .dispatch import DispatchMixin
 from .identity import (
+    IdentityMixin,
     _extract_vehicle_identifier,
     _register_log_names_for_identity,
+    _resolve_client_ip,
 )
-from .ip_utils import _resolve_client_ip
-from ..utils import _parse_ocpp_timestamp
+from ...utils import _parse_ocpp_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +120,9 @@ class SinkConsumer(AsyncWebsocketConsumer):
 
 
 class CSMSConsumer(
+    IdentityMixin,
+    CertificatesMixin,
+    DispatchMixin,
     RateLimitedConnectionMixin,
     SubprotocolConnectionMixin,
     WebsocketAuthMixin,
@@ -145,103 +141,6 @@ class CSMSConsumer(
         if self._client_ip_is_local():
             return None
         return super().get_rate_limit_identifier()
-
-    def _resolve_certificate_target(self) -> Charger | None:
-        target = self.aggregate_charger or self.charger
-        if target and target.pk:
-            found = Charger.objects.filter(pk=target.pk).first()
-            if found:
-                return found
-
-        charger_id = ""
-        if target and getattr(target, "charger_id", ""):
-            charger_id = target.charger_id
-        elif getattr(self, "charger_id", ""):
-            charger_id = self.charger_id
-
-        if charger_id:
-            found = Charger.objects.filter(charger_id=charger_id).first()
-            if found:
-                return found
-            return Charger.objects.create(charger_id=charger_id)
-
-        return None
-
-    def _extract_serial_identifier(self) -> str:
-        """Return the charge point serial from the query string or path."""
-
-        self.serial_source = None
-        query_bytes = self.scope.get("query_string") or b""
-        self._raw_query_string = query_bytes.decode("utf-8", "ignore") if query_bytes else ""
-        if query_bytes:
-            try:
-                parsed = parse_qs(
-                    self._raw_query_string,
-                    keep_blank_values=False,
-                )
-            except Exception:
-                parsed = {}
-            if parsed:
-                normalized = {
-                    key.lower(): values for key, values in parsed.items() if values
-                }
-                for candidate in SERIAL_QUERY_PARAM_NAMES:
-                    values = normalized.get(candidate)
-                    if not values:
-                        continue
-                    for value in values:
-                        if not value:
-                            continue
-                        trimmed = value.strip()
-                        if trimmed:
-                            self.serial_source = "query"
-                            return trimmed
-
-        serial = self.scope["url_route"]["kwargs"].get("cid", "").strip()
-        if serial:
-            self.serial_source = "route"
-            return serial
-
-        path = (self.scope.get("path") or "").strip("/")
-        if not path:
-            return ""
-
-        segments = [segment for segment in path.split("/") if segment]
-        if not segments:
-            return ""
-
-        serial = segments[-1].strip()
-        if not serial:
-            return ""
-        self.serial_source = "path"
-        return serial
-
-
-    async def _validate_serial_or_reject(self, raw_serial: str) -> bool:
-        """Validate the charge point serial and reject the connection if invalid."""
-
-        try:
-            self.charger_id = Charger.validate_serial(raw_serial)
-        except ValidationError as exc:
-            serial = Charger.normalize_serial(raw_serial)
-            store_key = store.pending_key(serial)
-            message = exc.messages[0] if exc.messages else "Invalid Serial Number"
-            details: list[str] = []
-            if getattr(self, "serial_source", None):
-                details.append(f"serial_source={self.serial_source}")
-            if getattr(self, "_raw_query_string", ""):
-                details.append(f"query_string={self._raw_query_string!r}")
-            if details:
-                message = f"{message} ({'; '.join(details)})"
-            store.add_log(
-                store_key,
-                f"Rejected connection: {message}",
-                log_type="charger",
-            )
-            await self.close(code=4003)
-            return False
-        return True
-
 
     async def _ensure_charger_record(
         self, existing_charger: Charger | None
@@ -1193,74 +1092,6 @@ class CSMSConsumer(
         )
         return configuration
 
-    async def _handle_call_result(self, message_id: str, payload: dict | None) -> None:
-        metadata = store.pop_pending_call(message_id)
-        if not metadata:
-            return
-        metadata_charger = metadata.get("charger_id")
-        if metadata_charger and self.charger_id:
-            metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
-            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
-            if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
-                return
-        action = metadata.get("action")
-        log_key = metadata.get("log_key") or self.store_key
-        payload_data = payload if isinstance(payload, dict) else {}
-        handled = await dispatch_call_result(
-            self,
-            action,
-            message_id,
-            metadata,
-            payload_data,
-            log_key,
-        )
-        if handled:
-            return
-        store.record_pending_call_result(
-            message_id,
-            metadata=metadata,
-            payload=payload_data,
-        )
-
-    async def _handle_call_error(
-        self,
-        message_id: str,
-        error_code: str | None,
-        description: str | None,
-        details: dict | None,
-    ) -> None:
-        metadata = store.pop_pending_call(message_id)
-        if not metadata:
-            return
-        metadata_charger = metadata.get("charger_id")
-        if metadata_charger and self.charger_id:
-            metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
-            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
-            if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
-                return
-        action = metadata.get("action")
-        log_key = metadata.get("log_key") or self.store_key
-        handled = await dispatch_call_error(
-            self,
-            action,
-            message_id,
-            metadata,
-            error_code,
-            description,
-            details,
-            log_key,
-        )
-        if handled:
-            return
-        store.record_pending_call_result(
-            message_id,
-            metadata=metadata,
-            success=False,
-            error_code=error_code,
-            error_description=description,
-            error_details=details,
-        )
-
     async def _handle_data_transfer(
         self, message_id: str, payload: dict | None
     ) -> dict[str, object]:
@@ -1525,114 +1356,6 @@ class CSMSConsumer(
         store.stop_session_lock()
         store.clear_pending_calls(self.charger_id)
         store.add_log(self.store_key, f"Closed (code={close_code})", log_type="charger")
-
-    async def receive(self, text_data=None, bytes_data=None):
-        raw = self._normalize_raw_message(text_data, bytes_data)
-        if raw is None:
-            return
-        store.add_log(self.store_key, raw, log_type="charger")
-        store.add_session_message(self.store_key, raw)
-        msg = self._parse_message(raw)
-        if msg is None:
-            return
-        message_type = msg[0]
-        if message_type == 2:
-            await self._handle_call_message(msg, raw, text_data)
-        elif message_type == 3:
-            msg_id = msg[1] if len(msg) > 1 else ""
-            payload = msg[2] if len(msg) > 2 else {}
-            await self._handle_call_result(msg_id, payload)
-        elif message_type == 4:
-            msg_id = msg[1] if len(msg) > 1 else ""
-            error_code = msg[2] if len(msg) > 2 else ""
-            description = msg[3] if len(msg) > 3 else ""
-            details = msg[4] if len(msg) > 4 else {}
-            await self._handle_call_error(msg_id, error_code, description, details)
-
-    def _normalize_raw_message(self, text_data, bytes_data):
-        raw = text_data
-        if raw is None and bytes_data is not None:
-            raw = base64.b64encode(bytes_data).decode("ascii")
-        return raw
-
-    def _parse_message(self, raw: str):
-        try:
-            msg = json.loads(raw)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(msg, list) or not msg:
-            return None
-        return msg
-
-    async def _handle_call_message(self, msg, raw, text_data):
-        msg_id, action = msg[1], msg[2]
-        payload = msg[3] if len(msg) > 3 else {}
-        connector_hint = payload.get("connectorId") if isinstance(payload, dict) else None
-        self._log_triggered_follow_up(action, connector_hint)
-        await self._assign_connector(payload.get("connectorId"))
-        action_handlers = {
-            "BootNotification": self._handle_boot_notification_action,
-            "DataTransfer": self._handle_data_transfer_action,
-            "Heartbeat": self._handle_heartbeat_action,
-            "StatusNotification": self._handle_status_notification_action,
-            "Authorize": self._handle_authorize_action,
-            "MeterValues": self._handle_meter_values_action,
-            "TransactionEvent": self._handle_transaction_event_action,
-            "SecurityEventNotification": self._handle_security_event_notification_action,
-            "NotifyChargingLimit": self._handle_notify_charging_limit_action,
-            "ClearedChargingLimit": self._handle_cleared_charging_limit_action,
-            "NotifyCustomerInformation": self._handle_notify_customer_information_action,
-            "NotifyDisplayMessages": self._handle_notify_display_messages_action,
-            "NotifyEVChargingNeeds": self._handle_notify_ev_charging_needs_action,
-            "NotifyEVChargingSchedule": self._handle_notify_ev_charging_schedule_action,
-            "NotifyEvent": self._handle_notify_event_action,
-            "NotifyMonitoringReport": self._handle_notify_monitoring_report_action,
-            "NotifyReport": self._handle_notify_report_action,
-            "CostUpdated": self._handle_cost_updated_action,
-            "PublishFirmwareStatusNotification": self._handle_publish_firmware_status_notification_action,
-            "ReportChargingProfiles": self._handle_report_charging_profiles_action,
-            "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
-            "LogStatusNotification": self._handle_log_status_notification_action,
-            "StartTransaction": self._handle_start_transaction_action,
-            "StopTransaction": self._handle_stop_transaction_action,
-            "FirmwareStatusNotification": self._handle_firmware_status_notification_action,
-            "ReservationStatusUpdate": self._handle_reservation_status_update_action,
-            "Get15118EVCertificate": self._handle_get_15118_ev_certificate_action,
-            "GetCertificateStatus": self._handle_get_certificate_status_action,
-            "SignCertificate": self._handle_sign_certificate_action,
-        }
-        reply_payload = {}
-        handler = action_handlers.get(action)
-        if handler:
-            reply_payload = await handler(payload, msg_id, raw, text_data)
-        response = [3, msg_id, reply_payload]
-        await self.send(json.dumps(response))
-        store.add_log(
-            self.store_key, f"< {json.dumps(response)}", log_type="charger"
-        )
-        await self._forward_charge_point_message(action, raw)
-
-    def _log_triggered_follow_up(self, action: str, connector_hint):
-        follow_up = store.consume_triggered_followup(
-            self.charger_id, action, connector_hint
-        )
-        if not follow_up:
-            return
-        follow_up_log_key = follow_up.get("log_key") or self.store_key
-        target_label = follow_up.get("target") or action
-        connector_slug_value = follow_up.get("connector")
-        suffix = ""
-        if connector_slug_value and connector_slug_value != store.AGGREGATE_SLUG:
-            connector_letter = Charger.connector_letter_from_slug(connector_slug_value)
-            if connector_letter:
-                suffix = f" (connector {connector_letter})"
-            else:
-                suffix = f" (connector {connector_slug_value})"
-        store.add_log(
-            follow_up_log_key,
-            f"TriggerMessage follow-up received: {target_label}{suffix}",
-            log_type="charger",
-        )
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
@@ -3342,331 +3065,6 @@ class CSMSConsumer(
             log_message += f", trigger={trigger_value}"
         store.add_log(self.store_key, log_message, log_type="charger")
         return {}
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
-    async def _handle_get_15118_ev_certificate_action(
-        self, payload, msg_id, raw, text_data
-    ):
-        certificate_type = str(payload.get("certificateType") or "").strip()
-        csr_value = payload.get("exiRequest") or payload.get("csr")
-        if csr_value is None:
-            csr_value = ""
-        if not isinstance(csr_value, str):
-            csr_value = str(csr_value)
-        csr_value = csr_value.strip()
-
-        def _csr_is_valid(value: str) -> bool:
-            return bool(value)
-
-        responded_at = timezone.now()
-
-        def _handle_request():
-            target = self._resolve_certificate_target()
-            response_payload: dict[str, object]
-            exi_response = ""
-            request_status = CertificateRequest.STATUS_REJECTED
-            status_info = ""
-
-            if target is None:
-                status_info = "Unknown charge point."
-                response_payload = {
-                    "status": "Rejected",
-                    "statusInfo": {
-                        "reasonCode": "Failed",
-                        "additionalInfo": status_info,
-                    },
-                }
-            elif not _csr_is_valid(csr_value):
-                status_info = "EXI request payload is missing or invalid."
-                response_payload = {
-                    "status": "Rejected",
-                    "statusInfo": {
-                        "reasonCode": "FormatViolation",
-                        "additionalInfo": status_info,
-                    },
-                }
-            else:
-                try:
-                    exi_response = certificate_signing.sign_certificate_request(
-                        csr=csr_value,
-                        certificate_type=certificate_type,
-                        charger_id=target.charger_id,
-                    )
-                    response_payload = {
-                        "status": "Accepted",
-                        "exiResponse": exi_response,
-                    }
-                    request_status = CertificateRequest.STATUS_ACCEPTED
-                    status_info = ""
-                except certificate_signing.CertificateSigningError as exc:
-                    status_info = str(exc) or "Certificate request failed."
-                    response_payload = {
-                        "status": "Rejected",
-                        "statusInfo": {
-                            "reasonCode": "Failed",
-                            "additionalInfo": status_info,
-                        },
-                    }
-                    request_status = CertificateRequest.STATUS_ERROR
-
-            request_pk: int | None = None
-            if target is not None:
-                request = CertificateRequest.objects.create(
-                    charger=target,
-                    action=CertificateRequest.ACTION_15118,
-                    certificate_type=certificate_type,
-                    csr=csr_value,
-                    signed_certificate=exi_response,
-                    status=request_status,
-                    status_info=status_info,
-                    request_payload=payload,
-                    response_payload=response_payload,
-                    responded_at=responded_at,
-                )
-                request_pk = request.pk
-
-            return {
-                "response": response_payload,
-                "status": request_status,
-                "request_pk": request_pk,
-            }
-
-        result = await database_sync_to_async(_handle_request)()
-        response_payload = result.get("response", {})
-        status_value = response_payload.get("status") or "Unknown"
-        store.add_log(
-            self.store_key,
-            f"Get15118EVCertificate request processed (status={status_value}).",
-            log_type="charger",
-        )
-        return response_payload
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
-    async def _handle_get_certificate_status_action(
-        self, payload, msg_id, raw, text_data
-    ):
-        hash_data = payload.get("certificateHashData") or {}
-        if not isinstance(hash_data, dict):
-            hash_data = {}
-
-        def _persist_status() -> dict:
-            target = self._resolve_certificate_target()
-            status_value = "Failed"
-            status_info = "Unknown charge point."
-            response_payload: dict[str, object] = {"status": status_value}
-
-            if target is not None:
-                status_info = "Certificate not found."
-                installed = InstalledCertificate.objects.filter(
-                    charger=target, certificate_hash_data=hash_data
-                ).first()
-                if installed and installed.status == InstalledCertificate.STATUS_INSTALLED:
-                    status_value = "Accepted"
-                    status_info = ""
-                    response_payload = {"status": status_value}
-                else:
-                    response_payload = {
-                        "status": status_value,
-                        "statusInfo": {
-                            "reasonCode": "NotFound",
-                            "additionalInfo": status_info,
-                        },
-                    }
-
-                CertificateStatusCheck.objects.create(
-                    charger=target,
-                    certificate_hash_data=hash_data,
-                    ocsp_result={},
-                    status=(
-                        CertificateStatusCheck.STATUS_ACCEPTED
-                        if status_value == "Accepted"
-                        else CertificateStatusCheck.STATUS_REJECTED
-                    ),
-                    status_info=status_info,
-                    request_payload=payload,
-                    response_payload=response_payload,
-                    responded_at=timezone.now(),
-                )
-
-            return {
-                "response": response_payload,
-                "status": status_value,
-                "status_info": status_info,
-            }
-
-        result = await database_sync_to_async(_persist_status)()
-        status_value = result.get("status")
-        store.add_log(
-            self.store_key,
-            f"GetCertificateStatus request received (status={status_value}).",
-            log_type="charger",
-        )
-        return result.get("response")
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
-    async def _handle_sign_certificate_action(
-        self, payload, msg_id, raw, text_data
-    ):
-        csr_value = payload.get("csr")
-        if csr_value is None:
-            csr_value = ""
-        if not isinstance(csr_value, str):
-            csr_value = str(csr_value)
-        csr_value = csr_value.strip()
-        certificate_type = str(payload.get("certificateType") or "").strip()
-
-        def _csr_is_valid(value: str) -> bool:
-            return bool(value)
-
-        responded_at = timezone.now()
-
-        def _handle_signing():
-            target = self._resolve_certificate_target()
-            response_payload: dict[str, object]
-            signed_certificate = ""
-            request_status = CertificateRequest.STATUS_REJECTED
-            status_info = ""
-            request_pk: int | None = None
-
-            if target is None:
-                status_info = "Unknown charge point."
-                response_payload = {
-                    "status": "Rejected",
-                    "statusInfo": {
-                        "reasonCode": "Failed",
-                        "additionalInfo": status_info,
-                    },
-                }
-            elif not _csr_is_valid(csr_value):
-                status_info = "CSR payload is missing or invalid."
-                response_payload = {
-                    "status": "Rejected",
-                    "statusInfo": {
-                        "reasonCode": "FormatViolation",
-                        "additionalInfo": status_info,
-                    },
-                }
-            else:
-                try:
-                    signed_certificate = certificate_signing.sign_certificate_request(
-                        csr=csr_value,
-                        certificate_type=certificate_type,
-                        charger_id=target.charger_id,
-                    )
-                    response_payload = {"status": "Accepted"}
-                    request_status = CertificateRequest.STATUS_ACCEPTED
-                    status_info = ""
-                except certificate_signing.CertificateSigningError as exc:
-                    status_info = str(exc) or "Certificate signing failed."
-                    response_payload = {
-                        "status": "Rejected",
-                        "statusInfo": {
-                            "reasonCode": "Failed",
-                            "additionalInfo": status_info,
-                        },
-                    }
-                    request_status = CertificateRequest.STATUS_ERROR
-
-            if target is not None:
-                request = CertificateRequest.objects.create(
-                    charger=target,
-                    action=CertificateRequest.ACTION_SIGN,
-                    certificate_type=certificate_type,
-                    csr=csr_value,
-                    signed_certificate=signed_certificate,
-                    status=request_status,
-                    status_info=status_info,
-                    request_payload=payload,
-                    response_payload=response_payload,
-                    responded_at=responded_at,
-                )
-                request_pk = request.pk
-
-            return {
-                "response": response_payload,
-                "target": target,
-                "request_pk": request_pk,
-                "signed_certificate": signed_certificate,
-            }
-
-        result = await database_sync_to_async(_handle_signing)()
-        response_payload: dict[str, object] = result.get("response", {})
-        status_value = str(response_payload.get("status") or "Unknown")
-        target: Charger | None = result.get("target")
-        signed_certificate = result.get("signed_certificate") or ""
-        request_pk = result.get("request_pk")
-
-        if (
-            status_value.lower() == "accepted"
-            and target is not None
-            and signed_certificate
-        ):
-            await self._dispatch_certificate_signed(
-                target,
-                certificate_chain=signed_certificate,
-                certificate_type=certificate_type,
-                request_pk=request_pk,
-            )
-
-        store.add_log(
-            self.store_key,
-            f"SignCertificate request processed (status={status_value}).",
-            log_type="charger",
-        )
-        return response_payload
-
-    async def _dispatch_certificate_signed(
-        self,
-        charger: Charger,
-        *,
-        certificate_chain: str,
-        certificate_type: str = "",
-        request_pk: int | None = None,
-    ) -> None:
-        payload = {"certificateChain": certificate_chain}
-        if certificate_type:
-            payload["certificateType"] = certificate_type
-        message_id = uuid.uuid4().hex
-        msg = json.dumps([2, message_id, "CertificateSigned", payload])
-        await self.send(msg)
-
-        log_key = self.store_key or store.identity_key(
-            charger.charger_id, getattr(charger, "connector_id", None)
-        )
-        requested_at = timezone.now()
-        operation = await database_sync_to_async(CertificateOperation.objects.create)(
-            charger=charger,
-            action=CertificateOperation.ACTION_SIGNED,
-            certificate_type=certificate_type,
-            request_payload=payload,
-            status=CertificateOperation.STATUS_PENDING,
-        )
-        if request_pk:
-            await database_sync_to_async(CertificateRequest.objects.filter(pk=request_pk).update)(
-                signed_certificate=certificate_chain,
-                status=CertificateRequest.STATUS_PENDING,
-                status_info="Certificate sent to charge point.",
-            )
-        store.register_pending_call(
-            message_id,
-            {
-                "action": "CertificateSigned",
-                "charger_id": charger.charger_id,
-                "connector_id": getattr(charger, "connector_id", None),
-                "log_key": log_key,
-                "requested_at": requested_at,
-                "operation_pk": operation.pk,
-            },
-        )
-        store.schedule_call_timeout(
-            message_id,
-            action="CertificateSigned",
-            log_key=log_key,
-            message="CertificateSigned request timed out",
-        )
 
     @protocol_call(
         "ocpp16",
