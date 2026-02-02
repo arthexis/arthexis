@@ -17,7 +17,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "url",
             nargs="?",
-            help="URL to capture. Defaults to the local node site (localhost:8888).",
+            help=(
+                "URL to capture. Defaults to the local node site using the PORT "
+                "environment variable or the dev server port when available."
+            ),
         )
         parser.add_argument(
             "--freq",
