@@ -7,6 +7,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import string
 import time as time_module
 import uuid
 from datetime import datetime, time, timedelta
@@ -21,7 +22,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.conf import settings
 from django.contrib.admin.utils import quote
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
 from django.db.models.deletion import ProtectedError
@@ -43,6 +44,7 @@ from apps.energy.models import EnergyTariff
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node
 from apps.protocols.decorators import protocol_call
+from apps.maps.models import Location
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from .. import store
@@ -82,6 +84,90 @@ from ..views import _charger_state, _live_sessions
 
 
 from .miscellaneous.simulator_admin import LogViewAdminMixin
+
+
+class ChargerLocationSetupForm(forms.Form):
+    location = forms.ModelChoiceField(
+        queryset=Location.objects.order_by("name"),
+        required=False,
+        label=_("Existing location"),
+    )
+    location_name = forms.CharField(
+        max_length=200,
+        required=False,
+        label=_("Location name"),
+        help_text=_(
+            "Provide a name for a new location or update the existing name."
+        ),
+    )
+    latitude = forms.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        required=False,
+        label=_("Latitude"),
+        widget=forms.NumberInput(attrs={"step": "any"}),
+    )
+    longitude = forms.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        required=False,
+        label=_("Longitude"),
+        widget=forms.NumberInput(attrs={"step": "any"}),
+    )
+
+    class Media:
+        css = {"all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)}
+        js = (
+            "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+            "ocpp/charger_map.js",
+        )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is None:
+            return
+        if getattr(user, "is_superuser", False):
+            return
+        location_field = self.fields.get("location")
+        if not location_field:
+            return
+        if not hasattr(Location, "assigned_to"):
+            return
+        if getattr(user, "is_authenticated", False):
+            location_field.queryset = location_field.queryset.filter(
+                Q(assigned_to__isnull=True) | Q(assigned_to=user)
+            )
+        else:
+            location_field.queryset = location_field.queryset.filter(
+                assigned_to__isnull=True
+            )
+
+    def clean(self):
+        cleaned = super().clean()
+        location = cleaned.get("location")
+        name = (cleaned.get("location_name") or "").strip()
+        latitude = cleaned.get("latitude")
+        longitude = cleaned.get("longitude")
+
+        if not location and not name:
+            self.add_error(
+                "location_name",
+                _("Select a location or provide a new location name."),
+            )
+
+        if (latitude is None) ^ (longitude is None):
+            self.add_error(
+                "latitude",
+                _("Provide both latitude and longitude to update coordinates."),
+            )
+            self.add_error(
+                "longitude",
+                _("Provide both latitude and longitude to update coordinates."),
+            )
+
+        cleaned["location_name"] = name
+        return cleaned
+
 
 @admin.register(Charger)
 class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
@@ -268,6 +354,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "remote_stop_transaction",
         "reset_chargers",
         "create_simulator_for_cp",
+        "setup_charger_location",
         "view_charge_point_dashboard",
         "delete_selected",
     ]
@@ -276,9 +363,28 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def view_charge_point_dashboard(self, request, queryset=None):
         return HttpResponseRedirect(reverse("ocpp:ocpp-dashboard"))
 
+    @admin.action(description=_("Setup charger location"))
+    def setup_charger_location(self, request, queryset):
+        charger_ids = list(queryset.values_list("pk", flat=True))
+        if not charger_ids:
+            self.message_user(
+                request,
+                _("Select at least one charge point to configure a location."),
+                level=messages.WARNING,
+            )
+            return None
+        ids_param = ",".join(str(pk) for pk in charger_ids)
+        url = reverse("admin:ocpp_charger_setup_location")
+        return HttpResponseRedirect(f"{url}?ids={ids_param}")
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
+            path(
+                "setup-location/",
+                self.admin_site.admin_view(self.setup_location_view),
+                name="ocpp_charger_setup_location",
+            ),
             path(
                 "view-in-site/",
                 self.admin_site.admin_view(self.view_charge_point_dashboard),
@@ -286,6 +392,154 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             ),
         ]
         return custom + urls
+
+    def _location_suffix(self, index: int) -> str:
+        if index <= 0:
+            return ""
+        letters = string.ascii_uppercase
+        result = ""
+        while index > 0:
+            index, remainder = divmod(index - 1, len(letters))
+            result = letters[remainder] + result
+        return result
+
+    def _apply_location_names(self, chargers: list[Charger], location_name: str) -> None:
+        grouped: dict[str, list[Charger]] = {}
+        for charger in chargers:
+            grouped.setdefault(charger.charger_id, []).append(charger)
+
+        chargers_to_update = []
+        for group in grouped.values():
+            main = [c for c in group if c.connector_id is None]
+            connectors = sorted(
+                (c for c in group if c.connector_id is not None),
+                key=lambda c: c.connector_id or 0,
+            )
+            for charger in main:
+                charger.display_name = location_name
+                chargers_to_update.append(charger)
+            for index, charger in enumerate(connectors, start=1):
+                suffix = self._location_suffix(index)
+                charger.display_name = f"{location_name} {suffix}".strip()
+                chargers_to_update.append(charger)
+
+        if chargers_to_update:
+            Charger.objects.bulk_update(chargers_to_update, ["display_name"])
+
+    def setup_location_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        raw_ids = (
+            request.POST.get("ids")
+            if request.method == "POST"
+            else request.GET.get("ids")
+        )
+        ids = (
+            [int(value) for value in raw_ids.split(",") if value.isdigit()]
+            if raw_ids
+            else []
+        )
+        if not ids:
+            self.message_user(
+                request,
+                _("No chargers selected."),
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
+
+        selected = list(
+            Charger.visible_for_user(request.user)
+            .filter(pk__in=ids)
+            .select_related("location")
+        )
+        if not selected:
+            self.message_user(
+                request,
+                _("Selected chargers were not found."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
+
+        charger_ids = {charger.charger_id for charger in selected}
+        chargers = list(
+            Charger.visible_for_user(request.user)
+            .filter(charger_id__in=charger_ids)
+            .select_related("location")
+        )
+
+        initial = {}
+        existing_locations = {
+            charger.location_id for charger in chargers if charger.location_id
+        }
+        if len(existing_locations) == 1:
+            location_obj = chargers[0].location
+            if location_obj:
+                initial["location"] = location_obj
+                initial["location_name"] = location_obj.name
+                initial["latitude"] = location_obj.latitude
+                initial["longitude"] = location_obj.longitude
+
+        if request.method == "POST":
+            form = ChargerLocationSetupForm(request.POST, user=request.user)
+            if form.is_valid():
+                location = form.cleaned_data["location"]
+                location_name = form.cleaned_data["location_name"]
+                latitude = form.cleaned_data["latitude"]
+                longitude = form.cleaned_data["longitude"]
+
+                with transaction.atomic():
+                    if location is None:
+                        extra_fields = {}
+                        if hasattr(Location, "assigned_to"):
+                            extra_fields["assigned_to"] = (
+                                request.user if request.user.is_authenticated else None
+                            )
+                        location = Location.objects.create(
+                            name=location_name,
+                            latitude=latitude,
+                            longitude=longitude,
+                            **extra_fields,
+                        )
+                    else:
+                        if location_name and location.name != location_name:
+                            location.name = location_name
+                        if latitude is not None and longitude is not None:
+                            location.latitude = latitude
+                            location.longitude = longitude
+                        location.save()
+
+                    charger_pks = [charger.pk for charger in chargers]
+                    if charger_pks:
+                        Charger.objects.filter(pk__in=charger_pks).update(location=location)
+
+                    self._apply_location_names(chargers, location.name)
+
+                self.message_user(
+                    request,
+                    _(
+                        "Updated %(count)d chargers with location %(location)s."
+                    )
+                    % {"count": len(chargers), "location": location.name},
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
+        else:
+            form = ChargerLocationSetupForm(initial=initial, user=request.user)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Setup charger location"),
+            "chargers": chargers,
+            "form": form,
+            "ids": ",".join(str(pk) for pk in ids),
+        }
+        return TemplateResponse(
+            request,
+            "admin/ocpp/charger/setup_location.html",
+            context,
+        )
 
     class DiagnosticsDownloadError(Exception):
         """Raised when diagnostics downloads fail."""
