@@ -33,4 +33,12 @@ class IgnoreStaticAssetRequestsFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
-        return self._static_prefix not in message
+        try:
+            # A typical access log is like: '"GET /path HTTP/1.1" 200 1234'
+            # Parsing the path is more robust than a substring search.
+            request_line = message.split('"')[1]
+            path = request_line.split()[1]
+            return not path.startswith(self._static_prefix)
+        except IndexError:
+            # Not in the expected format of an access log, so don't filter.
+            return True
