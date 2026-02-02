@@ -160,6 +160,34 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     return True
 
 
+def _migration_merge_required(base_dir: Path) -> bool:
+    """Return ``True`` if a merge migration is required."""
+
+    command = [
+        sys.executable,
+        str(base_dir / "manage.py"),
+        "makemigrations",
+        "--check",
+        "--dry-run",
+        "--noinput",
+    ]
+    env = os.environ.copy()
+    env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    print(f"{PREFIX} Checking for merge migrations:", " ".join(command))
+    result = subprocess.run(command, cwd=base_dir, env=env, capture_output=True, text=True)
+    output = "\n".join(
+        part.strip() for part in (result.stdout, result.stderr) if part and part.strip()
+    )
+    if "Conflicting migrations detected" in output:
+        print(f"{PREFIX} Migration merge required. Stopping.")
+        NOTIFY(
+            "Migration merge required",
+            "Resolve conflicting migrations before restarting the test server.",
+        )
+        return True
+    return False
+
+
 def run_tests(base_dir: Path) -> bool:
     """Execute the full test suite using pytest."""
 
@@ -188,15 +216,18 @@ def run_tests(base_dir: Path) -> bool:
     return True
 
 
-def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> None:
+def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
     """Run env-refresh and then execute the full test suite."""
 
+    if _migration_merge_required(base_dir):
+        return False
     if run_env_refresh(base_dir, latest=latest):
         print(f"{PREFIX} env-refresh completed successfully.")
         migration.request_runserver_restart(LOCK_DIR)
         run_tests(base_dir)
     else:
         print(f"{PREFIX} env-refresh failed. Awaiting further changes.")
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -235,7 +266,8 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = collect_source_mtimes(BASE_DIR)
     print(PREFIX, "Watching for changes... Press Ctrl+C to stop.")
     with server_state(LOCK_DIR):
-        run_env_refresh_with_tests(BASE_DIR, latest=args.latest)
+        if not run_env_refresh_with_tests(BASE_DIR, latest=args.latest):
+            return 0
         snapshot = collect_source_mtimes(BASE_DIR)
 
         try:
@@ -261,7 +293,8 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"{PREFIX} Changes detected: {display}")
-                run_env_refresh_with_tests(BASE_DIR, latest=args.latest)
+                if not run_env_refresh_with_tests(BASE_DIR, latest=args.latest):
+                    return 0
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:
             print(f"{PREFIX} Stopped.")
