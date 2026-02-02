@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
@@ -31,6 +32,8 @@ from .common import (
     _visible_chargers,
 )
 from ..models import PublicConnectorPage, PublicScanEvent
+
+logger = logging.getLogger(__name__)
 
 
 def _get_client_ip(request) -> str:
@@ -296,7 +299,11 @@ def charger_status(request, cid, connector=None):
     )
     if access_response is not None:
         return access_response
-    connectors = _connector_set(charger)
+    connectors = [
+        item
+        for item in _connector_set(charger)
+        if item.is_visible_to(request.user)
+    ]
     connector_count = len(
         [item for item in connectors if item.connector_id is not None]
     )
@@ -311,6 +318,11 @@ def charger_status(request, cid, connector=None):
             if _ensure_charger_access(request.user, aggregate, request=request) is None:
                 charger = aggregate
                 connector_slug = Charger.AGGREGATE_CONNECTOR_SLUG
+        else:
+            logger.warning(
+                "Aggregate charger missing for %s while rendering status view.",
+                charger.charger_id,
+            )
     session_id = request.GET.get("session")
     sessions = _live_sessions(charger, connectors=connectors)
     live_tx = None
