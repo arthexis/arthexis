@@ -1381,32 +1381,37 @@ body.user-story-open {
 </h1>
 <div id="site-badges">
   {% if badge_site %}
-    <a class="badge" style="background-color: {{ badge_site_color }};" href="{% url 'admin:pages_siteproxy_change' badge_site.pk %}">
-      SITE: {{ badge_admin_site_name }}
+    <span class="badge" style="background-color: {{ badge_site_color }};">
+      <a class="badge-link" href="{% url 'admin:pages_siteproxy_changelist' %}">SITE:</a>
+      <a class="badge-link badge-link-value" href="{% url 'admin:pages_siteproxy_change' badge_site.pk %}">{{ badge_admin_site_name }}</a>
       <span style="display:none">SITE: {{ badge_admin_site_name }}</span>
-    </a>
+    </span>
   {% else %}
-    <a class="badge badge-unknown" href="{% url 'admin:pages_siteproxy_changelist' %}">
-      SITE: Unknown
+    <span class="badge badge-unknown">
+      <a class="badge-link" href="{% url 'admin:pages_siteproxy_changelist' %}">SITE:</a>
+      <span class="badge-link badge-link-value">Unknown</span>
       <span style="display:none">SITE: Unknown</span>
-    </a>
+    </span>
   {% endif %}
   {% if badge_node %}
-    <a class="badge" style="background-color: {{ badge_node_color }};" href="{% url 'admin:nodes_node_change' badge_node.pk %}">
-      NODE: {{ badge_node.hostname }}
+    <span class="badge" style="background-color: {{ badge_node_color }};">
+      <a class="badge-link" href="{% url 'admin:nodes_node_changelist' %}">NODE:</a>
+      <a class="badge-link badge-link-value" href="{% url 'admin:nodes_node_change' badge_node.pk %}">{{ badge_node.hostname }}</a>
       <span style="display:none">NODE: {{ badge_node.hostname }}</span>
-    </a>
+    </span>
     {% if badge_role %}
-      <a class="badge" style="background-color: {{ badge_role_color }};" href="{% url 'admin:nodes_noderole_change' badge_role.pk %}">
-        ROLE: {{ badge_role.name }}
+      <span class="badge" style="background-color: {{ badge_role_color }};">
+        <a class="badge-link" href="{% url 'admin:nodes_noderole_changelist' %}">ROLE:</a>
+        <a class="badge-link badge-link-value" href="{% url 'admin:nodes_noderole_change' badge_role.pk %}">{{ badge_role.name }}</a>
         <span style="display:none">ROLE: {{ badge_role.name }}</span>
-      </a>
+      </span>
     {% endif %}
   {% else %}
-    <a class="badge badge-unknown" href="{% url 'admin:nodes_node_changelist' %}">
-      NODE: Unknown
+    <span class="badge badge-unknown">
+      <a class="badge-link" href="{% url 'admin:nodes_node_changelist' %}">NODE:</a>
+      <span class="badge-link badge-link-value">Unknown</span>
       <span style="display:none">NODE: Unknown</span>
-    </a>
+    </span>
   {% endif %}
   <span class="badge {% if not badge_video_device %}badge-unknown{% endif %}" {% if badge_video_device %}style="background-color: {{ badge_video_device_color }};"{% endif %}>
     <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
