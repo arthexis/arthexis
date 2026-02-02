@@ -19,6 +19,75 @@ arthexis__expand_path() {
     esac
 }
 
+arthexis__path_has_symlink() {
+    local path="$1"
+    local current=""
+    local IFS="/"
+
+    [ -n "$path" ] || return 1
+
+    case "$path" in
+        /*)
+            current="/"
+            path="${path#/}"
+            ;;
+    esac
+
+    read -r -a parts <<< "$path"
+    for part in "${parts[@]}"; do
+        [ -n "$part" ] || continue
+        if [ "$current" = "/" ]; then
+            current="/$part"
+        elif [ -n "$current" ]; then
+            current="$current/$part"
+        else
+            current="$part"
+        fi
+        if [ -L "$current" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+arthexis__secure_mkdir() {
+    local candidate="$1"
+
+    [ -n "$candidate" ] || return 1
+
+    if arthexis__path_has_symlink "$candidate"; then
+        return 1
+    fi
+
+    local old_umask
+    old_umask=$(umask)
+    umask 077
+    if ! mkdir -p -m 700 "$candidate" >/dev/null 2>&1; then
+        umask "$old_umask"
+        return 1
+    fi
+    umask "$old_umask"
+
+    if arthexis__path_has_symlink "$candidate"; then
+        return 1
+    fi
+
+    if [ ! -d "$candidate" ] || [ ! -w "$candidate" ]; then
+        return 1
+    fi
+
+    if [ -n "${EUID:-}" ] && [ "${EUID:-0}" -eq 0 ]; then
+        local owner
+        owner=$(stat -c '%u' "$candidate" 2>/dev/null || echo "")
+        if [ "$owner" != "0" ]; then
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
 arthexis_resolve_log_dir() {
     local script_dir="$1"
     local __resultvar="$2"
@@ -55,7 +124,7 @@ arthexis_resolve_log_dir() {
         [ -n "$candidate" ] || continue
         candidate="$(arthexis__expand_path "$candidate")"
         attempted+=("$candidate")
-        if mkdir -p "$candidate" >/dev/null 2>&1 && [ -d "$candidate" ] && [ -w "$candidate" ]; then
+        if arthexis__secure_mkdir "$candidate"; then
             chosen="$candidate"
             break
         fi
@@ -81,6 +150,34 @@ arthexis_resolve_log_dir() {
 
     export ARTHEXIS_LOG_DIR="$chosen"
     printf -v "$__resultvar" '%s' "$chosen"
+    return 0
+}
+
+arthexis_secure_log_file() {
+    local log_dir="$1"
+    local script_name="$2"
+    local __resultvar="$3"
+
+    if [ -z "$log_dir" ] || [ -z "$script_name" ] || [ -z "$__resultvar" ]; then
+        echo "arthexis_secure_log_file requires log directory, script name, and output variable" >&2
+        return 1
+    fi
+
+    if ! arthexis__secure_mkdir "$log_dir"; then
+        echo "Log directory $log_dir is not secure or writable." >&2
+        return 1
+    fi
+
+    local prefix
+    prefix="$(basename "$script_name" .sh)"
+    local log_file=""
+    log_file=$(mktemp -p "$log_dir" "${prefix}.log.XXXXXX" 2>/dev/null || true)
+    if [ -z "$log_file" ]; then
+        echo "Unable to create log file in $log_dir." >&2
+        return 1
+    fi
+
+    printf -v "$__resultvar" '%s' "$log_file"
     return 0
 }
 

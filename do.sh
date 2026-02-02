@@ -8,7 +8,7 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/logging.sh"
 arthexis_load_env_file "$BASE_DIR"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
-LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
+arthexis_secure_log_file "$LOG_DIR" "$0" LOG_FILE || exit 1
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 

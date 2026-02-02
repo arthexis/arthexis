@@ -12,9 +12,16 @@ if "%~1"=="" (
     echo Usage: %~nx0 ^<command^> [args...]
     exit /b 0
 )
-set COMMAND_RAW=%1
-set COMMAND=%1
+set "COMMAND_RAW=%~1"
+set "COMMAND=%~1"
 set COMMAND=%COMMAND:-=_%
+set INVALID_COMMAND=
+for /f "delims=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" %%A in ("%COMMAND%") do set INVALID_COMMAND=1
+if defined INVALID_COMMAND (
+    echo Invalid command name "%COMMAND_RAW%".
+    echo Command names may only contain letters, numbers, underscores, and hyphens.
+    exit /b 1
+)
 shift
 set COMMANDS=
 for /f "usebackq delims=" %%A in (`%VENV%\Scripts\python.exe manage.py help --commands`) do (
