@@ -1374,7 +1374,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
     signal.signal(signal.SIGHUP, _request_shutdown)
     signal.signal(signal.SIGUSR1, _request_event_interrupt)
 
-    def _disable_lcd(reason: str, exc: Exception | None = None) -> None:
+    def _disable_lcd(
+        reason: str, exc: Exception | None = None, *, exc_info: bool = False
+    ) -> None:
         nonlocal lcd
         nonlocal display_state
         nonlocal next_display_state
@@ -1389,7 +1391,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
         if exc is None:
             logger.warning("Disabling LCD feature: %s", reason)
         else:
-            logger.warning("Disabling LCD feature: %s: %s", reason, exc)
+            logger.warning(
+                "Disabling LCD feature: %s: %s", reason, exc, exc_info=exc_info
+            )
         _blank_display(lcd)
         lcd = None
         display_state = None
@@ -1713,7 +1717,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     else:
                         if lcd is not None and frame_writer.lcd is None:
                             _disable_lcd("LCD write failed during rotation display")
-                            next_scroll_sec = DEFAULT_FALLBACK_SCROLL_SEC
                             continue
                         delay = health.record_failure()
                         time.sleep(delay)
@@ -1764,8 +1767,10 @@ def main() -> None:  # pragma: no cover - hardware dependent
             except LCDUnavailableError as exc:
                 _disable_lcd("LCD unavailable", exc)
                 continue
-            except Exception as exc:
-                _disable_lcd("LCD update failed", exc)
+            except Exception:
+                logger.exception(
+                    "Unexpected error while updating LCD state; keeping LCD enabled"
+                )
                 continue
 
     finally:
