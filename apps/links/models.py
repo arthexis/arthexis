@@ -333,10 +333,12 @@ class ShortURL(Entity):
     )
     original_url = models.CharField(
         max_length=500,
+        db_index=True,
         help_text=_("Original URL used when the short link was created."),
     )
     target_url = models.CharField(
         max_length=500,
+        db_index=True,
         help_text=_("Destination URL or absolute path."),
     )
     created_on = models.DateTimeField(auto_now_add=True)
@@ -381,17 +383,11 @@ def get_or_create_short_url(target_url: str) -> ShortURL | None:
     target_url = (target_url or "").strip()
     if not target_url:
         return None
-    existing = (
-        ShortURL.objects.filter(
-            models.Q(target_url=target_url) | models.Q(original_url=target_url)
-        )
-        .order_by("pk")
-        .first()
-    )
+    existing = ShortURL.objects.filter(target_url=target_url).order_by("pk").first()
     if existing:
-        if existing.target_url != target_url:
-            existing.target_url = target_url
-            existing.save(update_fields=["target_url", "updated_on"])
+        return existing
+    existing = ShortURL.objects.filter(original_url=target_url).order_by("pk").first()
+    if existing:
         return existing
     return ShortURL.objects.create(original_url=target_url, target_url=target_url)
 
