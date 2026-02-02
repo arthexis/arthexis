@@ -668,6 +668,7 @@ class ImportExportAdminMixin:
     """Provide import/export actions for all model admins."""
 
     import_template = "admin/base/model_import.html"
+    export_template = "admin/base/model_export.html"
 
     def _admin_view_name(self, suffix: str) -> str:
         opts = self.model._meta
@@ -746,7 +747,11 @@ class ImportExportAdminMixin:
     def export_view(self, request):
         if not self.has_view_permission(request):
             raise PermissionDenied
-        export_format = request.GET.get("format", "json").lower()
+        export_format = None
+        if request.method == "POST":
+            export_format = request.POST.get("format", "").lower()
+        else:
+            export_format = request.GET.get("format", "").lower()
         original_get = request.GET
         filtered_get = request.GET.copy()
         filtered_get.pop("format", None)
@@ -759,29 +764,51 @@ class ImportExportAdminMixin:
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
         export_field_names = [field.name for field in export_fields]
-        if export_format == "csv":
-            response = HttpResponse(content_type="text/csv")
-            response["Content-Disposition"] = (
-                f"attachment; filename={opts.app_label}_{opts.model_name}.csv"
-            )
-            writer = csv.writer(response)
-            writer.writerow(export_field_names)
-            for obj in queryset:
-                writer.writerow(
-                    [
-                        self._sanitize_csv_value(field.value_from_object(obj))
-                        for field in export_fields
-                    ]
+        if export_format:
+            if export_format == "csv":
+                response = HttpResponse(content_type="text/csv")
+                response["Content-Disposition"] = (
+                    f"attachment; filename={opts.app_label}_{opts.model_name}.csv"
                 )
+                writer = csv.writer(response)
+                writer.writerow(export_field_names)
+                for obj in queryset:
+                    writer.writerow(
+                        [
+                            self._sanitize_csv_value(field.value_from_object(obj))
+                            for field in export_fields
+                        ]
+                    )
+                return response
+            if export_format != "json":
+                return HttpResponseBadRequest(_("Unsupported export format."))
+            payload = serialize("json", queryset, fields=export_field_names)
+            response = HttpResponse(payload, content_type="application/json")
+            response["Content-Disposition"] = (
+                f"attachment; filename={opts.app_label}_{opts.model_name}.json"
+            )
             return response
-        if export_format != "json":
-            return HttpResponseBadRequest(_("Unsupported export format."))
-        payload = serialize("json", queryset, fields=export_field_names)
-        response = HttpResponse(payload, content_type="application/json")
-        response["Content-Disposition"] = (
-            f"attachment; filename={opts.app_label}_{opts.model_name}.json"
+        changelist_url = reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_changelist"
         )
-        return response
+        context = admin.site.each_context(request)
+        context.update(
+            {
+                "title": _("Export %(name)s") % {"name": opts.verbose_name_plural},
+                "opts": opts,
+                "changelist_url": changelist_url,
+                "export_count": queryset.count(),
+                "export_columns": [
+                    {"name": field.name, "label": field.verbose_name}
+                    for field in export_fields
+                ],
+                "export_formats": [
+                    {"value": "json", "label": _("JSON")},
+                    {"value": "csv", "label": _("CSV")},
+                ],
+            }
+        )
+        return TemplateResponse(request, self.export_template, context)
 
     def import_view(self, request):
         can_add = self.has_add_permission(request)
