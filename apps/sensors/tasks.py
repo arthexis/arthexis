@@ -99,9 +99,14 @@ def _format_recipe_result(result: object) -> str:
 
 
 def _escape_recipe_arg(value: str) -> str:
-    escaped = value.encode("unicode_escape").decode("ascii")
-    escaped = escaped.replace('"', '\\"')
-    return escaped.replace("'", "\\'")
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace('"', "\\\"")
+        .replace("'", "\\'")
+    )
 
 
 def _match_usb_tracker(

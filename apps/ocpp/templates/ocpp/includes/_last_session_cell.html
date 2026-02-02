@@ -1,0 +1,7 @@
+<td>
+  {% if last_session_date %}
+    {{ last_session_date|date:"M j, Y" }}
+  {% else %}
+    &mdash;
+  {% endif %}
+</td>

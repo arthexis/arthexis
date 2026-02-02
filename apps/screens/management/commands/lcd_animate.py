@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.screens.animations import AnimationLoadError, load_frames_from_animation
 from apps.screens.lcd import LCDUnavailableError, prepare_lcd_controller
-from apps.screens.lcd_screen import LCDFrameWriter
+from apps.screens.lcd_screen.hardware import LCDFrameWriter
 from apps.screens.models import LCDAnimation
 
 

@@ -529,7 +529,7 @@ if [ "$CELERY" = true ]; then
 fi
 
 if [ "$LCD_EMBEDDED" = true ]; then
-  python -m apps.screens.lcd_screen &
+  python -m apps.screens.lcd_screen.runner &
   LCD_PROCESS_PID=$!
   record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
 fi
