@@ -13,11 +13,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.auto_upgrade import (
-    auto_upgrade_base_dir,
-    ensure_auto_upgrade_periodic_task,
-    set_auto_upgrade_fast_lane,
-)
+from apps.core.models import AdminNotice
 from apps.core import changelog
 from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
@@ -197,6 +193,23 @@ def _system_changelog_report_data_view(request):
     )
 
 
+def _dismiss_admin_notice_view(request, notice_id: int):
+    if request.method != "POST":
+        return HttpResponseRedirect(reverse("admin:index"))
+
+    notice = AdminNotice.objects.filter(pk=notice_id).first()
+    if not notice:
+        return HttpResponseRedirect(reverse("admin:index"))
+
+    if not notice.dismissed_at:
+        notice.dismissed_at = timezone.now()
+        if getattr(request, "user", None) and request.user.is_authenticated:
+            notice.dismissed_by = request.user
+        notice.save(update_fields=["dismissed_at", "dismissed_by"])
+
+    return HttpResponseRedirect(reverse("admin:index"))
+
+
 def _system_trigger_upgrade_check_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
@@ -277,38 +290,6 @@ def _system_upgrade_revision_check_view(request):
     return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
 
-def _system_toggle_fast_lane_view(request):
-    if request.method != "POST":
-        return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
-
-    action = (request.POST.get("fast_lane_action") or "").strip().lower()
-    enable = action == "enable"
-
-    base_dir = auto_upgrade_base_dir()
-    updated = set_auto_upgrade_fast_lane(enable, base_dir=base_dir)
-
-    if updated:
-        ensure_auto_upgrade_periodic_task(base_dir=base_dir)
-        if enable:
-            messages.success(
-                request,
-                _(
-                    "Fast Lane enabled. Upgrade checks will run once per hour until disabled."
-                ),
-            )
-        else:
-            messages.success(
-                request,
-                _(
-                    "Fast Lane disabled. Upgrade checks will run on the configured channel cadence."
-                ),
-            )
-    else:
-        messages.error(request, _("Unable to update Fast Lane mode."))
-
-    return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
-
-
 def patch_admin_system_view() -> None:
     """Add custom admin view for system information."""
 
@@ -318,6 +299,11 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "admin-notices/<int:notice_id>/dismiss/",
+                admin.site.admin_view(_dismiss_admin_notice_view),
+                name="dismiss-admin-notice",
+            ),
             path(
                 "system/startup-report/",
                 admin.site.admin_view(_system_startup_report_view),
@@ -362,11 +348,6 @@ def patch_admin_system_view() -> None:
                 "system/upgrade-report/run-check/",
                 admin.site.admin_view(_system_trigger_upgrade_check_view),
                 name="system-upgrade-run-check",
-            ),
-            path(
-                "system/upgrade-report/toggle-fast-lane/",
-                admin.site.admin_view(_system_toggle_fast_lane_view),
-                name="system-upgrade-toggle-fast-lane",
             ),
         ]
         return custom + urls

@@ -13,7 +13,7 @@ from django.utils import timezone
 
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
-AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.check_github_updates"
+AUTO_UPGRADE_TASK_PATH = "apps.nodes.tasks.apply_upgrade_policies"
 AUTO_UPGRADE_FAST_LANE_LOCK_NAME = "auto_upgrade_fast_lane.lck"
 AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 
@@ -259,6 +259,35 @@ def set_auto_upgrade_fast_lane(enabled: bool, base_dir: Path | None = None) -> b
     return True
 
 
+def _resolve_policy_interval_minutes() -> int:
+    try:  # pragma: no cover - optional dependency failures
+        from apps.nodes.models import Node, UpgradePolicy
+        from django.db import DatabaseError
+    except Exception:
+        return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
+
+    try:
+        local = Node.get_local()
+    except DatabaseError:
+        local = None
+
+    try:
+        if local:
+            policies = list(local.upgrade_policies.all())
+        else:
+            policies = list(UpgradePolicy.objects.all())
+    except DatabaseError:
+        return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
+
+    if not policies:
+        return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
+
+    intervals = [policy.interval_minutes for policy in policies if policy.interval_minutes]
+    if not intervals:
+        return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
+    return max(1, min(intervals))
+
+
 def ensure_auto_upgrade_periodic_task(
     sender=None, *, base_dir: Path | None = None, **kwargs
 ) -> None:
@@ -269,19 +298,10 @@ def ensure_auto_upgrade_periodic_task(
     ``**kwargs`` parameters are ignored.
     """
 
-    del sender, kwargs  # Unused when invoked as a Django signal handler.
-
-    if base_dir is None:
-        base_dir = Path(settings.BASE_DIR)
-    else:
-        base_dir = Path(base_dir)
-
-    lock_dir = base_dir / ".locks"
-    mode_file = lock_dir / "auto_upgrade.lck"
+    del sender, kwargs, base_dir  # Unused when invoked as a Django signal handler.
 
     try:  # pragma: no cover - optional dependency failures
         from django_celery_beat.models import (
-            CrontabSchedule,
             IntervalSchedule,
             PeriodicTask,
         )
@@ -289,69 +309,30 @@ def ensure_auto_upgrade_periodic_task(
     except Exception:
         return
 
-    if not mode_file.exists():
-        try:
-            PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
-        except (OperationalError, ProgrammingError):  # pragma: no cover - DB not ready
-            return
-        return
-
     override_interval = environ.get("ARTHEXIS_UPGRADE_FREQ")
-    fast_lane_enabled = auto_upgrade_fast_lane_enabled(base_dir)
-
-    _mode = mode_file.read_text().strip().lower() or DEFAULT_AUTO_UPGRADE_MODE
-    if _mode == "version":
-        _mode = DEFAULT_AUTO_UPGRADE_MODE
-    interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
-        _mode, AUTO_UPGRADE_FALLBACK_INTERVAL
-    )
-
-    if fast_lane_enabled:
-        interval_minutes = AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES
-        override_interval = None
-    elif override_interval:
+    interval_minutes = _resolve_policy_interval_minutes()
+    if override_interval:
         try:
             parsed_interval = int(override_interval)
         except ValueError:
             parsed_interval = None
         else:
-            if parsed_interval > 0:
+            if parsed_interval and parsed_interval > 0:
                 interval_minutes = parsed_interval
 
     try:
-        description = "Auto-upgrade checks run every %s minutes." % interval_minutes
-        if fast_lane_enabled:
-            description = "Fast Lane enabled: upgrade checks run hourly."
-        if fast_lane_enabled or override_interval or _mode not in AUTO_UPGRADE_CRONTAB_SCHEDULES:
-            schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=interval_minutes, period=IntervalSchedule.MINUTES
-            )
-            defaults = {
-                "interval": schedule,
-                "crontab": None,
-                "solar": None,
-                "clocked": None,
-                "task": AUTO_UPGRADE_TASK_PATH,
-                "description": description,
-            }
-        else:
-            crontab_config = AUTO_UPGRADE_CRONTAB_SCHEDULES[_mode]
-            schedule, _ = CrontabSchedule.objects.get_or_create(
-                minute=crontab_config["minute"],
-                hour=crontab_config["hour"],
-                day_of_week=crontab_config["day_of_week"],
-                day_of_month=crontab_config["day_of_month"],
-                month_of_year=crontab_config["month_of_year"],
-                timezone=timezone.get_current_timezone_name(),
-            )
-            defaults = {
-                "interval": None,
-                "crontab": schedule,
-                "solar": None,
-                "clocked": None,
-                "task": AUTO_UPGRADE_TASK_PATH,
-                "description": description,
-            }
+        description = "Upgrade policy checks run every %s minutes." % interval_minutes
+        schedule, _ = IntervalSchedule.objects.get_or_create(
+            every=interval_minutes, period=IntervalSchedule.MINUTES
+        )
+        defaults = {
+            "interval": schedule,
+            "crontab": None,
+            "solar": None,
+            "clocked": None,
+            "task": AUTO_UPGRADE_TASK_PATH,
+            "description": description,
+        }
         PeriodicTask.objects.update_or_create(
             name=AUTO_UPGRADE_TASK_NAME,
             defaults=defaults,

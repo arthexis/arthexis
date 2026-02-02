@@ -63,7 +63,11 @@ from .actions import (
     update_selected_nodes,
 )
 from .forms import NodeAdminForm
-from .inlines import NodeFeatureAssignmentInline, SSHAccountInline
+from .inlines import (
+    NodeFeatureAssignmentInline,
+    NodeUpgradePolicyAssignmentInline,
+    SSHAccountInline,
+)
 
 
 registration_logger = get_register_visitor_logger()
@@ -177,7 +181,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return user, password, expires_at
 
     change_actions = ["update_action"]
-    inlines = [NodeFeatureAssignmentInline, SSHAccountInline]
+    inlines = [NodeFeatureAssignmentInline, NodeUpgradePolicyAssignmentInline, SSHAccountInline]
 
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):

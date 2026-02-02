@@ -6,7 +6,10 @@
       "is_deleted": false,
       "name": "Watchtower",
       "acronym": "WTTW",
-      "description": "Multi-User Cloud & Orchestration"
+      "description": "Multi-User Cloud & Orchestration",
+      "default_upgrade_policy": [
+        "Unstable"
+      ]
     }
   }
 ]
