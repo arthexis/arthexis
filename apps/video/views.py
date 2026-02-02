@@ -26,26 +26,7 @@ def stream_detail(request, slug):
     return render(request, "video/stream_detail.html", context)
 
 
-def _build_mjpeg_stream_response(stream: MjpegStream):
-    cached = None
-    if settings.VIDEO_FRAME_REDIS_URL:
-        cached = get_frame(stream)
-        if cached:
-            generator = mjpeg_frame_stream(stream, first_frame=cached)
-            return StreamingHttpResponse(
-                generator,
-                content_type="multipart/x-mixed-replace; boundary=frame",
-            )
-        logger.info("No cached frames available for MJPEG stream %s", stream.slug)
-        status_payload = get_status(stream)
-        if status_payload and status_payload.get("last_error"):
-            logger.warning(
-                "Camera service error for stream %s: %s",
-                stream.slug,
-                status_payload.get("last_error"),
-            )
-        return HttpResponse("Camera service unavailable.", status=503)
-
+def _build_direct_mjpeg_stream_response(stream: MjpegStream):
     try:
         frame_iter = stream.iter_frame_bytes()
         first_frame = next(frame_iter)
@@ -74,6 +55,30 @@ def _build_mjpeg_stream_response(stream: MjpegStream):
         generator,
         content_type="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+def _build_mjpeg_stream_response(stream: MjpegStream):
+    if settings.VIDEO_FRAME_REDIS_URL:
+        cached = get_frame(stream)
+        if cached:
+            generator = mjpeg_frame_stream(stream, first_frame=cached)
+            return StreamingHttpResponse(
+                generator,
+                content_type="multipart/x-mixed-replace; boundary=frame",
+            )
+        logger.info("No cached frames available for MJPEG stream %s", stream.slug)
+        status_payload = get_status(stream)
+        if status_payload and status_payload.get("last_error"):
+            logger.warning(
+                "Camera service error for stream %s: %s",
+                stream.slug,
+                status_payload.get("last_error"),
+            )
+            return HttpResponse("Camera service unavailable.", status=503)
+        logger.info("Falling back to direct MJPEG capture for stream %s", stream.slug)
+        return _build_direct_mjpeg_stream_response(stream)
+
+    return _build_direct_mjpeg_stream_response(stream)
 
 
 def mjpeg_stream(request, slug):

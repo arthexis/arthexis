@@ -162,6 +162,25 @@ def test_mjpeg_stream_uses_camera_service_when_redis_enabled(
 
 
 @pytest.mark.django_db
+@override_settings(VIDEO_FRAME_REDIS_URL="redis://example.test/0")
+def test_mjpeg_stream_falls_back_to_direct_capture_when_cache_empty(
+    client, video_device, monkeypatch
+):
+    stream = MjpegStream.objects.create(name="Dock", slug="dock", video_device=video_device)
+
+    def fake_frames(self):
+        yield b"frame-bytes"
+
+    monkeypatch.setattr(MjpegStream, "iter_frame_bytes", fake_frames)
+    monkeypatch.setattr("apps.video.views.get_frame", lambda _stream: None)
+    monkeypatch.setattr("apps.video.views.get_status", lambda _stream: None)
+
+    response = client.get(reverse("video:mjpeg-stream", args=[stream.slug]))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
 def test_mjpeg_probe_captures_frame(client, video_device, monkeypatch):
     stream = MjpegStream.objects.create(name="Probe", slug="probe", video_device=video_device)
     captured: dict[str, bytes | bool] = {}
