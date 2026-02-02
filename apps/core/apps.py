@@ -16,6 +16,7 @@ class CoreConfig(AppConfig):
         _register_admin_and_post_migrate_handlers(self)
         _patch_entity_deserialization()
         _configure_lock_dependent_tasks(self)
+        _configure_urlfield_assume_scheme()
         _connect_sqlite_wal()
         _enable_usage_analytics()
 
@@ -312,6 +313,23 @@ def _patch_entity_deserialization():
     serializer_base.DeserializedObject.save = patched_save
 
 
+def _configure_urlfield_assume_scheme():
+    from django.db import models
+
+    if getattr(models.URLField, "_core_assume_scheme_patch", False):
+        return
+
+    original_formfield = models.URLField.formfield
+
+    def _core_urlfield_formfield(self, **kwargs):
+        kwargs.setdefault("assume_scheme", "https")
+        return original_formfield(self, **kwargs)
+
+    models.URLField.formfield = _core_urlfield_formfield
+    models.URLField._core_assume_scheme_patch = True
+    models.URLField._core_assume_scheme_original_formfield = original_formfield
+
+
 def _configure_lock_dependent_tasks(config):
     from django.db.backends.signals import connection_created
     from django.db.models.signals import post_migrate
@@ -421,3 +439,6 @@ def _connect_sqlite_wal():
 
 def _enable_usage_analytics():
     from . import analytics  # noqa: F401 - ensure signal registration
+
+
+_configure_urlfield_assume_scheme()
