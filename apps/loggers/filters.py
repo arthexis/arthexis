@@ -22,3 +22,15 @@ class DebugAppFilter(logging.Filter):
 
         app_name = getattr(record, "app_name", None) or get_active_app()
         return self._control.allows_app(app_name)
+
+
+class IgnoreStaticAssetRequestsFilter(logging.Filter):
+    """Filter out noisy static asset requests from access logs."""
+
+    def __init__(self, static_prefix: str = "/static/") -> None:
+        super().__init__()
+        self._static_prefix = static_prefix
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return self._static_prefix not in message
