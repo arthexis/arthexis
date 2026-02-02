@@ -9,7 +9,7 @@ from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, Http4
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .models import QRRedirect, QRRedirectLead
+from .models import QRRedirect, QRRedirectLead, ShortURL
 
 logger = logging.getLogger(__name__)
 
@@ -99,3 +99,12 @@ def qr_redirect_public_view(request: HttpRequest, slug: str) -> HttpResponse:
         "page_title": qr_entry.title or qr_entry.slug,
     }
     return render(request, "links/qr_redirect_public.html", context)
+
+
+def short_url_redirect(request: HttpRequest, slug: str) -> HttpResponse:
+    short_url = get_object_or_404(ShortURL, slug=slug)
+    try:
+        target_url = _resolve_target_url(request, short_url.target_url)
+    except ValueError:
+        return HttpResponseBadRequest("Invalid redirect target.")
+    return redirect(target_url)

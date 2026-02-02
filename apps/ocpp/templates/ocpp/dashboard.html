@@ -93,18 +93,17 @@
     {% include "ocpp/includes/dashboard_table_rows.html" %}
   </tbody>
 </table>
-<ul class="list-unstyled text-center mt-3 mb-0">
-  <li>
+<ul class="list-inline text-center mt-3 mb-0">
+  <li class="list-inline-item">
     <a href="{% url 'ocpp:charger-list' %}">{% trans "View chargers" %}</a>
   </li>
-  <li>
+  <li class="list-inline-item">
     <a href="{% url 'ocpp:cp-simulator' %}">{% trans "Open simulator" %}</a>
   </li>
   {% if request.user.is_staff %}
-  <li>
+  <li class="list-inline-item">
     <a href="{% url 'admin:ocpp_charger_changelist' %}">{% trans "Configure" %}</a>
   </li>
   {% endif %}
 </ul>
 {% endblock %}
-

@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity, EntityManager
+from apps.recipes.models import Recipe
 
 
 class PhysicalSensor(Entity):
@@ -160,9 +161,67 @@ class ThermometerReading(models.Model):
         return f"{self.thermometer} @ {self.read_at:%Y-%m-%d %H:%M:%S}"
 
 
+class UsbTrackerManager(EntityManager):
+    def get_by_natural_key(self, slug: str):  # pragma: no cover - fixture helper
+        return self.get(slug=slug)
+
+
+class UsbTracker(Entity):
+    """Watch mounted USB devices for trigger files and run a recipe."""
+
+    name = models.CharField(max_length=128)
+    slug = models.SlugField(unique=True)
+    description = models.TextField(blank=True)
+    required_file_path = models.CharField(
+        max_length=255,
+        help_text=_("Relative path that must exist on the USB device."),
+    )
+    required_file_regex = models.TextField(
+        blank=True,
+        help_text=_(
+            "Optional regex used to validate file contents before triggering."
+        ),
+    )
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="usb_trackers",
+    )
+    cooldown_seconds = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        help_text=_("Minimum seconds between triggers."),
+    )
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_matched_at = models.DateTimeField(null=True, blank=True)
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
+    last_match_path = models.CharField(max_length=512, blank=True)
+    last_match_signature = models.CharField(max_length=256, blank=True)
+    last_recipe_result = models.TextField(blank=True)
+    last_error = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    objects = UsbTrackerManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = _("USB Tracker")
+        verbose_name_plural = _("USB Trackers")
+
+    def natural_key(self):  # pragma: no cover - fixture loader
+        return (self.slug,)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 __all__ = [
     "PhysicalSensor",
     "Thermometer",
     "ThermometerManager",
     "ThermometerReading",
+    "UsbTracker",
+    "UsbTrackerManager",
 ]
