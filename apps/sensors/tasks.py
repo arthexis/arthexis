@@ -98,6 +98,17 @@ def _format_recipe_result(result: object) -> str:
         return repr(result)
 
 
+def _escape_recipe_arg(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace('"', "\\\"")
+        .replace("'", "\\'")
+    )
+
+
 def _match_usb_tracker(
     tracker: UsbTracker,
     mount: Path,
@@ -184,8 +195,8 @@ def scan_usb_trackers() -> dict[str, int]:
             try:
                 result = tracker.recipe.execute(
                     tracker=tracker,
-                    mount_path=str(mount),
-                    file_path=str(match_path),
+                    mount_path=_escape_recipe_arg(str(mount)),
+                    file_path=_escape_recipe_arg(str(match_path)),
                 )
                 tracker.last_recipe_result = _format_recipe_result(result.result)
                 tracker.last_error = ""
