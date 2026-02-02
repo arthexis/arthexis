@@ -4,7 +4,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.models import CardFace, get_cardface_bucket
+from apps.cards.models import CardFace, CardSet, get_cardface_bucket
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 
@@ -92,3 +92,14 @@ class CardFaceAdminForm(forms.ModelForm):
             instance.save()
             self.save_m2m()
         return instance
+
+
+class CardSetUploadForm(forms.Form):
+    mse_set = forms.FileField(
+        label=_("MSE set file"),
+        help_text=_("Upload a .mse-set file or a plain text set file."),
+    )
+
+    def save(self) -> CardSet:
+        uploaded = self.cleaned_data["mse_set"]
+        return CardSet.create_from_upload(uploaded)
