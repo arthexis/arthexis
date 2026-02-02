@@ -50,6 +50,8 @@ if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "0") == "1":
     settings.MIGRATION_MODULES = _DisableMigrations()
 
 from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
+
+REQUIRES_DB = False
 COLLECTED_RESULTS: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"logs": []})
 DB_BLOCKER = None
 
@@ -91,17 +93,30 @@ def _capture_db_blocker(django_db_blocker: Any) -> None:
     DB_BLOCKER = django_db_blocker
 
 
-def _requires_db(request: pytest.FixtureRequest) -> bool:
-    if request.node.get_closest_marker("django_db") is not None:
+def _requires_db(item: pytest.Item) -> bool:
+    if item.get_closest_marker("django_db") is not None:
         return True
-    if {"db", "transactional_db"}.intersection(request.node.fixturenames):
+    if {"db", "transactional_db"}.intersection(item.fixturenames):
         return True
-    test_class = getattr(request.node, "cls", None)
+    test_class = getattr(item, "cls", None)
     if test_class is None:
         return False
     from django.test import TransactionTestCase
 
     return issubclass(test_class, TransactionTestCase)
+
+
+def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
+    global REQUIRES_DB
+    REQUIRES_DB = any(_requires_db(item) for item in items)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _setup_db_for_django_tests(request: pytest.FixtureRequest, django_db_blocker: Any) -> None:
+    """Initialize the Django test database once for DB-backed tests."""
+    if not REQUIRES_DB:
+        return
+    request.getfixturevalue("django_db_setup")
 
 
 @pytest.fixture(scope="session")
@@ -115,7 +130,7 @@ def _load_sigil_roots_once(django_db_setup: Any, django_db_blocker: Any) -> None
 
 @pytest.fixture(autouse=True)
 def _ensure_fixture_sigil_roots(request: pytest.FixtureRequest) -> None:
-    if _requires_db(request) and request.node.get_closest_marker("sigil_roots"):
+    if _requires_db(request.node) and request.node.get_closest_marker("sigil_roots"):
         request.getfixturevalue("_load_sigil_roots_once")
 
 
