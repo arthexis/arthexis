@@ -98,10 +98,8 @@ def _simulator_running(
     state_file: Path | None = None,
     cache_seconds: float = 2.0,
 ) -> bool | None:
-    from apps.screens import lcd_screen
-
     if state_file is None:
-        state_file = lcd_screen.SIMULATOR_STATE_FILE
+        state_file = SIMULATOR_STATE_FILE
     now = time.monotonic()
     if now - _SIMULATOR_RUNNING_CACHE["checked_at"] <= cache_seconds:
         return _SIMULATOR_RUNNING_CACHE["is_running"]
