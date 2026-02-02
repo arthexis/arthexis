@@ -297,6 +297,17 @@ def charger_status(request, cid, connector=None):
     if access_response is not None:
         return access_response
     connectors = _connector_set(charger)
+    connector_count = len(
+        [item for item in connectors if item.connector_id is not None]
+    )
+    show_combined_view = connector_count > 1
+    if show_combined_view and charger.connector_id is not None:
+        aggregate = next(
+            (item for item in connectors if item.connector_id is None), None
+        )
+        if aggregate is not None:
+            charger = aggregate
+            connector_slug = Charger.AGGREGATE_CONNECTOR_SLUG
     session_id = request.GET.get("session")
     sessions = _live_sessions(charger, connectors=connectors)
     live_tx = None
@@ -451,8 +462,7 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
-    connector_count = len(connector_overview)
-    show_connector_tabs = connector_count > 1
+    show_connector_tabs = False
     show_connector_overview_cards = (
         charger.connector_id is None and connector_count > 1
     )
@@ -504,35 +514,35 @@ def charger_status(request, cid, connector=None):
             "past_session": past_session,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
-        "connector_overview": connector_overview,
-        "search_url": search_url,
-        "configuration_url": configuration_url,
-        "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
-        "is_connected": is_connected,
-        "is_idle": is_connected and not has_active_session,
-        "can_remote_start": can_remote_start,
-        "remote_start_messages": remote_start_messages,
-        "action_url": action_url,
-        "show_chart": bool(
-            chart_data["datasets"]
-            and any(
-                any(value is not None for value in dataset["values"])
-                for dataset in chart_data["datasets"]
-            )
-        ),
-        "date_view": date_view,
-        "date_toggle_links": date_toggle_links,
-        "pagination_query": pagination_query,
-        "session_query": session_query,
-        "chart_should_animate": chart_should_animate,
-        "usage_timeline": usage_timeline,
-        "usage_timeline_window": usage_timeline_window,
-        "charger_error_code": _visible_error_code(charger.last_error_code),
-        "show_connector_tabs": show_connector_tabs,
-        "show_connector_overview_cards": show_connector_overview_cards,
-        "charging_limit": _charging_limit_details(charger),
-    },
-)
+            "connector_overview": connector_overview,
+            "search_url": search_url,
+            "configuration_url": configuration_url,
+            "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
+            "is_connected": is_connected,
+            "is_idle": is_connected and not has_active_session,
+            "can_remote_start": can_remote_start,
+            "remote_start_messages": remote_start_messages,
+            "action_url": action_url,
+            "show_chart": bool(
+                chart_data["datasets"]
+                and any(
+                    any(value is not None for value in dataset["values"])
+                    for dataset in chart_data["datasets"]
+                )
+            ),
+            "date_view": date_view,
+            "date_toggle_links": date_toggle_links,
+            "pagination_query": pagination_query,
+            "session_query": session_query,
+            "chart_should_animate": chart_should_animate,
+            "usage_timeline": usage_timeline,
+            "usage_timeline_window": usage_timeline_window,
+            "charger_error_code": _visible_error_code(charger.last_error_code),
+            "show_connector_tabs": show_connector_tabs,
+            "show_connector_overview_cards": show_connector_overview_cards,
+            "charging_limit": _charging_limit_details(charger),
+        },
+    )
 
 
 @login_required
