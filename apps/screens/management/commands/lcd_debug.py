@@ -14,7 +14,7 @@ from apps.screens.lcd import (
     LCDUnavailableError,
     prepare_lcd_controller,
 )
-from apps.screens.lcd_screen import LOG_FILE, WORK_FILE
+from apps.screens.lcd_screen.logging import LOG_FILE, WORK_FILE
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LEGACY_FEATURE_LOCK,

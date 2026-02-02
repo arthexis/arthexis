@@ -1272,11 +1272,7 @@ lcd_service_was_active() {
     return 1
   fi
 
-  if pgrep -f "python -m apps.screens\\.lcd_screen" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  if pgrep -f "apps/screens/lcd_screen.py" >/dev/null 2>&1; then
+  if pgrep -f "python -m apps.screens\\.lcd_screen\\.runner" >/dev/null 2>&1; then
     return 0
   fi
 
