@@ -1,14 +1,12 @@
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from apps.nginx import config_utils
 from apps.nginx.renderers import (
-
     apply_site_entries,
     generate_primary_config,
     generate_site_entries_content,
-
 )
 
 pytestmark = pytest.mark.critical

@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import pytest
-
 from dataclasses import dataclass
 
-from apps.core.modeling import (
+import pytest
 
+from apps.core.modeling import (
     CanonicalEvent,
     DimensionSpec,
     ModelRegistry,
     Orchestrator,
     TransformationSpec,
     TransformerRegistry,
-
 )
 from apps.core.modeling.transformers import BaseTransformer
 

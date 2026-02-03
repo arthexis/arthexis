@@ -1,8 +1,6 @@
-from __future__ import annotations
+from datetime import datetime, timedelta
 
 import pytest
-
-from datetime import datetime, timedelta
 
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _

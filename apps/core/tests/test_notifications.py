@@ -1,14 +1,12 @@
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from apps.core.notifications import NotificationManager
 from apps.screens.startup_notifications import (
-
     LCD_LOW_LOCK_FILE,
     LCD_RUNTIME_LOCK_FILE,
     render_lcd_lock_file,
-
 )
 
 pytestmark = pytest.mark.critical

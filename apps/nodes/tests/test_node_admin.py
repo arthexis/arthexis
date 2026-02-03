@@ -1,6 +1,6 @@
-import pytest
-
 from django.urls import reverse
+
+import pytest
 
 from apps.nodes.models import Node
 

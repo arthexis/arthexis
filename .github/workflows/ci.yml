@@ -51,8 +51,8 @@ jobs:
           echo "app=true" >> "$GITHUB_OUTPUT"
 
   install:
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.app == 'true' }}
-    needs: changes
+    if: ${{ needs.upgrade.result == 'failure' }}
+    needs: upgrade
     runs-on: ubuntu-latest
     services:
       redis:
@@ -161,7 +161,6 @@ jobs:
           source .venv/bin/activate
           python scripts/check_no_http_links.py
   upgrade:
-    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     services:
       redis:

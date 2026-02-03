@@ -1,8 +1,6 @@
-from __future__ import annotations
+from datetime import datetime
 
 import pytest
-
-from datetime import datetime
 
 from django.utils import timezone
 

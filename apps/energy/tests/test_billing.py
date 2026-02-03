@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-import pytest
-
 from datetime import time
 from decimal import Decimal
+
+import pytest
 
 from apps.energy.models import CustomerAccount, EnergyTariff
 

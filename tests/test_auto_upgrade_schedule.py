@@ -1,8 +1,6 @@
-from __future__ import annotations
+from django.utils import timezone
 
 import pytest
-
-from django.utils import timezone
 
 from apps.core.system import upgrade
 from apps.core.system.ui import _format_timestamp

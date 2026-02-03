@@ -1,6 +1,6 @@
-import pytest
-
 import logging
+
+import pytest
 
 from django.db import connection, models
 from django.test.utils import isolate_apps
