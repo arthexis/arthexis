@@ -1257,6 +1257,36 @@ def _append_publish_workflow_status(
     return run_url
 
 
+def _pause_for_publish_pending(
+    release: PackageRelease,
+    ctx: dict[str, object],
+    log_path: Path,
+    *,
+    token: str | None,
+    message: str,
+    run_url: str | None = None,
+) -> None:
+    ctx["paused"] = True
+    ctx["publish_pending"] = True
+    publish_url = ""
+    if run_url is None:
+        publish_url = _append_publish_workflow_status(
+            release,
+            log_path,
+            token=token,
+            message=message,
+        )
+    else:
+        publish_url = run_url or ""
+        if publish_url:
+            _append_log(log_path, f"{message} {publish_url}")
+        else:
+            _append_log(log_path, message)
+    if publish_url:
+        ctx["publish_workflow_url"] = publish_url
+    raise PublishPending()
+
+
 def _download_publish_workflow_logs(
     *,
     owner: str,
@@ -1985,17 +2015,15 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         return
 
     if not _pypi_release_available(release):
-        ctx["paused"] = True
-        ctx["publish_pending"] = True
-        run_url = _append_publish_workflow_status(
+        _pause_for_publish_pending(
             release,
+            ctx,
             log_path,
             token=_resolve_github_token(release, ctx),
-            message="Publish not detected on PyPI yet; resume after GitHub Actions completes.",
+            message=(
+                "Publish not detected on PyPI yet; resume after GitHub Actions completes."
+            ),
         )
-        if run_url:
-            ctx["publish_workflow_url"] = run_url
-        raise PublishPending()
 
     targets = release.build_publish_targets()
     release.pypi_url = (
@@ -2064,35 +2092,33 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         token=token,
     )
     if not run:
-        ctx["paused"] = True
-        ctx["publish_pending"] = True
-        run_url = _append_publish_workflow_status(
+        _pause_for_publish_pending(
             release,
+            ctx,
             log_path,
             token=token,
-            message="Publish workflow run not found yet; resume after GitHub Actions completes.",
+            message=(
+                "Publish workflow run not found yet; resume after GitHub Actions completes."
+            ),
         )
-        if run_url:
-            ctx["publish_workflow_url"] = run_url
-        raise PublishPending()
 
     status = run.get("status")
     if status != "completed":
-        ctx["paused"] = True
-        ctx["publish_pending"] = True
         run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
         if run_url:
-            ctx["publish_workflow_url"] = run_url
-            _append_log(
-                log_path,
-                f"Publish workflow still running; monitor at {run_url}",
-            )
+            message = "Publish workflow still running; monitor at"
         else:
-            _append_log(
-                log_path,
-                "Publish workflow still running; resume after GitHub Actions completes.",
+            message = (
+                "Publish workflow still running; resume after GitHub Actions completes."
             )
-        raise PublishPending()
+        _pause_for_publish_pending(
+            release,
+            ctx,
+            log_path,
+            token=token,
+            message=message,
+            run_url=run_url,
+        )
 
     run_id = run.get("id")
     if not isinstance(run_id, int):
@@ -2102,17 +2128,13 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         owner=owner, repo=repo, run_id=run_id, token=token
     )
     if not raw_log:
-        ctx["paused"] = True
-        ctx["publish_pending"] = True
-        run_url = _append_publish_workflow_status(
+        _pause_for_publish_pending(
             release,
+            ctx,
             log_path,
             token=token,
             message="Publish workflow logs empty; resume after GitHub Actions completes.",
         )
-        if run_url:
-            ctx["publish_workflow_url"] = run_url
-        raise PublishPending()
 
     run_url = run.get("html_url") or ""
     conclusion = run.get("conclusion") or ""
