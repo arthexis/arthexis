@@ -13,7 +13,6 @@ from apps.odoo.models import OdooEmployee, OdooProduct
 
 from .forms import OdooEmployeeAdminForm, OdooProductAdminForm
 from .mixins import (
-    OwnableAdminMixin,
     ProfileAdminMixin,
     SaveBeforeChangeAction,
     _build_credentials_actions,
@@ -38,7 +37,7 @@ class OdooCustomerSearchForm(forms.Form):
 
 @admin.register(OdooEmployee)
 class OdooEmployeeAdmin(
-    OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+    ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooEmployeeAdminForm
@@ -49,7 +48,7 @@ class OdooEmployeeAdmin(
     change_actions = ["verify_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile", "generate_quote_report"]
     fieldsets = (
-        ("Owner", {"fields": ("user", "group")}),
+        ("Owner", {"fields": ("avatar",)}),
         ("Configuration", {"fields": ("host", "database")}),
         ("Credentials", {"fields": ("username", "password")}),
         (
