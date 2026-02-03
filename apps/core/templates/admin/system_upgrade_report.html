@@ -207,12 +207,39 @@
       --upgrade-chip-error-bg: rgba(248, 113, 113, 0.22);
       --upgrade-chip-error-fg: #fca5a5;
     }
+  }
 
+  html[data-theme="dark"],
+  body.dark-theme {
+    --upgrade-card-bg: #0b1727;
+    --upgrade-card-border: rgba(148, 163, 184, 0.35);
+    --upgrade-card-fg: #e2e8f0;
+    --upgrade-muted: #cbd5e1;
+    --upgrade-code-bg: rgba(226, 232, 240, 0.12);
+    --upgrade-code-fg: #e2e8f0;
+    --upgrade-chip-ok-bg: rgba(16, 185, 129, 0.18);
+    --upgrade-chip-ok-fg: #6ee7b7;
+    --upgrade-chip-warning-bg: rgba(249, 213, 35, 0.22);
+    --upgrade-chip-warning-fg: #facc15;
+    --upgrade-chip-error-bg: rgba(248, 113, 113, 0.22);
+    --upgrade-chip-error-fg: #fca5a5;
+  }
+
+  @media (prefers-color-scheme: dark) {
     .upgrade-report .upgrade-summary-card .help,
     .upgrade-report .upgrade-issues,
     .upgrade-report .upgrade-report-header h2 {
       color: var(--upgrade-muted, inherit);
     }
+  }
+
+  html[data-theme="dark"] .upgrade-report .upgrade-summary-card .help,
+  html[data-theme="dark"] .upgrade-report .upgrade-issues,
+  html[data-theme="dark"] .upgrade-report .upgrade-report-header h2,
+  body.dark-theme .upgrade-report .upgrade-summary-card .help,
+  body.dark-theme .upgrade-report .upgrade-issues,
+  body.dark-theme .upgrade-report .upgrade-report-header h2 {
+    color: var(--upgrade-muted, inherit);
   }
 </style>
 {% endblock %}
