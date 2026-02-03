@@ -36,6 +36,12 @@ def is_video_camera_feature_active() -> bool:
         return False
 
 
+def is_rpi_camera_feature_active() -> bool:
+    """Return ``True`` if the Raspberry Pi camera feature is active."""
+
+    return is_video_camera_feature_active()
+
+
 def _serialize_metadata(metadata: dict[str, Any]) -> str:
     """Convert *metadata* into a JSON string suitable for storage."""
 
