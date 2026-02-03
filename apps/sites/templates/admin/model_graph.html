@@ -170,10 +170,24 @@
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
           }
 
+          const VIEWPORT_BOTTOM_OFFSET = 24;
+
           function updateViewportHeight() {
             const rect = viewport.getBoundingClientRect();
-            const availableHeight = window.innerHeight - rect.top - 24;
+            const availableHeight = window.innerHeight - rect.top - VIEWPORT_BOTTOM_OFFSET;
             viewport.style.height = `${Math.max(0, availableHeight)}px`;
+          }
+
+          function debounce(callback, delay) {
+            let timeoutId = null;
+            return function (...args) {
+              if (timeoutId) {
+                window.clearTimeout(timeoutId);
+              }
+              timeoutId = window.setTimeout(function () {
+                callback.apply(this, args);
+              }.bind(this), delay);
+            };
           }
 
           function setScale(nextScale, clientX, clientY) {
@@ -266,8 +280,9 @@
             });
           }
 
+          const debouncedUpdateViewportHeight = debounce(updateViewportHeight, 150);
           updateViewportHeight();
-          window.addEventListener('resize', updateViewportHeight);
+          window.addEventListener('resize', debouncedUpdateViewportHeight);
           applyTransform();
         }
 
