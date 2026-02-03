@@ -1,11 +1,13 @@
+import pytest
+
 import logging
 
-import pytest
 from django.db import connection, models
 from django.test.utils import isolate_apps
 
 from apps.base.models import Entity
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db(transaction=True)
 def test_seed_soft_delete_skipped_for_constrained_model(caplog):
@@ -37,7 +39,6 @@ def test_seed_soft_delete_skipped_for_constrained_model(caplog):
         finally:
             with connection.schema_editor() as schema_editor:
                 schema_editor.delete_model(ConstrainedEntity)
-
 
 @pytest.mark.django_db(transaction=True)
 def test_seed_soft_delete_applies_without_constraint():

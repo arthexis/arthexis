@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 import json
 from pathlib import Path
 
+pytestmark = pytest.mark.critical
 
 def _fixture_files() -> list[Path]:
     project_root = Path(__file__).resolve().parents[3]
     return sorted(project_root.glob("**/fixtures/*.json"))
-
 
 def test_fixtures_use_natural_keys():
     project_root = Path(__file__).resolve().parents[3]
@@ -38,4 +40,3 @@ def test_fixtures_use_natural_keys():
             for path, rows in sorted(offenders.items())
         )
     )
-

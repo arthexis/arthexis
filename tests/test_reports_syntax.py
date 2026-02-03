@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 import py_compile
 from pathlib import Path
 
 from django.conf import settings
 
+pytestmark = pytest.mark.critical
 
 def test_reports_module_syntax() -> None:
     reports_path = Path(settings.BASE_DIR) / "apps/core/views/reports.py"

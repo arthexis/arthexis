@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
 from pathlib import Path
 
-import pytest
 from django.test import override_settings
 
 from apps.core.auto_upgrade import (
+
     AUTO_UPGRADE_INTERVAL_MINUTES,
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
     ensure_auto_upgrade_periodic_task,
+
 )
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 
@@ -35,7 +39,6 @@ def test_removes_periodic_task_when_lock_missing(tmp_path: Path):
     assert task.interval is not None
     assert task.interval.every == AUTO_UPGRADE_INTERVAL_MINUTES["unstable"]
 
-
 @pytest.mark.django_db
 
 def test_creates_interval_schedule_with_override(monkeypatch, tmp_path: Path):
@@ -52,7 +55,6 @@ def test_creates_interval_schedule_with_override(monkeypatch, tmp_path: Path):
     assert task.interval.period == IntervalSchedule.MINUTES
     assert task.crontab is None
     assert task.task == AUTO_UPGRADE_TASK_PATH
-
 
 @pytest.mark.django_db
 
@@ -76,7 +78,6 @@ def test_attaches_crontab_for_valid_mode(tmp_path: Path):
     assert task.interval is not None
     assert task.interval.period == IntervalSchedule.MINUTES
     assert task.interval.every == 30
-
 
 @pytest.mark.django_db
 

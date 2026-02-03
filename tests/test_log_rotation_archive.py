@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from pathlib import Path
 
 from apps.loggers.rotation import ArchiveTimedRotatingFileHandler
 
+pytestmark = pytest.mark.critical
 
 def test_rotation_filename_uses_namer(tmp_path: Path) -> None:
     """Ensure rotation naming respects the configured namer."""
@@ -25,7 +28,6 @@ def test_rotation_filename_uses_namer(tmp_path: Path) -> None:
 
     assert rotated == str(archive_dir / "app.log.2024-01-01.gz")
     handler.close()
-
 
 def test_get_files_to_delete_keeps_all_when_backup_count_zero(tmp_path: Path) -> None:
     """Ensure no log files are deleted when backupCount is zero."""

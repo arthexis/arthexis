@@ -4,6 +4,7 @@ import pytest
 
 from apps.loggers.filenames import normalize_log_filename
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.parametrize(
     ("value", "expected"),
@@ -17,6 +18,7 @@ from apps.loggers.filenames import normalize_log_filename
         ("_._", "arthexis"),
         (".my-app", "my-app"),
     ],
+
 )
 def test_normalize_log_filename(value: str, expected: str) -> None:
     """Ensure log filenames normalize unsafe characters consistently."""

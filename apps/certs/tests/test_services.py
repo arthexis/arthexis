@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from apps.certs import services
 
+pytestmark = pytest.mark.critical
 
 def test_verify_certificate_success(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"
@@ -36,7 +39,6 @@ def test_verify_certificate_success(tmp_path, monkeypatch):
     assert any("valid until" in message for message in result.messages)
     assert any("Certificate and key match" in message for message in result.messages)
 
-
 def test_verify_certificate_detects_key_mismatch(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"
     certificate_key_path = tmp_path / "privkey.pem"
@@ -68,7 +70,6 @@ def test_verify_certificate_detects_key_mismatch(tmp_path, monkeypatch):
 
     assert result.ok is False
     assert any("do not match" in message for message in result.messages)
-
 
 def test_generate_self_signed_certificate_with_subject_alt_names(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"

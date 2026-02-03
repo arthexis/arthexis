@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
 import datetime as dt
 
 from apps.energy.models.transactions import generate_missing_reports
 
+pytestmark = pytest.mark.critical
 
 class _DummySchedule:
     def __init__(self):
@@ -19,7 +22,6 @@ class _DummySchedule:
     def run(self, start, end):
         self.runs.append((start, end))
         return f"{start}:{end}"
-
 
 def test_generate_missing_reports_runs_each_pending_period():
     schedule = _DummySchedule()

@@ -3,6 +3,7 @@ import pytest
 from apps.modules.models import Module
 from apps.sites import views
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_sitemap_normalizes_module_paths(client, monkeypatch):
