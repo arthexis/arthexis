@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Run this script directly (ensure the executable bit is set).
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
