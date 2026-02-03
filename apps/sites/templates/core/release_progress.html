@@ -204,7 +204,7 @@
     {% endif %}
     {% if paused and started and not done and not error %}
     {% if not github_token_required %}
-    {% if publish_workflow_url %}
+    {% if publish_pending and publish_workflow_url %}
     <p class="status-message paused">
       {% trans 'Publishing paused. Press Continue to resume after approving the workflow below:' %}
     </p>
