@@ -38,13 +38,13 @@ then resolves all other `[SIGILS]` against the recipe before executing the scrip
 Recipes can be run like a Django management command with the existing helpers:
 
 ```bash
-./do.sh recipe validate-license premium region=na
+./command.sh recipe validate-license premium region=na
 ```
 
 On Windows:
 
 ```bat
-do.bat recipe validate-license premium region=na
+command.bat recipe validate-license premium region=na
 ```
 
 Arguments passed after the recipe identifier are made available as:
