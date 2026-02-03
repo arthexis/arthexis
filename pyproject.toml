@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arthexis"
-version = "0.2.2"
+version = "0.2.3"
 description = "Energy & Power Infrastructure"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
@@ -161,6 +161,7 @@ config = [ "**/*",]
 "apps.ocpp.admin.miscellaneous" = [ "**/*",]
 "apps.ocpp.views.actions" = [ "**/*",]
 "apps.ocpp.management.commands" = [ "**/*",]
+"apps.ocpp.consumers.base" = [ "**/*",]
 "apps.media.migrations" = [ "**/*",]
 "apps.selenium.utils" = [ "**/*",]
 "apps.selenium.migrations" = [ "**/*",]
@@ -249,6 +250,7 @@ config = [ "**/*",]
 "apps.content.classifiers" = [ "**/*",]
 "apps.content.migrations" = [ "**/*",]
 "apps.content.tests" = [ "**/*",]
+"apps.screens.lcd_screen" = [ "**/*",]
 "apps.screens.animations" = [ "**/*",]
 "apps.screens.migrations" = [ "**/*",]
 "apps.screens.tests" = [ "**/*",]
