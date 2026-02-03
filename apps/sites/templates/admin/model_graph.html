@@ -53,7 +53,6 @@
       border-radius: 4px;
       overflow: hidden;
       background: var(--body-bg);
-      min-height: 320px;
       cursor: grab;
       touch-action: none;
       user-select: none;
@@ -97,7 +96,6 @@
 {% endblock %}
 
 {% block content %}
-  <h1>{{ app_verbose_name }} {% translate 'model graph' %}</h1>
   <p class="help">{% blocktranslate %}This diagram is rendered with Graphviz and reflects the models registered in the {{ app_verbose_name }} admin group, including their relationships.{% endblocktranslate %}</p>
 
   <div class="model-graph-wrapper">
@@ -170,6 +168,12 @@
 
           function applyTransform() {
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+          }
+
+          function updateViewportHeight() {
+            const rect = viewport.getBoundingClientRect();
+            const availableHeight = window.innerHeight - rect.top - 24;
+            viewport.style.height = `${Math.max(0, availableHeight)}px`;
           }
 
           function setScale(nextScale, clientX, clientY) {
@@ -262,6 +266,8 @@
             });
           }
 
+          updateViewportHeight();
+          window.addEventListener('resize', updateViewportHeight);
           applyTransform();
         }
 
