@@ -582,14 +582,60 @@ class Command(BaseCommand):
                 self.stdout.write(vendor_info)
 
             if charger.last_meter_values:
-                meter_values = json.dumps(
-                    charger.last_meter_values,
-                    indent=2,
-                    sort_keys=True,
-                    default=str,
-                )
-                self.stdout.write("Last Meter Values:")
-                self.stdout.write(meter_values)
+                self._render_last_meter_values(charger.last_meter_values)
+
+    def _render_last_meter_values(self, payload: dict) -> None:
+        self.stdout.write("Last Meter Values:")
+        if not isinstance(payload, dict):
+            self.stdout.write("  -")
+            return
+
+        transaction_id = payload.get("transactionId")
+        if transaction_id is not None:
+            self.stdout.write(f"  Transaction ID: {transaction_id}")
+
+        meter_values = payload.get("meterValue")
+        if not isinstance(meter_values, list) or not meter_values:
+            self.stdout.write("  No meter values reported.")
+            return
+
+        for idx, entry in enumerate(meter_values, start=1):
+            if not isinstance(entry, dict):
+                continue
+            timestamp = entry.get("timestamp")
+            if timestamp:
+                label = "Timestamp"
+                if len(meter_values) > 1:
+                    label = f"Timestamp {idx}"
+                self.stdout.write(f"  {label}: {timestamp}")
+
+            sampled_values = entry.get("sampledValue")
+            if not isinstance(sampled_values, list):
+                continue
+            for sample in sampled_values:
+                if not isinstance(sample, dict):
+                    continue
+                measurand = sample.get("measurand") or "Value"
+                value = sample.get("value")
+                unit = sample.get("unit")
+                context = sample.get("context")
+                location = sample.get("location")
+
+                value_parts = []
+                if value is not None:
+                    value_parts.append(str(value))
+                if unit:
+                    value_parts.append(str(unit))
+                value_text = " ".join(value_parts) if value_parts else "-"
+
+                meta_parts = []
+                if context:
+                    meta_parts.append(f"context: {context}")
+                if location:
+                    meta_parts.append(f"location: {location}")
+                meta_text = f" ({', '.join(meta_parts)})" if meta_parts else ""
+
+                self.stdout.write(f"  - {measurand}: {value_text}{meta_text}")
 
     @staticmethod
     def _connector_descriptor(charger: Charger) -> str:
