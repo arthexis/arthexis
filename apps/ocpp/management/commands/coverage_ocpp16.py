@@ -49,10 +49,18 @@ def _collect_actions_from_dict(node: ast.Assign, target_name: str) -> set[str]:
 
 
 def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
-    consumer_path = app_dir / "consumers" / "base" / "consumer.py"
-    if not consumer_path.exists():
-        consumer_path = app_dir / "consumers" / "base.py"
-    source = consumer_path.read_text(encoding="utf-8")
+    candidate_paths = [
+        app_dir / "consumers" / "base" / "dispatch.py",
+        app_dir / "consumers" / "base" / "consumer.py",
+        app_dir / "consumers" / "base.py",
+    ]
+    source = None
+    for candidate in candidate_paths:
+        if candidate.exists():
+            source = candidate.read_text(encoding="utf-8")
+            break
+    if source is None:
+        return set()
     tree = ast.parse(source)
 
     class Visitor(ast.NodeVisitor):
@@ -61,7 +69,7 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             self._in_call_handler = False
 
         def visit_ClassDef(self, node: ast.ClassDef) -> None:
-            if node.name == "CSMSConsumer":
+            if node.name in {"CSMSConsumer", "DispatchMixin"}:
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name in {
                         "receive",
