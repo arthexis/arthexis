@@ -998,8 +998,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         context = self.admin_site.each_context(request)
         ensure_feature_enabled("rfid-scanner", logger=logger)
         rfid_feature_enabled = _feature_enabled("rfid-scanner")
-        camera_feature_enabled = _feature_enabled("video-cam")
-        camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
         table_mode, toggle_url, toggle_label = build_mode_toggle(request)
         public_view_url = reverse("rfid-reader")
         if table_mode:
@@ -1017,9 +1015,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "toggle_label": toggle_label,
                 "public_view_url": public_view_url,
                 "deep_read_url": reverse("rfid-scan-deep"),
-                "camera_enabled": camera_feature_enabled,
                 "rfid_feature_enabled": rfid_feature_enabled,
-                "camera_only_mode": camera_only_mode,
             }
         )
         context["show_release_info"] = True
@@ -1029,13 +1025,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     def scan_next(self, request):
         from apps.cards.scanner import scan_sources
         from apps.cards.reader import validate_rfid_value
-        from apps.video.rfid import scan_camera_qr
-
         ensure_feature_enabled("rfid-scanner", logger=logger)
         rfid_feature_enabled = _feature_enabled("rfid-scanner")
-        camera_feature_enabled = _feature_enabled("video-cam")
-        prefer_camera = request.GET.get("source") == "camera"
-        camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
         if request.method == "POST":
             try:
                 payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -1047,9 +1038,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             result = validate_rfid_value(rfid, kind=kind, endianness=endianness)
         else:
             endianness = request.GET.get("endianness")
-            if prefer_camera or camera_only_mode:
-                result = scan_camera_qr(endianness=endianness)
-            else:
-                result = scan_sources(request, endianness=endianness)
+            result = scan_sources(request, endianness=endianness)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
