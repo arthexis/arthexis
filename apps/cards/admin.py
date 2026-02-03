@@ -1,11 +1,13 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm
-from apps.cards.models import CardFace, RFID
+from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm, CardSetUploadForm
+from apps.cards.models import CardDesign, CardFace, CardSet, RFID
 from apps.core.admin import RFIDAdmin
 
 
@@ -165,3 +167,63 @@ class CardFaceAdmin(admin.ModelAdmin):
 
 
 admin.site.register(RFID, RFIDAdmin)
+
+
+class CardDesignInline(admin.TabularInline):
+    model = CardDesign
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    readonly_fields = ("sequence", "name")
+    fields = ("sequence", "name")
+
+
+@admin.register(CardSet)
+class CardSetAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "game", "style", "created_on")
+    search_fields = ("name", "code", "game", "style")
+    readonly_fields = ("created_on",)
+    inlines = (CardDesignInline,)
+    change_list_template = "admin/cards/cardset/change_list.html"
+
+    def get_urls(self):
+        custom = [
+            path(
+                "upload/",
+                self.admin_site.admin_view(self.upload_view),
+                name="cards_cardset_upload",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def upload_view(self, request: HttpRequest) -> HttpResponse:
+        if not self.has_add_permission(request):
+            messages.error(request, _("You do not have permission to upload card sets."))
+            return redirect("admin:index")
+
+        form = CardSetUploadForm(request.POST or None, request.FILES or None)
+
+        if request.method == "POST" and form.is_valid():
+            card_set = form.save()
+            messages.success(
+                request,
+                _("Imported card set '%(name)s' with %(count)d cards.")
+                % {"name": card_set.name, "count": card_set.card_designs.count()},
+            )
+            return redirect(reverse("admin:cards_cardset_change", args=[card_set.pk]))
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "form": form,
+            "title": _("Upload card set"),
+        }
+        return TemplateResponse(request, "admin/cards/cardset/upload.html", context)
+
+
+@admin.register(CardDesign)
+class CardDesignAdmin(admin.ModelAdmin):
+    list_display = ("name", "card_set", "sequence", "created_on")
+    list_filter = ("card_set",)
+    search_fields = ("name", "card_set__name")
+    readonly_fields = ("created_on",)

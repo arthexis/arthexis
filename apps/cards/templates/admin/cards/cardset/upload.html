@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <h1>{% trans "Upload card set" %}</h1>
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <fieldset class="module aligned">
+      {{ form.as_p }}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" value="{% trans "Upload" %}" class="default">
+      <a href="{% url 'admin:cards_cardset_changelist' %}" class="button">
+        {% trans "Cancel" %}
+      </a>
+    </div>
+  </form>
+{% endblock %}

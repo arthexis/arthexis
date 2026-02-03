@@ -1,6 +1,7 @@
 import json
 
 import pytest
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -15,6 +16,7 @@ from apps.core.models import (
 from apps.groups.models import SecurityGroup
 from apps.sigils.sigil_resolver import resolve_sigils
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_ownable_clean_requires_owner():
@@ -24,7 +26,6 @@ def test_ownable_clean_requires_owner():
         avatar.full_clean()
     avatar.user = user
     avatar.full_clean()  # does not raise
-
 
 @pytest.mark.django_db
 @pytest.mark.sigil_roots
@@ -40,7 +41,6 @@ def test_object_sigils_resolve_owner_and_members():
     resolved_members = resolve_sigils("[OBJECT.OWNERS]", current=avatar)
     members = json.loads(resolved_members)
     assert user.username in members
-
 
 @pytest.mark.django_db
 def test_owned_object_helpers_return_direct_and_indirect_lists():
@@ -58,7 +58,6 @@ def test_owned_object_helpers_return_direct_and_indirect_lists():
     direct_group, via_members = get_owned_objects_for_group(group)
     assert any(link.label == str(group_avatar) for link in direct_group)
     assert any(link.via == user.username for link in via_members)
-
 
 @pytest.mark.django_db
 def test_ownable_admins_use_mixin():

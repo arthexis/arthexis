@@ -32,6 +32,7 @@ import requests
 
 from apps.nodes.logging import get_register_visitor_logger
 from apps.nodes.views.registration import register_visitor_proxy
+from config.request_utils import is_https_request
 
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.cards.models import RFID
@@ -63,7 +64,11 @@ from .actions import (
     update_selected_nodes,
 )
 from .forms import NodeAdminForm
-from .inlines import NodeFeatureAssignmentInline, SSHAccountInline
+from .inlines import (
+    NodeFeatureAssignmentInline,
+    NodeUpgradePolicyAssignmentInline,
+    SSHAccountInline,
+)
 
 
 registration_logger = get_register_visitor_logger()
@@ -177,7 +182,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return user, password, expires_at
 
     change_actions = ["update_action"]
-    inlines = [NodeFeatureAssignmentInline, SSHAccountInline]
+    inlines = [NodeFeatureAssignmentInline, NodeUpgradePolicyAssignmentInline, SSHAccountInline]
 
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
@@ -995,6 +1000,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         visitor_info_url = ""
         visitor_register_url = ""
         visitor_error = None
+        https_warnings: list[str] = []
         server_summary = None
         server_host = None
         server_visitor = None
@@ -1070,6 +1076,14 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 if proxy_response.status_code == 200 and proxy_body.get("host") and proxy_body.get("visitor"):
                     host_body = proxy_body.get("host", {})
                     visitor_body = proxy_body.get("visitor", {})
+                    if not proxy_body.get("host_requires_https", True):
+                        https_warnings.append(
+                            _("Host node is not configured to require HTTPS. Update its Sites settings.")
+                        )
+                    if not proxy_body.get("visitor_requires_https", True):
+                        https_warnings.append(
+                            _("Visitor node is not configured to require HTTPS. Update its Sites settings.")
+                        )
                     server_summary = {
                         "status": "success",
                         "message": _("Both nodes registered successfully."),
@@ -1089,6 +1103,15 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     server_summary = {"status": "error", "message": error_message}
                     server_host = {"status": "error", "message": error_message}
                     server_visitor = {"status": "error", "message": error_message}
+
+        if not is_https_request(request):
+            https_warnings.append(
+                _("This admin session is not using HTTPS. Visitor registration requires HTTPS on both nodes.")
+            )
+        if node.base_site_id and not getattr(node.base_site, "require_https", False):
+            https_warnings.append(
+                _("This host node is not configured to require HTTPS. Update Sites settings before continuing.")
+            )
 
         registration_logger.info(
             "Visitor registration: admin flow initialized visitor_base=%s token=%s",
@@ -1111,6 +1134,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "visitor_host": visitor_host,
             "visitor_port": visitor_port,
             "visitor_scheme": visitor_scheme,
+            "https_warnings": https_warnings,
             "server_summary": server_summary,
             "server_host": server_host,
             "server_visitor": server_visitor,

@@ -200,6 +200,7 @@ def nav_links(request):
 
 
     valid_modules.sort(key=lambda m: (m.priority, m.menu_label.lower()))
+    request.current_module = current_module
 
     if current_module and current_module.favicon_url:
         favicon_url = current_module.favicon_url
@@ -273,6 +274,7 @@ def nav_links(request):
 
     context = {
         "nav_modules": valid_modules,
+        "current_module": current_module,
         "favicon_url": favicon_url,
         "header_references": header_references,
         "login_url": resolve_url(settings.LOGIN_URL),

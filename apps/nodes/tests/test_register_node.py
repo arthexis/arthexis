@@ -1,15 +1,17 @@
 import json
 import logging
 
-import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.test import RequestFactory
 
+import pytest
+
 from apps.nodes.models import Node, NodeRole
 from apps.nodes.views import node_info, register_node
 
+pytestmark = pytest.mark.critical
 
 @pytest.fixture
 def admin_user(db):
@@ -18,7 +20,6 @@ def admin_user(db):
         username="admin", email="admin@example.com", password="password"
     )
 
-
 def _build_request(factory, payload):
     request = factory.post(
         "/nodes/register/",
@@ -26,7 +27,6 @@ def _build_request(factory, payload):
         content_type="application/json",
     )
     return request
-
 
 @pytest.mark.django_db
 def test_register_node_logs_attempt_and_success(admin_user, caplog):
@@ -51,7 +51,6 @@ def test_register_node_logs_attempt_and_success(admin_user, caplog):
     assert any("Node registration attempt" in message for message in messages)
     assert any("Node registration succeeded" in message for message in messages)
 
-
 @pytest.mark.django_db
 def test_register_node_logs_validation_failure(admin_user, caplog):
     factory = RequestFactory()
@@ -73,7 +72,6 @@ def test_register_node_logs_validation_failure(admin_user, caplog):
     assert any("Node registration attempt" in message for message in messages)
     assert any("Node registration failed" in message for message in messages)
 
-
 @pytest.mark.django_db
 def test_register_node_sets_cors_headers_without_origin(admin_user):
     payload = {
@@ -94,7 +92,6 @@ def test_register_node_sets_cors_headers_without_origin(admin_user):
     assert response["Access-Control-Allow-Origin"] == "*"
     assert response["Access-Control-Allow-Headers"] == "Content-Type"
     assert response["Access-Control-Allow-Methods"] == "POST, OPTIONS"
-
 
 @pytest.mark.django_db
 def test_register_node_allows_authenticated_user_with_invalid_signature(admin_user):
@@ -119,7 +116,6 @@ def test_register_node_allows_authenticated_user_with_invalid_signature(admin_us
     node = Node.objects.get(mac_address=payload["mac_address"])
     assert node.hostname == payload["hostname"]
 
-
 @pytest.mark.django_db
 def test_register_node_links_base_site_when_domain_matches(admin_user):
     site = Site.objects.create(domain="linked.example.com", name="Linked")
@@ -141,7 +137,6 @@ def test_register_node_links_base_site_when_domain_matches(admin_user):
     assert response.status_code == 200
     node = Node.objects.get(mac_address=payload["mac_address"])
     assert node.base_site_id == site.id
-
 
 @pytest.mark.django_db
 def test_register_node_updates_base_site_for_existing_node(admin_user):
@@ -172,7 +167,6 @@ def test_register_node_updates_base_site_for_existing_node(admin_user):
     node.refresh_from_db()
     assert node.base_site_id == site.id
 
-
 @pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
     settings.LOG_DIR = settings.BASE_DIR / "logs"
@@ -192,7 +186,6 @@ def test_register_current_logs_to_local_logger(settings, caplog):
         or "Local node registration refreshed" in message
         for message in messages
     )
-
 
 @pytest.mark.django_db
 def test_register_current_uses_managed_site_domain(settings, caplog):
@@ -216,7 +209,6 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
     assert node.address == "arthexis.com"
     assert node.base_site_id == site.id
     assert node.port == 443
-
 
 @pytest.mark.django_db
 def test_node_info_prefers_base_site_domain(monkeypatch):

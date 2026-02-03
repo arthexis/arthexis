@@ -4,6 +4,7 @@ import pytest
 
 from apps.release.domain import ReleaseFeature, ReleaseFeatures
 
+pytestmark = pytest.mark.critical
 
 def test_release_feature_normalization_and_slug():
     feature = ReleaseFeature(
@@ -21,7 +22,6 @@ def test_release_feature_normalization_and_slug():
     assert feature.scope == "users"
     assert feature.slug == "add-api-tokens"
 
-
 def test_release_feature_from_mapping_and_formatting():
     source = {
         "title": "Restrict admin access",
@@ -34,7 +34,6 @@ def test_release_feature_from_mapping_and_formatting():
     assert feature.breaking is True
     assert feature.category == "security"
     assert "BREAKING" in feature.as_bullet()
-
 
 def test_release_features_collection_helpers():
     features = ReleaseFeatures.from_iterable(
@@ -54,7 +53,6 @@ def test_release_features_collection_helpers():
     formatted = features.format()
     assert formatted.startswith("-")
     assert "Gamma" in formatted
-
 
 def test_release_feature_requires_title_and_summary():
     with pytest.raises(ValueError):

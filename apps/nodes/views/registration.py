@@ -31,6 +31,7 @@ from config.request_utils import is_https_request
 from utils.api import api_login_required
 
 from apps.nodes.logging import get_register_visitor_logger
+from config.request_utils import is_https_request
 
 from ..models import Node, NodeRole, node_information_updated
 
@@ -529,6 +530,8 @@ def node_info(request):
         "installed_version": node.installed_version,
         "installed_revision": node.installed_revision,
         "base_site_domain": base_domain,
+        "base_site_requires_https": base_site_requires_https,
+        "request_is_https": is_https_request(request),
     }
 
     if token:
@@ -1416,6 +1419,8 @@ def register_visitor_proxy(request):
                 "detail": visitor_register_body.get("detail", ""),
                 "id": visitor_register_body.get("id"),
             },
+            "host_requires_https": bool(host_info.get("base_site_requires_https")),
+            "visitor_requires_https": bool(visitor_info.get("base_site_requires_https")),
         }
     )
 

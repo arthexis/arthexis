@@ -278,6 +278,19 @@
       <button id="start-registration" class="button button-default" type="submit">{% trans "Start registration" %}</button>
     </div>
   </form>
+  {% if https_warnings %}
+    <div class="status-banner" role="status" aria-live="polite" data-status="warning">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span class="status-text">
+            <strong>{% trans "HTTPS required" %}</strong>
+            <ul>
+              {% for warning in https_warnings %}
+                <li>{{ warning }}</li>
+              {% endfor %}
+            </ul>
+        </span>
+    </div>
+  {% endif %}
   <div id="registration-log" {% if not log_visible %}hidden{% endif %}>
     <div id="result" class="status-banner{% if server_summary and server_summary.status == 'error' %} errornote{% endif %}" role="status" aria-live="polite" aria-busy="false" data-status="{{ server_summary.status|default:'pending' }}">
         <span class="status-indicator" aria-hidden="true"></span>

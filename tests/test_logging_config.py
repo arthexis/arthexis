@@ -2,8 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from apps.loggers import build_logging_settings
 
+pytestmark = pytest.mark.critical
 
 def test_celery_logs_are_routed_to_dedicated_file(tmp_path: Path) -> None:
     """Celery INFO logs should not pollute the shared error log."""
@@ -21,7 +24,6 @@ def test_celery_logs_are_routed_to_dedicated_file(tmp_path: Path) -> None:
     assert celery_logger is not None
     assert celery_logger["handlers"] == ["celery_file", "error_file"]
     assert celery_logger["propagate"] is False
-
 
 def test_page_misses_use_dedicated_file(tmp_path: Path) -> None:
     """Page miss logs should be routed to their own handler."""

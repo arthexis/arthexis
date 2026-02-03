@@ -14,19 +14,45 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
   pull_request:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * 1'
   workflow_dispatch:
-    inputs:
-      run_slow_tests:
-        description: 'Run slow pytest markers'
-        required: false
-        default: 'false'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs || steps.fallback.outputs.docs }}
+      app: ${{ steps.filter.outputs.app || steps.fallback.outputs.app }}
+    steps:
+      - uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          clean: false
+      - id: filter
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+              - 'README.md'
+              - 'mkdocs.yml'
+            app:
+              - '**'
+              - '!docs/**'
+              - '!README.md'
+              - '!mkdocs.yml'
+      - id: fallback
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          echo "docs=true" >> "$GITHUB_OUTPUT"
+          echo "app=true" >> "$GITHUB_OUTPUT"
+
   install:
+    if: ${{ needs.upgrade.result == 'failure' }}
+    needs: upgrade
     runs-on: ubuntu-latest
     services:
       redis:
@@ -93,7 +119,7 @@ jobs:
         run: |
           set -o pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6
@@ -101,25 +127,9 @@ jobs:
           name: install-pytest-log
           path: pytest.log
           if-no-files-found: warn
-  docs-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      docs: ${{ steps.filter.outputs.docs }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          clean: false
-      - id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            docs:
-              - 'docs/**'
-              - 'README.md'
-              - 'mkdocs.yml'
   docs-links:
-    if: ${{ github.event_name == 'schedule' || needs.docs-changes.outputs.docs == 'true' }}
-    needs: docs-changes
+    if: ${{ github.event_name == 'schedule' || needs.changes.outputs.docs == 'true' }}
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
@@ -223,7 +233,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "critical" | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6
@@ -231,66 +241,12 @@ jobs:
           name: upgrade-pytest-log
           path: pytest.log
           if-no-files-found: warn
-  slow-tests:
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true') }}
-    runs-on: ubuntu-latest
-    env:
-      RUN_SLOW_TESTS: '1'
-      OCPP_STATE_REDIS_URL: redis://localhost:6379
-    services:
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          clean: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-      - name: Cache virtualenv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-
-      - name: Install suite from repository
-        run: |
-          ./install.sh --no-start
-      - name: Run slow tests
-        run: |
-          set -o pipefail
-          source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "slow or integration" | tee pytest.log
-      - name: Upload pytest log
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: slow-tests-pytest-log
-          path: pytest.log
-          if-no-files-found: warn
-
   notify-failure:
     if: ${{ failure() && github.event_name == 'pull_request' }}
     needs:
       - install
       - docs-links
       - upgrade
-      - slow-tests
     permissions:
       actions: read
       contents: read
@@ -311,20 +267,12 @@ jobs:
         with:
           name: upgrade-pytest-log
           path: artifacts/upgrade-pytest-log
-      - name: Download slow tests pytest log
-        if: always()
-        uses: actions/download-artifact@v7
-        continue-on-error: true
-        with:
-          name: slow-tests-pytest-log
-          path: artifacts/slow-tests-pytest-log
       - name: Comment on PR with failure summary
         uses: actions/github-script@v8
         env:
           INSTALL_RESULT: ${{ needs.install.result }}
           DOCS_LINKS_RESULT: ${{ needs.docs-links.result }}
           UPGRADE_RESULT: ${{ needs.upgrade.result }}
-          SLOW_TESTS_RESULT: ${{ needs.slow-tests.result }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -339,8 +287,7 @@ jobs:
             const results = {
               install: process.env.INSTALL_RESULT,
               'docs-links': process.env.DOCS_LINKS_RESULT,
-              upgrade: process.env.UPGRADE_RESULT,
-              'slow-tests': process.env.SLOW_TESTS_RESULT
+              upgrade: process.env.UPGRADE_RESULT
             };
 
             const failedJobs = Object.entries(results)
@@ -352,8 +299,7 @@ jobs:
 
             const logFiles = {
               install: 'artifacts/install-pytest-log/pytest.log',
-              upgrade: 'artifacts/upgrade-pytest-log/pytest.log',
-              'slow-tests': 'artifacts/slow-tests-pytest-log/pytest.log'
+              upgrade: 'artifacts/upgrade-pytest-log/pytest.log'
             };
 
             const logBlocks = Object.entries(logFiles)

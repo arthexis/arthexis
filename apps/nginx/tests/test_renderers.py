@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from apps.nginx import config_utils
 from apps.nginx.renderers import (
     apply_site_entries,
@@ -7,6 +9,7 @@ from apps.nginx.renderers import (
     generate_site_entries_content,
 )
 
+pytestmark = pytest.mark.critical
 
 def test_generate_primary_config_internal_mode():
     config = generate_primary_config("internal", 8080)
@@ -16,14 +19,12 @@ def test_generate_primary_config_internal_mode():
     assert "location = /maintenance/app-down.html" in config
     assert "ssl_certificate" not in config
 
-
 def test_generate_primary_config_public_mode():
     config = generate_primary_config("public", 8080, https_enabled=True)
 
     assert "return 301 https://$host$request_uri;" in config
     assert "ssl_certificate" in config
     assert "proxy_pass http://127.0.0.1:8080" in config
-
 
 def test_generate_primary_config_external_websockets_toggle():
     config = generate_primary_config("internal", 8080, external_websockets=True)
@@ -36,7 +37,6 @@ def test_generate_primary_config_external_websockets_toggle():
 
     assert config_utils.WEBSOCKET_MAP_DIRECTIVE not in disabled
     assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
-
 
 def test_apply_site_entries(tmp_path: Path):
     staging = tmp_path / "sites.json"
@@ -60,7 +60,6 @@ def test_apply_site_entries(tmp_path: Path):
     assert "return 301 https://$host$request_uri;" in content
     assert "demo.arthexis.com" in content
 
-
 def test_generate_site_entries_content_matches_written_file(tmp_path: Path):
     staging = tmp_path / "sites.json"
     staging.write_text(
@@ -77,7 +76,6 @@ def test_generate_site_entries_content_matches_written_file(tmp_path: Path):
 
     assert dest.read_text(encoding="utf-8") == preview_content
 
-
 def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
     staging = tmp_path / "sites.json"
     staging.write_text('[{"domain": "proxy.example.com", "require_https": false}]', encoding="utf-8")
@@ -87,7 +85,6 @@ def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
     )
 
     assert "proxy_pass http://arthexis-blue" in content
-
 
 def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
     staging = tmp_path / "sites.json"
@@ -103,7 +100,6 @@ def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
 
     assert "server_name example.com api.example.com admin.example.com;" in content
 
-
 def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(config_utils, "SSL_OPTIONS_PATH", tmp_path / "missing-options.conf")
     monkeypatch.setattr(config_utils, "BUNDLED_SSL_OPTIONS_PATH", tmp_path / "missing-bundled-options.conf")
@@ -115,7 +111,6 @@ def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path)
     assert "ssl_certificate" in config
     assert "include /" not in config
     assert "ssl_dhparam" not in config
-
 
 def test_ssl_directives_use_bundled_fallback(monkeypatch, tmp_path: Path):
     missing_options = tmp_path / "missing-options.conf"

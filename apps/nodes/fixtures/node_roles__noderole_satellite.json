@@ -6,7 +6,10 @@
       "is_deleted": false,
       "name": "Satellite",
       "acronym": "SATL",
-      "description": "Multi-Device Edge, Network & Data Acquisition"
+      "description": "Multi-Device Edge, Network & Data Acquisition",
+      "default_upgrade_policy": [
+        "Stable"
+      ]
     }
   }
 ]

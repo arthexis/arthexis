@@ -3,8 +3,10 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+
 from django.conf import settings
 
+pytestmark = pytest.mark.critical
 
 @pytest.fixture(scope="session")
 def env_refresh_module():
@@ -15,13 +17,11 @@ def env_refresh_module():
     spec.loader.exec_module(module)
     return module
 
-
 def _write_fixture(base_dir: Path, relative: str, content: str) -> str:
     path = base_dir / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     return relative
-
 
 def test_migration_hash_reads_migration_files(tmp_path, monkeypatch, env_refresh_module):
     app_one = tmp_path / "apps" / "one"
@@ -53,7 +53,6 @@ def test_migration_hash_reads_migration_files(tmp_path, monkeypatch, env_refresh
 
     assert env_refresh_module._migration_hash(["app_one", "app_two"]) == expected
 
-
 def test_fixtures_hash_uses_relative_paths(tmp_path, monkeypatch, env_refresh_module):
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
     fixtures = [
@@ -72,7 +71,6 @@ def test_fixtures_hash_uses_relative_paths(tmp_path, monkeypatch, env_refresh_mo
             continue
 
     assert env_refresh_module._fixtures_hash(fixtures) == digest.hexdigest()
-
 
 def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)

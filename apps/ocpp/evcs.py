@@ -49,6 +49,7 @@ from typing import Dict, Optional
 
 import websockets
 from . import store
+from .cpsim_service import cpsim_service_enabled, queue_cpsim_request
 from .utils import resolve_ws_scheme
 
 # ---------------------------------------------------------------------------
@@ -921,6 +922,19 @@ def _start_simulator(
     state.stop_time = None
     _save_state_file(_simulators)
 
+    if cpsim_service_enabled():
+        queue_cpsim_request(
+            action="start",
+            params=params,
+            slot=cp,
+            name=str(params.get("name") or f"Simulator {cp}"),
+            source="landing",
+        )
+        state.last_status = "cpsim-service start requested"
+        state.phase = "Service"
+        _save_state_file(_simulators)
+        return True, state.last_status, log_file
+
     coro = simulate(cp=cp, **state.params)
     threading.Thread(target=lambda: asyncio.run(coro), daemon=True).start()
 
@@ -955,6 +969,17 @@ def _stop_simulator(cp: int = 1) -> bool:
     state.phase = "Stopping"
     state.running = False
     _save_state_file(_simulators)
+    if cpsim_service_enabled():
+        queue_cpsim_request(
+            action="stop",
+            slot=cp,
+            name=str((state.params or {}).get("name") or f"Simulator {cp}"),
+            source="landing",
+            params=state.params,
+        )
+        state.last_status = "cpsim-service stop requested"
+        state.phase = "Service"
+        _save_state_file(_simulators)
     return True
 
 

@@ -1,8 +1,12 @@
-{% load i18n %}
+{% load i18n version_tags %}
 {% translate "A new version of this site is available." as version_message %}
 {% translate "Refresh" as refresh_label %}
 {% translate "Version" as version_label %}
 {% translate "Revision" as revision_label %}
+{% with local_version_info=None %}
+  {% if request.user.is_staff %}
+    {% version_check_info as local_version_info %}
+  {% endif %}
 <script>
 (function () {
   const CHECK_URL = "{% url 'version-info' %}";
@@ -10,6 +14,8 @@
   const REFRESH_TEXT = "{{ refresh_label|escapejs }}";
   const VERSION_LABEL = "{{ version_label|escapejs }}";
   const REVISION_LABEL = "{{ revision_label|escapejs }}";
+  const LOCAL_VERSION = "{{ local_version_info.version|escapejs }}";
+  const LOCAL_REVISION = "{{ local_version_info.revision|escapejs }}";
   const CHECK_INTERVAL = 120000;
   const REMOTE_CHECK_INTERVAL = 600000;
   const STORAGE_KEY = "version-check-state-v1";
@@ -79,6 +85,9 @@
       document.head.appendChild(style);
     }
 
+    const normalizedLocalVersion = (LOCAL_VERSION || "").trim();
+    const normalizedLocalRevision = (LOCAL_REVISION || "").trim();
+    const hasLocalInfo = Boolean(normalizedLocalVersion || normalizedLocalRevision);
     let currentVersion = null;
     let currentRevision = null;
     let bannerElement;
@@ -250,7 +259,17 @@
     }
 
     const stored = readStoredState();
-    if (stored) {
+    if (hasLocalInfo) {
+      currentVersion = normalizedLocalVersion;
+      currentRevision = normalizedLocalRevision;
+      if (
+        !stored ||
+        stored.version !== normalizedLocalVersion ||
+        stored.revision !== normalizedLocalRevision
+      ) {
+        writeStoredState({ version: normalizedLocalVersion, revision: normalizedLocalRevision });
+      }
+    } else if (stored) {
       currentVersion = stored.version;
       currentRevision = stored.revision;
     }
@@ -279,3 +298,4 @@
   }
 })();
 </script>
+{% endwith %}

@@ -14,6 +14,7 @@
       <td>{{ group.parent.charger.charger_id }}</td>
       <td class="text-end">{{ group.parent.stats.total_kw|floatformat:2 }}</td>
       <td class="text-end">{{ group.parent.stats.today_kw|floatformat:2 }}</td>
+      {% include "ocpp/includes/_last_session_cell.html" with last_session_date=group.parent.last_session %}
       <td>
         <span class="badge" style="background-color: {{ group.parent.color }};">{{ group.parent.state }}</span>
       </td>
@@ -34,6 +35,7 @@
       </td>
       <td class="text-end">{{ item.stats.total_kw|floatformat:2 }}</td>
       <td class="text-end">{{ item.stats.today_kw|floatformat:2 }}</td>
+      {% include "ocpp/includes/_last_session_cell.html" with last_session_date=item.last_session %}
       <td>
         <span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span>
       </td>
@@ -41,5 +43,5 @@
     {% endfor %}
   {% endfor %}
 {% else %}
-<tr><td colspan="5">{% trans "No charge points found." %}</td></tr>
+<tr><td colspan="6">{% trans "No charge points found." %}</td></tr>
 {% endif %}

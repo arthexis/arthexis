@@ -283,9 +283,15 @@ def _canary_gate(
     *,
     now: datetime | None = None,
 ) -> bool:
+    if not mode.requires_canaries:
+        return True
     canaries = _load_upgrade_canaries()
     if not canaries:
-        return True
+        append_auto_upgrade_log(
+            base_dir,
+            "Skipping auto-upgrade; no canaries configured for this policy.",
+        )
+        return False
 
     now = now or timezone.now()
     target_type, target_value = _resolve_canary_target(repo_state, mode)
@@ -992,26 +998,27 @@ def _ensure_runtime_services(
     )
 
 
-def _latest_release() -> tuple[str | None, str | None]:
-    """Return the latest release version and revision when available."""
+def _latest_release() -> tuple[str | None, str | None, str | None]:
+    """Return the latest release version, revision, and PyPI URL when available."""
 
     model = _get_package_release_model()
     if model is None:
-        return None, None
+        return None, None, None
 
     try:
         release = model.latest()
     except DatabaseError:  # pragma: no cover - depends on DB availability
-        return None, None
+        return None, None, None
     except Exception:  # pragma: no cover - defensive catch-all
-        return None, None
+        return None, None, None
 
     if not release:
         return None, None
 
     version = getattr(release, "version", None)
     revision = getattr(release, "revision", None)
-    return version, revision
+    pypi_url = getattr(release, "pypi_url", None)
+    return version, revision, pypi_url
 
 
 def _read_local_version(base_dir: Path) -> str | None:
@@ -1624,6 +1631,11 @@ class AutoUpgradeMode:
     mode_file_exists: bool
     mode_file_physical: bool
     interval_minutes: int
+    requires_canaries: bool
+    requires_pypi: bool
+    policy_id: int | None = None
+    policy_name: str | None = None
+    skip_recency_check: bool = False
 
 
 @dataclass
@@ -1637,6 +1649,7 @@ class AutoUpgradeRepositoryState:
     remote_revision: str
     release_version: str | None
     release_revision: str | None
+    release_pypi_url: str | None
     remote_version: str | None
     local_version: str | None
     local_revision: str
@@ -1677,7 +1690,23 @@ def _ensure_git_safe_directory(base_dir: Path) -> None:
 
 
 def _auto_upgrade_enabled(base_dir: Path) -> bool:
-    return (base_dir / ".locks" / "auto_upgrade.lck").exists()
+    try:  # pragma: no cover - optional dependency
+        from apps.nodes.models import Node
+    except Exception:
+        return (base_dir / ".locks" / "auto_upgrade.lck").exists()
+
+    try:
+        local = Node.get_local()
+    except (DatabaseError, Node.DoesNotExist):
+        return (base_dir / ".locks" / "auto_upgrade.lck").exists()
+
+    if not local:
+        return (base_dir / ".locks" / "auto_upgrade.lck").exists()
+
+    try:
+        return local.upgrade_policies.exists()
+    except DatabaseError:
+        return (base_dir / ".locks" / "auto_upgrade.lck").exists()
 
 
 def _is_non_terminal_role(role_name: str) -> bool:
@@ -1769,13 +1798,71 @@ def _git_remote_revision(base_dir: Path, branch: str) -> str:
     ).strip()
 
 
+def _load_upgrade_policy(policy_id: int | None):
+    if policy_id is None:
+        return None
+    try:  # pragma: no cover - optional dependency
+        from apps.nodes.models import UpgradePolicy
+        from django.db import DatabaseError
+    except Exception:
+        return None
+
+    try:
+        return UpgradePolicy.objects.filter(pk=policy_id).first()
+    except DatabaseError:
+        return None
+
+
 def _resolve_auto_upgrade_mode(
-    base_dir: Path, channel_override: str | None
+    base_dir: Path,
+    channel_override: str | None,
+    *,
+    policy=None,
 ) -> AutoUpgradeMode:
     mode_file = base_dir / ".locks" / "auto_upgrade.lck"
     mode_file_exists = mode_file.exists()
     mode = DEFAULT_AUTO_UPGRADE_MODE
     mode_file_physical = mode_file.is_file()
+    requires_canaries = False
+    requires_pypi = False
+    policy_id = None
+    policy_name = None
+    skip_recency_check = False
+
+    if policy is not None:
+        mode = (getattr(policy, "channel", "") or DEFAULT_AUTO_UPGRADE_MODE).lower()
+        interval_minutes = int(getattr(policy, "interval_minutes", 0) or 0)
+        if interval_minutes <= 0:
+            interval_minutes = AUTO_UPGRADE_FALLBACK_INTERVAL
+        requires_canaries = bool(getattr(policy, "requires_canaries", False))
+        requires_pypi = bool(getattr(policy, "requires_pypi_packages", False))
+        policy_id = getattr(policy, "pk", None)
+        policy_name = getattr(policy, "name", None)
+        mode_file_exists = False
+        mode_file_physical = False
+        skip_recency_check = True
+
+        mode = {
+            "latest": "unstable",
+            "unstable": "unstable",
+            "stable": "stable",
+            "normal": "stable",
+            "regular": "stable",
+        }.get(mode, mode)
+
+        return AutoUpgradeMode(
+            mode=mode,
+            admin_override=False,
+            override_log=None,
+            mode_file_exists=mode_file_exists,
+            mode_file_physical=mode_file_physical,
+            interval_minutes=interval_minutes,
+            requires_canaries=requires_canaries,
+            requires_pypi=requires_pypi,
+            policy_id=policy_id,
+            policy_name=policy_name,
+            skip_recency_check=skip_recency_check,
+        )
 
     try:
         raw_mode = mode_file.read_text() if mode_file_exists else ""
@@ -1815,6 +1902,11 @@ def _resolve_auto_upgrade_mode(
         mode_file_exists=mode_file_exists,
         mode_file_physical=mode_file_physical,
         interval_minutes=interval_minutes,
+        requires_canaries=requires_canaries,
+        requires_pypi=requires_pypi,
+        policy_id=policy_id,
+        policy_name=policy_name,
+        skip_recency_check=skip_recency_check,
     )
 
 
@@ -1825,7 +1917,7 @@ def _log_auto_upgrade_trigger(base_dir: Path) -> Path:
 def _apply_stable_schedule_guard(
     base_dir: Path, mode: AutoUpgradeMode, ops: AutoUpgradeOperations
 ) -> bool:
-    if mode.mode != "stable" or mode.admin_override or not mode.mode_file_exists:
+    if mode.mode != "stable" or mode.admin_override:
         return True
 
     now_local = timezone.localtime(timezone.now())
@@ -1906,7 +1998,7 @@ def _fetch_repository_state(
         )
         return None
 
-    release_version, release_revision = _latest_release()
+    release_version, release_revision, release_pypi_url = _latest_release()
     remote_version = release_version or _read_remote_version(base_dir, branch)
     local_version = _read_local_version(base_dir)
     severity = _resolve_release_severity(remote_version)
@@ -1916,6 +2008,7 @@ def _fetch_repository_state(
         remote_revision=remote_revision,
         release_version=release_version,
         release_revision=release_revision,
+        release_pypi_url=release_pypi_url,
         remote_version=remote_version,
         local_version=local_version,
         local_revision=local_revision,
@@ -1945,6 +2038,21 @@ def _plan_auto_upgrade(
         if startup:
             startup()
         return None
+
+    if mode.requires_pypi:
+        if not repo_state.release_pypi_url:
+            append_auto_upgrade_log(
+                base_dir,
+                "Skipping auto-upgrade; PyPI release has not been published yet.",
+            )
+            ops.ensure_runtime_services(
+                base_dir,
+                restart_if_active=False,
+                revert_on_failure=False,
+            )
+            if startup:
+                startup()
+            return None
 
     if mode.mode == "unstable":
         if repo_state.severity == SEVERITY_LOW:
@@ -2038,12 +2146,7 @@ def _execute_upgrade_plan(
     ops: AutoUpgradeOperations,
     state: AutoUpgradeState,
 ):
-    if (
-        upgrade_was_applied
-        and mode.mode == "stable"
-        and not mode.admin_override
-        and mode.mode_file_physical
-    ):
+    if upgrade_was_applied and not mode.admin_override and not mode.skip_recency_check:
         if _auto_upgrade_ran_recently(base_dir, mode.interval_minutes):
             append_auto_upgrade_log(
                 base_dir,
@@ -2064,9 +2167,8 @@ def _execute_upgrade_plan(
 
     if (
         upgrade_was_applied
-        and mode.mode == "unstable"
         and not mode.admin_override
-        and mode.mode_file_physical
+        and not mode.skip_recency_check
         and _auto_upgrade_ran_recently(base_dir, mode.interval_minutes)
     ):
         append_auto_upgrade_log(
@@ -2170,7 +2272,8 @@ def check_github_updates(
     *,
     operations: AutoUpgradeOperations | None = None,
     manual_trigger: bool = False,
-) -> None:
+    policy_id: int | None = None,
+) -> str:
     """Check the GitHub repo for updates and upgrade if needed."""
 
     base_dir = _project_base_dir()
@@ -2184,12 +2287,22 @@ def check_github_updates(
     initial_revision = _current_revision(base_dir)
 
     try:
-        mode = _resolve_auto_upgrade_mode(base_dir, channel_override)
+        policy = _load_upgrade_policy(policy_id)
+        if policy_id is not None and policy is None:
+            append_auto_upgrade_log(
+                base_dir,
+                f"Skipping auto-upgrade; policy {policy_id} was not found.",
+            )
+            return "SKIPPED"
+
+        mode = _resolve_auto_upgrade_mode(
+            base_dir, channel_override, policy=policy
+        )
         status = "NO-UPDATES"
 
         if not _apply_stable_schedule_guard(base_dir, mode, ops):
             status = "SKIPPED"
-            return
+            return status
 
         startup = None
         try:
@@ -2203,6 +2316,11 @@ def check_github_updates(
             append_auto_upgrade_log(
                 base_dir,
                 f"Using admin override channel: {mode.override_log}",
+            )
+        if mode.policy_name:
+            append_auto_upgrade_log(
+                base_dir,
+                f"Applying upgrade policy: {mode.policy_name}",
             )
 
         notify = None
@@ -2222,7 +2340,7 @@ def check_github_updates(
         plan = _plan_auto_upgrade(base_dir, mode, repo_state, notify, startup, ops)
         if plan is None:
             status = "NO-UPDATES"
-            return
+            return status
 
         args, upgrade_was_applied = plan
 
@@ -2250,6 +2368,7 @@ def check_github_updates(
         )
         _finalize_auto_upgrade(base_dir, state)
         _send_auto_upgrade_check_message(status, change_tag)
+    return status
 
 
 @shared_task

@@ -19,7 +19,7 @@ from apps.screens.history import (
     select_entry_for_timestamp,
 )
 from apps.screens.lcd import LCDUnavailableError, prepare_lcd_controller
-from apps.screens.lcd_screen import LCDFrameWriter
+from apps.screens.lcd_screen.hardware import LCDFrameWriter
 
 try:
     import termios
@@ -236,7 +236,11 @@ class Command(BaseCommand):
                 continue
 
             joined = " ".join(cmdline)
-            if "apps.screens.lcd_screen" in joined or "lcd-screen" in joined:
+            if (
+                "apps.screens.lcd_screen.runner" in joined
+                or "apps.screens.lcd_screen" in joined
+                or "lcd-screen" in joined
+            ):
                 if service_name and service_name not in joined:
                     continue
                 try:

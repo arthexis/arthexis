@@ -1,3 +1,5 @@
+import pytest
+
 import json
 import logging
 import socket
@@ -6,13 +8,13 @@ from unittest.mock import Mock
 
 import requests
 
-import pytest
 from django.urls import reverse
 
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
 from django.contrib.sites.models import Site
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
@@ -38,7 +40,6 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     assert payload["network_hostname"] == node.network_hostname
     assert payload["features"] == []
 
-
 @pytest.mark.django_db
 def test_node_info_uses_site_domain_port(monkeypatch, client):
     domain = f"{uuid4().hex}.example.com"
@@ -60,7 +61,6 @@ def test_node_info_uses_site_domain_port(monkeypatch, client):
     payload = response.json()
     assert payload["port"] == 443
 
-
 @pytest.mark.django_db
 def test_resolve_visitor_base_defaults_to_loopback():
     from django.contrib.admin.sites import AdminSite
@@ -80,8 +80,6 @@ def test_resolve_visitor_base_defaults_to_loopback():
     assert visitor_host == "127.0.0.1"
     assert visitor_port == 443
     assert visitor_scheme == "https"
-
-
 
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
     node = Node.objects.create(
@@ -158,7 +156,6 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
     body = response.json()
     assert body["host"]["id"]
     assert body["visitor"]["id"] == 2
-
 
 @pytest.mark.django_db
 def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
@@ -251,7 +248,6 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[2][1].startswith("https://93.184.216.34:8888")
     assert session.requests[3][1].startswith("https://93.184.216.34:8000")
 
-
 @pytest.mark.django_db
 def test_register_visitor_telemetry_logs(client, caplog):
     url = reverse("register-telemetry")
@@ -274,7 +270,6 @@ def test_register_visitor_telemetry_logs(client, caplog):
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert "telemetry stage=integration-test" in caplog.text
-
 
 @pytest.mark.django_db
 def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):

@@ -2,11 +2,13 @@ import io
 from pathlib import Path
 
 import pytest
+
 from django.core.management import call_command
 
 from apps.nginx import config_utils
 from apps.nodes.models import Node
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_check_forwarders_reports_external_websockets(monkeypatch):

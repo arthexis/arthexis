@@ -1,10 +1,11 @@
-from __future__ import annotations
-
 import json
 import time
 
+import pytest
+
 from apps.core import tasks
 
+pytestmark = pytest.mark.critical
 
 def test_is_migration_server_running_skips_unexpected_pid(monkeypatch, tmp_path):
     state_path = tmp_path / "migration_server.json"
@@ -30,7 +31,6 @@ def test_is_migration_server_running_skips_unexpected_pid(monkeypatch, tmp_path)
 
     assert tasks._is_migration_server_running(tmp_path) is False
     assert "kill" not in calls
-
 
 def test_is_migration_server_running_validates_process_identity(monkeypatch, tmp_path):
     state_path = tmp_path / "migration_server.json"

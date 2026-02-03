@@ -1,3 +1,6 @@
+import ipaddress
+from urllib.parse import urlparse
+
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -172,6 +175,41 @@ class GitHubAppAdmin(admin.ModelAdmin):
     search_fields = ("display_name", "app_slug", "=app_id")
     list_filter = ("auth_method",)
     raw_id_fields = ("auth_user",)
+
+    def _warn_about_base_url(self, request) -> None:
+        base_url = GitHubApp.instance_base_url()
+        parsed = urlparse(base_url)
+        host = parsed.hostname or ""
+        needs_https = parsed.scheme != "https"
+        if not host:
+            needs_domain = True
+        else:
+            try:
+                ipaddress.ip_address(host)
+                needs_domain = True  # Host is an IP address.
+            except ValueError:
+                needs_domain = host.lower() == "localhost"
+
+        if needs_https or needs_domain:
+            self.message_user(
+                request,
+                _(
+                    "GitHub Apps require a public HTTPS URL with a domain name. "
+                    "Current base URL is %(base_url)s."
+                )
+                % {"base_url": base_url},
+                level=messages.WARNING,
+            )
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        if request.method == "GET":
+            self._warn_about_base_url(request)
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
 
 
 @admin.register(GitHubAppInstall)

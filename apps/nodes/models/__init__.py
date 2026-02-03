@@ -22,6 +22,7 @@ from .node_core import (
     node_information_updated,
 )
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
+from .upgrade_policy import NodeUpgradePolicyAssignment, UpgradePolicy
 
 __all__ = [
     "NetMessage",
@@ -33,6 +34,7 @@ __all__ = [
     "NodeFeatureMixin",
     "NodeRole",
     "NodeRoleManager",
+    "NodeUpgradePolicyAssignment",
     "SlugDisplayNaturalKeyMixin",
     "SlugEntityManager",
     "PendingNetMessage",
@@ -40,6 +42,7 @@ __all__ = [
     "ROLE_RENAMES",
     "SSHAccount",
     "User",
+    "UpgradePolicy",
     "_format_upgrade_body",
     "_upgrade_in_progress",
     "get_terminal_role",

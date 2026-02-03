@@ -7,24 +7,6 @@ env:
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/dashboard-screenshot.yml'
-      - 'apps/**'
-      - 'config/**'
-      - 'scripts/**'
-      - 'start.sh'
-      - 'install.sh'
-      - 'requirements.txt'
-  pull_request:
-    paths:
-      - '.github/workflows/dashboard-screenshot.yml'
-      - 'apps/**'
-      - 'config/**'
-      - 'scripts/**'
-      - 'start.sh'
-      - 'install.sh'
-      - 'requirements.txt'
 
 jobs:
   install:
