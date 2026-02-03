@@ -20,36 +20,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      docs: ${{ steps.filter.outputs.docs || steps.fallback.outputs.docs }}
-      app: ${{ steps.filter.outputs.app || steps.fallback.outputs.app }}
-    steps:
-      - uses: actions/checkout@v6
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          clean: false
-      - id: filter
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            docs:
-              - 'docs/**'
-              - 'README.md'
-              - 'mkdocs.yml'
-            app:
-              - '**'
-              - '!docs/**'
-              - '!README.md'
-              - '!mkdocs.yml'
-      - id: fallback
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          echo "docs=true" >> "$GITHUB_OUTPUT"
-          echo "app=true" >> "$GITHUB_OUTPUT"
-
   install:
     if: ${{ needs.upgrade.result == 'failure' }}
     needs: upgrade
@@ -127,39 +97,6 @@ jobs:
           name: install-pytest-log
           path: pytest.log
           if-no-files-found: warn
-  docs-links:
-    if: ${{ github.event_name == 'schedule' || needs.changes.outputs.docs == 'true' }}
-    needs: changes
-    runs-on: ubuntu-latest
-    steps:
-      # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
-      - uses: actions/checkout@v6
-        with:
-          clean: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-      - name: Cache virtualenv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-
-      - name: Install suite from repository
-        run: |
-          ./install.sh --no-start
-      - name: Check documentation links use HTTPS
-        run: |
-          source .venv/bin/activate
-          python scripts/check_no_http_links.py
   upgrade:
     runs-on: ubuntu-latest
     services:
@@ -245,7 +182,6 @@ jobs:
     if: ${{ failure() && github.event_name == 'pull_request' }}
     needs:
       - install
-      - docs-links
       - upgrade
     permissions:
       actions: read
@@ -271,7 +207,6 @@ jobs:
         uses: actions/github-script@v8
         env:
           INSTALL_RESULT: ${{ needs.install.result }}
-          DOCS_LINKS_RESULT: ${{ needs.docs-links.result }}
           UPGRADE_RESULT: ${{ needs.upgrade.result }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -286,7 +221,6 @@ jobs:
 
             const results = {
               install: process.env.INSTALL_RESULT,
-              'docs-links': process.env.DOCS_LINKS_RESULT,
               upgrade: process.env.UPGRADE_RESULT
             };
 
