@@ -54,14 +54,12 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
         app_dir / "consumers" / "base" / "consumer.py",
         app_dir / "consumers" / "base.py",
     ]
-    source = None
-    for candidate in candidate_paths:
-        if candidate.exists():
-            source = candidate.read_text(encoding="utf-8")
-            break
-    if source is None:
+    source_path = next(
+        (candidate for candidate in candidate_paths if candidate.exists()), None
+    )
+    if source_path is None:
         return set()
-    tree = ast.parse(source)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
 
     class Visitor(ast.NodeVisitor):
         def __init__(self) -> None:
