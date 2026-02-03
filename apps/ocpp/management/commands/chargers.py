@@ -590,52 +590,61 @@ class Command(BaseCommand):
             self.stdout.write("  -")
             return
 
-        transaction_id = payload.get("transactionId")
-        if transaction_id is not None:
-            self.stdout.write(f"  Transaction ID: {transaction_id}")
+        self._render_meter_values_transaction(payload)
 
         meter_values = payload.get("meterValue")
         if not isinstance(meter_values, list) or not meter_values:
             self.stdout.write("  No meter values reported.")
             return
 
+        total = len(meter_values)
         for idx, entry in enumerate(meter_values, start=1):
-            if not isinstance(entry, dict):
-                continue
-            timestamp = entry.get("timestamp")
-            if timestamp:
-                label = "Timestamp"
-                if len(meter_values) > 1:
-                    label = f"Timestamp {idx}"
-                self.stdout.write(f"  {label}: {timestamp}")
+            self._render_meter_value_entry(entry, idx, total)
 
-            sampled_values = entry.get("sampledValue")
-            if not isinstance(sampled_values, list):
-                continue
-            for sample in sampled_values:
-                if not isinstance(sample, dict):
-                    continue
-                measurand = sample.get("measurand") or "Value"
-                value = sample.get("value")
-                unit = sample.get("unit")
-                context = sample.get("context")
-                location = sample.get("location")
+    def _render_meter_values_transaction(self, payload: dict) -> None:
+        transaction_id = payload.get("transactionId")
+        if transaction_id is not None:
+            self.stdout.write(f"  Transaction ID: {transaction_id}")
 
-                value_parts = []
-                if value is not None:
-                    value_parts.append(str(value))
-                if unit:
-                    value_parts.append(str(unit))
-                value_text = " ".join(value_parts) if value_parts else "-"
+    def _render_meter_value_entry(self, entry: object, index: int, total: int) -> None:
+        if not isinstance(entry, dict):
+            return
+        timestamp = entry.get("timestamp")
+        if timestamp:
+            label = "Timestamp" if total <= 1 else f"Timestamp {index}"
+            self.stdout.write(f"  {label}: {timestamp}")
 
-                meta_parts = []
-                if context:
-                    meta_parts.append(f"context: {context}")
-                if location:
-                    meta_parts.append(f"location: {location}")
-                meta_text = f" ({', '.join(meta_parts)})" if meta_parts else ""
+        sampled_values = entry.get("sampledValue")
+        if not isinstance(sampled_values, list):
+            return
+        for sample in sampled_values:
+            self._render_sampled_value(sample)
 
-                self.stdout.write(f"  - {measurand}: {value_text}{meta_text}")
+    def _render_sampled_value(self, sample: object) -> None:
+        if not isinstance(sample, dict):
+            return
+        measurand = sample.get("measurand") or "Value"
+        value_text = self._format_sample_value(sample.get("value"), sample.get("unit"))
+        meta_text = self._format_sample_meta(sample.get("context"), sample.get("location"))
+        self.stdout.write(f"  - {measurand}: {value_text}{meta_text}")
+
+    @staticmethod
+    def _format_sample_value(value: object, unit: object) -> str:
+        value_parts: list[str] = []
+        if value is not None:
+            value_parts.append(str(value))
+        if unit:
+            value_parts.append(str(unit))
+        return " ".join(value_parts) if value_parts else "-"
+
+    @staticmethod
+    def _format_sample_meta(context: object, location: object) -> str:
+        meta_parts: list[str] = []
+        if context:
+            meta_parts.append(f"context: {context}")
+        if location:
+            meta_parts.append(f"location: {location}")
+        return f" ({', '.join(meta_parts)})" if meta_parts else ""
 
     @staticmethod
     def _connector_descriptor(charger: Charger) -> str:
