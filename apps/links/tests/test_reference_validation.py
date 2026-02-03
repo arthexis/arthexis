@@ -12,6 +12,7 @@ import pytest
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_is_link_valid_allows_redirect_status_codes():
@@ -23,7 +24,6 @@ def test_is_link_valid_allows_redirect_status_codes():
     )
 
     assert reference.is_link_valid() is True
-
 
 @pytest.mark.django_db
 def test_filter_visible_references_keeps_redirects():
@@ -38,7 +38,6 @@ def test_filter_visible_references_keeps_redirects():
 
     assert visible == [reference]
 
-
 @pytest.mark.django_db
 def test_filter_visible_references_keeps_fresh_valid_entries():
     reference = Reference.objects.create(
@@ -50,7 +49,6 @@ def test_filter_visible_references_keeps_fresh_valid_entries():
     visible = filter_visible_references([reference])
 
     assert visible == [reference]
-
 
 @pytest.mark.django_db
 def test_filter_visible_references_excludes_invalid_status():

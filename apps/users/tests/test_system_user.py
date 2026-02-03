@@ -7,6 +7,7 @@ from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
 from apps.users.system import collect_system_user_issues, ensure_system_user
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_ensure_system_user_creates_and_repairs_account():
@@ -36,7 +37,6 @@ def test_ensure_system_user_creates_and_repairs_account():
     assert repaired_user.operate_as_id is None
     assert not repaired_user.has_usable_password()
 
-
 @pytest.mark.django_db
 def test_collect_system_user_issues_reports_expected_problems():
     User = get_user_model()
@@ -61,7 +61,6 @@ def test_collect_system_user_issues_reports_expected_problems():
         "account has a usable password",
     }
 
-
 @pytest.mark.django_db
 def test_system_user_only_authenticates_with_temp_password():
     User = get_user_model()
@@ -82,7 +81,6 @@ def test_system_user_only_authenticates_with_temp_password():
     assert (
         backend.authenticate(request, username=user.username, password="incorrect") is None
     )
-
 
 @pytest.mark.django_db
 def test_temp_password_allows_email_lookup():

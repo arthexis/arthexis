@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import time
 from decimal import Decimal
 
-import pytest
-
 from apps.energy.models import CustomerAccount, EnergyTariff
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_customer_account_authorization_with_tariff_and_balance():
@@ -31,7 +32,6 @@ def test_customer_account_authorization_with_tariff_and_balance():
 
     assert account.potential_purchase_kw == Decimal("2")
     assert account.can_authorize() is True
-
 
 def test_customer_account_service_account_override():
     account = CustomerAccount(name="SERVICE")

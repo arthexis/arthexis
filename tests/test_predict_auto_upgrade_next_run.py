@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timedelta
 
-import pytest
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.system import upgrade
 from apps.core.system.ui import _format_timestamp
 
+pytestmark = pytest.mark.critical
 
 class DummySchedule:
     def __init__(
@@ -43,7 +45,6 @@ class DummySchedule:
             raise self._remaining
         return self._remaining
 
-
 class DummyTask:
     def __init__(
         self,
@@ -58,12 +59,10 @@ class DummyTask:
         self.start_time = start_time
         self.last_run_at = last_run_at
 
-
 def test_disabled_task_returns_disabled_label():
     task = DummyTask(enabled=False, schedule=object())
 
     assert upgrade._predict_auto_upgrade_next_run(task) == str(_("Disabled"))
-
 
 def test_missing_schedule_returns_empty_string():
     class NoScheduleTask(DummyTask):
@@ -80,7 +79,6 @@ def test_missing_schedule_returns_empty_string():
 
     assert upgrade._predict_auto_upgrade_next_run(task) == ""
 
-
 def test_start_time_in_future_uses_normalized_time(settings):
     now = timezone.now()
     raw_start = now.replace(tzinfo=None) + timedelta(minutes=30)
@@ -93,7 +91,6 @@ def test_start_time_in_future_uses_normalized_time(settings):
 
     assert upgrade._predict_auto_upgrade_next_run(task) == expected
 
-
 def test_last_run_reference_with_aware_datetime(settings):
     now = timezone.now()
     last_run = now - timedelta(minutes=5)
@@ -104,14 +101,12 @@ def test_last_run_reference_with_aware_datetime(settings):
 
     assert upgrade._predict_auto_upgrade_next_run(task) == expected
 
-
 def test_exception_during_remaining_estimate_returns_empty():
     now = timezone.now()
     schedule = DummySchedule(now, RuntimeError("no estimate"))
     task = DummyTask(schedule=schedule)
 
     assert upgrade._predict_auto_upgrade_next_run(task) == ""
-
 
 def test_now_fallback_uses_timezone_now_when_localtime_fails(monkeypatch):
     schedule_now = timezone.now()

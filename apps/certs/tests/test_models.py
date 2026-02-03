@@ -1,9 +1,11 @@
 import pytest
+
 from django.utils import timezone
 
 from apps.certs import services
 from apps.certs.models import CertbotCertificate, SelfSignedCertificate
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_certbot_certificate_request_updates_state(monkeypatch):
@@ -31,7 +33,6 @@ def test_certbot_certificate_request_updates_state(monkeypatch):
     assert certificate.certificate_key_path.endswith("privkey.pem")
     assert captured["domain"] == "example.com"
     assert captured["certificate_path"].name == "fullchain.pem"
-
 
 @pytest.mark.django_db
 def test_self_signed_certificate_generate_updates_state(monkeypatch):
@@ -63,7 +64,6 @@ def test_self_signed_certificate_generate_updates_state(monkeypatch):
     assert captured["domain"] == "demo.example.com"
     assert captured["days_valid"] == 30
     assert captured["key_length"] == 1024
-
 
 @pytest.mark.django_db
 def test_certificate_provision_dispatches(monkeypatch):

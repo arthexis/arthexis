@@ -1,7 +1,10 @@
+import pytest
+
 from pathlib import Path
 
 from apps.nginx import services
 
+pytestmark = pytest.mark.critical
 
 def test_ensure_site_enabled_creates_symlink(monkeypatch, tmp_path: Path):
     sites_available = tmp_path / "sites-available"
@@ -32,7 +35,6 @@ def test_ensure_site_enabled_creates_symlink(monkeypatch, tmp_path: Path):
     assert calls[1][0][3] == str(source)
     assert calls[1][0][4] == str(sites_enabled / source.name)
 
-
 def test_ensure_site_enabled_skips_non_sites_available(monkeypatch, tmp_path: Path):
     sites_available = tmp_path / "sites-available"
     sites_enabled = tmp_path / "sites-enabled"
@@ -58,4 +60,3 @@ def test_ensure_site_enabled_skips_non_sites_available(monkeypatch, tmp_path: Pa
     services._ensure_site_enabled(source, sudo="sudo")
 
     assert calls == []
-

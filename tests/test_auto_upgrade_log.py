@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import pytest
+
 from pathlib import Path
 
-import pytest
 from django.utils import timezone
 
 from apps.core import tasks
 from apps.core.system import upgrade
 from apps.core.tasks import _project_base_dir
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_project_base_dir_prefers_environment(monkeypatch, settings, tmp_path):
@@ -19,7 +21,6 @@ def test_project_base_dir_prefers_environment(monkeypatch, settings, tmp_path):
     monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
 
     assert _project_base_dir() == env_base
-
 
 @pytest.mark.django_db
 def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path):
@@ -38,7 +39,6 @@ def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path
 
     assert report["log_entries"][0]["message"] == "logged entry"
     assert Path(report["settings"]["log_path"]) == log_file
-
 
 @pytest.mark.django_db
 def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
@@ -64,7 +64,6 @@ def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
     report = upgrade._build_auto_upgrade_report()
 
     assert report["schedule"]["last_run_at"] == report["log_entries"][0]["timestamp"]
-
 
 @pytest.mark.django_db
 def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tmp_path):
@@ -99,8 +98,6 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
         "recorded upgrade failure" in issue["label"] for issue in report["summary"]["issues"]
     )
 
-
-
 def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
     calls: list[tuple[str | None, bool]] = []
 
@@ -119,7 +116,6 @@ def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, setti
     assert not queued
     assert calls == [(None, True)]
 
-
 def test_health_check_failure_without_revision(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks, "get_revision", lambda: "")
 
@@ -134,7 +130,6 @@ def test_health_check_failure_without_revision(monkeypatch, tmp_path):
     )
     skip_lock = tmp_path / ".locks" / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME
     assert not skip_lock.exists()
-
 
 def test_health_check_failure_records_revision(monkeypatch, tmp_path):
     revision = "abc123"

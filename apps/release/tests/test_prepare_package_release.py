@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from types import SimpleNamespace
 
-import pytest
 import requests
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -12,6 +13,7 @@ from django.urls import reverse
 from apps.release.admin import package_actions
 from apps.release.models import Package, PackageRelease
 
+pytestmark = pytest.mark.critical
 
 class DummyResponse:
     def __init__(
@@ -29,7 +31,6 @@ class DummyResponse:
 
     def close(self) -> None:
         return None
-
 
 @pytest.mark.django_db
 def test_prepare_package_release_get_redirects_to_existing_draft(monkeypatch):
@@ -59,7 +60,6 @@ def test_prepare_package_release_get_redirects_to_existing_draft(monkeypatch):
     release.refresh_from_db()
     assert release.is_deleted is False
 
-
 @pytest.mark.django_db
 def test_prepare_package_release_warns_when_pypi_unavailable(monkeypatch):
     package = Package.objects.create(name="test-package")
@@ -79,7 +79,6 @@ def test_prepare_package_release_warns_when_pypi_unavailable(monkeypatch):
     response = package_actions.prepare_package_release(admin_view, request, package)
 
     assert response.url == "/admin/release/packagerelease/"
-
 
 @pytest.mark.django_db
 def test_prepare_package_release_skips_draft_when_pypi_ahead(monkeypatch):
@@ -105,7 +104,6 @@ def test_prepare_package_release_skips_draft_when_pypi_ahead(monkeypatch):
     assert response.url == reverse(
         "admin:release_packagerelease_change", args=[new_release.pk]
     )
-
 
 @pytest.mark.django_db
 def test_prepare_package_release_handles_invalid_versions(monkeypatch):

@@ -1,11 +1,13 @@
-from datetime import timedelta
 import pytest
+
+from datetime import timedelta
 from django.utils import timezone
 
 from apps.counters.models import DashboardRule
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_site_configuration_apply_records_state(monkeypatch):
@@ -40,7 +42,6 @@ def test_site_configuration_apply_records_state(monkeypatch):
     assert captured["external_websockets"] is True
     assert captured["destination"] == config.expected_destination
 
-
 @pytest.mark.django_db
 def test_site_configuration_validate_only(monkeypatch):
     config = SiteConfiguration.get_default()
@@ -62,7 +63,6 @@ def test_site_configuration_validate_only(monkeypatch):
     config.refresh_from_db()
     assert config.last_validated_at == later
     assert config.last_message == "restarted"
-
 
 @pytest.mark.django_db
 def test_site_configuration_save_invalidates_dashboard_rule_cache(monkeypatch):

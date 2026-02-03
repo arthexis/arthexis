@@ -1,3 +1,5 @@
+import pytest
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
@@ -6,6 +8,7 @@ from django.urls import NoReverseMatch, reverse
 from apps.counters import dashboard_rules
 from apps.counters.models import DashboardRule
 
+pytestmark = pytest.mark.critical
 
 class DashboardBadgeTests(TestCase):
     def setUp(self):

@@ -1,9 +1,11 @@
 import pytest
+
 from django.urls import reverse
 
 from apps.links import models as links_models
 from apps.links.models import QRRedirect, QRRedirectLead
 
+pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_qr_redirect_save_strips_target_and_generates_slug():
@@ -11,7 +13,6 @@ def test_qr_redirect_save_strips_target_and_generates_slug():
 
     assert qr_redirect.slug
     assert qr_redirect.target_url == "/qr-target/"
-
 
 @pytest.mark.django_db
 def test_qr_redirect_save_retries_on_slug_collision(monkeypatch):
@@ -23,7 +24,6 @@ def test_qr_redirect_save_retries_on_slug_collision(monkeypatch):
     qr_redirect.save()
 
     assert qr_redirect.slug == "unique-slug"
-
 
 @pytest.mark.django_db
 def test_qr_redirect_public_view_creates_lead(client):
@@ -37,7 +37,6 @@ def test_qr_redirect_public_view_creates_lead(client):
     assert response.status_code == 200
     lead = QRRedirectLead.objects.get(qr_redirect=qr_redirect)
     assert lead.target_url.startswith("http://testserver/destination/")
-
 
 @pytest.mark.django_db
 def test_qr_redirect_public_view_rejects_private_for_anonymous(client):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import importlib
 from pathlib import Path
 from types import ModuleType
@@ -10,10 +12,10 @@ from django.conf import settings
 
 from config.urls import autodiscovered_urlpatterns
 
+pytestmark = pytest.mark.critical
 
 def _pattern_routes():
     return {pattern.pattern._route for pattern in autodiscovered_urlpatterns()}
-
 
 def _project_app_admin_modules():
     base_dir = Path(settings.BASE_DIR).resolve()
@@ -31,7 +33,6 @@ def _project_app_admin_modules():
 
     return modules
 
-
 def test_autodiscovery_includes_known_apps_with_app_namespaces():
     routes = _pattern_routes()
 
@@ -41,13 +42,11 @@ def test_autodiscovery_includes_known_apps_with_app_namespaces():
     assert "api/rfid/" not in routes
     assert "rfid/" not in routes
 
-
 def test_pages_and_docs_are_excluded_from_autodiscovery():
     routes = _pattern_routes()
 
     assert "pages/" not in routes
     assert "docs/" not in routes
-
 
 def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
     class ExternalConfig(AppConfig):
@@ -68,7 +67,6 @@ def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
     assert "external/" not in routes
     assert "core/" in routes
 
-
 def test_api_modules_are_namespaced_under_their_app(monkeypatch):
     app_config = apps.get_app_config("core")
 
@@ -87,7 +85,6 @@ def test_api_modules_are_namespaced_under_their_app(monkeypatch):
 
     assert f"{app_config.label}/api/" in routes
 
-
 def test_apps_without_urls_do_not_raise(monkeypatch):
     app_without_urls = apps.get_app_config("aws")
     monkeypatch.setattr(apps, "get_app_configs", lambda: [app_without_urls])
@@ -95,7 +92,6 @@ def test_apps_without_urls_do_not_raise(monkeypatch):
     routes = _pattern_routes()
 
     assert routes == set()
-
 
 def test_api_routes_are_only_namespaced_by_app():
     routes = _pattern_routes()
@@ -118,7 +114,6 @@ def test_api_routes_are_only_namespaced_by_app():
 
     api_routes = [route for route in routes if "/api/" in route]
     assert all(any(route.startswith(prefix) for prefix in app_api_prefixes) for route in api_routes)
-
 
 def test_admin_modules_are_loaded_during_url_configuration(monkeypatch):
     import config.urls as urls
