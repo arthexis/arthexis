@@ -209,8 +209,8 @@
     }
   }
 
-  html[data-theme="dark"],
-  body.dark-theme {
+  /* Keep in sync with the prefers-color-scheme dark variables above. */
+  :is(html[data-theme="dark"], body.dark-theme) {
     --upgrade-card-bg: #0b1727;
     --upgrade-card-border: rgba(148, 163, 184, 0.35);
     --upgrade-card-fg: #e2e8f0;
@@ -233,12 +233,9 @@
     }
   }
 
-  html[data-theme="dark"] .upgrade-report .upgrade-summary-card .help,
-  html[data-theme="dark"] .upgrade-report .upgrade-issues,
-  html[data-theme="dark"] .upgrade-report .upgrade-report-header h2,
-  body.dark-theme .upgrade-report .upgrade-summary-card .help,
-  body.dark-theme .upgrade-report .upgrade-issues,
-  body.dark-theme .upgrade-report .upgrade-report-header h2 {
+  :is(html[data-theme="dark"], body.dark-theme)
+    .upgrade-report
+    :is(.upgrade-summary-card .help, .upgrade-issues, .upgrade-report-header h2) {
     color: var(--upgrade-muted, inherit);
   }
 </style>
