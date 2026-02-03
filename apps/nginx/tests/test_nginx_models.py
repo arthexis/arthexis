@@ -1,7 +1,8 @@
-import pytest
-
 from datetime import timedelta
+
 from django.utils import timezone
+
+import pytest
 
 from apps.counters.models import DashboardRule
 from apps.nginx import services

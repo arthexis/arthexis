@@ -1,6 +1,6 @@
-import pytest
-
 import json
+
+import pytest
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -9,11 +9,9 @@ from django.core.exceptions import ValidationError
 from apps.chats.models import ChatAvatar
 from apps.core.admin.mixins import OwnableAdminMixin
 from apps.core.models import (
-
     get_owned_objects_for_group,
     get_owned_objects_for_user,
     get_ownable_models,
-
 )
 from apps.groups.models import SecurityGroup
 from apps.sigils.sigil_resolver import resolve_sigils

@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-import pytest
-
 import py_compile
 from pathlib import Path
+
+import pytest
 
 from django.conf import settings
 

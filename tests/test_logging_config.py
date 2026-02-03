@@ -1,8 +1,8 @@
 """Tests for Django logging configuration helpers."""
 
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from apps.loggers import build_logging_settings
 

@@ -1,5 +1,3 @@
-import pytest
-
 import json
 import logging
 
@@ -7,6 +5,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.test import RequestFactory
+
+import pytest
 
 from apps.nodes.models import Node, NodeRole
 from apps.nodes.views import node_info, register_node

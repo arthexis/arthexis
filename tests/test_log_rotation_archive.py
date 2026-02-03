@@ -1,10 +1,8 @@
 """Tests for archive-aware log rotation handlers."""
 
-from __future__ import annotations
+from pathlib import Path
 
 import pytest
-
-from pathlib import Path
 
 from apps.loggers.rotation import ArchiveTimedRotatingFileHandler
 

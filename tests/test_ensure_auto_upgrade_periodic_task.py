@@ -1,18 +1,13 @@
-from __future__ import annotations
-
-import pytest
-
 from pathlib import Path
 
 from django.test import override_settings
+import pytest
 
 from apps.core.auto_upgrade import (
-
     AUTO_UPGRADE_INTERVAL_MINUTES,
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
     ensure_auto_upgrade_periodic_task,
-
 )
 
 pytestmark = pytest.mark.critical

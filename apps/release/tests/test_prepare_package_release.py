@@ -1,14 +1,11 @@
-from __future__ import annotations
-
-import pytest
-
 from types import SimpleNamespace
 
-import requests
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory
 from django.urls import reverse
+import pytest
+import requests
 
 from apps.release.admin import package_actions
 from apps.release.models import Package, PackageRelease

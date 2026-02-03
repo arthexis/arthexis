@@ -1,6 +1,6 @@
-import pytest
-
 from django.urls import reverse
+
+import pytest
 
 from apps.links import models as links_models
 from apps.links.models import QRRedirect, QRRedirectLead

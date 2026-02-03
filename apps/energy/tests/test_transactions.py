@@ -1,8 +1,6 @@
-from __future__ import annotations
+import datetime as dt
 
 import pytest
-
-import datetime as dt
 
 from apps.energy.models.transactions import generate_missing_reports
 

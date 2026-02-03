@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-import pytest
-
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from apps.release import release
 from apps.release.domain import release_tasks
