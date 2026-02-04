@@ -33,6 +33,7 @@ from django.http import (
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.functional import LazyObject
+from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _, ngettext
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -168,14 +169,14 @@ def _seed_fixture_name(model) -> str:
     return f"{opts.app_label}__{opts.model_name}__local_seed.json"
 
 
-def _seed_fixture_entries_from_bytes(content: bytes) -> list[dict]:
+def _seed_fixture_text_from_bytes(content: bytes) -> str | None:
     try:
-        text = content.decode("utf-8")
+        return content.decode("utf-8")
     except UnicodeDecodeError:
-        try:
-            text = content.decode("latin-1")
-        except Exception:
-            return []
+        return content.decode("latin-1")
+
+
+def _seed_fixture_entries_from_text(text: str) -> list[dict]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -183,6 +184,13 @@ def _seed_fixture_entries_from_bytes(content: bytes) -> list[dict]:
     if not isinstance(data, list):
         return []
     return [obj for obj in data if isinstance(obj, dict)]
+
+
+def _seed_fixture_entries_from_bytes(content: bytes) -> list[dict]:
+    text = _seed_fixture_text_from_bytes(content)
+    if text is None:
+        return []
+    return _seed_fixture_entries_from_text(text)
 
 
 def _seed_fixture_has_unapplied_entries(entries: list[dict]) -> bool:
@@ -217,6 +225,50 @@ def _seed_fixture_has_unapplied_entries(entries: list[dict]) -> bool:
     return False
 
 
+def _seed_data_allowed_models() -> dict[str, tuple[type, admin.ModelAdmin]]:
+    allowed: dict[str, tuple[type, admin.ModelAdmin]] = {}
+    for model, model_admin in _iter_entity_admin_models():
+        if not _supports_seed_datum(model):
+            continue
+        label = f"{model._meta.app_label}.{model._meta.model_name}"
+        allowed[label] = (model, model_admin)
+    return allowed
+
+
+def _seed_fixture_entries_authorized(
+    request, entries: list[dict]
+) -> tuple[bool, str]:
+    allowed = _seed_data_allowed_models()
+    for obj in entries:
+        if not isinstance(obj, dict):
+            return False, _("Seed data fixture contains invalid entries.")
+        label = obj.get("model")
+        if not label or label not in allowed:
+            return (
+                False,
+                _("Seed data fixture targets an unsupported model: %(model)s.")
+                % {"model": label or _("unknown")},
+            )
+        if request.user.is_superuser:
+            continue
+        _, model_admin = allowed[label]
+        if not (
+            model_admin.has_add_permission(request)
+            and model_admin.has_change_permission(request)
+        ):
+            return (
+                False,
+                _("You do not have permission to import seed data for %(model)s.")
+                % {"model": label},
+            )
+    return True, ""
+
+
+def _require_seed_data_permission(request) -> None:
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+
 def load_local_seed_zips(*, verbosity: int = 0, only_paths: list[Path] | None = None) -> int:
     from apps.core.fixtures import ensure_seed_data_flags
 
@@ -228,15 +280,14 @@ def load_local_seed_zips(*, verbosity: int = 0, only_paths: list[Path] | None = 
                     if not name.endswith(".json"):
                         continue
                     content_bytes = zf.read(name)
-                    entries = _seed_fixture_entries_from_bytes(content_bytes)
+                    text = _seed_fixture_text_from_bytes(content_bytes)
+                    if text is None:
+                        continue
+                    entries = _seed_fixture_entries_from_text(text)
                     if not entries:
                         continue
                     if not _seed_fixture_has_unapplied_entries(entries):
                         continue
-                    try:
-                        text = content_bytes.decode("utf-8")
-                    except UnicodeDecodeError:
-                        text = content_bytes.decode("latin-1")
                     text = ensure_seed_data_flags(text)
                     with tempfile.NamedTemporaryFile(
                         mode="w",
@@ -1508,6 +1559,7 @@ def toggle_user_datum(request, app_label, model_name, object_id):
 
 
 def _seed_data_view(request):
+    _require_seed_data_permission(request)
     loaded = load_local_seed_zips()
     if loaded:
         messages.success(
@@ -1557,13 +1609,14 @@ def _seed_data_view(request):
             "seed_data_actions": True,
             "seed_data_download_url": reverse("admin:seed_data_export"),
             "seed_data_upload_url": reverse("admin:seed_data_import"),
-            "seed_data_upload_dir": str(_seed_zip_dir().resolve()),
+            "seed_data_upload_dir": str(Path("config") / "seeds"),
         }
     )
     return TemplateResponse(request, "admin/data_list.html", context)
 
 
 def _seed_data_export(request):
+    _require_seed_data_permission(request)
     buffer = BytesIO()
     fixture_index = _seed_fixture_index()
     from apps.core.fixtures import ensure_seed_data_flags
@@ -1595,10 +1648,46 @@ def _seed_data_export(request):
 
 
 def _seed_data_import(request):
+    _require_seed_data_permission(request)
     if request.method == "POST" and request.FILES.get("seed_zip"):
         seed_zip = request.FILES["seed_zip"]
         target_dir = _seed_zip_dir()
-        target_path = target_dir / Path(seed_zip.name).name
+        try:
+            with ZipFile(seed_zip) as zf:
+                validated = False
+                for name in zf.namelist():
+                    if not name.endswith(".json"):
+                        continue
+                    content_bytes = zf.read(name)
+                    text = _seed_fixture_text_from_bytes(content_bytes)
+                    if text is None:
+                        messages.error(
+                            request, _("Seed data fixture includes unreadable content.")
+                        )
+                        return HttpResponseRedirect(reverse("admin:seed_data"))
+                    entries = _seed_fixture_entries_from_text(text)
+                    if not entries:
+                        continue
+                    authorized, message = _seed_fixture_entries_authorized(
+                        request, entries
+                    )
+                    if not authorized:
+                        messages.error(request, message)
+                        return HttpResponseRedirect(reverse("admin:seed_data"))
+                    validated = True
+            seed_zip.seek(0)
+        except Exception:
+            messages.error(request, _("Invalid seed data ZIP file."))
+            return HttpResponseRedirect(reverse("admin:seed_data"))
+        if not validated:
+            messages.warning(
+                request, _("Seed data ZIP did not include any supported fixtures.")
+            )
+            return HttpResponseRedirect(reverse("admin:seed_data"))
+        filename = get_valid_filename(Path(seed_zip.name).name)
+        if not filename.lower().endswith(".zip"):
+            filename = f"{filename}.zip"
+        target_path = target_dir / filename
         with target_path.open("wb") as f:
             for chunk in seed_zip.chunks():
                 f.write(chunk)
