@@ -269,11 +269,7 @@ def _extract_failed_count(output_lines: Iterable[str]) -> int | None:
         return None
     if " in " in summary_text:
         summary_text = summary_text.split(" in ", 1)[0]
-    failed_count = 0
-    for count, label in SUMMARY_COUNT_RE.findall(summary_text):
-        if label in {"failed", "error", "errors"}:
-            failed_count += int(count)
-    return failed_count
+    return sum(int(count) for count, _ in SUMMARY_COUNT_RE.findall(summary_text))
 
 
 def _strip_ansi(text: str) -> str:
