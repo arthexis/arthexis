@@ -77,6 +77,15 @@ def build_logging_settings(
                 "formatter": "standard",
                 "filters": ["debug_app_filter"],
             },
+            "cp_forwarder_file": {
+                "class": "apps.loggers.handlers.ActiveAppFileHandler",
+                "filename": str(log_dir / "cp_forwarder.log"),
+                "when": "midnight",
+                "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
+                "encoding": "utf-8",
+                "formatter": "standard",
+                "level": "INFO",
+            },
             "error_file": {
                 "class": "apps.loggers.handlers.ErrorFileHandler",
                 "filename": str(log_dir / "error.log"),
@@ -132,6 +141,12 @@ def build_logging_settings(
             "propagate": False,
         }
         for logger_name in celery_logger_names
+    }
+
+    logging_config["loggers"]["apps.ocpp.forwarder"] = {
+        "handlers": ["cp_forwarder_file", "error_file"],
+        "level": "INFO",
+        "propagate": False,
     }
 
     logging_config["loggers"]["page_misses"] = {

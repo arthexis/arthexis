@@ -41,3 +41,21 @@ def test_page_misses_use_dedicated_file(tmp_path: Path) -> None:
     assert logger is not None
     assert logger["handlers"] == ["page_misses_file"]
     assert logger["propagate"] is False
+
+
+def test_cp_forwarder_logs_use_dedicated_file(tmp_path: Path) -> None:
+    """CP forwarder logs should be routed to their own handler."""
+
+    log_dir, _log_file_name, logging_config = build_logging_settings(
+        tmp_path, debug_enabled=False
+    )
+
+    handler = logging_config["handlers"].get("cp_forwarder_file")
+    assert handler is not None
+    assert handler["filename"] == str(log_dir / "cp_forwarder.log")
+    assert handler["level"] == "INFO"
+
+    logger = logging_config["loggers"].get("apps.ocpp.forwarder")
+    assert logger is not None
+    assert logger["handlers"] == ["cp_forwarder_file", "error_file"]
+    assert logger["propagate"] is False
