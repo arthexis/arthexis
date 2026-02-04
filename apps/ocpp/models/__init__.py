@@ -12,7 +12,6 @@ from .charging_profile_dispatch import ChargingProfileDispatch
 from .cost_update import CostUpdate
 from .power_projection import PowerProjection
 from .transaction import Transaction, annotate_transaction_energy_bounds
-from .rfid_session_attempt import RFIDSessionAttempt
 from .security_event import SecurityEvent
 from .charger_log_request import ChargerLogRequest, generate_log_request_id
 from .meter_value import MeterValue
@@ -60,7 +59,6 @@ __all__ = [
     "PowerProjection",
     "Transaction",
     "annotate_transaction_energy_bounds",
-    "RFIDSessionAttempt",
     "SecurityEvent",
     "ChargerLogRequest",
     "generate_log_request_id",

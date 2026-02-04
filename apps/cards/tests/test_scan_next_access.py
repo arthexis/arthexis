@@ -9,6 +9,7 @@ from django.test import RequestFactory
 from django.urls import reverse
 
 from apps.cards import views
+from apps.cards.models import RFIDAttempt
 
 
 pytestmark = pytest.mark.django_db
@@ -65,7 +66,12 @@ def test_scan_next_anonymous_json_requests_unauthorized_for_non_control_role(mon
 def test_scan_next_allows_anonymous_get_for_control_role(monkeypatch):
     node = _make_node("Control")
     monkeypatch.setattr(views.Node, "get_local", lambda: node)
-    monkeypatch.setattr(views, "scan_sources", lambda *_args, **_kwargs: {"rfid": "scan_next"})
+    RFIDAttempt.objects.create(
+        rfid="SCAN_NEXT",
+        status=RFIDAttempt.Status.SCANNED,
+        source=RFIDAttempt.Source.SERVICE,
+        payload={"rfid": "SCAN_NEXT"},
+    )
 
     factory = RequestFactory()
     get_request = factory.get(reverse("rfid-scan-next"))
@@ -74,7 +80,7 @@ def test_scan_next_allows_anonymous_get_for_control_role(monkeypatch):
     get_response = views.scan_next(get_request)
 
     assert get_response.status_code == 200
-    assert json.loads(get_response.content) == {"rfid": "scan_next"}
+    assert json.loads(get_response.content)["rfid"] == "SCAN_NEXT"
 
 
 def test_scan_next_blocks_anonymous_post_for_control_role(monkeypatch):

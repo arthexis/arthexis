@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.ocpp.models import RFIDSessionAttempt
+from apps.cards.models import RFIDAttempt
 
 
 class Command(BaseCommand):
@@ -26,7 +26,8 @@ class Command(BaseCommand):
             raise CommandError("--last must be a positive integer")
 
         attempts = (
-            RFIDSessionAttempt.objects.select_related("account")
+            RFIDAttempt.objects.select_related("account")
+            .filter(source=RFIDAttempt.Source.OCPP)
             .order_by("-attempted_at")[:count]
         )
         if not attempts:

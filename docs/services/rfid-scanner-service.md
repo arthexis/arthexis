@@ -1,11 +1,12 @@
 # RFID scanner service
 
 ## What it is
-The RFID scanner service is a lightweight UDP server that brokers RFID reads for local hardware. It is used by features that need quick RFID scans without blocking the main web process.
+The RFID scanner service runs a lightweight background reader for local hardware. It stores successful scans as persistent RFID attempts so the web UI can poll the database without opening direct service connections.
 
 ## What it does
-- Listens on the configured host/port for RFID scan requests.
-- Executes scan and deep-read operations via attached RFID hardware.
+- Reads RFID tags from attached hardware in a background worker.
+- Writes non-repeated scans to the RFID Attempts table for web and API clients.
+- Exposes health checks (ping) and deep-read toggles for diagnostics.
 
 ## Enable
 1. Enable the RFID service lock (installer or configurator):
@@ -33,7 +34,7 @@ The RFID scanner service is a lightweight UDP server that brokers RFID reads for
 - The Suite Services Report lists the RFID service row even if it is not installed so operators know the expected unit name.
 
 ## Troubleshooting
-- Use the interactive RFID doctor command to verify the service, lock files, and scan path:
+- Use the interactive RFID doctor command to verify the service, lock files, and database scan path:
   ```bash
   python manage.py rfid_doctor --scan
   ```

@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ...models import RFIDSessionAttempt
+from apps.cards.models import RFIDAttempt
 from .utils import (
     TransactionExportForm,
     TransactionImportForm,
@@ -156,17 +156,18 @@ class MeterValueAdmin(EntityModelAdmin):
     list_filter = ("charger", MeterValueDateFilter)
 
 
-@admin.register(RFIDSessionAttempt)
-class RFIDSessionAttemptAdmin(EntityModelAdmin):
+@admin.register(RFIDAttempt)
+class RFIDAttemptAdmin(EntityModelAdmin):
     list_display = (
         "rfid",
         "status",
+        "source",
         "charger",
         "account",
         "transaction",
         "attempted_at",
     )
-    list_filter = ("status",)
+    list_filter = ("status", "source")
     search_fields = (
         "rfid",
         "charger__charger_id",

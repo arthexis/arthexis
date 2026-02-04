@@ -9,6 +9,7 @@ import signal
 import socket
 import socketserver
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone as datetime_timezone
@@ -21,6 +22,7 @@ from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
 
 from .background_reader import get_next_tag, is_configured, start as start_reader, stop as stop_reader
+from .models import RFIDAttempt
 from .reader import toggle_deep_read
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,9 @@ DEFAULT_SERVICE_PORT = int(os.environ.get("RFID_SERVICE_PORT", "29801"))
 DEFAULT_SCAN_TIMEOUT = float(os.environ.get("RFID_SERVICE_SCAN_TIMEOUT", "0.3"))
 DEFAULT_QUEUE_MAX = int(os.environ.get("RFID_SERVICE_QUEUE_MAX", "50"))
 DEFAULT_EVENT_DURATION = int(os.environ.get("RFID_EVENT_DURATION", "30"))
-RFID_SCAN_LOCK_FILE = "rfid-scan.lck"
+DEFAULT_SCAN_DEDUPE_SECONDS = float(
+    os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0")
+)
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,8 @@ class RFIDServiceState:
         self.started_at = datetime.now(datetime_timezone.utc)
         self.stop_event = threading.Event()
         self.worker_thread: threading.Thread | None = None
+        self._last_persisted_rfid: str | None = None
+        self._last_persisted_at: float | None = None
 
     def start_worker(self) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
@@ -115,7 +121,7 @@ class RFIDServiceState:
                     )
                     self.queue.put(result)
                     self._notify_lcd_event(result)
-                    write_rfid_scan_lock(result)
+                    self._persist_scan(result)
         finally:
             stop_reader()
             logger.info("RFID service worker stopped")
@@ -142,6 +148,30 @@ class RFIDServiceState:
             subject, body, duration=DEFAULT_EVENT_DURATION, event_id=0
         )
 
+    def _persist_scan(self, result: dict[str, Any]) -> None:
+        rfid_value = str(result.get("rfid", "") or "").strip().upper()
+        if not rfid_value:
+            return
+        now = time.monotonic()
+        if (
+            self._last_persisted_rfid == rfid_value
+            and self._last_persisted_at is not None
+            and now - self._last_persisted_at < DEFAULT_SCAN_DEDUPE_SECONDS
+        ):
+            return
+        payload = dict(result)
+        payload.setdefault("service_mode", "service")
+        try:
+            RFIDAttempt.record_attempt(
+                payload,
+                source=RFIDAttempt.Source.SERVICE,
+                status=RFIDAttempt.Status.SCANNED,
+            )
+        except Exception:  # pragma: no cover - database dependent
+            logger.exception("RFID service failed to persist scan attempt")
+            return
+        self._last_persisted_rfid = rfid_value
+        self._last_persisted_at = now
 
     def status(self) -> ServiceStatus:
         queue_depth, _last_scan, last_scan_at = self.queue.status()
@@ -221,6 +251,14 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
             return
 
+        if action == "scan":
+            response = {
+                "error": "scan requests are handled via the database",
+                "service_mode": "service",
+            }
+            socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
+            return
+
         timeout = payload.get("timeout")
         try:
             timeout_value = float(timeout) if timeout is not None else DEFAULT_SCAN_TIMEOUT
@@ -269,10 +307,6 @@ def get_lock_dir(base_dir: Path | None = None) -> Path:
     return Path(base_dir) / ".locks"
 
 
-def rfid_scan_lock_path(base_dir: Path | None = None) -> Path:
-    return get_lock_dir(base_dir) / RFID_SCAN_LOCK_FILE
-
-
 def sanitize_rfid_payload(payload: dict[str, Any]) -> dict[str, Any]:
     sanitized: dict[str, Any] = {}
     for key, value in payload.items():
@@ -296,25 +330,6 @@ def mask_rfid(value: Any) -> str | None:
     if len(text) <= 4:
         return "*" * len(text)
     return f"{'*' * (len(text) - 4)}{text[-4:]}"
-
-
-def write_rfid_scan_lock(result: dict[str, Any], base_dir: Path | None = None) -> None:
-    rfid_value = str(result.get("rfid", "")).strip()
-    if not rfid_value:
-        return
-    lock_path = rfid_scan_lock_path(base_dir)
-    payload = {
-        "rfid": rfid_value,
-        "label_id": result.get("label_id"),
-        "allowed": result.get("allowed"),
-        "color": result.get("color"),
-        "scanned_at": datetime.now(datetime_timezone.utc).isoformat(),
-    }
-    try:
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text(json.dumps(payload), encoding="utf-8")
-    except OSError:  # pragma: no cover - filesystem dependent
-        logger.debug("Unable to write RFID scan lock file", exc_info=True)
 
 
 def rfid_service_lock_path(base_dir: Path | None = None) -> Path:
@@ -353,13 +368,6 @@ def request_service(
     if not isinstance(response, dict):
         return None
     return response
-
-
-def scan_via_service(timeout: float | None = None) -> dict[str, Any] | None:
-    payload: dict[str, Any] = {}
-    if timeout is not None:
-        payload["timeout"] = timeout
-    return request_service("scan", payload, timeout=timeout or DEFAULT_SCAN_TIMEOUT)
 
 
 def deep_read_via_service() -> dict[str, Any] | None:

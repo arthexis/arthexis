@@ -31,7 +31,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from apps.cards.models import RFID
+from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.rfid_import_export import (
     account_column_for_field,
     parse_accounts,
@@ -1023,7 +1023,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return render(request, "admin/cards/rfid/scan.html", context)
 
     def scan_next(self, request):
-        from apps.cards.scanner import scan_sources
+        from apps.cards.scanner import poll_scan_attempt, record_scan_attempt
         from apps.cards.reader import validate_rfid_value
         ensure_feature_enabled("rfid-scanner", logger=logger)
         rfid_feature_enabled = _feature_enabled("rfid-scanner")
@@ -1036,8 +1036,24 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             kind = payload.get("kind")
             endianness = payload.get("endianness")
             result = validate_rfid_value(rfid, kind=kind, endianness=endianness)
+            if not result.get("error") and result.get("rfid"):
+                attempt = record_scan_attempt(
+                    result,
+                    source=RFIDAttempt.Source.BROWSER,
+                    status=RFIDAttempt.Status.SCANNED,
+                )
+                if attempt:
+                    result["attempt_id"] = attempt.pk
         else:
             endianness = request.GET.get("endianness")
-            result = scan_sources(request, endianness=endianness)
+            after_id = request.GET.get("after")
+            try:
+                after_id_value = int(after_id) if after_id else None
+            except (TypeError, ValueError):
+                after_id_value = None
+            result = poll_scan_attempt(
+                after_id=after_id_value,
+                endianness=endianness,
+            )
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)

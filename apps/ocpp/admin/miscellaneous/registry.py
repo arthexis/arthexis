@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.admin.sites import NotRegistered
 
+from apps.cards.models import RFIDAttempt
 from ...models import (
     ChargerConfiguration,
     ConfigurationKey,
@@ -21,7 +22,6 @@ from ...models import (
     StationModel,
     CPNetworkProfile,
     CPNetworkProfileDeployment,
-    RFIDSessionAttempt,
     CertificateRequest,
     CertificateStatusCheck,
     CertificateOperation,
@@ -55,7 +55,7 @@ for _model in (
     CPNetworkProfile,
     CPNetworkProfileDeployment,
     CPFirmwareRequest,
-    RFIDSessionAttempt,
+    RFIDAttempt,
     CertificateRequest,
     CertificateStatusCheck,
     CertificateOperation,
