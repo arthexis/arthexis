@@ -9,8 +9,65 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Run full test suite
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+      - name: Validate migrations
+        run: |
+          source .venv/bin/activate
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --database default
+      - name: Run tests
+        run: |
+          set -o pipefail
+          source .venv/bin/activate
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
   build:
     name: Build distributions
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
