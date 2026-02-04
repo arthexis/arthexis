@@ -36,7 +36,7 @@ class RFIDAttempt(Entity):
     )
     authenticated = models.BooleanField(null=True, blank=True)
     allowed = models.BooleanField(null=True, blank=True)
-    source = models.CharField(max_length=32, choices=Source.choices)
+    source = models.CharField(max_length=32, choices=Source.choices, db_index=True)
     payload = models.JSONField(default=dict, blank=True)
     attempted_at = models.DateTimeField(auto_now_add=True)
     charger = models.ForeignKey(
