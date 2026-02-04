@@ -97,6 +97,120 @@ class DNSProviderCredential(Profile):
         return dns_utils.deploy_records(self, records)
 
 
+class DNSProxyConfig(Entity):
+    """Configuration for the local DNS proxy."""
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Label for this proxy configuration.",
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to prevent the proxy from starting.",
+    )
+    listen_host = models.CharField(
+        max_length=255,
+        default="127.0.0.1",
+        help_text="Local interface to bind (use 0.0.0.0 for all IPv4 interfaces).",
+    )
+    listen_port = models.PositiveIntegerField(
+        default=5353,
+        help_text="Port to bind for DNS proxying (53 requires elevated privileges).",
+    )
+    upstream_servers = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Static upstream DNS servers (IP addresses).",
+    )
+    include_nmcli_dns = models.BooleanField(
+        default=True,
+        help_text="Include DNS servers discovered from the linked NMCLI connection.",
+    )
+    nmcli_connection = models.ForeignKey(
+        "nmcli.NetworkConnection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dns_proxy_configs",
+        help_text="NMCLI connection used as an upstream DNS source.",
+    )
+    use_tcp_upstream = models.BooleanField(
+        default=False,
+        help_text="Send upstream DNS queries over TCP instead of UDP.",
+    )
+    timeout_seconds = models.PositiveIntegerField(
+        default=2,
+        help_text="Timeout for upstream DNS queries (seconds).",
+    )
+
+    class Meta:
+        verbose_name = "DNS Proxy Configuration"
+        verbose_name_plural = "DNS Proxy Configurations"
+
+    def __str__(self) -> str:  # pragma: no cover - representation only
+        return self.name
+
+    def _normalize_servers(self, values: Iterable[object]) -> list[str]:
+        from .proxy import parse_dns_servers
+
+        normalized: list[str] = []
+        for value in values:
+            if isinstance(value, str):
+                normalized.extend(parse_dns_servers(value))
+        return normalized
+
+    def get_nmcli_upstream_servers(self) -> list[str]:
+        if not self.include_nmcli_dns or not self.nmcli_connection:
+            return []
+        connection = self.nmcli_connection
+        from apps.dns.proxy import parse_dns_servers
+
+        return self._dedupe(
+            parse_dns_servers(connection.ip4_dns)
+            + parse_dns_servers(connection.ip6_dns)
+        )
+
+    def get_upstream_servers(self) -> list[str]:
+        upstreams = self._normalize_servers(self.upstream_servers or [])
+        upstreams.extend(self.get_nmcli_upstream_servers())
+        return self._dedupe(upstreams)
+
+    def get_listen_host_for_clients(self) -> str:
+        host = (self.listen_host or "").strip()
+        if host in {"", "0.0.0.0"}:
+            return "127.0.0.1"
+        if host == "::":
+            return "::1"
+        return host
+
+    def get_nmcli_dns_entries(self) -> list[str]:
+        return [self.get_listen_host_for_clients()]
+
+    def to_runtime_config(self):
+        from .proxy import DNSProxyRuntimeConfig
+
+        return DNSProxyRuntimeConfig(
+            listen_host=self.listen_host,
+            listen_port=self.listen_port,
+            upstream_servers=self.get_upstream_servers(),
+            use_tcp=self.use_tcp_upstream,
+            timeout_seconds=self.timeout_seconds,
+        )
+
+    @staticmethod
+    def _dedupe(values: Iterable[str]) -> list[str]:
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for value in values:
+            value = value.strip()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            deduped.append(value)
+        return deduped
+
+
 class DNSRecord(Entity):
     """Stored DNS configuration ready for deployment."""
 
