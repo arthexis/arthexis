@@ -164,7 +164,7 @@ class DNSProxyConfig(Entity):
         if not self.include_nmcli_dns or not self.nmcli_connection:
             return []
         connection = self.nmcli_connection
-        from .proxy import parse_dns_servers
+        from apps.dns.proxy import parse_dns_servers
 
         return self._dedupe(
             parse_dns_servers(connection.ip4_dns)
