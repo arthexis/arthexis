@@ -92,11 +92,8 @@ def _systemd_status(services: Iterable[str]) -> dict[str, str]:
     results: dict[str, str] = {}
     for service in services:
         try:
-            result = subprocess.run(
-                [systemctl_path, "is-active", service],
-                capture_output=True,
-                text=True,
-            )
+            cmd = [systemctl_path, "is-active", service]
+            result = subprocess.run(cmd, capture_output=True, text=True)
         except (FileNotFoundError, OSError) as exc:
             results[service] = f"error: {exc}"
             continue
