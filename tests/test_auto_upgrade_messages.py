@@ -7,8 +7,6 @@ from django.utils import timezone
 from apps.core import tasks
 from apps.core.notifications import LcdChannel
 
-pytestmark = pytest.mark.critical
-
 @pytest.mark.django_db
 def test_send_auto_upgrade_check_message(monkeypatch):
     sent = []
