@@ -75,3 +75,14 @@ class PageMissesFileHandler(ActiveAppFileHandler):
         if "test" in sys.argv:
             return log_dir / "tests-page_misses.log"
         return log_dir / "page_misses.log"
+
+
+class CPForwarderFileHandler(ActiveAppFileHandler):
+    """File handler dedicated to capturing CP forwarder output."""
+
+    def _current_file(self) -> Path:
+        log_dir = Path(settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if "test" in sys.argv:
+            return log_dir / "tests-cp_forwarder.log"
+        return log_dir / "cp_forwarder.log"
