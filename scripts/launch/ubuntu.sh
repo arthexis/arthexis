@@ -70,6 +70,10 @@ ubuntu_launch_prepare_repo() {
     git -C "$repo_dir" remote set-url origin "$origin_url"
     git -C "$repo_dir" fetch origin
   else
+    if [[ -d "$repo_dir" ]] && [[ -n "$(ls -A "$repo_dir")" ]]; then
+      echo "Error: Directory '$repo_dir' exists and is not empty, but is not a git repository." >&2
+      exit 1
+    fi
     git clone --origin origin "$origin_url" "$repo_dir"
   fi
 
