@@ -309,6 +309,46 @@ def test_goto_stream_creates_default_stream(admin_user):
 
 
 @pytest.mark.django_db
+def test_videodevice_view_on_site_uses_stream(admin_user):
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+    stream = MjpegStream.objects.create(
+        name="Stream",
+        slug="stream",
+        video_device=device,
+        is_active=True,
+    )
+    admin_view = video_admin.VideoDeviceAdmin(VideoDevice, admin.site)
+
+    assert admin_view.get_view_on_site_url(device) == stream.get_absolute_url()
+
+
+@pytest.mark.django_db
+def test_videodevice_view_on_site_falls_back_to_gallery():
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+    admin_view = video_admin.VideoDeviceAdmin(VideoDevice, admin.site)
+
+    assert admin_view.get_view_on_site_url(device) == reverse("video:camera-gallery")
+
+
+@pytest.mark.django_db
 def test_create_default_stream_truncates_and_uniques_slug(admin_user):
     node = Node.objects.create(
         hostname="local",
