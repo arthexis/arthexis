@@ -32,7 +32,7 @@ Use the search field to find features by slug or display string. The queryset pr
 
 | Feature | Slug | Default roles | Key actions / notes |
 | --- | --- | --- | --- |
-| AP Router | `ap-router` | Satellite | Auto-managed network access point capability for satellites. |
+| AP Router | `ap-router` | Control, Satellite | Auto-managed network access point capability for satellites. |
 | Audio Capture | `audio-capture` | Control | Manual feature with a **Test Microphone** admin action for verification. |
 | Celery Queue | `celery-queue` | Satellite, Control, Watchtower | Auto-managed feature with a **Celery Report** admin action. |
 | GUI Toast | `gui-toast` | Terminal, Control | Auto-managed feature that surfaces GUI toast notifications when supported. |

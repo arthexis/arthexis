@@ -37,3 +37,26 @@ class NetworkConnection(models.Model):
 
     def __str__(self):
         return self.connection_id or self.uuid or str(self.pk)
+
+
+class APClient(models.Model):
+    connection_name = models.CharField(max_length=255, blank=True, default="")
+    interface_name = models.CharField(max_length=100, blank=True, default="")
+    mac_address = models.CharField(max_length=64, db_index=True)
+    signal_dbm = models.IntegerField(null=True, blank=True)
+    rx_bitrate_mbps = models.FloatField(null=True, blank=True)
+    tx_bitrate_mbps = models.FloatField(null=True, blank=True)
+    inactive_time_ms = models.IntegerField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-last_seen_at", "mac_address")
+        unique_together = ("mac_address", "interface_name")
+        verbose_name = _("AP Client")
+        verbose_name_plural = _("AP Clients")
+
+    def __str__(self):
+        label = self.mac_address or str(self.pk)
+        if self.connection_name:
+            return f"{label} ({self.connection_name})"
+        return label
