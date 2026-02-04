@@ -49,7 +49,11 @@ from django.contrib.contenttypes.models import ContentType
 
 from apps.release.models import PackageRelease
 from apps.sigils.sigil_builder import generate_model_sigils
-from apps.locals.user_data import load_shared_user_fixtures, load_user_fixtures
+from apps.locals.user_data import (
+    load_local_seed_zips,
+    load_shared_user_fixtures,
+    load_user_fixtures,
+)
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 from scripts.fixtures_changed import fixtures_changed
 from django.utils import timezone
@@ -853,6 +857,10 @@ def run_database_tasks(
         print("Fixtures unchanged; skipping reload.")
         fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
         fixture_mtime_file.write_text(json.dumps(fixture_mtimes, sort_keys=True))
+
+    local_seed_loaded = load_local_seed_zips()
+    if local_seed_loaded:
+        print(f"Applied {local_seed_loaded} local seed data fixture(s).")
 
     # Ensure current node is registered or updated
     node, _ = Node.register_current(notify_peers=False)

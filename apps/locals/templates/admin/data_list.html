@@ -16,12 +16,24 @@
     display: inline;
     margin-left: 1rem;
   }
+  #content-main .seed-data-actions {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    margin-left: 1rem;
+  }
+  #content-main .seed-data-actions .help {
+    margin: 0;
+    font-size: 0.85em;
+    color: var(--body-quiet-color, #666);
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div id="content-main">
-  {% if import_export or fixture_status %}
+  {% if import_export or fixture_status or seed_data_actions %}
     <div class="actions">
       {% if import_export %}
         <a href="{% url 'admin:user_data_export' %}">{% trans "Export" %}</a>
@@ -30,6 +42,21 @@
           <input type="file" name="data_zip" accept=".zip" />
           <a href="#" onclick="this.closest('form').submit(); return false;">{% trans 'Import' %}</a>
         </form>
+      {% endif %}
+      {% if seed_data_actions %}
+        <div class="seed-data-actions">
+          <a class="button" href="{{ seed_data_download_url }}">{% trans "Download local seed data" %}</a>
+          <p class="help">
+            {% blocktrans with upload_dir=seed_data_upload_dir %}
+              Upload the zip to {{ upload_dir }} or use the upload button below.
+            {% endblocktrans %}
+          </p>
+          <form action="{{ seed_data_upload_url }}" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="file" name="seed_zip" accept=".zip" />
+            <button type="submit" class="button">{% trans "Upload seed data zip" %}</button>
+          </form>
+        </div>
       {% endif %}
       {% if fixture_status %}
         <span>
@@ -76,7 +103,7 @@
               {% endif %}
             </td>
             <td><a href="{{ item.url }}">{{ item.label }}</a></td>
-            <td>{{ item.fixture.name }}</td>
+            <td>{{ item.fixture_name }}</td>
           </tr>
           {% endfor %}
         {% endfor %}
