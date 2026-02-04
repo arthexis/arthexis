@@ -227,3 +227,4 @@ class CardDesignAdmin(admin.ModelAdmin):
     list_filter = ("card_set",)
     search_fields = ("name", "card_set__name")
     readonly_fields = ("created_on",)
+    change_list_template = "admin/cards/carddesign/change_list.html"
