@@ -1,14 +1,27 @@
+import os
 import time
 
 from django.db import IntegrityError
+from django.utils import timezone
 
-from apps.cards.models import RFID
+from apps.cards.models import RFID, RFIDAttempt
 
 from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin
 from .reader import toggle_deep_read
 from .utils import convert_endianness_value, normalize_endianness
-from .rfid_service import deep_read_via_service, scan_via_service
+from .rfid_service import deep_read_via_service
+
+
+RECENT_SCAN_WINDOW_SECONDS = float(
+    os.environ.get("RFID_SCAN_RECENT_WINDOW_SECONDS", "10")
+)
+SCANNER_SOURCES = {
+    RFIDAttempt.Source.SERVICE,
+    RFIDAttempt.Source.BROWSER,
+    RFIDAttempt.Source.CAMERA,
+    RFIDAttempt.Source.ON_DEMAND,
+}
 
 
 def _normalize_scan_response(
@@ -53,21 +66,72 @@ def _normalize_scan_response(
     return response
 
 
+def _service_mode_for_source(source: str) -> str:
+    return "service" if source == RFIDAttempt.Source.SERVICE else "on-demand"
+
+
+def build_attempt_response(
+    attempt: RFIDAttempt, *, endianness: str | None = None
+) -> dict:
+    payload = dict(attempt.payload or {})
+    payload.setdefault("rfid", attempt.rfid)
+    if attempt.label_id:
+        payload.setdefault("label_id", attempt.label_id)
+    if attempt.allowed is not None:
+        payload.setdefault("allowed", attempt.allowed)
+    service_mode = payload.get("service_mode") or _service_mode_for_source(
+        attempt.source
+    )
+    normalized = _normalize_scan_response(
+        payload, endianness=endianness, service_mode=service_mode
+    )
+    normalized["attempt_id"] = attempt.pk
+    return normalized
+
+
+def poll_scan_attempt(
+    *,
+    after_id: int | None = None,
+    endianness: str | None = None,
+    sources: set[str] | None = None,
+) -> dict:
+    sources = sources or SCANNER_SOURCES
+    queryset = RFIDAttempt.objects.filter(source__in=sources)
+    if after_id:
+        attempt = queryset.filter(pk__gt=after_id).order_by("pk").first()
+        if attempt:
+            return build_attempt_response(attempt, endianness=endianness)
+        latest_id = queryset.order_by("-pk").values_list("pk", flat=True).first()
+        return {"rfid": None, "service_mode": "service", "last_id": latest_id}
+    latest = queryset.order_by("-pk").first()
+    if latest:
+        age_seconds = (timezone.now() - latest.attempted_at).total_seconds()
+        if age_seconds <= RECENT_SCAN_WINDOW_SECONDS:
+            return build_attempt_response(latest, endianness=endianness)
+    latest_id = latest.pk if latest else None
+    return {"rfid": None, "service_mode": "service", "last_id": latest_id}
+
+
+def record_scan_attempt(
+    result: dict,
+    *,
+    source: str,
+    status: str | None = None,
+    authenticated: bool | None = None,
+) -> RFIDAttempt | None:
+    return RFIDAttempt.record_attempt(
+        result,
+        source=source,
+        status=status,
+        authenticated=authenticated,
+    )
+
+
 def scan_sources(
     request=None, *, endianness: str | None = None, timeout: float | None = None
 ):
     """Read the next RFID tag from the local scanner."""
     start_time = time.monotonic()
-    response = scan_via_service(timeout=timeout)
-    if response is not None:
-        service_mode = "service"
-        if response.get("error"):
-            response["service_mode"] = service_mode
-            return response
-        return _normalize_scan_response(
-            response, endianness=endianness, service_mode=service_mode
-        )
-
     service_mode = "on-demand"
     start()
     if not is_configured():
@@ -83,7 +147,15 @@ def scan_sources(
         result["service_mode"] = service_mode
         return result
 
-    return _normalize_scan_response(result, endianness=endianness, service_mode=service_mode)
+    normalized = _normalize_scan_response(
+        result, endianness=endianness, service_mode=service_mode
+    )
+    attempt = record_scan_attempt(
+        normalized, source=RFIDAttempt.Source.ON_DEMAND, status=RFIDAttempt.Status.SCANNED
+    )
+    if attempt:
+        normalized["attempt_id"] = attempt.pk
+    return normalized
 
 
 def restart_sources():

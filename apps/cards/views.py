@@ -15,9 +15,9 @@ from apps.sites.utils import landing
 from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
 
-from .scanner import scan_sources, enable_deep_read_mode
+from .scanner import enable_deep_read_mode, poll_scan_attempt, record_scan_attempt
 from .reader import validate_rfid_value
-from apps.cards.models import RFID
+from apps.cards.models import RFID, RFIDAttempt
 from .utils import build_mode_toggle
 from apps.video.rfid import scan_camera_qr
 
@@ -79,12 +79,36 @@ def scan_next(request):
         kind = payload.get("kind")
         endianness = payload.get("endianness")
         result = validate_rfid_value(rfid, kind=kind, endianness=endianness)
+        if not result.get("error") and result.get("rfid"):
+            attempt = record_scan_attempt(
+                result,
+                source=RFIDAttempt.Source.BROWSER,
+                status=RFIDAttempt.Status.SCANNED,
+            )
+            if attempt:
+                result["attempt_id"] = attempt.pk
     else:
         endianness = request.GET.get("endianness")
         if prefer_camera or camera_only_mode:
             result = scan_camera_qr(endianness=endianness)
+            if not result.get("error") and result.get("rfid"):
+                attempt = record_scan_attempt(
+                    result,
+                    source=RFIDAttempt.Source.CAMERA,
+                    status=RFIDAttempt.Status.SCANNED,
+                )
+                if attempt:
+                    result["attempt_id"] = attempt.pk
         else:
-            result = scan_sources(request, endianness=endianness)
+            after_id = request.GET.get("after")
+            try:
+                after_id_value = int(after_id) if after_id else None
+            except (TypeError, ValueError):
+                after_id_value = None
+            result = poll_scan_attempt(
+                after_id=after_id_value,
+                endianness=endianness,
+            )
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 

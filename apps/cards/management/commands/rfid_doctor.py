@@ -1,10 +1,12 @@
 import json
 import sys
+import time
 
 from django.core.management.base import BaseCommand
 
 from apps.cards import rfid_service
 from apps.cards.background_reader import is_configured, lock_file_path
+from apps.cards.models import RFIDAttempt
 
 
 class Command(BaseCommand):
@@ -56,10 +58,8 @@ class Command(BaseCommand):
 
         service_lock = rfid_service.rfid_service_lock_path()
         scanner_lock = lock_file_path()
-        scan_lock = rfid_service.rfid_scan_lock_path()
         self._print_lock_status("Service lock", service_lock)
         self._print_lock_status("Scanner lock", scanner_lock)
-        self._print_lock_status("Last scan lock", scan_lock)
 
         configured = is_configured()
         config_status = "configured" if configured else "not configured"
@@ -126,14 +126,37 @@ class Command(BaseCommand):
         self.stdout.write(
             "Hold an RFID card near the reader, then wait for the scan result..."
         )
-        response = rfid_service.scan_via_service(timeout=timeout)
-        if response is None:
+        start = time.monotonic()
+        latest_id = (
+            RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
+            .order_by("-pk")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        attempt = None
+        while time.monotonic() - start < timeout:
+            attempt = (
+                RFIDAttempt.objects.filter(
+                    source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0
+                )
+                .order_by("pk")
+                .first()
+            )
+            if attempt:
+                break
+            time.sleep(0.2)
+        if not attempt:
             self.stdout.write(
                 self.style.WARNING(
-                    "RFID service did not respond to scan request."
+                    "No new RFID scan recorded before timeout."
                 )
             )
             return
-        payload = self._format_payload(response, show_raw=show_raw)
+        payload = dict(attempt.payload or {})
+        payload.setdefault("rfid", attempt.rfid)
+        if attempt.label_id:
+            payload.setdefault("label_id", attempt.label_id)
+        payload.setdefault("attempted_at", attempt.attempted_at.isoformat())
+        payload = self._format_payload(payload, show_raw=show_raw)
         self.stdout.write(self.style.SUCCESS("Scan response:"))
         self.stdout.write(json.dumps(payload, indent=2, sort_keys=True))

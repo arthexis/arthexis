@@ -1,10 +1,11 @@
 import json
+import time
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from apps.cards.background_reader import is_configured
-from apps.cards.models import RFID
+from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
 from apps.cards.rfid_service import service_available
 from apps.cards.scanner import scan_sources
@@ -107,7 +108,10 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        result = scan_sources(timeout=timeout)
+        if service_available():
+            result = self._scan_via_attempt(timeout)
+        else:
+            result = scan_sources(timeout=timeout)
         if result.get("error"):
             return result
 
@@ -117,3 +121,31 @@ class Command(BaseCommand):
             return {"error": "No RFID detected before timeout"}
 
         return result
+
+    def _scan_via_attempt(self, timeout: float) -> dict:
+        start = time.monotonic()
+        latest_id = (
+            RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
+            .order_by("-pk")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        attempt = None
+        while time.monotonic() - start < timeout:
+            attempt = (
+                RFIDAttempt.objects.filter(
+                    source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0
+                )
+                .order_by("pk")
+                .first()
+            )
+            if attempt:
+                break
+            time.sleep(0.2)
+        if not attempt:
+            return {"rfid": None, "label_id": None}
+        payload = dict(attempt.payload or {})
+        payload.setdefault("rfid", attempt.rfid)
+        if attempt.label_id:
+            payload.setdefault("label_id", attempt.label_id)
+        return payload

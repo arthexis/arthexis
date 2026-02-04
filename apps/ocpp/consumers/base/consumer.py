@@ -11,7 +11,7 @@ from django.conf import settings
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
-from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.core.notifications import LcdChannel
 from apps.nodes.models import NetMessage
 from apps.protocols.decorators import protocol_call
@@ -39,7 +39,6 @@ from ...models import (
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
-    RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
     PowerProjection,
@@ -291,7 +290,7 @@ class CSMSConsumer(
         self,
         *,
         rfid: str,
-        status: RFIDSessionAttempt.Status,
+        status: RFIDAttempt.Status,
         account: CustomerAccount | None,
         transaction: Transaction | None = None,
     ) -> None:
@@ -304,10 +303,17 @@ class CSMSConsumer(
         charger = self.charger
 
         def _create_attempt() -> None:
-            RFIDSessionAttempt.objects.create(
+            authenticated = None
+            if status == RFIDAttempt.Status.ACCEPTED:
+                authenticated = True
+            elif status == RFIDAttempt.Status.REJECTED:
+                authenticated = False
+            RFIDAttempt.objects.create(
                 charger=charger,
                 rfid=normalized,
                 status=status,
+                authenticated=authenticated,
+                source=RFIDAttempt.Source.OCPP,
                 account=account,
                 transaction=transaction,
             )
@@ -3321,7 +3327,7 @@ class CSMSConsumer(
                 )
                 await self._record_rfid_attempt(
                     rfid=id_tag or "",
-                    status=RFIDSessionAttempt.Status.ACCEPTED,
+                    status=RFIDAttempt.Status.ACCEPTED,
                     account=account,
                     transaction=tx_obj,
                 )
@@ -3329,7 +3335,7 @@ class CSMSConsumer(
 
             await self._record_rfid_attempt(
                 rfid=id_tag or "",
-                status=RFIDSessionAttempt.Status.REJECTED,
+                status=RFIDAttempt.Status.REJECTED,
                 account=account,
             )
             return {"idTokenInfo": {"status": "Invalid"}}
@@ -3473,7 +3479,7 @@ class CSMSConsumer(
             await self._start_consumption_updates(tx_obj)
             await self._record_rfid_attempt(
                 rfid=id_tag or "",
-                status=RFIDSessionAttempt.Status.ACCEPTED,
+                    status=RFIDAttempt.Status.ACCEPTED,
                 account=account,
                 transaction=tx_obj,
             )
@@ -3483,7 +3489,7 @@ class CSMSConsumer(
             }
         await self._record_rfid_attempt(
             rfid=id_tag or "",
-            status=RFIDSessionAttempt.Status.REJECTED,
+            status=RFIDAttempt.Status.REJECTED,
             account=account,
         )
         return {"idTagInfo": {"status": "Invalid"}}
