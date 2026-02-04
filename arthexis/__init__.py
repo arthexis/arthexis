@@ -47,7 +47,10 @@ def _load_app(short_name: str) -> ModuleType:
     module_name = _APP_MODULES[short_name]
     module = sys.modules.get(module_name)
     if module is None:
-        module = importlib.import_module(module_name)
+        raise ImportError(
+            f"Module '{module_name}' was not prepared for lazy loading. "
+            f"This may indicate a problem with its discovery or spec."
+        )
 
     sys.modules.setdefault(short_name, module)
     sys.modules.setdefault(f"{__name__}.{short_name}", module)
