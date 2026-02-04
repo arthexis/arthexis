@@ -17,6 +17,7 @@ from apps.sensors import tasks as sensor_tasks
 from apps.sensors.tasks import sample_thermometers
 
 
+@pytest.mark.critical
 @pytest.mark.django_db
 def test_sample_thermometers_records_reading(monkeypatch):
     thermometer = Thermometer.objects.create(
