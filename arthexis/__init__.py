@@ -40,7 +40,6 @@ def _install_lazy_aliases() -> None:
         if module is None:
             continue
 
-        sys.modules.setdefault(short_name, module)
         sys.modules.setdefault(f"{__name__}.{short_name}", module)
 
 
