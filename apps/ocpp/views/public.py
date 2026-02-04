@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from pathlib import Path
 
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
@@ -31,7 +32,7 @@ from .common import (
     _visible_error_code,
     _visible_chargers,
 )
-from ..models import PublicConnectorPage, PublicScanEvent
+from ..models import PublicConnectorPage, PublicScanEvent, StationModel
 
 logger = logging.getLogger(__name__)
 
@@ -713,8 +714,12 @@ def charger_log_page(request, cid, connector=None):
         download_content = "\n".join(log_entries)
         if download_content and not download_content.endswith("\n"):
             download_content = f"{download_content}\n"
-        response = HttpResponse(download_content, content_type="text/plain; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
+        response = HttpResponse(
+            download_content, content_type="text/plain; charset=utf-8"
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="{download_filename}"'
+        )
         return response
 
     log_entries = list(
@@ -746,5 +751,60 @@ def charger_log_page(request, cid, connector=None):
             "log_limit_label": limit_label,
             "log_download_url": log_download_url,
             "log_filename": download_filename,
+        },
+    )
+
+
+def _station_model_images(bucket):
+    if not bucket:
+        return []
+    files = bucket.files.all().order_by("-uploaded_at")
+    images = []
+    for media_file in files:
+        content_type = (media_file.content_type or "").lower()
+        if content_type.startswith("image/"):
+            images.append(media_file)
+            continue
+        name = media_file.original_name or ""
+        extension = Path(name).suffix.lower()
+        if extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
+            images.append(media_file)
+    return images
+
+
+def _station_model_documents(bucket, image_ids):
+    if not bucket:
+        return []
+    files = bucket.files.all().order_by("-uploaded_at")
+    return [media_file for media_file in files if media_file.pk not in image_ids]
+
+
+def supported_chargers(request):
+    station_models = StationModel.objects.all().order_by(
+        "vendor", "model_family", "model"
+    )
+    return render(
+        request,
+        "ocpp/supported_chargers.html",
+        {"station_models": station_models},
+    )
+
+
+def supported_charger_detail(request, station_model_id: int):
+    station_model = get_object_or_404(StationModel, pk=station_model_id)
+    instructions_html, _ = rendering.render_markdown_with_toc(
+        station_model.instructions_markdown or ""
+    )
+    images = _station_model_images(station_model.images_bucket)
+    image_ids = {image.pk for image in images}
+    documents = _station_model_documents(station_model.documents_bucket, image_ids)
+    return render(
+        request,
+        "ocpp/supported_charger_detail.html",
+        {
+            "station_model": station_model,
+            "instructions_html": instructions_html,
+            "images": images,
+            "documents": documents,
         },
     )

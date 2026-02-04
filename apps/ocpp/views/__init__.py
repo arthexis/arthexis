@@ -9,6 +9,8 @@ from .public import (
     charger_status,
     charging_station_map,
     public_connector_page,
+    supported_charger_detail,
+    supported_chargers,
 )
 from .simulator import cp_simulator
 from .firmware import firmware_download
