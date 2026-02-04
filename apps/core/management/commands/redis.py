@@ -76,7 +76,9 @@ def _systemd_status(services: Iterable[str]) -> dict[str, str]:
                 text=True,
             )
         except FileNotFoundError:
-            return {"systemctl": "unavailable"}
+        except (FileNotFoundError, OSError) as exc:
+            results[service] = f"error: {exc}"
+            continue
         status = result.stdout.strip() if result.stdout else "unknown"
         results[service] = status or "unknown"
     return results
