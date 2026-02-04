@@ -5,8 +5,6 @@ import pytest
 
 from django.conf import settings
 
-pytestmark = pytest.mark.critical
-
 def test_reports_module_syntax() -> None:
     reports_path = Path(settings.BASE_DIR) / "apps/core/views/reports.py"
     py_compile.compile(str(reports_path), doraise=True)
