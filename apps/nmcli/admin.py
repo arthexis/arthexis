@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -294,9 +295,10 @@ class APClientAdmin(DjangoObjectActions, admin.ModelAdmin):
         updated = 0
 
         for entry in scanned:
+            mac_address = entry.get("mac_address", "")
+            interface_name = entry.get("interface_name", "")
             defaults = {
                 "connection_name": entry.get("connection_name", ""),
-                "interface_name": entry.get("interface_name", ""),
                 "signal_dbm": entry.get("signal_dbm"),
                 "rx_bitrate_mbps": entry.get("rx_bitrate_mbps"),
                 "tx_bitrate_mbps": entry.get("tx_bitrate_mbps"),
@@ -304,8 +306,8 @@ class APClientAdmin(DjangoObjectActions, admin.ModelAdmin):
                 "last_seen_at": entry.get("last_seen_at"),
             }
             obj, created_flag = APClient.objects.update_or_create(
-                mac_address=entry.get("mac_address", ""),
-                interface_name=defaults["interface_name"],
+                mac_address=mac_address,
+                interface_name=interface_name,
                 defaults=defaults,
             )
             if created_flag:
@@ -316,12 +318,12 @@ class APClientAdmin(DjangoObjectActions, admin.ModelAdmin):
                 record_discovery_item(
                     discovery,
                     obj=obj,
-                    label=entry.get("mac_address", ""),
+                    label=mac_address,
                     created=created_flag,
                     overwritten=not created_flag,
                     data={
                         "connection_name": defaults["connection_name"],
-                        "interface_name": defaults["interface_name"],
+                        "interface_name": interface_name,
                     },
                 )
 
@@ -333,6 +335,9 @@ class APClientAdmin(DjangoObjectActions, admin.ModelAdmin):
         }
 
     def run_ap_client_discovery_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
         opts = self.model._meta
         changelist_url = reverse("admin:nmcli_apclient_changelist")
         context = {

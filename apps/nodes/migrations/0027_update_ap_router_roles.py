@@ -10,11 +10,11 @@ def add_control_role_to_ap_router(apps, schema_editor):
     except NodeFeature.DoesNotExist:
         return
 
-    roles = list(NodeRole.objects.filter(name__in=["Control", "Satellite"]))
-    if not roles:
+    control_role = NodeRole.objects.filter(name="Control").first()
+    if not control_role:
         return
 
-    feature.roles.set(roles)
+    feature.roles.add(control_role)
 
 
 def remove_control_role_from_ap_router(apps, schema_editor):
@@ -26,8 +26,11 @@ def remove_control_role_from_ap_router(apps, schema_editor):
     except NodeFeature.DoesNotExist:
         return
 
-    roles = list(NodeRole.objects.filter(name="Satellite"))
-    feature.roles.set(roles)
+    control_role = NodeRole.objects.filter(name="Control").first()
+    if not control_role:
+        return
+
+    feature.roles.remove(control_role)
 
 
 class Migration(migrations.Migration):
