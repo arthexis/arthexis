@@ -19,6 +19,7 @@ def test_strip_http_subresources_removes_http_sources():
     assert "https://example.com/image.png" in cleaned
 
 
+@pytest.mark.critical
 def test_resolve_work_asset_rejects_traversal(tmp_path, settings):
     settings.BASE_DIR = tmp_path
     user_dir = tmp_path / "work" / "bob"

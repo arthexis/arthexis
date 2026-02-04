@@ -6,7 +6,7 @@ import pytest
 
 from apps.loggers.rotation import ArchiveTimedRotatingFileHandler
 
-pytestmark = pytest.mark.critical
+pytestmark = pytest.mark.slow
 
 def test_rotation_filename_uses_namer(tmp_path: Path) -> None:
     """Ensure rotation naming respects the configured namer."""

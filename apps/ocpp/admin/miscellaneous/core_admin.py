@@ -1586,6 +1586,7 @@ class CPForwarderAdmin(EntityModelAdmin):
 
 @admin.register(StationModel)
 class StationModelAdmin(EntityModelAdmin):
+    change_list_template = "admin/ocpp/stationmodel/change_list.html"
     list_display = (
         "vendor",
         "model_family",
@@ -1598,3 +1599,17 @@ class StationModelAdmin(EntityModelAdmin):
     search_fields = ("vendor", "model_family", "model")
     list_filter = ("preferred_ocpp_version", "integration_rating")
     raw_id_fields = ("images_bucket", "documents_bucket")
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "view-in-site/",
+                self.admin_site.admin_view(self.view_in_site),
+                name="ocpp_stationmodel_view_in_site",
+            )
+        ]
+        return custom + urls
+
+    def view_in_site(self, request):
+        return HttpResponseRedirect(reverse("ocpp:supported-chargers"))
