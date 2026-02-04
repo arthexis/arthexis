@@ -33,21 +33,22 @@ ubuntu_launch_warn_if_not_version() {
 }
 
 ubuntu_launch_ensure_sudo() {
-  if [[ "$EUID" -ne 0 ]]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-      echo "sudo is required to install system dependencies." >&2
-      exit 1
-    fi
-    echo "sudo"  # shellcheck disable=SC2124
+  if [[ "$EUID" -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
+    echo "sudo is required to install system dependencies." >&2
+    exit 1
   fi
 }
 
 ubuntu_launch_install_packages() {
-  local sudo_cmd
-  sudo_cmd=$(ubuntu_launch_ensure_sudo)
+  ubuntu_launch_ensure_sudo
 
-  $sudo_cmd apt-get update
-  $sudo_cmd apt-get install -y \
+  local -a sudo_prefix=()
+  if [[ "$EUID" -ne 0 ]]; then
+    sudo_prefix=(sudo)
+  fi
+
+  "${sudo_prefix[@]}" apt-get update
+  "${sudo_prefix[@]}" apt-get install -y \
     ca-certificates \
     curl \
     git \
