@@ -228,7 +228,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
     def get_view_on_site_url(self, obj=None):
         if not obj:
-            return super().get_view_on_site_url(obj)
+            return None
         stream = obj.mjpeg_streams.order_by("-is_active", "pk").first()
         if stream:
             return stream.get_absolute_url()
