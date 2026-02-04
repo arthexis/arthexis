@@ -193,19 +193,21 @@ def _migration_merge_required(base_dir: Path) -> bool:
     return False
 
 
-def run_tests(base_dir: Path) -> bool:
-    """Execute the full test suite using pytest."""
+def _run_test_group(base_dir: Path, *, label: str, marker: str) -> bool:
+    """Execute a group of pytest tests filtered by markers."""
 
     command = [
         sys.executable,
         "-m",
         "pytest",
+        "-m",
+        marker,
         f"--durations={PYTEST_DURATIONS_COUNT}",
         f"--durations-min={PYTEST_DURATIONS_MIN_SECONDS}",
     ]
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    print(f"{PREFIX} Running tests:", " ".join(command))
+    print(f"{PREFIX} Running {label} tests:", " ".join(command))
     started_at = time.monotonic()
     result = subprocess.run(command, cwd=base_dir, env=env)
     elapsed = migration._format_elapsed(time.monotonic() - started_at)
@@ -214,11 +216,26 @@ def run_tests(base_dir: Path) -> bool:
             "Test suite failure",
             "Check test server output for pytest details.",
         )
-        print(f"{PREFIX} Test suite failed after {elapsed}.")
+        print(f"{PREFIX} {label} tests failed after {elapsed}.")
         return False
 
-    print(f"{PREFIX} Test suite completed successfully in {elapsed}.")
+    print(f"{PREFIX} {label} tests completed successfully in {elapsed}.")
     return True
+
+
+def run_tests(base_dir: Path) -> bool:
+    """Execute the test suite grouped by markers."""
+
+    groups = [
+        ("critical", "critical"),
+        ("unmarked", "not critical and not integration and not slow"),
+        ("integration", "integration"),
+        ("slow", "slow"),
+    ]
+    return all([
+        _run_test_group(base_dir, label=label, marker=marker)
+        for label, marker in groups
+    ])
 
 
 def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
