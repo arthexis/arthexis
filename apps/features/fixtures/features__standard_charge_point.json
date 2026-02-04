@@ -1,0 +1,294 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "standard-charge-point",
+      "display": "Standard Charge Point",
+      "summary": "Core CSMS capability: listen for charge point websocket traffic, respond to OCPP requests, and approve standard flows unless gated by additional features.",
+      "is_enabled": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "node_feature": [
+        "charge-points"
+      ],
+      "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
+      "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
+      "service_requirements": "Accept websocket connections from charge points, process OCPP calls, and dispatch CSMS responses.",
+      "admin_views": [
+        "admin:ocpp_charger_changelist",
+        "admin:ocpp_simulator_changelist"
+      ],
+      "public_views": [
+        "ocpp:ocpp-dashboard",
+        "ocpp:charger-page",
+        "ocpp:charger-status"
+      ],
+      "service_views": [
+        "WebSocket: /<charge_point_id>/",
+        "WebSocket: /ws/<charge_point_id>/",
+        "Service: apps.ocpp.consumers.CSMSConsumer"
+      ],
+      "code_locations": [
+        "apps/ocpp/consumers.py",
+        "apps/ocpp/views/actions",
+        "apps/ocpp/views/common.py",
+        "apps/ocpp/store.py",
+        "apps/ocpp/coverage.json",
+        "apps/ocpp/coverage201.json",
+        "apps/ocpp/coverage21.json"
+      ],
+      "protocol_coverage": {
+        "ocpp16": {
+          "cp_to_csms": [
+            "Authorize",
+            "BootNotification",
+            "DataTransfer",
+            "DiagnosticsStatusNotification",
+            "FirmwareStatusNotification",
+            "Heartbeat",
+            "MeterValues",
+            "StartTransaction",
+            "StatusNotification",
+            "StopTransaction"
+          ],
+          "csms_to_cp": [
+            "CancelReservation",
+            "ChangeAvailability",
+            "ChangeConfiguration",
+            "ClearCache",
+            "ClearChargingProfile",
+            "DataTransfer",
+            "GetCompositeSchedule",
+            "GetConfiguration",
+            "GetDiagnostics",
+            "GetLocalListVersion",
+            "RemoteStartTransaction",
+            "RemoteStopTransaction",
+            "ReserveNow",
+            "Reset",
+            "SendLocalList",
+            "SetChargingProfile",
+            "TriggerMessage",
+            "UnlockConnector",
+            "UpdateFirmware"
+          ]
+        },
+        "ocpp201": {
+          "cp_to_csms": [
+            "Authorize",
+            "BootNotification",
+            "ClearedChargingLimit",
+            "CostUpdated",
+            "DataTransfer",
+            "FirmwareStatusNotification",
+            "Get15118EVCertificate",
+            "GetCertificateStatus",
+            "Heartbeat",
+            "LogStatusNotification",
+            "MeterValues",
+            "NotifyChargingLimit",
+            "NotifyCustomerInformation",
+            "NotifyDisplayMessages",
+            "NotifyEVChargingNeeds",
+            "NotifyEVChargingSchedule",
+            "NotifyEvent",
+            "NotifyMonitoringReport",
+            "NotifyReport",
+            "PublishFirmwareStatusNotification",
+            "ReportChargingProfiles",
+            "ReservationStatusUpdate",
+            "SecurityEventNotification",
+            "SignCertificate",
+            "StatusNotification",
+            "TransactionEvent"
+          ],
+          "csms_to_cp": [
+            "CancelReservation",
+            "CertificateSigned",
+            "ChangeAvailability",
+            "ClearCache",
+            "ClearChargingProfile",
+            "ClearDisplayMessage",
+            "ClearVariableMonitoring",
+            "CustomerInformation",
+            "DataTransfer",
+            "DeleteCertificate",
+            "GetBaseReport",
+            "GetChargingProfiles",
+            "GetCompositeSchedule",
+            "GetDisplayMessages",
+            "GetInstalledCertificateIds",
+            "GetLocalListVersion",
+            "GetLog",
+            "GetMonitoringReport",
+            "GetReport",
+            "GetTransactionStatus",
+            "GetVariables",
+            "InstallCertificate",
+            "PublishFirmware",
+            "RequestStartTransaction",
+            "RequestStopTransaction",
+            "ReserveNow",
+            "Reset",
+            "SendLocalList",
+            "SetChargingProfile",
+            "SetDisplayMessage",
+            "SetMonitoringBase",
+            "SetMonitoringLevel",
+            "SetNetworkProfile",
+            "SetVariableMonitoring",
+            "SetVariables",
+            "TriggerMessage",
+            "UnlockConnector",
+            "UnpublishFirmware",
+            "UpdateFirmware"
+          ]
+        },
+        "ocpp21": {
+          "cp_to_csms": [
+            "Authorize",
+            "BootNotification",
+            "ClearedChargingLimit",
+            "CostUpdated",
+            "DataTransfer",
+            "FirmwareStatusNotification",
+            "Get15118EVCertificate",
+            "GetCertificateStatus",
+            "Heartbeat",
+            "LogStatusNotification",
+            "MeterValues",
+            "NotifyChargingLimit",
+            "NotifyCustomerInformation",
+            "NotifyDisplayMessages",
+            "NotifyEVChargingNeeds",
+            "NotifyEVChargingSchedule",
+            "NotifyEvent",
+            "NotifyMonitoringReport",
+            "NotifyReport",
+            "PublishFirmwareStatusNotification",
+            "ReportChargingProfiles",
+            "ReservationStatusUpdate",
+            "SecurityEventNotification",
+            "SignCertificate",
+            "StatusNotification",
+            "TransactionEvent"
+          ],
+          "csms_to_cp": [
+            "CancelReservation",
+            "CertificateSigned",
+            "ChangeAvailability",
+            "ClearCache",
+            "ClearChargingProfile",
+            "ClearDisplayMessage",
+            "ClearVariableMonitoring",
+            "CustomerInformation",
+            "DataTransfer",
+            "DeleteCertificate",
+            "GetBaseReport",
+            "GetChargingProfiles",
+            "GetCompositeSchedule",
+            "GetDisplayMessages",
+            "GetInstalledCertificateIds",
+            "GetLocalListVersion",
+            "GetLog",
+            "GetMonitoringReport",
+            "GetReport",
+            "GetTransactionStatus",
+            "GetVariables",
+            "InstallCertificate",
+            "PublishFirmware",
+            "RequestStartTransaction",
+            "RequestStopTransaction",
+            "ReserveNow",
+            "Reset",
+            "SendLocalList",
+            "SetChargingProfile",
+            "SetDisplayMessage",
+            "SetMonitoringBase",
+            "SetMonitoringLevel",
+            "SetNetworkProfile",
+            "SetVariableMonitoring",
+            "SetVariables",
+            "TriggerMessage",
+            "UnlockConnector",
+            "UnpublishFirmware",
+            "UpdateFirmware"
+          ]
+        }
+      },
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_websocket_creation.py::test_charge_point_created_for_new_websocket_path",
+      "name": "Creates charger on first websocket connection",
+      "is_regression_guard": true,
+      "notes": "Validates websocket handshake and charger provisioning.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_websocket_creation.py::test_connect_prefers_stored_ocpp2_without_offered_subprotocol",
+      "name": "Prefers stored OCPP version during websocket negotiation",
+      "is_regression_guard": true,
+      "notes": "Ensures protocol preference behavior for OCPP 2.x connections.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_ocpp_handlers.py::test_transaction_event_registered_for_ocpp201_and_ocpp21",
+      "name": "Registers transaction events for OCPP 2.0.1/2.1",
+      "is_regression_guard": true,
+      "notes": "Confirms CSMS handler coverage for OCPP 2.x transaction events.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_ocpp_handlers.py::test_notify_event_registered_for_ocpp201_and_ocpp21",
+      "name": "Registers notify event for OCPP 2.0.1/2.1",
+      "is_regression_guard": true,
+      "notes": "Guards OCPP 2.x event notifications on the CSMS side.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_ocpp201_actions.py::test_firmware_actions_register_ocpp201_and_ocpp21",
+      "name": "Firmware actions cover OCPP 2.0.1/2.1",
+      "is_regression_guard": true,
+      "notes": "Ensures firmware call registration for OCPP 2.x.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  }
+]

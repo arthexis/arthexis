@@ -452,6 +452,7 @@ LOCAL_APPS = [
     "apps.socials",
     "apps.survey",
     "apps.modules",
+    "apps.features",
     "apps.widgets",
     "apps.sites",
     "apps.summary",
