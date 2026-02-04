@@ -17,11 +17,19 @@ def _configure_default_site(settings, certificate):
     return config
 
 
-def test_trust_certificate_page_includes_download(admin_client, settings, tmp_path):
+@pytest.fixture
+def mock_certificate_files(tmp_path):
     certificate_path = tmp_path / "fullchain.pem"
     certificate_path.write_text("demo-cert", encoding="utf-8")
     key_path = tmp_path / "privkey.pem"
     key_path.write_text("demo-key", encoding="utf-8")
+    return certificate_path, key_path
+
+
+def test_trust_certificate_page_includes_download(
+    admin_client, settings, mock_certificate_files
+):
+    certificate_path, key_path = mock_certificate_files
 
     certificate = SelfSignedCertificate.objects.create(
         name="router-cert",
@@ -37,11 +45,10 @@ def test_trust_certificate_page_includes_download(admin_client, settings, tmp_pa
     assert b"Download certificate" in response.content
 
 
-def test_trust_certificate_download_serves_pem(admin_client, settings, tmp_path):
-    certificate_path = tmp_path / "fullchain.pem"
-    certificate_path.write_text("demo-cert", encoding="utf-8")
-    key_path = tmp_path / "privkey.pem"
-    key_path.write_text("demo-key", encoding="utf-8")
+def test_trust_certificate_download_serves_pem(
+    admin_client, settings, mock_certificate_files
+):
+    certificate_path, key_path = mock_certificate_files
 
     certificate = SelfSignedCertificate.objects.create(
         name="router-cert-download",
