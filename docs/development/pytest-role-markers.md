@@ -33,6 +33,13 @@ Because CI leaves `NODE_FEATURES` unset, feature-marked tests always run in the
 default pipeline. Locally you can constrain them to a specific set of features
 by exporting `NODE_FEATURES`.
 
+## Critical markers
+
+Use `@pytest.mark.critical` for tests that must always run in CI install/upgrade
+pipelines, even when local filtering or marker-based selection is applied.
+These tests should cover high-risk flows (for example, security checks or
+upgrade blockers) where skipped coverage would be unacceptable.
+
 ## Local filtering
 
 Pytest honours the following environment variables for local filtering:
