@@ -57,6 +57,7 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         node: Node | None = None,
         auto_enable: bool = False,
     ):
+        auto_enabled = False
         try:
             feature = NodeFeature.objects.get(slug="gpio-rtc")
         except NodeFeature.DoesNotExist:
@@ -69,7 +70,7 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             return None
         if not feature.is_enabled:
             if auto_enable and node:
-                NodeFeatureAssignment.objects.update_or_create(
+                _, auto_enabled = NodeFeatureAssignment.objects.update_or_create(
                     node=node, feature=feature
                 )
                 node.sync_feature_tasks()
@@ -87,7 +88,7 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
                     level=messages.WARNING,
                 )
                 return None
-        return feature
+        return feature, auto_enabled
 
     def _get_local_node(self, request):
         node = Node.get_local()
@@ -104,14 +105,15 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         if node is None:
             return redirect("..")
 
-        feature = self._ensure_rtc_feature_enabled(
+        feature_info = self._ensure_rtc_feature_enabled(
             request,
             _("Discover"),
             node=node,
             auto_enable=True,
         )
-        if not feature:
+        if not feature_info:
             return redirect("..")
+        feature, auto_enabled = feature_info
 
         discovery = start_discovery(
             _("Discover"),
@@ -121,6 +123,14 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         )
 
         if not has_clock_device():
+            if auto_enabled:
+                NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+                self.message_user(
+                    request,
+                    _("%(feature)s feature was disabled because no devices were found.")
+                    % {"feature": feature.display},
+                    level=messages.INFO,
+                )
             if discovery:
                 discovery.metadata = {
                     "action": "clock_find_devices",
