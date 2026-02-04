@@ -7,7 +7,7 @@ from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
 from . import godaddy as dns_utils
-from .models import DNSProviderCredential, GoDaddyDNSRecord
+from .models import DNSProviderCredential, DNSProxyConfig, GoDaddyDNSRecord
 
 
 class DeployDNSRecordsForm(forms.Form):
@@ -126,6 +126,39 @@ class DNSProviderCredentialAdmin(OwnableAdminMixin, EntityModelAdmin):
                     "default_domain",
                     "use_sandbox",
                     "is_enabled",
+                )
+            },
+        ),
+    )
+
+
+@admin.register(DNSProxyConfig)
+class DNSProxyConfigAdmin(EntityModelAdmin):
+    list_display = ("name", "listen_host", "listen_port", "is_enabled", "nmcli_connection")
+    list_filter = ("is_enabled", "include_nmcli_dns", "use_tcp_upstream")
+    search_fields = ("name", "listen_host")
+    autocomplete_fields = ("nmcli_connection",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "is_enabled",
+                    "listen_host",
+                    "listen_port",
+                )
+            },
+        ),
+        (
+            _("Upstream"),
+            {
+                "fields": (
+                    "upstream_servers",
+                    "include_nmcli_dns",
+                    "nmcli_connection",
+                    "use_tcp_upstream",
+                    "timeout_seconds",
                 )
             },
         ),
