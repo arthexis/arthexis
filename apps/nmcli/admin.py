@@ -8,8 +8,13 @@ from django_object_actions import DjangoObjectActions
 
 from apps.discovery.services import record_discovery_item, start_discovery
 
-from .models import NetworkConnection
-from .services import NMCLIScanError, scan_nmcli_connections
+from .models import APClient, NetworkConnection
+from .services import (
+    APClientScanError,
+    NMCLIScanError,
+    scan_ap_clients,
+    scan_nmcli_connections,
+)
 
 
 @admin.register(NetworkConnection)
@@ -221,4 +226,159 @@ class NetworkConnectionAdmin(DjangoObjectActions, admin.ModelAdmin):
 
         return TemplateResponse(
             request, "admin/nmcli/networkconnection/run_scan.html", context
+        )
+
+
+@admin.register(APClient)
+class APClientAdmin(DjangoObjectActions, admin.ModelAdmin):
+    actions = ["run_ap_client_discovery"]
+    changelist_actions = ["run_ap_client_discovery"]
+    list_display = (
+        "mac_address",
+        "connection_name",
+        "interface_name",
+        "signal_dbm",
+        "last_seen_at",
+    )
+    list_filter = ("interface_name",)
+    search_fields = ("mac_address", "connection_name", "interface_name")
+    readonly_fields = ("last_seen_at",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "mac_address",
+                    "connection_name",
+                    "interface_name",
+                    "signal_dbm",
+                    "inactive_time_ms",
+                )
+            },
+        ),
+        (
+            "Bitrates",
+            {"fields": ("rx_bitrate_mbps", "tx_bitrate_mbps")},
+        ),
+        (
+            "Timestamps",
+            {"fields": ("last_seen_at",)},
+        ),
+    )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "run-discovery/",
+                self.admin_site.admin_view(self.run_ap_client_discovery_view),
+                name="nmcli_apclient_run_discovery",
+            ),
+        ]
+        return custom + urls
+
+    def _discovery_url(self) -> str:
+        return reverse("admin:nmcli_apclient_run_discovery")
+
+    def run_ap_client_discovery(self, request, queryset=None):
+        return HttpResponseRedirect(self._discovery_url())
+
+    run_ap_client_discovery.label = _("Discover")
+    run_ap_client_discovery.short_description = _("Discover")
+    run_ap_client_discovery.requires_queryset = False
+    run_ap_client_discovery.is_discover_action = True
+
+    def _sync_ap_clients(self, request, *, discovery=None):
+        scanned, errors = scan_ap_clients()
+        created = 0
+        updated = 0
+
+        for entry in scanned:
+            defaults = {
+                "connection_name": entry.get("connection_name", ""),
+                "interface_name": entry.get("interface_name", ""),
+                "signal_dbm": entry.get("signal_dbm"),
+                "rx_bitrate_mbps": entry.get("rx_bitrate_mbps"),
+                "tx_bitrate_mbps": entry.get("tx_bitrate_mbps"),
+                "inactive_time_ms": entry.get("inactive_time_ms"),
+                "last_seen_at": entry.get("last_seen_at"),
+            }
+            obj, created_flag = APClient.objects.update_or_create(
+                mac_address=entry.get("mac_address", ""),
+                interface_name=defaults["interface_name"],
+                defaults=defaults,
+            )
+            if created_flag:
+                created += 1
+            else:
+                updated += 1
+            if discovery:
+                record_discovery_item(
+                    discovery,
+                    obj=obj,
+                    label=entry.get("mac_address", ""),
+                    created=created_flag,
+                    overwritten=not created_flag,
+                    data={
+                        "connection_name": defaults["connection_name"],
+                        "interface_name": defaults["interface_name"],
+                    },
+                )
+
+        return {
+            "created": created,
+            "updated": updated,
+            "errors": errors,
+            "count": len(scanned),
+        }
+
+    def run_ap_client_discovery_view(self, request):
+        opts = self.model._meta
+        changelist_url = reverse("admin:nmcli_apclient_changelist")
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": opts,
+            "title": _("Discover"),
+            "changelist_url": changelist_url,
+            "scan_url": self._discovery_url(),
+            "result": None,
+        }
+
+        if request.method == "POST":
+            try:
+                discovery = start_discovery(
+                    _("Discover"),
+                    request,
+                    model=self.model,
+                    metadata={"action": "ap_client_discover"},
+                )
+                result = self._sync_ap_clients(request, discovery=discovery)
+            except APClientScanError as exc:
+                self.message_user(request, str(exc), messages.ERROR)
+            else:
+                context["result"] = result
+                if discovery:
+                    discovery.metadata = {
+                        "action": "ap_client_discover",
+                        "created": result["created"],
+                        "updated": result["updated"],
+                        "count": result["count"],
+                        "errors": result.get("errors") or [],
+                    }
+                    discovery.save(update_fields=["metadata"])
+                if result["created"] or result["updated"]:
+                    self.message_user(
+                        request,
+                        _(
+                            "AP client discovery completed. %(created)d created, %(updated)d updated."
+                        )
+                        % {"created": result["created"], "updated": result["updated"]},
+                        messages.SUCCESS,
+                    )
+                if result.get("errors"):
+                    for error in result["errors"]:
+                        self.message_user(request, error, messages.WARNING)
+
+        return TemplateResponse(
+            request, "admin/nmcli/apclient/run_scan.html", context
         )

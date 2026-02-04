@@ -67,6 +67,10 @@ class NMCLIScanError(RuntimeError):
     """Raised when nmcli cannot be executed or returns an unexpected error."""
 
 
+class APClientScanError(RuntimeError):
+    """Raised when AP client discovery cannot be completed."""
+
+
 def _run_nmcli(args: Iterable[str]) -> str:
     try:
         result = subprocess.run(
@@ -79,6 +83,21 @@ def _run_nmcli(args: Iterable[str]) -> str:
         stdout = (exc.stdout or "").strip()
         details = stderr or stdout or str(exc)
         raise NMCLIScanError(details) from exc
+    return result.stdout
+
+
+def _run_iw(args: Iterable[str]) -> str:
+    try:
+        result = subprocess.run(
+            ["iw", *args], capture_output=True, text=True, check=True
+        )
+    except FileNotFoundError as exc:  # pragma: no cover - external binary
+        raise APClientScanError("iw is not available on this system.") from exc
+    except subprocess.CalledProcessError as exc:  # pragma: no cover - external binary
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        details = stderr or stdout or str(exc)
+        raise APClientScanError(details) from exc
     return result.stdout
 
 
@@ -144,3 +163,112 @@ def scan_nmcli_connections() -> tuple[list[dict[str, object]], list[str]]:
             errors.append(f"{name}: {exc}")
 
     return records, errors
+
+
+def _parse_bitrate(value: str) -> float | None:
+    if not value:
+        return None
+    parts = value.split()
+    if not parts:
+        return None
+    try:
+        return float(parts[0])
+    except ValueError:
+        return None
+
+
+def _parse_station_dump(output: str) -> list[dict[str, object]]:
+    clients: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("Station "):
+            if current:
+                clients.append(current)
+            parts = line.split()
+            mac_address = parts[1] if len(parts) > 1 else ""
+            current = {"mac_address": mac_address}
+            continue
+        if current is None:
+            continue
+        if ":" not in line:
+            continue
+        key, value = [part.strip() for part in line.split(":", 1)]
+        if key == "signal":
+            try:
+                current["signal_dbm"] = int(value.split()[0])
+            except (ValueError, IndexError):
+                current["signal_dbm"] = None
+        elif key == "rx bitrate":
+            current["rx_bitrate_mbps"] = _parse_bitrate(value)
+        elif key == "tx bitrate":
+            current["tx_bitrate_mbps"] = _parse_bitrate(value)
+        elif key == "inactive time":
+            try:
+                current["inactive_time_ms"] = int(value.split()[0])
+            except (ValueError, IndexError):
+                current["inactive_time_ms"] = None
+
+    if current:
+        clients.append(current)
+
+    return clients
+
+
+def _find_active_ap_connections() -> list[tuple[str, str]]:
+    output = _run_nmcli(["-t", "-f", "NAME,DEVICE,TYPE", "connection", "show", "--active"])
+    ap_connections: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        if not line:
+            continue
+        parts = line.split(":", 2)
+        name = parts[0] if len(parts) > 0 else ""
+        device = parts[1] if len(parts) > 1 else ""
+        conn_type = parts[2] if len(parts) > 2 else ""
+        if not name or not device:
+            continue
+        if conn_type.strip().lower() not in {"wifi", "802-11-wireless"}:
+            continue
+        mode = _run_nmcli(
+            ["-g", "802-11-wireless.mode", "connection", "show", name]
+        ).strip()
+        if mode == "ap":
+            ap_connections.append((name, device))
+    return ap_connections
+
+
+def scan_ap_clients() -> tuple[list[dict[str, object]], list[str]]:
+    """Return parsed AP client details and any non-fatal errors."""
+
+    errors: list[str] = []
+    clients: list[dict[str, object]] = []
+    now = timezone.now()
+
+    try:
+        ap_connections = _find_active_ap_connections()
+    except NMCLIScanError as exc:
+        raise APClientScanError(str(exc)) from exc
+
+    for connection_name, device in ap_connections:
+        try:
+            output = _run_iw(["dev", device, "station", "dump"])
+        except APClientScanError as exc:
+            errors.append(f"{device}: {exc}")
+            continue
+        for entry in _parse_station_dump(output):
+            if not entry.get("mac_address"):
+                errors.append(f"{device}: Missing client MAC address.")
+                continue
+            entry.update(
+                {
+                    "connection_name": connection_name,
+                    "interface_name": device,
+                    "last_seen_at": now,
+                }
+            )
+            clients.append(entry)
+
+    return clients, errors

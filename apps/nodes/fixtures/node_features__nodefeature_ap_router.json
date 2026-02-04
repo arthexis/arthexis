@@ -8,6 +8,9 @@
       "display": "AP Router",
       "roles": [
         [
+          "Control"
+        ],
+        [
           "Satellite"
         ]
       ]
