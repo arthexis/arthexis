@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="module">
+    <h1>{% trans "Trust the Local HTTPS Certificate" %}</h1>
+    {% if certificate_available %}
+      <p>
+        {% blocktrans with domain=certificate_domain %}
+          Download the current HTTPS certificate for <strong>{{ domain }}</strong>, then
+          add it to your device or browser trust store to remove the invalid certificate warning.
+        {% endblocktrans %}
+      </p>
+      <p>
+        <a class="button" href="{% url 'certs-trust-download' %}">
+          {% trans "Download certificate (.pem)" %}
+        </a>
+      </p>
+      <ol>
+        <li>{% trans "Download the certificate file." %}</li>
+        <li>{% trans "Open your OS/browser certificate manager." %}</li>
+        <li>{% trans "Import the certificate and mark it as trusted." %}</li>
+        <li>{% trans "Reload this site once the trust store update completes." %}</li>
+      </ol>
+      <p class="help">
+        {% trans "Tip: On managed fleets, distribute the certificate with your MDM profile." %}
+      </p>
+    {% else %}
+      <p>
+        {% trans "No HTTPS certificate is currently available to download. Generate or assign a certificate in the NGINX site configuration first." %}
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}
