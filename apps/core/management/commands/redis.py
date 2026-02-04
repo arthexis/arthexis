@@ -14,6 +14,8 @@ from redis import Redis
 from redis.exceptions import RedisError
 
 SYSTEMD_REDIS_UNITS = ("redis-server", "redis")
+ENV_KEYS_PREFIXES = ("REDIS", "CELERY")
+MASKED_VALUE = "****"
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,25 @@ def _is_redis_url(value: str | None) -> bool:
         return False
     scheme = urlparse(value).scheme
     return "redis" in scheme
+
+
+def _mask_redis_url(value: str) -> str:
+    parsed = urlparse(value)
+    if not parsed.password:
+        return value
+    host = parsed.hostname or ""
+    port = f":{parsed.port}" if parsed.port else ""
+    userinfo = ""
+    if parsed.username:
+        userinfo = parsed.username
+    if parsed.password:
+        userinfo = f"{userinfo}:{MASKED_VALUE}" if userinfo else f":{MASKED_VALUE}"
+    netloc = f"{userinfo}@{host}{port}" if userinfo else f"{host}{port}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+def _mask_value(value: str) -> str:
+    return _mask_redis_url(value) if _is_redis_url(value) else value
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -65,17 +86,17 @@ def _collect_redis_urls(extra_env: dict[str, str]) -> list[str]:
 
 
 def _systemd_status(services: Iterable[str]) -> dict[str, str]:
-    if not shutil.which("systemctl"):
+    systemctl_path = shutil.which("systemctl")
+    if not systemctl_path:
         return {"systemctl": "unavailable"}
     results: dict[str, str] = {}
     for service in services:
         try:
             result = subprocess.run(
-                ["systemctl", "is-active", service],
+                [systemctl_path, "is-active", service],
                 capture_output=True,
                 text=True,
             )
-        except FileNotFoundError:
         except (FileNotFoundError, OSError) as exc:
             results[service] = f"error: {exc}"
             continue
@@ -122,6 +143,13 @@ class Command(BaseCommand):
         base_dir = Path(getattr(settings, "BASE_DIR", os.getcwd()))
         redis_env = _read_env_file(base_dir / "redis.env")
         redis_urls = _collect_redis_urls(redis_env)
+        config_settings = [
+            "CHANNEL_REDIS_URL",
+            "OCPP_STATE_REDIS_URL",
+            "CELERY_BROKER_URL",
+            "CELERY_RESULT_BACKEND",
+            "VIDEO_FRAME_REDIS_URL",
+        ]
 
         self.stdout.write("Redis service status:")
         systemd_statuses = _systemd_status(SYSTEMD_REDIS_UNITS)
@@ -130,25 +158,22 @@ class Command(BaseCommand):
 
         self.stdout.write("")
         self.stdout.write("Redis configuration:")
-        self.stdout.write(
-            f"  CHANNEL_REDIS_URL: {getattr(settings, 'CHANNEL_REDIS_URL', '') or 'unset'}"
-        )
-        self.stdout.write(
-            f"  OCPP_STATE_REDIS_URL: {getattr(settings, 'OCPP_STATE_REDIS_URL', '') or 'unset'}"
-        )
-        self.stdout.write(
-            f"  CELERY_BROKER_URL: {getattr(settings, 'CELERY_BROKER_URL', '') or 'unset'}"
-        )
-        self.stdout.write(
-            f"  CELERY_RESULT_BACKEND: {getattr(settings, 'CELERY_RESULT_BACKEND', '') or 'unset'}"
-        )
-        self.stdout.write(
-            f"  VIDEO_FRAME_REDIS_URL: {getattr(settings, 'VIDEO_FRAME_REDIS_URL', '') or 'unset'}"
-        )
+        for setting_name in config_settings:
+            raw_value = getattr(settings, setting_name, "") or "unset"
+            value = _mask_value(raw_value) if raw_value != "unset" else raw_value
+            self.stdout.write(f"  {setting_name}: {value}")
         if redis_env:
             self.stdout.write("  redis.env:")
-            for key, value in sorted(redis_env.items()):
-                self.stdout.write(f"    {key}={value}")
+            filtered_env = {
+                key: value
+                for key, value in redis_env.items()
+                if key.startswith(ENV_KEYS_PREFIXES)
+            }
+            if filtered_env:
+                for key, value in sorted(filtered_env.items()):
+                    self.stdout.write(f"    {key}={_mask_value(value)}")
+            else:
+                self.stdout.write("    (no Redis-related entries)")
         else:
             self.stdout.write("  redis.env: not found or empty")
 
@@ -156,10 +181,12 @@ class Command(BaseCommand):
         if redis_urls:
             report = _check_redis_connection(redis_urls[0])
             if report.ok:
-                self.stdout.write(f"Redis connectivity: OK ({report.url})")
+                self.stdout.write(
+                    f"Redis connectivity: OK ({_mask_redis_url(report.url)})"
+                )
             else:
                 self.stdout.write(
-                    f"Redis connectivity: FAILED ({report.url}) -> {report.error}"
+                    f"Redis connectivity: FAILED ({_mask_redis_url(report.url)}) -> {report.error}"
                 )
         else:
             self.stdout.write("Redis connectivity: unavailable (no Redis URLs configured)")
@@ -180,10 +207,12 @@ class Command(BaseCommand):
             server_info = _info_section(client, "server")
             keyspace_info = _info_section(client, "keyspace")
         except (RedisError, OSError, ValueError) as exc:
-            self.stdout.write(f"  Unable to fetch report from {url}: {exc}")
+            self.stdout.write(
+                f"  Unable to fetch report from {_mask_redis_url(url)}: {exc}"
+            )
             return
 
-        self.stdout.write(f"  URL: {url}")
+        self.stdout.write(f"  URL: {_mask_redis_url(url)}")
         self.stdout.write(
             f"  Version: {server_info.get('redis_version', 'unknown')}"
         )

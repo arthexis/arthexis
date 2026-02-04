@@ -12,13 +12,17 @@ from apps.core.management.commands import redis as redis_command
 @pytest.mark.django_db
 def test_redis_command_shows_status_and_config(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(settings, "CHANNEL_REDIS_URL", "redis://example.test/0")
+    monkeypatch.setattr(
+        settings, "CHANNEL_REDIS_URL", "redis://user:secret@example.test/0"
+    )
     monkeypatch.setattr(settings, "OCPP_STATE_REDIS_URL", "")
-    monkeypatch.setattr(settings, "CELERY_BROKER_URL", "redis://example.test/1")
+    monkeypatch.setattr(
+        settings, "CELERY_BROKER_URL", "redis://:s3cr3t@example.test/1"
+    )
     monkeypatch.setattr(settings, "CELERY_RESULT_BACKEND", "cache+memory://")
     monkeypatch.setattr(settings, "VIDEO_FRAME_REDIS_URL", "")
     (tmp_path / "redis.env").write_text(
-        "CELERY_BROKER_URL=redis://localhost:6379/0\n", encoding="utf-8"
+        "CELERY_BROKER_URL=redis://:p4ss@localhost:6379/0\n", encoding="utf-8"
     )
 
     def fake_run(args, capture_output=False, text=False):
@@ -36,10 +40,10 @@ def test_redis_command_shows_status_and_config(monkeypatch, settings, tmp_path):
     output = stdout.getvalue()
 
     assert "redis-server: active" in output
-    assert "CHANNEL_REDIS_URL: redis://example.test/0" in output
-    assert "CELERY_BROKER_URL: redis://example.test/1" in output
+    assert "CHANNEL_REDIS_URL: redis://user:****@example.test/0" in output
+    assert "CELERY_BROKER_URL: redis://:****@example.test/1" in output
     assert "redis.env:" in output
-    assert "CELERY_BROKER_URL=redis://localhost:6379/0" in output
+    assert "CELERY_BROKER_URL=redis://:****@localhost:6379/0" in output
     assert "Redis connectivity: OK" in output
 
 
