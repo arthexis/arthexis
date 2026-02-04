@@ -529,7 +529,7 @@ else
 fi
 
 if [ ! -f .venv/bin/activate ]; then
-    echo "Virtual environment activation script not found at .venv/bin/activate. If you're on Ubuntu, install python3-venv and rerun install.sh." >&2
+    echo "Virtual environment activation script not found at .venv/bin/activate. The .venv directory may be corrupted. Try removing it before rerunning install.sh. On Debian/Ubuntu, you may need to install the 'python3-venv' package." >&2
     exit 1
 fi
 
