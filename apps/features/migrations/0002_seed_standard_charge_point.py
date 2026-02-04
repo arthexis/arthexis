@@ -16,7 +16,8 @@ def _load_fixture():
         return []
     try:
         payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Warning: Could not load or parse fixture {FIXTURE_PATH}: {e}")
         return []
     if isinstance(payload, list):
         return payload
