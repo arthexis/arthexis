@@ -6,8 +6,6 @@ from apps.core.system import upgrade
 from apps.core.system.ui import _format_timestamp
 from apps.core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
 
-pytestmark = pytest.mark.critical
-
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     ("last_run_at", "expected"),
