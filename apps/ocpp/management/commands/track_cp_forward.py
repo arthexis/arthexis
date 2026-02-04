@@ -168,7 +168,10 @@ def _write_sample(payload: SamplePayload, output: Path) -> None:
 
 
 def _load_sample(path: Path) -> SamplePayload:
-    data = json.loads(path.read_text(encoding="utf-8") or "{}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8") or "{}")
+    except FileNotFoundError:
+        raise CommandError(f"Baseline file not found: {path}")
     if not isinstance(data, dict):
         raise CommandError("Baseline file is not valid JSON.")
     message = data.get("message")
@@ -180,6 +183,7 @@ def _load_sample(path: Path) -> SamplePayload:
         log_file=data.get("log_file"),
         message=message,
     )
+
 
 
 def _baseline_match(identifier: str, baseline: SamplePayload, limit: int) -> bool:
