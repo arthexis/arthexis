@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterable, NamedTuple
 
 import pytest
 
@@ -27,6 +29,8 @@ wait_for_changes = migration.wait_for_changes
 PREFIX = "[Test Server]"
 PYTEST_DURATIONS_COUNT = 5
 PYTEST_DURATIONS_MIN_SECONDS = 0.0
+SUMMARY_LINE_RE = re.compile(r"=+ (.+?) =+")
+SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
 
 
 @pytest.fixture
@@ -193,7 +197,9 @@ def _migration_merge_required(base_dir: Path) -> bool:
     return False
 
 
-def _run_test_group(base_dir: Path, *, label: str, marker: str) -> bool:
+def _run_test_group(
+    base_dir: Path, *, label: str, marker: str
+) -> tuple[bool, int | None]:
     """Execute a group of pytest tests filtered by markers."""
 
     command = [
@@ -209,7 +215,7 @@ def _run_test_group(base_dir: Path, *, label: str, marker: str) -> bool:
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Running {label} tests:", " ".join(command))
     started_at = time.monotonic()
-    result = subprocess.run(command, cwd=base_dir, env=env)
+    result = _run_command_with_output(command, cwd=base_dir, env=env)
     elapsed = migration._format_elapsed(time.monotonic() - started_at)
     if result.returncode != 0:
         NOTIFY(
@@ -217,10 +223,61 @@ def _run_test_group(base_dir: Path, *, label: str, marker: str) -> bool:
             "Check test server output for pytest details.",
         )
         print(f"{PREFIX} {label} tests failed after {elapsed}.")
-        return False
+        return False, result.failed_count
 
     print(f"{PREFIX} {label} tests completed successfully in {elapsed}.")
-    return True
+    return True, result.failed_count
+
+
+class _TestRunResult(NamedTuple):
+    returncode: int
+    failed_count: int | None
+
+
+def _run_command_with_output(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+) -> _TestRunResult:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+    output_lines: list[str] = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="")
+        output_lines.append(line)
+    returncode = process.wait()
+    failed_count = _extract_failed_count(output_lines)
+    return _TestRunResult(returncode=returncode, failed_count=failed_count)
+
+
+def _extract_failed_count(output_lines: Iterable[str]) -> int | None:
+    summary_text = None
+    for line in output_lines:
+        match = SUMMARY_LINE_RE.search(_strip_ansi(line))
+        if match:
+            summary_text = match.group(1)
+    if not summary_text:
+        return None
+    if " in " in summary_text:
+        summary_text = summary_text.split(" in ", 1)[0]
+    failed_count = 0
+    for count, label in SUMMARY_COUNT_RE.findall(summary_text):
+        if label in {"failed", "error", "errors"}:
+            failed_count += int(count)
+    return failed_count
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub("\x1b\\[[0-9;]*m", "", text)
 
 
 def run_tests(base_dir: Path) -> bool:
@@ -232,10 +289,35 @@ def run_tests(base_dir: Path) -> bool:
         ("integration", "integration"),
         ("slow", "slow"),
     ]
-    return all([
-        _run_test_group(base_dir, label=label, marker=marker)
-        for label, marker in groups
-    ])
+    results: list[tuple[str, bool, int | None]] = []
+    for label, marker in groups:
+        success, failed_count = _run_test_group(
+            base_dir,
+            label=label,
+            marker=marker,
+        )
+        results.append((label, success, failed_count))
+
+    overall_success = all(result[1] for result in results)
+    _report_test_failures(results)
+    return overall_success
+
+
+def _report_test_failures(results: Iterable[tuple[str, bool, int | None]]) -> None:
+    failures_present = False
+    parts = []
+    for label, success, failed_count in results:
+        if failed_count is None:
+            count_display = "unknown"
+        else:
+            count_display = str(failed_count)
+            if failed_count > 0:
+                failures_present = True
+        if not success:
+            failures_present = True
+        parts.append(f"{label}: {count_display} failed")
+    if failures_present:
+        print(f"{PREFIX} WARNING: Test failures summary - {', '.join(parts)}")
 
 
 def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
