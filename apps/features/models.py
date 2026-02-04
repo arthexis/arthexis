@@ -106,8 +106,9 @@ class Feature(Ownable):
             return False
         if not self.node_feature_id:
             return True
-        NodeModel = django_apps.get_model("nodes", "Node")
-        if NodeModel is None:
+        try:
+            NodeModel = django_apps.get_model("nodes", "Node")
+        except LookupError:
             return False
         if node is None:
             node = NodeModel.get_local()

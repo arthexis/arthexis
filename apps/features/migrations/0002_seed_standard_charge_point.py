@@ -34,6 +34,7 @@ def seed_standard_charge_point(apps, schema_editor):
 
     feature_manager = getattr(Feature, "all_objects", Feature._base_manager)
     test_manager = getattr(FeatureTest, "all_objects", FeatureTest._base_manager)
+    application_manager = getattr(Application, "all_objects", Application._base_manager)
 
     for entry in _load_fixture():
         if not isinstance(entry, dict):
@@ -53,7 +54,7 @@ def seed_standard_charge_point(apps, schema_editor):
             if isinstance(main_app, (list, tuple)) and main_app:
                 app_name = str(main_app[0])
                 if app_name:
-                    app_obj, _ = Application.objects.get_or_create(
+                    app_obj, _ = application_manager.get_or_create(
                         name=app_name, defaults={"description": ""}
                     )
 
