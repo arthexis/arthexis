@@ -52,7 +52,6 @@ def _load_app(short_name: str) -> ModuleType:
             f"This may indicate a problem with its discovery or spec."
         )
 
-    sys.modules.setdefault(short_name, module)
     sys.modules.setdefault(f"{__name__}.{short_name}", module)
     globals()[short_name] = module
     return module
