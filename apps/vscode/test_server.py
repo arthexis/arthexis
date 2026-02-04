@@ -232,11 +232,10 @@ def run_tests(base_dir: Path) -> bool:
         ("integration", "integration"),
         ("slow", "slow"),
     ]
-    all_ok = True
-    for label, marker in groups:
-        if not _run_test_group(base_dir, label=label, marker=marker):
-            all_ok = False
-    return all_ok
+    return all([
+        _run_test_group(base_dir, label=label, marker=marker)
+        for label, marker in groups
+    ])
 
 
 def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
