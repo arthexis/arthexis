@@ -1611,17 +1611,5 @@ class StationModelAdmin(EntityModelAdmin):
         ]
         return custom + urls
 
-    def get_changelist_actions(self, request):
-        parent = getattr(super(), "get_changelist_actions", None)
-        actions = []
-        if callable(parent):
-            parent_actions = parent(request)
-            if parent_actions:
-                actions.extend(parent_actions)
-        if "view_in_site" not in actions:
-            actions.append("view_in_site")
-        return actions
-
-    @admin.action(description=_("View in Site"))
-    def view_in_site(self, request, queryset=None):
+    def view_in_site(self, request):
         return HttpResponseRedirect(reverse("ocpp:supported-chargers"))
