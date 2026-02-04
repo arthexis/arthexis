@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import importlib
 
+import pytest
 from django.conf import settings
+
+pytestmark = pytest.mark.critical
 
 
 def _admin_module_names() -> list[str]:
