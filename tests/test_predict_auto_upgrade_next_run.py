@@ -8,8 +8,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.system import upgrade
 from apps.core.system.ui import _format_timestamp
 
-pytestmark = pytest.mark.critical
-
 class DummySchedule:
     def __init__(
         self,
