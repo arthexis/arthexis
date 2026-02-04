@@ -55,7 +55,7 @@ class StationModel(Entity):
         help_text=_("Special instructions in Markdown format."),
     )
     images_bucket = models.ForeignKey(
-        MediaBucket,
+        "media.MediaBucket",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -63,7 +63,7 @@ class StationModel(Entity):
         help_text=_("Media bucket for charger images."),
     )
     documents_bucket = models.ForeignKey(
-        MediaBucket,
+        "media.MediaBucket",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
