@@ -755,6 +755,9 @@ def charger_log_page(request, cid, connector=None):
     )
 
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+
+
 def _station_model_images(bucket):
     if not bucket:
         return []
@@ -762,12 +765,9 @@ def _station_model_images(bucket):
     images = []
     for media_file in files:
         content_type = (media_file.content_type or "").lower()
-        if content_type.startswith("image/"):
-            images.append(media_file)
-            continue
         name = media_file.original_name or ""
         extension = Path(name).suffix.lower()
-        if extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
+        if content_type.startswith("image/") or extension in IMAGE_EXTENSIONS:
             images.append(media_file)
     return images
 
@@ -795,9 +795,24 @@ def supported_charger_detail(request, station_model_id: int):
     instructions_html, _ = rendering.render_markdown_with_toc(
         station_model.instructions_markdown or ""
     )
-    images = _station_model_images(station_model.images_bucket)
-    image_ids = {image.pk for image in images}
-    documents = _station_model_documents(station_model.documents_bucket, image_ids)
+    images_bucket = station_model.images_bucket
+    documents_bucket = station_model.documents_bucket
+    if images_bucket and images_bucket == documents_bucket:
+        files = images_bucket.files.all().order_by("-uploaded_at")
+        images = []
+        documents = []
+        for media_file in files:
+            content_type = (media_file.content_type or "").lower()
+            name = media_file.original_name or ""
+            extension = Path(name).suffix.lower()
+            if content_type.startswith("image/") or extension in IMAGE_EXTENSIONS:
+                images.append(media_file)
+            else:
+                documents.append(media_file)
+    else:
+        images = _station_model_images(images_bucket)
+        image_ids = {image.pk for image in images}
+        documents = _station_model_documents(documents_bucket, image_ids)
     return render(
         request,
         "ocpp/supported_charger_detail.html",
