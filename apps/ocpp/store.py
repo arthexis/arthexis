@@ -1485,6 +1485,14 @@ def _iter_file_lines_reverse(path: Path, *, limit: int | None = None) -> Iterato
                 yield text
 
 
+def iter_file_lines_reverse(
+    path: Path, *, limit: int | None = None
+) -> Iterator[str]:
+    """Yield lines from ``path`` starting with the newest entries."""
+
+    return _iter_file_lines_reverse(path, limit=limit)
+
+
 def _iter_log_entries_for_key(
     cid: str,
     name: str | None,
@@ -1661,6 +1669,16 @@ def get_logs(
     if entries_deque is None:
         return []
     return list(entries_deque)
+
+
+def resolve_log_path(
+    identifier: str, *, log_type: str = "charger"
+) -> Path | None:
+    """Return the log path for an identifier if it exists."""
+
+    resolved, name = _resolve_log_identifier(identifier, log_type)
+    path = _log_file_for_identifier(resolved, name, log_type)
+    return path if path.exists() else None
 
 
 def clear_log(cid: str, log_type: str = "charger") -> None:

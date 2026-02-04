@@ -78,7 +78,7 @@ def build_logging_settings(
                 "filters": ["debug_app_filter"],
             },
             "cp_forwarder_file": {
-                "class": "apps.loggers.handlers.ActiveAppFileHandler",
+                "class": "apps.loggers.handlers.CPForwarderFileHandler",
                 "filename": str(log_dir / "cp_forwarder.log"),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,

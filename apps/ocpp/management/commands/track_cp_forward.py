@@ -60,7 +60,7 @@ def _parse_ocpp_message(raw: str) -> ParsedMessage:
     message_type = None
     message_id = None
     action = None
-    payload_hash = None
+    payload_hash = _hash_payload(normalized)
 
     try:
         parsed = json.loads(normalized)
@@ -69,7 +69,7 @@ def _parse_ocpp_message(raw: str) -> ParsedMessage:
             message_type=None,
             message_id=None,
             action=None,
-            payload_hash=_hash_payload(normalized),
+            payload_hash=payload_hash,
             raw=normalized,
         )
 
@@ -79,7 +79,6 @@ def _parse_ocpp_message(raw: str) -> ParsedMessage:
             message_id = str(parsed[1])
         if message_type == 2 and len(parsed) > 2:
             action = str(parsed[2])
-        payload_hash = _hash_payload(normalized)
 
     return ParsedMessage(
         message_type=message_type,
@@ -108,9 +107,7 @@ def _latest_charger_log_file() -> Path | None:
 
 
 def _resolve_log_path(identifier: str) -> Path | None:
-    resolved, name = store._resolve_log_identifier(identifier, "charger")
-    path = store._log_file_for_identifier(resolved, name, "charger")
-    return path if path.exists() else None
+    return store.resolve_log_path(identifier, log_type="charger")
 
 
 def _build_sample(identifier: str | None) -> SamplePayload:
@@ -125,7 +122,7 @@ def _build_sample(identifier: str | None) -> SamplePayload:
         log_path = _latest_charger_log_file()
         if log_path:
             log_file = str(log_path)
-            entry = next(store._iter_file_lines_reverse(log_path, limit=1), None)
+            entry = next(store.iter_file_lines_reverse(log_path, limit=1), None)
             raw_entry = entry
 
     if raw_entry is None:
