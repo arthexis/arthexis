@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from django.core.validators import MaxValueValidator, MinValueValidator
+
 from .base import *
 
 class StationModelManager(EntityManager):
@@ -40,6 +42,33 @@ class StationModel(Entity):
         max_length=64,
         blank=True,
         help_text=_("Primary connector format supported by this model."),
+    )
+    integration_rating = models.PositiveSmallIntegerField(
+        _("Integration Rating"),
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(5)],
+        help_text=_("Integration quality rating from 0 (unknown) to 5."),
+    )
+    instructions_markdown = models.TextField(
+        blank=True,
+        default="",
+        help_text=_("Special instructions in Markdown format."),
+    )
+    images_bucket = models.ForeignKey(
+        MediaBucket,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="station_model_images",
+        help_text=_("Media bucket for charger images."),
+    )
+    documents_bucket = models.ForeignKey(
+        MediaBucket,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="station_model_documents",
+        help_text=_("Media bucket for manuals and supporting files."),
     )
     notes = models.TextField(
         blank=True,

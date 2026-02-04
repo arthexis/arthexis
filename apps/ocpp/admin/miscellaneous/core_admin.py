@@ -1591,8 +1591,10 @@ class StationModelAdmin(EntityModelAdmin):
         "model_family",
         "model",
         "preferred_ocpp_version",
+        "integration_rating",
         "max_power_kw",
         "max_voltage_v",
     )
     search_fields = ("vendor", "model_family", "model")
-    list_filter = ("preferred_ocpp_version",)
+    list_filter = ("preferred_ocpp_version", "integration_rating")
+    raw_id_fields = ("images_bucket", "documents_bucket")

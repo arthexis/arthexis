@@ -9,6 +9,16 @@ urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path("charging-map/", views.charging_station_map, name="charging-station-map"),
+    path(
+        "charge-point-models/",
+        views.supported_chargers,
+        name="supported-chargers",
+    ),
+    path(
+        "charge-point-models/<int:station_model_id>/",
+        views.supported_charger_detail,
+        name="supported-charger-detail",
+    ),
     path("c/<uuid:slug>/", views.public_connector_page, name="public-connector-page"),
     path(
         "firmware/<int:deployment_id>/<slug:token>/",
