@@ -529,7 +529,17 @@ else
 fi
 
 if [ ! -f .venv/bin/activate ]; then
-    echo "Virtual environment activation script not found at .venv/bin/activate. The .venv directory may be corrupted. Try removing it before rerunning install.sh. On Debian/Ubuntu, you may need to install the 'python3-venv' package." >&2
+    echo "Virtual environment activation script not found at .venv/bin/activate. Attempting to recreate the virtual environment." >&2
+    rm -rf .venv
+    if ! python3 -m venv .venv; then
+        echo "Failed to recreate virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
+        exit 1
+    fi
+    NEW_VENV=true
+fi
+
+if [ ! -f .venv/bin/activate ]; then
+    echo "Virtual environment activation script not found at .venv/bin/activate after recreation. The .venv directory may be corrupted. On Debian/Ubuntu, you may need to install the 'python3-venv' package." >&2
     exit 1
 fi
 
