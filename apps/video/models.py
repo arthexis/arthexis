@@ -302,6 +302,7 @@ class MjpegStream(VideoStream):
         return reverse("video:mjpeg-stream", args=[self.slug])
 
     def get_stream_ws_path(self) -> str:
+        # Keep in sync with websocket_urlpatterns in apps.video.routing.
         return f"/ws/video/{self.slug}/"
 
     def get_webrtc_ws_path(self) -> str:

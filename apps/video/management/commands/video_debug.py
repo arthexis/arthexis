@@ -228,15 +228,10 @@ class Command(BaseCommand):
 
         for stream in streams:
             cached = get_frame(stream)
-            if cached:
-                frame_bytes = cached.frame_bytes
-            else:
+            if not cached:
                 skipped += 1
                 continue
-
-            if not frame_bytes:
-                skipped += 1
-                continue
+            frame_bytes = cached.frame_bytes
 
             try:
                 stream.store_frame_bytes(frame_bytes, update_thumbnail=True)

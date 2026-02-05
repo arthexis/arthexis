@@ -108,6 +108,7 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
 ### 3. Install and upgrade
 - **Linux:**
   - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback) and control Celery with `--celery` or `--no-celery`. Use `./install.sh --help` to see every available option.
+  - WebRTC streaming requires system media libraries (libavcodec, libavformat, libavutil, libvpx, opus) for the `aiortc` dependency.
   - Use [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh) with `--stable` (weekly) or `--latest`/`-l`/`--unstable` (daily) to follow the preferred release cadence.
    - Consult the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
    - Review the [Auto-Upgrade Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
