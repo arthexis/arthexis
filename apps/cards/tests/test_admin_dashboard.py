@@ -13,7 +13,8 @@ class DashboardRFIDAttemptTests(TestCase):
         self.superuser = user_model.objects.create_superuser(
             username="admin",
             email="admin@example.com",
-            password="password",
+            password=None,
+        )
         )
         self.client.force_login(self.superuser)
 
