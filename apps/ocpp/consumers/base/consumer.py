@@ -528,32 +528,32 @@ class CSMSConsumer(
         """Attempt to re-establish a forwarding session for ``charger``."""
 
         if charger is None or not getattr(charger, "pk", None):
-            return None
+            return None, None
 
-        target = getattr(charger, "forwarded_to", None)
-        if target is None and getattr(charger, "forwarded_to_id", None):
-            def _refresh():
-                return (
-                    Charger.objects.select_related("forwarded_to")
-                    .filter(pk=charger.pk)
-                    .first()
-                )
+        def _refresh():
+            return (
+                Charger.objects.select_related("forwarded_to")
+                .filter(pk=charger.pk)
+                .first()
+            )
 
-            refreshed = await database_sync_to_async(_refresh)()
-            target = getattr(refreshed, "forwarded_to", None)
+        refreshed = await database_sync_to_async(_refresh)()
+        if refreshed is None:
+            return None, None
 
+        target = getattr(refreshed, "forwarded_to", None)
         if target is None:
-            return None
+            return None, refreshed
 
         session = await sync_to_async(forwarder.connect_forwarding_session)(
-            charger,
+            refreshed,
             target,
         )
         if session is None:
-            return None
+            return None, refreshed
         session.forwarded_messages = allowed_messages
         session.forwarder_id = forwarder_pk
-        return session
+        return session, refreshed
 
     async def _forward_charge_point_message(self, action: str, raw: str) -> None:
         """Forward an OCPP message to the configured remote node when permitted."""
@@ -592,12 +592,21 @@ class CSMSConsumer(
                 exc,
             )
             forwarder.remove_session(charger.pk)
-            session = await self._reconnect_forwarding_session(
+            session, refreshed = await self._reconnect_forwarding_session(
                 charger,
                 allowed_messages=allowed,
                 forwarder_pk=forwarder_pk,
             )
             if session is None:
+                return
+            context = await self._ensure_forwarding_context(refreshed)
+            if context is None:
+                forwarder.remove_session(charger.pk)
+                return
+            allowed, forwarder_pk = context
+            session.forwarded_messages = allowed
+            session.forwarder_id = forwarder_pk
+            if allowed is not None and action not in allowed:
                 return
             try:
                 await sync_to_async(session.connection.send)(raw)
