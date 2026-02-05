@@ -25,6 +25,20 @@ def admin_user(db):
     )
 
 
+@pytest.fixture
+def video_device(db):
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    return VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+
+
 @pytest.mark.django_db
 def test_take_snapshot_discovers_device_and_redirects(
     admin_client, monkeypatch, tmp_path
@@ -306,6 +320,34 @@ def test_goto_stream_creates_default_stream(admin_user):
     assert response.url == stream.get_admin_url()
     messages = [str(message) for message in request._messages]
     assert any("Created MJPEG stream" in msg for msg in messages)
+
+
+@pytest.mark.django_db
+def test_videodevice_view_on_site_uses_stream(video_device):
+    stream = MjpegStream.objects.create(
+        name="Stream",
+        slug="stream",
+        video_device=video_device,
+        is_active=True,
+    )
+    admin_view = video_admin.VideoDeviceAdmin(VideoDevice, admin.site)
+
+    assert admin_view.get_view_on_site_url(video_device) == stream.get_absolute_url()
+
+
+@pytest.mark.django_db
+def test_videodevice_view_on_site_falls_back_to_gallery(video_device):
+    MjpegStream.objects.create(
+        name="Inactive Stream",
+        slug="inactive-stream",
+        video_device=video_device,
+        is_active=False,
+    )
+    admin_view = video_admin.VideoDeviceAdmin(VideoDevice, admin.site)
+
+    assert admin_view.get_view_on_site_url(video_device) == reverse(
+        "video:camera-gallery"
+    )
 
 
 @pytest.mark.django_db

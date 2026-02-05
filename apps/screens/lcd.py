@@ -195,6 +195,9 @@ class LCDController(Protocol):
 def scan_i2c_addresses() -> list[str]:  # pragma: no cover - requires hardware
     """Return a list of detected I2C addresses using ``i2cdetect``."""
 
+    if not any(p.exists() for p in (Path("/dev/i2c-1"), Path("/dev/i2c/1"))):
+        return []
+
     try:
         output = subprocess.check_output(["i2cdetect", "-y", "1"], text=True)
     except Exception:  # pragma: no cover - depends on environment

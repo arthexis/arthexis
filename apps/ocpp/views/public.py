@@ -11,7 +11,7 @@ from django.utils.translation import gettext as _
 from apps.maps.models import Location
 from apps.docs import rendering
 from apps.locale.models import Language
-from apps.sites.utils import get_request_language_code
+from apps.sites.utils import get_request_language_code, require_site_operator_or_staff
 
 from .common import *  # noqa: F401,F403
 from .common import (
@@ -54,6 +54,9 @@ def _hash_ip(value: str) -> str:
 
 
 def charging_station_map(request):
+    auth_response = require_site_operator_or_staff(request)
+    if auth_response is not None:
+        return auth_response
     location_ids = (
         _visible_chargers(request.user)
         .select_related("location")
@@ -87,6 +90,7 @@ def charging_station_map(request):
             "initial_location": locations[0] if locations else None,
         },
     )
+
 
 def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""

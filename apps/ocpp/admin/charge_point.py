@@ -66,7 +66,6 @@ from ..models import (
     DataTransferMessage,
     MeterValue,
     PowerProjection,
-    RFIDSessionAttempt,
     SecurityEvent,
     Simulator,
     StationModel,

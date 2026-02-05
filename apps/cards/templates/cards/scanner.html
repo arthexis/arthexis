@@ -461,6 +461,7 @@
   let firstReadySource = null;
   let pollActive = false;
   let pollTimer = null;
+  let lastAttemptId = null;
   const historyEntries = tableMode ? new Map() : null;
   let deepReadActive = false;
   let lastDeepDetailsRfid = null;
@@ -904,6 +905,11 @@
       }
       return;
     }
+    if(Object.prototype.hasOwnProperty.call(data, 'attempt_id')){
+      lastAttemptId = data.attempt_id;
+    } else if(Object.prototype.hasOwnProperty.call(data, 'last_id')){
+      lastAttemptId = data.last_id || lastAttemptId;
+    }
     if(!data.rfid){
       if(typeof data.status === 'string' && data.status){
         statusEl.textContent = data.status;
@@ -1076,6 +1082,9 @@
     try {
       const url = new URL(baseScanUrl || '', window.location.origin);
       url.searchParams.set('endianness', getRequestedEndianness());
+      if(lastAttemptId){
+        url.searchParams.set('after', lastAttemptId);
+      }
       return url.toString();
     } catch(err){
       return baseScanUrl;

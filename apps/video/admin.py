@@ -117,6 +117,7 @@ class VideoDeviceAdminForm(forms.ModelForm):
 @admin.register(VideoDevice)
 class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
     form = VideoDeviceAdminForm
+    view_on_site = True
     list_display = (
         "name",
         "slug",
@@ -224,6 +225,17 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         return super().changeform_view(
             request, object_id, form_url=form_url, extra_context=extra_context
         )
+
+    def get_view_on_site_url(self, obj=None):
+        if not obj:
+            return None
+        stream = obj.mjpeg_streams.filter(is_active=True).order_by("pk").first()
+        if stream:
+            return stream.get_absolute_url()
+        try:
+            return reverse("video:camera-gallery")
+        except NoReverseMatch:
+            return None
 
     def find_devices(self, request, queryset=None):
         return self._redirect_admin("video_videodevice_find_devices")

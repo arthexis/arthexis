@@ -121,6 +121,12 @@ def _format_datetime(dt: datetime | None) -> str:
     return date_format(timezone.localtime(dt), "Y-m-d H:i")
 
 
+def format_datetime(dt: datetime | None) -> str:
+    """Return *dt* formatted for UI output."""
+
+    return _format_datetime(dt)
+
+
 def _parse_runserver_port(command_line: str) -> int | None:
     """Extract the HTTP port from a runserver command line."""
 
@@ -580,6 +586,12 @@ def _suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
     return None
 
 
+def suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
+    """Return a downtime window when the lock predates the current boot."""
+
+    return _suite_offline_period(now)
+
+
 def _parse_last_history_line(line: str) -> dict[str, object] | None:
     """Parse a single ``last -x -F`` line for shutdown or reboot entries."""
 
@@ -648,6 +660,12 @@ def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], st
             shutdown_periods.append((start, end if isinstance(end, datetime) else None))
 
     return shutdown_periods, None
+
+
+def load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], str | None]:
+    """Return shutdown periods parsed from ``last -x -F`` output."""
+
+    return _load_shutdown_periods()
 
 
 def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
@@ -820,6 +838,18 @@ def _build_uptime_segments(
         )
 
     return segments
+
+
+def build_uptime_segments(
+    *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
+) -> list[dict[str, object]]:
+    """Return uptime/downtime segments for the given window."""
+
+    return _build_uptime_segments(
+        window_start=window_start,
+        window_end=window_end,
+        shutdown_periods=shutdown_periods,
+    )
 
 
 def _serialize_segments(segments: list[dict[str, object]], *, window_duration: float) -> list[dict[str, object]]:

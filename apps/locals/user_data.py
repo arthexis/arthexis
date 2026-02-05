@@ -33,6 +33,7 @@ from django.http import (
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.functional import LazyObject
+from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _, ngettext
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -151,6 +152,170 @@ def _seed_fixture_path(instance, *, index=None) -> Path | None:
         if match:
             return path
     return None
+
+
+def _seed_zip_dir() -> Path:
+    path = Path(settings.BASE_DIR) / "config" / "seeds"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _seed_zip_paths() -> list[Path]:
+    return sorted(_seed_zip_dir().glob("*.zip"))
+
+
+def _seed_fixture_name(model) -> str:
+    opts = model._meta
+    return f"{opts.app_label}__{opts.model_name}__local_seed.json"
+
+
+def _seed_fixture_text_from_bytes(content: bytes) -> str | None:
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content.decode("latin-1")
+
+
+def _seed_fixture_entries_from_text(text: str) -> list[dict]:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [obj for obj in data if isinstance(obj, dict)]
+
+
+def _seed_fixture_entries_from_bytes(content: bytes) -> list[dict]:
+    text = _seed_fixture_text_from_bytes(content)
+    if text is None:
+        return []
+    return _seed_fixture_entries_from_text(text)
+
+
+def _seed_fixture_has_unapplied_entries(entries: list[dict]) -> bool:
+    pks_by_model: dict[type, list] = {}
+    for obj in entries:
+        if not _fixture_entry_targets_installed_apps(obj):
+            continue
+        label = obj.get("model")
+        pk = obj.get("pk")
+        if not label:
+            continue
+        if pk is None:
+            return True
+        try:
+            model = apps.get_model(label)
+        except LookupError:
+            continue
+        pks_by_model.setdefault(model, []).append(pk)
+
+    for model, pks in pks_by_model.items():
+        try:
+            unique_pks = set(pks)
+        except TypeError:
+            return True
+        manager = getattr(model, "all_objects", model._default_manager)
+        try:
+            existing = manager.filter(pk__in=unique_pks).count()
+        except (ValueError, TypeError):
+            return True
+        if existing < len(unique_pks):
+            return True
+    return False
+
+
+def _seed_data_allowed_models() -> dict[str, tuple[type, admin.ModelAdmin]]:
+    allowed: dict[str, tuple[type, admin.ModelAdmin]] = {}
+    for model, model_admin in _iter_entity_admin_models():
+        if not _supports_seed_datum(model):
+            continue
+        label = f"{model._meta.app_label}.{model._meta.model_name}"
+        allowed[label] = (model, model_admin)
+    return allowed
+
+
+def _seed_fixture_entries_authorized(
+    request, entries: list[dict]
+) -> tuple[bool, str]:
+    allowed = _seed_data_allowed_models()
+    for obj in entries:
+        if not isinstance(obj, dict):
+            return False, _("Seed data fixture contains invalid entries.")
+        label = obj.get("model")
+        if not label or label not in allowed:
+            return (
+                False,
+                _("Seed data fixture targets an unsupported model: %(model)s.")
+                % {"model": label or _("unknown")},
+            )
+        if request.user.is_superuser:
+            continue
+        _, model_admin = allowed[label]
+        if not (
+            model_admin.has_add_permission(request)
+            and model_admin.has_change_permission(request)
+        ):
+            return (
+                False,
+                _("You do not have permission to import seed data for %(model)s.")
+                % {"model": label},
+            )
+    return True, ""
+
+
+def _require_seed_data_permission(request) -> None:
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+
+def load_local_seed_zips(*, verbosity: int = 0, only_paths: list[Path] | None = None) -> int:
+    from apps.core.fixtures import ensure_seed_data_flags
+
+    loaded = 0
+    for zip_path in only_paths or _seed_zip_paths():
+        try:
+            with ZipFile(zip_path) as zf:
+                for name in zf.namelist():
+                    if not name.endswith(".json"):
+                        continue
+                    content_bytes = zf.read(name)
+                    text = _seed_fixture_text_from_bytes(content_bytes)
+                    if text is None:
+                        continue
+                    entries = _seed_fixture_entries_from_text(text)
+                    if not entries:
+                        continue
+                    if not _seed_fixture_has_unapplied_entries(entries):
+                        continue
+                    text = ensure_seed_data_flags(text)
+                    with tempfile.NamedTemporaryFile(
+                        mode="w",
+                        suffix=".json",
+                        delete=False,
+                        encoding="utf-8",
+                    ) as temp_file:
+                        temp_file.write(text)
+                        temp_path = Path(temp_file.name)
+                    try:
+                        call_command(
+                            "loaddata",
+                            str(temp_path),
+                            ignorenonexistent=True,
+                            verbosity=verbosity,
+                        )
+                        loaded += 1
+                    finally:
+                        temp_path.unlink(missing_ok=True)
+        except Exception:
+            logger.exception("Unable to load local seed data from %s", zip_path)
+    return loaded
+
+
+def _seed_datum_is_default(instance, *, index=None) -> bool:
+    if instance is None:
+        return False
+    return _seed_fixture_path(instance, index=index) is not None
 
 
 def _coerce_user(candidate, user_model):
@@ -566,12 +731,8 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        supports_user_datum = issubclass(self.model, Entity) or getattr(
-            self.model, "supports_user_datum", False
-        )
-        supports_seed_datum = issubclass(self.model, Entity) or getattr(
-            self.model, "supports_seed_datum", supports_user_datum
-        )
+        supports_user_datum = _supports_user_datum(self.model)
+        supports_seed_datum = _supports_seed_datum(self.model)
         context["show_user_datum"] = supports_user_datum
         context["show_seed_datum"] = supports_seed_datum
         context["show_save_as_copy"] = (
@@ -579,22 +740,29 @@ class UserDatumAdminMixin(admin.ModelAdmin):
             or getattr(self.model, "supports_save_as_copy", False)
             or hasattr(self.model, "clone")
         )
+        fixture_index = _seed_fixture_index() if supports_seed_datum else None
         if obj is not None:
             context["is_user_datum"] = getattr(obj, "is_user_data", False)
             context["is_seed_datum"] = getattr(obj, "is_seed_data", False)
         else:
             context["is_user_datum"] = False
             context["is_seed_datum"] = False
+        context["seed_datum_editable"] = (
+            supports_seed_datum
+            and (obj is None or not _seed_datum_is_default(obj, index=fixture_index))
+        )
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def get_actions(self, request):
         actions = super().get_actions(request)
-        if not _supports_user_datum(self.model):
-            return actions
-
-        action = self.get_action("toggle_selected_user_data")
-        if action is not None:
-            actions.setdefault("toggle_selected_user_data", action)
+        if _supports_user_datum(self.model):
+            action = self.get_action("toggle_selected_user_data")
+            if action is not None:
+                actions.setdefault("toggle_selected_user_data", action)
+        if _supports_seed_datum(self.model):
+            action = self.get_action("toggle_selected_seed_data")
+            if action is not None:
+                actions.setdefault("toggle_selected_seed_data", action)
         return actions
 
     @admin.action(description=_("Toggle selected User Data"))
@@ -657,6 +825,60 @@ class UserDatumAdminMixin(admin.ModelAdmin):
                 ngettext(
                     "Skipped %(count)d object because user data is not available.",
                     "Skipped %(count)d objects because user data is not available.",
+                    skipped,
+                )
+                % {"count": skipped},
+                level=messages.WARNING,
+            )
+
+    @admin.action(description=_("Toggle selected Seed Data"))
+    def toggle_selected_seed_data(self, request, queryset):
+        if not _supports_seed_datum(self.model):
+            messages.warning(
+                request,
+                _("Seed data is not available for this model."),
+            )
+            return
+
+        manager = getattr(self.model, "all_objects", self.model._default_manager)
+        toggled = 0
+        skipped = 0
+        fixture_index = _seed_fixture_index()
+
+        for obj in queryset:
+            if _seed_datum_is_default(obj, index=fixture_index):
+                skipped += 1
+                continue
+            if getattr(obj, "is_seed_data", False):
+                manager.filter(pk=obj.pk).update(is_seed_data=False)
+                obj.is_seed_data = False
+            else:
+                manager.filter(pk=obj.pk).update(is_seed_data=True)
+                obj.is_seed_data = True
+            toggled += 1
+
+        if toggled:
+            opts = self.model._meta
+            self.message_user(
+                request,
+                ngettext(
+                    "Toggled seed data for %(count)d %(verbose_name)s.",
+                    "Toggled seed data for %(count)d %(verbose_name_plural)s.",
+                    toggled,
+                )
+                % {
+                    "count": toggled,
+                    "verbose_name": opts.verbose_name,
+                    "verbose_name_plural": opts.verbose_name_plural,
+                },
+                level=messages.SUCCESS,
+            )
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d object because it is bundled seed data.",
+                    "Skipped %(count)d objects because they are bundled seed data.",
                     skipped,
                 )
                 % {"count": skipped},
@@ -1101,6 +1323,15 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
                 type(obj).all_objects.filter(pk=obj.pk).update(
                     is_seed_data=obj.is_seed_data, is_user_data=obj.is_user_data
                 )
+        supports_seed_datum = _supports_seed_datum(self.model)
+        if supports_seed_datum:
+            fixture_index = _seed_fixture_index()
+            if not _seed_datum_is_default(obj, index=fixture_index):
+                seed_requested = request.POST.get("_seed_datum") == "on"
+                if getattr(obj, "is_seed_data", False) != seed_requested:
+                    manager = getattr(type(obj), "all_objects", type(obj)._default_manager)
+                    manager.filter(pk=obj.pk).update(is_seed_data=seed_requested)
+                    obj.is_seed_data = seed_requested
         if copied:
             return
         if getattr(self, "_skip_entity_user_datum", False):
@@ -1247,6 +1478,12 @@ def _supports_user_datum(model) -> bool:
     return issubclass(model, Entity) or getattr(model, "supports_user_datum", False)
 
 
+def _supports_seed_datum(model) -> bool:
+    return issubclass(model, Entity) or getattr(
+        model, "supports_seed_datum", _supports_user_datum(model)
+    )
+
+
 def toggle_user_datum(request, app_label, model_name, object_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1322,6 +1559,18 @@ def toggle_user_datum(request, app_label, model_name, object_id):
 
 
 def _seed_data_view(request):
+    _require_seed_data_permission(request)
+    loaded = load_local_seed_zips()
+    if loaded:
+        messages.success(
+            request,
+            ngettext(
+                "Applied %(count)d local seed data fixture.",
+                "Applied %(count)d local seed data fixtures.",
+                loaded,
+            )
+            % {"count": loaded},
+        )
     sections = []
     fixture_index = _seed_fixture_index()
     for model, model_admin in _iter_entity_admin_models():
@@ -1333,8 +1582,11 @@ def _seed_data_view(request):
             url = reverse(
                 f"admin:{obj._meta.app_label}_{obj._meta.model_name}_change",
                 args=[obj.pk],
-            )
+                )
             fixture = _seed_fixture_path(obj, index=fixture_index)
+            fixture_name = (
+                fixture.name if fixture is not None else _seed_fixture_name(model)
+            )
             target_user = _resolve_fixture_user(obj, request.user)
             allow_user_data = _user_allows_user_data(target_user)
             custom = False
@@ -1344,14 +1596,118 @@ def _seed_data_view(request):
                 {
                     "url": url,
                     "label": str(obj),
-                    "fixture": fixture,
+                    "fixture_name": fixture_name,
                     "custom": custom,
                 }
             )
         sections.append({"opts": model._meta, "items": items})
     context = admin.site.each_context(request)
-    context.update({"title": _("Seed Data"), "sections": sections})
+    context.update(
+        {
+            "title": _("Seed Data"),
+            "sections": sections,
+            "seed_data_actions": True,
+            "seed_data_download_url": reverse("admin:seed_data_export"),
+            "seed_data_upload_url": reverse("admin:seed_data_import"),
+            "seed_data_upload_dir": str(Path("config") / "seeds"),
+        }
+    )
     return TemplateResponse(request, "admin/data_list.html", context)
+
+
+def _seed_data_export(request):
+    _require_seed_data_permission(request)
+    buffer = BytesIO()
+    fixture_index = _seed_fixture_index()
+    from apps.core.fixtures import ensure_seed_data_flags
+
+    with ZipFile(buffer, "w") as zf:
+        for model, model_admin in _iter_entity_admin_models():
+            objs = model.objects.filter(is_seed_data=True)
+            if not objs.exists():
+                continue
+            local_ids = [
+                obj.pk
+                for obj in objs
+                if not _seed_datum_is_default(obj, index=fixture_index)
+            ]
+            if not local_ids:
+                continue
+            queryset = model.objects.filter(pk__in=local_ids)
+            payload = serialize(
+                "json",
+                queryset,
+                use_natural_foreign_keys=True,
+            )
+            payload = ensure_seed_data_flags(payload)
+            zf.writestr(_seed_fixture_name(model), payload)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = "attachment; filename=local_seed_data.zip"
+    return response
+
+
+def _seed_data_import(request):
+    _require_seed_data_permission(request)
+    if request.method == "POST" and request.FILES.get("seed_zip"):
+        seed_zip = request.FILES["seed_zip"]
+        target_dir = _seed_zip_dir()
+        try:
+            with ZipFile(seed_zip) as zf:
+                validated = False
+                for name in zf.namelist():
+                    if not name.endswith(".json"):
+                        continue
+                    content_bytes = zf.read(name)
+                    text = _seed_fixture_text_from_bytes(content_bytes)
+                    if text is None:
+                        messages.error(
+                            request, _("Seed data fixture includes unreadable content.")
+                        )
+                        return HttpResponseRedirect(reverse("admin:seed_data"))
+                    entries = _seed_fixture_entries_from_text(text)
+                    if not entries:
+                        continue
+                    authorized, message = _seed_fixture_entries_authorized(
+                        request, entries
+                    )
+                    if not authorized:
+                        messages.error(request, message)
+                        return HttpResponseRedirect(reverse("admin:seed_data"))
+                    validated = True
+            seed_zip.seek(0)
+        except Exception:
+            messages.error(request, _("Invalid seed data ZIP file."))
+            return HttpResponseRedirect(reverse("admin:seed_data"))
+        if not validated:
+            messages.warning(
+                request, _("Seed data ZIP did not include any supported fixtures.")
+            )
+            return HttpResponseRedirect(reverse("admin:seed_data"))
+        filename = get_valid_filename(Path(seed_zip.name).name)
+        if not filename.lower().endswith(".zip"):
+            filename = f"{filename}.zip"
+        target_path = target_dir / filename
+        with target_path.open("wb") as f:
+            for chunk in seed_zip.chunks():
+                f.write(chunk)
+        loaded = load_local_seed_zips(only_paths=[target_path])
+        if loaded:
+            messages.success(
+                request,
+                ngettext(
+                    "Applied %(count)d local seed data fixture.",
+                    "Applied %(count)d local seed data fixtures.",
+                    loaded,
+                )
+                % {"count": loaded},
+            )
+        else:
+            messages.warning(
+                request,
+                _("No missing seed data fixtures were applied."),
+            )
+    return HttpResponseRedirect(reverse("admin:seed_data"))
 
 
 def _user_data_view(request):
@@ -1367,7 +1723,9 @@ def _user_data_view(request):
                 args=[obj.pk],
             )
             fixture = _fixture_path(request.user, obj)
-            items.append({"url": url, "label": str(obj), "fixture": fixture})
+            items.append(
+                {"url": url, "label": str(obj), "fixture_name": fixture.name}
+            )
         sections.append({"opts": model._meta, "items": items})
     fixture_status = _user_fixture_status(request.user)
     context = admin.site.each_context(request)
@@ -1530,6 +1888,16 @@ def patch_admin_user_data_views() -> None:
         custom = [
             path(
                 "seed-data/", admin.site.admin_view(_seed_data_view), name="seed_data"
+            ),
+            path(
+                "seed-data/export/",
+                admin.site.admin_view(_seed_data_export),
+                name="seed_data_export",
+            ),
+            path(
+                "seed-data/import/",
+                admin.site.admin_view(_seed_data_import),
+                name="seed_data_import",
             ),
             path(
                 "user-data/", admin.site.admin_view(_user_data_view), name="user_data"

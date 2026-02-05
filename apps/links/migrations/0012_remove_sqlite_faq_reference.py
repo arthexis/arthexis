@@ -17,20 +17,6 @@ def remove_sqlite_faq_reference(apps, schema_editor):
     ).delete()
 
 
-def restore_sqlite_faq_reference(apps, schema_editor):
-    Reference = apps.get_model("links", "Reference")
-    Reference.objects.get_or_create(
-        value=SQLITE_FAQ_REFERENCE["value"],
-        alt_text=SQLITE_FAQ_REFERENCE["alt_text"],
-        defaults={
-            "method": "link",
-            "include_in_footer": True,
-            "footer_visibility": "public",
-            "is_seed_data": True,
-        },
-    )
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -40,6 +26,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(
             remove_sqlite_faq_reference,
-            restore_sqlite_faq_reference,
+            migrations.RunPython.noop,
         ),
     ]

@@ -17,7 +17,7 @@
         {% endif %}
         {% if show_seed_datum %}
         <label class="seed-datum-flag seed-datum-flag--seed">
-            <input type="checkbox" class="seed-datum-checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
+            <input type="checkbox" class="seed-datum-checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if is_seed_datum %} checked{% endif %}{% if not seed_datum_editable %} disabled{% endif %}>
             <span class="seed-datum-text">{% trans "Seed Datum" %} [ <a href="{% url 'admin:seed_data' %}">{% trans "View" %}</a> ]</span>
         </label>
         {% endif %}

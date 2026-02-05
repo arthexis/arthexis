@@ -4,6 +4,8 @@ import pytest
 
 from apps.docs import rendering
 
+pytestmark = pytest.mark.critical
+
 
 def test_render_plain_text_document_escapes_html():
     html, toc = rendering.render_plain_text_document("<script>alert('xss')</script>")

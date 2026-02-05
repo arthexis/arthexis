@@ -85,6 +85,7 @@ data/
 !ocpp/static/ocpp/net_monitor/pyxel_viewport/data/
 !config/data/
 !config/data/ACRONYMS.txt
+config/seeds/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

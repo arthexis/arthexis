@@ -4,11 +4,15 @@ import logging
 from urllib.parse import urlsplit
 
 from django.conf import settings
-from django.core.exceptions import DisallowedHost
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import DisallowedHost, PermissionDenied
 from django.db import DatabaseError
+from django.db.utils import OperationalError, ProgrammingError
 from django.http.request import split_domain_port
+from django.shortcuts import resolve_url
 from django.urls import path as django_path
 from django.utils.translation import get_language
+
 from apps.celery.utils import celery_feature_enabled
 
 try:  # pragma: no cover - compatibility shim for Django versions without constant
@@ -18,6 +22,8 @@ except ImportError:  # pragma: no cover - fallback when constant is unavailable
 
 
 logger = logging.getLogger(__name__)
+
+SITE_OPERATOR_GROUP_NAME = "Site Operator"
 
 
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
@@ -45,6 +51,26 @@ def landing(label=None):
         return view
 
     return decorator
+
+
+def user_in_site_operator_group(user) -> bool:
+    if not getattr(user, "is_authenticated", False):
+        return False
+    try:
+        return user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
+    except (OperationalError, ProgrammingError):
+        return False
+
+
+def require_site_operator_or_staff(request, *, login_url: str = "pages:login"):
+    user = getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        return redirect_to_login(request.get_full_path(), resolve_url(login_url))
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return None
+    if user_in_site_operator_group(user):
+        return None
+    raise PermissionDenied
 
 
 def cache_original_referer(request) -> None:

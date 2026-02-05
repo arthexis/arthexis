@@ -2,6 +2,7 @@
 
 from apps.repos.models.events import GitHubEvent, RepositoryEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall, GitHubWebhook
+from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
@@ -10,6 +11,7 @@ __all__ = [
     "GitHubApp",
     "GitHubAppInstall",
     "GitHubWebhook",
+    "GitHubToken",
     "GitHubRepository",
     "PackageRepository",
     "RepositoryEvent",

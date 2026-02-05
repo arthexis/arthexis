@@ -41,8 +41,9 @@ class OdooEmployeeAdmin(
     OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
     change_form_template = "django_object_actions/change_form.html"
-    ownable_fieldset = ("Owner", {"fields": ("avatar",)})
+    ownable_fieldset = ("Owner", {"fields": ("user", "group")})
     form = OdooEmployeeAdminForm
+    exclude = ("avatar",)
     list_display = ("owner", "host", "database", "credentials_ok", "verified_on")
     list_filter = ()
     readonly_fields = ("verified_on", "odoo_uid", "name", "email", "partner_id")
@@ -50,7 +51,7 @@ class OdooEmployeeAdmin(
     change_actions = ["verify_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile", "generate_quote_report"]
     fieldsets = (
-        ("Owner", {"fields": ("avatar",)}),
+        ("Owner", {"fields": ("user", "group")}),
         ("Configuration", {"fields": ("host", "database")}),
         ("Credentials", {"fields": ("username", "password")}),
         (

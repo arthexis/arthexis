@@ -109,6 +109,7 @@ def _reset_pending_calls() -> None:
     store._pending_call_handles.clear()
 
 
+@pytest.mark.critical
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_handle_clear_charging_profile_result_updates_profile():

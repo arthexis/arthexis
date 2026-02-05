@@ -76,6 +76,7 @@
   let loggingIn = false;
   let lastValue = null;
   let lastScanAt = 0;
+  let lastAttemptId = null;
   let port = null;
   let reader = null;
   let remotePollTimer = null;
@@ -237,7 +238,11 @@
       return;
     }
     try{
-      const response = await fetch(scanUrl, {
+      const url = new URL(scanUrl, window.location.origin);
+      if(lastAttemptId){
+        url.searchParams.set('after', lastAttemptId);
+      }
+      const response = await fetch(url.toString(), {
         credentials: 'same-origin',
         headers: {
           'Accept': 'application/json',
@@ -265,6 +270,11 @@
         }
         scheduleRemotePoll();
         return;
+      }
+      if(Object.prototype.hasOwnProperty.call(data, 'attempt_id')){
+        lastAttemptId = data.attempt_id;
+      } else if(Object.prototype.hasOwnProperty.call(data, 'last_id')){
+        lastAttemptId = data.last_id || lastAttemptId;
       }
       if(Object.prototype.hasOwnProperty.call(data, 'rfid')){
         if(!remoteConnected){

@@ -8,8 +8,17 @@ from . import access as _access  # noqa: F401
 from . import card as _card  # noqa: F401
 from . import mse as _mse  # noqa: F401
 from . import rfid as _rfid  # noqa: F401
+from . import rfid_attempt as _rfid_attempt  # noqa: F401
 from .card import CardFace, get_cardface_bucket
 from .mse import CardDesign, CardSet
 from .rfid import RFID
+from .rfid_attempt import RFIDAttempt
 
-__all__ = ["CardDesign", "CardFace", "CardSet", "RFID", "get_cardface_bucket"]
+__all__ = [
+    "CardDesign",
+    "CardFace",
+    "CardSet",
+    "RFID",
+    "RFIDAttempt",
+    "get_cardface_bucket",
+]

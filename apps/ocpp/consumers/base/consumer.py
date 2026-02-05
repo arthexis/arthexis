@@ -11,7 +11,7 @@ from django.conf import settings
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
-from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.core.notifications import LcdChannel
 from apps.nodes.models import NetMessage
 from apps.protocols.decorators import protocol_call
@@ -39,7 +39,6 @@ from ...models import (
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
-    RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
     PowerProjection,
@@ -291,7 +290,7 @@ class CSMSConsumer(
         self,
         *,
         rfid: str,
-        status: RFIDSessionAttempt.Status,
+        status: RFIDAttempt.Status,
         account: CustomerAccount | None,
         transaction: Transaction | None = None,
     ) -> None:
@@ -304,12 +303,13 @@ class CSMSConsumer(
         charger = self.charger
 
         def _create_attempt() -> None:
-            RFIDSessionAttempt.objects.create(
-                charger=charger,
-                rfid=normalized,
+            RFIDAttempt.record_attempt(
+                payload={"rfid": normalized},
+                source=RFIDAttempt.Source.OCPP,
                 status=status,
-                account=account,
-                transaction=transaction,
+                charger_id=charger.pk,
+                account_id=account.pk if account else None,
+                transaction_id=transaction.pk if transaction else None,
             )
 
         await database_sync_to_async(_create_attempt)()
@@ -518,6 +518,43 @@ class CSMSConsumer(
 
         await database_sync_to_async(_update)()
 
+    async def _reconnect_forwarding_session(
+        self,
+        charger,
+        *,
+        allowed_messages: tuple[str, ...] | None,
+        forwarder_pk: int | None,
+    ):
+        """Attempt to re-establish a forwarding session for ``charger``."""
+
+        if charger is None or not getattr(charger, "pk", None):
+            return None, None
+
+        def _refresh():
+            return (
+                Charger.objects.select_related("forwarded_to")
+                .filter(pk=charger.pk)
+                .first()
+            )
+
+        refreshed = await database_sync_to_async(_refresh)()
+        if refreshed is None:
+            return None, None
+
+        target = getattr(refreshed, "forwarded_to", None)
+        if target is None:
+            return None, refreshed
+
+        session = await sync_to_async(forwarder.connect_forwarding_session)(
+            refreshed,
+            target,
+        )
+        if session is None:
+            return None, refreshed
+        session.forwarded_messages = allowed_messages
+        session.forwarder_id = forwarder_pk
+        return session, refreshed
+
     async def _forward_charge_point_message(self, action: str, raw: str) -> None:
         """Forward an OCPP message to the configured remote node when permitted."""
 
@@ -548,13 +585,40 @@ class CSMSConsumer(
             await sync_to_async(session.connection.send)(raw)
         except Exception as exc:  # pragma: no cover - network errors
             logger.warning(
-                "Failed to forward %s from charger %s: %s",
+                "Failed to forward %s from charger %s via %s: %s",
                 action,
                 getattr(charger, "charger_id", charger.pk),
+                getattr(session, "url", "unknown"),
                 exc,
             )
             forwarder.remove_session(charger.pk)
-            return
+            session, refreshed = await self._reconnect_forwarding_session(
+                charger,
+                allowed_messages=allowed,
+                forwarder_pk=forwarder_pk,
+            )
+            if session is None:
+                return
+            context = await self._ensure_forwarding_context(refreshed)
+            if context is None:
+                forwarder.remove_session(charger.pk)
+                return
+            allowed, forwarder_pk = context
+            session.forwarded_messages = allowed
+            session.forwarder_id = forwarder_pk
+            if allowed is not None and action not in allowed:
+                return
+            try:
+                await sync_to_async(session.connection.send)(raw)
+            except Exception as retry_exc:
+                logger.warning(
+                    "Failed to forward %s from charger %s after reconnect: %s",
+                    action,
+                    getattr(charger, "charger_id", charger.pk),
+                    retry_exc,
+                )
+                forwarder.remove_session(charger.pk)
+                return
 
         timestamp = timezone.now()
         await self._record_forwarding_activity(
@@ -3321,7 +3385,7 @@ class CSMSConsumer(
                 )
                 await self._record_rfid_attempt(
                     rfid=id_tag or "",
-                    status=RFIDSessionAttempt.Status.ACCEPTED,
+                    status=RFIDAttempt.Status.ACCEPTED,
                     account=account,
                     transaction=tx_obj,
                 )
@@ -3329,7 +3393,7 @@ class CSMSConsumer(
 
             await self._record_rfid_attempt(
                 rfid=id_tag or "",
-                status=RFIDSessionAttempt.Status.REJECTED,
+                status=RFIDAttempt.Status.REJECTED,
                 account=account,
             )
             return {"idTokenInfo": {"status": "Invalid"}}
@@ -3473,7 +3537,7 @@ class CSMSConsumer(
             await self._start_consumption_updates(tx_obj)
             await self._record_rfid_attempt(
                 rfid=id_tag or "",
-                status=RFIDSessionAttempt.Status.ACCEPTED,
+                    status=RFIDAttempt.Status.ACCEPTED,
                 account=account,
                 transaction=tx_obj,
             )
@@ -3483,7 +3547,7 @@ class CSMSConsumer(
             }
         await self._record_rfid_attempt(
             rfid=id_tag or "",
-            status=RFIDSessionAttempt.Status.REJECTED,
+            status=RFIDAttempt.Status.REJECTED,
             account=account,
         )
         return {"idTagInfo": {"status": "Invalid"}}
