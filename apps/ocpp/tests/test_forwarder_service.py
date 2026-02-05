@@ -122,6 +122,7 @@ def test_prune_inactive_sessions_closes_missing(monkeypatch, forwarder_instance)
     stale_connection.close.assert_called_once()
 
 
+@pytest.mark.critical
 @pytest.mark.django_db
 def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
     forwarder = Forwarder()

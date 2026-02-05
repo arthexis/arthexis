@@ -15,8 +15,8 @@ def base_time():
     return timezone.make_aware(datetime(2024, 1, 1, 12, 0, 0))
 
 
+@pytest.mark.critical
 @pytest.mark.django_db
-
 def test_export_transactions_filters_and_serializes_decimals(base_time):
     charger = Charger.objects.create(charger_id="CP-1", connector_id=1, require_rfid=True)
     other = Charger.objects.create(charger_id="CP-2")
