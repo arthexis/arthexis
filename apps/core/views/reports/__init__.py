@@ -9,11 +9,11 @@ from .release_publish import (
 )
 
 __all__ = [
-    "DirtyRepository",
-    "PublishPending",
-    "PUBLISH_STEPS",
     "_append_log",
     "_release_log_name",
     "_resolve_release_log_dir",
+    "DirtyRepository",
+    "PUBLISH_STEPS",
+    "PublishPending",
     "release_progress",
 ]
