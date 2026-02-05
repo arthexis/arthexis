@@ -103,7 +103,7 @@ def test_schedule_pending_samplers(monkeypatch):
     sampler = WebRequestSampler.objects.create(
         slug="schedule",
         label="Schedule",
-        sampling_period_minutes=1,
+        sampling_period_minutes=30,
     )
     executed = []
 
@@ -122,6 +122,6 @@ def test_schedule_pending_samplers(monkeypatch):
     later = now + timedelta(seconds=30)
     rerun = schedule_pending_samplers(now=later)
     assert rerun == []
-    latest = now + timedelta(minutes=2)
+    latest = now + timedelta(minutes=31)
     again = schedule_pending_samplers(now=latest)
     assert again == [sampler.pk]
