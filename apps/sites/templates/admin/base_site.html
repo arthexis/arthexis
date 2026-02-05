@@ -1117,7 +1117,7 @@ body.user-story-open {
     transition: transform 0.25s ease;
 }
 
-.user-story-card .card-header {
+.user-story-card .user-story-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -1126,19 +1126,21 @@ body.user-story-open {
     border-bottom: 1px solid var(--user-story-card-border);
 }
 
-.user-story-card .card-body {
+.user-story-card .user-story-body {
     padding: 1rem 1.25rem 1.5rem;
 }
 
-.user-story-card .card-title {
+.user-story-card .user-story-title {
     margin-bottom: 0.25rem;
 }
 
-.user-story-card .card-subtitle {
+.user-story-card .user-story-subtitle {
     margin-bottom: 0;
+    font-size: 0.85rem;
+    color: var(--user-story-muted);
 }
 
-.user-story-card .btn {
+.user-story-card .user-story-submit {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1154,20 +1156,20 @@ body.user-story-open {
     transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
-.user-story-card .btn:hover,
-.user-story-card .btn:focus-visible {
+.user-story-card .user-story-submit:hover,
+.user-story-card .user-story-submit:focus-visible {
     transform: translateY(-1px);
     box-shadow: 0 1rem 2rem rgba(14, 165, 233, 0.35);
     text-decoration: none;
 }
 
-.user-story-card .btn:disabled {
+.user-story-card .user-story-submit:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     box-shadow: none;
 }
 
-.user-story-card .btn-close {
+.user-story-card .user-story-close {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -1182,18 +1184,18 @@ body.user-story-open {
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.user-story-card .btn-close::before {
+.user-story-card .user-story-close::before {
     content: "\00d7";
     font-size: 1.25rem;
     line-height: 1;
 }
 
-.user-story-card .btn-close:hover,
-.user-story-card .btn-close:focus-visible {
+.user-story-card .user-story-close:hover,
+.user-story-card .user-story-close:focus-visible {
     background-color: var(--user-story-close-hover-bg);
 }
 
-.user-story-card .form-control,
+.user-story-card .user-story-input,
 .user-story-card textarea {
     width: 100%;
     border-radius: 0.5rem;
@@ -1205,12 +1207,12 @@ body.user-story-open {
     resize: vertical;
 }
 
-.user-story-card .form-control::placeholder,
+.user-story-card .user-story-input::placeholder,
 .user-story-card textarea::placeholder {
     color: var(--user-story-muted);
 }
 
-.user-story-card .form-control:focus,
+.user-story-card .user-story-input:focus,
 .user-story-card textarea:focus {
     border-color: #2563eb;
     box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
@@ -1227,24 +1229,11 @@ body.user-story-open {
     cursor: pointer;
 }
 
-.user-story-card .mb-3 {
+.user-story-card .user-story-field {
     margin-bottom: 1rem;
 }
 
-.user-story-card .mt-3 {
-    margin-top: 1rem;
-}
-
-.user-story-card .w-100 {
-    width: 100%;
-}
-
-.user-story-card .py-2 {
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-}
-
-.user-story-card .d-none {
+.user-story-card .is-hidden {
     display: none !important;
 }
 
@@ -1276,20 +1265,16 @@ body.user-story-open {
     color: var(--user-story-muted);
 }
 
-.user-story-card .form-label,
-.user-story-card .form-text,
+.user-story-card .user-story-label,
+.user-story-card .user-story-help,
 .user-story-card .form-check-label {
     display: block;
 }
 
-.user-story-card .form-text {
+.user-story-card .user-story-help {
     color: var(--user-story-muted);
     font-size: 0.85rem;
     margin-top: 0.3rem;
-}
-
-.user-story-card .text-muted {
-    color: var(--user-story-muted) !important;
 }
 
 .user-story-clipboard {
@@ -1338,20 +1323,21 @@ body.user-story-open {
     transition: opacity 0.2s ease;
 }
 
-.user-story-card .alert {
+.user-story-card .user-story-alert {
     margin-bottom: 0;
+    margin-top: 1rem;
     border-radius: 0.75rem;
     border: 1px solid transparent;
     padding: 0.75rem 1rem;
 }
 
-.user-story-card .alert-success {
+.user-story-card .user-story-alert-success {
     background-color: var(--user-story-alert-success-bg);
     border-color: var(--user-story-alert-success-border);
     color: var(--user-story-alert-success-fg);
 }
 
-.user-story-card .alert-danger {
+.user-story-card .user-story-alert-error {
     background-color: var(--user-story-alert-danger-bg);
     border-color: var(--user-story-alert-danger-border);
     color: var(--user-story-alert-danger-fg);
