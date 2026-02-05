@@ -21,7 +21,7 @@ WINDOW_HOURS = 72
 class Command(BaseCommand):
     help = "Summarize suite offline/online periods for the last 72 hours"
 
-    def handle(self, *args, **options):  # type: ignore[override]
+    def handle(self, *args: Any, **options: Any) -> None:
         now = timezone.now()
         window_start = now - timedelta(hours=WINDOW_HOURS)
 
