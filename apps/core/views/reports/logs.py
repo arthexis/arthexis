@@ -60,13 +60,14 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
         "Release log directory %s is not writable: %s", preferred, error
     )
 
-    env_override = os.environ.pop("ARTHEXIS_LOG_DIR", None)
-    fallback = select_log_dir(Path(settings.BASE_DIR))
-    if env_override is not None:
-        if Path(env_override) == fallback:
-            os.environ["ARTHEXIS_LOG_DIR"] = env_override
-        else:
-            os.environ["ARTHEXIS_LOG_DIR"] = str(fallback)
+    with log_dir_lock:
+        env_override = os.environ.pop("ARTHEXIS_LOG_DIR", None)
+        fallback = select_log_dir(Path(settings.BASE_DIR))
+        if env_override is not None:
+            if Path(env_override) == fallback:
+                os.environ["ARTHEXIS_LOG_DIR"] = env_override
+            else:
+                os.environ["ARTHEXIS_LOG_DIR"] = str(fallback)
 
     if fallback == preferred:
         if error:
