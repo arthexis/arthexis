@@ -518,6 +518,43 @@ class CSMSConsumer(
 
         await database_sync_to_async(_update)()
 
+    async def _reconnect_forwarding_session(
+        self,
+        charger,
+        *,
+        allowed_messages: tuple[str, ...] | None,
+        forwarder_pk: int | None,
+    ):
+        """Attempt to re-establish a forwarding session for ``charger``."""
+
+        if charger is None or not getattr(charger, "pk", None):
+            return None
+
+        target = getattr(charger, "forwarded_to", None)
+        if target is None and getattr(charger, "forwarded_to_id", None):
+            def _refresh():
+                return (
+                    Charger.objects.select_related("forwarded_to")
+                    .filter(pk=charger.pk)
+                    .first()
+                )
+
+            refreshed = await database_sync_to_async(_refresh)()
+            target = getattr(refreshed, "forwarded_to", None)
+
+        if target is None:
+            return None
+
+        session = await sync_to_async(forwarder.connect_forwarding_session)(
+            charger,
+            target,
+        )
+        if session is None:
+            return None
+        session.forwarded_messages = allowed_messages
+        session.forwarder_id = forwarder_pk
+        return session
+
     async def _forward_charge_point_message(self, action: str, raw: str) -> None:
         """Forward an OCPP message to the configured remote node when permitted."""
 
@@ -548,13 +585,31 @@ class CSMSConsumer(
             await sync_to_async(session.connection.send)(raw)
         except Exception as exc:  # pragma: no cover - network errors
             logger.warning(
-                "Failed to forward %s from charger %s: %s",
+                "Failed to forward %s from charger %s via %s: %s",
                 action,
                 getattr(charger, "charger_id", charger.pk),
+                getattr(session, "url", "unknown"),
                 exc,
             )
             forwarder.remove_session(charger.pk)
-            return
+            session = await self._reconnect_forwarding_session(
+                charger,
+                allowed_messages=allowed,
+                forwarder_pk=forwarder_pk,
+            )
+            if session is None:
+                return
+            try:
+                await sync_to_async(session.connection.send)(raw)
+            except Exception as retry_exc:
+                logger.warning(
+                    "Failed to forward %s from charger %s after reconnect: %s",
+                    action,
+                    getattr(charger, "charger_id", charger.pk),
+                    retry_exc,
+                )
+                forwarder.remove_session(charger.pk)
+                return
 
         timestamp = timezone.now()
         await self._record_forwarding_activity(
