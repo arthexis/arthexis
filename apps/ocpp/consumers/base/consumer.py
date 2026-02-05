@@ -303,19 +303,13 @@ class CSMSConsumer(
         charger = self.charger
 
         def _create_attempt() -> None:
-            authenticated = None
-            if status == RFIDAttempt.Status.ACCEPTED:
-                authenticated = True
-            elif status == RFIDAttempt.Status.REJECTED:
-                authenticated = False
-            RFIDAttempt.objects.create(
-                charger=charger,
-                rfid=normalized,
-                status=status,
-                authenticated=authenticated,
+            RFIDAttempt.record_attempt(
+                payload={"rfid": normalized},
                 source=RFIDAttempt.Source.OCPP,
-                account=account,
-                transaction=transaction,
+                status=status,
+                charger_id=charger.pk,
+                account_id=account.pk if account else None,
+                transaction_id=transaction.pk if transaction else None,
             )
 
         await database_sync_to_async(_create_attempt)()
