@@ -1,0 +1,85 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ feature.display }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <h1 class="mb-3">{{ feature.display }}</h1>
+      {% if feature.summary %}
+        <p class="text-muted">{{ feature.summary }}</p>
+      {% endif %}
+      {% if feature.admin_requirements or feature.public_requirements or feature.service_requirements %}
+        <div class="vstack gap-3">
+          {% if feature.admin_requirements %}
+            <section>
+              <h2 class="h5">{% trans "Admin requirements" %}</h2>
+              <p class="mb-0">{{ feature.admin_requirements|linebreaksbr }}</p>
+            </section>
+          {% endif %}
+          {% if feature.public_requirements %}
+            <section>
+              <h2 class="h5">{% trans "Public requirements" %}</h2>
+              <p class="mb-0">{{ feature.public_requirements|linebreaksbr }}</p>
+            </section>
+          {% endif %}
+          {% if feature.service_requirements %}
+            <section>
+              <h2 class="h5">{% trans "Service requirements" %}</h2>
+              <p class="mb-0">{{ feature.service_requirements|linebreaksbr }}</p>
+            </section>
+          {% endif %}
+        </div>
+      {% endif %}
+      <hr class="my-4">
+      <h2 class="h5">{% trans "Feature notes" %}</h2>
+      <ul class="list-group list-group-flush">
+        {% for note in notes %}
+          <li class="list-group-item px-0">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+              <div>
+                <div class="fw-semibold">
+                  {{ note.author|default:_("Unknown author") }}
+                </div>
+                <div class="text-muted small">{{ note.updated_at|date:"M j, Y H:i" }}</div>
+              </div>
+            </div>
+            <p class="mb-0 mt-2">{{ note.body|linebreaksbr }}</p>
+          </li>
+        {% empty %}
+          <li class="list-group-item px-0 text-muted">{% trans "No notes yet." %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="col-lg-4">
+      <div class="card reader-sidebar">
+        <div class="card-body">
+          <h4 class="card-title">{% trans "Details" %}</h4>
+          <dl class="row mb-0">
+            <dt class="col-5">{% trans "Slug" %}</dt>
+            <dd class="col-7">{{ feature.slug }}</dd>
+            <dt class="col-5">{% trans "Enabled" %}</dt>
+            <dd class="col-7">
+              {% if feature.is_enabled %}
+                {% trans "Yes" %}
+              {% else %}
+                {% trans "No" %}
+              {% endif %}
+            </dd>
+            {% if feature.main_app %}
+              <dt class="col-5">{% trans "Primary app" %}</dt>
+              <dd class="col-7">{{ feature.main_app }}</dd>
+            {% endif %}
+            {% if feature.node_feature %}
+              <dt class="col-5">{% trans "Node feature" %}</dt>
+              <dd class="col-7">{{ feature.node_feature }}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

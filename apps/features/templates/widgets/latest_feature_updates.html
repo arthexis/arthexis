@@ -1,0 +1,25 @@
+{% load i18n %}
+<div class="module" id="latest-feature-updates-widget">
+  <h2>{% translate "Latest feature updates" %}</h2>
+  <ul class="actionlist latest-feature-updates-list">
+    {% for entry in features %}
+      <li class="latest-feature-updates-item">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <span class="latest-feature-updates-name">{{ entry.feature.display }}</span>
+            <div class="latest-feature-updates-links">
+              <a href="{{ entry.admin_url }}">{% translate "Admin" %}</a>
+              <span aria-hidden="true">·</span>
+              <a href="{{ entry.site_url }}">{% translate "Site" %}</a>
+            </div>
+          </div>
+          <span class="latest-feature-updates-timestamp">
+            {{ entry.updated_at|date:"M j, H:i" }}
+          </span>
+        </div>
+      </li>
+    {% empty %}
+      <li class="quiet">{% translate "No feature updates yet." %}</li>
+    {% endfor %}
+  </ul>
+</div>

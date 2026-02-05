@@ -4,13 +4,20 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
-from .models import Feature, FeatureTest
+from .models import Feature, FeatureNote, FeatureTest
 
 
 class FeatureTestInline(admin.TabularInline):
     model = FeatureTest
     extra = 0
     fields = ("name", "node_id", "is_regression_guard", "notes")
+
+
+class FeatureNoteInline(admin.TabularInline):
+    model = FeatureNote
+    extra = 0
+    fields = ("author", "body", "updated_at")
+    readonly_fields = ("updated_at",)
 
 
 @admin.register(Feature)
@@ -66,4 +73,4 @@ class FeatureAdmin(OwnableAdminMixin, EntityModelAdmin):
             },
         ),
     )
-    inlines = [FeatureTestInline]
+    inlines = [FeatureNoteInline, FeatureTestInline]
