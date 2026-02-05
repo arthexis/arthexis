@@ -220,8 +220,7 @@ class WebRTCSignalingConsumer(AsyncJsonWebsocketConsumer):
             if candidate:
                 if isinstance(candidate, dict):
                     await self.pc.addIceCandidate(RTCIceCandidate(**candidate))
-                else:
-                    await self.pc.addIceCandidate(candidate)
+                    await self.pc.addIceCandidate(RTCIceCandidate(**candidate))
             return
         if message_type == "status":
             status = await database_sync_to_async(get_status)(self.stream)
