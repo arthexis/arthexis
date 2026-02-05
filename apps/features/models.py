@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from django.apps import apps as django_apps
+from django.conf import settings
 from django.db import models
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.models import Ownable
@@ -86,6 +88,8 @@ class Feature(Ownable):
             "Protocol call coverage keyed by protocol slug (e.g. ocpp16, ocpp201, ocpp21)."
         ),
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     objects = FeatureManager()
 
@@ -99,6 +103,9 @@ class Feature(Ownable):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.display
+
+    def get_absolute_url(self):
+        return reverse("features:detail", kwargs={"slug": self.slug})
 
     def is_enabled_for_node(self, node=None) -> bool:
         """Return whether the feature is enabled for the supplied node."""
@@ -158,4 +165,35 @@ class FeatureTest(Entity):
         return f"{self.feature.display}: {self.name}"
 
 
-__all__ = ["Feature", "FeatureTest"]
+class FeatureNote(Entity):
+    """Track developer commentary for a feature over time."""
+
+    feature = models.ForeignKey(
+        Feature,
+        on_delete=models.CASCADE,
+        related_name="notes",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feature_notes",
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-pk"]
+        verbose_name = "Feature note"
+        verbose_name_plural = "Feature notes"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        snippet = (self.body or "").strip()
+        if len(snippet) > 80:
+            snippet = f"{snippet[:77]}..."
+        return f"{self.feature.display}: {snippet}"
+
+
+__all__ = ["Feature", "FeatureNote", "FeatureTest"]
