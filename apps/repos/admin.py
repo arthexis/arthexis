@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.core.admin import OwnableAdminMixin
 from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
@@ -230,7 +231,7 @@ class GitHubAppInstallAdmin(admin.ModelAdmin):
 
 
 @admin.register(GitHubToken)
-class GitHubTokenAdmin(admin.ModelAdmin):
+class GitHubTokenAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = ("owner_display", "label")
     search_fields = ("label", "user__username", "group__name")
     raw_id_fields = ("user", "group")
