@@ -94,7 +94,7 @@ class RedisVideoStreamTrack(VideoStreamTrack):
             _, items = entries[0]
             for entry_id, fields in items:
                 self._last_id = entry_id
-                frame_bytes = fields.get(b"frame") or fields.get("frame")
+                frame_bytes = fields.get(b"frame")
                 if not frame_bytes:
                     continue
                 frame = self._decode_frame(frame_bytes)
