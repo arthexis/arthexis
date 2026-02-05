@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import io
 
 from django.core.management import call_command
+from django.utils import timezone as django_timezone
 
 from apps.core.management.commands import offline_time as offline_time_command
 
@@ -16,13 +17,14 @@ def test_offline_time_command_summarizes_segments(monkeypatch):
     monkeypatch.setattr(offline_time_command.timezone, "now", lambda: now)
     monkeypatch.setattr(
         offline_time_command,
-        "_load_shutdown_periods",
+        "load_shutdown_periods",
         lambda: (downtime_periods, None),
     )
-    monkeypatch.setattr(offline_time_command, "_suite_offline_period", lambda *_: None)
+    monkeypatch.setattr(offline_time_command, "suite_offline_period", lambda *_: None)
 
     stdout = io.StringIO()
-    call_command("offline_time", stdout=stdout)
+    with django_timezone.override("UTC"):
+        call_command("offline_time", stdout=stdout)
     output = stdout.getvalue()
 
     assert "Suite offline/online summary (last 72 hours):" in output
