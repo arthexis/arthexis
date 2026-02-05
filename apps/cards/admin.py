@@ -1,5 +1,5 @@
 from django.contrib import admin, messages
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -223,8 +223,16 @@ class CardSetAdmin(admin.ModelAdmin):
 
 @admin.register(CardDesign)
 class CardDesignAdmin(admin.ModelAdmin):
+    actions = ["upload_set_file"]
     list_display = ("name", "card_set", "sequence", "created_on")
     list_filter = ("card_set",)
     search_fields = ("name", "card_set__name")
     readonly_fields = ("created_on",)
     change_list_template = "admin/cards/carddesign/change_list.html"
+
+    def upload_set_file(self, request, queryset=None):  # pragma: no cover - admin action
+        return HttpResponseRedirect(reverse("admin:cards_cardset_upload"))
+
+    upload_set_file.label = _("Upload Set File")
+    upload_set_file.short_description = _("Upload Set File")
+    upload_set_file.requires_queryset = False
