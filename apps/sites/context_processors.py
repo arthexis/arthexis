@@ -11,6 +11,7 @@ from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from apps.modules.models import Module
+from apps.sites.utils import user_in_site_operator_group
 from .models import SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
@@ -58,6 +59,7 @@ def nav_links(request):
 
     user = getattr(request, "user", None)
     user_is_authenticated = getattr(user, "is_authenticated", False)
+    user_is_staff = getattr(user, "is_staff", False)
     role_id = getattr(role, "id", "none")
     site_id = getattr(site, "id", "none")
 
@@ -92,9 +94,22 @@ def nav_links(request):
     else:
         user_group_names = set()
         user_group_ids = set()
+    is_site_operator = user_in_site_operator_group(user)
     feature_checker = FeatureChecker()
 
+    def _is_charge_points_module(candidate: Module) -> bool:
+        module_path = (candidate.path or "").rstrip("/").lower()
+        if module_path == "/ocpp":
+            return True
+        app_name = getattr(getattr(candidate, "application", None), "name", "")
+        return app_name.lower() == "ocpp"
+
     for module in modules:
+        if _is_charge_points_module(module):
+            if not user_is_authenticated:
+                continue
+            if not (user_is_staff or user_is_superuser or is_site_operator):
+                continue
         if not module.meets_feature_requirements(feature_checker.is_enabled):
             continue
         module_roles = getattr(module, "roles")
