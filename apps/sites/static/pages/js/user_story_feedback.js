@@ -61,11 +61,11 @@
   const resetAlerts = () => {
     if (successAlert) {
       successAlert.textContent = defaultSuccessMessage;
-      successAlert.classList.add('d-none');
+      successAlert.classList.add('is-hidden');
       successAlert.setAttribute('hidden', '');
     }
     if (errorAlert) {
-      errorAlert.classList.add('d-none');
+      errorAlert.classList.add('is-hidden');
       errorAlert.textContent = '';
       errorAlert.setAttribute('hidden', '');
     }
@@ -308,7 +308,7 @@
         setRatingHint();
         if (successAlert) {
           successAlert.textContent = defaultSuccessMessage;
-          successAlert.classList.remove('d-none');
+          successAlert.classList.remove('is-hidden');
           successAlert.removeAttribute('hidden');
         }
       } else {
@@ -324,14 +324,14 @@
         }
         if (errorAlert) {
           errorAlert.textContent = message;
-          errorAlert.classList.remove('d-none');
+          errorAlert.classList.remove('is-hidden');
           errorAlert.removeAttribute('hidden');
         }
       }
     } catch (error) {
       if (errorAlert) {
         errorAlert.textContent = networkErrorMessage || '';
-        errorAlert.classList.remove('d-none');
+        errorAlert.classList.remove('is-hidden');
         errorAlert.removeAttribute('hidden');
       }
     } finally {

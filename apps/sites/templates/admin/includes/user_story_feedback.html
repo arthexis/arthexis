@@ -26,15 +26,15 @@
   aria-labelledby="user-story-title"
   hidden
 >
-  <div class="user-story-card card" tabindex="-1">
-    <div class="card-header d-flex justify-content-between align-items-start">
+  <div class="user-story-card" tabindex="-1">
+    <div class="user-story-header">
       <div>
-        <h5 class="card-title mb-1" id="user-story-title">{% trans 'Please provide feedback!' %}</h5>
-        <p class="card-subtitle text-muted small mb-0">{% trans 'Tell us how this page worked for you.' %}</p>
+        <h5 class="user-story-title" id="user-story-title">{% trans 'Please provide feedback!' %}</h5>
+        <p class="user-story-subtitle">{% trans 'Tell us how this page worked for you.' %}</p>
       </div>
-      <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close></button>
+      <button type="button" class="user-story-close" aria-label="{% trans 'Close' %}" data-feedback-close></button>
     </div>
-    <div class="card-body">
+    <div class="user-story-body">
       <form
         id="user-story-form"
         method="post"
@@ -48,11 +48,11 @@
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
         {% if request.user.is_authenticated %}
-          <div class="mb-3">
-            <label for="user-story-name" class="form-label">{% trans 'Username' %}</label>
+          <div class="user-story-field">
+            <label for="user-story-name" class="user-story-label">{% trans 'Username' %}</label>
             <input
               type="text"
-              class="form-control"
+              class="user-story-input"
               id="user-story-name"
               name="name"
               maxlength="40"
@@ -61,11 +61,11 @@
             >
           </div>
         {% else %}
-          <div class="mb-3">
-            <label for="user-story-name" class="form-label">{% trans 'Email address' %}</label>
+          <div class="user-story-field">
+            <label for="user-story-name" class="user-story-label">{% trans 'Email address' %}</label>
             <input
               type="email"
-              class="form-control"
+              class="user-story-input"
               id="user-story-name"
               name="name"
               maxlength="40"
@@ -74,11 +74,11 @@
               inputmode="email"
               required
             >
-            <div class="form-text">{% trans 'We may contact you via email if your feedback is utilized.' %}</div>
+            <div class="user-story-help">{% trans 'We may contact you via email if your feedback is utilized.' %}</div>
           </div>
         {% endif %}
-        <div class="mb-3">
-          <span class="form-label d-block" id="user-story-rating-group-label">
+        <div class="user-story-field">
+          <span class="user-story-label" id="user-story-rating-group-label">
             {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
               Your experience on {{ link_start }}this page{{ link_end }}
             {% endblocktrans %}
@@ -110,10 +110,10 @@
             </span>
           </div>
         </div>
-        <div class="mb-3">
-          <label for="user-story-comments" class="form-label">{% trans 'Comments' %}</label>
+        <div class="user-story-field">
+          <label for="user-story-comments" class="user-story-label">{% trans 'Comments' %}</label>
           <textarea
-            class="form-control"
+            class="user-story-input user-story-textarea"
             id="user-story-comments"
             name="comments"
             rows="4"
@@ -121,17 +121,17 @@
             placeholder="{% trans 'Share details about your experience (max 400 characters)' %}"
             required
           ></textarea>
-          <div class="form-text">
+          <div class="user-story-help">
             <span id="user-story-char-count">0</span>/400
           </div>
         </div>
-        <button type="submit" class="btn btn-primary w-100 py-2">
+        <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
         </button>
-        <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" role="status" hidden>
+        <div id="user-story-success" class="user-story-alert user-story-alert-success is-hidden" role="status" hidden>
           {% trans 'Thank you! Your feedback has been sent.' %}
         </div>
-        <div id="user-story-error" class="alert alert-danger user-story-alert mt-3 d-none" role="alert" hidden></div>
+        <div id="user-story-error" class="user-story-alert user-story-alert-error is-hidden" role="alert" hidden></div>
       </form>
     </div>
   </div>
