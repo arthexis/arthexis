@@ -6,5 +6,6 @@ import pytest
 from django.conf import settings
 
 def test_reports_module_syntax() -> None:
-    reports_path = Path(settings.BASE_DIR) / "apps/core/views/reports.py"
-    py_compile.compile(str(reports_path), doraise=True)
+    reports_dir = Path(settings.BASE_DIR) / "apps/core/views/reports"
+    for reports_path in reports_dir.glob("*.py"):
+        py_compile.compile(str(reports_path), doraise=True)
