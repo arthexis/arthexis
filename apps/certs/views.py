@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
@@ -28,9 +29,24 @@ def _resolve_default_certificate() -> tuple[Path, str] | None:
 @never_cache
 def trust_certificate(request):
     resolved = _resolve_default_certificate()
+    certificate_path = ""
+    certificate_filename = ""
+    certificate_filesize = 0
+    certificate_modified = None
+    if resolved:
+        path, _domain = resolved
+        stats = path.stat()
+        certificate_path = str(path)
+        certificate_filename = path.name
+        certificate_filesize = stats.st_size
+        certificate_modified = datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc)
     context = {
         "certificate_available": resolved is not None,
         "certificate_domain": resolved[1] if resolved else "",
+        "certificate_path": certificate_path,
+        "certificate_filename": certificate_filename,
+        "certificate_filesize": certificate_filesize,
+        "certificate_modified": certificate_modified,
     }
     return render(request, "certs/trust.html", context)
 
