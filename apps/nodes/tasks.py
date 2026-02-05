@@ -367,6 +367,15 @@ def poll_upstream() -> None:
                 logger.warning("Polling upstream node %s via %s failed: %s", upstream.pk, url, exc)
                 continue
             if response.ok:
+                upstream.last_updated = django_timezone.now()
+                try:
+                    upstream.save(update_fields=["last_updated"])
+                except DatabaseError:
+                    logger.debug(
+                        "Failed to update last_updated for upstream node %s",
+                        upstream.pk,
+                        exc_info=True,
+                    )
                 break
             logger.warning(
                 "Upstream node %s returned status %s", upstream.pk, response.status_code
