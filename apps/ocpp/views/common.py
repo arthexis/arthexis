@@ -464,7 +464,7 @@ def _usage_timeline(
     if now is None:
         now = timezone.now()
     window_end = now
-    window_start = now - timedelta(days=7)
+    window_start = now - timedelta(hours=48)
     local_node = Node.get_local()
     active_delta = _remote_node_active_delta()
 
