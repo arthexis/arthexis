@@ -15,7 +15,6 @@ class DashboardRFIDAttemptTests(TestCase):
             email="admin@example.com",
             password=None,
         )
-        )
         self.client.force_login(self.superuser)
 
     def test_rfid_attempts_model_appears_on_admin_dashboard(self):
