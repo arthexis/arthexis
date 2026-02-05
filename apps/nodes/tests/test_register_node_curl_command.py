@@ -31,3 +31,17 @@ def test_register_node_curl_command_rejects_invalid_scheme():
 
     with pytest.raises(CommandError, match="Upstream base URL must use https"):
         command.handle(upstream="http://example.com", local_base="https://local:8888", token="abc123")
+
+
+def test_register_node_curl_command_rejects_invalid_token():
+    command = _load_command()
+
+    with pytest.raises(
+        CommandError,
+        match="Token must contain only alphanumeric characters, hyphens, or underscores.",
+    ):
+        command.handle(
+            upstream="https://example.com",
+            local_base="https://local:8888",
+            token="bad token!",
+        )

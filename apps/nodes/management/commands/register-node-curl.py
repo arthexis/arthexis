@@ -1,3 +1,4 @@
+import re
 import textwrap
 import uuid
 from urllib.parse import urlsplit, urlunsplit
@@ -7,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 class Command(BaseCommand):
     help = "Generate a curl-based visitor registration script."
+    TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -43,6 +45,10 @@ class Command(BaseCommand):
         )
         local_base = self._normalize_base_url(options["local_base"], label="Local")
         token = options["token"] or uuid.uuid4().hex
+        if not self.TOKEN_PATTERN.match(token):
+            raise CommandError(
+                "Token must contain only alphanumeric characters, hyphens, or underscores."
+            )
 
         script = textwrap.dedent(
             f"""\
