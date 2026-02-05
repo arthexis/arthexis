@@ -33,8 +33,8 @@ class Command(BaseCommand):
         parsed = urlsplit(candidate)
         if not parsed.scheme or not parsed.netloc:
             raise CommandError(f"{label} base URL is invalid: {raw}")
-        if parsed.scheme not in {"https", "http"}:
-            raise CommandError(f"{label} base URL must be http or https: {raw}")
+        if parsed.scheme != "https":
+            raise CommandError(f"{label} base URL must use https: {raw}")
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", "")).rstrip("/")
 
     def handle(self, *args, **options):
