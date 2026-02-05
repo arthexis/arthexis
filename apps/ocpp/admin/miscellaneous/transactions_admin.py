@@ -155,23 +155,3 @@ class MeterValueAdmin(EntityModelAdmin):
     date_hierarchy = "timestamp"
     list_filter = ("charger", MeterValueDateFilter)
 
-
-@admin.register(RFIDAttempt)
-class RFIDAttemptAdmin(EntityModelAdmin):
-    list_display = (
-        "rfid",
-        "status",
-        "source",
-        "charger",
-        "account",
-        "transaction",
-        "attempted_at",
-    )
-    list_filter = ("status", "source")
-    search_fields = (
-        "rfid",
-        "charger__charger_id",
-        "account__name",
-        "transaction__ocpp_id",
-    )
-    readonly_fields = ("attempted_at",)

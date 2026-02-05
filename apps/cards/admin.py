@@ -7,8 +7,9 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm, CardSetUploadForm
-from apps.cards.models import CardDesign, CardFace, CardSet, RFID
+from apps.cards.models import CardDesign, CardFace, CardSet, RFID, RFIDAttempt
 from apps.core.admin import RFIDAdmin
+from apps.locals.user_data import EntityModelAdmin
 
 
 @admin.register(CardFace)
@@ -167,6 +168,27 @@ class CardFaceAdmin(admin.ModelAdmin):
 
 
 admin.site.register(RFID, RFIDAdmin)
+
+
+@admin.register(RFIDAttempt)
+class RFIDAttemptAdmin(EntityModelAdmin):
+    list_display = (
+        "rfid",
+        "status",
+        "source",
+        "charger",
+        "account",
+        "transaction",
+        "attempted_at",
+    )
+    list_filter = ("status", "source")
+    search_fields = (
+        "rfid",
+        "charger__charger_id",
+        "account__name",
+        "transaction__ocpp_id",
+    )
+    readonly_fields = ("attempted_at",)
 
 
 class CardDesignInline(admin.TabularInline):
