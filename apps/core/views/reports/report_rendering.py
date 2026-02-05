@@ -66,5 +66,5 @@ def _sanitize_release_error_message(error: str | None, ctx: dict) -> str | None:
     for key in SENSITIVE_CONTEXT_KEYS:
         value = ctx.get(key)
         if value:
-            sanitized = sanitized.replace(str(value), "[redacted]")
+            sanitized = re.sub(r'\b' + re.escape(str(value)) + r'\b', "[redacted]", sanitized)
     return sanitized
