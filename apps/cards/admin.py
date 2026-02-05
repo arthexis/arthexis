@@ -173,6 +173,7 @@ admin.site.register(RFID, RFIDAdmin)
 @admin.register(RFIDAttempt)
 class RFIDAttemptAdmin(EntityModelAdmin):
     list_display = (
+        "label",
         "rfid",
         "status",
         "source",
