@@ -1676,13 +1676,13 @@ else
       REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
     fi
   else
-    echo "Unable to reach the repository to check for updates." >&2
+    echo "Error: Unable to reach the repository to check for updates." >&2
     if [[ $FORCE_UPGRADE -eq 1 ]]; then
-      echo "Continuing upgrade with local sources because --force was provided." >&2
+      echo "Warning: Continuing upgrade with local sources because --force was provided." >&2
       REMOTE_REVISION="$LOCAL_REVISION"
       REMOTE_VERSION="$LOCAL_VERSION"
     else
-      echo "Re-run upgrade.sh with --local or --force to proceed without remote updates." >&2
+      echo "Info: Re-run upgrade.sh with --local or --force to proceed without remote updates." >&2
       exit 1
     fi
   fi
