@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 class OdooEmployee(Profile):
     """Store Odoo API credentials for a user."""
 
+    owner_required = True
     profile_fields = ("host", "database", "username", "password")
     host = SigilShortAutoField(max_length=255)
     database = SigilShortAutoField(max_length=255)
@@ -99,17 +100,10 @@ class OdooEmployee(Profile):
 
     def clean(self):
         super().clean()
-        errors: dict[str, list[str]] = {}
-        if not self.avatar_id:
-            errors.setdefault("avatar", []).append(
-                _("Select an avatar to own these credentials."),
+        if self.avatar_id:
+            raise ValidationError(
+                {"avatar": _("Avatars cannot own Odoo employee credentials.")},
             )
-        if self.user_id or self.group_id:
-            errors.setdefault("avatar", []).append(
-                _("Assign the profile to an avatar instead of a direct user or group."),
-            )
-        if errors:
-            raise ValidationError(errors)
 
     @property
     def is_verified(self):
@@ -212,14 +206,7 @@ class OdooEmployee(Profile):
         db_table = "core_odooemployee"
         constraints = [
             models.CheckConstraint(
-                condition=(
-                    Q(avatar__isnull=True)
-                    | (
-                        Q(avatar__isnull=False)
-                        & Q(user__isnull=True)
-                        & Q(group__isnull=True)
-                    )
-                ),
-                name="odooemployee_avatar_exclusive",
+                condition=Q(avatar__isnull=True),
+                name="odooemployee_avatar_null",
             )
         ]
