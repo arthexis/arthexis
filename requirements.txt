@@ -94,6 +94,7 @@ tinycss2==1.5.1
 toml==0.10.2
 trio==0.30.0
 trio-websocket==0.12.2
+aiortc==1.9.0
 Twisted==25.5.0
 twine==6.1.0
 txaio==25.9.2

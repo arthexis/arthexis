@@ -6,78 +6,45 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .frame_cache import get_frame, get_status, mjpeg_frame_stream
-from .models import MjpegDependencyError, MjpegDeviceUnavailableError, MjpegStream
+from .models import MjpegStream
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def _is_missing_mjpeg_dependency(exc: Exception) -> bool:
-    return "OpenCV (cv2)" in str(exc)
-
-
 def stream_detail(request, slug):
     stream = get_object_or_404(MjpegStream, slug=slug, is_active=True)
     context = {
         "stream": stream,
-        "stream_url": stream.get_stream_url(),
+        "stream_ws_path": stream.get_stream_ws_path(),
+        "stream_webrtc_ws_path": stream.get_webrtc_ws_path(),
+        "webrtc_ice_servers": settings.VIDEO_WEBRTC_ICE_SERVERS,
     }
     return render(request, "video/stream_detail.html", context)
 
 
-def _build_direct_mjpeg_stream_response(stream: MjpegStream):
-    try:
-        frame_iter = stream.iter_frame_bytes()
-        first_frame = next(frame_iter)
-    except StopIteration:
-        logger.info("No frames available for MJPEG stream %s", stream.slug)
-        return HttpResponse(status=204)
-    except MjpegDependencyError:
-        logger.warning("MJPEG dependencies unavailable for stream %s", stream.slug)
-        return HttpResponse(status=204)
-    except MjpegDeviceUnavailableError:
-        logger.info("MJPEG device unavailable for stream %s", stream.slug)
-        return HttpResponse(status=204)
-    except RuntimeError as exc:
-        if _is_missing_mjpeg_dependency(exc):
-            logger.warning("MJPEG dependencies unavailable for stream %s", stream.slug)
-            return HttpResponse(status=204)
-        logger.exception("Runtime error while starting MJPEG stream %s", stream.slug)
-        return HttpResponse("Unable to start stream.", status=503)
-    except Exception as exc:
-        logger.exception("Unexpected error while starting MJPEG stream %s", stream.slug)
-        return HttpResponse("Unable to start stream.", status=503)
-
-    generator = stream.mjpeg_stream(frame_iter, first_frame=first_frame)
-
-    return StreamingHttpResponse(
-        generator,
-        content_type="multipart/x-mixed-replace; boundary=frame",
-    )
-
-
 def _build_mjpeg_stream_response(stream: MjpegStream):
-    if settings.VIDEO_FRAME_REDIS_URL:
-        cached = get_frame(stream)
-        if cached:
-            generator = mjpeg_frame_stream(stream, first_frame=cached)
-            return StreamingHttpResponse(
-                generator,
-                content_type="multipart/x-mixed-replace; boundary=frame",
-            )
-        logger.info("No cached frames available for MJPEG stream %s", stream.slug)
-        status_payload = get_status(stream)
-        if status_payload and status_payload.get("last_error"):
-            logger.warning(
-                "Camera service error for stream %s: %s",
-                stream.slug,
-                status_payload.get("last_error"),
-            )
-            return HttpResponse("Camera service unavailable.", status=503)
-        logger.info("Falling back to direct MJPEG capture for stream %s", stream.slug)
+    if not settings.VIDEO_FRAME_REDIS_URL:
+        logger.warning("Camera service unavailable for stream %s", stream.slug)
+        return HttpResponse("Camera service unavailable.", status=503)
 
-    return _build_direct_mjpeg_stream_response(stream)
+    cached = get_frame(stream)
+    if cached:
+        generator = mjpeg_frame_stream(stream, first_frame=cached)
+        return StreamingHttpResponse(
+            generator,
+            content_type="multipart/x-mixed-replace; boundary=frame",
+        )
+    logger.info("No cached frames available for MJPEG stream %s", stream.slug)
+    status_payload = get_status(stream)
+    if status_payload and status_payload.get("last_error"):
+        logger.warning(
+            "Camera service error for stream %s: %s",
+            stream.slug,
+            status_payload.get("last_error"),
+        )
+    return HttpResponse("Camera service unavailable.", status=503)
 
 
 def mjpeg_stream(request, slug):
@@ -146,48 +113,27 @@ def _format_timestamp(value):
 
 
 def _build_mjpeg_probe_response(stream: MjpegStream):
-    if settings.VIDEO_FRAME_REDIS_URL:
-        cached = get_frame(stream)
-        if cached:
-            try:
-                stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
-            except Exception:
-                logger.exception("Unable to store cached MJPEG frame for %s", stream.slug)
-                return HttpResponse("Unable to store frame.", status=503)
-            return HttpResponse(status=204)
-        logger.info("No cached frames available for probe %s", stream.slug)
-        status_payload = get_status(stream)
-        if status_payload and status_payload.get("last_error"):
-            logger.warning(
-                "Camera service error for probe %s: %s",
-                stream.slug,
-                status_payload.get("last_error"),
-            )
+    if not settings.VIDEO_FRAME_REDIS_URL:
+        logger.warning("Camera service unavailable for probe %s", stream.slug)
         return HttpResponse("Camera service unavailable.", status=503)
 
-    try:
-        frame_bytes = stream.capture_frame_bytes()
-    except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError) as exc:
-        if isinstance(exc, MjpegDependencyError) or _is_missing_mjpeg_dependency(exc):
-            logger.warning("MJPEG dependencies unavailable for probe %s", stream.slug)
-            return HttpResponse(status=204)
-        if isinstance(exc, MjpegDeviceUnavailableError):
-            logger.info("MJPEG device unavailable for probe %s", stream.slug)
-            return HttpResponse(status=204)
-        logger.exception("Runtime error while capturing MJPEG frame for %s", stream.slug)
-        return HttpResponse("Unable to capture frame.", status=503)
-    except Exception:
-        logger.exception("Unexpected error while capturing MJPEG frame for %s", stream.slug)
-        return HttpResponse("Unable to capture frame.", status=503)
-
-    if frame_bytes:
+    cached = get_frame(stream)
+    if cached:
         try:
-            stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
+            stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
         except Exception:
-            logger.exception("Unable to store MJPEG frame for %s", stream.slug)
+            logger.exception("Unable to store cached MJPEG frame for %s", stream.slug)
             return HttpResponse("Unable to store frame.", status=503)
-
-    return HttpResponse(status=204)
+        return HttpResponse(status=204)
+    logger.info("No cached frames available for probe %s", stream.slug)
+    status_payload = get_status(stream)
+    if status_payload and status_payload.get("last_error"):
+        logger.warning(
+            "Camera service error for probe %s: %s",
+            stream.slug,
+            status_payload.get("last_error"),
+        )
+    return HttpResponse("Camera service unavailable.", status=503)
 
 
 def camera_gallery(request):

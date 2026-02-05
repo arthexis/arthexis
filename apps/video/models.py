@@ -301,6 +301,12 @@ class MjpegStream(VideoStream):
     def get_stream_url(self) -> str:
         return reverse("video:mjpeg-stream", args=[self.slug])
 
+    def get_stream_ws_path(self) -> str:
+        return f"/ws/video/{self.slug}/"
+
+    def get_webrtc_ws_path(self) -> str:
+        return f"/ws/video/{self.slug}/webrtc/"
+
     @staticmethod
     def _resolve_sample_path(sample: ContentSample) -> Path:
         file_path = Path(sample.path)

@@ -17,9 +17,8 @@ from apps.core.admin.mixins import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
+from .frame_cache import get_frame
 from .models import (
-    MjpegDependencyError,
-    MjpegDeviceUnavailableError,
     MjpegStream,
     VideoDevice,
     VideoRecording,
@@ -643,21 +642,12 @@ class MjpegStreamAdmin(EntityModelAdmin):
         failed = 0
 
         for stream in queryset:
-            try:
-                frame_bytes = stream.capture_frame_bytes()
-            except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError):
-                failed += 1
-                continue
-            except Exception:
-                failed += 1
-                continue
-
-            if not frame_bytes:
+            cached = get_frame(stream)
+            if not cached or not cached.frame_bytes:
                 skipped += 1
                 continue
-
             try:
-                stream.store_frame_bytes(frame_bytes, update_thumbnail=True)
+                stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
             except Exception:
                 failed += 1
                 continue

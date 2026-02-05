@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import contextlib
+import json
 import importlib.util
 import ipaddress
 import os
@@ -605,6 +606,16 @@ VIDEO_FRAME_CACHE_TTL = int(os.environ.get("VIDEO_FRAME_CACHE_TTL", "10") or 10)
 VIDEO_FRAME_MAX_AGE_SECONDS = int(
     os.environ.get("VIDEO_FRAME_MAX_AGE_SECONDS", "15") or 15
 )
+VIDEO_FRAME_STREAM_BUFFER_SECONDS = int(
+    os.environ.get("VIDEO_FRAME_STREAM_BUFFER_SECONDS", "300") or 300
+)
+VIDEO_WEBRTC_ICE_SERVERS = []
+_webrtc_ice_payload = os.environ.get("VIDEO_WEBRTC_ICE_SERVERS", "").strip()
+if _webrtc_ice_payload:
+    try:
+        VIDEO_WEBRTC_ICE_SERVERS = json.loads(_webrtc_ice_payload)
+    except (TypeError, ValueError):
+        VIDEO_WEBRTC_ICE_SERVERS = []
 VIDEO_FRAME_CAPTURE_INTERVAL = float(
     os.environ.get("VIDEO_FRAME_CAPTURE_INTERVAL", "0.2") or 0.2
 )
