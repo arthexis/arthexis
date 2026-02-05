@@ -334,7 +334,11 @@ def capture_node_screenshot(
 
 @shared_task
 def poll_upstream() -> None:
-    """Poll upstream nodes for queued NetMessages."""
+    """
+    Poll configured upstream nodes for queued NetMessage payloads and import any valid messages.
+    
+    This task constructs an authenticated request identifying the local node, sends it to each upstream node configured with relation UPSTREAM, and on successful responses updates the upstream's last_updated timestamp. Responses are expected to contain a JSON object with a `messages` list; each message must include a `payload` object and a `signature`. For each message the upstream's stored public key is used to verify the signature; verified payloads are handed to NetMessage.receive_payload for processing. The task skips polling when the local node is not available, lacks the celery-queue feature, or cannot sign requests, and it ignores upstream entries that lack a valid public key or return invalid/unsigned data.
+    """
 
     local = Node.get_local()
     if not local or not local.has_feature("celery-queue"):

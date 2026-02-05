@@ -58,9 +58,27 @@ def test_poll_upstream_updates_last_updated_on_success(monkeypatch):
 
         @staticmethod
         def json():
+            """
+            Provide a JSON-serializable response body for the dummy HTTP response.
+            
+            Returns:
+                dict: A dictionary with a single key `"messages"` mapped to an empty list.
+            """
             return {"messages": []}
 
     def fake_post(url, data, headers, timeout):
+        """
+        Mock replacement for requests.post used in the test that validates the outgoing request payload and headers.
+        
+        Parameters:
+            url (str): The URL the request would be sent to.
+            data (str): JSON-encoded request body; must include a "requester" field equal to str(local_node.uuid).
+            headers (dict): Request headers; must include the "X-Signature" header.
+            timeout (float|int): Request timeout value (unused by the mock).
+        
+        Returns:
+            DummyResponse: A dummy response object representing a successful upstream response.
+        """
         payload = json.loads(data)
         assert payload["requester"] == str(local_node.uuid)
         assert "X-Signature" in headers
