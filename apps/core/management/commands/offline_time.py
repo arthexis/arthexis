@@ -80,5 +80,4 @@ class Command(BaseCommand):
             )
 
         if error:
-            self.stdout.write("")
-            self.stdout.write(f"Warning: {error}")
+            self.stderr.write(self.style.WARNING(f"Warning: {error}"))
