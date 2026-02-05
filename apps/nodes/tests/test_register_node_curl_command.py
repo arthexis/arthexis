@@ -29,5 +29,5 @@ def test_register_node_curl_command_outputs_script():
 def test_register_node_curl_command_rejects_invalid_scheme():
     command = _load_command()
 
-    with pytest.raises(CommandError, match="Upstream base URL must be http or https"):
-        command.handle(upstream="ftp://example.com", local_base="https://local:8888", token="abc123")
+    with pytest.raises(CommandError, match="Upstream base URL must use https"):
+        command.handle(upstream="http://example.com", local_base="https://local:8888", token="abc123")
