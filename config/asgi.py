@@ -23,11 +23,13 @@ django_asgi_app = get_asgi_application()
 import apps.ocpp.routing
 import apps.nodes.routing
 import apps.sites.routing
+import apps.video.routing
 
 websocket_patterns = [
     *apps.sites.routing.websocket_urlpatterns,
     *apps.nodes.routing.websocket_urlpatterns,
     *apps.ocpp.routing.websocket_urlpatterns,
+    *apps.video.routing.websocket_urlpatterns,
 ]
 
 application = ProtocolTypeRouter(

@@ -25,117 +25,162 @@
       </div>
       <div
         class="ratio ratio-16x9 bg-dark rounded shadow-sm d-flex align-items-center justify-content-center overflow-hidden"
-        data-mjpeg-probe-url="{% url 'video:mjpeg-probe' stream.slug %}"
+        data-stream-ws-path="{{ stream_ws_path }}"
+        data-stream-webrtc-ws-path="{{ stream_webrtc_ws_path }}"
       >
+        <video
+          class="w-100 h-100 object-fit-cover"
+          playsinline
+          autoplay
+          muted
+          controls
+          hidden
+        ></video>
         <img
-          src="{{ stream_url }}"
           class="img-fluid w-100 h-100 object-fit-cover"
           alt="{% trans 'Live video stream' %}"
-          data-stream-url="{{ stream_url }}"
-        >
+          hidden
+        />
       </div>
       <p class="mt-3 text-muted">
-        {% trans "This stream serves Motion JPEG frames directly from the configured device." %}
+        {% trans "This stream uses WebRTC with a Redis-backed WebSocket fallback for reliable playback." %}
       </p>
     </div>
   </div>
 </div>
+{{ webrtc_ice_servers|json_script:"webrtc-ice-servers" }}
 <script>
   (() => {
-    const container = document.querySelector("[data-mjpeg-probe-url]");
+    const container = document.querySelector("[data-stream-ws-path]");
     if (!container) {
       return;
     }
-    const probeUrl = container.dataset.mjpegProbeUrl;
-    const streamImage = container.querySelector("img");
-    const streamUrl = streamImage?.dataset.streamUrl || streamImage?.getAttribute("src");
-    let probeTimer = null;
-    let retryTimer = null;
-    let retryDelay = 3000;
-    const maxRetryDelay = 30000;
-    const initialRetryDelay = 3000;
+    const wsPath = container.dataset.streamWsPath;
+    const webrtcPath = container.dataset.streamWebrtcWsPath;
+    const video = container.querySelector("video");
+    const image = container.querySelector("img");
+    const iceServers = (() => {
+      const node = document.getElementById("webrtc-ice-servers");
+      if (!node) {
+        return [];
+      }
+      try {
+        return JSON.parse(node.textContent);
+      } catch (error) {
+        console.error("Unable to parse ICE servers:", error);
+        return [];
+      }
+    })();
 
-    const sendProbe = () => {
-      if (!probeUrl) {
+    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+    const buildWsUrl = (path) => `${wsScheme}://${window.location.host}${path}`;
+
+    const showVideo = () => {
+      if (video) {
+        video.hidden = false;
+      }
+      if (image) {
+        image.hidden = true;
+      }
+    };
+
+    const showImage = () => {
+      if (video) {
+        video.hidden = true;
+      }
+      if (image) {
+        image.hidden = false;
+      }
+    };
+
+    let websocketStarted = false;
+    const startWebsocketStream = () => {
+      if (websocketStarted) {
         return;
       }
-      fetch(probeUrl, { cache: "no-store" }).catch((error) => {
-        console.error("MJPEG probe request failed:", error);
-      });
-    };
-
-    const startProbing = () => {
-      if (probeTimer) {
+      websocketStarted = true;
+      if (!wsPath || !image) {
         return;
       }
-      sendProbe();
-      probeTimer = window.setInterval(sendProbe, 6000);
-    };
-
-    const stopProbing = () => {
-      if (!probeTimer) {
-        return;
-      }
-      window.clearInterval(probeTimer);
-      probeTimer = null;
-    };
-
-    const stopRetry = () => {
-      if (!retryTimer) {
-        return;
-      }
-      window.clearTimeout(retryTimer);
-      retryTimer = null;
-    };
-
-    const refreshStream = () => {
-      if (!streamImage || !streamUrl) {
-        return;
-      }
-      const separator = streamUrl.includes("?") ? "&" : "?";
-      streamImage.src = `${streamUrl}${separator}reload=${Date.now()}`;
-    };
-
-    const scheduleRetry = (delay = 3000) => {
-      if (retryTimer) {
-        return;
-      }
-      retryTimer = window.setTimeout(() => {
-        retryTimer = null;
-        refreshStream();
-      }, delay);
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        startProbing();
-        refreshStream();
-      } else {
-        stopProbing();
-        stopRetry();
-      }
-    };
-
-    if (streamImage) {
-      streamImage.addEventListener("error", () => {
-        if (document.visibilityState !== "visible") {
-          return;
+      const ws = new WebSocket(buildWsUrl(wsPath));
+      ws.binaryType = "arraybuffer";
+      let lastUrl = null;
+      ws.addEventListener("message", (event) => {
+        const blob = new Blob([event.data], { type: "image/jpeg" });
+        const objectUrl = URL.createObjectURL(blob);
+        if (lastUrl) {
+          URL.revokeObjectURL(lastUrl);
         }
-        scheduleRetry(retryDelay);
-        retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
-        startProbing();
+        lastUrl = objectUrl;
+        image.src = objectUrl;
       });
-      streamImage.addEventListener("load", () => {
-        stopRetry();
-        retryDelay = initialRetryDelay;
+      ws.addEventListener("open", showImage);
+      ws.addEventListener("close", () => {
+        if (lastUrl) {
+          URL.revokeObjectURL(lastUrl);
+        }
       });
-    }
+    };
 
-    handleVisibility();
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("beforeunload", () => {
-      stopRetry();
-      stopProbing();
+    const startWebrtcStream = async () => {
+      if (!webrtcPath || !window.RTCPeerConnection || !video) {
+        return false;
+      }
+      const ws = new WebSocket(buildWsUrl(webrtcPath));
+      const pc = new RTCPeerConnection({ iceServers });
+      pc.addEventListener("track", (event) => {
+        showVideo();
+        if (video.srcObject !== event.streams[0]) {
+          video.srcObject = event.streams[0];
+        }
+      });
+      pc.addEventListener("icecandidate", (event) => {
+        if (event.candidate) {
+          ws.send(JSON.stringify({ type: "candidate", candidate: event.candidate }));
+        }
+      });
+      pc.addEventListener("connectionstatechange", () => {
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+          startWebsocketStream();
+        }
+      });
+
+      ws.addEventListener("message", async (event) => {
+        const payload = JSON.parse(event.data || "{}");
+        if (payload.type === "answer") {
+          await pc.setRemoteDescription({ type: "answer", sdp: payload.sdp });
+        }
+        if (payload.type === "candidate" && payload.candidate) {
+          await pc.addIceCandidate(payload.candidate);
+        }
+      });
+
+      ws.addEventListener("open", async () => {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
+      });
+
+      ws.addEventListener("close", () => {
+        pc.close();
+        if (video.srcObject) {
+          video.srcObject = null;
+        }
+        startWebsocketStream();
+      });
+
+      ws.addEventListener("error", () => {
+        pc.close();
+        startWebsocketStream();
+      });
+
+      return true;
+    };
+
+    startWebrtcStream().then((started) => {
+      if (!started) {
+        startWebsocketStream();
+      }
     });
   })();
 </script>

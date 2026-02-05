@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.video.frame_cache import get_frame
-from apps.video.models import (
-    MjpegDependencyError,
-    MjpegDeviceUnavailableError,
-    MjpegStream,
-    VideoDevice,
-)
+from apps.video.models import MjpegStream, VideoDevice
 from apps.video.utils import has_rpi_camera_stack
 
 
@@ -237,17 +231,8 @@ class Command(BaseCommand):
             if cached:
                 frame_bytes = cached.frame_bytes
             else:
-                if settings.VIDEO_FRAME_REDIS_URL:
-                    skipped += 1
-                    continue
-                try:
-                    frame_bytes = stream.capture_frame_bytes()
-                except (MjpegDependencyError, MjpegDeviceUnavailableError, RuntimeError):
-                    failed += 1
-                    continue
-                except Exception:  # pragma: no cover - best-effort diagnostics
-                    failed += 1
-                    continue
+                skipped += 1
+                continue
 
             if not frame_bytes:
                 skipped += 1

@@ -12,6 +12,7 @@ from django.urls import reverse
 from apps.content.models import ContentSample
 from apps.nodes.models import Node, NodeFeature
 from apps.video import admin as video_admin
+from apps.video.frame_cache import CachedFrame
 from apps.video.models import MjpegStream, VideoDevice, VideoSnapshot, YoutubeChannel
 
 
@@ -267,18 +268,17 @@ def test_mjpeg_stream_action_captures_snapshot(admin_client, monkeypatch):
         is_active=True,
     )
 
-    captured = {"frame": 0, "store": 0}
+    captured = {"store": 0}
 
-    def fake_capture(self):
-        captured["frame"] += 1
-        return b"frame"
+    def fake_get_frame(_stream):
+        return CachedFrame(frame_bytes=b"frame", frame_id=1, captured_at=None)
 
     def fake_store(self, frame_bytes, *, update_thumbnail=True):
         assert frame_bytes == b"frame"
         assert update_thumbnail is True
         captured["store"] += 1
 
-    monkeypatch.setattr(MjpegStream, "capture_frame_bytes", fake_capture)
+    monkeypatch.setattr("apps.video.admin.get_frame", fake_get_frame)
     monkeypatch.setattr(MjpegStream, "store_frame_bytes", fake_store)
 
     response = admin_client.post(
@@ -290,7 +290,6 @@ def test_mjpeg_stream_action_captures_snapshot(admin_client, monkeypatch):
     messages = [str(message) for message in get_messages(response.wsgi_request)]
     assert any("Captured snapshots for 1 stream" in msg for msg in messages)
     assert response.status_code == 200
-    assert captured["frame"] == 1
     assert captured["store"] == 1
 
 

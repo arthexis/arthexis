@@ -42,8 +42,16 @@ def _frame_cache_poll_interval() -> float:
     return float(getattr(settings, "VIDEO_FRAME_POLL_INTERVAL", 0.2) or 0.2)
 
 
+def _frame_capture_interval() -> float:
+    return float(getattr(settings, "VIDEO_FRAME_CAPTURE_INTERVAL", 0.2) or 0.2)
+
+
 def _frame_cache_prefix() -> str:
     return str(getattr(settings, "VIDEO_FRAME_CACHE_PREFIX", "video:mjpeg"))
+
+
+def _frame_stream_buffer_seconds() -> int:
+    return int(getattr(settings, "VIDEO_FRAME_STREAM_BUFFER_SECONDS", 300) or 300)
 
 
 def get_frame_cache() -> Redis | None:
@@ -70,6 +78,10 @@ def _cache_key(stream: MjpegStream, suffix: str) -> str:
     return f"{_frame_cache_prefix()}:{stream.slug}:{suffix}"
 
 
+def _stream_key(stream: MjpegStream) -> str:
+    return _cache_key(stream, "stream")
+
+
 def store_frame(stream: MjpegStream, frame_bytes: bytes) -> CachedFrame | None:
     client = get_frame_cache()
     if not client:
@@ -79,12 +91,26 @@ def store_frame(stream: MjpegStream, frame_bytes: bytes) -> CachedFrame | None:
     frame_key = _cache_key(stream, "frame")
     ts_key = _cache_key(stream, "captured_at")
     id_key = _cache_key(stream, "frame_id")
+    stream_key = _stream_key(stream)
+    buffer_seconds = _frame_stream_buffer_seconds()
+    capture_interval = max(_frame_capture_interval(), 0.01)
     try:
         pipeline = client.pipeline()
         pipeline.incr(id_key)
         pipeline.set(frame_key, frame_bytes, ex=ttl)
         pipeline.set(ts_key, captured_at.isoformat(), ex=ttl)
         pipeline.expire(id_key, ttl)
+        maxlen = int(buffer_seconds / capture_interval) + 1
+        pipeline.xadd(
+            stream_key,
+            {
+                "frame": frame_bytes,
+                "captured_at": captured_at.isoformat(),
+            },
+            maxlen=maxlen,
+            approximate=True,
+        )
+        pipeline.expire(stream_key, buffer_seconds)
         results = pipeline.execute()
     except RedisError as exc:  # pragma: no cover - runtime dependency
         logger.warning("Unable to store MJPEG frame for %s: %s", stream.slug, exc)
