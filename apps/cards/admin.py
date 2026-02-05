@@ -185,6 +185,8 @@ class RFIDAttemptAdmin(EntityModelAdmin):
     list_filter = ("status", "source")
     search_fields = (
         "rfid",
+        "label__label_id",
+        "label__rfid",
         "charger__charger_id",
         "account__name",
         "transaction__ocpp_id",
