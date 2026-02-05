@@ -222,7 +222,7 @@ class ChargePointSimulator:
                     {
                         "chargePointVendor": "SimVendor",
                         "chargePointModel": "Simulator",
-                        "serialNumber": cfg.serial_number,
+                        "chargePointSerialNumber": cfg.serial_number,
                     },
                 )
 
@@ -566,7 +566,7 @@ class ChargePointSimulator:
                     {
                         "chargePointModel": "Simulator",
                         "chargePointVendor": "SimVendor",
-                        "serialNumber": cfg.serial_number,
+                        "chargePointSerialNumber": cfg.serial_number,
                     },
                 ]
             )

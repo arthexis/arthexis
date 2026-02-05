@@ -313,7 +313,7 @@ async def simulate_cp(
                     {
                         "chargePointModel": "Simulator",
                         "chargePointVendor": "SimVendor",
-                        "serialNumber": self.serial_number,
+                        "chargePointSerialNumber": self.serial_number,
                     },
                 ],
             )
