@@ -613,9 +613,11 @@ VIDEO_WEBRTC_ICE_SERVERS = []
 _webrtc_ice_payload = os.environ.get("VIDEO_WEBRTC_ICE_SERVERS", "").strip()
 if _webrtc_ice_payload:
     try:
-        VIDEO_WEBRTC_ICE_SERVERS = json.loads(_webrtc_ice_payload)
+        parsed = json.loads(_webrtc_ice_payload)
     except (TypeError, ValueError):
         VIDEO_WEBRTC_ICE_SERVERS = []
+    else:
+        VIDEO_WEBRTC_ICE_SERVERS = parsed if isinstance(parsed, list) else []
 VIDEO_FRAME_CAPTURE_INTERVAL = float(
     os.environ.get("VIDEO_FRAME_CAPTURE_INTERVAL", "0.2") or 0.2
 )

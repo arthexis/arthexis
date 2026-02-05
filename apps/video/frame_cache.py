@@ -92,7 +92,7 @@ def store_frame(stream: MjpegStream, frame_bytes: bytes) -> CachedFrame | None:
     ts_key = _cache_key(stream, "captured_at")
     id_key = _cache_key(stream, "frame_id")
     stream_key = _stream_key(stream)
-    buffer_seconds = _frame_stream_buffer_seconds()
+    buffer_seconds = max(_frame_stream_buffer_seconds(), 1)
     capture_interval = max(_frame_capture_interval(), 0.01)
     try:
         pipeline = client.pipeline()
@@ -100,7 +100,7 @@ def store_frame(stream: MjpegStream, frame_bytes: bytes) -> CachedFrame | None:
         pipeline.set(frame_key, frame_bytes, ex=ttl)
         pipeline.set(ts_key, captured_at.isoformat(), ex=ttl)
         pipeline.expire(id_key, ttl)
-        maxlen = int(buffer_seconds / capture_interval) + 1
+        maxlen = max(int(buffer_seconds / capture_interval) + 1, 1)
         pipeline.xadd(
             stream_key,
             {

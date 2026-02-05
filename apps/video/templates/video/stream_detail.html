@@ -94,6 +94,8 @@
     };
 
     let websocketStarted = false;
+    let websocketReconnectDelay = 1000;
+    const maxWebsocketReconnectDelay = 30000;
     const startWebsocketStream = () => {
       if (websocketStarted) {
         return;
@@ -102,9 +104,24 @@
       if (!wsPath || !image) {
         return;
       }
+      let lastUrl = null;
       const ws = new WebSocket(buildWsUrl(wsPath));
       ws.binaryType = "arraybuffer";
-      let lastUrl = null;
+      const cleanup = () => {
+        if (lastUrl) {
+          URL.revokeObjectURL(lastUrl);
+          lastUrl = null;
+        }
+      };
+      const scheduleReconnect = () => {
+        cleanup();
+        websocketStarted = false;
+        setTimeout(startWebsocketStream, websocketReconnectDelay);
+        websocketReconnectDelay = Math.min(
+          websocketReconnectDelay * 2,
+          maxWebsocketReconnectDelay
+        );
+      };
       ws.addEventListener("message", (event) => {
         const blob = new Blob([event.data], { type: "image/jpeg" });
         const objectUrl = URL.createObjectURL(blob);
@@ -114,11 +131,14 @@
         lastUrl = objectUrl;
         image.src = objectUrl;
       });
-      ws.addEventListener("open", showImage);
-      ws.addEventListener("close", () => {
-        if (lastUrl) {
-          URL.revokeObjectURL(lastUrl);
-        }
+      ws.addEventListener("open", () => {
+        websocketReconnectDelay = 1000;
+        showImage();
+      });
+      ws.addEventListener("close", scheduleReconnect);
+      ws.addEventListener("error", (event) => {
+        console.error("WebSocket error:", event);
+        ws.close();
       });
     };
 

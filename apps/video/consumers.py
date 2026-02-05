@@ -5,21 +5,20 @@ import contextlib
 import logging
 from typing import Any
 
-import av
-import cv2  # type: ignore
-import numpy as np  # type: ignore
-from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
 from aiortc.mediastreams import VideoStreamTrack
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer, AsyncWebsocketConsumer
 from django.conf import settings
-from redis.asyncio import Redis
+from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
 from .frame_cache import get_frame, get_status
 from .models import MjpegStream
 
 logger = logging.getLogger(__name__)
+
+_REDIS_POOL: ConnectionPool | None = None
+_REDIS_POOL_URL: str | None = None
 
 
 @database_sync_to_async
@@ -37,6 +36,24 @@ def _stream_key(slug: str) -> str:
 
 def _redis_url() -> str:
     return getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip()
+
+
+def _redis_pool() -> ConnectionPool | None:
+    url = _redis_url()
+    if not url:
+        return None
+    global _REDIS_POOL, _REDIS_POOL_URL
+    if _REDIS_POOL is None or _REDIS_POOL_URL != url:
+        _REDIS_POOL = ConnectionPool.from_url(url, decode_responses=False)
+        _REDIS_POOL_URL = url
+    return _REDIS_POOL
+
+
+def _redis_client() -> Redis | None:
+    pool = _redis_pool()
+    if not pool:
+        return None
+    return Redis(connection_pool=pool)
 
 
 def _parse_query_string(scope: dict[str, Any]) -> dict[str, str]:
@@ -71,7 +88,7 @@ class RedisVideoStreamTrack(VideoStreamTrack):
         super().__init__()
         self._slug = slug
         self._stream_key = _stream_key(slug)
-        self._redis = Redis.from_url(_redis_url(), decode_responses=False)
+        self._redis = _redis_client() or Redis.from_url(_redis_url(), decode_responses=False)
         self._last_id = start_id
         self._closed = False
 
@@ -104,6 +121,10 @@ class RedisVideoStreamTrack(VideoStreamTrack):
                 return frame
 
     def _decode_frame(self, frame_bytes: bytes) -> av.VideoFrame | None:
+        import av
+        import cv2  # type: ignore
+        import numpy as np  # type: ignore
+
         try:
             data = np.frombuffer(frame_bytes, dtype=np.uint8)
             image = cv2.imdecode(data, cv2.IMREAD_COLOR)
@@ -117,7 +138,6 @@ class RedisVideoStreamTrack(VideoStreamTrack):
 
     async def stop(self) -> None:
         self._closed = True
-        await self._redis.close()
         await super().stop()
 
 
@@ -139,7 +159,7 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
         self.stream = stream
         self.start_id = _resolve_start_id(self.scope)
         await self.accept()
-        self.redis = Redis.from_url(_redis_url(), decode_responses=False)
+        self.redis = _redis_client() or Redis.from_url(_redis_url(), decode_responses=False)
         self.stream_task = asyncio.create_task(self._stream_frames())
 
     async def disconnect(self, code: int) -> None:
@@ -147,8 +167,6 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
             self.stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self.stream_task
-        if hasattr(self, "redis"):
-            await self.redis.close()
 
     async def _stream_frames(self) -> None:
         if self.start_id == "$":
@@ -173,7 +191,7 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
             _, items = entries[0]
             for entry_id, fields in items:
                 last_id = entry_id
-                frame_bytes = fields.get(b"frame") or fields.get("frame")
+                frame_bytes = fields.get(b"frame")
                 if not frame_bytes:
                     continue
                 await self.send(bytes_data=frame_bytes)
@@ -196,7 +214,10 @@ class WebRTCSignalingConsumer(AsyncJsonWebsocketConsumer):
         self.slug = slug
         self.stream = stream
         self.start_id = _resolve_start_id(self.scope)
-        self.pc = RTCPeerConnection()
+        from aiortc import RTCPeerConnection
+
+        ice_servers = getattr(settings, "VIDEO_WEBRTC_ICE_SERVERS", [])
+        self.pc = RTCPeerConnection({"iceServers": ice_servers})
         self.pc.addTrack(RedisVideoStreamTrack(slug, start_id=self.start_id))
         await self.accept()
 
@@ -207,6 +228,8 @@ class WebRTCSignalingConsumer(AsyncJsonWebsocketConsumer):
     async def receive_json(self, content: dict[str, Any], **kwargs: Any) -> None:
         message_type = content.get("type")
         if message_type == "offer":
+            from aiortc import RTCSessionDescription
+
             offer = RTCSessionDescription(sdp=content.get("sdp", ""), type="offer")
             await self.pc.setRemoteDescription(offer)
             answer = await self.pc.createAnswer()
@@ -217,10 +240,10 @@ class WebRTCSignalingConsumer(AsyncJsonWebsocketConsumer):
             return
         if message_type == "candidate":
             candidate = content.get("candidate")
-            if candidate:
-                if isinstance(candidate, dict):
-                    await self.pc.addIceCandidate(RTCIceCandidate(**candidate))
-                    await self.pc.addIceCandidate(RTCIceCandidate(**candidate))
+            if isinstance(candidate, dict):
+                from aiortc import RTCIceCandidate
+
+                await self.pc.addIceCandidate(RTCIceCandidate(**candidate))
             return
         if message_type == "status":
             status = await database_sync_to_async(get_status)(self.stream)
