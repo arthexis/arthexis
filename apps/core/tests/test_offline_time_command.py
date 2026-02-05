@@ -28,4 +28,6 @@ def test_offline_time_command_summarizes_segments(monkeypatch):
     assert "Suite offline/online summary (last 72 hours):" in output
     assert "Online: 66h30m0s" in output
     assert "Offline: 5h30m0s" in output
-    assert "Offline:" in output
+    assert "Timeline:" in output
+    assert "- Offline: 2024-01-02 00:00 -> 2024-01-02 02:00" in output
+    assert "- Offline: 2024-01-03 06:00 -> 2024-01-03 09:30" in output
