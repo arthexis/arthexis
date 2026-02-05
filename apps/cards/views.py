@@ -2,6 +2,7 @@ import json
 import logging
 from collections.abc import Mapping
 
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -11,7 +12,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.utils import ensure_feature_enabled
-from apps.sites.utils import landing
+from apps.sites.utils import landing, require_site_operator_or_staff, user_in_site_operator_group
 from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
 
@@ -50,27 +51,27 @@ def scan_next(request):
     """Return the next scanned RFID tag or validate a client-provided value."""
 
     node = Node.get_local()
-    role_name = node.role.name if node and node.role else ""
-    allow_anonymous_read = role_name == "Control"
     ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")
     camera_feature_enabled = _feature_enabled("video-cam")
     prefer_camera = request.GET.get("source") == "camera"
     camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
 
-    if (
-        request.method != "POST"
-        and not request.user.is_authenticated
-        and not allow_anonymous_read
+    user = request.user
+    wants_json = _request_wants_json(request) or request.method == "POST"
+    if not user.is_authenticated:
+        if wants_json:
+            return JsonResponse({"error": "Authentication required"}, status=401)
+        return redirect_to_login(request.get_full_path(), reverse("pages:login"))
+    if not (
+        user.is_staff
+        or user.is_superuser
+        or user_in_site_operator_group(user)
     ):
-        if _request_wants_json(request):
-            return JsonResponse({"error": "Authentication required"}, status=401)
-        return redirect_to_login(
-            request.get_full_path(), reverse("pages:login")
-        )
+        if wants_json:
+            return JsonResponse({"error": "Permission denied"}, status=403)
+        raise PermissionDenied
     if request.method == "POST":
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -228,14 +229,11 @@ def scan_deep(_request):
 def reader(request):
     """Public page to scan RFID tags."""
     node = Node.get_local()
-    role_name = node.role.name if node and node.role else ""
-    allow_anonymous = role_name == "Control"
     ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
 
-    if not request.user.is_authenticated and not allow_anonymous:
-        return redirect_to_login(
-            request.get_full_path(), reverse("pages:login")
-        )
+    auth_response = require_site_operator_or_staff(request)
+    if auth_response is not None:
+        return auth_response
 
     table_mode, toggle_url, toggle_label = build_mode_toggle(request)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")

@@ -8,6 +8,7 @@ from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
 
 from .common import *  # noqa: F401,F403
+from apps.sites.utils import require_site_operator_or_staff
 from ..evcs import _start_simulator, _stop_simulator, parse_repeat
 
 REPEAT_TRUE_STRINGS = {
@@ -21,10 +22,12 @@ REPEAT_TRUE_STRINGS = {
 }
 
 
-@login_required(login_url="pages:login")
 @landing("Charge Point Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
+    auth_response = require_site_operator_or_staff(request)
+    if auth_response is not None:
+        return auth_response
 
     ws_scheme = resolve_ws_scheme(request=request)
 
