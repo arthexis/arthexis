@@ -10,6 +10,7 @@ from django_object_actions import DjangoObjectActions
 from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
+from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
@@ -226,3 +227,14 @@ class GitHubAppInstallAdmin(admin.ModelAdmin):
     list_filter = ("target_type", "repository_selection")
     search_fields = ("=installation_id", "account_login")
     raw_id_fields = ("app",)
+
+
+@admin.register(GitHubToken)
+class GitHubTokenAdmin(admin.ModelAdmin):
+    list_display = ("owner_display", "label")
+    search_fields = ("label", "user__username", "group__name")
+    raw_id_fields = ("user", "group")
+
+    @admin.display(description=_("Owner"))
+    def owner_display(self, obj):
+        return obj.owner_display()

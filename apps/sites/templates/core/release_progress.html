@@ -183,23 +183,31 @@
       </li>
     {% endfor %}
     </ol>
-    {% if github_credentials_missing and not done %}
+    {% if (github_credentials_missing or github_token_using_stored) and not done %}
     <div class="token-card">
+      {% if github_token_using_stored %}
+      <h2>🔑 {% trans "GitHub token" %}</h2>
+      <p>
+        {% trans "Using your stored token," %}
+        <a href="{{ github_token_edit_url }}">{% trans "click here to edit." %}</a>
+      </p>
+      {% else %}
       <h2>🔑 {% trans "GitHub token required" %}</h2>
       {% if github_token_required %}
-      <p>{% trans "Publishing paused. Enter a GitHub token to continue. The token is used for this publish session and is not stored in the database." %}</p>
+      <p>{% trans "Publishing paused. Enter a GitHub token to continue. The token is used for this publish session unless you choose to store it." %}</p>
       {% else %}
-      <p>{% trans "Enter a GitHub token before starting the publish. The token is used for this publish session and is not stored in the database." %}</p>
+      <p>{% trans "Enter a GitHub token before starting the publish. The token is used for this publish session unless you choose to store it." %}</p>
       {% endif %}
       <form method="post">
         {% csrf_token %}
         <input type="password" name="github_token" autocomplete="off" placeholder="{% trans 'GitHub token' %}" aria-label="{% trans 'GitHub token' %}">
-        {% if github_token_required %}
-        <button type="submit" name="set_github_token" value="1">🔁 {% trans "Retry with token" %}</button>
-        {% else %}
-        <button type="submit" name="set_github_token" value="1">🔑 {% trans "Save token" %}</button>
-        {% endif %}
+        <button type="submit" name="set_github_token" value="1">🔑 {% trans "Use Token" %}</button>
+        <label class="checkbox">
+          <input type="checkbox" name="store_github_token" value="1">
+          {% trans "Store token for my account" %}
+        </label>
       </form>
+      {% endif %}
     </div>
     {% endif %}
     {% if paused and started and not done and not error %}
