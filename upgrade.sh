@@ -1681,6 +1681,7 @@ else
       echo "Warning: Continuing upgrade with local sources because --force was provided." >&2
       REMOTE_REVISION="$LOCAL_REVISION"
       REMOTE_VERSION="$LOCAL_VERSION"
+      LOCAL_ONLY=1
     else
       echo "Info: Re-run upgrade.sh with --local or --force to proceed without remote updates." >&2
       exit 1
