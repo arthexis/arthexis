@@ -61,6 +61,11 @@
           {% render_widgets 'sidebar' %}
         </noscript>
       </div>
+      <p>
+        <a href="{% url 'admin:widgets_widget_changelist' %}">
+          {% translate "Configure Widgets" %}
+        </a>
+      </p>
   </div>
 </div>
 {% endblock %}
