@@ -68,8 +68,9 @@ def test_poll_upstream_updates_last_updated_on_success(monkeypatch):
 
     monkeypatch.setattr("apps.nodes.tasks.requests.post", fake_post)
 
-    before = timezone.now()
+    expected_timestamp = upstream_node.last_updated + timezone.timedelta(seconds=1)
+    monkeypatch.setattr("apps.nodes.tasks.django_timezone.now", lambda: expected_timestamp)
     poll_upstream()
     upstream_node.refresh_from_db()
 
-    assert upstream_node.last_updated >= before
+    assert upstream_node.last_updated == expected_timestamp
