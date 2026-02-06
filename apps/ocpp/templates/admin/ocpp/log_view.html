@@ -3,6 +3,8 @@
 
 {% block title %}{{ title }}{% endblock %}
 
+{% block content_title %}{{ title }}{% endblock %}
+
 {% block breadcrumbs %}
 {% if has_permission %}
 <div class="breadcrumbs">
@@ -19,7 +21,6 @@
 
 {% block content %}
 <div id="content-main">
-  <h1>{{ title }}</h1>
   {% if log_file %}
   <p class="help">{% trans 'Log file' %}: <code>{{ log_file }}</code></p>
   {% endif %}
@@ -54,7 +55,7 @@
 {{ block.super }}
 <style>
   #log.log-output {
-    max-height: calc(1em * 40);
+    max-height: calc(1em * 20);
     overflow-y: auto;
     overflow-x: auto;
   }
@@ -99,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (allowedLimits.includes(limit)) {
       return limit;
     }
-    return allowedLimits.includes(initialLimit) ? initialLimit : '40';
+    return allowedLimits.includes(initialLimit) ? initialLimit : '20';
   }
   function updateLimitDisplay(limit) {
     logEl.style.maxHeight = 'calc(1em * ' + limit + ')';
@@ -150,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (checkbox) {
     checkbox.addEventListener('change', function () {
       if (this.checked) {
-        reloadTimer = setInterval(fetchLog, 3000);
+        reloadTimer = setInterval(fetchLog, 15000);
       } else if (reloadTimer) {
         clearInterval(reloadTimer);
         reloadTimer = null;
