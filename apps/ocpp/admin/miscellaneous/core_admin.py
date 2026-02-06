@@ -1,4 +1,5 @@
 from ..common_imports import *
+from ..cp_forwarder import CPForwarderForm
 from ...models import (
     CustomerInformationRequest,
     CustomerInformationChunk,
@@ -1365,57 +1366,6 @@ class ChargerLogRequestAdmin(EntityModelAdmin):
         "location",
     )
     date_hierarchy = "requested_at"
-
-
-class CPForwarderForm(forms.ModelForm):
-    forwarded_messages = forms.MultipleChoiceField(
-        label=_("Forwarded messages"),
-        choices=[
-            (message, message)
-            for message in CPForwarder.available_forwarded_messages()
-        ],
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-        help_text=_(
-            "Choose which OCPP messages should be forwarded. Only charge points "
-            "with Export transactions enabled are eligible."
-        ),
-    )
-    forwarded_calls = forms.MultipleChoiceField(
-        label=_("Forwarded calls"),
-        choices=[
-            (action, action)
-            for action in CPForwarder.available_forwarded_calls()
-        ],
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-        help_text=_(
-            "Choose which CSMS actions should be accepted from the remote node."
-        ),
-    )
-
-    class Meta:
-        model = CPForwarder
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        initial = CPForwarder.available_forwarded_messages()
-        if self.instance and self.instance.pk:
-            initial = self.instance.get_forwarded_messages()
-        self.fields["forwarded_messages"].initial = initial
-        call_initial = CPForwarder.available_forwarded_calls()
-        if self.instance and self.instance.pk:
-            call_initial = self.instance.get_forwarded_calls()
-        self.fields["forwarded_calls"].initial = call_initial
-
-    def clean_forwarded_messages(self):
-        selected = self.cleaned_data.get("forwarded_messages") or []
-        return CPForwarder.sanitize_forwarded_messages(selected)
-
-    def clean_forwarded_calls(self):
-        selected = self.cleaned_data.get("forwarded_calls") or []
-        return CPForwarder.sanitize_forwarded_calls(selected)
 
 
 @admin.register(CPForwarder)

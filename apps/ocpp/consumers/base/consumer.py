@@ -721,9 +721,10 @@ class CSMSConsumer(
         session = forwarder.get_session(charger.pk)
         if session is None or not session.is_connected:
             return
-        if message_id not in session.pending_call_ids:
-            return
-        session.pending_call_ids.discard(message_id)
+        with session._pending_lock:
+            if message_id not in session.pending_call_ids:
+                return
+            session.pending_call_ids.discard(message_id)
         try:
             await sync_to_async(session.connection.send)(
                 self._wrap_forwarding_payload(

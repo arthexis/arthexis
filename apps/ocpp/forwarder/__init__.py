@@ -138,7 +138,13 @@ class Forwarder:
                 self.remove_session(pk)
 
     def connect_forwarding_session(
-        self, charger, target_node, *, timeout: float = 5.0
+        self,
+        charger,
+        target_node,
+        *,
+        timeout: float = 5.0,
+        forwarded_messages: tuple[str, ...] | None = None,
+        forwarded_calls: tuple[str, ...] | None = None,
     ) -> ForwardingSession | None:
         """Establish a websocket forwarding session for ``charger``.
 
@@ -171,6 +177,8 @@ class Forwarder:
                 connection=connection,
                 connected_at=timezone.now(),
                 last_activity=timezone.now(),
+                forwarded_messages=forwarded_messages,
+                forwarded_calls=forwarded_calls,
             )
             with self._sync_lock:
                 self._sessions[charger.pk] = session
@@ -239,6 +247,7 @@ class Forwarder:
     def _listen_forwarding_session(self, charger_pk: int) -> None:
         """Listen for incoming commands from the remote node."""
 
+        # Local imports avoid circular dependencies with the consumer/store modules.
         from asgiref.sync import async_to_sync
         import json
 
@@ -302,7 +311,11 @@ class Forwarder:
                 try:
                     session.connection.send(error)
                 except Exception as exc:  # pragma: no cover - network errors
-                    logger.warning("Failed to send error to forwarding peer for charger %s: %s", charger_pk, exc)
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
                 continue
 
             charger = Charger.objects.filter(pk=charger_pk).first()
@@ -320,8 +333,12 @@ class Forwarder:
                 )
                 try:
                     session.connection.send(error)
-                except Exception:  # pragma: no cover - network errors
-                    pass
+                except Exception as exc:  # pragma: no cover - network errors
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
                 continue
             ws = store.get_connection(charger.charger_id, charger.connector_id)
             if ws is None:
@@ -336,8 +353,12 @@ class Forwarder:
                 )
                 try:
                     session.connection.send(error)
-                except Exception:  # pragma: no cover - network errors
-                    pass
+                except Exception as exc:  # pragma: no cover - network errors
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
                 continue
 
             log_key = store.identity_key(charger.charger_id, charger.connector_id)
@@ -373,11 +394,16 @@ class Forwarder:
                 )
                 try:
                     session.connection.send(error)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
                 continue
 
-            session.pending_call_ids.add(message_id)
+            with session._pending_lock:
+                session.pending_call_ids.add(message_id)
 
     def ensure_keepalive_task(self, *, idle_seconds: int = 60) -> None:
         """Ensure the keepalive loop runs in the current asyncio process."""
@@ -493,7 +519,16 @@ class Forwarder:
                     continue
                 self.remove_session(charger.pk)
 
-            session = self.connect_forwarding_session(charger, target)
+            session = self.connect_forwarding_session(
+                charger,
+                target,
+                forwarded_messages=(
+                    tuple(forwarder.get_forwarded_messages()) if forwarder else None
+                ),
+                forwarded_calls=(
+                    tuple(forwarder.get_forwarded_calls()) if forwarder else None
+                ),
+            )
             if session is None:
                 logger.warning(
                     "Unable to establish forwarding websocket for charger %s",
