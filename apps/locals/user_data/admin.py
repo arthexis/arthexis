@@ -360,17 +360,25 @@ class ImportExportAdminMixin:
                                     "Imported data contains objects of an unexpected model type."
                                 )
                             )
-                        if not can_add:
-                            pk = deserialized_object.object.pk
-                            if pk is None or not self.model._default_manager.filter(
-                                pk=pk
-                            ).exists():
-                                raise ValidationError(
-                                    _(
-                                        "You do not have permission to add new %(name)s records."
-                                    )
-                                    % {"name": opts.verbose_name_plural}
+                        pk = deserialized_object.object.pk
+                        exists = (
+                            pk is not None
+                            and self.model._default_manager.filter(pk=pk).exists()
+                        )
+                        if exists and not can_change:
+                            raise ValidationError(
+                                _(
+                                    "You do not have permission to change %(name)s records."
                                 )
+                                % {"name": opts.verbose_name_plural}
+                            )
+                        if not exists and not can_add:
+                            raise ValidationError(
+                                _(
+                                    "You do not have permission to add new %(name)s records."
+                                )
+                                % {"name": opts.verbose_name_plural}
+                            )
                         deserialized_object.save()
                         imported += 1
             except (DeserializationError, IntegrityError, ValidationError, ValueError) as exc:
@@ -405,7 +413,6 @@ class ImportExportAdminMixin:
             }
         )
         return TemplateResponse(request, self.import_template, context)
-
 
 class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelAdmin):
     """ModelAdmin base class for :class:`Entity` models."""
