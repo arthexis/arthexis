@@ -147,6 +147,29 @@
         font-size: 1.125rem;
         color: var(--body-fg);
     }
+    .dashboard-side .latest-feature-updates-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 16px 16px;
+        margin: 0 0 16px;
+        border-bottom: 1px solid var(--hairline-color);
+    }
+    .dashboard-side .latest-feature-updates-header h2 {
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+    .dashboard-side .latest-feature-updates-header a {
+        font-size: 0.85rem;
+        color: var(--link-fg);
+        text-decoration: none;
+    }
+    .dashboard-side .latest-feature-updates-header a:hover,
+    .dashboard-side .latest-feature-updates-header a:focus-visible {
+        text-decoration: underline;
+    }
     .dashboard-side h3 {
         color: var(--body-quiet-color);
         padding: 0 16px;
@@ -172,6 +195,34 @@
     .dashboard-side .latest-updates-timestamp {
         font-size: 0.75rem;
         color: var(--body-quiet-color);
+    }
+    .dashboard-side .latest-feature-updates-item {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .dashboard-side .latest-feature-updates-links {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        font-size: 0.85rem;
+    }
+    .dashboard-side .latest-feature-updates-toggle {
+        display: inline;
+        margin: 0;
+    }
+    .dashboard-side .button-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: var(--link-fg);
+        cursor: pointer;
+    }
+    .dashboard-side .button-link:hover,
+    .dashboard-side .button-link:focus-visible {
+        text-decoration: underline;
     }
     #google-calendar-module {
         margin-bottom: 16px;
