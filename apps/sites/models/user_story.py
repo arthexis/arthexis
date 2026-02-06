@@ -27,6 +27,11 @@ class UserStory(Lead):
         validators=[MaxLengthValidator(400)],
         help_text=_("Share more about your experience."),
     )
+    messages = models.TextField(
+        blank=True,
+        validators=[MaxLengthValidator(2000)],
+        help_text=_("Messages displayed to the user when the feedback was submitted."),
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -116,6 +121,10 @@ class UserStory(Lead):
 
         if self.submitted_at:
             lines.append(f"**Submitted at:** {self.submitted_at.isoformat()}")
+
+        message_list = (self.messages or "").strip()
+        if message_list:
+            lines.append(f"**Messages:** {message_list}")
 
         comment = (self.comments or "").strip()
         if comment:
