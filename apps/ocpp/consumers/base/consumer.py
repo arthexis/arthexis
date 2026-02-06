@@ -211,6 +211,11 @@ class CSMSConsumer(
             await database_sync_to_async(
                 forwarder.sync_forwarded_charge_points
             )(refresh_forwarders=False)
+        forwarder.ensure_keepalive_task(
+            idle_seconds=int(
+                getattr(settings, "OCPP_FORWARDER_PING_INTERVAL", 60)
+            )
+        )
 
     async def _get_account(self, id_tag: str) -> CustomerAccount | None:
         """Return the customer account for the provided RFID if valid."""
