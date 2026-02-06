@@ -837,8 +837,8 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
             )
         if timezone.now() - last_seen <= _remote_node_active_delta():
             if has_session:
-                return STATUS_BADGE_MAP.get("charging", (_("Charging"), "#198754"))
-            return STATUS_BADGE_MAP.get("available", (_("Available"), "#0d6efd"))
+                return STATUS_BADGE_MAP["charging"]
+            return STATUS_BADGE_MAP["available"]
     return _("Offline"), "grey"
 
 
