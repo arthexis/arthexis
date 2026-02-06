@@ -265,7 +265,7 @@
     if (!messageField) {
       return;
     }
-    messageField.value = messages.join(' | ');
+    messageField.value = messages.join(' | ').substring(0, 2000);
   };
 
   const buildCopyValue = () => {
