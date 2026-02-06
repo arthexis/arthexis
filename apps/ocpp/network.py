@@ -39,6 +39,7 @@ def serialize_charger_for_network(
     charger: Charger,
     *,
     forwarded_messages: Iterable[str] | None = None,
+    forwarded_calls: Iterable[str] | None = None,
 ) -> dict[str, object]:
     simple_fields = [
         "display_name",
@@ -108,6 +109,10 @@ def serialize_charger_for_network(
         cleaned = [str(value) for value in forwarded_messages if value]
         data["forwarded_messages"] = cleaned
 
+    if forwarded_calls is not None:
+        cleaned_calls = [str(value) for value in forwarded_calls if value]
+        data["forwarded_calls"] = cleaned_calls
+
     return data
 
 
@@ -171,6 +176,8 @@ def apply_remote_charger_payload(
         "node_origin": node,
         "allow_remote": bool(payload.get("allow_remote", False)),
         "export_transactions": bool(payload.get("export_transactions", False)),
+        "forwarded_messages": payload.get("forwarded_messages") or None,
+        "forwarded_calls": payload.get("forwarded_calls") or None,
         "last_online_at": timezone.now(),
         "forwarded_to": None,
     }

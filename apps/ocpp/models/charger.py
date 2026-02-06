@@ -284,6 +284,16 @@ class Charger(Ownable):
         related_name="forwarded_chargers",
         help_text=_("Remote node receiving forwarded transactions."),
     )
+    forwarded_messages = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=_("OCPP messages the forwarding peer allows this charge point to emit."),
+    )
+    forwarded_calls = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=_("OCPP commands the forwarding peer allows for this charge point."),
+    )
     forwarding_watermark = models.DateTimeField(
         null=True,
         blank=True,
@@ -429,6 +439,8 @@ class Charger(Ownable):
     def is_local(self) -> bool:
         """Return ``True`` when this charger originates from the local node."""
 
+        if store.get_connection(self.charger_id, self.connector_id):
+            return True
         local = Node.get_local()
         if self.node_origin_id is None:
             return True

@@ -6,7 +6,7 @@ import asyncio
 import ipaddress
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable, Iterator, MutableMapping
 
@@ -28,7 +28,10 @@ class ForwardingSession:
     connected_at: datetime
     forwarder_id: int | None = None
     forwarded_messages: tuple[str, ...] | None = None
+    forwarded_calls: tuple[str, ...] | None = None
+    pending_call_ids: set[str] = field(default_factory=set)
     last_activity: datetime | None = None
+    listener: threading.Thread | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -176,6 +179,7 @@ class Forwarder:
                 target_node,
                 url,
             )
+            self._start_listener(session)
             return session
 
         return None
@@ -217,6 +221,163 @@ class Forwarder:
                     session.last_activity = now
             pinged += 1
         return pinged
+
+    def _start_listener(self, session: ForwardingSession) -> None:
+        if not hasattr(session.connection, "recv"):
+            return
+        if session.listener and session.listener.is_alive():
+            return
+        listener = threading.Thread(
+            target=self._listen_forwarding_session,
+            args=(session.charger_pk,),
+            daemon=True,
+        )
+        session.listener = listener
+        listener.start()
+
+    def _listen_forwarding_session(self, charger_pk: int) -> None:
+        """Listen for incoming commands from the remote node."""
+
+        from asgiref.sync import async_to_sync
+        import json
+
+        from apps.ocpp import store
+        from apps.ocpp.models import Charger
+
+        while True:
+            session = self.get_session(charger_pk)
+            if session is None or not session.is_connected:
+                return
+            try:
+                raw = session.connection.recv()
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.warning(
+                    "Forwarding websocket recv failed for charger %s via %s: %s",
+                    charger_pk,
+                    getattr(session, "url", "unknown"),
+                    exc,
+                )
+                self.remove_session(charger_pk)
+                return
+            if not raw:
+                continue
+            if isinstance(raw, bytes):
+                try:
+                    raw = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("ocpp"), list):
+                message = parsed.get("ocpp")
+            else:
+                message = parsed
+            if not isinstance(message, list) or not message:
+                continue
+            message_type = message[0]
+            if message_type != 2:
+                continue
+            if len(message) < 3:
+                continue
+            message_id = message[1]
+            action = message[2]
+            if not isinstance(message_id, str):
+                message_id = str(message_id)
+            if not isinstance(action, str):
+                action = str(action)
+
+            if session.forwarded_calls is not None and action not in session.forwarded_calls:
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "SecurityError",
+                        "Action not permitted by forwarding policy.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception:  # pragma: no cover - network errors
+                    pass
+                continue
+
+            charger = Charger.objects.filter(pk=charger_pk).first()
+            if charger is None:
+                continue
+            if not charger.allow_remote:
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "SecurityError",
+                        "Remote actions are disabled for this charge point.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception:  # pragma: no cover - network errors
+                    pass
+                continue
+            ws = store.get_connection(charger.charger_id, charger.connector_id)
+            if ws is None:
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "InternalError",
+                        "Charge point not connected.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception:  # pragma: no cover - network errors
+                    pass
+                continue
+
+            payload = message[3] if len(message) > 3 else {}
+            log_key = store.identity_key(charger.charger_id, charger.connector_id)
+            store.add_log(log_key, f"< {json.dumps(message)}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": action,
+                    "charger_id": charger.charger_id,
+                    "connector_id": charger.connector_id,
+                    "log_key": log_key,
+                    "forwarded": True,
+                    "requested_at": timezone.now(),
+                },
+            )
+            try:
+                async_to_sync(ws.send)(json.dumps(message))
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.warning(
+                    "Forwarded command %s failed for charger %s: %s",
+                    action,
+                    charger.charger_id,
+                    exc,
+                )
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "InternalError",
+                        "Failed to forward command.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception:
+                    pass
+                continue
+
+            session.pending_call_ids.add(message_id)
 
     def ensure_keepalive_task(self, *, idle_seconds: int = 60) -> None:
         """Ensure the keepalive loop runs in the current asyncio process."""
@@ -323,9 +484,11 @@ class Forwarder:
                     existing.forwarded_messages = tuple(
                         forwarder.get_forwarded_messages()
                     )
+                    existing.forwarded_calls = tuple(forwarder.get_forwarded_calls())
                 else:
                     existing.forwarder_id = None
                     existing.forwarded_messages = None
+                    existing.forwarded_calls = None
                 if existing.is_connected:
                     continue
                 self.remove_session(charger.pk)
@@ -346,6 +509,7 @@ class Forwarder:
                 session.forwarded_messages = tuple(
                     forwarder.get_forwarded_messages()
                 )
+                session.forwarded_calls = tuple(forwarder.get_forwarded_calls())
                 forwarder.mark_running(session.connected_at)
             connected += 1
 
