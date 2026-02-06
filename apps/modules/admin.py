@@ -132,7 +132,7 @@ class ModuleAdmin(EntityModelAdmin):
         roles = [role.name for role in obj.roles.all()]
         return ", ".join(roles) if roles else _("All")
 
-    @admin.display(description=_("Suite Features"))
+    @admin.display(description=_("Node Features"))
     def features_display(self, obj):
         features = [feature.display for feature in obj.features.all()]
         return ", ".join(features) if features else _("None")
