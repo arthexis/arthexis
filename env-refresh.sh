@@ -193,12 +193,8 @@ should_install_hardware_requirements() {
       ;;
   esac
 
-  if [ -f "$role_file" ]; then
-    local role
-    role=$(tr -d '\r\n' < "$role_file")
-    if [ "$role" = "Control" ]; then
-      return 0
-    fi
+  if [ -f "$role_file" ] && [ "$(tr -d '\r\n' < "$role_file")" = "Control" ]; then
+    return 0
   fi
 
   if [ -f "$lock_dir/lcd_screen.lck" ] || [ -f "$lock_dir/rfid-service.lck" ] || [ -f "$lock_dir/rfid.lck" ]; then
