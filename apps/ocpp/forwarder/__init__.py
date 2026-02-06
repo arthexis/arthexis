@@ -32,6 +32,7 @@ class ForwardingSession:
     pending_call_ids: set[str] = field(default_factory=set)
     last_activity: datetime | None = None
     listener: threading.Thread | None = None
+    _pending_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def is_connected(self) -> bool:
