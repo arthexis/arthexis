@@ -19,17 +19,16 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _, ngettext
 
-from .admin import _iter_entity_admin_models, _safe_next_url, _supports_seed_datum, _supports_user_datum
+from .admin import _iter_entity_admin_models, _supports_seed_datum, _supports_user_datum
 from .fixtures import (
-    _apply_user_fixture_paths,
     _data_dir,
-    _fixture_path,
     _load_fixture,
-    _resolve_fixture_user,
-    _user_allows_user_data,
     _user_fixture_status,
     delete_user_fixture,
     dump_user_fixture,
+    fixture_path,
+    resolve_fixture_user,
+    user_allows_user_data,
 )
 from .seeds import (
     _seed_datum_is_default,
@@ -41,6 +40,7 @@ from .seeds import (
     _seed_zip_dir,
     load_local_seed_zips,
 )
+from .utils import _safe_next_url
 
 
 def toggle_user_datum(request, app_label, model_name, object_id):
@@ -74,8 +74,8 @@ def toggle_user_datum(request, app_label, model_name, object_id):
         raise PermissionDenied
 
     manager = getattr(model, "all_objects", model._default_manager)
-    target_user = _resolve_fixture_user(obj, request.user)
-    allow_user_data = _user_allows_user_data(target_user)
+    target_user = resolve_fixture_user(obj, request.user)
+    allow_user_data = user_allows_user_data(target_user)
     message = None
 
     if obj.is_user_data:
@@ -93,7 +93,7 @@ def toggle_user_datum(request, app_label, model_name, object_id):
         handler = getattr(model_admin, "user_datum_saved", None)
         if callable(handler):
             handler(request, obj)
-        path = _fixture_path(target_user, obj)
+        path = fixture_path(target_user, obj)
         message = _("User datum saved to %(path)s") % {"path": str(path)}
     else:
         messages.warning(
@@ -190,11 +190,11 @@ def _seed_data_view(request):
             fixture_name = (
                 fixture.name if fixture is not None else _seed_fixture_name(model)
             )
-            target_user = _resolve_fixture_user(obj, request.user)
-            allow_user_data = _user_allows_user_data(target_user)
+            target_user = resolve_fixture_user(obj, request.user)
+            allow_user_data = user_allows_user_data(target_user)
             custom = False
             if allow_user_data and target_user:
-                custom = _fixture_path(target_user, obj).exists()
+                custom = fixture_path(target_user, obj).exists()
             items.append(
                 {
                     "url": url,
@@ -325,7 +325,7 @@ def _user_data_view(request):
                 f"admin:{obj._meta.app_label}_{obj._meta.model_name}_change",
                 args=[obj.pk],
             )
-            fixture = _fixture_path(request.user, obj)
+            fixture = fixture_path(request.user, obj)
             items.append(
                 {"url": url, "label": str(obj), "fixture_name": fixture.name}
             )
@@ -373,6 +373,25 @@ def _user_data_import(request):
             for path in paths:
                 _load_fixture(path)
     return HttpResponseRedirect(reverse("admin:user_data"))
+
+
+def _apply_user_fixture_paths(request, paths, *, action_label: str, empty_message):
+    if not paths:
+        messages.warning(request, empty_message)
+        return
+    loaded = 0
+    for path in paths:
+        if _load_fixture(path):
+            loaded += 1
+    if loaded:
+        message = ngettext(
+            "%(action)s %(count)d user data fixture.",
+            "%(action)s %(count)d user data fixtures.",
+            loaded,
+        ) % {"action": action_label, "count": loaded}
+        messages.success(request, message)
+    else:
+        messages.warning(request, _("No user data fixtures were applied."))
 
 
 def _user_data_apply_fixtures(request):

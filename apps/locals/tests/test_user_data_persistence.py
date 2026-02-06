@@ -27,7 +27,7 @@ def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
     favorite.refresh_from_db()
 
     user_data.dump_user_fixture(favorite, user)
-    fixture_path = user_data._fixture_path(user, favorite)
+    fixture_path = user_data.fixture_path(user, favorite)
 
     assert fixture_path.exists()
 
