@@ -61,6 +61,7 @@ def isolate_log_dir(tmp_path, monkeypatch):
 
 `@pytest.fixture`
 def local_node(monkeypatch):
+def local_node(monkeypatch):
     def _noop_sync_feature_tasks(*_args, **_kwargs):
         return None
 
