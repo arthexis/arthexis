@@ -19,7 +19,11 @@
                 class="latest-feature-updates-toggle"
               >
                 {% csrf_token %}
-                <button type="submit" class="button-link">
+                <button
+                  type="submit"
+                  class="button-link"
+                  aria-label="{% if entry.feature.is_enabled %}{% blocktranslate with name=entry.feature.display %}Disable {{ name }}{% endblocktranslate %}{% else %}{% blocktranslate with name=entry.feature.display %}Enable {{ name }}{% endblocktranslate %}{% endif %}"
+                >
                   {% if entry.feature.is_enabled %}
                     {% translate "Disable" %}
                   {% else %}
