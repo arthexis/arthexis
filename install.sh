@@ -585,7 +585,15 @@ env_refresh_args=(--force-refresh --deps-only)
 if [ "$CHANNEL" = "unstable" ]; then
     env_refresh_args+=(--latest)
 fi
-./env-refresh.sh "${env_refresh_args[@]}"
+INSTALL_HARDWARE_DEPS=false
+if [ "$ENABLE_CONTROL" = true ] || [ "$ENABLE_RFID_SERVICE" = true ] || [ "$ENABLE_LCD_SCREEN" = true ]; then
+    INSTALL_HARDWARE_DEPS=true
+fi
+if [ "$INSTALL_HARDWARE_DEPS" = true ]; then
+    ARTHEXIS_INSTALL_HARDWARE_DEPS=1 ./env-refresh.sh "${env_refresh_args[@]}"
+else
+    ./env-refresh.sh "${env_refresh_args[@]}"
+fi
 arthexis_timing_end "requirements_install" "refreshed"
 
 
@@ -633,9 +641,17 @@ fi
 # Refresh environment data and register this node
 arthexis_timing_start "env_refresh"
 if [ "$CHANNEL" = "unstable" ]; then
-    ./env-refresh.sh --latest
+    if [ "$INSTALL_HARDWARE_DEPS" = true ]; then
+        ARTHEXIS_INSTALL_HARDWARE_DEPS=1 ./env-refresh.sh --latest
+    else
+        ./env-refresh.sh --latest
+    fi
 else
-    ./env-refresh.sh
+    if [ "$INSTALL_HARDWARE_DEPS" = true ]; then
+        ARTHEXIS_INSTALL_HARDWARE_DEPS=1 ./env-refresh.sh
+    else
+        ./env-refresh.sh
+    fi
 fi
 arthexis_timing_end "env_refresh"
 
