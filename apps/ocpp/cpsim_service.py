@@ -54,6 +54,20 @@ def queue_cpsim_request(
     return lock_path
 
 
+def queue_cpsim_service_toggle(
+    *,
+    enabled: bool,
+    source: str | None = None,
+    base_dir: Path | None = None,
+) -> Path:
+    action = "service-enable" if enabled else "service-disable"
+    return queue_cpsim_request(
+        action=action,
+        source=source,
+        base_dir=base_dir,
+    )
+
+
 def cpsim_service_enabled() -> bool:
     try:
         from apps.nodes.models import NodeFeature
