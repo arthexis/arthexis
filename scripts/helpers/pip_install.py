@@ -98,7 +98,7 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
             sys.stderr.write(
                 "Install build tools if you need GPIO/SPIDEV support. "
                 "On Debian/Ubuntu run: "
-                "`sudo apt-get update && sudo apt-get install -y build-essential`.\n"
+                "`sudo apt update && sudo apt install -y build-essential`.\n"
             )
         return 0
 
