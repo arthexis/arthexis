@@ -59,9 +59,12 @@ def isolate_log_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "LOG_DIR", log_dir)
 
 
-@pytest.fixture
+`@pytest.fixture`
 def local_node(monkeypatch):
-    monkeypatch.setattr(Node, "sync_feature_tasks", lambda self: None)
+    def _noop_sync_feature_tasks(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(Node, "sync_feature_tasks", _noop_sync_feature_tasks)
     Node._local_cache.clear()
     node = Node.objects.create(
         hostname="local-node",
