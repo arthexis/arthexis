@@ -8,6 +8,9 @@ from apps.core import tasks
 from apps.nodes.models import Node
 
 
+pytestmark = [pytest.mark.regression]
+
+
 @pytest.mark.django_db
 def test_canary_gate_blocks_when_canary_offline(monkeypatch, tmp_path: Path):
     now = timezone.now()
