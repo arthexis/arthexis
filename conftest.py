@@ -161,33 +161,34 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Any:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    if not COLLECTED_RESULTS:
-        return
-
-    results = [
-        RecordedTestResult(
-            node_id=node_id,
-            name=payload.get("name", node_id),
-            status=payload.get("status", "error"),
-            duration=payload.get("duration"),
-            log="\n\n".join(payload.get("logs", [])).strip(),
-        )
-        for node_id, payload in COLLECTED_RESULTS.items()
-    ]
-
     try:
-        if DB_BLOCKER:
-            with DB_BLOCKER.unblock():
+        if not COLLECTED_RESULTS:
+            return
+
+        results = [
+            RecordedTestResult(
+                node_id=node_id,
+                name=payload.get("name", node_id),
+                status=payload.get("status", "error"),
+                duration=payload.get("duration"),
+                log="\n\n".join(payload.get("logs", [])).strip(),
+            )
+            for node_id, payload in COLLECTED_RESULTS.items()
+        ]
+
+        try:
+            if DB_BLOCKER:
+                with DB_BLOCKER.unblock():
+                    persist_results(results)
+            else:
                 persist_results(results)
-        else:
-            persist_results(results)
-    except Exception as exc:  # pragma: no cover - best effort logging
-        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-        message = f"Unable to persist test results to primary database: {exc}"
-        if reporter:
-            reporter.write_line(message, yellow=True)
-        else:
-            print(message, file=sys.stderr)
+        except Exception as exc:  # pragma: no cover - best effort logging
+            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+            message = f"Unable to persist test results to primary database: {exc}"
+            if reporter:
+                reporter.write_line(message, yellow=True)
+            else:
+                print(message, file=sys.stderr)
     finally:
         from django.db import connections
 
