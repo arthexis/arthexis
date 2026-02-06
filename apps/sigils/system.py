@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Callable, Optional
 
-from apps.core.system.ui import SystemField, _build_system_fields, _gather_info
+from apps.core.system.ui.summary import SystemField, _build_system_fields, _gather_info
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
     _resolve_auto_upgrade_namespace,

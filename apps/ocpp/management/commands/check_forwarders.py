@@ -5,7 +5,7 @@ from urllib.parse import urlsplit, urlunsplit
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.core.system.ui import _build_nginx_report
+from apps.core.system.ui.summary import _build_nginx_report
 from apps.nginx import config_utils
 from apps.nodes.models import Node
 from apps.ocpp.models import CPForwarder, Charger

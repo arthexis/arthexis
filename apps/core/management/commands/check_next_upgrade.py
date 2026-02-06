@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.core.system.ui import _format_timestamp
+from apps.core.system.ui.formatters import _format_timestamp
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
     _get_auto_upgrade_periodic_task,

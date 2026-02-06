@@ -17,14 +17,13 @@ from apps.core.models import AdminNotice
 from apps.core import changelog
 from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
-from .ui import (
-    STARTUP_REPORT_DEFAULT_LIMIT,
+from .ui.services import _build_services_report
+from .ui.startup import STARTUP_REPORT_DEFAULT_LIMIT, _read_startup_report
+from .ui.summary import (
     _build_nginx_report,
-    _build_services_report,
     _build_system_fields,
     _build_uptime_report,
     _gather_info,
-    _read_startup_report,
 )
 from .upgrade import (
     UPGRADE_CHANNEL_CHOICES,

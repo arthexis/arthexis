@@ -8,7 +8,8 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.core.system.filesystem import _suite_uptime_lock_info
-from apps.core.system.ui import _format_datetime, _suite_uptime_details, _system_boot_time
+from apps.core.system.ui.formatters import _format_datetime
+from apps.core.system.ui.summary import _suite_uptime_details, _system_boot_time
 from apps.nodes import tasks as node_tasks
 
 

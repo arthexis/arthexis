@@ -27,7 +27,8 @@ from apps.core.tasks.auto_upgrade import (
 )
 
 from .filesystem import _auto_upgrade_skip_file
-from .ui import _format_datetime, _format_timestamp, _suite_uptime_details
+from .ui.formatters import _format_datetime, _format_timestamp
+from .ui.summary import _suite_uptime_details
 
 
 AUTO_UPGRADE_LOG_LIMIT = 30

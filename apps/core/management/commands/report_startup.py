@@ -3,7 +3,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from apps.core.system.ui import _read_startup_report
+from apps.core.system.ui.startup import _read_startup_report
 
 
 class Command(BaseCommand):

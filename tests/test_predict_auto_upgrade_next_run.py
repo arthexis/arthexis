@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.system import upgrade
-from apps.core.system.ui import _format_timestamp
+from apps.core.system.ui.formatters import _format_timestamp
 
 class DummySchedule:
     def __init__(
