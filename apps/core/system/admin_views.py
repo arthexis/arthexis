@@ -273,7 +273,7 @@ def _system_upgrade_revision_check_view(request):
     ci_status = ""
     if origin_revision:
         try:
-            from apps.core.tasks import _ci_status_for_revision
+            from apps.core.tasks.auto_upgrade import _ci_status_for_revision
 
             ci_status = _ci_status_for_revision(base_dir, origin_revision) or ""
         except Exception:  # pragma: no cover - unexpected failure path

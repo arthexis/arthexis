@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from apps.core import tasks
+from apps.core.tasks import migrations as tasks_migrations
 
 pytestmark = pytest.mark.critical
 
@@ -22,14 +22,10 @@ def test_is_migration_server_running_skips_unexpected_pid(monkeypatch, tmp_path)
     def fake_start_time(pid: int):
         return time.time()
 
-    def fake_kill(pid: int, signal: int):
-        calls.append("kill")
+    monkeypatch.setattr(tasks_migrations, "_read_process_cmdline", fake_cmdline)
+    monkeypatch.setattr(tasks_migrations, "_read_process_start_time", fake_start_time)
 
-    monkeypatch.setattr(tasks, "_read_process_cmdline", fake_cmdline)
-    monkeypatch.setattr(tasks, "_read_process_start_time", fake_start_time)
-    monkeypatch.setattr(tasks.os, "kill", fake_kill)
-
-    assert tasks._is_migration_server_running(tmp_path) is False
+    assert tasks_migrations._is_migration_server_running(tmp_path) is False
     assert "kill" not in calls
 
 def test_is_migration_server_running_validates_process_identity(monkeypatch, tmp_path):
@@ -46,11 +42,7 @@ def test_is_migration_server_running_validates_process_identity(monkeypatch, tmp
     def fake_start_time(pid: int):
         return started_at + 30
 
-    def fake_kill(pid: int, signal: int):
-        return None
+    monkeypatch.setattr(tasks_migrations, "_read_process_cmdline", fake_cmdline)
+    monkeypatch.setattr(tasks_migrations, "_read_process_start_time", fake_start_time)
 
-    monkeypatch.setattr(tasks, "_read_process_cmdline", fake_cmdline)
-    monkeypatch.setattr(tasks, "_read_process_start_time", fake_start_time)
-    monkeypatch.setattr(tasks.os, "kill", fake_kill)
-
-    assert tasks._is_migration_server_running(tmp_path) is True
+    assert tasks_migrations._is_migration_server_running(tmp_path) is True
