@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
-from apps.core.tasks import check_github_updates
+from apps.core.tasks.auto_upgrade import check_github_updates
 from apps.core import uptime_constants, uptime_utils
 from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, lcd_feature_enabled, queue_startup_message
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage

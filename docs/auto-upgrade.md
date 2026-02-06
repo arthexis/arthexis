@@ -74,7 +74,7 @@ You can also request the Celery task:
 
 ```bash
 # Django shell or worker context
-from apps.core.tasks import check_github_updates
+from apps.core.tasks.auto_upgrade import check_github_updates
 check_github_updates.delay()
 ```
 
