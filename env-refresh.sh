@@ -149,7 +149,7 @@ celery_requirement() {
   local requirements_file="$SCRIPT_DIR/requirements.txt"
   if [ -f "$requirements_file" ]; then
     local line
-    line=$(grep -E '^celery[<=>!~]+' "$requirements_file" | head -n 1 || true)
+    line=$(grep -E '^celery\b[<=>!~]+' "$requirements_file" | head -n 1 || true)
     if [ -n "$line" ]; then
       echo "$line"
       return 0
