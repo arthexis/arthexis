@@ -47,12 +47,20 @@ def latest_feature_updates_widget(**_kwargs):
             "admin:features_feature_change",
             args=[feature.pk],
         )
+        toggle_url = reverse(
+            "admin:features_feature_toggle",
+            args=[feature.pk],
+        )
         entries.append(
             {
                 "feature": feature,
                 "admin_url": admin_url,
                 "site_url": feature.get_absolute_url(),
+                "toggle_url": toggle_url,
                 "updated_at": feature.latest_activity_at,
             }
         )
-    return {"features": entries}
+    return {
+        "features": entries,
+        "feature_admin_url": reverse("admin:features_feature_changelist"),
+    }

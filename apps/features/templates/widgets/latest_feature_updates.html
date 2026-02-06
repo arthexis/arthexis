@@ -1,6 +1,9 @@
 {% load i18n %}
 <div class="module" id="latest-feature-updates-widget">
-  <h2>{% translate "Latest feature updates" %}</h2>
+  <div class="latest-feature-updates-header">
+    <h2>{% translate "Hot features" %}</h2>
+    <a href="{{ feature_admin_url }}">{% translate "All features" %}</a>
+  </div>
   <ul class="actionlist latest-feature-updates-list">
     {% for entry in features %}
       <li class="latest-feature-updates-item">
@@ -8,9 +11,22 @@
           <div>
             <span class="latest-feature-updates-name">{{ entry.feature.display }}</span>
             <div class="latest-feature-updates-links">
-              <a href="{{ entry.admin_url }}">{% translate "Admin" %}</a>
+              <a href="{{ entry.admin_url }}">{% translate "View" %}</a>
               <span aria-hidden="true">·</span>
-              <a href="{{ entry.site_url }}">{% translate "Site" %}</a>
+              <form
+                method="post"
+                action="{{ entry.toggle_url }}"
+                class="latest-feature-updates-toggle"
+              >
+                {% csrf_token %}
+                <button type="submit" class="button-link">
+                  {% if entry.feature.is_enabled %}
+                    {% translate "Disable" %}
+                  {% else %}
+                    {% translate "Enable" %}
+                  {% endif %}
+                </button>
+              </form>
             </div>
           </div>
           <span class="latest-feature-updates-timestamp">
