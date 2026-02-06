@@ -96,8 +96,9 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
         )
         if missing_compiler:
             sys.stderr.write(
-                "Install build tools (e.g. `sudo apt-get install build-essential`) "
-                "if you need GPIO/SPIDEV support.\n"
+                "Install build tools if you need GPIO/SPIDEV support. "
+                "On Debian/Ubuntu run: "
+                "`sudo apt-get update && sudo apt-get install -y build-essential`.\n"
             )
         return 0
 
