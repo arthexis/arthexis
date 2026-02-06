@@ -137,9 +137,7 @@ def test_charge_point_created_for_new_websocket_path():
 def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
     charge_point_features,
 ):
-    _local_node, _node_feature, suite_feature = charge_point_features
-    suite_feature.is_enabled = True
-    suite_feature.save(update_fields=["is_enabled"])
+    _local_node, _node_feature, _ = charge_point_features
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/CP-NODE-FEATURE-OFF")
