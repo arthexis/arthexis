@@ -193,9 +193,7 @@ class CSMSConsumer(
                 .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
                 .first()
             )
-            node_feature = None
-            if feature and feature.node_feature_id:
-                node_feature = feature.node_feature
+            node_feature = feature.node_feature if feature else None
             if not node_feature:
                 node_feature = NodeFeature.objects.filter(
                     slug=CHARGE_POINT_FEATURE_SLUG
