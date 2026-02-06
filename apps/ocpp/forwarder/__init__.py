@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, Iterator, MutableMapping
@@ -41,6 +42,7 @@ class Forwarder:
         self._sessions: MutableMapping[int, ForwardingSession] = {}
         self._keepalive_task: asyncio.Task[None] | None = None
         self._keepalive_interval: int | None = None
+        self._sync_lock = threading.Lock()
 
     @staticmethod
     def _candidate_forwarding_urls(node, charger) -> Iterator[str]:
@@ -95,24 +97,29 @@ class Forwarder:
     def get_session(self, charger_pk: int) -> ForwardingSession | None:
         """Return the forwarding session for ``charger_pk`` when present."""
 
-        return self._sessions.get(charger_pk)
+        with self._sync_lock:
+            return self._sessions.get(charger_pk)
 
     def iter_sessions(self) -> Iterator[ForwardingSession]:
         """Yield active forwarding sessions."""
 
-        return iter(self._sessions.values())
+        with self._sync_lock:
+            return iter(list(self._sessions.values()))
 
     def clear_sessions(self) -> None:
         """Close and drop all active forwarding sessions."""
 
-        for session in list(self._sessions.values()):
+        with self._sync_lock:
+            sessions = list(self._sessions.values())
+            self._sessions.clear()
+        for session in sessions:
             self._close_forwarding_session(session)
-        self._sessions.clear()
 
     def remove_session(self, charger_pk: int) -> None:
         """Close and remove the session for ``charger_pk`` when it exists."""
 
-        session = self._sessions.pop(charger_pk, None)
+        with self._sync_lock:
+            session = self._sessions.pop(charger_pk, None)
         if session is not None:
             self._close_forwarding_session(session)
 
@@ -120,7 +127,9 @@ class Forwarder:
         """Close sessions that no longer map to a charger in ``active_ids``."""
 
         valid = set(active_ids)
-        for pk in list(self._sessions.keys()):
+        with self._sync_lock:
+            session_ids = list(self._sessions.keys())
+        for pk in session_ids:
             if pk not in valid:
                 self.remove_session(pk)
 
@@ -159,7 +168,8 @@ class Forwarder:
                 connected_at=timezone.now(),
                 last_activity=timezone.now(),
             )
-            self._sessions[charger.pk] = session
+            with self._sync_lock:
+                self._sessions[charger.pk] = session
             logger.info(
                 "Established forwarding websocket for charger %s to %s via %s",
                 getattr(charger, "charger_id", charger.pk),
@@ -178,7 +188,9 @@ class Forwarder:
 
         now = timezone.now()
         pinged = 0
-        for session in list(self._sessions.values()):
+        with self._sync_lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
             if not session.is_connected:
                 self.remove_session(session.charger_pk)
                 continue
@@ -199,7 +211,10 @@ class Forwarder:
                 )
                 self.remove_session(session.charger_pk)
                 continue
-            session.last_activity = now
+            with self._sync_lock:
+                current = self._sessions.get(session.charger_pk)
+                if current is session:
+                    session.last_activity = now
             pinged += 1
         return pinged
 
@@ -236,7 +251,9 @@ class Forwarder:
         """Return the set of target node IDs with active sessions."""
 
         ids: set[int] = set()
-        for session in self._sessions.values():
+        with self._sync_lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
             if session.node_id is None:
                 continue
             if not only_connected or session.is_connected:
