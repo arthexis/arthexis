@@ -157,9 +157,11 @@ class UserStoryAdmin(EntityModelAdmin):
 
     @admin.action(description=_("Mark selected as spam"))
     def mark_selected_as_spam(self, request, queryset):
-        updated = queryset.exclude(status=UserStory.Status.SPAM).update(
-            status=UserStory.Status.SPAM
-        )
+        updated = 0
+        for story in queryset.exclude(status=UserStory.Status.SPAM).iterator():
+            story.status = UserStory.Status.SPAM
+            story.save(update_fields=["status"])
+            updated += 1
         if updated:
             self.message_user(
                 request,
