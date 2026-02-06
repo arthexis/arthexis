@@ -70,9 +70,9 @@ class LogViewAdminMixin:
             )
             return redirect(changelist_url)
         allowed_limits = {"20", "40", "60", "80", "100"}
-        log_limit = request.GET.get("limit") or "40"
+        log_limit = request.GET.get("limit") or "20"
         if log_limit not in allowed_limits:
-            log_limit = "40"
+            log_limit = "20"
         log_entries = store.get_logs(identifier, log_type=self.log_type, limit=log_limit)
         context = {
             **self.admin_site.each_context(request),
