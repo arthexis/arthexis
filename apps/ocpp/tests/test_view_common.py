@@ -110,7 +110,7 @@ def test_charger_state_uses_recent_heartbeat_when_disconnected(monkeypatch, sett
     settings.NODE_LAST_SEEN_ACTIVE_DELTA = datetime.timedelta(minutes=5)
     recent = timezone.now() - datetime.timedelta(minutes=1)
     charger = _ChargerStub(last_heartbeat=recent)
-    monkeypatch.setattr(common.store, "is_connected", lambda *args, **kwargs: False)
+    monkeypatch.setattr(common.store, "is_connected", lambda *_args, **_kwargs: False)
 
     label, color = common._charger_state(charger, tx_obj=None)
 
@@ -121,7 +121,7 @@ def test_charger_state_offline_when_heartbeat_stale(monkeypatch, settings):
     settings.NODE_LAST_SEEN_ACTIVE_DELTA = datetime.timedelta(minutes=5)
     stale = timezone.now() - datetime.timedelta(minutes=10)
     charger = _ChargerStub(last_heartbeat=stale)
-    monkeypatch.setattr(common.store, "is_connected", lambda *args, **kwargs: False)
+    monkeypatch.setattr(common.store, "is_connected", lambda *_args, **_kwargs: False)
 
     label, color = common._charger_state(charger, tx_obj=None)
 
