@@ -100,7 +100,7 @@ def remove_nginx_configuration(*, sudo: str = "sudo", reload: bool = True) -> Ap
     if not can_manage_nginx():
         raise NginxUnavailableError(
             "nginx configuration requires sudo privileges and nginx assets. "
-            "Install nginx with 'sudo apt-get update && sudo apt-get install nginx'."
+            "Install nginx with 'sudo apt update && sudo apt install nginx'."
         )
 
     commands = [
@@ -183,7 +183,7 @@ def apply_nginx_configuration(
     if not can_manage_nginx():
         raise NginxUnavailableError(
             "nginx configuration requires sudo privileges and nginx assets. "
-            "Install nginx with 'sudo apt-get update && sudo apt-get install nginx'."
+            "Install nginx with 'sudo apt update && sudo apt install nginx'."
         )
 
     record_lock_state(mode, port, role)
@@ -254,12 +254,12 @@ def restart_nginx(*, sudo: str = "sudo") -> ApplyResult:
     if not can_manage_nginx():
         raise NginxUnavailableError(
             "nginx must be installed before it can be restarted. "
-            "Install nginx with 'sudo apt-get update && sudo apt-get install nginx'."
+            "Install nginx with 'sudo apt update && sudo apt install nginx'."
         )
 
     if not ensure_nginx_in_path() or not shutil.which("nginx"):
         raise NginxUnavailableError(
-            "nginx executable not found. Install nginx with 'sudo apt-get update && sudo apt-get install nginx'."
+            "nginx executable not found. Install nginx with 'sudo apt update && sudo apt install nginx'."
         )
 
     validated = subprocess.run([sudo, "nginx", "-t"], check=False).returncode == 0
