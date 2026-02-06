@@ -111,6 +111,12 @@ def _requires_db(item: pytest.Item) -> bool:
     return issubclass(test_class, TransactionTestCase)
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    markexpr = getattr(config.option, "markexpr", "")
+    if markexpr and "critical" in markexpr and "regression" not in markexpr:
+        config.option.markexpr = f"({markexpr}) or regression"
+
+
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     global REQUIRES_DB
     REQUIRES_DB = any(_requires_db(item) for item in items)
