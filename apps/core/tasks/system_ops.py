@@ -158,9 +158,6 @@ def _ensure_managed_service(
                 return handle_restart_failure()
             restarted = True
 
-        if not restarted:
-            return handle_restart_failure()
-
         append_auto_upgrade_log(
             base_dir,
             f"Waiting for {service} to restart after upgrade",
