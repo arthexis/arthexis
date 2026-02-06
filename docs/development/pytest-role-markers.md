@@ -40,6 +40,12 @@ pipelines, even when local filtering or marker-based selection is applied.
 These tests should cover high-risk flows (for example, security checks or
 upgrade blockers) where skipped coverage would be unacceptable.
 
+## Regression markers
+
+Use `@pytest.mark.regression` for tests that guard against reported regressions.
+Regression tests should run whenever critical tests are selected, so the
+regression marker is treated as a critical marker in test collection.
+
 ## Local filtering
 
 Pytest honours the following environment variables for local filtering:

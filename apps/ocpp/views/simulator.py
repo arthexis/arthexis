@@ -25,9 +25,11 @@ REPEAT_TRUE_STRINGS = {
 @landing("Charge Point Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
-    auth_response = require_site_operator_or_staff(request)
-    if auth_response is not None:
-        return auth_response
+    user = getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        auth_response = require_site_operator_or_staff(request)
+        if auth_response is not None:
+            return auth_response
 
     ws_scheme = resolve_ws_scheme(request=request)
 

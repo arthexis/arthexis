@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.ocpp.models import Charger, Transaction
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.regression]
 
 
 def test_cpms_dashboard_reachable(client):

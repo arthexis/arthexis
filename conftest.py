@@ -114,6 +114,9 @@ def _requires_db(item: pytest.Item) -> bool:
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     global REQUIRES_DB
     REQUIRES_DB = any(_requires_db(item) for item in items)
+    for item in items:
+        if item.get_closest_marker("regression") and not item.get_closest_marker("critical"):
+            item.add_marker("critical")
 
 
 @pytest.fixture(scope="session", autouse=True)
