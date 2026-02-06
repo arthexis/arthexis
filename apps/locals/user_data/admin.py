@@ -22,13 +22,14 @@ from django.utils.translation import gettext as _, ngettext
 from apps.core.entity import Entity
 
 from .fixtures import (
-    _fixture_path,
-    _resolve_fixture_user,
-    _user_allows_user_data,
     delete_user_fixture,
     dump_user_fixture,
+    fixture_path,
+    resolve_fixture_user,
+    user_allows_user_data,
 )
 from .seeds import _seed_datum_is_default, _seed_fixture_index
+from .utils import _safe_next_url
 
 
 class UserDatumAdminMixin(admin.ModelAdmin):
@@ -85,8 +86,8 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         skipped = 0
 
         for obj in queryset:
-            target_user = _resolve_fixture_user(obj, request.user)
-            allow_user_data = _user_allows_user_data(target_user)
+            target_user = resolve_fixture_user(obj, request.user)
+            allow_user_data = user_allows_user_data(target_user)
             if getattr(obj, "is_user_data", False):
                 manager.filter(pk=obj.pk).update(is_user_data=False)
                 obj.is_user_data = False
@@ -643,8 +644,8 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
         if getattr(self, "_skip_entity_user_datum", False):
             return
 
-        target_user = _resolve_fixture_user(obj, request.user)
-        allow_user_data = _user_allows_user_data(target_user)
+        target_user = resolve_fixture_user(obj, request.user)
+        allow_user_data = user_allows_user_data(target_user)
         if request.POST.get("_user_datum") == "on":
             if allow_user_data:
                 if not obj.is_user_data:
@@ -654,7 +655,7 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
                 handler = getattr(self, "user_datum_saved", None)
                 if callable(handler):
                     handler(request, obj)
-                path = _fixture_path(target_user, obj)
+                path = fixture_path(target_user, obj)
                 self.message_user(request, f"User datum saved to {path}")
             else:
                 if obj.is_user_data:
@@ -763,26 +764,6 @@ def _iter_entity_admin_models():
         yield model, model_admin
 
 
-def _safe_next_url(request):
-    from django.conf import settings
-    from django.utils.http import url_has_allowed_host_and_scheme
-
-    from config.request_utils import is_https_request
-
-    candidate = request.POST.get("next") or request.GET.get("next")
-    if not candidate:
-        return None
-
-    allowed_hosts = {request.get_host()}
-    allowed_hosts.update(filter(None, settings.ALLOWED_HOSTS))
-
-    if url_has_allowed_host_and_scheme(
-        candidate,
-        allowed_hosts=allowed_hosts,
-        require_https=is_https_request(request),
-    ):
-        return candidate
-    return None
 
 
 def _supports_user_datum(model) -> bool:

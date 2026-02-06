@@ -59,5 +59,5 @@ When enabled, Arthexis writes a JSON fixture next to other managed data in `data
 ## Troubleshooting
 
 - **The export link downloads an empty archive** – Confirm that at least one object has `is_user_data=True`. You can verify this on the object change form or by checking the favorites list.
-- **Cannot toggle user data** – Some users are restricted from storing fixtures. The helper `_user_allows_user_data` (line 43) blocks toggles for profiles without permission. Use a service or admin account to perform the action, or delegate through the `operate_as` relationship.
+- **Cannot toggle user data** – Some users are restricted from storing fixtures. The helper `user_allows_user_data` (line 43) blocks toggles for profiles without permission. Use a service or admin account to perform the action, or delegate through the `operate_as` relationship.
 - **Import skips records** – The importer validates JSON payloads before loading them. Review the Django messages displayed after import for warnings about missing models or stale primary keys.

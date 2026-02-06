@@ -33,7 +33,7 @@ def _username_for(user) -> str:
     return username
 
 
-def _user_allows_user_data(user) -> bool:
+def user_allows_user_data(user) -> bool:
     if not user:
         return False
     username = _username_for(user)
@@ -53,7 +53,7 @@ def _data_dir(user) -> Path:
     return path
 
 
-def _fixture_path(user, instance) -> Path:
+def fixture_path(user, instance) -> Path:
     model_meta = instance._meta.concrete_model._meta
     filename = f"{model_meta.app_label}_{model_meta.model_name}_{instance.pk}.json"
     return _data_dir(user) / filename
@@ -93,7 +93,7 @@ def _select_fixture_user(candidate, user_model):
             if delegate is not None and delegate is not user:
                 user = delegate
                 continue
-        if _user_allows_user_data(user):
+        if user_allows_user_data(user):
             return user
         try:
             delegate = getattr(user, "operate_as", None)
@@ -103,7 +103,7 @@ def _select_fixture_user(candidate, user_model):
     return None
 
 
-def _resolve_fixture_user(instance, fallback=None):
+def resolve_fixture_user(instance, fallback=None):
     UserModel = get_user_model()
     owner = getattr(instance, "user", None)
     selected = _select_fixture_user(owner, UserModel)
@@ -129,10 +129,10 @@ def dump_user_fixture(instance, user=None) -> None:
     UserModel = get_user_model()
     if issubclass(UserModel, Entity) and isinstance(instance, UserModel):
         return
-    target_user = user or _resolve_fixture_user(instance)
+    target_user = user or resolve_fixture_user(instance)
     if target_user is None:
         return
-    allow_user_data = _user_allows_user_data(target_user)
+    allow_user_data = user_allows_user_data(target_user)
     if not allow_user_data:
         is_user_data = getattr(instance, "is_user_data", False)
         if not is_user_data and instance.pk:
@@ -146,7 +146,7 @@ def dump_user_fixture(instance, user=None) -> None:
         if not is_user_data:
             return
     meta = model._meta
-    path = _fixture_path(target_user, instance)
+    path = fixture_path(target_user, instance)
     natural = getattr(model, "natural_key", None)
     if callable(natural):
         deps = getattr(natural, "dependencies", None)
@@ -174,7 +174,7 @@ def dump_user_fixture(instance, user=None) -> None:
 
 
 def delete_user_fixture(instance, user=None) -> None:
-    target_user = user or _resolve_fixture_user(instance)
+    target_user = user or resolve_fixture_user(instance)
     meta = instance._meta.concrete_model._meta
     filename = f"{meta.app_label}_{meta.model_name}_{instance.pk}.json"
 
@@ -386,30 +386,6 @@ def _is_user_fixture(path: Path) -> bool:
     return len(parts) >= 2 and parts[1].lower() == "user"
 
 
-def _get_request_ip(request) -> str:
-    """Return the best-effort client IP for ``request``."""
-
-    if request is None:
-        return ""
-
-    meta = getattr(request, "META", None)
-    if not getattr(meta, "get", None):
-        return ""
-
-    forwarded = meta.get("HTTP_X_FORWARDED_FOR")
-    if forwarded:
-        for value in str(forwarded).split(","):
-            candidate = value.strip()
-            if candidate:
-                return candidate
-
-    remote = meta.get("REMOTE_ADDR")
-    if remote:
-        return str(remote).strip()
-
-    return ""
-
-
 _shared_fixtures_loaded = False
 
 
@@ -507,24 +483,3 @@ def _user_fixture_status(user):
     pending = [path for path in paths if _fixture_has_unapplied_entries(path)]
     return {"pending": pending, "total": paths}
 
-
-def _apply_user_fixture_paths(request, paths, *, action_label: str, empty_message):
-    from django.contrib import messages
-    from django.utils.translation import gettext as _, ngettext
-
-    if not paths:
-        messages.warning(request, empty_message)
-        return
-    loaded = 0
-    for path in paths:
-        if _load_fixture(path):
-            loaded += 1
-    if loaded:
-        message = ngettext(
-            "%(action)s %(count)d user data fixture.",
-            "%(action)s %(count)d user data fixtures.",
-            loaded,
-        ) % {"action": action_label, "count": loaded}
-        messages.success(request, message)
-    else:
-        messages.warning(request, _("No user data fixtures were applied."))
