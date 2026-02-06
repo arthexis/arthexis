@@ -74,7 +74,7 @@ def test_offline_notification_source_prefers_station_defaults():
 
 
 def test_offline_notification_source_prefers_connector_settings():
-    station = Charger.objects.create(
+    _station = Charger.objects.create(
         charger_id="CH-6",
         email_when_offline=True,
         maintenance_email="station@example.com",
