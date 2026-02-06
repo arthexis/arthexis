@@ -173,7 +173,7 @@ require_redis() {
     if ! command -v redis-cli >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but is not installed."
         echo "Install redis-server and re-run this script. For Debian/Ubuntu:"
-        echo "  sudo apt-get update && sudo apt-get install redis-server"
+        echo "  sudo apt update && sudo apt install redis-server"
         exit 1
     fi
     if ! redis-cli ping >/dev/null 2>&1; then
@@ -193,8 +193,8 @@ ensure_i2c_packages() {
     if ! python3 -c 'import smbus' >/dev/null 2>&1 \
         && ! python3 -c 'import smbus2' >/dev/null 2>&1; then
         echo "smbus module not found. Installing i2c-tools and python3-smbus"
-        sudo apt-get update
-        sudo apt-get install -y i2c-tools python3-smbus
+        sudo apt update
+        sudo apt install -y i2c-tools python3-smbus
     fi
 }
 

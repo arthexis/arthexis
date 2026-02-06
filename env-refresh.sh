@@ -177,7 +177,7 @@ PY
   echo "Celery not found; attempting to install ${celery_req}." >&2
   if ! pip_install_with_helper "${celery_pip_args[@]}" "$celery_req"; then
     echo "Celery installation failed. Ensure pip and Python venv support are installed." >&2
-    echo "  Ubuntu/Debian: sudo apt-get install python3-venv" >&2
+    echo "  Ubuntu/Debian: sudo apt install python3-venv" >&2
     echo "  RHEL/Fedora:   sudo dnf install python3-pip" >&2
     return 1
   fi
