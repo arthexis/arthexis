@@ -69,7 +69,7 @@ class LogViewAdminMixin:
                 current_app=self.admin_site.name,
             )
             return redirect(changelist_url)
-        allowed_limits = {"20", "40", "80", "100"}
+        allowed_limits = {"20", "40", "60", "80", "100"}
         log_limit = request.GET.get("limit") or "40"
         if log_limit not in allowed_limits:
             log_limit = "40"

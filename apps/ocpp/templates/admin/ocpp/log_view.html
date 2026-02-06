@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const limitValue = document.getElementById('log-row-value');
   const downloadLink = document.getElementById('log-download');
   const params = new URLSearchParams(window.location.search);
-  const allowedLimits = ['20', '40', '80', '100'];
+  const allowedLimits = ['20', '40', '60', '80', '100'];
   const initialLimit = '{{ log_limit }}';
   function currentLimit() {
     const limit = params.get('limit');
