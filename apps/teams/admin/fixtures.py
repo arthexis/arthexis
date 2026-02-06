@@ -3,6 +3,8 @@ from apps.locals.user_data import (
     UserDatumAdminMixin,
     delete_user_fixture,
     dump_user_fixture,
+)
+from apps.locals.user_data.fixtures import (
     _fixture_path,
     _resolve_fixture_user,
     _user_allows_user_data,
