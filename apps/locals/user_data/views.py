@@ -380,8 +380,8 @@ def _apply_user_fixture_paths(request, paths, *, action_label: str, empty_messag
         messages.warning(request, empty_message)
         return
     loaded = 0
-    for path in paths:
-        if _load_fixture(path):
+    for fixture_item in paths:
+        if _load_fixture(fixture_item):
             loaded += 1
     if loaded:
         message = ngettext(
@@ -392,7 +392,6 @@ def _apply_user_fixture_paths(request, paths, *, action_label: str, empty_messag
         messages.success(request, message)
     else:
         messages.warning(request, _("No user data fixtures were applied."))
-
 
 def _user_data_apply_fixtures(request):
     if request.method != "POST":
