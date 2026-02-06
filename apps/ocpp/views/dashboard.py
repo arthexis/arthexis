@@ -43,7 +43,6 @@ def dashboard(request):
     role = node.role if node else None
     role_name = role.name if role else ""
     if role_name != "Terminal":
-    if role_name != "Terminal":
         auth_response = require_site_operator_or_staff(request)
         if auth_response is not None:
             return auth_response
