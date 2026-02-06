@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 from dataclasses import dataclass
@@ -38,6 +39,8 @@ class Forwarder:
 
     def __init__(self) -> None:
         self._sessions: MutableMapping[int, ForwardingSession] = {}
+        self._keepalive_task: asyncio.Task[None] | None = None
+        self._keepalive_interval: int | None = None
 
     @staticmethod
     def _candidate_forwarding_urls(node, charger) -> Iterator[str]:
@@ -199,6 +202,35 @@ class Forwarder:
             session.last_activity = now
             pinged += 1
         return pinged
+
+    def ensure_keepalive_task(self, *, idle_seconds: int = 60) -> None:
+        """Ensure the keepalive loop runs in the current asyncio process."""
+
+        if idle_seconds <= 0:
+            return
+        existing = self._keepalive_task
+        if existing is not None and not existing.done():
+            if self._keepalive_interval == idle_seconds:
+                return
+            existing.cancel()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._keepalive_interval = idle_seconds
+        self._keepalive_task = loop.create_task(self._keepalive_loop())
+
+    async def _keepalive_loop(self) -> None:
+        """Run periodic keepalive checks on forwarding sessions."""
+
+        while True:
+            interval = self._keepalive_interval or 0
+            if interval <= 0:
+                return
+            await asyncio.sleep(interval)
+            await asyncio.to_thread(
+                self.keepalive_sessions, idle_seconds=interval
+            )
 
     def active_target_ids(self, only_connected: bool = True) -> set[int]:
         """Return the set of target node IDs with active sessions."""
