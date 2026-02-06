@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_FIRMWARE_VENDOR_ID = "org.openchargealliance.firmware"
+OFFLINE_NOTIFICATION_GRACE = timedelta(minutes=5)
+OFFLINE_NOTIFICATION_COOLDOWN = timedelta(days=1)
 
 
 @shared_task
@@ -589,6 +591,52 @@ def _format_charger(transaction: Transaction) -> str:
     return str(charger)
 
 
+def _first_group_email(group) -> str:
+    if not group or not getattr(group, "pk", None):
+        return ""
+    user = (
+        group.user_set.filter(is_active=True)
+        .exclude(email="")
+        .order_by("id")
+        .first()
+    )
+    return (user.email or "").strip() if user else ""
+
+
+def _node_outbox_email() -> str:
+    node = Node.get_local()
+    if not node:
+        return ""
+    outbox = getattr(node, "email_outbox", None)
+    if not outbox:
+        return ""
+    owner = getattr(outbox, "owner", None)
+    if owner is None:
+        return ""
+    if hasattr(owner, "email"):
+        return (getattr(owner, "email", "") or "").strip()
+    return _first_group_email(owner)
+
+
+def _resolve_offline_notification_recipient(charger: Charger) -> str:
+    maintenance_email = charger.maintenance_email_value()
+    if maintenance_email:
+        return maintenance_email
+    owner = charger.owner
+    if owner is not None and hasattr(owner, "email"):
+        owner_email = (getattr(owner, "email", "") or "").strip()
+        if owner_email:
+            return owner_email
+    group_email = _first_group_email(getattr(charger, "group", None))
+    if group_email:
+        return group_email
+    outbox_email = _node_outbox_email()
+    if outbox_email:
+        return outbox_email
+    recipients, _ = resolve_recipient_fallbacks([], owner=None)
+    return recipients[0] if recipients else ""
+
+
 @shared_task
 def send_daily_session_report() -> int:
     """Send a summary of today's OCPP sessions when email is available."""
@@ -692,3 +740,69 @@ def send_daily_session_report() -> int:
         "Sent OCPP session report for %s to %s", today.isoformat(), ", ".join(recipients)
     )
     return len(transactions)
+
+
+@shared_task(rate_limit="12/h")
+def send_offline_charge_point_notifications() -> int:
+    """Send offline notifications for charge points that stay offline."""
+
+    if not mailer.can_send_email():
+        logger.info("Skipping offline charge point notifications: email not configured")
+        return 0
+    if not is_celery_enabled():
+        logger.info("Skipping offline charge point notifications: celery disabled")
+        return 0
+
+    now = timezone.now()
+    cutoff = now - OFFLINE_NOTIFICATION_GRACE
+    candidates = (
+        Charger.objects.filter(last_heartbeat__isnull=False, last_heartbeat__lt=cutoff)
+        .select_related("user", "group", "location")
+        .order_by("charger_id", "connector_id")
+    )
+
+    sources: dict[int, Charger] = {}
+    for charger in candidates:
+        source = charger.offline_notification_source()
+        if not source.email_when_offline_value():
+            continue
+        if source.last_seen and source.last_seen > cutoff:
+            continue
+        if source.pk is not None and source.pk not in sources:
+            sources[source.pk] = source
+
+    sent = 0
+    for source in sources.values():
+        last_sent = source.offline_notification_sent_at
+        if last_sent and (now - last_sent) < OFFLINE_NOTIFICATION_COOLDOWN:
+            continue
+        recipient = _resolve_offline_notification_recipient(source)
+        if not recipient:
+            logger.info(
+                "Skipping offline notification for %s: no recipient resolved",
+                source.charger_id,
+            )
+            continue
+
+        subject = f"Charge point offline: {source.charger_id}"
+        last_seen = source.last_seen
+        message = [
+            f"Charge point {source.charger_id} has been offline for more than 5 minutes.",
+        ]
+        if source.display_name:
+            message.append(f"Display name: {source.display_name}")
+        if source.location:
+            message.append(f"Location: {source.location}")
+        if last_seen:
+            message.append(f"Last seen: {timezone.localtime(last_seen).isoformat()}")
+        mailer.send(
+            subject=subject,
+            message="\n".join(message),
+            recipient_list=[recipient],
+        )
+        source.offline_notification_sent_at = now
+        source.save(update_fields=["offline_notification_sent_at"])
+        sent += 1
+
+    logger.info("Sent %s offline charge point notifications", sent)
+    return sent
