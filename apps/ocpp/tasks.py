@@ -526,17 +526,6 @@ def setup_forwarders() -> int:
     return connected
 
 
-@shared_task
-def keepalive_forwarders() -> int:
-    """Ping forwarding sessions to avoid idle disconnects."""
-
-    idle_seconds = int(getattr(settings, "OCPP_FORWARDER_PING_INTERVAL", 60))
-    pinged = forwarder.keepalive_sessions(idle_seconds=idle_seconds)
-    if pinged:
-        logger.debug("Sent %s forwarding websocket ping(s)", pinged)
-    return pinged
-
-
 # Backwards compatibility alias for legacy schedules
 @shared_task
 def push_forwarded_charge_points() -> int:
