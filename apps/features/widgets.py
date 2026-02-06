@@ -55,7 +55,6 @@ def latest_feature_updates_widget(**_kwargs):
             {
                 "feature": feature,
                 "admin_url": admin_url,
-                "site_url": feature.get_absolute_url(),
                 "toggle_url": toggle_url,
                 "updated_at": feature.latest_activity_at,
             }
