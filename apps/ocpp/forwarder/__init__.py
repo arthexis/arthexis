@@ -190,7 +190,7 @@ class Forwarder:
                 continue
             try:
                 ping()
-            except Exception as exc:  # pragma: no cover - network errors
+            except (WebSocketException, OSError) as exc:  # pragma: no cover - network errors
                 logger.warning(
                     "Forwarding websocket ping failed for charger %s via %s: %s",
                     session.charger_pk,

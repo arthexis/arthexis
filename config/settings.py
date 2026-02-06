@@ -652,6 +652,8 @@ try:
     )
 except (TypeError, ValueError):
     OCPP_FORWARDER_PING_INTERVAL = 60
+if OCPP_FORWARDER_PING_INTERVAL <= 0:
+    OCPP_FORWARDER_PING_INTERVAL = 60
 
 PAGES_CHAT_ENABLED = env_bool("PAGES_CHAT_ENABLED", True)
 PAGES_CHAT_NOTIFY_STAFF = env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
@@ -892,10 +894,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.schedule_daily_charge_point_configuration_checks",
         "schedule": crontab(minute=0, hour=0),
     },
-    "ocpp_power_projection": {
-        "task": "apps.ocpp.tasks.schedule_power_projection_requests",
-        "schedule": crontab(minute=0, hour=1),
-    },
     "ocpp_firmware_snapshot": {
         "task": "apps.ocpp.tasks.schedule_daily_firmware_snapshot_requests",
         "schedule": crontab(minute=30, hour=0),
@@ -904,13 +902,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.setup_forwarders",
         "schedule": timedelta(minutes=5),
     },
-    "ocpp_forwarding_keepalive": {
-        "task": "apps.ocpp.tasks.keepalive_forwarders",
-        "schedule": timedelta(seconds=OCPP_FORWARDER_PING_INTERVAL),
-    },
     "ocpp_meter_value_purge": {
         "task": "apps.ocpp.tasks.purge_meter_values",
         "schedule": crontab(minute=0, hour=3),
+    },
+    "ocpp_power_projection": {
+        "task": "apps.ocpp.tasks.schedule_power_projection_requests",
+        "schedule": crontab(minute=0, hour=1),
     },
     "web_request_sampling": {
         "task": "apps.content.tasks.run_scheduled_web_samplers",
