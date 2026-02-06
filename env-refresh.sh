@@ -183,10 +183,51 @@ PY
   fi
 }
 
+should_install_hardware_requirements() {
+  local lock_dir="$SCRIPT_DIR/.locks"
+  local role_file="$lock_dir/role.lck"
+
+  case "${ARTHEXIS_INSTALL_HARDWARE_DEPS:-}" in
+    1|true|TRUE|yes|YES)
+      return 0
+      ;;
+  esac
+
+  if [ -f "$role_file" ]; then
+    local role
+    role=$(tr -d '\r\n' < "$role_file")
+    if [ "$role" = "Control" ]; then
+      return 0
+    fi
+  fi
+
+  if [ -f "$lock_dir/lcd_screen.lck" ] || [ -f "$lock_dir/rfid-service.lck" ] || [ -f "$lock_dir/rfid.lck" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
 collect_requirement_files() {
   local -n out_array="$1"
+  local -a all_requirements=()
+  local -a filtered=()
+  local hardware_file="$SCRIPT_DIR/requirements-hardware.txt"
 
-  mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
+  mapfile -t all_requirements < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
+
+  for req_file in "${all_requirements[@]}"; do
+    if [ "$req_file" = "$hardware_file" ]; then
+      continue
+    fi
+    filtered+=("$req_file")
+  done
+
+  if [ -f "$hardware_file" ] && should_install_hardware_requirements; then
+    filtered+=("$hardware_file")
+  fi
+
+  out_array=("${filtered[@]}")
 }
 
 compute_file_checksum() {
