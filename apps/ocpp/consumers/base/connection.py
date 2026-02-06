@@ -158,7 +158,8 @@ class ConnectionMixin:
 
     async def _assign_specific_connector(self, connector_value: int) -> None:
         if (
-            self.connector_value == connector_value
+            self.charger
+            and self.connector_value == connector_value
             and self.charger.connector_id == connector_value
         ):
             return
@@ -185,7 +186,6 @@ class ConnectionMixin:
         )
         self.store_key = new_key
         self.connector_value = connector_value
-
     async def _ensure_aggregate_charger(self) -> Charger:
         aggregate = self.aggregate_charger
         if (
