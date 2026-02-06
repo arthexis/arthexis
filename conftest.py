@@ -188,3 +188,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             reporter.write_line(message, yellow=True)
         else:
             print(message, file=sys.stderr)
+    finally:
+        from django.db import connections
+
+        connections.close_all()
