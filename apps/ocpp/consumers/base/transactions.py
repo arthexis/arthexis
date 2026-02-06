@@ -253,12 +253,13 @@ class TransactionsMixin:
         task = self._consumption_task
         message_uuid = self._consumption_message_uuid
         self._consumption_task = None
+        cancelled = False
         if task:
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                cancelled = True
         if message_uuid:
             def _expire() -> None:
                 msg = NetMessage.objects.filter(uuid=message_uuid).first()
@@ -270,6 +271,8 @@ class TransactionsMixin:
 
             await database_sync_to_async(_expire)()
         self._consumption_message_uuid = None
+        if cancelled:
+            raise
 
     async def _update_consumption_message(self, tx_id: int) -> str | None:
         """Create or update the Net Message for an active transaction."""
