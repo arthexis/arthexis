@@ -47,6 +47,7 @@
       >
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
+        <input type="hidden" name="messages" value="">
         {% if request.user.is_authenticated %}
           <div class="user-story-field">
             <label for="user-story-name" class="user-story-label">{% trans 'Username' %}</label>

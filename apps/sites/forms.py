@@ -45,10 +45,11 @@ class AuthenticatorLoginForm(AuthenticationForm):
 class UserStoryForm(forms.ModelForm):
     class Meta:
         model = UserStory
-        fields = ("name", "rating", "comments", "path")
+        fields = ("name", "rating", "comments", "path", "messages")
         widgets = {
             "path": forms.HiddenInput(),
             "comments": forms.Textarea(attrs={"rows": 4, "maxlength": 400}),
+            "messages": forms.HiddenInput(),
         }
 
     def __init__(self, *args, user=None, **kwargs):
@@ -102,6 +103,9 @@ class UserStoryForm(forms.ModelForm):
 
     def clean_path(self):
         return (self.cleaned_data.get("path") or "").strip()
+
+    def clean_messages(self):
+        return (self.cleaned_data.get("messages") or "").strip()
 
     def save(self, commit=True):
         instance = super().save(commit=False)
