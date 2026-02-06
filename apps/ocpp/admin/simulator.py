@@ -114,14 +114,13 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                 "slug", flat=True
             )
         )
-        if feature.is_enabled:
-            current.discard(feature.slug)
-            action = "disabled"
-            service_enabled = False
-        else:
+        service_enabled = not feature.is_enabled
+        if service_enabled:
             current.add(feature.slug)
             action = "enabled"
-            service_enabled = True
+        else:
+            current.discard(feature.slug)
+            action = "disabled"
         node.update_manual_features(current)
         queue_cpsim_service_toggle(enabled=service_enabled, source="admin")
         self.message_user(
