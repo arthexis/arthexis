@@ -4,7 +4,7 @@
     "fields": {
       "slug": "standard-charge-point",
       "display": "Standard Charge Point",
-      "summary": "Core CSMS capability: listen for charge point websocket traffic, respond to OCPP requests, and approve standard flows unless gated by additional features.",
+      "summary": "Allow the CSMS to auto-create and register new charge points on first websocket connect. When disabled, only known chargers can connect.",
       "is_enabled": true,
       "main_app": [
         "ocpp"
@@ -14,7 +14,7 @@
       ],
       "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
       "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
-      "service_requirements": "Accept websocket connections from charge points, process OCPP calls, and dispatch CSMS responses.",
+      "service_requirements": "Create charger records on first connect, register charge points to the local node, and allow OCPP traffic for known chargers when creation is disabled.",
       "admin_views": [
         "admin:ocpp_charger_changelist",
         "admin:ocpp_simulator_changelist"
