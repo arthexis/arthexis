@@ -157,7 +157,8 @@ def load_local_seed_zips(*, verbosity: int = 0, only_paths: list[Path] | None = 
     from apps.core.fixtures import ensure_seed_data_flags
 
     loaded = 0
-    for zip_path in only_paths or _seed_zip_paths():
+    paths = _seed_zip_paths() if only_paths is None else only_paths
+    for zip_path in paths:
         try:
             with ZipFile(zip_path) as zf:
                 for name in zf.namelist():
