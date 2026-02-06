@@ -48,8 +48,9 @@ class LogViewAdminMixin:
         log_file = store.resolve_log_path(identifier, log_type=self.log_type)
         if log_file is None:
             log_file = store._file_path(identifier, log_type=self.log_type)
+        log_file_exists = log_file is not None and log_file.exists()
         if request.GET.get("download") == "1":
-            if log_file.exists():
+            if log_file_exists:
                 response = FileResponse(
                     log_file.open("rb"),
                     as_attachment=True,
@@ -79,7 +80,7 @@ class LogViewAdminMixin:
             "original": obj,
             "title": self.get_log_title(obj),
             "log_entries": log_entries,
-            "log_file": str(log_file),
+            "log_file": str(log_file) if log_file_exists else None,
             "log_identifier": identifier,
             "log_limit": log_limit,
         }
