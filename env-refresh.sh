@@ -145,6 +145,43 @@ pip_install_with_helper() {
   fi
 }
 
+celery_requirement() {
+  local requirements_file="$SCRIPT_DIR/requirements.txt"
+  if [ -f "$requirements_file" ]; then
+    local line
+    line=$(grep -E '^celery[<=>!~]+' "$requirements_file" | head -n 1 || true)
+    if [ -n "$line" ]; then
+      echo "$line"
+      return 0
+    fi
+  fi
+  echo "celery"
+}
+
+ensure_celery_installed() {
+  if "$PYTHON" - <<'PY' >/dev/null 2>&1
+import importlib
+importlib.import_module("celery")
+PY
+  then
+    return 0
+  fi
+
+  local -a celery_pip_args=(--cache-dir "$PIP_CACHE_DIR")
+  if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+    celery_pip_args+=(--user)
+  fi
+  local celery_req
+  celery_req=$(celery_requirement)
+
+  echo "Celery not found; attempting to install ${celery_req}." >&2
+  if ! pip_install_with_helper "${celery_pip_args[@]}" "$celery_req"; then
+    echo "Celery installation failed. On Ubuntu 24, ensure pip and venv support are installed:" >&2
+    echo "  sudo apt-get update && sudo apt-get install python3-venv" >&2
+    return 1
+  fi
+}
+
 collect_requirement_files() {
   local -n out_array="$1"
 
@@ -364,6 +401,8 @@ else
   fi
   date +%s > "$REQ_TIMESTAMP_FILE"
 fi
+
+ensure_celery_installed
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
