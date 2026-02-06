@@ -459,7 +459,7 @@ class CPForwarder(Entity):
         if values is None:
             return list(OCPP_FORWARDING_CALLS)
         if isinstance(values, str):
-            return list(OCPP_FORWARDING_CALLS)
+            return []
         cleaned: list[str] = []
         order_map = {msg: idx for idx, msg in enumerate(OCPP_FORWARDING_CALLS)}
         for item in values:
