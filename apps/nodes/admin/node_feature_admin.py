@@ -42,12 +42,12 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         check_features_for_eligibility,
         enable_selected_features,
     ]
-    readonly_fields = ("is_enabled",)
+    readonly_fields = ("is_enabled", "linked_features")
     search_fields = ("display", "slug")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.prefetch_related("roles")
+        return qs.prefetch_related("roles", "suite_features")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -91,6 +91,23 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         if not links:
             return "—"
         return format_html_join(" | ", "{}", ((link,) for link in links))
+
+    @admin.display(description="Linked Features")
+    def linked_features(self, obj):
+        features = obj.suite_features.all()
+        if not features:
+            return "—"
+        items = []
+        for feature in features.order_by("display", "slug"):
+            status = _("Enabled") if feature.is_enabled else _("Disabled")
+            items.append(
+                format_html(
+                    "<li>{} <span class='help'>({})</span></li>",
+                    feature.display,
+                    status,
+                )
+            )
+        return format_html("<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items)))
 
     def _manual_enablement_data(self, feature, node):
         if node is None:
