@@ -12,7 +12,7 @@ from apps.cards import views
 from apps.cards.models import RFIDAttempt
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.regression]
 
 
 def _make_node(role_name: str) -> SimpleNamespace:

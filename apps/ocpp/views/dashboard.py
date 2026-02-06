@@ -39,13 +39,16 @@ from .common import (
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
     is_htmx = request.headers.get("HX-Request") == "true"
-    auth_response = require_site_operator_or_staff(request)
-    if auth_response is not None:
-        return auth_response
-    _clear_stale_statuses_for_view()
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
+    user = getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        if role_name != "Terminal":
+            auth_response = require_site_operator_or_staff(request)
+            if auth_response is not None:
+                return auth_response
+    _clear_stale_statuses_for_view()
     is_watchtower = role_name in {"Watchtower", "Constellation"}
     latest_tx_subquery = (
         Transaction.objects.filter(charger=OuterRef("pk"))
