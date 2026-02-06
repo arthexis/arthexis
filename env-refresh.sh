@@ -149,7 +149,7 @@ celery_requirement() {
   local requirements_file="$SCRIPT_DIR/requirements.txt"
   if [ -f "$requirements_file" ]; then
     local line
-    line=$(grep -E '^celery(\[|[<=>!~])' "$requirements_file" | head -n 1 || true)
+    line=$(grep -E '^celery(\[[^]]+\])?([[:space:]]*[<=>!~].*)?$' "$requirements_file" | head -n 1 || true)
     if [ -n "$line" ]; then
       echo "$line"
       return 0
@@ -176,8 +176,9 @@ PY
 
   echo "Celery not found; attempting to install ${celery_req}." >&2
   if ! pip_install_with_helper "${celery_pip_args[@]}" "$celery_req"; then
-    echo "Celery installation failed. On Ubuntu 24, ensure pip and venv support are installed:" >&2
-    echo "  sudo apt-get update && sudo apt-get install python3-venv" >&2
+    echo "Celery installation failed. Ensure pip and Python venv support are installed." >&2
+    echo "  Ubuntu/Debian: sudo apt-get install python3-venv" >&2
+    echo "  RHEL/Fedora:   sudo dnf install python3-pip" >&2
     return 1
   fi
 }

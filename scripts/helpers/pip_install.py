@@ -20,7 +20,14 @@ def _extract_failed_builds(line: str) -> Set[str]:
 
     wheel_marker = "ERROR: Failed building wheel for "
     if wheel_marker in line:
-        failures.add(line.split(wheel_marker, 1)[1].strip())
+        pkg = line.split(wheel_marker, 1)[1].split()[0].strip()
+        failures.add(pkg)
+        return failures
+
+    wheel_fail_marker = "ERROR: Could not build wheels for "
+    if wheel_fail_marker in line:
+        pkg = line.split(wheel_fail_marker, 1)[1].split(",", 1)[0].split()[0].strip()
+        failures.add(pkg)
         return failures
 
     trimmed = line.strip()
@@ -65,8 +72,13 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
                 failed_builds.update(new_failures)
                 if not new_failures.issubset(ALLOWED_BUILD_FAILURES):
                     non_allowed_failure = True
-            if "ERROR:" in line and "Failed building wheel for" not in line and "Failed to build " not in line:
-                non_allowed_failure = True
+            if "ERROR:" in line:
+                if new_failures and new_failures.issubset(ALLOWED_BUILD_FAILURES):
+                    pass
+                elif "Failed building wheel for" in line or "Failed to build " in line:
+                    pass
+                else:
+                    non_allowed_failure = True
             if "No such file or directory" in line and "gcc" in line:
                 missing_compiler = True
 
@@ -78,17 +90,16 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
             sys.stdout.flush()
 
     if return_code != 0 and failed_builds and not non_allowed_failure:
-        if failed_builds.issubset(ALLOWED_BUILD_FAILURES):
+        sys.stderr.write(
+            "Optional hardware dependencies failed to build "
+            f"({', '.join(sorted(failed_builds))}); continuing install.\n"
+        )
+        if missing_compiler:
             sys.stderr.write(
-                "Optional hardware dependencies failed to build "
-                f"({', '.join(sorted(failed_builds))}); continuing install.\n"
+                "Install build tools (e.g. `sudo apt-get install build-essential`) "
+                "if you need GPIO/SPIDEV support.\n"
             )
-            if missing_compiler:
-                sys.stderr.write(
-                    "Install build tools (e.g. `sudo apt-get install build-essential`) "
-                    "if you need GPIO/SPIDEV support.\n"
-                )
-            return 0
+        return 0
 
     return return_code
 
