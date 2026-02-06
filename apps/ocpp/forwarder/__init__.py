@@ -300,8 +300,8 @@ class Forwarder:
                 )
                 try:
                     session.connection.send(error)
-                except Exception:  # pragma: no cover - network errors
-                    pass
+                except Exception as exc:  # pragma: no cover - network errors
+                    logger.warning("Failed to send error to forwarding peer for charger %s: %s", charger_pk, exc)
                 continue
 
             charger = Charger.objects.filter(pk=charger_pk).first()
