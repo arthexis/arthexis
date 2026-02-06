@@ -8,6 +8,7 @@ from celery import shared_task
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Prefetch
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 
 from apps.celery.utils import enqueue_task, is_celery_enabled
@@ -756,13 +757,13 @@ def send_offline_charge_point_notifications() -> int:
     now = timezone.now()
     cutoff = now - OFFLINE_NOTIFICATION_GRACE
     candidates = (
-        Charger.objects.filter(
-            (
-                Q(last_status_timestamp__isnull=False)
-                & Q(last_status_timestamp__lt=cutoff)
-            )
-            | (Q(last_heartbeat__isnull=False) & Q(last_heartbeat__lt=cutoff))
+        Charger.objects.annotate(
+            last_activity=Greatest(
+                Coalesce("last_status_timestamp", "last_heartbeat"),
+                Coalesce("last_heartbeat", "last_status_timestamp"),
+            ),
         )
+        .filter(last_activity__isnull=False, last_activity__lt=cutoff)
         .select_related("user", "group", "location")
         .order_by("charger_id", "connector_id")
     )
@@ -821,8 +822,12 @@ def send_offline_charge_point_notifications() -> int:
 
         subject = f"Charge point offline: {source.charger_id}"
         last_seen = source.last_seen
+        grace_minutes = int(OFFLINE_NOTIFICATION_GRACE.total_seconds() // 60)
         message = [
-            f"Charge point {source.charger_id} has been offline for more than 5 minutes.",
+            (
+                f"Charge point {source.charger_id} has been offline for more than "
+                f"{grace_minutes} minutes."
+            ),
         ]
         if source.display_name:
             message.append(f"Display name: {source.display_name}")
