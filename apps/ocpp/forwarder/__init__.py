@@ -339,7 +339,6 @@ class Forwarder:
                     pass
                 continue
 
-            payload = message[3] if len(message) > 3 else {}
             log_key = store.identity_key(charger.charger_id, charger.connector_id)
             store.add_log(log_key, f"< {json.dumps(message)}", log_type="charger")
             store.register_pending_call(
