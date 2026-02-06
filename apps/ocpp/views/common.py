@@ -353,9 +353,7 @@ def _is_untracked_origin(
     local_pk = getattr(local_node, "pk", None)
     if local_pk is not None and origin.pk == local_pk:
         return False
-    last_seen = getattr(origin, "last_seen", None)
-    if last_seen is None:
-        last_seen = getattr(origin, "last_updated", None)
+    last_seen = getattr(origin, "last_seen", None) or getattr(origin, "last_updated", None)
     if last_seen is None:
         return True
     if timezone.is_naive(last_seen):
