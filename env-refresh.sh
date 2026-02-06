@@ -31,6 +31,16 @@ sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
+if [ -f "$SCRIPT_DIR/scripts/helpers/service_manager.sh" ]; then
+  . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
+else
+  echo "Warning: service_manager.sh not found; using default lock filenames." >&2
+fi
+
+ARTHEXIS_LCD_LOCK="${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}"
+ARTHEXIS_RFID_SERVICE_LOCK="${ARTHEXIS_RFID_SERVICE_LOCK:-rfid-service.lck}"
 
 now_ms() {
   date +%s%3N
@@ -186,6 +196,9 @@ PY
 should_install_hardware_requirements() {
   local lock_dir="$SCRIPT_DIR/.locks"
   local role_file="$lock_dir/role.lck"
+  local lcd_lock="$ARTHEXIS_LCD_LOCK"
+  local rfid_service_lock="$ARTHEXIS_RFID_SERVICE_LOCK"
+  local rfid_lock="rfid.lck"
 
   case "${ARTHEXIS_INSTALL_HARDWARE_DEPS:-}" in
     1|true|TRUE|yes|YES)
@@ -197,7 +210,7 @@ should_install_hardware_requirements() {
     return 0
   fi
 
-  if [ -f "$lock_dir/lcd_screen.lck" ] || [ -f "$lock_dir/rfid-service.lck" ] || [ -f "$lock_dir/rfid.lck" ]; then
+  if [ -f "$lock_dir/$lcd_lock" ] || [ -f "$lock_dir/$rfid_service_lock" ] || [ -f "$lock_dir/$rfid_lock" ]; then
     return 0
   fi
 
@@ -206,24 +219,13 @@ should_install_hardware_requirements() {
 
 collect_requirement_files() {
   local -n out_array="$1"
-  local -a all_requirements=()
-  local -a filtered=()
   local hardware_file="$SCRIPT_DIR/requirements-hardware.txt"
 
-  mapfile -t all_requirements < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
-
-  for req_file in "${all_requirements[@]}"; do
-    if [ "$req_file" = "$hardware_file" ]; then
-      continue
-    fi
-    filtered+=("$req_file")
-  done
+  mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' ! -name 'requirements-hardware.txt' -print | sort)
 
   if [ -f "$hardware_file" ] && should_install_hardware_requirements; then
-    filtered+=("$hardware_file")
+    out_array+=("$hardware_file")
   fi
-
-  out_array=("${filtered[@]}")
 }
 
 compute_file_checksum() {
