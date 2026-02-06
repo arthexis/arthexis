@@ -756,15 +756,50 @@ def send_offline_charge_point_notifications() -> int:
     now = timezone.now()
     cutoff = now - OFFLINE_NOTIFICATION_GRACE
     candidates = (
-        Charger.objects.filter(last_heartbeat__isnull=False, last_heartbeat__lt=cutoff)
+        Charger.objects.filter(
+            (
+                Q(last_status_timestamp__isnull=False)
+                & Q(last_status_timestamp__lt=cutoff)
+            )
+            | (Q(last_heartbeat__isnull=False) & Q(last_heartbeat__lt=cutoff))
+        )
         .select_related("user", "group", "location")
         .order_by("charger_id", "connector_id")
     )
 
+    charger_ids = {charger.charger_id for charger in candidates}
+    station_map = {}
+    if charger_ids:
+        station_map = {
+            station.charger_id: station
+            for station in Charger.objects.filter(
+                charger_id__in=charger_ids,
+                connector_id__isnull=True,
+            )
+        }
+
+    def _station_for(charger: Charger) -> Charger:
+        if charger.connector_id is None:
+            return charger
+        return station_map.get(charger.charger_id, charger)
+
+    def _offline_notification_source(charger: Charger) -> Charger:
+        if charger.email_when_offline or charger.maintenance_email:
+            return charger
+        return _station_for(charger)
+
+    def _email_when_offline_value(charger: Charger, station: Charger) -> bool:
+        if charger.email_when_offline:
+            return True
+        if station.pk != charger.pk:
+            return bool(station.email_when_offline)
+        return False
+
     sources: dict[int, Charger] = {}
     for charger in candidates:
-        source = charger.offline_notification_source()
-        if not source.email_when_offline_value():
+        station = _station_for(charger)
+        source = _offline_notification_source(charger)
+        if not _email_when_offline_value(source, station):
             continue
         if source.last_seen and source.last_seen > cutoff:
             continue
@@ -795,11 +830,19 @@ def send_offline_charge_point_notifications() -> int:
             message.append(f"Location: {source.location}")
         if last_seen:
             message.append(f"Last seen: {timezone.localtime(last_seen).isoformat()}")
-        mailer.send(
-            subject=subject,
-            message="\n".join(message),
-            recipient_list=[recipient],
-        )
+        try:
+            mailer.send(
+                subject=subject,
+                message="\n".join(message),
+                recipient_list=[recipient],
+            )
+        except Exception as exc:
+            logger.exception(
+                "Failed to send offline notification for %s: %s",
+                source.charger_id,
+                exc,
+            )
+            continue
         source.offline_notification_sent_at = now
         source.save(update_fields=["offline_notification_sent_at"])
         sent += 1
