@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections import deque
 from datetime import datetime
+import ipaddress
 
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
@@ -70,6 +71,7 @@ class ConnectionMixin:
         self._consumption_message_uuid: str | None = None
         self.client_ip = _resolve_client_ip(self.scope)
         self._header_reference_created = False
+        self._charger_record_created = False
         existing_charger = await database_sync_to_async(
             lambda: Charger.objects.select_related(
                 "ws_auth_user", "ws_auth_group", "station_model"
@@ -84,6 +86,7 @@ class ConnectionMixin:
         if not await self._accept_connection(subprotocol):
             return
         created = await self._ensure_charger_record(existing_charger)
+        self._charger_record_created = created
         await self._register_charger_logs()
 
         restored_calls = store.restore_pending_calls(self.charger_id)
@@ -118,108 +121,54 @@ class ConnectionMixin:
 
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
-        if connector in (None, "", "-"):
-            connector_value = None
-        else:
-            try:
-                connector_value = int(connector)
-                if connector_value == 0:
-                    connector_value = None
-            except (TypeError, ValueError):
-                return
-        if connector_value is None:
-            aggregate = self.aggregate_charger
-            if (
-                not aggregate
-                or aggregate.connector_id is not None
-                or aggregate.charger_id != self.charger_id
-            ):
-                aggregate, _ = await database_sync_to_async(
-                    Charger.objects.get_or_create
-                )(
-                    charger_id=self.charger_id,
-                    connector_id=None,
-                    defaults={"last_path": self.scope.get("path", "")},
-                )
-                await database_sync_to_async(aggregate.refresh_manager_node)()
-                self.aggregate_charger = aggregate
-            self.charger = self.aggregate_charger
-            previous_key = self.store_key
-            new_key = store.identity_key(self.charger_id, None)
-            if previous_key != new_key:
-                existing_consumer = store.connections.get(new_key)
-                if existing_consumer is not None and existing_consumer is not self:
-                    await existing_consumer.close()
-                store.reassign_identity(previous_key, new_key)
-                store.connections[new_key] = self
-                store.logs["charger"].setdefault(
-                    new_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
-                )
-            aggregate_name = await sync_to_async(
-                lambda: self.charger.name or self.charger.charger_id
-            )()
-            friendly_name = aggregate_name or self.charger_id
-            _register_log_names_for_identity(self.charger_id, None, friendly_name)
-            self.store_key = new_key
-            self.connector_value = None
-            if not self._header_reference_created and self.client_ip:
-                await database_sync_to_async(self._ensure_console_reference)()
-                self._header_reference_created = True
+        connector_value, is_valid = self._normalize_connector_value(connector)
+        if not is_valid:
             return
+        if connector_value is None:
+            await self._assign_aggregate_connector()
+            return
+        await self._assign_specific_connector(connector_value)
+
+    def _normalize_connector_value(
+        self, connector: int | str | None
+    ) -> tuple[int | None, bool]:
+        if connector in (None, "", "-"):
+            return None, True
+        try:
+            connector_value = int(connector)
+        except (TypeError, ValueError):
+            return None, False
+        if connector_value == 0:
+            return None, True
+        return connector_value, True
+
+    async def _assign_aggregate_connector(self) -> None:
+        aggregate = await self._ensure_aggregate_charger()
+        self.charger = aggregate
+        new_key = store.identity_key(self.charger_id, None)
+        await self._reassign_store_identity(new_key)
+        aggregate_name = await sync_to_async(
+            lambda: self.charger.name or self.charger.charger_id
+        )()
+        friendly_name = aggregate_name or self.charger_id
+        _register_log_names_for_identity(self.charger_id, None, friendly_name)
+        self.store_key = new_key
+        self.connector_value = None
+        await self._maybe_create_console_reference()
+
+    async def _assign_specific_connector(self, connector_value: int) -> None:
         if (
             self.connector_value == connector_value
             and self.charger.connector_id == connector_value
         ):
             return
-        if (
-            not self.aggregate_charger
-            or self.aggregate_charger.connector_id is not None
-        ):
-            aggregate, _ = await database_sync_to_async(
-                Charger.objects.get_or_create
-            )(
-                charger_id=self.charger_id,
-                connector_id=None,
-                defaults={"last_path": self.scope.get("path", "")},
-            )
-            await database_sync_to_async(aggregate.refresh_manager_node)()
-            self.aggregate_charger = aggregate
-        existing = await database_sync_to_async(
-            Charger.objects.filter(
-                charger_id=self.charger_id, connector_id=connector_value
-            ).first
-        )()
-        if existing:
-            self.charger = existing
-            await database_sync_to_async(self.charger.refresh_manager_node)()
-        else:
-
-            def _create_connector():
-                charger, _ = Charger.objects.get_or_create(
-                    charger_id=self.charger_id,
-                    connector_id=connector_value,
-                    defaults={"last_path": self.scope.get("path", "")},
-                )
-                if self.scope.get("path") and charger.last_path != self.scope.get(
-                    "path"
-                ):
-                    charger.last_path = self.scope.get("path")
-                    charger.save(update_fields=["last_path"])
-                charger.refresh_manager_node()
-                return charger
-
-            self.charger = await database_sync_to_async(_create_connector)()
-        previous_key = self.store_key
+        await self._ensure_aggregate_charger()
+        self.charger = await self._get_or_create_connector_charger(
+            connector_value,
+            update_last_path=True,
+        )
         new_key = store.identity_key(self.charger_id, connector_value)
-        if previous_key != new_key:
-            existing_consumer = store.connections.get(new_key)
-            if existing_consumer is not None and existing_consumer is not self:
-                await existing_consumer.close()
-            store.reassign_identity(previous_key, new_key)
-            store.connections[new_key] = self
-            store.logs["charger"].setdefault(
-                new_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
-            )
+        await self._reassign_store_identity(new_key)
         connector_name = await sync_to_async(
             lambda: self.charger.name or self.charger.charger_id
         )()
@@ -236,6 +185,62 @@ class ConnectionMixin:
         )
         self.store_key = new_key
         self.connector_value = connector_value
+
+    async def _ensure_aggregate_charger(self) -> Charger:
+        aggregate = self.aggregate_charger
+        if (
+            not aggregate
+            or aggregate.connector_id is not None
+            or aggregate.charger_id != self.charger_id
+        ):
+            aggregate, _ = await database_sync_to_async(
+                Charger.objects.get_or_create
+            )(
+                charger_id=self.charger_id,
+                connector_id=None,
+                defaults={"last_path": self.scope.get("path", "")},
+            )
+            await database_sync_to_async(aggregate.refresh_manager_node)()
+            self.aggregate_charger = aggregate
+        return self.aggregate_charger
+
+    async def _get_or_create_connector_charger(
+        self, connector_value: int, *, update_last_path: bool
+    ) -> Charger:
+        def _get_or_create():
+            charger, _ = Charger.objects.get_or_create(
+                charger_id=self.charger_id,
+                connector_id=connector_value,
+                defaults={"last_path": self.scope.get("path", "")},
+            )
+            if update_last_path and self.scope.get("path"):
+                path = self.scope.get("path")
+                if charger.last_path != path:
+                    charger.last_path = path
+                    charger.save(update_fields=["last_path"])
+            charger.refresh_manager_node()
+            return charger
+
+        return await database_sync_to_async(_get_or_create)()
+
+    async def _reassign_store_identity(self, new_key: str) -> None:
+        previous_key = self.store_key
+        if previous_key == new_key:
+            return
+        existing_consumer = store.connections.get(new_key)
+        if existing_consumer is not None and existing_consumer is not self:
+            await existing_consumer.close()
+        store.reassign_identity(previous_key, new_key)
+        store.connections[new_key] = self
+        store.logs["charger"].setdefault(
+            new_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
+        )
+
+    async def _maybe_create_console_reference(self) -> None:
+        if self._header_reference_created or not self.client_ip:
+            return
+        await database_sync_to_async(self._ensure_console_reference)()
+        self._header_reference_created = True
 
     async def _ensure_forwarding_context(
         self, charger,
@@ -419,6 +424,12 @@ class ConnectionMixin:
             return
         if host_is_local_loopback(ip):
             return
+        try:
+            parsed_ip = ipaddress.ip_address(ip)
+        except ValueError:
+            return
+        if not parsed_ip.is_global:
+            return
         host = ip
         ports = scan_open_ports(host)
         if ports:
@@ -431,6 +442,8 @@ class ConnectionMixin:
         alt_text = f"{serial} Console"
         reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
         if reference is None:
+            if self._charger_record_created:
+                return
             reference = Reference.objects.create(
                 alt_text=alt_text,
                 value=url,

@@ -24,24 +24,24 @@ class DispatchingMixin:
             vendor_message_id_text = str(vendor_message_id)
         connector_value = self.connector_value
 
-        def _get_or_create_charger():
-            if self.charger and getattr(self.charger, "pk", None):
-                return self.charger
-            if connector_value is None:
+        if self.charger and getattr(self.charger, "pk", None):
+            charger_obj = self.charger
+        elif connector_value is None:
+
+            def _get_or_create_aggregate():
                 charger, _ = Charger.objects.get_or_create(
                     charger_id=self.charger_id,
                     connector_id=None,
                     defaults={"last_path": self.scope.get("path", "")},
                 )
                 return charger
-            charger, _ = Charger.objects.get_or_create(
-                charger_id=self.charger_id,
-                connector_id=connector_value,
-                defaults={"last_path": self.scope.get("path", "")},
-            )
-            return charger
 
-        charger_obj = await database_sync_to_async(_get_or_create_charger)()
+            charger_obj = await database_sync_to_async(_get_or_create_aggregate)()
+        else:
+            charger_obj = await self._get_or_create_connector_charger(
+                connector_value,
+                update_last_path=False,
+            )
         message = await database_sync_to_async(DataTransferMessage.objects.create)(
             charger=charger_obj,
             connector_id=connector_value,

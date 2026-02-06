@@ -108,16 +108,13 @@ class AuthMixin:
             if version is not None:
                 updates["local_auth_list_version"] = int(version)
 
-            targets: list = []
+            targets_map: dict[int, Charger] = {}
             if self.charger and getattr(self.charger, "pk", None):
-                targets.append(self.charger)
+                targets_map[self.charger.pk] = self.charger
             aggregate = self.aggregate_charger
-            if (
-                aggregate
-                and getattr(aggregate, "pk", None)
-                and not any(target.pk == aggregate.pk for target in targets if target.pk)
-            ):
-                targets.append(aggregate)
+            if aggregate and getattr(aggregate, "pk", None):
+                targets_map[aggregate.pk] = aggregate
+            targets = list(targets_map.values())
 
             if not targets:
                 return
