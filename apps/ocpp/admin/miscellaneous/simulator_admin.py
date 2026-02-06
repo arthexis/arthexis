@@ -1,7 +1,12 @@
 from ..common_imports import *
 from django.core.exceptions import PermissionDenied
 
-from ...cpsim_service import cpsim_service_enabled, get_cpsim_feature, queue_cpsim_request
+from ...cpsim_service import (
+    cpsim_service_enabled,
+    get_cpsim_feature,
+    queue_cpsim_request,
+    queue_cpsim_service_toggle,
+)
 
 
 class LogViewAdminMixin:
@@ -190,10 +195,13 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         if feature.is_enabled:
             current.discard(feature.slug)
             action = "disabled"
+            service_enabled = False
         else:
             current.add(feature.slug)
             action = "enabled"
+            service_enabled = True
         node.update_manual_features(current)
+        queue_cpsim_service_toggle(enabled=service_enabled, source="admin")
         self.message_user(
             request,
             f"{feature.display} {action} for this node.",
