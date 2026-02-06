@@ -321,7 +321,7 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
         visible=bool(info.get("screen_mode")),
     )
 
-    add_field(_("Features"), "FEATURES", info.get("features", []), field_type="features")
+    add_field(_("Node Features"), "FEATURES", info.get("features", []), field_type="features")
     add_field(_("Running"), "RUNNING", info.get("running", False), field_type="boolean")
     add_field(
         _("Service status"),

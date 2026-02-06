@@ -16,7 +16,14 @@ class FeatureManager(models.Manager):
 
 
 class Feature(Ownable):
-    """Suite feature definitions that map to tests and runtime gating."""
+    """Suite feature definitions that describe external interfaces and contracts.
+
+    Suite features are user-facing (or user-agent-facing) capabilities that we expect
+    to be mostly enabled across deployments, except when toggled off for compatibility.
+    They contrast with node features, which are minimal, device-specific capabilities
+    internal to a node. Suite features often gate behavior behind user profiles or
+    other business rules and define interfaces we want to remember as contracts.
+    """
 
     owner_required = False
 
@@ -95,8 +102,8 @@ class Feature(Ownable):
 
     class Meta:
         ordering = ["display"]
-        verbose_name = "Feature"
-        verbose_name_plural = "Features"
+        verbose_name = "Suite Feature"
+        verbose_name_plural = "Suite Features"
 
     def natural_key(self):  # pragma: no cover - used by fixtures
         return (self.slug,)

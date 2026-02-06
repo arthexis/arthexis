@@ -92,7 +92,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return "—"
         return format_html_join(" | ", "{}", ((link,) for link in links))
 
-    @admin.display(description="Linked Features")
+    @admin.display(description="Linked Suite Features")
     def linked_features(self, obj):
         features = obj.suite_features.all()
         if not features:
