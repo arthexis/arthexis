@@ -25,6 +25,7 @@ from django.utils.translation import gettext_lazy as _
 from asgiref.sync import async_to_sync
 
 from apps.base.models import Entity, EntityManager
+from apps.core.models import Ownable
 from apps.nodes.models import Node
 
 from apps.energy.models import CustomerAccount, EnergyTariff
@@ -68,6 +69,7 @@ __all__ = [
     "async_to_sync",
     "Entity",
     "EntityManager",
+    "Ownable",
     "Node",
     "CustomerAccount",
     "EnergyTariff",

@@ -36,7 +36,7 @@ from requests import RequestException
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-from apps.core.admin import SaveBeforeChangeAction
+from apps.core.admin import OwnableAdminMixin, SaveBeforeChangeAction
 from apps.energy.models import EnergyTariff
 from apps.cards.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField

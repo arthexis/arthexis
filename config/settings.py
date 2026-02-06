@@ -902,6 +902,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.setup_forwarders",
         "schedule": timedelta(minutes=5),
     },
+    "ocpp_offline_notifications": {
+        "task": "apps.ocpp.tasks.send_offline_charge_point_notifications",
+        "schedule": timedelta(minutes=5),
+    },
     "ocpp_meter_value_purge": {
         "task": "apps.ocpp.tasks.purge_meter_values",
         "schedule": crontab(minute=0, hour=3),

@@ -3,16 +3,19 @@ from __future__ import annotations
 from django.urls import NoReverseMatch
 
 from apps.locale.models import Language
+from apps.sites.utils import SITE_OPERATOR_GROUP_NAME
 
 from .. import store
 from .base import *
 from .transaction import annotate_transaction_energy_bounds
 
-class Charger(Entity):
+class Charger(Ownable):
     """Known charge point."""
 
     _PLACEHOLDER_SERIAL_RE = re.compile(r"^<[^>]+>$")
     _AUTO_LOCATION_SANITIZE_RE = re.compile(r"[^0-9A-Za-z_-]+")
+
+    owner_required = False
 
     class EnergyUnit(models.TextChoices):
         KW = "kW", _("kW")
@@ -301,6 +304,23 @@ class Charger(Entity):
         ),
     )
     last_online_at = models.DateTimeField(null=True, blank=True)
+    maintenance_email = models.EmailField(
+        _("Maintenance Email"),
+        blank=True,
+        default="",
+        help_text=_("Optional contact to notify when the charge point is offline."),
+    )
+    email_when_offline = models.BooleanField(
+        _("Email when offline"),
+        default=False,
+        help_text=_("Send an email notification if this charge point is offline."),
+    )
+    offline_notification_sent_at = models.DateTimeField(
+        _("Offline Notification Sent At"),
+        null=True,
+        blank=True,
+        help_text=_("Last time an offline notification was sent for this charge point."),
+    )
     ws_auth_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -422,12 +442,54 @@ class Charger(Entity):
 
         return self.last_status_timestamp or self.last_heartbeat
 
-    def save(self, *args, **kwargs):
-        if self.node_origin_id is None:
-            local = Node.get_local()
-            if local:
-                self.node_origin = local
-        super().save(*args, **kwargs)
+    def station_record(self) -> "Charger | None":
+        """Return the aggregate station record for this charge point when available."""
+
+        if self.connector_id is None:
+            return self
+        return (
+            Charger.objects.filter(
+                charger_id=self.charger_id, connector_id__isnull=True
+            )
+            .order_by("pk")
+            .first()
+        )
+
+    def offline_notification_source(self) -> "Charger":
+        """Return the charger record supplying offline notification settings."""
+
+        if self.email_when_offline or self.maintenance_email:
+            return self
+        station = self.station_record()
+        return station or self
+
+    def maintenance_email_value(self) -> str:
+        """Return the maintenance email, falling back to the station record."""
+
+        email = (self.maintenance_email or "").strip()
+        if email:
+            return email
+        station = self.station_record()
+        if station and station.pk != self.pk:
+            return (station.maintenance_email or "").strip()
+        return ""
+
+    def email_when_offline_value(self) -> bool:
+        """Return the offline notification toggle, falling back to the station."""
+
+        if self.email_when_offline:
+            return True
+        station = self.station_record()
+        if station and station.pk != self.pk:
+            return bool(station.email_when_offline)
+        return False
+
+    def _assign_default_owner(self) -> None:
+        if self.user_id or self.group_id:
+            return
+        group = SecurityGroup.objects.filter(name=SITE_OPERATOR_GROUP_NAME).first()
+        if group:
+            self.group = group
 
     def ensure_diagnostics_bucket(self, *, expires_at: datetime | None = None):
         """Return an active diagnostics bucket, creating one if necessary."""
@@ -714,6 +776,7 @@ class Charger(Entity):
         return f"{scheme}://{domain}{self.get_absolute_url()}"
 
     def clean(self):
+        self._assign_default_owner()
         super().clean()
         self.charger_id = type(self).validate_serial(self.charger_id)
         if self.ws_auth_user_id and self.ws_auth_group_id:
@@ -730,6 +793,10 @@ class Charger(Entity):
 
     def save(self, *args, **kwargs):
         self.clean()
+        if self.node_origin_id is None:
+            local = Node.get_local()
+            if local:
+                self.node_origin = local
         update_fields = kwargs.get("update_fields")
         update_list = list(update_fields) if update_fields is not None else None
         if not self.manager_node_id:
