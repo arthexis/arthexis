@@ -10,13 +10,8 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import (
-    UserDatumAdminMixin,
-    delete_user_fixture,
-    dump_user_fixture,
-    _resolve_fixture_user,
-    _user_allows_user_data,
-)
+from apps.locals.user_data import UserDatumAdminMixin, delete_user_fixture, dump_user_fixture
+from apps.locals.user_data.fixtures import _resolve_fixture_user, _user_allows_user_data
 from apps.core.admin.mixins import OwnedObjectLinksMixin
 from apps.core.models import get_owned_objects_for_user
 from apps.users import temp_passwords

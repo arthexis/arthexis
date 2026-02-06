@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 
-from apps.locals import user_data
+from apps.locals.user_data import fixtures as user_data
 from apps.locals.models import Favorite
 
 
