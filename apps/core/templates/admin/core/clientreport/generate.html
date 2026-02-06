@@ -43,31 +43,31 @@
     </div>
     <div class="form-grid" id="range-fields">
       <div class="form-group">
-        {{ form.start.label_tag }}
-        {{ form.start }}
-        {% if form.start.errors %}
+        {{ form.start_date.label_tag }}
+        {{ form.start_date }}
+        {% if form.start_date.errors %}
           <ul class="errorlist">
-            {% for error in form.start.errors %}
+            {% for error in form.start_date.errors %}
               <li>{{ error }}</li>
             {% endfor %}
           </ul>
         {% endif %}
-        {% if form.start.help_text %}
-          <p class="help-text" id="id_start-help">{{ form.start.help_text }}</p>
+        {% if form.start_date.help_text %}
+          <p class="help-text" id="id_start_date-help">{{ form.start_date.help_text }}</p>
         {% endif %}
       </div>
       <div class="form-group">
-        {{ form.end.label_tag }}
-        {{ form.end }}
-        {% if form.end.errors %}
+        {{ form.end_date.label_tag }}
+        {{ form.end_date }}
+        {% if form.end_date.errors %}
           <ul class="errorlist">
-            {% for error in form.end.errors %}
+            {% for error in form.end_date.errors %}
               <li>{{ error }}</li>
             {% endfor %}
           </ul>
         {% endif %}
-        {% if form.end.help_text %}
-          <p class="help-text" id="id_end-help">{{ form.end.help_text }}</p>
+        {% if form.end_date.help_text %}
+          <p class="help-text" id="id_end_date-help">{{ form.end_date.help_text }}</p>
         {% endif %}
       </div>
     </div>
@@ -221,31 +221,17 @@
       Control who receives the report and how it is scheduled for delivery.
     </p>
     <div class="form-group">
-      {{ form.owner.label_tag }}
-      {{ form.owner }}
-      {% if form.owner.errors %}
+      {{ form.email_recipients.label_tag }}
+      {{ form.email_recipients }}
+      {% if form.email_recipients.errors %}
         <ul class="errorlist">
-          {% for error in form.owner.errors %}
+          {% for error in form.email_recipients.errors %}
             <li>{{ error }}</li>
           {% endfor %}
         </ul>
       {% endif %}
-      {% if form.owner.help_text %}
-        <p class="help-text" id="id_owner-help">{{ form.owner.help_text }}</p>
-      {% endif %}
-    </div>
-    <div class="form-group">
-      {{ form.destinations.label_tag }}
-      {{ form.destinations }}
-      {% if form.destinations.errors %}
-        <ul class="errorlist">
-          {% for error in form.destinations.errors %}
-            <li>{{ error }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-      {% if form.destinations.help_text %}
-        <p class="help-text" id="id_destinations-help">{{ form.destinations.help_text }}</p>
+      {% if form.email_recipients.help_text %}
+        <p class="help-text" id="id_email_recipients-help">{{ form.email_recipients.help_text }}</p>
       {% endif %}
     </div>
     <div class="form-group">
@@ -264,18 +250,18 @@
     </div>
     <div class="form-group checkbox-group">
       <div class="checkbox-wrapper">
-        {{ form.enable_emails }}
-        {{ form.enable_emails.label_tag }}
+        {{ form.disable_emails }}
+        {{ form.disable_emails.label_tag }}
       </div>
-      {% if form.enable_emails.errors %}
+      {% if form.disable_emails.errors %}
         <ul class="errorlist">
-          {% for error in form.enable_emails.errors %}
+          {% for error in form.disable_emails.errors %}
             <li>{{ error }}</li>
           {% endfor %}
         </ul>
       {% endif %}
-      {% if form.enable_emails.help_text %}
-        <p class="help-text" id="id_enable_emails-help">{{ form.enable_emails.help_text }}</p>
+      {% if form.disable_emails.help_text %}
+        <p class="help-text" id="id_disable_emails-help">{{ form.disable_emails.help_text }}</p>
       {% endif %}
     </div>
   </fieldset>
@@ -517,18 +503,17 @@
   toggleFields();
 
   const describedByMap = {
-    id_start: 'id_start-help',
-    id_end: 'id_end-help',
+    id_start_date: 'id_start_date-help',
+    id_end_date: 'id_end_date-help',
     id_week: 'id_week-help',
     id_month: 'id_month-help',
     id_view_mode: 'id_view_mode-help',
     id_language: 'id_language-help',
     id_title: 'id_title-help',
     id_chargers: 'id_chargers-help',
-    id_owner: 'id_owner-help',
-    id_destinations: 'id_destinations-help',
+    id_email_recipients: 'id_email_recipients-help',
     id_recurrence: 'id_recurrence-help',
-    id_enable_emails: 'id_enable_emails-help',
+    id_disable_emails: 'id_disable_emails-help',
   };
 
   Object.entries(describedByMap).forEach(([fieldId, helpId]) => {
