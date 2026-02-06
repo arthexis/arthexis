@@ -13,7 +13,8 @@ from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.core.notifications import LcdChannel
-from apps.nodes.models import NetMessage
+from apps.features.models import Feature
+from apps.nodes.models import NetMessage, Node, NodeFeature
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -86,6 +87,9 @@ from .identity import (
 from ...utils import _parse_ocpp_timestamp
 
 logger = logging.getLogger(__name__)
+
+CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
+CHARGE_POINT_FEATURE_SLUG = "charge-points"
 
 
 class SinkConsumer(AsyncWebsocketConsumer):
@@ -171,6 +175,64 @@ class CSMSConsumer(
         friendly_name = location_name or self.charger_id
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
+    async def _allow_charge_point_connection(
+        self, existing_charger: Charger | None
+    ) -> bool:
+        """Return whether the charge point connection should be accepted."""
+
+        def _resolve_feature_state() -> tuple[bool, str | None]:
+            node = Node.get_local()
+            if not node:
+                logger.warning(
+                    "Charge point connection allowed because no local node is registered."
+                )
+                return True, "node-missing"
+
+            feature = (
+                Feature.objects.select_related("node_feature")
+                .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
+                .first()
+            )
+            node_feature = None
+            if feature and feature.node_feature_id:
+                node_feature = feature.node_feature
+            if not node_feature:
+                node_feature = NodeFeature.objects.filter(
+                    slug=CHARGE_POINT_FEATURE_SLUG
+                ).first()
+
+            if not node_feature:
+                logger.warning(
+                    "Charge point connection blocked: node feature %s missing.",
+                    CHARGE_POINT_FEATURE_SLUG,
+                )
+                return False, "node-feature-missing"
+
+            if not node_feature.is_enabled:
+                logger.info(
+                    "Charge point connection blocked: node feature %s disabled.",
+                    node_feature.slug,
+                )
+                return False, "node-feature-disabled"
+
+            if feature and not feature.is_enabled:
+                if existing_charger:
+                    logger.info(
+                        "Charge point creation disabled; allowing known charger %s.",
+                        existing_charger.charger_id,
+                    )
+                    return True, "creation-disabled-known"
+                logger.info(
+                    "Charge point creation disabled; blocking unknown charger %s.",
+                    getattr(self, "charger_id", "unknown"),
+                )
+                return False, "creation-disabled-unknown"
+
+            return True, None
+
+        allowed, _reason = await database_sync_to_async(_resolve_feature_state)()
+        return allowed
+
     @requires_network
     async def connect(self):
         raw_serial = self._extract_serial_identifier()
@@ -193,6 +255,9 @@ class CSMSConsumer(
         )()
         subprotocol = self._negotiate_ocpp_version(existing_charger)
         if not await self._enforce_ws_auth(existing_charger):
+            return
+        if not await self._allow_charge_point_connection(existing_charger):
+            await self.close()
             return
         if not await self._accept_connection(subprotocol):
             return
