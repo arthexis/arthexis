@@ -37,6 +37,7 @@ from django.utils import timezone
 from utils.revision import get_revision
 
 from .system_ops import _ensure_runtime_services
+from .utils import _get_package_release_model
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
@@ -73,26 +74,6 @@ _NETWORK_FAILURE_PATTERNS = (
 SEVERITY_NORMAL = "normal"
 SEVERITY_LOW = "low"
 SEVERITY_CRITICAL = "critical"
-
-_PackageReleaseModel = None
-
-
-def _get_package_release_model():
-    """Return the :class:`release.models.PackageRelease` model when available."""
-
-    global _PackageReleaseModel
-
-    if _PackageReleaseModel is not None:
-        return _PackageReleaseModel
-
-    try:
-        from apps.release.models import PackageRelease  # noqa: WPS433 - runtime import
-    except Exception:  # pragma: no cover - app registry not ready
-        return None
-
-    _PackageReleaseModel = PackageRelease
-    return PackageRelease
-
 
 model = _get_package_release_model()
 if model is not None:  # pragma: no branch - runtime constant setup
@@ -600,7 +581,7 @@ def _latest_release() -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
     if not release:
-        return None, None
+        return None, None, None
 
     version = getattr(release, "version", None)
     revision = getattr(release, "revision", None)
@@ -1205,7 +1186,10 @@ def _shares_stable_series(local: str, remote: str) -> bool:
 class AutoUpgradeOperations:
     git_fetch: Callable[[Path, str], None]
     resolve_remote_revision: Callable[[Path, str], str]
-    ensure_runtime_services: Callable[[Path, bool, bool], None]
+    ensure_runtime_services: Callable[
+        [Path, bool, bool, Callable[[Path, str], Any]],
+        bool,
+    ]
     delegate_upgrade: Callable[[Path, list[str]], str | None]
     run_upgrade_command: Callable[[Path, list[str]], tuple[str | None, bool]]
 
@@ -1519,6 +1503,7 @@ def _apply_stable_schedule_guard(
         base_dir,
         restart_if_active=False,
         revert_on_failure=False,
+        log_appender=append_auto_upgrade_log,
     )
     return False
 
@@ -1564,6 +1549,7 @@ def _fetch_repository_state(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         return None
 
@@ -1582,6 +1568,7 @@ def _fetch_repository_state(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         return None
 
@@ -1621,6 +1608,7 @@ def _plan_auto_upgrade(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         if startup:
             startup()
@@ -1636,6 +1624,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             if startup:
                 startup()
@@ -1651,6 +1640,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             if startup:
                 startup()
@@ -1664,6 +1654,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             return None
 
@@ -1679,6 +1670,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             if startup:
                 startup()
@@ -1705,6 +1697,7 @@ def _plan_auto_upgrade(
                     base_dir,
                     restart_if_active=False,
                     revert_on_failure=False,
+                    log_appender=append_auto_upgrade_log,
                 )
                 return None
 
@@ -1746,6 +1739,7 @@ def _execute_upgrade_plan(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             return
 
@@ -1769,6 +1763,7 @@ def _execute_upgrade_plan(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         return
 
@@ -1835,6 +1830,7 @@ def _execute_upgrade_plan(
         base_dir,
         restart_if_active=True,
         revert_on_failure=True,
+        log_appender=append_auto_upgrade_log,
     )
 
 
@@ -1922,7 +1918,7 @@ def check_github_updates(
         repo_state = _fetch_repository_state(base_dir, branch, mode, ops, state)
         if repo_state is None:
             status = "SKIPPED"
-            return
+            return status
 
         plan = _plan_auto_upgrade(base_dir, mode, repo_state, notify, startup, ops)
         if plan is None:

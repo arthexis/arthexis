@@ -6,14 +6,13 @@ from celery import shared_task
 
 from apps.release import release_workflow
 
-from .auto_upgrade import _get_package_release_model
+from .utils import _get_package_release_model
 
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task
-def poll_emails() -> None:
+def _poll_emails() -> None:
     """Poll all configured email collectors for new messages."""
     try:
         from apps.emails.models import EmailCollector
@@ -22,6 +21,10 @@ def poll_emails() -> None:
 
     for collector in EmailCollector.objects.all():
         collector.collect()
+
+
+poll_emails = shared_task(_poll_emails)
+poll_emails_legacy = shared_task(name="apps.core.tasks.poll_emails")(_poll_emails)
 
 
 def execute_scheduled_release(release_id: int) -> None:
@@ -43,15 +46,19 @@ def execute_scheduled_release(release_id: int) -> None:
         release.clear_schedule(save=True)
 
 
-@shared_task
-def run_scheduled_release(release_id: int) -> None:
+def _run_scheduled_release(release_id: int) -> None:
     """Entrypoint used by django-celery-beat to trigger scheduled releases."""
 
     execute_scheduled_release(release_id)
 
 
-@shared_task
-def run_client_report_schedule(schedule_id: int) -> None:
+run_scheduled_release = shared_task(_run_scheduled_release)
+run_scheduled_release_legacy = shared_task(
+    name="apps.core.tasks.run_scheduled_release"
+)(_run_scheduled_release)
+
+
+def _run_client_report_schedule(schedule_id: int) -> None:
     """Execute a :class:`core.models.ClientReportSchedule` run."""
 
     from apps.energy.models import ClientReportSchedule
@@ -66,3 +73,9 @@ def run_client_report_schedule(schedule_id: int) -> None:
     except Exception:
         logger.exception("ClientReportSchedule %s failed", schedule_id)
         raise
+
+
+run_client_report_schedule = shared_task(_run_client_report_schedule)
+run_client_report_schedule_legacy = shared_task(
+    name="apps.core.tasks.run_client_report_schedule"
+)(_run_client_report_schedule)

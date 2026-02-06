@@ -4,10 +4,10 @@ import logging
 import subprocess
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 import psutil
 
-from apps.core.auto_upgrade import append_auto_upgrade_log
 from apps.core.systemctl import _systemctl_command
 
 
@@ -50,6 +50,7 @@ def _wait_for_service_restart(
             [*command, "is-active", "--quiet", service],
             cwd=base_dir,
             check=False,
+            timeout=10,
         )
         if result.returncode == 0:
             return True
@@ -59,16 +60,22 @@ def _wait_for_service_restart(
         [*command, "status", service, "--no-pager"],
         cwd=base_dir,
         check=False,
+        timeout=30,
     )
     return False
 
 
-def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
+def _restart_service_via_start_script(
+    base_dir: Path,
+    service: str,
+    *,
+    log_appender: Callable[[Path, str], Any],
+) -> bool:
     """Attempt to restart the managed service using ``start.sh``."""
 
     start_script = base_dir / "start.sh"
     if not start_script.exists():
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             (
                 "start.sh not found after upgrade; manual restart "
@@ -81,7 +88,7 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
         subprocess.run(["./start.sh"], cwd=base_dir, check=True)
     except Exception:  # pragma: no cover - defensive restart handling
         logger.exception("start.sh restart failed after upgrade")
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             (
                 f"start.sh restart failed after upgrade for {service or 'service'}; "
@@ -93,10 +100,15 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
     return True
 
 
-def _record_restart_failure(base_dir: Path, service: str) -> None:
+def _record_restart_failure(
+    base_dir: Path,
+    service: str,
+    *,
+    log_appender: Callable[[Path, str], Any],
+) -> None:
     """Record restart failures in the auto-upgrade log."""
 
-    append_auto_upgrade_log(
+    log_appender(
         base_dir,
         (
             f"Service {service or 'unknown'} failed to restart after upgrade; "
@@ -111,6 +123,7 @@ def _ensure_managed_service(
     *,
     restart_if_active: bool,
     revert_on_failure: bool,
+    log_appender: Callable[[Path, str], Any],
 ) -> bool:
     command = _systemctl_command()
     service_is_active = False
@@ -138,38 +151,39 @@ def _ensure_managed_service(
 
     def handle_restart_failure() -> bool:
         if revert_on_failure:
-            _record_restart_failure(base_dir, service)
+            _record_restart_failure(base_dir, service, log_appender=log_appender)
         return False
 
     if restart_if_active:
-        restarted = False
         if restart_via_systemd("post-upgrade restart"):
-            append_auto_upgrade_log(
+            log_appender(
                 base_dir,
                 f"Restarting {service} via systemd restart after upgrade",
             )
-            restarted = True
         else:
-            append_auto_upgrade_log(
+            log_appender(
                 base_dir,
                 f"Systemd restart unavailable for {service}; restarting via start.sh",
             )
-            if not _restart_service_via_start_script(base_dir, service):
+            if not _restart_service_via_start_script(
+                base_dir,
+                service,
+                log_appender=log_appender,
+            ):
                 return handle_restart_failure()
-            restarted = True
 
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             f"Waiting for {service} to restart after upgrade",
         )
         if not _wait_for_service_restart(base_dir, service):
-            append_auto_upgrade_log(
+            log_appender(
                 base_dir,
                 f"Service {service} did not report active status after automatic restart",
             )
             return handle_restart_failure()
 
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             f"Service {service} restarted successfully after upgrade",
         )
@@ -185,17 +199,21 @@ def _ensure_managed_service(
     )
 
     if restart_via_systemd("auto-upgrade recovery"):
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             f"{base_message}; restarting via systemd restart",
         )
     else:
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             f"{base_message}; restarting via start.sh",
         )
-        if not _restart_service_via_start_script(base_dir, service):
-            append_auto_upgrade_log(
+        if not _restart_service_via_start_script(
+            base_dir,
+            service,
+            log_appender=log_appender,
+        ):
+            log_appender(
                 base_dir,
                 (
                     "Automatic restart via start.sh failed for inactive service "
@@ -203,16 +221,16 @@ def _ensure_managed_service(
                 ),
             )
             if revert_on_failure:
-                _record_restart_failure(base_dir, service)
+                _record_restart_failure(base_dir, service, log_appender=log_appender)
             return False
 
     if command:
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             f"Waiting for {service} to restart after upgrade",
         )
         if not _wait_for_service_restart(base_dir, service):
-            append_auto_upgrade_log(
+            log_appender(
                 base_dir,
                 (
                     f"Service {service} did not report active status after "
@@ -220,10 +238,10 @@ def _ensure_managed_service(
                 ),
             )
             if revert_on_failure:
-                _record_restart_failure(base_dir, service)
+                _record_restart_failure(base_dir, service, log_appender=log_appender)
             return False
 
-    append_auto_upgrade_log(
+    log_appender(
         base_dir,
         f"Service {service} restarted successfully during auto-upgrade check",
     )
@@ -234,6 +252,7 @@ def _ensure_development_server(
     base_dir: Path,
     *,
     restart_if_active: bool,
+    log_appender: Callable[[Path, str], Any],
 ) -> bool:
     if restart_if_active:
         result = subprocess.run(
@@ -241,7 +260,7 @@ def _ensure_development_server(
             cwd=base_dir,
         )
         if result.returncode == 0:
-            append_auto_upgrade_log(
+            log_appender(
                 base_dir,
                 "Restarting development server via start.sh after upgrade",
             )
@@ -256,7 +275,7 @@ def _ensure_development_server(
                         start_new_session=True,
                     )
                 except Exception as exc:  # pragma: no cover - subprocess errors
-                    append_auto_upgrade_log(
+                    log_appender(
                         base_dir,
                         (
                             "Failed to restart development server automatically: "
@@ -265,12 +284,12 @@ def _ensure_development_server(
                     )
                     raise
             else:  # pragma: no cover - installation invariant
-                append_auto_upgrade_log(
+                log_appender(
                     base_dir,
                     "start.sh not found; manual restart required for development server",
                 )
         else:
-            append_auto_upgrade_log(
+            log_appender(
                 base_dir,
                 (
                     "No manage.py runserver process was active during upgrade; "
@@ -288,13 +307,13 @@ def _ensure_development_server(
     if check.returncode == 0:
         return True
 
-    append_auto_upgrade_log(
+    log_appender(
         base_dir,
         "Development server inactive during auto-upgrade check; restarting via start.sh",
     )
     start_script = base_dir / "start.sh"
     if not start_script.exists():  # pragma: no cover - installation invariant
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             "start.sh not found; manual restart required for development server",
         )
@@ -308,7 +327,7 @@ def _ensure_development_server(
             start_new_session=True,
         )
     except Exception as exc:  # pragma: no cover - subprocess errors
-        append_auto_upgrade_log(
+        log_appender(
             base_dir,
             (
                 "Failed to restart development server automatically: "
@@ -324,6 +343,7 @@ def _ensure_runtime_services(
     *,
     restart_if_active: bool,
     revert_on_failure: bool,
+    log_appender: Callable[[Path, str], Any],
 ) -> bool:
     service_file = base_dir / ".locks" / "service.lck"
     if service_file.exists():
@@ -333,7 +353,7 @@ def _ensure_runtime_services(
             service = ""
         if not service:
             if restart_if_active:
-                append_auto_upgrade_log(
+                log_appender(
                     base_dir,
                     "Service restart requested but service lock was empty; "
                     "skipping automatic verification",
@@ -344,9 +364,11 @@ def _ensure_runtime_services(
             service,
             restart_if_active=restart_if_active,
             revert_on_failure=revert_on_failure,
+            log_appender=log_appender,
         )
 
     return _ensure_development_server(
         base_dir,
         restart_if_active=restart_if_active or revert_on_failure,
+        log_appender=log_appender,
     )
