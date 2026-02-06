@@ -525,7 +525,7 @@ except Exception:
     sys.exit(0)
 
 try:
-    from apps.core.tasks import _broadcast_upgrade_start_message
+    from apps.core.tasks.auto_upgrade import _broadcast_upgrade_start_message
 except Exception:
     sys.exit(0)
 

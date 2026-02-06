@@ -12,6 +12,7 @@ class LocalsConfig(AppConfig):
             patch_admin_user_datum,
             patch_admin_user_data_views,
         )
+        from .user_data import signals as _user_data_signals
 
         patch_admin_user_datum()
         patch_admin_import_export()

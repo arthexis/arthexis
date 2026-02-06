@@ -21,7 +21,10 @@ from apps.core.auto_upgrade import (
     auto_upgrade_log_file,
     ensure_auto_upgrade_periodic_task,
 )
-from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
+from apps.core.tasks.auto_upgrade import (
+    _read_auto_upgrade_failure_count,
+    check_github_updates,
+)
 
 from .filesystem import _auto_upgrade_skip_file
 from .ui import _format_datetime, _format_timestamp, _suite_uptime_details
