@@ -646,6 +646,12 @@ OCPP_PENDING_CALL_TTL = int(os.environ.get("OCPP_PENDING_CALL_TTL", "1800") or 1
 OCPP_ASYNC_LOGGING = env_bool(
     "OCPP_ASYNC_LOGGING", bool(CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL)
 )
+try:
+    OCPP_FORWARDER_PING_INTERVAL = int(
+        os.environ.get("OCPP_FORWARDER_PING_INTERVAL", "60")
+    )
+except (TypeError, ValueError):
+    OCPP_FORWARDER_PING_INTERVAL = 60
 
 PAGES_CHAT_ENABLED = env_bool("PAGES_CHAT_ENABLED", True)
 PAGES_CHAT_NOTIFY_STAFF = env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
@@ -897,6 +903,10 @@ CELERY_BEAT_SCHEDULE = {
     "ocpp_forwarding_push": {
         "task": "apps.ocpp.tasks.setup_forwarders",
         "schedule": timedelta(minutes=5),
+    },
+    "ocpp_forwarding_keepalive": {
+        "task": "apps.ocpp.tasks.keepalive_forwarders",
+        "schedule": timedelta(seconds=OCPP_FORWARDER_PING_INTERVAL),
     },
     "ocpp_meter_value_purge": {
         "task": "apps.ocpp.tasks.purge_meter_values",

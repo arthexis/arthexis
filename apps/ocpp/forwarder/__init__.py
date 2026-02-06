@@ -26,6 +26,7 @@ class ForwardingSession:
     connected_at: datetime
     forwarder_id: int | None = None
     forwarded_messages: tuple[str, ...] | None = None
+    last_activity: datetime | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -153,6 +154,7 @@ class Forwarder:
                 url=url,
                 connection=connection,
                 connected_at=timezone.now(),
+                last_activity=timezone.now(),
             )
             self._sessions[charger.pk] = session
             logger.info(
@@ -164,6 +166,39 @@ class Forwarder:
             return session
 
         return None
+
+    def keepalive_sessions(self, *, idle_seconds: int = 60) -> int:
+        """Send ping frames on idle sessions to keep forwarding sockets open."""
+
+        if idle_seconds <= 0:
+            return 0
+
+        now = timezone.now()
+        pinged = 0
+        for session in list(self._sessions.values()):
+            if not session.is_connected:
+                self.remove_session(session.charger_pk)
+                continue
+            last_activity = session.last_activity or session.connected_at
+            if (now - last_activity).total_seconds() < idle_seconds:
+                continue
+            ping = getattr(session.connection, "ping", None)
+            if ping is None:
+                continue
+            try:
+                ping()
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.warning(
+                    "Forwarding websocket ping failed for charger %s via %s: %s",
+                    session.charger_pk,
+                    session.url,
+                    exc,
+                )
+                self.remove_session(session.charger_pk)
+                continue
+            session.last_activity = now
+            pinged += 1
+        return pinged
 
     def active_target_ids(self, only_connected: bool = True) -> set[int]:
         """Return the set of target node IDs with active sessions."""
