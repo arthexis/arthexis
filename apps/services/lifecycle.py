@@ -27,6 +27,7 @@ class LifecycleConfig:
 
 
 def lock_dir(base_dir: Path | None = None) -> Path:
+    """Return the lock directory for lifecycle service configuration."""
     base = Path(base_dir or settings.BASE_DIR)
     path = base / ".locks"
     path.mkdir(parents=True, exist_ok=True)
@@ -34,6 +35,7 @@ def lock_dir(base_dir: Path | None = None) -> Path:
 
 
 def read_service_name(lock_path: Path) -> str:
+    """Read the configured service name from the lock file."""
     try:
         return lock_path.read_text(encoding="utf-8").strip()
     except OSError:
@@ -41,6 +43,7 @@ def read_service_name(lock_path: Path) -> str:
 
 
 def _service_docs_url(doc: str) -> str:
+    """Return the documentation URL for a given document slug."""
     if not doc:
         return ""
     try:
@@ -50,6 +53,7 @@ def _service_docs_url(doc: str) -> str:
 
 
 def _normalize_unit(unit_name: str) -> tuple[str, str]:
+    """Normalize a unit name for systemd display and lookups."""
     normalized = unit_name.strip()
     unit_display = normalized
     unit = normalized
@@ -70,8 +74,9 @@ def _add_unit(
     docs_url: str = "",
     pid_file: str = "",
 ) -> None:
+    """Add or update a unit entry in the service list."""
     normalized = unit_name.strip()
-    if not normalized:
+    if not normalized or normalized.startswith("-"):
         return
 
     unit, unit_display = _normalize_unit(normalized)
@@ -81,7 +86,8 @@ def _add_unit(
                 existing_unit["key"] = key
             existing_unit["label"] = label or existing_unit["label"]
             existing_unit["configured"] = configured
-            existing_unit["docs_url"] = docs_url
+            if docs_url:
+                existing_unit["docs_url"] = docs_url
             if pid_file and not existing_unit.get("pid_file"):
                 existing_unit["pid_file"] = pid_file
             return
@@ -99,6 +105,7 @@ def _add_unit(
 
 
 def _read_extra_systemd_units(lock_path: Path) -> list[str]:
+    """Return systemd units listed in the lock file."""
     try:
         return [line for line in lock_path.read_text(encoding="utf-8").splitlines() if line]
     except OSError:
@@ -106,6 +113,7 @@ def _read_extra_systemd_units(lock_path: Path) -> list[str]:
 
 
 def build_lifecycle_service_units(base_dir: Path | None = None) -> list[dict[str, object]]:
+    """Build a list of configured lifecycle service units."""
     resolved_base = Path(base_dir or settings.BASE_DIR)
     locks = lock_dir(resolved_base)
     service_name = read_service_name(locks / SERVICE_NAME_LOCK)
@@ -137,6 +145,7 @@ def build_lifecycle_service_units(base_dir: Path | None = None) -> list[dict[str
 
 
 def build_lifecycle_config(base_dir: Path | None = None) -> LifecycleConfig:
+    """Build lifecycle configuration payloads for services and systemd."""
     resolved_base = Path(base_dir or settings.BASE_DIR)
     locks = lock_dir(resolved_base)
     service_name = read_service_name(locks / SERVICE_NAME_LOCK)
@@ -162,6 +171,7 @@ def build_lifecycle_config(base_dir: Path | None = None) -> LifecycleConfig:
 
 
 def write_lifecycle_config(base_dir: Path | None = None) -> LifecycleConfig:
+    """Write lifecycle configuration and lock files to disk."""
     resolved_base = Path(base_dir or settings.BASE_DIR)
     locks = lock_dir(resolved_base)
     config = build_lifecycle_config(resolved_base)

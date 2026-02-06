@@ -41,6 +41,8 @@ def test_write_lifecycle_config_generates_lock_files(tmp_path: Path):
 
     payload = json.loads(config_path.read_text(encoding="utf-8"))
     assert payload["service_name"] == "demo"
+    assert config.service_name == payload["service_name"]
 
     assert "rfid-demo.service" in payload["systemd_units"]
     assert "rfid-demo.service" in systemd_path.read_text(encoding="utf-8")
+    assert "rfid-demo.service" in config.systemd_units

@@ -45,10 +45,31 @@ class LifecycleService(models.Model):
         return self.display
 
     def uses_service_name(self) -> bool:
+        """Return True when the unit template uses a service placeholder."""
         return "{service}" in self.unit_template
 
+    def _safe_lock_names(self) -> list[str]:
+        """Return lock file names that are safe to resolve within the lock directory."""
+        safe_names: list[str] = []
+        for name in self.lock_names or []:
+            if not isinstance(name, str):
+                continue
+            normalized = name.strip()
+            if not normalized:
+                continue
+            candidate = Path(normalized)
+            if candidate.is_absolute():
+                continue
+            if candidate.name != normalized:
+                continue
+            if ".." in candidate.parts:
+                continue
+            safe_names.append(normalized)
+        return safe_names
+
     def _lockfile_enabled(self, lock_dir: Path) -> bool:
-        lock_names = [name for name in (self.lock_names or []) if name]
+        """Return True when a configured lock file enables the service."""
+        lock_names = self._safe_lock_names()
         if not lock_names or not lock_dir:
             return False
         if "celery.lck" in lock_names:
@@ -63,6 +84,7 @@ class LifecycleService(models.Model):
         service_name: str | None,
         lock_dir: Path,
     ) -> bool:
+        """Return True when this service should be configured for the node."""
         if not service_name and self.uses_service_name():
             return False
         if self.activation == self.Activation.ALWAYS:
@@ -74,7 +96,7 @@ class LifecycleService(models.Model):
                 return False
             try:
                 from apps.nodes.models import NodeFeature
-            except Exception:
+            except ImportError:
                 logger.debug("Unable to import NodeFeature", exc_info=True)
                 return False
             feature = NodeFeature.objects.filter(slug=self.feature_slug).first()
