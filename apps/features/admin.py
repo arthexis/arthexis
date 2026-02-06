@@ -107,6 +107,10 @@ class FeatureAdmin(OwnableAdminMixin, EntityModelAdmin):
             % {"feature": feature.display, "status": status},
         )
         redirect_to = request.META.get("HTTP_REFERER")
-        if redirect_to:
+        if redirect_to and url_has_allowed_host_and_scheme(
+            url=redirect_to,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
             return HttpResponseRedirect(redirect_to)
         return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
