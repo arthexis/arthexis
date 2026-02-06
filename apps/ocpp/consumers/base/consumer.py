@@ -193,6 +193,11 @@ class CSMSConsumer(
                 .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
                 .first()
             )
+            if not feature:
+                logger.warning(
+                    "Charge point creation feature %s missing; treating as enabled.",
+                    CHARGER_CREATION_FEATURE_SLUG,
+                )
             node_feature = feature.node_feature if feature else None
             if not node_feature:
                 node_feature = NodeFeature.objects.filter(
@@ -201,12 +206,10 @@ class CSMSConsumer(
 
             if not node_feature:
                 logger.warning(
-                    "Charge point connection blocked: node feature %s missing.",
+                    "Charge point node feature %s missing; treating as enabled.",
                     CHARGE_POINT_FEATURE_SLUG,
                 )
-                return False, "node-feature-missing"
-
-            if not node_feature.is_enabled:
+            elif not node_feature.is_enabled:
                 logger.info(
                     "Charge point connection blocked: node feature %s disabled.",
                     node_feature.slug,
