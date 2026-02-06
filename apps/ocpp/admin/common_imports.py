@@ -23,7 +23,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Max
 from django.db.models.deletion import ProtectedError
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse

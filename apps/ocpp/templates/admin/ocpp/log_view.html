@@ -23,6 +23,19 @@
   {% if log_file %}
   <p class="help">{% trans 'Log file' %}: <code>{{ log_file }}</code></p>
   {% endif %}
+  <div class="form-row log-viewer-controls">
+    <div class="log-viewer-control">
+      <label for="log-row-limit">{% trans 'Visible rows' %}</label>
+      <input type="range" id="log-row-limit" min="20" max="100" step="20" value="40">
+      <span class="log-row-value" id="log-row-value">40</span>
+    </div>
+    <div class="log-viewer-control">
+      <a class="button" id="log-download" href="?download=1">{% trans 'Download full log' %}</a>
+    </div>
+  </div>
+  <p class="help" id="log-direction">
+    {% trans 'Auto reload adds new lines at the bottom and scrolls downward.' %}
+  </p>
   <div class="form-row">
     <label>
       <input type="checkbox" id="auto-reload">
@@ -45,6 +58,25 @@
     overflow-y: auto;
     overflow-x: auto;
   }
+  .log-viewer-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .log-viewer-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .log-viewer-control label {
+    font-weight: 600;
+  }
+  .log-row-value {
+    min-width: 2.5em;
+    text-align: right;
+  }
 </style>
 {% endblock %}
 
@@ -55,6 +87,32 @@ document.addEventListener('DOMContentLoaded', function () {
   const logEl = document.getElementById('log');
   if (!logEl) {
     return;
+  }
+  const limitInput = document.getElementById('log-row-limit');
+  const limitValue = document.getElementById('log-row-value');
+  const downloadLink = document.getElementById('log-download');
+  const params = new URLSearchParams(window.location.search);
+  const allowedLimits = ['20', '40', '80', '100'];
+  function currentLimit() {
+    const limit = params.get('limit');
+    return allowedLimits.includes(limit) ? limit : '40';
+  }
+  function updateLimitDisplay(limit) {
+    logEl.style.maxHeight = 'calc(1em * ' + limit + ')';
+    if (limitValue) {
+      limitValue.textContent = limit;
+    }
+    if (limitInput) {
+      limitInput.value = limit;
+    }
+  }
+  function syncDownloadLink() {
+    if (!downloadLink) {
+      return;
+    }
+    const downloadParams = new URLSearchParams(window.location.search);
+    downloadParams.set('download', '1');
+    downloadLink.href = '?' + downloadParams.toString();
   }
   function scrollToBottom() {
     logEl.scrollTop = logEl.scrollHeight;
@@ -72,6 +130,16 @@ document.addEventListener('DOMContentLoaded', function () {
       })
       .catch(() => {});
   }
+  function updateLimit(limit) {
+    params.set('limit', limit);
+    const newUrl = window.location.pathname + '?' + params.toString();
+    window.history.replaceState({}, '', newUrl);
+    updateLimitDisplay(limit);
+    syncDownloadLink();
+    fetchLog();
+  }
+  updateLimitDisplay(currentLimit());
+  syncDownloadLink();
   scrollToBottom();
   let reloadTimer;
   const checkbox = document.getElementById('auto-reload');
@@ -83,6 +151,11 @@ document.addEventListener('DOMContentLoaded', function () {
         clearInterval(reloadTimer);
         reloadTimer = null;
       }
+    });
+  }
+  if (limitInput) {
+    limitInput.addEventListener('input', function () {
+      updateLimit(this.value);
     });
   }
 });
