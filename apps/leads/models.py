@@ -13,6 +13,7 @@ class Lead(Entity):
         OPEN = "open", _("Open")
         ASSIGNED = "assigned", _("Assigned")
         CLOSED = "closed", _("Closed")
+        SPAM = "spam", _("Spam")
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL

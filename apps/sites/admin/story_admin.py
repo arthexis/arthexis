@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @admin.register(UserStory)
 class UserStoryAdmin(EntityModelAdmin):
     date_hierarchy = "submitted_at"
-    actions = ["create_github_issues"]
+    actions = ["create_github_issues", "mark_selected_as_spam"]
     list_display = (
         "name",
         "language_code",
@@ -152,6 +152,29 @@ class UserStoryAdmin(EntityModelAdmin):
                     skipped,
                 )
                 % {"count": skipped},
+                messages.INFO,
+            )
+
+    @admin.action(description=_("Mark selected as spam"))
+    def mark_selected_as_spam(self, request, queryset):
+        updated = queryset.exclude(status=UserStory.Status.SPAM).update(
+            status=UserStory.Status.SPAM
+        )
+        if updated:
+            self.message_user(
+                request,
+                ngettext(
+                    "Marked %(count)d feedback item as spam.",
+                    "Marked %(count)d feedback items as spam.",
+                    updated,
+                )
+                % {"count": updated},
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("Selected feedback items are already marked as spam."),
                 messages.INFO,
             )
 
