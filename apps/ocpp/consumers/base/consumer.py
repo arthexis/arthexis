@@ -621,6 +621,7 @@ class CSMSConsumer(
                 return
 
         timestamp = timezone.now()
+        session.last_activity = timestamp
         await self._record_forwarding_activity(
             charger_pk=charger.pk,
             forwarder_pk=forwarder_pk,

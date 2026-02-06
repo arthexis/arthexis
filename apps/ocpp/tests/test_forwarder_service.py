@@ -1,4 +1,5 @@
 import sys
+from datetime import timedelta
 
 import pytest
 from types import SimpleNamespace
@@ -120,6 +121,48 @@ def test_prune_inactive_sessions_closes_missing(monkeypatch, forwarder_instance)
     assert 1 in forwarder_instance._sessions
     assert 2 not in forwarder_instance._sessions
     stale_connection.close.assert_called_once()
+
+
+def test_keepalive_sessions_pings_idle_connections(forwarder_instance):
+    connection = SimpleNamespace(connected=True, close=Mock(), ping=Mock())
+    session = ForwardingSession(
+        charger_pk=1,
+        node_id=10,
+        url="ws://one",
+        connection=connection,
+        connected_at=timezone.now() - timedelta(minutes=5),
+        last_activity=timezone.now() - timedelta(minutes=5),
+    )
+    forwarder_instance._sessions = {1: session}
+
+    pinged = forwarder_instance.keepalive_sessions(idle_seconds=60)
+
+    assert pinged == 1
+    connection.ping.assert_called_once()
+    assert forwarder_instance.get_session(1) is session
+
+
+def test_keepalive_sessions_removes_dead_connections(forwarder_instance):
+    connection = SimpleNamespace(
+        connected=True,
+        close=Mock(),
+        ping=Mock(side_effect=WebSocketException("closed")),
+    )
+    session = ForwardingSession(
+        charger_pk=1,
+        node_id=10,
+        url="ws://one",
+        connection=connection,
+        connected_at=timezone.now() - timedelta(minutes=5),
+        last_activity=timezone.now() - timedelta(minutes=5),
+    )
+    forwarder_instance._sessions = {1: session}
+
+    pinged = forwarder_instance.keepalive_sessions(idle_seconds=60)
+
+    assert pinged == 0
+    assert forwarder_instance.get_session(1) is None
+    connection.close.assert_called_once()
 
 
 @pytest.mark.critical
