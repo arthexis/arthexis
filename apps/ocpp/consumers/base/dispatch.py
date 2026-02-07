@@ -161,7 +161,7 @@ class DispatchMixin:
         error_code: str | None,
         description: str | None,
         details: dict | None,
-        raw: str,
+        raw: str | None = None,
     ) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
@@ -185,7 +185,7 @@ class DispatchMixin:
             log_key,
         )
         forward_reply = getattr(self, "_forward_charge_point_reply", None)
-        if callable(forward_reply):
+        if callable(forward_reply) and raw is not None:
             await forward_reply(message_id, raw)
         if handled:
             return
