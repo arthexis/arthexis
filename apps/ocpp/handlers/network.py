@@ -67,14 +67,7 @@ async def handle_set_network_profile_error(
         deployment = CPNetworkProfileDeployment.objects.filter(pk=deployment_pk).first()
         if not deployment:
             return
-        detail_text = (description or "").strip()
-        if not detail_text and details:
-            try:
-                detail_text = json.dumps(details, sort_keys=True)
-            except Exception:
-                detail_text = str(details)
-        if not detail_text:
-            detail_text = (error_code or "").strip() or "Error"
+        detail_text = (description or "").strip() or _json_details(details) or (error_code or "").strip() or "Error"
         deployment.mark_status("Error", detail_text, response=details)
         deployment.completed_at = timezone.now()
         deployment.save(update_fields=["completed_at", "updated_at"])
