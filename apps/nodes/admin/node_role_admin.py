@@ -29,7 +29,7 @@ class NodeRoleAdmin(EntityModelAdmin):
     def registered(self, obj):
         return getattr(obj, "_registered", obj.node_set.count())
 
-    @admin.display(description="Default Features")
+    @admin.display(description="Default Node Features")
     def default_features(self, obj):
         features = [feature.display for feature in obj.features.all()]
         return ", ".join(features) if features else "—"

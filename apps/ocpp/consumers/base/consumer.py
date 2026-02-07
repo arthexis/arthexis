@@ -653,7 +653,9 @@ class CSMSConsumer(
             return
 
         try:
-            await sync_to_async(session.connection.send)(raw)
+            await sync_to_async(session.connection.send)(
+                self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+            )
         except Exception as exc:  # pragma: no cover - network errors
             logger.warning(
                 "Failed to forward %s from charger %s via %s: %s",
@@ -680,7 +682,9 @@ class CSMSConsumer(
             if allowed is not None and action not in allowed:
                 return
             try:
-                await sync_to_async(session.connection.send)(raw)
+                await sync_to_async(session.connection.send)(
+                    self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+                )
             except Exception as retry_exc:
                 logger.warning(
                     "Failed to forward %s from charger %s after reconnect: %s",
@@ -705,6 +709,56 @@ class CSMSConsumer(
         current = self.charger
         if current and current.pk == charger.pk and current is not aggregate:
             current.forwarding_watermark = timestamp
+
+    async def _forward_charge_point_reply(self, message_id: str, raw: str) -> None:
+        """Forward a call result or error back to the remote node when needed."""
+
+        if not message_id or not raw:
+            return
+        charger = self.aggregate_charger or self.charger
+        if charger is None or not getattr(charger, "pk", None):
+            return
+        session = forwarder.get_session(charger.pk)
+        if session is None or not session.is_connected:
+            return
+        with session._pending_lock:
+            if message_id not in session.pending_call_ids:
+                return
+            session.pending_call_ids.discard(message_id)
+        try:
+            await sync_to_async(session.connection.send)(
+                self._wrap_forwarding_payload(
+                    charger,
+                    raw,
+                    direction="cp_to_csms_reply",
+                )
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.warning(
+                "Failed to forward reply %s for charger %s via %s: %s",
+                message_id,
+                getattr(charger, "charger_id", charger.pk),
+                getattr(session, "url", "unknown"),
+                exc,
+            )
+            forwarder.remove_session(charger.pk)
+
+    def _wrap_forwarding_payload(self, charger, raw: str, *, direction: str) -> str:
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return raw
+        if not isinstance(payload, list):
+            return raw
+        local_node = Node.get_local()
+        meta: dict[str, object] = {
+            "charger_id": getattr(charger, "charger_id", None),
+            "connector_id": getattr(charger, "connector_id", None),
+            "direction": direction,
+        }
+        if local_node and getattr(local_node, "uuid", None):
+            meta["route"] = [str(local_node.uuid)]
+        return json.dumps({"ocpp": payload, "meta": meta})
 
     def _ensure_console_reference(self) -> None:
         """Create or update a header reference for the connected charger."""

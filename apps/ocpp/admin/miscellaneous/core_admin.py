@@ -1,4 +1,5 @@
 from ..common_imports import *
+from ..cp_forwarder import CPForwarderForm
 from ...models import (
     CustomerInformationRequest,
     CustomerInformationChunk,
@@ -1367,37 +1368,6 @@ class ChargerLogRequestAdmin(EntityModelAdmin):
     date_hierarchy = "requested_at"
 
 
-class CPForwarderForm(forms.ModelForm):
-    forwarded_messages = forms.MultipleChoiceField(
-        label=_("Forwarded messages"),
-        choices=[
-            (message, message)
-            for message in CPForwarder.available_forwarded_messages()
-        ],
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-        help_text=_(
-            "Choose which OCPP messages should be forwarded. Only charge points "
-            "with Export transactions enabled are eligible."
-        ),
-    )
-
-    class Meta:
-        model = CPForwarder
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        initial = CPForwarder.available_forwarded_messages()
-        if self.instance and self.instance.pk:
-            initial = self.instance.get_forwarded_messages()
-        self.fields["forwarded_messages"].initial = initial
-
-    def clean_forwarded_messages(self):
-        selected = self.cleaned_data.get("forwarded_messages") or []
-        return CPForwarder.sanitize_forwarded_messages(selected)
-
-
 @admin.register(CPForwarder)
 class CPForwarderAdmin(EntityModelAdmin):
     form = CPForwarderForm
@@ -1462,7 +1432,7 @@ class CPForwarderAdmin(EntityModelAdmin):
             _("Forwarding"),
             {
                 "classes": ("collapse",),
-                "fields": ("forwarded_messages",),
+                "fields": ("forwarded_messages", "forwarded_calls"),
             },
         ),
     )
