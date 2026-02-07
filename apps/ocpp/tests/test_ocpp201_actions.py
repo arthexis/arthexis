@@ -3,6 +3,7 @@ import json
 import pytest
 
 from apps.ocpp import store
+import apps.ocpp.store.logs as store_logs
 from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.models import (
     Charger,
@@ -43,6 +44,10 @@ def reset_store_state(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "SESSION_DIR", session_dir)
     monkeypatch.setattr(store, "LOCK_DIR", lock_dir)
     monkeypatch.setattr(store, "SESSION_LOCK", lock_dir / "charging.lck")
+    monkeypatch.setattr(store_logs, "LOG_DIR", log_dir)
+    monkeypatch.setattr(store_logs, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(store_logs, "LOCK_DIR", lock_dir)
+    monkeypatch.setattr(store_logs, "SESSION_LOCK", lock_dir / "charging.lck")
 
     def _clear_state() -> None:
         store.connections.clear()

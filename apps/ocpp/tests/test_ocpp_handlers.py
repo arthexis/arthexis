@@ -10,6 +10,7 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.ocpp import store, call_error_handlers, call_result_handlers
+import apps.ocpp.store.logs as store_logs
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
 from apps.flows.models import Transition
@@ -75,6 +76,10 @@ def reset_store(monkeypatch, tmp_path):
     monkeypatch.setattr(store, "SESSION_DIR", session_dir)
     monkeypatch.setattr(store, "LOCK_DIR", lock_dir)
     monkeypatch.setattr(store, "SESSION_LOCK", lock_dir / "charging.lck")
+    monkeypatch.setattr(store_logs, "LOG_DIR", log_dir)
+    monkeypatch.setattr(store_logs, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(store_logs, "LOCK_DIR", lock_dir)
+    monkeypatch.setattr(store_logs, "SESSION_LOCK", lock_dir / "charging.lck")
     yield
     store.logs["charger"].clear()
     store.log_names["charger"].clear()

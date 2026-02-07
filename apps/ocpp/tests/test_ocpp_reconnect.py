@@ -10,6 +10,8 @@ from django.core.cache import cache
 from django.test.utils import override_settings
 
 from apps.ocpp import store
+import apps.ocpp.store.logs as store_logs
+import apps.ocpp.store.redis_state as redis_state
 from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -117,19 +119,19 @@ def clear_store_state():
     store._pending_call_handles.clear()
     store.triggered_followups.clear()
     store.monitoring_report_requests.clear()
-    store._STATE_REDIS = None
-    store._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
+    redis_state._STATE_REDIS = None
+    redis_state._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
 
 
 @pytest.fixture()
 def fake_state_redis(monkeypatch):
     fake = FakeRedis()
-    monkeypatch.setattr(store, "_STATE_REDIS", fake)
-    monkeypatch.setattr(store, "_STATE_REDIS_URL", "redis://test")
-    monkeypatch.setattr(store, "_state_redis", lambda: fake)
+    monkeypatch.setattr(redis_state, "_STATE_REDIS", fake)
+    monkeypatch.setattr(redis_state, "_STATE_REDIS_URL", "redis://test")
+    monkeypatch.setattr(redis_state, "_state_redis", lambda: fake)
     yield fake
-    store._STATE_REDIS = None
-    store._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
+    redis_state._STATE_REDIS = None
+    redis_state._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
 
 
 @pytest.fixture()
@@ -144,6 +146,10 @@ def temp_store_dirs(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "SESSION_DIR", session_dir)
     monkeypatch.setattr(store, "LOCK_DIR", lock_dir)
     monkeypatch.setattr(store, "SESSION_LOCK", lock_dir / "charging.lck")
+    monkeypatch.setattr(store_logs, "LOG_DIR", log_dir)
+    monkeypatch.setattr(store_logs, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(store_logs, "LOCK_DIR", lock_dir)
+    monkeypatch.setattr(store_logs, "SESSION_LOCK", lock_dir / "charging.lck")
     yield
 
 

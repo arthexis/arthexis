@@ -17,6 +17,7 @@ from django.utils import timezone
 from apps.features.models import Feature
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.ocpp import store
+import apps.ocpp.store.logs as store_logs
 from apps.ocpp.consumers import (
     CSMSConsumer,
     OCPP_VERSION_16,
@@ -57,6 +58,7 @@ def isolate_log_dir(tmp_path, monkeypatch):
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(store, "LOG_DIR", log_dir)
+    monkeypatch.setattr(store_logs, "LOG_DIR", log_dir)
 
 
 @pytest.fixture
