@@ -31,7 +31,7 @@ def _detect_path_owner(base_dir: Path) -> tuple[str | None, str | None]:
     if sys.platform == "win32":
         return None, None
 
-    import pwd  # noqa: WPS433 - platform-specific import
+    import pwd  # platform-specific import
 
     try:
         stat_info = base_dir.stat()
