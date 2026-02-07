@@ -579,13 +579,6 @@ class Charger(Ownable):
 
         if not self._ftp_reports_feature_enabled():
             return None
-        if not self.ftp_server_id:
-            return None
-
-        try:
-            FTPServer = apps.get_model("ftp", "FTPServer")
-        except LookupError:
-            return None
 
         node = node or self.manager_node or Node.get_local()
         if not node:
@@ -594,12 +587,7 @@ class Charger(Ownable):
         if self.ftp_server and self.ftp_server.node_id == node.pk:
             return self.ftp_server
 
-        server = FTPServer.objects.filter(node=node).first()
-        if not server:
-            server = FTPServer.objects.create(node=node, enabled=True)
-        type(self).objects.filter(pk=self.pk).update(ftp_server=server)
-        self.ftp_server = server
-        return server
+        return self.ensure_report_ftp_server(node=node)
 
     def build_report_ftp_location(
         self,
