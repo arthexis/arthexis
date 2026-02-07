@@ -27,7 +27,7 @@ from apps.core.tasks.auto_upgrade import (
 )
 
 from .filesystem import _auto_upgrade_skip_file
-from .ui.formatters import _format_datetime, _format_timestamp
+from .ui.formatters import format_datetime, _format_timestamp
 from .ui.summary import _suite_uptime_details
 
 
@@ -786,7 +786,7 @@ def _build_auto_upgrade_report(
         "suite_uptime_details": {
             "available": bool(suite_details.get("available") or suite_details.get("uptime")),
             "boot_time_label": suite_details.get("boot_time_label", ""),
-            "lock_started_at_label": _format_datetime(suite_lock_started_at)
+            "lock_started_at_label": format_datetime(suite_lock_started_at)
             if isinstance(suite_lock_started_at, datetime)
             else "",
             "lock_predates_boot": bool(

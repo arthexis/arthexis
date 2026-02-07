@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.core.system.filesystem import _suite_uptime_lock_info
-from apps.core.system.ui.formatters import _format_datetime
+from apps.core.system.ui.formatters import format_datetime
 from apps.core.system.ui.summary import _suite_uptime_details, _system_boot_time
 from apps.nodes import tasks as node_tasks
 
@@ -111,19 +111,19 @@ class Command(BaseCommand):
 
         self.stdout.write("Details:")
         self.stdout.write(f"  Lock path: {lock_path}")
-        self.stdout.write(f"  Started at: {_format_datetime(started_at) or 'unknown'}")
+        self.stdout.write(f"  Started at: {format_datetime(started_at) or 'unknown'}")
         self.stdout.write(
-            f"  Heartbeat: {_format_datetime(heartbeat) or 'unknown'}"
+            f"  Heartbeat: {format_datetime(heartbeat) or 'unknown'}"
         )
         self.stdout.write(
             f"  Suite uptime: {uptime_details.get('uptime') or 'unavailable'}"
         )
         self.stdout.write(
-            f"  Suite boot time: {_format_datetime(uptime_details.get('boot_time')) or 'unknown'}"
+            f"  Suite boot time: {format_datetime(uptime_details.get('boot_time')) or 'unknown'}"
         )
         if boot_time:
             self.stdout.write(
-                f"  System boot time: {_format_datetime(boot_time) or 'unknown'}"
+                f"  System boot time: {format_datetime(boot_time) or 'unknown'}"
             )
 
         issues = _lock_issues(

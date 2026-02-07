@@ -53,6 +53,8 @@ SERVICE_REPORT_DEFINITIONS = (
 
 
 def _service_docs_url(doc: str) -> str:
+    """Return the documentation URL for a service."""
+
     try:
         return reverse("docs:docs-document", args=[doc])
     except NoReverseMatch:
@@ -81,6 +83,8 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
     service_units: list[dict[str, object]] = []
 
     def _normalize_unit(unit_name: str) -> tuple[str, str]:
+        """Normalize a unit name to (unit, display) values."""
+
         normalized = unit_name.strip()
         unit_display = normalized
         unit = normalized
@@ -99,6 +103,8 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
         docs_url: str = "",
         pid_file: str = "",
     ) -> None:
+        """Add or update an entry in the service list."""
+
         normalized = unit_name.strip()
         if not normalized:
             return
@@ -130,6 +136,12 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
     celery_enabled = is_celery_enabled(lock_dir / "celery.lck")
     lcd_enabled = lcd_feature_enabled(lock_dir)
     rfid_enabled = rfid_service_enabled(lock_dir)
+    feature_map = {
+        "celery-worker": celery_enabled,
+        "celery-beat": celery_enabled,
+        "lcd-screen": lcd_enabled,
+        "rfid-service": rfid_enabled,
+    }
 
     for spec in SERVICE_REPORT_DEFINITIONS:
         unit_name = spec["unit_template"].format(service=service_name_placeholder)
@@ -137,14 +149,8 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
             configured = False
         elif spec["key"] == "suite":
             configured = True
-        elif spec["key"] in {"celery-worker", "celery-beat"}:
-            configured = celery_enabled
-        elif spec["key"] == "lcd-screen":
-            configured = lcd_enabled
-        elif spec["key"] == "rfid-service":
-            configured = rfid_enabled
         else:
-            configured = False
+            configured = feature_map.get(spec["key"], False)
 
         _add_unit(
             unit_name,
@@ -183,6 +189,8 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
 
 
 def _embedded_service_status(lock_dir: Path, pid_file: str) -> dict[str, object]:
+    """Return status information for embedded services."""
+
     running = _pid_file_running(lock_dir / pid_file)
     status_label = _("active (embedded)") if running else _("inactive (embedded)")
     return {
@@ -193,6 +201,8 @@ def _embedded_service_status(lock_dir: Path, pid_file: str) -> dict[str, object]
 
 
 def _build_services_report() -> dict[str, object]:
+    """Return status data for system services."""
+
     base_dir = Path(settings.BASE_DIR)
     lock_dir = base_dir / ".locks"
     configured_units = _configured_service_units(base_dir)

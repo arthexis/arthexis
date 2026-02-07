@@ -9,7 +9,7 @@ from django.utils.timesince import timesince
 from django.utils.translation import gettext_lazy as _
 
 from ..filesystem import _startup_report_log_path, _startup_report_reference_time
-from .formatters import _format_datetime
+from .formatters import format_datetime
 
 
 STARTUP_REPORT_DEFAULT_LIMIT = 50
@@ -17,6 +17,8 @@ STARTUP_CLOCK_DRIFT_THRESHOLD = timedelta(minutes=5)
 
 
 def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
+    """Parse a startup report entry line into structured data."""
+
     text = line.strip()
     if not text:
         return None
@@ -38,7 +40,7 @@ def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
         except ValueError:
             parsed_timestamp = None
 
-    timestamp_label = _format_datetime(parsed_timestamp) if parsed_timestamp else timestamp_raw
+    timestamp_label = format_datetime(parsed_timestamp) if parsed_timestamp else timestamp_raw
 
     return {
         "timestamp": parsed_timestamp,
@@ -54,6 +56,8 @@ def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
 def _read_startup_report(
     *, limit: int | None = None, base_dir: Path | None = None
 ) -> dict[str, object]:
+    """Read and parse the startup report log."""
+
     normalized_limit = limit if limit is None or limit > 0 else None
     log_path = _startup_report_log_path(base_dir)
     lines: deque[str] = deque(maxlen=normalized_limit)

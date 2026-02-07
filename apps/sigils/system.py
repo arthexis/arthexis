@@ -47,7 +47,7 @@ def _export_field_value(field: SystemField) -> str:
 def get_system_sigil_values() -> dict[str, str]:
     """Expose system information in a format suitable for sigil lookups."""
 
-    info = _gather_info()
+    info = _gather_info(_auto_upgrade_next_check)
     values: dict[str, str] = {}
     for field in _build_system_fields(info):
         exported = _export_field_value(field)

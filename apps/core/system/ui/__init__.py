@@ -28,9 +28,9 @@ from .summary import (
 )
 
 __all__ = [
+    "SERVICE_REPORT_DEFINITIONS",
     "STARTUP_CLOCK_DRIFT_THRESHOLD",
     "STARTUP_REPORT_DEFAULT_LIMIT",
-    "SERVICE_REPORT_DEFINITIONS",
     "SystemField",
     "_build_nginx_report",
     "_build_services_report",

@@ -24,7 +24,7 @@ from ..filesystem import (
     _resolve_nginx_mode,
     _suite_uptime_lock_info,
 )
-from .formatters import _format_datetime
+from .formatters import format_datetime
 from .runtime import _detect_runserver_process, _port_candidates, _probe_ports
 
 
@@ -44,6 +44,8 @@ class SystemField:
 
     @property
     def sigil(self) -> str:
+        """Return the fully-qualified sigil key."""
+
         return f"SYS.{self.sigil_key}"
 
 
@@ -54,6 +56,8 @@ def _normalize_nginx_content(content: str) -> str:
 
 
 def _resolve_external_websockets(default: bool = True) -> bool:
+    """Return the configured external websockets flag with a fallback."""
+
     try:
         from apps.nginx.models import SiteConfiguration
 
@@ -148,10 +152,21 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
 
     fields: list[SystemField] = []
 
-    def add_field(label: str, key: str, value: object, *, field_type: str = "text", visible: bool = True) -> None:
+    def add_field(
+        label: str,
+        key: str,
+        value: object,
+        *,
+        field_type: str = "text",
+        visible: bool = True,
+    ) -> None:
+        """Add a field to the system info list when visible."""
+
         if not visible:
             return
-        fields.append(SystemField(label=label, sigil_key=key, value=value, field_type=field_type))
+        fields.append(
+            SystemField(label=label, sigil_key=key, value=value, field_type=field_type)
+        )
 
     add_field(_("Suite installed"), "INSTALLED", info.get("installed", False), field_type="boolean")
     add_field(_("Revision"), "REVISION", info.get("revision", ""))
@@ -244,6 +259,8 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
         feature_map: dict[str, dict[str, object]] = {}
 
         def _add_feature(feature: NodeFeature, flag: str) -> None:
+            """Append a feature description to the info payload."""
+
             slug = getattr(feature, "slug", "") or ""
             if not slug:
                 return
@@ -381,7 +398,7 @@ def _suite_uptime_details() -> dict[str, object]:
         return {
             "available": False,
             "boot_time": boot_time,
-            "boot_time_label": _format_datetime(boot_time),
+            "boot_time_label": format_datetime(boot_time),
             "lock_started_at": lock_start,
         }
 
@@ -390,7 +407,7 @@ def _suite_uptime_details() -> dict[str, object]:
         return {
             "uptime": uptime_label,
             "boot_time": lock_start,
-            "boot_time_label": _format_datetime(lock_start),
+            "boot_time_label": format_datetime(lock_start),
             "available": True,
         }
 
@@ -400,7 +417,7 @@ def _suite_uptime_details() -> dict[str, object]:
             return {
                 "uptime": uptime_label,
                 "boot_time": boot_time,
-                "boot_time_label": _format_datetime(boot_time),
+                "boot_time_label": format_datetime(boot_time),
                 "lock_started_at": lock_start,
                 "available": True,
             }
@@ -411,7 +428,7 @@ def _suite_uptime_details() -> dict[str, object]:
         return {
             "uptime": uptime_label,
             "boot_time": boot_time,
-            "boot_time_label": _format_datetime(boot_time),
+            "boot_time_label": format_datetime(boot_time),
             "available": True,
         }
 
@@ -520,6 +537,8 @@ def load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], str
 
 
 def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    """Merge overlapping shutdown windows."""
+
     normalized: list[tuple[datetime, datetime]] = []
     for start, end in periods:
         if end < start:
@@ -543,6 +562,8 @@ def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> lis
 def _build_uptime_segments(
     *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
 ) -> list[dict[str, object]]:
+    """Build uptime segments for the requested time window."""
+
     segments: list[dict[str, object]] = []
     if window_end <= window_start:
         return segments
@@ -602,6 +623,8 @@ def build_uptime_segments(
 
 
 def _serialize_segments(segments: list[dict[str, object]], *, window_duration: float) -> list[dict[str, object]]:
+    """Serialize uptime segments for rendering."""
+
     serialized: list[dict[str, object]] = []
     for segment in segments:
         start = segment["start"]
@@ -624,8 +647,8 @@ def _serialize_segments(segments: list[dict[str, object]], *, window_duration: f
                 )
                 % {
                     "status": _(segment["status"] == "up" and "Up" or "Down"),
-                    "start": _format_datetime(start),
-                    "end": _format_datetime(end),
+                    "start": format_datetime(start),
+                    "end": format_datetime(end),
                 },
             }
         )
@@ -633,6 +656,8 @@ def _serialize_segments(segments: list[dict[str, object]], *, window_duration: f
 
 
 def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
+    """Return uptime summary information and segment details."""
+
     current_time = now or timezone.now()
     raw_periods, error = _load_shutdown_periods()
     shutdown_periods = []
@@ -681,8 +706,8 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
                 "downtime_percent": round(downtime_percent, 1),
                 "downtime_events": [
                     {
-                        "start": _format_datetime(segment["start"]),
-                        "end": _format_datetime(segment["end"]),
+                        "start": format_datetime(segment["start"]),
+                        "end": format_datetime(segment["end"]),
                         "duration": timesince(segment["start"], segment["end"]),
                     }
                     for segment in serialized_segments

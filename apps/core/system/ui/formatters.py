@@ -18,13 +18,12 @@ def _format_timestamp(dt: datetime | None) -> str:
     return date_format(localized, "DATETIME_FORMAT")
 
 
-def _format_datetime(dt: datetime | None) -> str:
+def format_datetime(dt: datetime | None) -> str:
+    """Return *dt* formatted for UI output."""
+
     if not dt:
         return ""
     return date_format(timezone.localtime(dt), "Y-m-d H:i")
 
 
-def format_datetime(dt: datetime | None) -> str:
-    """Return *dt* formatted for UI output."""
-
-    return _format_datetime(dt)
+_format_datetime = format_datetime

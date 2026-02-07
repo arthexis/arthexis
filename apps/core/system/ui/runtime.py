@@ -105,7 +105,7 @@ def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[st
             text=True,
             check=False,
         )
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return {
             "status": str(_("Unknown")),
             "enabled": "",
@@ -126,7 +126,7 @@ def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[st
                 check=False,
             )
             enabled_state = (enabled_result.stdout or enabled_result.stderr).strip()
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             enabled_state = ""
 
     return {
