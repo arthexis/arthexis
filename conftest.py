@@ -165,6 +165,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         if not COLLECTED_RESULTS:
             return
 
+        use_permanent_db = (
+            os.environ.get("ARTHEXIS_TEST_RESULTS_PERMANENT_DB", "0") == "1"
+        )
         results = [
             RecordedTestResult(
                 node_id=node_id,
@@ -179,9 +182,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         try:
             if DB_BLOCKER:
                 with DB_BLOCKER.unblock():
-                    persist_results(results)
+                    persist_results(results, use_permanent_db=use_permanent_db)
             else:
-                persist_results(results)
+                persist_results(results, use_permanent_db=use_permanent_db)
         except Exception as exc:  # pragma: no cover - best effort logging
             reporter = session.config.pluginmanager.get_plugin("terminalreporter")
             message = f"Unable to persist test results to primary database: {exc}"
