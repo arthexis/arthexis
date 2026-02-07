@@ -286,6 +286,11 @@
             </button>
           </form>
         </div>
+        <div class="upgrade-report-action-group">
+          <a href="{% url 'admin:nodes_upgradepolicy_changelist' %}" class="button upgrade-action-button">
+            {% trans "Review Upgrade Policies" %}
+          </a>
+        </div>
       </div>
     </div>
     {% with report=auto_upgrade_report %}
