@@ -286,15 +286,5 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
 def _resolve_service_url(base_dir: Path) -> str:
     """Return the local URL used to probe the Django suite."""
 
-    lock_dir = base_dir / ".locks"
-    mode_file = lock_dir / "nginx_mode.lck"
-    mode = "internal"
-    if mode_file.exists():
-        try:
-            value = mode_file.read_text(encoding="utf-8").strip()
-        except OSError:
-            value = ""
-        if value:
-            mode = value.lower()
     port = 8888
     return f"http://127.0.0.1:{port}/"
