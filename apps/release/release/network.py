@@ -41,8 +41,6 @@ def fetch_pypi_releases(
         return {}
 
     url = f"https://pypi.org/pypi/{package.name}/json"
-    last_error: Exception | None = None
-
     for attempt in range(1, retries + 1):
         resp = None
         try:
@@ -55,7 +53,6 @@ def fetch_pypi_releases(
         except ReleaseError:
             raise
         except Exception as exc:  # pragma: no cover - network failure
-            last_error = exc
             if attempt < retries and is_retryable_twine_error(str(exc)):
                 time.sleep(cooldown)
                 continue
@@ -65,12 +62,7 @@ def fetch_pypi_releases(
         finally:
             close_response(resp)
 
-    if last_error is not None:
-        raise ReleaseError(
-            f"Failed to reach PyPI JSON API for '{package.name}': {last_error}"
-        ) from last_error
-
-    return {}
+    raise AssertionError("Unreachable")  # pragma: no cover
 
 
 def close_response(resp: Optional[object]) -> None:

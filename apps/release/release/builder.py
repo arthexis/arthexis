@@ -276,7 +276,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
 def build(
     *,
     version: Optional[str] = None,
-    bump: bool = False,
     tests: bool = False,
     dist: bool = False,
     twine: bool = False,
@@ -320,6 +319,8 @@ def build(
         if package.dependencies_path
         else Path("requirements.txt")
     )
+    if not requirements_path.exists():
+        raise ReleaseError(f"Dependencies file not found: {requirements_path}")
     requirements = [
         line.strip()
         for line in requirements_path.read_text().splitlines()

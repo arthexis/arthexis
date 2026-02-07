@@ -9,7 +9,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 from urllib.parse import urlparse
 
 from apps.release import git_utils
@@ -18,6 +18,9 @@ from .builder import _run
 from .defaults import DEFAULT_PACKAGE
 from .models import Credentials, GitCredentials, Package, ReleaseError, RepositoryTarget
 from .network import close_response, fetch_pypi_releases, is_retryable_twine_error, network_available, requests
+
+if TYPE_CHECKING:
+    from apps.release.models import PackageRelease
 
 
 class PostPublishWarning(ReleaseError):
@@ -363,7 +366,7 @@ def publish(
 
 def check_pypi_readiness(
     *,
-    release: Optional["PackageRelease"] = None,
+    release: Optional[PackageRelease] = None,
     package: Optional[Package] = None,
     creds: Optional[Credentials] = None,
     repositories: Optional[Sequence[RepositoryTarget]] = None,
