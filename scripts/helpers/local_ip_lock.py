@@ -8,30 +8,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from config.settings_helpers import discover_local_ip_addresses
 
-
-def _load_existing_addresses(lock_path: Path) -> set[str]:
-    if not lock_path.exists():
-        return set()
-
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return set()
-
-    if isinstance(payload, dict):
-        addresses = payload.get("addresses", [])
-    else:
-        addresses = payload
-
-    if isinstance(addresses, str):
-        addresses = addresses.splitlines()
-
-    if not isinstance(addresses, list):
-        return set()
-
-    return {str(entry).strip() for entry in addresses if str(entry).strip()}
+def _ensure_repo_on_path(base_dir: Path) -> None:
+    """Ensure the repo root is on sys.path for module imports."""
+    base_dir_str = str(base_dir)
+    if base_dir_str not in sys.path:
+        sys.path.insert(0, base_dir_str)
 
 
 def main() -> int:
@@ -40,10 +22,13 @@ def main() -> int:
         return 1
 
     base_dir = Path(sys.argv[1]).resolve()
+    _ensure_repo_on_path(base_dir)
+
+    from config.settings_helpers import discover_local_ip_addresses, load_local_ip_lock
     lock_dir = base_dir / ".locks"
     lock_path = lock_dir / "local_ips.lck"
 
-    existing = _load_existing_addresses(lock_path)
+    existing = load_local_ip_lock(base_dir)
     discovered = discover_local_ip_addresses()
     addresses = sorted(existing.union(discovered))
 
