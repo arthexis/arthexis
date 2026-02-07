@@ -385,8 +385,8 @@ def build(
         cmd = [sys.executable, "-m", "twine", "upload", *files]
         try:
             cmd += creds.twine_args()
-        except ValueError:
-            raise ReleaseError("Missing PyPI credentials")
+        except ValueError as err:
+            raise ReleaseError("Missing PyPI credentials") from err
         upload_with_retries(cmd, repository="PyPI")
 
     if stashed:
