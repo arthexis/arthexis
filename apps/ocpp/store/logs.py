@@ -22,6 +22,7 @@ from .state import AGGREGATE_SLUG, IDENTITY_SEPARATOR, identity_key
 
 # Maximum number of recent log entries to keep in memory per identity.
 MAX_IN_MEMORY_LOG_ENTRIES = 1000
+MAX_LOG_READ_LINES = 10000
 
 logs: dict[str, dict[str, deque[str]]] = {"charger": {}, "simulator": {}}
 # store per charger session logs before they are flushed to disk
@@ -81,9 +82,31 @@ def _file_path(cid: str, log_type: str = "charger") -> Path:
     return LOG_DIR / f"{log_type}.{basename}.log"
 
 
+def _scrub_log_entry(entry: str) -> str:
+    entry = re.sub(r"[\r\n]+", " ", entry)
+    patterns = [
+        r'(?P<prefix>"password"\s*:\s*)".*?"',
+        r'(?P<prefix>"secret"\s*:\s*)".*?"',
+        r'(?P<prefix>"token"\s*:\s*)".*?"',
+        r'(?P<prefix>"private_key"\s*:\s*)".*?"',
+        r'(?P<prefix>"api_key"\s*:\s*)".*?"',
+        r'(?P<prefix>"key"\s*:\s*)".*?"',
+        r"(?P<prefix>\bpassword\s*=\s*)\S+",
+        r"(?P<prefix>\bsecret\s*=\s*)\S+",
+        r"(?P<prefix>\btoken\s*=\s*)\S+",
+        r"(?P<prefix>\bprivate_key\s*=\s*)\S+",
+        r"(?P<prefix>\bapi_key\s*=\s*)\S+",
+        r"(?P<prefix>\bkey\s*=\s*)\S+",
+    ]
+    for pattern in patterns:
+        entry = re.sub(pattern, r"\g<prefix>[REDACTED]", entry, flags=re.IGNORECASE)
+    return entry
+
+
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     """Append a timestamped log entry for the given id and log type."""
 
+    entry = _scrub_log_entry(entry)
     timestamp = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     entry = f"{timestamp} {entry}"
 
@@ -529,7 +552,6 @@ def get_logs(
 ) -> list[str]:
     """Return all log entries for the given id and type."""
 
-    entries_list: list[str] = []
     max_entries: int | None = None
     entries_deque: deque[str] | None = None
     if limit is not None:
@@ -540,6 +562,9 @@ def get_logs(
         if parsed_limit is not None and parsed_limit > 0:
             max_entries = parsed_limit
             entries_deque = deque(maxlen=max_entries)
+    if max_entries is None:
+        max_entries = MAX_LOG_READ_LINES
+        entries_deque = deque(maxlen=max_entries)
 
     seen_paths: set[Path] = set()
     seen_keys: set[str] = set()
@@ -547,25 +572,18 @@ def get_logs(
         resolved, name = _resolve_log_identifier(key, log_type)
         path = _log_file_for_identifier(resolved, name, log_type)
         if path.exists() and path not in seen_paths:
-            if max_entries is None:
-                entries_list.extend(path.read_text(encoding="utf-8").splitlines())
-            else:
-                with path.open("r", encoding="utf-8") as handle:
-                    for line in handle:
-                        if entries_deque is not None:
-                            entries_deque.append(line.rstrip("\r\n"))
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    if entries_deque is not None:
+                        entries_deque.append(line.rstrip("\r\n"))
             seen_paths.add(path)
         memory_entries = _memory_logs_for_identifier(resolved, log_type)
         lower_key = resolved.lower()
         if memory_entries and lower_key not in seen_keys:
-            if max_entries is None:
-                entries_list.extend(memory_entries)
-            elif entries_deque is not None:
+            if entries_deque is not None:
                 for entry in memory_entries:
                     entries_deque.append(entry)
             seen_keys.add(lower_key)
-    if max_entries is None:
-        return entries_list
     if entries_deque is None:
         return []
     return list(entries_deque)
@@ -629,6 +647,7 @@ def stop_session_lock() -> None:
 
 __all__ = [
     "MAX_IN_MEMORY_LOG_ENTRIES",
+    "MAX_LOG_READ_LINES",
     "logs",
     "history",
     "log_names",
