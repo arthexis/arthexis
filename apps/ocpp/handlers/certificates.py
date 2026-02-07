@@ -259,9 +259,7 @@ async def handle_install_certificate_error(
     responded_at = timezone.now()
 
     def _apply():
-        detail_text = (description or "").strip() or _json_details(details)
-        if not detail_text:
-            detail_text = (error_code or "").strip() or "Error"
+        detail_text = (description or "").strip() or _json_details(details) or (error_code or "").strip() or "Error"
         operation = CertificateOperation.objects.filter(pk=operation_pk).first()
         if operation:
             operation.status = CertificateOperation.STATUS_ERROR
