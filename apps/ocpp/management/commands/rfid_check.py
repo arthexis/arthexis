@@ -1,5 +1,7 @@
 import json
+import sys
 import time
+from select import select
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
@@ -44,7 +46,10 @@ class Command(BaseCommand):
             "--timeout",
             type=float,
             default=5.0,
-            help="How long to wait for a scan before timing out (seconds).",
+            help=(
+                "How long to wait for a scan before timing out when running "
+                "non-interactively (seconds)."
+            ),
         )
         parser.add_argument(
             "--pretty",
@@ -111,7 +116,7 @@ class Command(BaseCommand):
         if service_available():
             result = self._scan_via_attempt(timeout)
         else:
-            result = scan_sources(timeout=timeout)
+            result = self._scan_via_local(timeout)
         if result.get("error"):
             return result
 
@@ -123,6 +128,9 @@ class Command(BaseCommand):
         return result
 
     def _scan_via_attempt(self, timeout: float) -> dict:
+        interactive = sys.stdin.isatty()
+        if interactive:
+            self.stdout.write("Press any key to stop scanning.")
         start = time.monotonic()
         latest_id = (
             RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
@@ -131,7 +139,9 @@ class Command(BaseCommand):
             .first()
         )
         attempt = None
-        while time.monotonic() - start < timeout:
+        while True:
+            if interactive and self._user_requested_stop():
+                return {"error": "Scan cancelled by user"}
             attempt = (
                 RFIDAttempt.objects.filter(
                     source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0
@@ -141,6 +151,8 @@ class Command(BaseCommand):
             )
             if attempt:
                 break
+            if not interactive and time.monotonic() - start >= timeout:
+                break
             time.sleep(0.2)
         if not attempt:
             return {"rfid": None, "label_id": None}
@@ -149,3 +161,27 @@ class Command(BaseCommand):
         if attempt.label_id:
             payload.setdefault("label_id", attempt.label_id)
         return payload
+
+    def _scan_via_local(self, timeout: float) -> dict:
+        interactive = sys.stdin.isatty()
+        if interactive:
+            self.stdout.write("Press any key to stop scanning.")
+        start = time.monotonic()
+        while True:
+            if interactive and self._user_requested_stop():
+                return {"error": "Scan cancelled by user"}
+            result = scan_sources(timeout=0.2)
+            if result.get("rfid") or result.get("error"):
+                return result
+            if not interactive and time.monotonic() - start >= timeout:
+                return {"rfid": None, "label_id": None}
+
+    def _user_requested_stop(self) -> bool:
+        try:
+            ready, _, _ = select([sys.stdin], [], [], 0)
+        except Exception:
+            return False
+        if ready:
+            sys.stdin.read(1)
+            return True
+        return False

@@ -86,6 +86,15 @@ def build_logging_settings(
                 "formatter": "standard",
                 "level": "INFO",
             },
+            "rfid_file": {
+                "class": "apps.loggers.handlers.RFIDFileHandler",
+                "filename": str(log_dir / "rfid.log"),
+                "when": "midnight",
+                "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
+                "encoding": "utf-8",
+                "formatter": "standard",
+                "level": "INFO",
+            },
             "error_file": {
                 "class": "apps.loggers.handlers.ErrorFileHandler",
                 "filename": str(log_dir / "error.log"),
@@ -145,6 +154,12 @@ def build_logging_settings(
 
     logging_config["loggers"]["apps.ocpp.forwarder"] = {
         "handlers": ["cp_forwarder_file", "error_file"],
+        "level": "INFO",
+        "propagate": False,
+    }
+
+    logging_config["loggers"]["apps.cards.rfid_service"] = {
+        "handlers": ["rfid_file", "error_file"],
         "level": "INFO",
         "propagate": False,
     }
