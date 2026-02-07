@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from contextlib import nullcontext
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List
@@ -180,10 +181,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         ]
 
         try:
-            if DB_BLOCKER:
-                with DB_BLOCKER.unblock():
-                    persist_results(results, use_permanent_db=use_permanent_db)
-            else:
+            db_context = DB_BLOCKER.unblock() if DB_BLOCKER else nullcontext()
+            with db_context:
                 persist_results(results, use_permanent_db=use_permanent_db)
         except Exception as exc:  # pragma: no cover - best effort logging
             reporter = session.config.pluginmanager.get_plugin("terminalreporter")
