@@ -20,9 +20,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        args = ["--enable", "--local"]
+        cmd_args = ["--enable", "--local"]
         if options["no_reload"]:
-            args.append("--no-reload")
+            cmd_args.append("--no-reload")
         if options["no_sudo"]:
-            args.append("--no-sudo")
-        call_command("https", *args)
+            cmd_args.append("--no-sudo")
+        call_command("https", *cmd_args)
