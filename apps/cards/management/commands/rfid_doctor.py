@@ -1,7 +1,6 @@
 import json
 import sys
 import time
-from select import select
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -10,6 +9,7 @@ from apps.cards import rfid_service
 from apps.cards.background_reader import is_configured, lock_file_path
 from apps.cards.detect import detect_scanner
 from apps.cards.models import RFIDAttempt
+from apps.cards.utils import user_requested_stop
 
 
 class Command(BaseCommand):
@@ -147,7 +147,7 @@ class Command(BaseCommand):
         )
         attempt = None
         while True:
-            if interactive and self._user_requested_stop():
+            if interactive and user_requested_stop():
                 self.stdout.write(self.style.WARNING("Scan cancelled by user."))
                 return
             attempt = (
@@ -177,16 +177,6 @@ class Command(BaseCommand):
         payload = self._format_payload(payload, show_raw=show_raw)
         self.stdout.write(self.style.SUCCESS("Scan response:"))
         self.stdout.write(json.dumps(payload, indent=2, sort_keys=True))
-
-    def _user_requested_stop(self) -> bool:
-        try:
-            ready, _, _ = select([sys.stdin], [], [], 0)
-        except Exception:
-            return False
-        if ready:
-            sys.stdin.read(1)
-            return True
-        return False
 
     def _report_device_status(self, configured: bool) -> None:
         detection = detect_scanner()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+from select import select
 from typing import Tuple
 
 from django.http import HttpRequest
@@ -67,3 +69,16 @@ def build_mode_toggle(
         toggle_url = f"{toggle_url}?{toggle_query}"
 
     return table_mode, toggle_url, toggle_label
+
+
+def user_requested_stop() -> bool:
+    """Check for a non-blocking keypress to stop an interactive operation."""
+
+    try:
+        ready, _, _ = select([sys.stdin], [], [], 0)
+    except (OSError, ValueError):
+        return False
+    if ready:
+        sys.stdin.read(1)
+        return True
+    return False
