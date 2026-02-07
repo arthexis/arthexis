@@ -14,11 +14,13 @@ class Command(BaseCommand):
         "Interactively verify RFID service availability, configuration, and scans."
     )
 
+    DEFAULT_SCAN_TIMEOUT = max(30.0, rfid_service.DEFAULT_SCAN_TIMEOUT)
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--timeout",
             type=float,
-            default=rfid_service.DEFAULT_SCAN_TIMEOUT,
+            default=DEFAULT_SCAN_TIMEOUT,
             help="Scan timeout in seconds (default: %(default)s)",
         )
         parser.add_argument(
