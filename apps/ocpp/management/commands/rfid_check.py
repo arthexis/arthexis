@@ -1,7 +1,6 @@
 import json
 import sys
 import time
-from select import select
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
@@ -11,6 +10,7 @@ from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
 from apps.cards.rfid_service import service_available
 from apps.cards.scanner import scan_sources
+from apps.cards.utils import user_requested_stop
 
 
 class Command(BaseCommand):
@@ -140,7 +140,7 @@ class Command(BaseCommand):
         )
         attempt = None
         while True:
-            if interactive and self._user_requested_stop():
+            if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
             attempt = (
                 RFIDAttempt.objects.filter(
@@ -168,20 +168,10 @@ class Command(BaseCommand):
             self.stdout.write("Press any key to stop scanning.")
         start = time.monotonic()
         while True:
-            if interactive and self._user_requested_stop():
+            if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
             result = scan_sources(timeout=0.2)
             if result.get("rfid") or result.get("error"):
                 return result
             if not interactive and time.monotonic() - start >= timeout:
                 return {"rfid": None, "label_id": None}
-
-    def _user_requested_stop(self) -> bool:
-        try:
-            ready, _, _ = select([sys.stdin], [], [], 0)
-        except Exception:
-            return False
-        if ready:
-            sys.stdin.read(1)
-            return True
-        return False
