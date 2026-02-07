@@ -9,7 +9,7 @@ from apps.cards import rfid_service
 from apps.cards.background_reader import is_configured, lock_file_path
 from apps.cards.detect import detect_scanner
 from apps.cards.models import RFIDAttempt
-from apps.cards.utils import user_requested_stop
+from apps.cards.utils import drain_stdin, user_requested_stop
 
 
 class Command(BaseCommand):
@@ -138,6 +138,9 @@ class Command(BaseCommand):
         )
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
+        self.stdout.flush()
+        if interactive:
+            drain_stdin()
         start = time.monotonic()
         latest_id = (
             RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
