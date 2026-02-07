@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import ipaddress
+import json
 import os
 import socket
 import subprocess
@@ -22,6 +23,7 @@ __all__ = [
     "discover_local_ip_addresses",
     "extract_ip_from_host",
     "install_validate_host_with_subnets",
+    "load_local_ip_lock",
     "load_secret_key",
     "resolve_celery_shutdown_timeout",
     "strip_ipv6_brackets",
@@ -255,6 +257,40 @@ def discover_local_ip_addresses(
     return addresses
 
 
+def load_local_ip_lock(base_dir: Path) -> set[str]:
+    """Return IP addresses stored in the local IP lock file."""
+
+    lock_path = base_dir / ".locks" / "local_ips.lck"
+    if not lock_path.exists():
+        return set()
+
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+    if isinstance(payload, dict):
+        addresses = payload.get("addresses", [])
+    else:
+        addresses = payload
+
+    if isinstance(addresses, str):
+        addresses = addresses.splitlines()
+
+    if not isinstance(addresses, list):
+        return set()
+
+    normalized: set[str] = set()
+    for candidate in addresses:
+        if candidate is None:
+            continue
+        normalized_ip = _normalize_candidate_ip(str(candidate))
+        if normalized_ip:
+            normalized.add(normalized_ip)
+
+    return normalized
+
+
 def load_secret_key(
     base_dir: Path,
     env: Mapping[str, str] | MutableMapping[str, str] | None = None,
@@ -284,4 +320,3 @@ def load_secret_key(
         secret_file.write_text(generated_key, encoding="utf-8")
 
     return generated_key
-
