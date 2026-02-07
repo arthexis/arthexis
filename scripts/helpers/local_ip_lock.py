@@ -22,24 +22,31 @@ def main() -> int:
         return 1
 
     base_dir = Path(sys.argv[1]).resolve()
+    if not base_dir.is_dir():
+        print(f"Base dir not found: {base_dir}", file=sys.stderr)
+        return 1
     _ensure_repo_on_path(base_dir)
 
-    from config.settings_helpers import discover_local_ip_addresses, load_local_ip_lock
-    lock_dir = base_dir / ".locks"
-    lock_path = lock_dir / "local_ips.lck"
+    try:
+        from config.settings_helpers import discover_local_ip_addresses, load_local_ip_lock
+        lock_dir = base_dir / ".locks"
+        lock_path = lock_dir / "local_ips.lck"
 
-    existing = load_local_ip_lock(base_dir)
-    discovered = discover_local_ip_addresses()
-    addresses = sorted(existing.union(discovered))
+        existing = load_local_ip_lock(base_dir)
+        discovered = discover_local_ip_addresses()
+        addresses = sorted(existing.union(discovered))
 
-    payload = {
-        "addresses": addresses,
-        "updated_at": datetime.now(tz=timezone.utc).isoformat(),
-    }
+        payload = {
+            "addresses": addresses,
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
 
-    lock_dir.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    return 0
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        return 0
+    except Exception as exc:
+        print(f"local_ip_lock warning: {exc}", file=sys.stderr)
+        return 0
 
 
 if __name__ == "__main__":
