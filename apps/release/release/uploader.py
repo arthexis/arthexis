@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
+from urllib.parse import urlparse
 
 from apps.release import git_utils
 
@@ -44,10 +47,14 @@ def upload_with_retries(
     repository: str,
     retries: int = 3,
     cooldown: float = 3.0,
+    env: Optional[dict[str, str]] = None,
 ) -> None:
     last_output = ""
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
     for attempt in range(1, retries + 1):
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=merged_env)
         stdout = proc.stdout or ""
         stderr = proc.stderr or ""
         if stdout:
@@ -161,7 +168,7 @@ def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcess
     raise ReleaseError(message) from exc
 
 
-def _push_tag(tag_name: str, package: Package) -> None:
+def _push_tag(tag_name: str) -> None:
     auth_error: subprocess.CalledProcessError | None = None
     try:
         _run(["git", "push", "origin", tag_name])
@@ -185,15 +192,39 @@ def _push_tag(tag_name: str, package: Package) -> None:
     creds = _environment_git_credentials()
     if creds and creds.has_auth():
         remote_url = git_utils.git_remote_url("origin")
-        if remote_url:
-            authed_url = git_utils.remote_url_with_credentials(
-                remote_url,
-                username=(creds.username or "").strip(),
-                password=(creds.password or "").strip(),
-            )
-            if authed_url:
+        parsed = urlparse(remote_url) if remote_url else None
+        if parsed and parsed.scheme in {"http", "https"}:
+            username = (creds.username or "").strip()
+            password = (creds.password or "").strip()
+            with tempfile.TemporaryDirectory(prefix="arthexis-git-") as temp_dir:
+                askpass_path = Path(temp_dir) / "askpass.sh"
+                askpass_path.write_text(
+                    "\n".join(
+                        [
+                            "#!/bin/sh",
+                            'case "$1" in',
+                            '*Username*) echo "' + username.replace('"', '\\"') + '" ;;',
+                            '*Password*) echo "' + password.replace('"', '\\"') + '" ;;',
+                            "*) echo ;;",
+                            "esac",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                askpass_path.chmod(0o700)
+                env = os.environ.copy()
+                env.update(
+                    {
+                        "GIT_ASKPASS": str(askpass_path),
+                        "GIT_TERMINAL_PROMPT": "0",
+                    }
+                )
                 try:
-                    _run(["git", "push", authed_url, tag_name])
+                    subprocess.run(
+                        ["git", "push", "origin", tag_name],
+                        check=True,
+                        env=env,
+                    )
                     return
                 except subprocess.CalledProcessError as push_exc:
                     if not _git_authentication_missing(push_exc):
@@ -278,12 +309,12 @@ def publish(
             else:
                 raise ReleaseError(f"Missing credentials for {target.name}")
         try:
-            auth_args = creds_obj.twine_args()
+            auth_env = creds_obj.twine_env()
         except ValueError as exc:
             label = "PyPI" if index == 0 else target.name
             raise ReleaseError(f"Missing credentials for {label}") from exc
-        cmd = target.build_command(files) + auth_args
-        upload_with_retries(cmd, repository=target.name)
+        cmd = target.build_command(files)
+        upload_with_retries(cmd, repository=target.name, env=auth_env)
         uploaded.append(target.name)
 
     tag_name = f"v{version}"
@@ -312,7 +343,7 @@ def publish(
         ) from exc
 
     try:
-        _push_tag(tag_name, package)
+        _push_tag(tag_name)
     except ReleaseError as exc:
         if uploaded:
             uploads = ", ".join(uploaded)
@@ -477,6 +508,12 @@ def check_pypi_readiness(
         if url in checked_urls:
             continue
         checked_urls.add(url)
+        if not _is_repository_url_safe(url):
+            add(
+                "error",
+                f"Upload endpoint {url} is not allowed for readiness checks.",
+            )
+            continue
         resp = None
         try:
             resp = requests.get(url, timeout=10)
@@ -499,3 +536,28 @@ def check_pypi_readiness(
             close_response(resp)
 
     return PyPICheckResult(ok=not has_error, messages=messages)
+
+
+def _is_repository_url_safe(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return False
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return True
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+    )

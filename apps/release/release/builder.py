@@ -261,9 +261,13 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
     def _dump_toml(data: dict) -> str:
         if toml is not None and hasattr(toml, "dumps"):
             return toml.dumps(data)
-        import json
-
-        return json.dumps(data)
+        try:
+            import tomli_w
+        except ImportError as exc:
+            raise ReleaseError(
+                "No TOML writer available. Install the 'toml' or 'tomli_w' package."
+            ) from exc
+        return tomli_w.dumps(data)
 
     Path("pyproject.toml").write_text(_dump_toml(content), encoding="utf-8")
 
