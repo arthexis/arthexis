@@ -127,22 +127,24 @@ class Command(BaseCommand):
     def _get_or_create_config(self, domain: str, *, protocol: str) -> SiteConfiguration:
         defaults_source = SiteConfiguration.get_default()
         name = "localhost" if domain == "localhost" else domain
-        desired_config = {
-            "enabled": True,
-            "protocol": protocol,
-            "mode": defaults_source.mode,
-            "role": defaults_source.role,
-            "port": defaults_source.port,
-            "include_ipv6": defaults_source.include_ipv6,
-            "external_websockets": defaults_source.external_websockets,
-            "site_entries_path": defaults_source.site_entries_path,
-            "site_destination": defaults_source.site_destination,
-            "expected_path": defaults_source.expected_path,
-        }
-        config, _ = SiteConfiguration.objects.update_or_create(
-            name=name,
-            defaults=desired_config,
-        )
+        config, created = SiteConfiguration.objects.get_or_create(name=name)
+        if created:
+            config.enabled = True
+            config.protocol = protocol
+            config.mode = defaults_source.mode
+            config.role = defaults_source.role
+            config.port = defaults_source.port
+            config.include_ipv6 = defaults_source.include_ipv6
+            config.external_websockets = defaults_source.external_websockets
+            config.site_entries_path = defaults_source.site_entries_path
+            config.site_destination = defaults_source.site_destination
+            config.expected_path = defaults_source.expected_path
+            config.save()
+        else:
+            if config.protocol != protocol or not config.enabled:
+                config.protocol = protocol
+                config.enabled = True
+                config.save(update_fields=["protocol", "enabled"])
         return config
 
     def _get_or_create_certificate(
@@ -213,10 +215,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"  - {cert_summary}")
 
     def _verify_certificate(self, cert, *, sudo: str) -> str:
-        try:
-            result = cert.verify(sudo=sudo)
-        except Exception as exc:  # pragma: no cover - depends on system
-            return f"Verification failed: {exc}"
+        result = cert.verify(sudo=sudo)
         return self._format_verification_result(result)
 
     def _format_verification_result(self, result: CertificateVerificationResult) -> str:
