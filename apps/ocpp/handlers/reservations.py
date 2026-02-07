@@ -108,10 +108,10 @@ async def handle_reserve_now_error(
     log_key: str,
 ) -> bool:
     parts: list[str] = []
-    code_text = (error_code or "").strip() if error_code else ""
+    code_text = (error_code or "").strip()
     if code_text:
         parts.append(f"code={code_text}")
-    description_text = (description or "").strip() if description else ""
+    description_text = (description or "").strip()
     if description_text:
         parts.append(f"description={description_text}")
     details_text = _json_details(details)
