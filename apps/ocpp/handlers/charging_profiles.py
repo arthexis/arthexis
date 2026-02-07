@@ -155,9 +155,7 @@ async def handle_clear_charging_profile_error(
         "description": description or "",
         "details": details or {},
     }
-    detail_text = (description or "").strip() or _json_details(details)
-    if not detail_text:
-        detail_text = (error_code or "").strip()
+    detail_text = (description or "").strip() or _json_details(details) or (error_code or "").strip()
 
     def _apply_error() -> None:
         if not charging_profile_id:
