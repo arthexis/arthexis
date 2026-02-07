@@ -2,8 +2,7 @@ import base64
 import json
 
 from ... import store
-from ...call_error_handlers import dispatch_call_error
-from ...call_result_handlers import dispatch_call_result
+from ...handlers import dispatch_call_error, dispatch_call_result
 from ...models import Charger
 
 
@@ -122,7 +121,7 @@ class DispatchMixin:
         )
 
     async def _handle_call_result(
-        self, message_id: str, payload: dict | None, raw: str
+        self, message_id: str, payload: dict | None, raw: str = ""
     ) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
@@ -161,7 +160,7 @@ class DispatchMixin:
         error_code: str | None,
         description: str | None,
         details: dict | None,
-        raw: str,
+        raw: str = "",
     ) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
