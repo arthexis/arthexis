@@ -296,7 +296,7 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
     return unit_name
 
 
-def _resolve_service_url(base_dir: Path) -> str:
+def _resolve_service_url(_base_dir: Path) -> str:
     """Return the local URL used to probe the Django suite."""
 
     port = 8888
