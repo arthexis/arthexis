@@ -1398,11 +1398,7 @@ async def handle_change_availability_error(
     details: dict | None,
     log_key: str,
 ) -> bool:
-    detail_text = _json_details(details) if details is not None else ""
-    if not detail_text:
-        detail_text = (description or "").strip()
-    if not detail_text:
-        detail_text = (error_code or "").strip() or "Error"
+    detail_text = _json_details(details) or (description or "").strip() or (error_code or "").strip() or "Error"
     requested_type = metadata.get("availability_type")
     connector_value = metadata.get("connector_id")
     requested_at = metadata.get("requested_at")
