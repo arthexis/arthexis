@@ -40,6 +40,7 @@ from config.settings_helpers import (
     discover_local_ip_addresses,
     extract_ip_from_host,
     install_validate_host_with_subnets,
+    load_local_ip_lock,
     load_secret_key,
     strip_ipv6_brackets,
 )
@@ -168,6 +169,11 @@ for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
 
 
 for address in discover_local_ip_addresses():
+    if address not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(address)
+
+
+for address in load_local_ip_lock(BASE_DIR):
     if address not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(address)
 
