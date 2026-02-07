@@ -17,6 +17,7 @@ class DashboardRFIDAttemptTests(TestCase):
         )
         self.client.force_login(self.superuser)
 
+    @pytest.mark.slow
     def test_rfid_attempts_model_appears_on_admin_dashboard(self):
         response = self.client.get(reverse("admin:index"))
         changelist_url = reverse("admin:cards_rfidattempt_changelist")

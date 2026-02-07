@@ -136,6 +136,7 @@ def test_charge_point_created_for_new_websocket_path():
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
     charge_point_features,
@@ -151,6 +152,7 @@ def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_new_charge_point_blocked_when_creation_feature_disabled(
     charge_point_features,
@@ -173,6 +175,7 @@ def test_new_charge_point_blocked_when_creation_feature_disabled(
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_known_charge_point_allowed_when_creation_feature_disabled(
     charge_point_features,
@@ -194,6 +197,7 @@ def test_known_charge_point_allowed_when_creation_feature_disabled(
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_charger_page_reverse_resolves_expected_path():
     cid = "CP-TEST-REVERSE"
@@ -201,6 +205,7 @@ def test_charger_page_reverse_resolves_expected_path():
     assert reverse("charger-page", args=[cid]) == f"/c/{cid}/"
 
 
+@pytest.mark.slow
 def test_select_subprotocol_prioritizes_preference_and_defaults():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
 
@@ -231,6 +236,7 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
         assert consumer._select_subprotocol(offered, preferred) == expected
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 @pytest.mark.parametrize(
     "preferred",
@@ -260,6 +266,7 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_ocpp_websocket_rate_limit_enforced():
     async def run_scenario():
@@ -289,6 +296,7 @@ def test_ocpp_websocket_rate_limit_enforced():
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
     async def run_scenario():
@@ -319,6 +327,7 @@ def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_pending_connection_replaced_on_reconnect():
     async def run_scenario():
@@ -348,8 +357,8 @@ def test_pending_connection_replaced_on_reconnect():
     async_to_sync(run_scenario)()
 
 
-@override_settings(ROOT_URLCONF="apps.ocpp.urls")
 @pytest.mark.slow
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_assign_connector_rebinds_store_preserves_state():
     async def run_scenario():
         serial = "CP-CONNECTOR-REASSIGN"
@@ -423,6 +432,7 @@ def test_assign_connector_rebinds_store_preserves_state():
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
     charger = Charger.objects.create(
@@ -461,6 +471,7 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
     assert called["refresh_forwarders"] is False
 
 
+@pytest.mark.slow
 @override_settings(
     ROOT_URLCONF="apps.ocpp.urls",
     CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
@@ -518,6 +529,7 @@ def _latest_log_message(key: str) -> str:
     return parts[-1] if len(parts) == 3 else entry
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_serial_from_path_logs_reason():
     async def run_scenario():
@@ -533,6 +545,7 @@ def test_rejects_invalid_serial_from_path_logs_reason():
     assert "Serial Number placeholder values such as <charger_id> are not allowed." in message
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_query_serial_and_logs_details():
     async def run_scenario():
@@ -554,6 +567,7 @@ def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
     return [(b"authorization", b"Basic " + token)]
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_when_missing_header():
     user = get_user_model().objects.create_user(username="auth-missing", password="secret")
@@ -572,6 +586,7 @@ def test_basic_auth_rejects_when_missing_header():
     assert "HTTP Basic authentication required (credentials missing)" in message
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_header_format():
     user = get_user_model().objects.create_user(username="auth-invalid", password="secret")
@@ -594,6 +609,7 @@ def test_basic_auth_rejects_invalid_header_format():
     assert "HTTP Basic authentication header is invalid" in message
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_credentials():
     user = get_user_model().objects.create_user(username="auth-fail", password="secret")
@@ -616,6 +632,7 @@ def test_basic_auth_rejects_invalid_credentials():
     assert "HTTP Basic authentication failed" in message
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_unauthorized_user():
     authorized = get_user_model().objects.create_user(username="authorized", password="secret")
@@ -647,6 +664,7 @@ def test_basic_auth_rejects_unauthorized_user():
     )
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_authorized_user():
     user = get_user_model().objects.create_user(username="auth-ok", password="secret")
@@ -678,6 +696,7 @@ def test_basic_auth_accepts_authorized_user():
         assert auth_entries or connection_result.get("close_code") != 4003
 
 
+@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_unknown_extension_action_replies_with_empty_call_result():
     async def run_scenario():
