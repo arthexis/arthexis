@@ -218,6 +218,19 @@ def _run_upgrade_command(
 
     try:
         subprocess.run(command, cwd=base_dir, check=True, **run_kwargs)
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            "Inline auto-upgrade failed with non-zero exit; will retry on next cycle",
+            exc_info=True,
+        )
+        append_auto_upgrade_log(
+            base_dir,
+            (
+                "Inline auto-upgrade failed "
+                f"(exit code {exc.returncode}); will retry on next cycle"
+            ),
+        )
+        return None, False
     except OSError as exc:  # pragma: no cover - platform-specific
         logger.warning(
             "Inline auto-upgrade launch failed; will retry on next cycle",
