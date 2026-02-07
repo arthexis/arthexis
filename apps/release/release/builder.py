@@ -303,99 +303,104 @@ def build(
                 "Git repository is not clean. Commit, stash, or enable auto stash before building."
             )
 
-    version_path = Path(package.version_path) if package.version_path else Path("VERSION")
-    if version is None:
-        if not version_path.exists():
-            raise ReleaseError("VERSION file not found")
-        version = version_path.read_text().strip()
-    else:
-        # Ensure the VERSION file reflects the provided release version
-        if version_path.parent != Path("."):
-            version_path.parent.mkdir(parents=True, exist_ok=True)
-        version_path.write_text(version + "\n")
-
-    requirements_path = (
-        Path(package.dependencies_path)
-        if package.dependencies_path
-        else Path("requirements.txt")
-    )
-    if not requirements_path.exists():
-        raise ReleaseError(f"Dependencies file not found: {requirements_path}")
-    requirements = [
-        line.strip()
-        for line in requirements_path.read_text().splitlines()
-        if line.strip() and not line.startswith("#")
-    ]
-
-    if tests:
-        log_path = Path("logs/test.log")
-        test_command = shlex.split(package.test_command) if package.test_command else None
-        proc = run_tests(log_path=log_path, command=test_command)
-        if proc.returncode != 0:
-            raise TestsFailed(log_path, proc.stdout + proc.stderr)
-
-    _write_pyproject(package, version, requirements)
-    if dist:
-        if Path("dist").exists():
-            shutil.rmtree("dist")
-        build_dir = Path("build")
-        if build_dir.exists():
-            shutil.rmtree(build_dir)
-        sys.modules.pop("build", None)
-        try:
-            import build  # type: ignore
-        except Exception:
-            _run([sys.executable, "-m", "pip", "install", "build"])
-        else:
-            module_path = Path(getattr(build, "__file__", "") or "").resolve()
-            try:
-                module_path.relative_to(Path.cwd().resolve())
-            except ValueError:
-                pass
-            else:
-                # A local ``build`` package shadows the build backend; reinstall it.
-                sys.modules.pop("build", None)
-                _run([sys.executable, "-m", "pip", "install", "build"])
-        _build_in_sanitized_tree(Path.cwd(), generate_wheels=package.generate_wheels)
-
-    if git:
-        files = ["VERSION", "pyproject.toml"]
-        _run(["git", "add"] + files)
-        msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
-        if _git_has_staged_changes():
-            _run(["git", "commit", "-m", msg])
-        _run(["git", "push"])
-
-    if tag:
-        tag_name = f"v{version}"
-        _run(["git", "tag", tag_name])
-        _run(["git", "push", "origin", tag_name])
-
-    if dist and twine:
-        if not force:
-            releases = fetch_pypi_releases(package)
-            if version in releases:
-                raise ReleaseError(f"Version {version} already on PyPI")
-        creds = (
-            creds
-            or Credentials(
-                token=os.environ.get("PYPI_API_TOKEN"),
-                username=os.environ.get("PYPI_USERNAME"),
-                password=os.environ.get("PYPI_PASSWORD"),
-            )
+    try:
+        version_path = (
+            Path(package.version_path) if package.version_path else Path("VERSION")
         )
-        files = sorted(str(p) for p in Path("dist").glob("*"))
-        if not files:
-            raise ReleaseError("dist directory is empty")
-        cmd = [sys.executable, "-m", "twine", "upload", *files]
-        try:
-            cmd += creds.twine_args()
-        except ValueError as err:
-            raise ReleaseError("Missing PyPI credentials") from err
-        upload_with_retries(cmd, repository="PyPI")
+        if version is None:
+            if not version_path.exists():
+                raise ReleaseError("VERSION file not found")
+            version = version_path.read_text().strip()
+        else:
+            # Ensure the VERSION file reflects the provided release version
+            if version_path.parent != Path("."):
+                version_path.parent.mkdir(parents=True, exist_ok=True)
+            version_path.write_text(version + "\n")
 
-    if stashed:
-        _run(["git", "stash", "pop"], check=False)
+        requirements_path = (
+            Path(package.dependencies_path)
+            if package.dependencies_path
+            else Path("requirements.txt")
+        )
+        if not requirements_path.exists():
+            raise ReleaseError(f"Dependencies file not found: {requirements_path}")
+        requirements = [
+            line.strip()
+            for line in requirements_path.read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+
+        if tests:
+            log_path = Path("logs/test.log")
+            test_command = (
+                shlex.split(package.test_command) if package.test_command else None
+            )
+            proc = run_tests(log_path=log_path, command=test_command)
+            if proc.returncode != 0:
+                raise TestsFailed(log_path, proc.stdout + proc.stderr)
+
+        _write_pyproject(package, version, requirements)
+        if dist:
+            if Path("dist").exists():
+                shutil.rmtree("dist")
+            build_dir = Path("build")
+            if build_dir.exists():
+                shutil.rmtree(build_dir)
+            sys.modules.pop("build", None)
+            try:
+                import build  # type: ignore
+            except Exception:
+                _run([sys.executable, "-m", "pip", "install", "build"])
+            else:
+                module_path = Path(getattr(build, "__file__", "") or "").resolve()
+                try:
+                    module_path.relative_to(Path.cwd().resolve())
+                except ValueError:
+                    pass
+                else:
+                    # A local ``build`` package shadows the build backend; reinstall it.
+                    sys.modules.pop("build", None)
+                    _run([sys.executable, "-m", "pip", "install", "build"])
+            _build_in_sanitized_tree(Path.cwd(), generate_wheels=package.generate_wheels)
+
+        if git:
+            files = ["VERSION", "pyproject.toml"]
+            _run(["git", "add"] + files)
+            msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
+            if _git_has_staged_changes():
+                _run(["git", "commit", "-m", msg])
+            _run(["git", "push"])
+
+        if tag:
+            tag_name = f"v{version}"
+            _run(["git", "tag", tag_name])
+            _run(["git", "push", "origin", tag_name])
+
+        if dist and twine:
+            if not force:
+                releases = fetch_pypi_releases(package)
+                if version in releases:
+                    raise ReleaseError(f"Version {version} already on PyPI")
+            creds = (
+                creds
+                or Credentials(
+                    token=os.environ.get("PYPI_API_TOKEN"),
+                    username=os.environ.get("PYPI_USERNAME"),
+                    password=os.environ.get("PYPI_PASSWORD"),
+                )
+            )
+            files = sorted(str(p) for p in Path("dist").glob("*"))
+            if not files:
+                raise ReleaseError("dist directory is empty")
+            cmd = [sys.executable, "-m", "twine", "upload", *files]
+            try:
+                cmd += creds.twine_args()
+            except ValueError as err:
+                raise ReleaseError("Missing PyPI credentials") from err
+            upload_with_retries(cmd, repository="PyPI")
+    finally:
+        if stashed:
+            _run(["git", "stash", "pop"], check=False)
 
 
 def promote(

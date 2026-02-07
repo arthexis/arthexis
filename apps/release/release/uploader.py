@@ -174,7 +174,12 @@ def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcess
 def _push_tag(tag_name: str) -> None:
     auth_error: subprocess.CalledProcessError | None = None
     try:
-        _run(["git", "push", "origin", tag_name])
+        subprocess.run(
+            ["git", "push", "origin", tag_name],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         return
     except subprocess.CalledProcessError as exc:
         remote_commit = _git_remote_tag_commit("origin", tag_name)
@@ -227,6 +232,8 @@ def _push_tag(tag_name: str) -> None:
                         ["git", "push", "origin", tag_name],
                         check=True,
                         env=env,
+                        capture_output=True,
+                        text=True,
                     )
                     return
                 except subprocess.CalledProcessError as push_exc:
