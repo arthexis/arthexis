@@ -213,6 +213,7 @@ def _run_test_group(
     ]
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    env.setdefault("ARTHEXIS_TEST_RESULTS_PERMANENT_DB", "1")
     print(f"{PREFIX} Running {label} tests:", " ".join(command))
     started_at = time.monotonic()
     result = _run_command_with_output(command, cwd=base_dir, env=env)
