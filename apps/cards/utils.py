@@ -82,3 +82,16 @@ def user_requested_stop() -> bool:
         sys.stdin.read(1)
         return True
     return False
+
+
+def drain_stdin() -> None:
+    """Clear any buffered stdin input without treating it as a stop request."""
+
+    try:
+        while True:
+            ready, _, _ = select([sys.stdin], [], [], 0)
+            if not ready:
+                break
+            sys.stdin.read(1)
+    except (OSError, ValueError):
+        return

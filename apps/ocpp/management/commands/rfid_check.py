@@ -10,7 +10,7 @@ from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
 from apps.cards.rfid_service import service_available
 from apps.cards.scanner import scan_sources
-from apps.cards.utils import user_requested_stop
+from apps.cards.utils import drain_stdin, user_requested_stop
 
 
 class Command(BaseCommand):
@@ -131,6 +131,9 @@ class Command(BaseCommand):
         interactive = sys.stdin.isatty()
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
+        self.stdout.flush()
+        if interactive:
+            drain_stdin()
         start = time.monotonic()
         latest_id = (
             RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
@@ -166,6 +169,9 @@ class Command(BaseCommand):
         interactive = sys.stdin.isatty()
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
+        self.stdout.flush()
+        if interactive:
+            drain_stdin()
         start = time.monotonic()
         while True:
             if interactive and user_requested_stop():
