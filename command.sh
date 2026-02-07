@@ -49,12 +49,37 @@ COMMAND_RAW="$1"
 COMMAND="${COMMAND_RAW//-/_}"
 shift
 
+CACHE_DIR="$BASE_DIR/.cache"
+CACHE_TTL_SECONDS="${ARTHEXIS_COMMAND_CACHE_TTL:-30}"
+CACHE_KEY="${celery_flag#--}"
+CACHE_KEY="${CACHE_KEY//-/_}"
+CACHE_FILE="$CACHE_DIR/command_list_${CACHE_KEY}.txt"
+
 COMMAND_LIST="$(
-  python manage.py help --commands "$celery_flag" \
+  if [ -f "$CACHE_FILE" ]; then
+    now="$(date +%s)"
+    cache_mtime="$(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)"
+    cache_age="$((now - cache_mtime))"
+    if [ "$cache_age" -lt "$CACHE_TTL_SECONDS" ]; then
+      cat "$CACHE_FILE"
+      exit 0
+    fi
+  fi
+
+  mkdir -p "$CACHE_DIR"
+  cache_tmp="$(mktemp "${CACHE_FILE}.XXXXXX")"
+  if python manage.py help --commands "$celery_flag" \
     | tr '\t' ' ' \
     | tr ' ' '\n' \
     | sed '/^$/d' \
-    | grep -v '^\[.*]'
+    | grep -v '^\[.*]' \
+    > "$cache_tmp"; then
+    mv "$cache_tmp" "$CACHE_FILE"
+    cat "$CACHE_FILE"
+  else
+    rm -f "$cache_tmp"
+    exit 1
+  fi
 )"
 
 if ! printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" '($0 == cmd) { found = 1 } END { exit (found ? 0 : 1) }'; then
