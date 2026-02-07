@@ -108,9 +108,11 @@ def prepare_package_release(admin_view, request, package):
                     )
                 )
 
-    ver_file = Path("VERSION")
-    if ver_file.exists():
-        raw_version = ver_file.read_text().strip()
+    version_path = Path(package.version_path) if package.version_path else None
+    if version_path is None and package.name == "arthexis":
+        version_path = Path("VERSION")
+    if version_path is not None and version_path.exists():
+        raw_version = version_path.read_text().strip()
         repo_version_text = PackageRelease.normalize_version(raw_version) or "0.0.0"
         repo_version = _safe_version(repo_version_text) or Version("0.0.0")
     else:

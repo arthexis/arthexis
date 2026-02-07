@@ -63,11 +63,7 @@ def fetch_pypi_releases(
                 f"Failed to reach PyPI JSON API for '{package.name}': {exc}"
             ) from exc
         finally:
-            if resp is not None:
-                close = getattr(resp, "close", None)
-                if callable(close):
-                    with contextlib.suppress(Exception):
-                        close()
+            close_response(resp)
 
     if last_error is not None:
         raise ReleaseError(

@@ -52,6 +52,13 @@ class Credentials:
             return ["--username", self.username, "--password", self.password]
         raise ValueError("Missing PyPI credentials")
 
+    def twine_env(self) -> dict[str, str]:
+        if self.token:
+            return {"TWINE_USERNAME": "__token__", "TWINE_PASSWORD": self.token}
+        if self.username and self.password:
+            return {"TWINE_USERNAME": self.username, "TWINE_PASSWORD": self.password}
+        raise ValueError("Missing PyPI credentials")
+
 
 @dataclass
 class GitCredentials:
