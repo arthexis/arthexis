@@ -534,6 +534,7 @@ class Charger(Ownable):
         return bucket
 
     def _ftp_reports_feature_enabled(self, *, node: Node | None = None) -> bool:
+        node = node or self.manager_node or Node.get_local()
         try:
             Feature = apps.get_model("features", "Feature")
         except LookupError:
@@ -545,7 +546,7 @@ class Charger(Ownable):
         )
         if not feature:
             return False
-        return feature.is_enabled_for_node(node)
+        return feature.is_enabled_for_node(node=node)
 
     def ensure_report_ftp_server(self, *, node: Node | None = None):
         """Ensure an FTP server exists for report uploads and link it."""
