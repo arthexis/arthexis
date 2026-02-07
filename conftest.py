@@ -111,9 +111,18 @@ def _requires_db(item: pytest.Item) -> bool:
     return issubclass(test_class, TransactionTestCase)
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    markexpr = getattr(config.option, "markexpr", "")
+    if markexpr and "critical" in markexpr and "regression" not in markexpr:
+        config.option.markexpr = f"({markexpr}) or regression"
+
+
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     global REQUIRES_DB
     REQUIRES_DB = any(_requires_db(item) for item in items)
+    for item in items:
+        if item.get_closest_marker("regression") and not item.get_closest_marker("critical"):
+            item.add_marker("critical")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -152,30 +161,35 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Any:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    if not COLLECTED_RESULTS:
-        return
-
-    results = [
-        RecordedTestResult(
-            node_id=node_id,
-            name=payload.get("name", node_id),
-            status=payload.get("status", "error"),
-            duration=payload.get("duration"),
-            log="\n\n".join(payload.get("logs", [])).strip(),
-        )
-        for node_id, payload in COLLECTED_RESULTS.items()
-    ]
-
     try:
-        if DB_BLOCKER:
-            with DB_BLOCKER.unblock():
+        if not COLLECTED_RESULTS:
+            return
+
+        results = [
+            RecordedTestResult(
+                node_id=node_id,
+                name=payload.get("name", node_id),
+                status=payload.get("status", "error"),
+                duration=payload.get("duration"),
+                log="\n\n".join(payload.get("logs", [])).strip(),
+            )
+            for node_id, payload in COLLECTED_RESULTS.items()
+        ]
+
+        try:
+            if DB_BLOCKER:
+                with DB_BLOCKER.unblock():
+                    persist_results(results)
+            else:
                 persist_results(results)
-        else:
-            persist_results(results)
-    except Exception as exc:  # pragma: no cover - best effort logging
-        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-        message = f"Unable to persist test results to primary database: {exc}"
-        if reporter:
-            reporter.write_line(message, yellow=True)
-        else:
-            print(message, file=sys.stderr)
+        except Exception as exc:  # pragma: no cover - best effort logging
+            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+            message = f"Unable to persist test results to primary database: {exc}"
+            if reporter:
+                reporter.write_line(message, yellow=True)
+            else:
+                print(message, file=sys.stderr)
+    finally:
+        from django.db import connections
+
+        connections.close_all()

@@ -9,16 +9,17 @@ from django.db.models import (
     Sum,
     Value,
 )
+from django.contrib.auth.views import redirect_to_login
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, resolve_url
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
-from apps.sites.utils import landing, require_site_operator_or_staff
+from apps.sites.utils import landing
 from config.request_utils import is_https_request
 
 from .. import store
@@ -39,13 +40,17 @@ from .common import (
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
     is_htmx = request.headers.get("HX-Request") == "true"
-    auth_response = require_site_operator_or_staff(request)
-    if auth_response is not None:
-        return auth_response
-    _clear_stale_statuses_for_view()
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
+    if role_name != "Terminal":
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            return redirect_to_login(
+                request.get_full_path(),
+                resolve_url("pages:login"),
+            )
+    _clear_stale_statuses_for_view()
     is_watchtower = role_name in {"Watchtower", "Constellation"}
     latest_tx_subquery = (
         Transaction.objects.filter(charger=OuterRef("pk"))

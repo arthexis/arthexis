@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 
-from apps.locals import user_data
+from apps.locals.user_data import fixtures as user_data
 from apps.locals.models import Favorite
 
 
@@ -27,7 +27,7 @@ def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
     favorite.refresh_from_db()
 
     user_data.dump_user_fixture(favorite, user)
-    fixture_path = user_data._fixture_path(user, favorite)
+    fixture_path = user_data.fixture_path(user, favorite)
 
     assert fixture_path.exists()
 

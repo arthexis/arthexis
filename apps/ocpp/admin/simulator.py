@@ -2,7 +2,12 @@ from .common_imports import *
 from .common import LogViewAdminMixin
 from django.core.exceptions import PermissionDenied
 
-from ..cpsim_service import cpsim_service_enabled, get_cpsim_feature, queue_cpsim_request
+from ..cpsim_service import (
+    cpsim_service_enabled,
+    get_cpsim_feature,
+    queue_cpsim_request,
+    queue_cpsim_service_toggle,
+)
 
 class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin):
     change_list_template = "admin/ocpp/simulator/change_list.html"
@@ -109,13 +114,15 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                 "slug", flat=True
             )
         )
-        if feature.is_enabled:
-            current.discard(feature.slug)
-            action = "disabled"
-        else:
+        service_enabled = not feature.is_enabled
+        if service_enabled:
             current.add(feature.slug)
             action = "enabled"
+        else:
+            current.discard(feature.slug)
+            action = "disabled"
         node.update_manual_features(current)
+        queue_cpsim_service_toggle(enabled=service_enabled, source="admin")
         self.message_user(
             request,
             f"{feature.display} {action} for this node.",

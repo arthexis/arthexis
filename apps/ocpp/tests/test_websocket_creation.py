@@ -14,6 +14,8 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.features.models import Feature
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.ocpp import store
 from apps.ocpp.consumers import (
     CSMSConsumer,
@@ -57,6 +59,38 @@ def isolate_log_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "LOG_DIR", log_dir)
 
 
+@pytest.fixture
+def local_node(monkeypatch):
+    def _noop_sync_feature_tasks(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(Node, "sync_feature_tasks", _noop_sync_feature_tasks)
+    Node._local_cache.clear()
+    node = Node.objects.create(
+        hostname="local-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    Node._local_cache.clear()
+    return node
+
+
+@pytest.fixture
+def charge_point_features(local_node):
+    node_feature, _ = NodeFeature.objects.get_or_create(
+        slug="charge-points",
+        defaults={"display": "Charge Points"},
+    )
+    suite_feature, _ = Feature.objects.get_or_create(
+        slug="standard-charge-point",
+        defaults={"display": "Standard Charge Point"},
+    )
+    suite_feature.node_feature = node_feature
+    suite_feature.is_enabled = True
+    suite_feature.save(update_fields=["node_feature", "is_enabled"])
+    return local_node, node_feature, suite_feature
+
+
 @pytest.mark.critical
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -97,6 +131,64 @@ def test_charge_point_created_for_new_websocket_path():
         assert charger is not None, "Expected a charger to be created after websocket connect"
         assert charger.last_path == path
 
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
+    charge_point_features,
+):
+    _local_node, _node_feature, _ = charge_point_features
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-NODE-FEATURE-OFF")
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is False
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_new_charge_point_blocked_when_creation_feature_disabled(
+    charge_point_features,
+):
+    local_node, node_feature, suite_feature = charge_point_features
+    NodeFeatureAssignment.objects.update_or_create(
+        node=local_node, feature=node_feature
+    )
+    suite_feature.is_enabled = False
+    suite_feature.save(update_fields=["is_enabled"])
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application, "/CP-CREATION-FEATURE-OFF"
+        )
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is False
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_known_charge_point_allowed_when_creation_feature_disabled(
+    charge_point_features,
+):
+    local_node, node_feature, suite_feature = charge_point_features
+    NodeFeatureAssignment.objects.update_or_create(
+        node=local_node, feature=node_feature
+    )
+    suite_feature.is_enabled = False
+    suite_feature.save(update_fields=["is_enabled"])
+    Charger.objects.create(charger_id="CP-KNOWN", connector_id=None)
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-KNOWN")
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is True
         await communicator.disconnect()
 
     async_to_sync(run_scenario)()

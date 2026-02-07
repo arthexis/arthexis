@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from django.utils import timezone
 
-from apps.core import tasks
+from apps.core.tasks import auto_upgrade as tasks
 from apps.core.system import upgrade
-from apps.core.tasks import _project_base_dir
+from apps.core.tasks.auto_upgrade import _project_base_dir
 
 pytestmark = pytest.mark.critical
 

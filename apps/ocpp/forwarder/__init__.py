@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable, Iterator, MutableMapping
 
@@ -26,6 +28,11 @@ class ForwardingSession:
     connected_at: datetime
     forwarder_id: int | None = None
     forwarded_messages: tuple[str, ...] | None = None
+    forwarded_calls: tuple[str, ...] | None = None
+    pending_call_ids: set[str] = field(default_factory=set)
+    last_activity: datetime | None = None
+    listener: threading.Thread | None = None
+    _pending_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def is_connected(self) -> bool:
@@ -37,6 +44,9 @@ class Forwarder:
 
     def __init__(self) -> None:
         self._sessions: MutableMapping[int, ForwardingSession] = {}
+        self._keepalive_task: asyncio.Task[None] | None = None
+        self._keepalive_interval: int | None = None
+        self._sync_lock = threading.Lock()
 
     @staticmethod
     def _candidate_forwarding_urls(node, charger) -> Iterator[str]:
@@ -91,24 +101,29 @@ class Forwarder:
     def get_session(self, charger_pk: int) -> ForwardingSession | None:
         """Return the forwarding session for ``charger_pk`` when present."""
 
-        return self._sessions.get(charger_pk)
+        with self._sync_lock:
+            return self._sessions.get(charger_pk)
 
     def iter_sessions(self) -> Iterator[ForwardingSession]:
         """Yield active forwarding sessions."""
 
-        return iter(self._sessions.values())
+        with self._sync_lock:
+            return iter(list(self._sessions.values()))
 
     def clear_sessions(self) -> None:
         """Close and drop all active forwarding sessions."""
 
-        for session in list(self._sessions.values()):
+        with self._sync_lock:
+            sessions = list(self._sessions.values())
+            self._sessions.clear()
+        for session in sessions:
             self._close_forwarding_session(session)
-        self._sessions.clear()
 
     def remove_session(self, charger_pk: int) -> None:
         """Close and remove the session for ``charger_pk`` when it exists."""
 
-        session = self._sessions.pop(charger_pk, None)
+        with self._sync_lock:
+            session = self._sessions.pop(charger_pk, None)
         if session is not None:
             self._close_forwarding_session(session)
 
@@ -116,12 +131,20 @@ class Forwarder:
         """Close sessions that no longer map to a charger in ``active_ids``."""
 
         valid = set(active_ids)
-        for pk in list(self._sessions.keys()):
+        with self._sync_lock:
+            session_ids = list(self._sessions.keys())
+        for pk in session_ids:
             if pk not in valid:
                 self.remove_session(pk)
 
     def connect_forwarding_session(
-        self, charger, target_node, *, timeout: float = 5.0
+        self,
+        charger,
+        target_node,
+        *,
+        timeout: float = 5.0,
+        forwarded_messages: tuple[str, ...] | None = None,
+        forwarded_calls: tuple[str, ...] | None = None,
     ) -> ForwardingSession | None:
         """Establish a websocket forwarding session for ``charger``.
 
@@ -153,23 +176,271 @@ class Forwarder:
                 url=url,
                 connection=connection,
                 connected_at=timezone.now(),
+                last_activity=timezone.now(),
+                forwarded_messages=forwarded_messages,
+                forwarded_calls=forwarded_calls,
             )
-            self._sessions[charger.pk] = session
+            with self._sync_lock:
+                self._sessions[charger.pk] = session
             logger.info(
                 "Established forwarding websocket for charger %s to %s via %s",
                 getattr(charger, "charger_id", charger.pk),
                 target_node,
                 url,
             )
+            self._start_listener(session)
             return session
 
         return None
+
+    def keepalive_sessions(self, *, idle_seconds: int = 60) -> int:
+        """Send ping frames on idle sessions to keep forwarding sockets open."""
+
+        if idle_seconds <= 0:
+            return 0
+
+        now = timezone.now()
+        pinged = 0
+        with self._sync_lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
+            if not session.is_connected:
+                self.remove_session(session.charger_pk)
+                continue
+            last_activity = session.last_activity or session.connected_at
+            if (now - last_activity).total_seconds() < idle_seconds:
+                continue
+            ping = getattr(session.connection, "ping", None)
+            if ping is None:
+                continue
+            try:
+                ping()
+            except (WebSocketException, OSError) as exc:  # pragma: no cover - network errors
+                logger.warning(
+                    "Forwarding websocket ping failed for charger %s via %s: %s",
+                    session.charger_pk,
+                    session.url,
+                    exc,
+                )
+                self.remove_session(session.charger_pk)
+                continue
+            with self._sync_lock:
+                current = self._sessions.get(session.charger_pk)
+                if current is session:
+                    session.last_activity = now
+            pinged += 1
+        return pinged
+
+    def _start_listener(self, session: ForwardingSession) -> None:
+        if not hasattr(session.connection, "recv"):
+            return
+        if session.listener and session.listener.is_alive():
+            return
+        listener = threading.Thread(
+            target=self._listen_forwarding_session,
+            args=(session.charger_pk,),
+            daemon=True,
+        )
+        session.listener = listener
+        listener.start()
+
+    def _listen_forwarding_session(self, charger_pk: int) -> None:
+        """Listen for incoming commands from the remote node."""
+
+        # Local imports avoid circular dependencies with the consumer/store modules.
+        from asgiref.sync import async_to_sync
+        import json
+
+        from apps.ocpp import store
+        from apps.ocpp.models import Charger
+
+        while True:
+            session = self.get_session(charger_pk)
+            if session is None or not session.is_connected:
+                return
+            try:
+                raw = session.connection.recv()
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.warning(
+                    "Forwarding websocket recv failed for charger %s via %s: %s",
+                    charger_pk,
+                    getattr(session, "url", "unknown"),
+                    exc,
+                )
+                self.remove_session(charger_pk)
+                return
+            if not raw:
+                continue
+            if isinstance(raw, bytes):
+                try:
+                    raw = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("ocpp"), list):
+                message = parsed.get("ocpp")
+            else:
+                message = parsed
+            if not isinstance(message, list) or not message:
+                continue
+            message_type = message[0]
+            if message_type != 2:
+                continue
+            if len(message) < 3:
+                continue
+            message_id = message[1]
+            action = message[2]
+            if not isinstance(message_id, str):
+                message_id = str(message_id)
+            if not isinstance(action, str):
+                action = str(action)
+
+            if session.forwarded_calls is not None and action not in session.forwarded_calls:
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "SecurityError",
+                        "Action not permitted by forwarding policy.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception as exc:  # pragma: no cover - network errors
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
+                continue
+
+            charger = Charger.objects.filter(pk=charger_pk).first()
+            if charger is None:
+                continue
+            if not charger.allow_remote:
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "SecurityError",
+                        "Remote actions are disabled for this charge point.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception as exc:  # pragma: no cover - network errors
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
+                continue
+            ws = store.get_connection(charger.charger_id, charger.connector_id)
+            if ws is None:
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "InternalError",
+                        "Charge point not connected.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception as exc:  # pragma: no cover - network errors
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
+                continue
+
+            log_key = store.identity_key(charger.charger_id, charger.connector_id)
+            store.add_log(log_key, f"< {json.dumps(message)}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": action,
+                    "charger_id": charger.charger_id,
+                    "connector_id": charger.connector_id,
+                    "log_key": log_key,
+                    "forwarded": True,
+                    "requested_at": timezone.now(),
+                },
+            )
+            try:
+                async_to_sync(ws.send)(json.dumps(message))
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.warning(
+                    "Forwarded command %s failed for charger %s: %s",
+                    action,
+                    charger.charger_id,
+                    exc,
+                )
+                error = json.dumps(
+                    [
+                        4,
+                        message_id,
+                        "InternalError",
+                        "Failed to forward command.",
+                        {},
+                    ]
+                )
+                try:
+                    session.connection.send(error)
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to send error to forwarding peer for charger %s: %s",
+                        charger_pk,
+                        exc,
+                    )
+                continue
+
+            with session._pending_lock:
+                session.pending_call_ids.add(message_id)
+
+    def ensure_keepalive_task(self, *, idle_seconds: int = 60) -> None:
+        """Ensure the keepalive loop runs in the current asyncio process."""
+
+        if idle_seconds <= 0:
+            return
+        existing = self._keepalive_task
+        if existing is not None and not existing.done():
+            if self._keepalive_interval == idle_seconds:
+                return
+            existing.cancel()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._keepalive_interval = idle_seconds
+        self._keepalive_task = loop.create_task(self._keepalive_loop())
+
+    async def _keepalive_loop(self) -> None:
+        """Run periodic keepalive checks on forwarding sessions."""
+
+        while True:
+            interval = self._keepalive_interval or 0
+            if interval <= 0:
+                return
+            await asyncio.sleep(interval)
+            await asyncio.to_thread(
+                self.keepalive_sessions, idle_seconds=interval
+            )
 
     def active_target_ids(self, only_connected: bool = True) -> set[int]:
         """Return the set of target node IDs with active sessions."""
 
         ids: set[int] = set()
-        for session in self._sessions.values():
+        with self._sync_lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
             if session.node_id is None:
                 continue
             if not only_connected or session.is_connected:
@@ -239,14 +510,25 @@ class Forwarder:
                     existing.forwarded_messages = tuple(
                         forwarder.get_forwarded_messages()
                     )
+                    existing.forwarded_calls = tuple(forwarder.get_forwarded_calls())
                 else:
                     existing.forwarder_id = None
                     existing.forwarded_messages = None
+                    existing.forwarded_calls = None
                 if existing.is_connected:
                     continue
                 self.remove_session(charger.pk)
 
-            session = self.connect_forwarding_session(charger, target)
+            session = self.connect_forwarding_session(
+                charger,
+                target,
+                forwarded_messages=(
+                    tuple(forwarder.get_forwarded_messages()) if forwarder else None
+                ),
+                forwarded_calls=(
+                    tuple(forwarder.get_forwarded_calls()) if forwarder else None
+                ),
+            )
             if session is None:
                 logger.warning(
                     "Unable to establish forwarding websocket for charger %s",
@@ -262,6 +544,7 @@ class Forwarder:
                 session.forwarded_messages = tuple(
                     forwarder.get_forwarded_messages()
                 )
+                session.forwarded_calls = tuple(forwarder.get_forwarded_calls())
                 forwarder.mark_running(session.connected_at)
             connected += 1
 

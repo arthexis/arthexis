@@ -235,15 +235,14 @@ def evaluate_nginx_site_configuration_rules() -> dict[str, object] | None:
 
 def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
     unassigned = UserStory.objects.filter(
-        status=UserStory.Status.OPEN,
         assign_to__isnull=True,
         owner__isnull=True,
-    )
+    ).exclude(status=UserStory.Status.SPAM)
     count = unassigned.count()
     if count:
         message = ngettext(
-            "Open unassigned user story: %(count)s.",
-            "Open unassigned user stories: %(count)s.",
+            "Unassigned user story: %(count)s.",
+            "Unassigned user stories: %(count)s.",
             count,
         ) % {"count": count}
         return rule_failure(message)

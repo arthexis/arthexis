@@ -24,6 +24,9 @@ from .identity import IdentityMixin, _resolve_client_ip
 from .logging import LoggingMixin
 from .transactions import TransactionsMixin
 
+CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
+CHARGE_POINT_FEATURE_SLUG = "charge-points"
+
 
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""

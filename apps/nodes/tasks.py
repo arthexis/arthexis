@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
-from apps.core.tasks import check_github_updates
+from apps.core.tasks.auto_upgrade import check_github_updates
 from apps.core import uptime_constants, uptime_utils
 from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, lcd_feature_enabled, queue_startup_message
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
@@ -367,6 +367,16 @@ def poll_upstream() -> None:
                 logger.warning("Polling upstream node %s via %s failed: %s", upstream.pk, url, exc)
                 continue
             if response.ok:
+                try:
+                    Node.objects.filter(pk=upstream.pk).update(
+                        last_updated=django_timezone.now()
+                    )
+                except DatabaseError:
+                    logger.debug(
+                        "Failed to update last_updated for upstream node %s",
+                        upstream.pk,
+                        exc_info=True,
+                    )
                 break
             logger.warning(
                 "Upstream node %s returned status %s", upstream.pk, response.status_code

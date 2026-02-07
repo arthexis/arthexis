@@ -54,8 +54,56 @@ OCPP_FORWARDING_MESSAGES: Sequence[str] = (
     "TransactionEvent",
 )
 
+OCPP_FORWARDING_CALLS: Sequence[str] = (
+    "RemoteStartTransaction",
+    "RemoteStopTransaction",
+    "RequestStartTransaction",
+    "RequestStopTransaction",
+    "GetTransactionStatus",
+    "GetDiagnostics",
+    "ChangeAvailability",
+    "ChangeConfiguration",
+    "DataTransfer",
+    "Reset",
+    "TriggerMessage",
+    "ReserveNow",
+    "CancelReservation",
+    "ClearCache",
+    "UnlockConnector",
+    "UpdateFirmware",
+    "PublishFirmware",
+    "UnpublishFirmware",
+    "SetChargingProfile",
+    "InstallCertificate",
+    "DeleteCertificate",
+    "CertificateSigned",
+    "GetInstalledCertificateIds",
+    "GetVariables",
+    "SetVariables",
+    "ClearChargingProfile",
+    "SetMonitoringBase",
+    "SetMonitoringLevel",
+    "SetVariableMonitoring",
+    "ClearVariableMonitoring",
+    "GetMonitoringReport",
+    "ClearDisplayMessage",
+    "CustomerInformation",
+    "GetBaseReport",
+    "GetChargingProfiles",
+    "GetDisplayMessages",
+    "GetReport",
+    "SetDisplayMessage",
+    "SetNetworkProfile",
+    "GetCompositeSchedule",
+    "GetLocalListVersion",
+    "GetLog",
+)
+
 def default_forwarded_messages() -> list[str]:
     return list(OCPP_FORWARDING_MESSAGES)
+
+def default_forwarded_calls() -> list[str]:
+    return list(OCPP_FORWARDING_CALLS)
 
 class CPForwarderManager(EntityManager):
     """Manager adding helpers for charge point forwarders."""
@@ -105,6 +153,13 @@ class CPForwarder(Entity):
         blank=True,
         help_text=_(
             "Select the OCPP messages that should be forwarded to the remote node."
+        ),
+    )
+    forwarded_calls = models.JSONField(
+        default=default_forwarded_calls,
+        blank=True,
+        help_text=_(
+            "Select the CSMS actions that should be accepted from the remote node."
         ),
     )
     is_running = models.BooleanField(
@@ -167,6 +222,7 @@ class CPForwarder(Entity):
         self.forwarded_messages = self.sanitize_forwarded_messages(
             self.forwarded_messages
         )
+        self.forwarded_calls = self.sanitize_forwarded_calls(self.forwarded_calls)
         if self.source_node_id is None:
             local = Node.get_local()
             if local:
@@ -301,6 +357,7 @@ class CPForwarder(Entity):
                     local_node,
                     private_key,
                     forwarded_messages=self.get_forwarded_messages(),
+                    forwarded_calls=self.get_forwarded_calls(),
                 )
                 if success:
                     status_parts.append(
@@ -376,6 +433,10 @@ class CPForwarder(Entity):
         return tuple(OCPP_FORWARDING_MESSAGES)
 
     @classmethod
+    def available_forwarded_calls(cls) -> Sequence[str]:
+        return tuple(OCPP_FORWARDING_CALLS)
+
+    @classmethod
     def sanitize_forwarded_messages(cls, values: Iterable[str] | None) -> list[str]:
         if values is None:
             return list(OCPP_FORWARDING_MESSAGES)
@@ -393,8 +454,29 @@ class CPForwarder(Entity):
             return []
         return list(OCPP_FORWARDING_MESSAGES)
 
+    @classmethod
+    def sanitize_forwarded_calls(cls, values: Iterable[str] | None) -> list[str]:
+        if values is None:
+            return list(OCPP_FORWARDING_CALLS)
+        if isinstance(values, str):
+            return []
+        cleaned: list[str] = []
+        order_map = {msg: idx for idx, msg in enumerate(OCPP_FORWARDING_CALLS)}
+        for item in values:
+            if item in order_map and item not in cleaned:
+                cleaned.append(item)
+        if cleaned:
+            cleaned.sort(key=lambda msg: order_map[msg])
+            return cleaned
+        if isinstance(values, list) and not values:
+            return []
+        return list(OCPP_FORWARDING_CALLS)
+
     def get_forwarded_messages(self) -> list[str]:
         return self.sanitize_forwarded_messages(self.forwarded_messages)
+
+    def get_forwarded_calls(self) -> list[str]:
+        return self.sanitize_forwarded_calls(self.forwarded_calls)
 
     def forwards_action(self, action: str) -> bool:
         if not action:

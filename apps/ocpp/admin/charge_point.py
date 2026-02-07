@@ -38,7 +38,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from requests import RequestException
 
 from apps.cards.models import RFID as CoreRFID
-from apps.core.admin import SaveBeforeChangeAction
+from apps.core.admin import OwnableAdminMixin, SaveBeforeChangeAction
 from apps.core.form_fields import SchedulePeriodsField
 from apps.energy.models import EnergyTariff
 from apps.locals.user_data import EntityModelAdmin
@@ -169,7 +169,7 @@ class ChargerLocationSetupForm(forms.Form):
 
 
 @admin.register(Charger)
-class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
+class ChargerAdmin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
     _REMOTE_DATETIME_FIELDS = {
         "availability_state_updated_at",
         "availability_requested_at",
@@ -214,6 +214,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "diagnostics_timestamp",
                     "diagnostics_location",
                     "diagnostics_bucket",
+                )
+            },
+        ),
+        (
+            "Maintenance",
+            {
+                "fields": (
+                    "maintenance_email",
+                    "email_when_offline",
+                    "offline_notification_sent_at",
                 )
             },
         ),
@@ -289,7 +299,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
         (
-            "Owner",
+            "Visibility",
             {
                 "fields": ("owner_users", "owner_groups"),
                 "classes": ("collapse",),
@@ -316,6 +326,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "forwarded_to",
         "forwarding_watermark",
         "last_online_at",
+        "offline_notification_sent_at",
     )
     list_display = (
         "display_name_with_fallback",

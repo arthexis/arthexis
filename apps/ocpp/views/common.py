@@ -353,7 +353,7 @@ def _is_untracked_origin(
     local_pk = getattr(local_node, "pk", None)
     if local_pk is not None and origin.pk == local_pk:
         return False
-    last_seen = getattr(origin, "last_seen", None)
+    last_seen = getattr(origin, "last_seen", None) or getattr(origin, "last_updated", None)
     if last_seen is None:
         return True
     if timezone.is_naive(last_seen):
@@ -829,6 +829,16 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
         return _("Charging"), "green"
     if connected:
         return _("Available"), "blue"
+    last_seen = _charger_last_seen(charger)
+    if last_seen:
+        if timezone.is_naive(last_seen):
+            last_seen = timezone.make_aware(
+                last_seen, timezone.get_current_timezone()
+            )
+        if timezone.now() - last_seen <= _remote_node_active_delta():
+            if has_session:
+                return STATUS_BADGE_MAP["charging"]
+            return STATUS_BADGE_MAP["available"]
     return _("Offline"), "grey"
 
 

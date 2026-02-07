@@ -8,9 +8,9 @@ from .fixtures import (
     UserDatumAdminMixin,
     delete_user_fixture,
     dump_user_fixture,
-    _fixture_path,
-    _resolve_fixture_user,
-    _user_allows_user_data,
+    fixture_path,
+    resolve_fixture_user,
+    user_allows_user_data,
 )
 from .slack import SlackBotProfileAdmin
 
@@ -27,9 +27,9 @@ __all__ = [
     "UserDatumAdminMixin",
     "delete_user_fixture",
     "dump_user_fixture",
-    "_fixture_path",
-    "_resolve_fixture_user",
-    "_user_allows_user_data",
+    "fixture_path",
+    "resolve_fixture_user",
+    "user_allows_user_data",
     "InviteLeadAdminProxy",
     "SlackBotProfileAdmin",
 ]

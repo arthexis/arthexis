@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - missing dependency
 
 SMBUS_HINT = (
     "smbus module not found. Enable the I2C interface and install the dependencies.\n"
-    "For Debian/Ubuntu run: sudo apt-get install i2c-tools python3-smbus\n"
+    "For Debian/Ubuntu run: sudo apt install i2c-tools python3-smbus\n"
     "Within the virtualenv: pip install smbus2"
 )
 

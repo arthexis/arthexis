@@ -5,7 +5,39 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from typing import Iterable
+from typing import Iterable, Set
+
+
+ALLOWED_BUILD_FAILURES = {"spidev", "RPi.GPIO"}
+
+
+def _extract_failed_builds(line: str) -> Set[str]:
+    failures: Set[str] = set()
+    marker = "Failed to build "
+    if marker in line:
+        failures.update(line.split(marker, 1)[1].split())
+        return failures
+
+    wheel_marker = "ERROR: Failed building wheel for "
+    if wheel_marker in line:
+        pkg = line.split(wheel_marker, 1)[1].split()[0].strip()
+        failures.add(pkg)
+        return failures
+
+    wheel_fail_marker = "ERROR: Could not build wheels for "
+    if wheel_fail_marker in line:
+        pkg = line.split(wheel_fail_marker, 1)[1].split(",", 1)[0].split()[0].strip()
+        failures.add(pkg)
+        return failures
+
+    trimmed = line.strip()
+    if trimmed.startswith("╰─>") or trimmed.startswith("->"):
+        names = trimmed.split(">", 1)[1]
+        for name in names.split(","):
+            cleaned = name.strip()
+            if cleaned:
+                failures.add(cleaned)
+    return failures
 
 
 def _iter_pip_output(cmd: Iterable[str]) -> int:
@@ -16,6 +48,9 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
     assert process.stdout is not None
 
     printed_dot = False
+    failed_builds: Set[str] = set()
+    non_allowed_failure = False
+    missing_compiler = False
     try:
         for raw_line in process.stdout:
             line = raw_line.rstrip("\r\n")
@@ -32,12 +67,40 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
                 sys.stdout.write("\n")
                 printed_dot = False
 
+            new_failures = _extract_failed_builds(line)
+            if new_failures:
+                failed_builds.update(new_failures)
+                if not new_failures.issubset(ALLOWED_BUILD_FAILURES):
+                    non_allowed_failure = True
+            if "ERROR:" in line:
+                if new_failures and new_failures.issubset(ALLOWED_BUILD_FAILURES):
+                    pass
+                elif "Failed building wheel for" in line or "Failed to build " in line:
+                    pass
+                else:
+                    non_allowed_failure = True
+            if "No such file or directory" in line and "gcc" in line:
+                missing_compiler = True
+
             sys.stdout.write(raw_line)
         return_code = process.wait()
     finally:
         if printed_dot:
             sys.stdout.write("\n")
             sys.stdout.flush()
+
+    if return_code != 0 and failed_builds and not non_allowed_failure:
+        sys.stderr.write(
+            "Optional hardware dependencies failed to build "
+            f"({', '.join(sorted(failed_builds))}); continuing install.\n"
+        )
+        if missing_compiler:
+            sys.stderr.write(
+                "Install build tools if you need GPIO/SPIDEV support. "
+                "On Debian/Ubuntu run: "
+                "`sudo apt update && sudo apt install -y build-essential`.\n"
+            )
+        return 0
 
     return return_code
 

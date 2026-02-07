@@ -14,8 +14,8 @@ from apps.locals.user_data import (
     UserDatumAdminMixin,
     delete_user_fixture,
     dump_user_fixture,
-    _resolve_fixture_user,
-    _user_allows_user_data,
+    resolve_fixture_user,
+    user_allows_user_data,
 )
 from apps.core.admin.mixins import OwnedObjectLinksMixin
 from apps.core.models import get_owned_objects_for_user
@@ -392,8 +392,8 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         super().save_model(request, obj, form, change)
         if not getattr(obj, "pk", None):
             return
-        target_user = _resolve_fixture_user(obj, obj)
-        allow_user_data = _user_allows_user_data(target_user)
+        target_user = resolve_fixture_user(obj, obj)
+        allow_user_data = user_allows_user_data(target_user)
         if request.POST.get("_user_datum") == "on":
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False

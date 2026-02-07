@@ -23,6 +23,7 @@
   const copySuccessMessage = form.dataset.copySuccess;
   const copyErrorMessage = form.dataset.copyError;
   const copyAriaLabel = form.dataset.copyAriaLabel;
+  const messageField = form.querySelector('input[name="messages"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -223,7 +224,7 @@
     const formData = new FormData(form);
     const details = [];
     for (const [name, value] of formData.entries()) {
-      if (name === 'csrfmiddlewaretoken' || name === 'path') {
+      if (name === 'csrfmiddlewaretoken' || name === 'path' || name === 'messages') {
         continue;
       }
       if (typeof value !== 'string') {
@@ -247,13 +248,40 @@
     return details;
   };
 
+  const getPageMessages = () => {
+    const messageNodes = document.querySelectorAll('.messagelist li');
+    const messages = [];
+    messageNodes.forEach(node => {
+      const content = node.querySelector('.message-content') || node;
+      const message = content.textContent.replace(/\s+/g, ' ').trim();
+      if (message) {
+        messages.push(message);
+      }
+    });
+    return [...new Set(messages)];
+  };
+
+  const syncMessageField = messages => {
+    if (!messageField) {
+      return;
+    }
+    messageField.value = messages.join(' | ').substring(0, 2000);
+  };
+
   const buildCopyValue = () => {
     const baseValue = getPageCopyValue();
     const details = getFormDetails();
-    if (!details.length) {
+    const messages = getPageMessages();
+    syncMessageField(messages);
+    if (!details.length && !messages.length) {
       return baseValue;
     }
-    return `${baseValue}\n\nFeedback:\n${details.map(detail => `- ${detail}`).join('\n')}`;
+    const lines = details.map(detail => `- ${detail}`);
+    if (messages.length) {
+      lines.push('- messages:');
+      lines.push(...messages.map(message => `  - ${message}`));
+    }
+    return `${baseValue}\n\nFeedback:\n${lines.join('\n')}`;
   };
 
   if (copyLink) {
@@ -287,6 +315,7 @@
   form.addEventListener('submit', async event => {
     event.preventDefault();
     resetAlerts();
+    syncMessageField(getPageMessages());
 
     if (submitBtn) {
       submitBtn.disabled = true;

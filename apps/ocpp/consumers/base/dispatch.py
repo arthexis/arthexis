@@ -23,13 +23,13 @@ class DispatchMixin:
         elif message_type == 3:
             msg_id = msg[1] if len(msg) > 1 else ""
             payload = msg[2] if len(msg) > 2 else {}
-            await self._handle_call_result(msg_id, payload)
+            await self._handle_call_result(msg_id, payload, raw)
         elif message_type == 4:
             msg_id = msg[1] if len(msg) > 1 else ""
             error_code = msg[2] if len(msg) > 2 else ""
             description = msg[3] if len(msg) > 3 else ""
             details = msg[4] if len(msg) > 4 else {}
-            await self._handle_call_error(msg_id, error_code, description, details)
+            await self._handle_call_error(msg_id, error_code, description, details, raw)
 
     def _normalize_raw_message(self, text_data, bytes_data):
         raw = text_data
@@ -42,6 +42,11 @@ class DispatchMixin:
             msg = json.loads(raw)
         except json.JSONDecodeError:
             return None
+        if isinstance(msg, dict):
+            ocpp_payload = msg.get("ocpp")
+            if isinstance(ocpp_payload, list) and ocpp_payload:
+                self.forwarding_meta = msg.get("meta")
+                return ocpp_payload
         if not isinstance(msg, list) or not msg:
             return None
         return msg
@@ -116,7 +121,9 @@ class DispatchMixin:
             log_type="charger",
         )
 
-    async def _handle_call_result(self, message_id: str, payload: dict | None) -> None:
+    async def _handle_call_result(
+        self, message_id: str, payload: dict | None, raw: str
+    ) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
@@ -137,6 +144,9 @@ class DispatchMixin:
             payload_data,
             log_key,
         )
+        forward_reply = getattr(self, "_forward_charge_point_reply", None)
+        if callable(forward_reply):
+            await forward_reply(message_id, raw)
         if handled:
             return
         store.record_pending_call_result(
@@ -151,6 +161,7 @@ class DispatchMixin:
         error_code: str | None,
         description: str | None,
         details: dict | None,
+        raw: str | None = None,
     ) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
@@ -173,6 +184,9 @@ class DispatchMixin:
             details,
             log_key,
         )
+        forward_reply = getattr(self, "_forward_charge_point_reply", None)
+        if callable(forward_reply) and raw is not None:
+            await forward_reply(message_id, raw)
         if handled:
             return
         store.record_pending_call_result(

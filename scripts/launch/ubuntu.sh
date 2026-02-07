@@ -47,8 +47,8 @@ ubuntu_launch_install_packages() {
     sudo_prefix=(sudo)
   fi
 
-  "${sudo_prefix[@]}" apt-get update
-  "${sudo_prefix[@]}" apt-get install -y \
+  "${sudo_prefix[@]}" apt update
+  "${sudo_prefix[@]}" apt install -y \
     ca-certificates \
     curl \
     git \

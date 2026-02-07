@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import os
 import re
@@ -9,7 +8,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -19,10 +17,8 @@ import urllib.error
 import urllib.request
 
 import requests
-import psutil
 
 from celery import shared_task
-from apps.repos import github
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
@@ -34,12 +30,14 @@ from apps.core.auto_upgrade import (
     auto_upgrade_base_dir,
 )
 from apps.core.notifications import LcdChannel
-from apps.core.systemctl import _systemctl_command
 from apps.release import release_workflow
 from django.conf import settings
-from django.db import DatabaseError, models
+from django.db import DatabaseError
 from django.utils import timezone
 from utils.revision import get_revision
+
+from .system_ops import _ensure_runtime_services
+from .utils import _get_package_release_model
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
@@ -77,26 +75,6 @@ SEVERITY_NORMAL = "normal"
 SEVERITY_LOW = "low"
 SEVERITY_CRITICAL = "critical"
 
-_PackageReleaseModel = None
-
-
-def _get_package_release_model():
-    """Return the :class:`release.models.PackageRelease` model when available."""
-
-    global _PackageReleaseModel
-
-    if _PackageReleaseModel is not None:
-        return _PackageReleaseModel
-
-    try:
-        from apps.release.models import PackageRelease  # noqa: WPS433 - runtime import
-    except Exception:  # pragma: no cover - app registry not ready
-        return None
-
-    _PackageReleaseModel = PackageRelease
-    return PackageRelease
-
-
 model = _get_package_release_model()
 if model is not None:  # pragma: no branch - runtime constant setup
     SEVERITY_NORMAL = model.Severity.NORMAL
@@ -115,98 +93,10 @@ def _resolve_release_severity(version: str | None) -> str:
         return SEVERITY_NORMAL
 
 
-@shared_task
-def heartbeat() -> None:
-    """Log a simple heartbeat message."""
-    logger.info("Heartbeat task executed")
-
-
-@shared_task(bind=True, name="core.tasks.heartbeat")
-def legacy_heartbeat(self) -> None:
-    """Backward-compatible alias for the heartbeat task.
-
-    Older Celery schedules may still reference ``core.tasks.heartbeat``.
-    Register the legacy name so workers avoid "unregistered task" errors
-    while routing through the current implementation.
-    """
-
-    request = getattr(self, "request", None)
-    if request:
-        logger.warning(
-            "Received legacy heartbeat task; inspect scheduler and broker for stale entries",
-            extra={
-                "celery_id": getattr(request, "id", None),
-                "delivery_info": getattr(request, "delivery_info", None),
-                "origin": getattr(request, "hostname", None),
-                "headers": getattr(request, "headers", None),
-            },
-        )
-
-    heartbeat()
-
-
 def _project_base_dir() -> Path:
     """Return the filesystem base directory for runtime operations."""
 
     return auto_upgrade_base_dir()
-
-
-def _read_process_cmdline(pid: int) -> list[str]:
-    """Return the command line for a process when available."""
-
-    try:
-        return psutil.Process(pid).cmdline()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
-        return []
-
-
-def _read_process_start_time(pid: int) -> float | None:
-    """Return the process start time in epoch seconds when available."""
-
-    try:
-        return psutil.Process(pid).create_time()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
-        return None
-
-
-def _is_migration_server_running(lock_dir: Path) -> bool:
-    """Return ``True`` when the migration server lock indicates it is active."""
-
-    state_path = lock_dir / "migration_server.json"
-    try:
-        payload = json.loads(state_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return False
-    except json.JSONDecodeError:
-        return True
-
-    pid = payload.get("pid")
-    if isinstance(pid, str) and pid.isdigit():
-        pid = int(pid)
-    if not isinstance(pid, int):
-        return False
-
-    cmdline = _read_process_cmdline(pid)
-    script_path = lock_dir.parent / "scripts" / "migration_server.py"
-    if not any(str(part) == str(script_path) for part in cmdline):
-        return False
-
-    timestamp = payload.get("timestamp")
-    if isinstance(timestamp, str):
-        try:
-            timestamp = float(timestamp)
-        except ValueError:
-            timestamp = None
-
-    start_time = _read_process_start_time(pid)
-    if (
-        isinstance(timestamp, (int, float))
-        and start_time is not None
-        and abs(start_time - timestamp) > 120
-    ):
-        return False
-
-    return True
 
 
 def _load_upgrade_canaries() -> list["Node"]:
@@ -676,328 +566,6 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
     return unit_name
 
 
-def _wait_for_service_restart(
-    base_dir: Path, service: str, timeout: int = 30
-) -> bool:
-    """Return ``True`` when ``service`` reports active within ``timeout`` seconds."""
-
-    if not service:
-        return True
-
-    command = _systemctl_command()
-    if not command:
-        return True
-
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        result = subprocess.run(
-            [*command, "is-active", "--quiet", service],
-            cwd=base_dir,
-            check=False,
-        )
-        if result.returncode == 0:
-            return True
-        time.sleep(2)
-
-    subprocess.run(
-        [*command, "status", service, "--no-pager"],
-        cwd=base_dir,
-        check=False,
-    )
-    return False
-
-
-def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
-    """Attempt to restart the managed service using ``start.sh``."""
-
-    start_script = base_dir / "start.sh"
-    if not start_script.exists():
-        append_auto_upgrade_log(
-            base_dir,
-            (
-                "start.sh not found after upgrade; manual restart "
-                f"required for {service or 'service'}"
-            ),
-        )
-        return False
-
-    try:
-        subprocess.run(["./start.sh"], cwd=base_dir, check=True)
-    except Exception:  # pragma: no cover - defensive restart handling
-        logger.exception("start.sh restart failed after upgrade")
-        append_auto_upgrade_log(
-            base_dir,
-            (
-                f"start.sh restart failed after upgrade for {service or 'service'}; "
-                "manual intervention required"
-            ),
-        )
-        return False
-
-    return True
-
-
-def _record_restart_failure(base_dir: Path, service: str) -> None:
-    """Record restart failures in the auto-upgrade log."""
-
-    append_auto_upgrade_log(
-        base_dir,
-        (
-            f"Service {service or 'unknown'} failed to restart after upgrade; "
-            "manual intervention required"
-        ),
-    )
-
-def _ensure_managed_service(
-    base_dir: Path,
-    service: str,
-    *,
-    restart_if_active: bool,
-    revert_on_failure: bool,
-) -> bool:
-    command = _systemctl_command()
-    service_is_active = False
-    if command and service:
-        status_result = subprocess.run(
-            [*command, "is-active", "--quiet", service],
-            cwd=base_dir,
-            check=False,
-        )
-        service_is_active = status_result.returncode == 0
-
-    def restart_via_systemd(reason: str) -> bool:
-        if not command:
-            return False
-        try:
-            subprocess.run(
-                [*command, "restart", service],
-                cwd=base_dir,
-                check=True,
-            )
-        except subprocess.CalledProcessError:
-            logger.exception("systemd restart failed for %s during %s", service, reason)
-            return False
-        return True
-
-    def handle_restart_failure() -> bool:
-        if revert_on_failure:
-            _record_restart_failure(base_dir, service)
-        return False
-
-    if restart_if_active:
-        restarted = False
-        if restart_via_systemd("post-upgrade restart"):
-            append_auto_upgrade_log(
-                base_dir,
-                f"Restarting {service} via systemd restart after upgrade",
-            )
-            restarted = True
-        else:
-            append_auto_upgrade_log(
-                base_dir,
-                f"Systemd restart unavailable for {service}; restarting via start.sh",
-            )
-            if not _restart_service_via_start_script(base_dir, service):
-                return handle_restart_failure()
-            restarted = True
-
-        if not restarted:
-            return handle_restart_failure()
-
-        append_auto_upgrade_log(
-            base_dir,
-            f"Waiting for {service} to restart after upgrade",
-        )
-        if not _wait_for_service_restart(base_dir, service):
-            append_auto_upgrade_log(
-                base_dir,
-                f"Service {service} did not report active status after automatic restart",
-            )
-            return handle_restart_failure()
-
-        append_auto_upgrade_log(
-            base_dir,
-            f"Service {service} restarted successfully after upgrade",
-        )
-        return True
-
-    if service_is_active:
-        return True
-
-    base_message = (
-        f"Service {service} not active after upgrade"
-        if revert_on_failure
-        else f"Service {service} inactive during auto-upgrade check"
-    )
-
-    if restart_via_systemd("auto-upgrade recovery"):
-        append_auto_upgrade_log(
-            base_dir,
-            f"{base_message}; restarting via systemd restart",
-        )
-    else:
-        append_auto_upgrade_log(
-            base_dir,
-            f"{base_message}; restarting via start.sh",
-        )
-        if not _restart_service_via_start_script(base_dir, service):
-            append_auto_upgrade_log(
-                base_dir,
-                (
-                    "Automatic restart via start.sh failed for inactive service "
-                    f"{service}"
-                ),
-            )
-            if revert_on_failure:
-                _record_restart_failure(base_dir, service)
-            return False
-
-    if command:
-        append_auto_upgrade_log(
-            base_dir,
-            f"Waiting for {service} to restart after upgrade",
-        )
-        if not _wait_for_service_restart(base_dir, service):
-            append_auto_upgrade_log(
-                base_dir,
-                (
-                    f"Service {service} did not report active status after "
-                    "automatic restart"
-                ),
-            )
-            if revert_on_failure:
-                _record_restart_failure(base_dir, service)
-            return False
-
-    append_auto_upgrade_log(
-        base_dir,
-        f"Service {service} restarted successfully during auto-upgrade check",
-    )
-    return True
-
-
-def _ensure_development_server(
-    base_dir: Path,
-    *,
-    restart_if_active: bool,
-) -> bool:
-    if restart_if_active:
-        result = subprocess.run(
-            ["pkill", "-f", "manage.py runserver"],
-            cwd=base_dir,
-        )
-        if result.returncode == 0:
-            append_auto_upgrade_log(
-                base_dir,
-                "Restarting development server via start.sh after upgrade",
-            )
-            start_script = base_dir / "start.sh"
-            if start_script.exists():
-                try:
-                    subprocess.Popen(
-                        ["./start.sh"],
-                        cwd=base_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        start_new_session=True,
-                    )
-                except Exception as exc:  # pragma: no cover - subprocess errors
-                    append_auto_upgrade_log(
-                        base_dir,
-                        (
-                            "Failed to restart development server automatically: "
-                            f"{exc}"
-                        ),
-                    )
-                    raise
-            else:  # pragma: no cover - installation invariant
-                append_auto_upgrade_log(
-                    base_dir,
-                    "start.sh not found; manual restart required for development server",
-                )
-        else:
-            append_auto_upgrade_log(
-                base_dir,
-                (
-                    "No manage.py runserver process was active during upgrade; "
-                    "skipping development server restart"
-                ),
-            )
-        return True
-
-    check = subprocess.run(
-        ["pgrep", "-f", "manage.py runserver"],
-        cwd=base_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if check.returncode == 0:
-        return True
-
-    append_auto_upgrade_log(
-        base_dir,
-        "Development server inactive during auto-upgrade check; restarting via start.sh",
-    )
-    start_script = base_dir / "start.sh"
-    if not start_script.exists():  # pragma: no cover - installation invariant
-        append_auto_upgrade_log(
-            base_dir,
-            "start.sh not found; manual restart required for development server",
-        )
-        return False
-    try:
-        subprocess.Popen(
-            ["./start.sh"],
-            cwd=base_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except Exception as exc:  # pragma: no cover - subprocess errors
-        append_auto_upgrade_log(
-            base_dir,
-            (
-                "Failed to restart development server automatically: "
-                f"{exc}"
-            ),
-        )
-        return False
-    return True
-
-
-def _ensure_runtime_services(
-    base_dir: Path,
-    *,
-    restart_if_active: bool,
-    revert_on_failure: bool,
-) -> bool:
-    service_file = base_dir / ".locks" / "service.lck"
-    if service_file.exists():
-        try:
-            service = service_file.read_text().strip()
-        except OSError:
-            service = ""
-        if not service:
-            if restart_if_active:
-                append_auto_upgrade_log(
-                    base_dir,
-                    "Service restart requested but service lock was empty; "
-                    "skipping automatic verification",
-                )
-            return True
-        return _ensure_managed_service(
-            base_dir,
-            service,
-            restart_if_active=restart_if_active,
-            revert_on_failure=revert_on_failure,
-        )
-
-    return _ensure_development_server(
-        base_dir,
-        restart_if_active=restart_if_active or revert_on_failure,
-    )
-
-
 def _latest_release() -> tuple[str | None, str | None, str | None]:
     """Return the latest release version, revision, and PyPI URL when available."""
 
@@ -1013,7 +581,7 @@ def _latest_release() -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
     if not release:
-        return None, None
+        return None, None, None
 
     version = getattr(release, "version", None)
     revision = getattr(release, "revision", None)
@@ -1618,7 +1186,10 @@ def _shares_stable_series(local: str, remote: str) -> bool:
 class AutoUpgradeOperations:
     git_fetch: Callable[[Path, str], None]
     resolve_remote_revision: Callable[[Path, str], str]
-    ensure_runtime_services: Callable[[Path, bool, bool], None]
+    ensure_runtime_services: Callable[
+        [Path, bool, bool, Callable[[Path, str], Any]],
+        bool,
+    ]
     delegate_upgrade: Callable[[Path, list[str]], str | None]
     run_upgrade_command: Callable[[Path, list[str]], tuple[str | None, bool]]
 
@@ -1932,6 +1503,7 @@ def _apply_stable_schedule_guard(
         base_dir,
         restart_if_active=False,
         revert_on_failure=False,
+        log_appender=append_auto_upgrade_log,
     )
     return False
 
@@ -1977,6 +1549,7 @@ def _fetch_repository_state(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         return None
 
@@ -1995,6 +1568,7 @@ def _fetch_repository_state(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         return None
 
@@ -2034,6 +1608,7 @@ def _plan_auto_upgrade(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         if startup:
             startup()
@@ -2049,6 +1624,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             if startup:
                 startup()
@@ -2064,6 +1640,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             if startup:
                 startup()
@@ -2077,6 +1654,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             return None
 
@@ -2092,6 +1670,7 @@ def _plan_auto_upgrade(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             if startup:
                 startup()
@@ -2118,6 +1697,7 @@ def _plan_auto_upgrade(
                     base_dir,
                     restart_if_active=False,
                     revert_on_failure=False,
+                    log_appender=append_auto_upgrade_log,
                 )
                 return None
 
@@ -2159,6 +1739,7 @@ def _execute_upgrade_plan(
                 base_dir,
                 restart_if_active=False,
                 revert_on_failure=False,
+                log_appender=append_auto_upgrade_log,
             )
             return
 
@@ -2182,6 +1763,7 @@ def _execute_upgrade_plan(
             base_dir,
             restart_if_active=False,
             revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
         )
         return
 
@@ -2248,6 +1830,7 @@ def _execute_upgrade_plan(
         base_dir,
         restart_if_active=True,
         revert_on_failure=True,
+        log_appender=append_auto_upgrade_log,
     )
 
 
@@ -2335,7 +1918,7 @@ def check_github_updates(
         repo_state = _fetch_repository_state(base_dir, branch, mode, ops, state)
         if repo_state is None:
             status = "SKIPPED"
-            return
+            return status
 
         plan = _plan_auto_upgrade(base_dir, mode, repo_state, notify, startup, ops)
         if plan is None:
@@ -2369,18 +1952,6 @@ def check_github_updates(
         _finalize_auto_upgrade(base_dir, state)
         _send_auto_upgrade_check_message(status, change_tag)
     return status
-
-
-@shared_task
-def poll_emails() -> None:
-    """Poll all configured email collectors for new messages."""
-    try:
-        from apps.emails.models import EmailCollector
-    except Exception:  # pragma: no cover - app not ready
-        return
-
-    for collector in EmailCollector.objects.all():
-        collector.collect()
 
 
 def _record_health_check_result(
@@ -2485,47 +2056,3 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
     _record_health_check_result(base_dir, attempt, status, detail)
     _handle_failed_health_check(base_dir, detail)
     return False
-
-
-def execute_scheduled_release(release_id: int) -> None:
-    """Run the automated release flow for a scheduled PackageRelease."""
-
-    model = _get_package_release_model()
-    if model is None:
-        logger.warning("Scheduled release %s skipped: model unavailable", release_id)
-        return
-
-    release = model.objects.filter(pk=release_id).first()
-    if release is None:
-        logger.warning("Scheduled release %s skipped: release not found", release_id)
-        return
-
-    try:
-        release_workflow.run_headless_publish(release, auto_release=True)
-    finally:
-        release.clear_schedule(save=True)
-
-
-@shared_task
-def run_scheduled_release(release_id: int) -> None:
-    """Entrypoint used by django-celery-beat to trigger scheduled releases."""
-
-    execute_scheduled_release(release_id)
-
-
-@shared_task
-def run_client_report_schedule(schedule_id: int) -> None:
-    """Execute a :class:`core.models.ClientReportSchedule` run."""
-
-    from apps.energy.models import ClientReportSchedule
-
-    schedule = ClientReportSchedule.objects.filter(pk=schedule_id).first()
-    if not schedule:
-        logger.warning("ClientReportSchedule %s no longer exists", schedule_id)
-        return
-
-    try:
-        schedule.run()
-    except Exception:
-        logger.exception("ClientReportSchedule %s failed", schedule_id)
-        raise

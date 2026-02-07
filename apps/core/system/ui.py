@@ -18,12 +18,10 @@ from django.utils import timezone
 from django.utils.timesince import timesince
 from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _
-from django.urls import NoReverseMatch, reverse
 
 from apps.core.systemctl import _systemctl_command
 from apps.nginx.renderers import generate_primary_config
-from apps.screens.startup_notifications import lcd_feature_enabled
-from apps.cards.rfid_service import rfid_service_enabled
+from apps.services.lifecycle import build_lifecycle_service_units
 from utils import revision
 
 from .filesystem import (
@@ -62,45 +60,6 @@ _RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORE
 
 
 _DAY_NAMES = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-
-
-SERVICE_REPORT_DEFINITIONS = (
-    {
-        "key": "suite",
-        "label": _("Suite service"),
-        "unit_template": "{service}.service",
-        "pid_file": "django.pid",
-        "docs": "services/suite-service.md",
-    },
-    {
-        "key": "celery-worker",
-        "label": _("Celery worker"),
-        "unit_template": "celery-{service}.service",
-        "pid_file": "celery_worker.pid",
-        "docs": "services/celery-worker.md",
-    },
-    {
-        "key": "celery-beat",
-        "label": _("Celery beat"),
-        "unit_template": "celery-beat-{service}.service",
-        "pid_file": "celery_beat.pid",
-        "docs": "services/celery-beat.md",
-    },
-    {
-        "key": "lcd-screen",
-        "label": _("LCD screen"),
-        "unit_template": "lcd-{service}.service",
-        "pid_file": "lcd.pid",
-        "docs": "services/lcd-screen.md",
-    },
-    {
-        "key": "rfid-service",
-        "label": _("RFID scanner service"),
-        "unit_template": "rfid-{service}.service",
-        "docs": "services/rfid-scanner-service.md",
-    },
-)
-
 
 
 def _format_timestamp(dt: datetime | None) -> str:
@@ -321,7 +280,7 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
         visible=bool(info.get("screen_mode")),
     )
 
-    add_field(_("Features"), "FEATURES", info.get("features", []), field_type="features")
+    add_field(_("Node Features"), "FEATURES", info.get("features", []), field_type="features")
     add_field(_("Running"), "RUNNING", info.get("running", False), field_type="boolean")
     add_field(
         _("Service status"),
@@ -958,134 +917,9 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
     }
 
 
-def _service_docs_url(doc: str) -> str:
-    try:
-        return reverse("docs:docs-document", args=[doc])
-    except NoReverseMatch:
-        return ""
-
-
 def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
     """Return service units configured for this instance."""
-
-    from apps.celery.utils import is_celery_enabled
-
-    lock_dir = base_dir / ".locks"
-    service_file = lock_dir / "service.lck"
-    systemd_services_file = lock_dir / "systemd_services.lck"
-
-    try:
-        service_name = service_file.read_text(encoding="utf-8").strip()
-    except OSError:
-        service_name = ""
-
-    try:
-        systemd_units = systemd_services_file.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        systemd_units = []
-
-    service_units: list[dict[str, object]] = []
-
-    def _normalize_unit(unit_name: str) -> tuple[str, str]:
-        normalized = unit_name.strip()
-        unit_display = normalized
-        unit = normalized
-        if normalized.endswith(".service"):
-            unit = normalized.removesuffix(".service")
-        else:
-            unit_display = f"{normalized}.service"
-        return unit, unit_display
-
-    def _add_unit(
-        unit_name: str,
-        *,
-        key: str | None = None,
-        label: str | None = None,
-        configured: bool = True,
-        docs_url: str = "",
-        pid_file: str = "",
-    ) -> None:
-        normalized = unit_name.strip()
-        if not normalized:
-            return
-
-        unit, unit_display = _normalize_unit(normalized)
-        for existing_unit in service_units:
-            if existing_unit["unit_display"] == unit_display:
-                if key and not existing_unit.get("key"):
-                    existing_unit["key"] = key
-                existing_unit["label"] = label or existing_unit["label"]
-                existing_unit["configured"] = configured
-                existing_unit["docs_url"] = docs_url
-                if pid_file and not existing_unit.get("pid_file"):
-                    existing_unit["pid_file"] = pid_file
-                return
-        service_units.append(
-            {
-                "key": key or "",
-                "label": label or normalized,
-                "unit": unit,
-                "unit_display": unit_display,
-                "configured": configured,
-                "docs_url": docs_url,
-                "pid_file": pid_file or "",
-            }
-        )
-
-    service_name_placeholder = service_name or "SERVICE_NAME"
-    celery_enabled = is_celery_enabled(lock_dir / "celery.lck")
-    lcd_enabled = lcd_feature_enabled(lock_dir)
-    rfid_enabled = rfid_service_enabled(lock_dir)
-
-    for spec in SERVICE_REPORT_DEFINITIONS:
-        unit_name = spec["unit_template"].format(service=service_name_placeholder)
-        if not service_name:
-            configured = False
-        elif spec["key"] == "suite":
-            configured = True
-        elif spec["key"] in {"celery-worker", "celery-beat"}:
-            configured = celery_enabled
-        elif spec["key"] == "lcd-screen":
-            configured = lcd_enabled
-        elif spec["key"] == "rfid-service":
-            configured = rfid_enabled
-        else:
-            configured = False
-
-        _add_unit(
-            unit_name,
-            key=spec.get("key"),
-            label=str(spec["label"]),
-            configured=configured,
-            docs_url=_service_docs_url(spec["docs"]),
-            pid_file=spec.get("pid_file", ""),
-        )
-
-    base_label_map: dict[str, str] = {}
-    docs_url_map: dict[str, str] = {}
-    if service_name:
-        base_label_map = {
-            f"{service_name}.service": str(_("Suite service")),
-            f"celery-{service_name}.service": str(_("Celery worker")),
-            f"celery-beat-{service_name}.service": str(_("Celery beat")),
-            f"lcd-{service_name}.service": str(_("LCD screen")),
-            f"rfid-{service_name}.service": str(_("RFID scanner service")),
-        }
-        for spec in SERVICE_REPORT_DEFINITIONS:
-            docs_url_map[
-                spec["unit_template"].format(service=service_name)
-            ] = _service_docs_url(spec["docs"])
-
-    for unit_name in systemd_units:
-        normalized = unit_name.strip()
-        _add_unit(
-            normalized,
-            label=base_label_map.get(normalized),
-            configured=True,
-            docs_url=docs_url_map.get(normalized, ""),
-        )
-
-    return service_units
+    return build_lifecycle_service_units(base_dir)
 
 
 def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[str, object]:

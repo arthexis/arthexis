@@ -177,7 +177,7 @@ class ClientReportSchedule(Entity):
         name = normalize_periodic_task_name(PeriodicTask.objects, raw_name)
         defaults = {
             "crontab": schedule,
-            "task": "apps.core.tasks.run_client_report_schedule",
+            "task": "apps.core.tasks.maintenance.run_client_report_schedule",
             "kwargs": _json.dumps({"schedule_id": self.pk}),
             "enabled": True,
         }

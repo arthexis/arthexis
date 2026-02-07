@@ -11,7 +11,7 @@ This guide explains how Arthexis automatically loads bundled fixtures on each no
 ## Relationship to user data
 
 - Shared user fixtures stored directly under `data/*.json` are loaded once per process start, and per-user fixtures under `data/<username>/*.json` are loaded for each account. The loader skips `user_*` files to avoid overwriting the authenticated user entries.
-- Freshly created staff accounts automatically pull in both shared and personal fixtures via signals in [`apps/locals/user_data.py`](../../apps/locals/user_data.py) so admins inherit the latest local defaults on first login.
+- Freshly created staff accounts automatically pull in both shared and personal fixtures via signals in [`apps/locals/user_data/signals.py`](../../apps/locals/user_data/signals.py) so admins inherit the latest local defaults on first login.
 - Exporting or importing user data through the admin uses the same on-disk files. User data fixtures override or extend the seed set without modifying the shipped JSON files, keeping customizations isolated to the node.
 
 ## Operational tips

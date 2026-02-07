@@ -31,6 +31,16 @@ sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
+if [ -f "$SCRIPT_DIR/scripts/helpers/service_manager.sh" ]; then
+  . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
+else
+  echo "Warning: service_manager.sh not found; using default lock filenames." >&2
+fi
+
+ARTHEXIS_LCD_LOCK="${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}"
+ARTHEXIS_RFID_SERVICE_LOCK="${ARTHEXIS_RFID_SERVICE_LOCK:-rfid-service.lck}"
 
 now_ms() {
   date +%s%3N
@@ -145,10 +155,77 @@ pip_install_with_helper() {
   fi
 }
 
+celery_requirement() {
+  local requirements_file="$SCRIPT_DIR/requirements.txt"
+  if [ -f "$requirements_file" ]; then
+    local line
+    line=$(grep -E '^celery(\[[^]]+\])?([[:space:]]*[<=>!~].*)?$' "$requirements_file" | head -n 1 || true)
+    if [ -n "$line" ]; then
+      echo "$line"
+      return 0
+    fi
+  fi
+  echo "celery"
+}
+
+ensure_celery_installed() {
+  if "$PYTHON" - <<'PY' >/dev/null 2>&1
+import importlib
+importlib.import_module("celery")
+PY
+  then
+    return 0
+  fi
+
+  local -a celery_pip_args=(--cache-dir "$PIP_CACHE_DIR")
+  if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+    celery_pip_args+=(--user)
+  fi
+  local celery_req
+  celery_req=$(celery_requirement)
+
+  echo "Celery not found; attempting to install ${celery_req}." >&2
+  if ! pip_install_with_helper "${celery_pip_args[@]}" "$celery_req"; then
+    echo "Celery installation failed. Ensure pip and Python venv support are installed." >&2
+    echo "  Ubuntu/Debian: sudo apt install python3-venv" >&2
+    echo "  RHEL/Fedora:   sudo dnf install python3-pip" >&2
+    return 1
+  fi
+}
+
+should_install_hardware_requirements() {
+  local lock_dir="$SCRIPT_DIR/.locks"
+  local role_file="$lock_dir/role.lck"
+  local lcd_lock="$ARTHEXIS_LCD_LOCK"
+  local rfid_service_lock="$ARTHEXIS_RFID_SERVICE_LOCK"
+  local rfid_lock="rfid.lck"
+
+  case "${ARTHEXIS_INSTALL_HARDWARE_DEPS:-}" in
+    1|true|TRUE|yes|YES)
+      return 0
+      ;;
+  esac
+
+  if [ -f "$role_file" ] && [ "$(tr -d '\r\n' < "$role_file")" = "Control" ]; then
+    return 0
+  fi
+
+  if [ -f "$lock_dir/$lcd_lock" ] || [ -f "$lock_dir/$rfid_service_lock" ] || [ -f "$lock_dir/$rfid_lock" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
 collect_requirement_files() {
   local -n out_array="$1"
+  local hardware_file="$SCRIPT_DIR/requirements-hardware.txt"
 
-  mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
+  mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' ! -name 'requirements-hardware.txt' -print | sort)
+
+  if [ -f "$hardware_file" ] && should_install_hardware_requirements; then
+    out_array+=("$hardware_file")
+  fi
 }
 
 compute_file_checksum() {
@@ -364,6 +441,8 @@ else
   fi
   date +%s > "$REQ_TIMESTAMP_FILE"
 fi
+
+ensure_celery_installed
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
