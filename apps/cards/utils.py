@@ -92,6 +92,8 @@ def drain_stdin() -> None:
             ready, _, _ = select([sys.stdin], [], [], 0)
             if not ready:
                 break
-            sys.stdin.read(1)
+            char = sys.stdin.read(1)
+            if char == "":
+                break
     except (OSError, ValueError):
         return
