@@ -14,6 +14,7 @@ class Charger(Ownable):
 
     _PLACEHOLDER_SERIAL_RE = re.compile(r"^<[^>]+>$")
     _AUTO_LOCATION_SANITIZE_RE = re.compile(r"[^0-9A-Za-z_-]+")
+    FTP_REPORTS_FEATURE_SLUG = "ocpp-ftp-reports"
 
     owner_required = False
 
@@ -209,6 +210,14 @@ class Charger(Ownable):
         blank=True,
         related_name="chargers",
         help_text=_("Media bucket where this charge point should upload diagnostics."),
+    )
+    ftp_server = models.ForeignKey(
+        "ftp.FTPServer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chargers",
+        help_text=_("FTP server used for report uploads."),
     )
     reference = models.OneToOneField(
         Reference, null=True, blank=True, on_delete=models.SET_NULL
@@ -523,6 +532,93 @@ class Charger(Ownable):
             MediaBucket.objects.filter(pk=bucket.pk).update(expires_at=expires_at)
             bucket.expires_at = expires_at
         return bucket
+
+    def _ftp_reports_feature_enabled(self) -> bool:
+        try:
+            Feature = apps.get_model("features", "Feature")
+        except LookupError:
+            return False
+        feature = (
+            Feature.objects.select_related("node_feature")
+            .filter(slug=self.FTP_REPORTS_FEATURE_SLUG)
+            .first()
+        )
+        if not feature:
+            return False
+        return feature.is_enabled_for_node()
+
+    def ensure_report_ftp_server(self, *, node: Node | None = None):
+        """Ensure an FTP server exists for report uploads and link it."""
+
+        if not self._ftp_reports_feature_enabled():
+            return None
+
+        try:
+            FTPServer = apps.get_model("ftp", "FTPServer")
+        except LookupError:
+            return None
+
+        node = node or self.manager_node or Node.get_local()
+        if not node:
+            return None
+
+        server, created = FTPServer.objects.get_or_create(
+            node=node,
+            defaults={"enabled": True},
+        )
+        if not created and not server.enabled:
+            FTPServer.objects.filter(pk=server.pk).update(enabled=True)
+            server.enabled = True
+        if self.pk and self.ftp_server_id != server.pk:
+            type(self).objects.filter(pk=self.pk).update(ftp_server=server)
+            self.ftp_server = server
+        return server
+
+    def sync_report_ftp_server(self, *, node: Node | None = None):
+        """Keep the linked FTP server aligned with the manager node."""
+
+        if not self._ftp_reports_feature_enabled():
+            return None
+        if not self.ftp_server_id:
+            return None
+
+        try:
+            FTPServer = apps.get_model("ftp", "FTPServer")
+        except LookupError:
+            return None
+
+        node = node or self.manager_node or Node.get_local()
+        if not node:
+            return None
+
+        if self.ftp_server and self.ftp_server.node_id == node.pk:
+            return self.ftp_server
+
+        server = FTPServer.objects.filter(node=node).first()
+        if not server:
+            server = FTPServer.objects.create(node=node, enabled=True)
+        type(self).objects.filter(pk=self.pk).update(ftp_server=server)
+        self.ftp_server = server
+        return server
+
+    def build_report_ftp_location(
+        self,
+        *,
+        server=None,
+        node: Node | None = None,
+    ) -> str:
+        """Return the FTP location string for report uploads."""
+
+        server = server or self.ftp_server
+        if not server:
+            return ""
+        node = node or server.node or self.manager_node or Node.get_local()
+        if not node:
+            return ""
+        host = node.get_preferred_hostname()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"ftp://{host}:{server.port}/"
 
     class Meta:
         verbose_name = _("Charge Point")
@@ -867,6 +963,7 @@ class Charger(Ownable):
         if self.manager_node_id != node.pk:
             type(self).objects.filter(pk=self.pk).update(manager_node=node)
             self.manager_node = node
+            self.sync_report_ftp_server(node=node)
         return node
 
     @property

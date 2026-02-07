@@ -1,0 +1,39 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "ocpp-ftp-reports",
+      "display": "OCPP FTP Report Uploads",
+      "summary": "Provide FTP endpoints for charge points to upload diagnostics and report archives.",
+      "is_enabled": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "node_feature": [
+        "ftp-server"
+      ],
+      "admin_requirements": "Offer a quick action to configure and link a local FTP server for charge points configured to upload diagnostics.",
+      "public_requirements": "",
+      "service_requirements": "Expose an embedded FTP server for OCPP report uploads and keep charge points linked to the local FTP configuration.",
+      "admin_views": [
+        "admin:ocpp_charger_changelist",
+        "admin:ftp_ftpserver_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "Service: apps.ftp.management.commands.runftpserver"
+      ],
+      "code_locations": [
+        "apps/ocpp/admin/charge_point.py",
+        "apps/ocpp/models/charger.py",
+        "apps/ftp/models.py",
+        "apps/ftp/management/commands/runftpserver.py"
+      ],
+      "protocol_coverage": {},
+      "created_at": "2026-03-07T18:00:00Z",
+      "updated_at": "2026-03-07T18:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  }
+]

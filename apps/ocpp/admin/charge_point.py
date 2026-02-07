@@ -38,6 +38,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from requests import RequestException
 
 from apps.cards.models import RFID as CoreRFID
+from apps.features.models import Feature
 from apps.core.admin import OwnableAdminMixin, SaveBeforeChangeAction
 from apps.core.form_fields import SchedulePeriodsField
 from apps.energy.models import EnergyTariff
@@ -214,6 +215,7 @@ class ChargerAdmin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
                     "diagnostics_timestamp",
                     "diagnostics_location",
                     "diagnostics_bucket",
+                    "ftp_server",
                 )
             },
         ),
@@ -353,6 +355,7 @@ class ChargerAdmin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
         "update_rfids_from_evcs",
         "recheck_charger_status",
         "setup_cp_diagnostics",
+        "configure_local_ftp_server",
         "request_cp_diagnostics",
         "get_diagnostics",
         "change_availability_operative",
@@ -958,6 +961,76 @@ class ChargerAdmin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
             expires_at=expiration,
             success_message=success_message,
         )
+
+    @admin.action(description=_("Configure local FTP server"))
+    def configure_local_ftp_server(self, request, queryset):
+        feature = (
+            Feature.objects.select_related("node_feature")
+            .filter(slug=Charger.FTP_REPORTS_FEATURE_SLUG)
+            .first()
+        )
+        if not feature:
+            self.message_user(
+                request,
+                _("Suite feature %(slug)s is missing; cannot configure FTP servers.")
+                % {"slug": Charger.FTP_REPORTS_FEATURE_SLUG},
+                messages.WARNING,
+            )
+            return
+        if not feature.is_enabled_for_node():
+            self.message_user(
+                request,
+                _("Suite feature %(slug)s is disabled; FTP linking skipped.")
+                % {"slug": Charger.FTP_REPORTS_FEATURE_SLUG},
+                messages.WARNING,
+            )
+            return
+
+        local_node = Node.get_local()
+        if not local_node:
+            self.message_user(
+                request,
+                _("Local node is not registered; FTP linking skipped."),
+                messages.WARNING,
+            )
+            return
+
+        configured = 0
+        for charger in queryset:
+            server = charger.ensure_report_ftp_server(node=local_node)
+            if not server:
+                continue
+            location = charger.build_report_ftp_location(
+                server=server, node=local_node
+            )
+            updates = {}
+            if charger.ftp_server_id != server.pk:
+                updates["ftp_server"] = server
+            if location:
+                updates["diagnostics_location"] = location
+            if updates:
+                Charger.objects.filter(pk=charger.pk).update(**updates)
+                for key, value in updates.items():
+                    setattr(charger, key, value)
+            configured += 1
+
+        if configured:
+            self.message_user(
+                request,
+                ngettext(
+                    "Configured local FTP server for %(count)d charger.",
+                    "Configured local FTP server for %(count)d chargers.",
+                    configured,
+                )
+                % {"count": configured},
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("No FTP servers were configured."),
+                messages.WARNING,
+            )
 
     @admin.action(description="Get diagnostics")
     def get_diagnostics(self, request, queryset):
