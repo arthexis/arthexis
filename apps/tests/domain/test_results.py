@@ -26,9 +26,7 @@ def _resolve_results_connection_alias(use_permanent_db: bool) -> str:
     default_connection = connections[DEFAULT_DB_ALIAS]
     persistent_config = dict(settings.DATABASES[DEFAULT_DB_ALIAS])
     persistent_name = persistent_config.get("NAME")
-    if not persistent_name:
-        return DEFAULT_DB_ALIAS
-    if persistent_name == default_connection.settings_dict.get("NAME"):
+    if not persistent_name or persistent_name == default_connection.settings_dict.get("NAME"):
         return DEFAULT_DB_ALIAS
 
     alias = "persistent_results"
