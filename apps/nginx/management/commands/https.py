@@ -13,7 +13,7 @@ from apps.nginx.services import NginxUnavailableError, ValidationError
 
 
 class Command(BaseCommand):
-    help = "Manage HTTPS certificates and nginx configuration."  # noqa: A003
+    help = "Manage HTTPS certificates and nginx configuration."
 
     def add_arguments(self, parser):
         action_group = parser.add_mutually_exclusive_group()
@@ -66,8 +66,6 @@ class Command(BaseCommand):
             return
 
         domain = "localhost" if use_local else certbot_domain
-        if not domain:
-            raise CommandError("--certbot requires a domain.")
 
         if disable:
             self._disable_https(domain, reload=reload)
@@ -108,18 +106,7 @@ class Command(BaseCommand):
         else:
             certificate.provision(sudo=sudo)
 
-        try:
-            result = config.apply(reload=reload)
-        except (NginxUnavailableError, ValidationError) as exc:
-            raise CommandError(str(exc)) from exc
-
-        self.stdout.write(self.style.SUCCESS(result.message))
-        if not result.validated:
-            self.stdout.write("nginx configuration applied but validation was skipped or failed.")
-        if not result.reloaded:
-            self.stdout.write(
-                "nginx reload/start did not complete automatically; check the service status."
-            )
+        self._apply_config(config, reload=reload)
         return certificate
 
     def _disable_https(self, domain: str, *, reload: bool) -> None:
@@ -131,6 +118,66 @@ class Command(BaseCommand):
             config.protocol = "http"
             config.save(update_fields=["protocol"])
 
+        self._apply_config(config, reload=reload)
+
+    def _get_existing_config(self, domain: str) -> SiteConfiguration | None:
+        name = "localhost" if domain == "localhost" else domain
+        return SiteConfiguration.objects.filter(name=name).first()
+
+    def _get_or_create_config(self, domain: str, *, protocol: str) -> SiteConfiguration:
+        defaults_source = SiteConfiguration.get_default()
+        name = "localhost" if domain == "localhost" else domain
+        desired_config = {
+            "enabled": True,
+            "protocol": protocol,
+            "mode": defaults_source.mode,
+            "role": defaults_source.role,
+            "port": defaults_source.port,
+            "include_ipv6": defaults_source.include_ipv6,
+            "external_websockets": defaults_source.external_websockets,
+            "site_entries_path": defaults_source.site_entries_path,
+            "site_destination": defaults_source.site_destination,
+            "expected_path": defaults_source.expected_path,
+        }
+        config, _ = SiteConfiguration.objects.update_or_create(
+            name=name,
+            defaults=desired_config,
+        )
+        return config
+
+    def _get_or_create_certificate(
+        self,
+        domain: str,
+        config: SiteConfiguration,
+        *,
+        use_local: bool,
+    ):
+        slug = slugify(domain)
+        if use_local:
+            base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+            defaults = {
+                "domain": domain,
+                "certificate_path": str(base_path / "fullchain.pem"),
+                "certificate_key_path": str(base_path / "privkey.pem"),
+            }
+            certificate, _ = SelfSignedCertificate.objects.update_or_create(
+                name="local-https-localhost",
+                defaults=defaults,
+            )
+        else:
+            defaults = {
+                "domain": domain,
+                "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
+                "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+            }
+            certificate, _ = CertbotCertificate.objects.update_or_create(
+                name=f"{config.name or 'nginx-site'}-{slug}-certbot",
+                defaults=defaults,
+            )
+
+        return certificate
+
+    def _apply_config(self, config: SiteConfiguration, *, reload: bool) -> None:
         try:
             result = config.apply(reload=reload)
         except (NginxUnavailableError, ValidationError) as exc:
@@ -143,93 +190,6 @@ class Command(BaseCommand):
             self.stdout.write(
                 "nginx reload/start did not complete automatically; check the service status."
             )
-
-    def _get_existing_config(self, domain: str) -> SiteConfiguration | None:
-        name = "localhost" if domain == "localhost" else domain
-        return SiteConfiguration.objects.filter(name=name).first()
-
-    def _get_or_create_config(self, domain: str, *, protocol: str) -> SiteConfiguration:
-        defaults_source = SiteConfiguration.get_default()
-        defaults = {
-            "mode": defaults_source.mode,
-            "role": defaults_source.role,
-            "port": defaults_source.port,
-            "include_ipv6": defaults_source.include_ipv6,
-            "external_websockets": defaults_source.external_websockets,
-            "site_entries_path": defaults_source.site_entries_path,
-            "site_destination": defaults_source.site_destination,
-            "expected_path": defaults_source.expected_path,
-        }
-        name = "localhost" if domain == "localhost" else domain
-        config, created = SiteConfiguration.objects.get_or_create(name=name, defaults=defaults)
-
-        desired = {
-            "enabled": True,
-            "protocol": protocol,
-            "mode": defaults_source.mode,
-            "role": defaults_source.role,
-            "port": defaults_source.port,
-            "include_ipv6": defaults_source.include_ipv6,
-            "external_websockets": defaults_source.external_websockets,
-            "site_entries_path": defaults_source.site_entries_path,
-            "site_destination": defaults_source.site_destination,
-            "expected_path": defaults_source.expected_path,
-        }
-
-        updated_fields: list[str] = []
-        for field, value in desired.items():
-            if getattr(config, field) != value:
-                setattr(config, field, value)
-                updated_fields.append(field)
-
-        if created or updated_fields:
-            config.save(update_fields=updated_fields or None)
-
-        return config
-
-    def _get_or_create_certificate(
-        self,
-        domain: str,
-        config: SiteConfiguration,
-        *,
-        use_local: bool,
-    ):
-        if use_local:
-            slug = slugify(domain)
-            base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
-            defaults = {
-                "domain": domain,
-                "certificate_path": str(base_path / "fullchain.pem"),
-                "certificate_key_path": str(base_path / "privkey.pem"),
-            }
-
-            certificate, created = SelfSignedCertificate.objects.get_or_create(
-                name="local-https-localhost",
-                defaults=defaults,
-            )
-        else:
-            slug = slugify(domain)
-            defaults = {
-                "domain": domain,
-                "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
-                "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-            }
-
-            certificate, created = CertbotCertificate.objects.get_or_create(
-                name=f"{config.name or 'nginx-site'}-{slug}-certbot",
-                defaults=defaults,
-            )
-
-        if not created:
-            updated_fields: list[str] = []
-            for field, value in defaults.items():
-                if getattr(certificate, field) != value:
-                    setattr(certificate, field, value)
-                    updated_fields.append(field)
-            if updated_fields:
-                certificate.save(update_fields=updated_fields)
-
-        return certificate
 
     def _render_report(self, *, sudo: str) -> None:
         configs = list(SiteConfiguration.objects.order_by("pk"))
