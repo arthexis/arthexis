@@ -41,7 +41,9 @@ class Credentials:
     password: Optional[str] = None
 
     def has_auth(self) -> bool:
-        return bool(self.token) or bool(self.username and self.password)
+        return bool((self.token or "").strip()) or bool(
+            (self.username or "").strip() and (self.password or "").strip()
+        )
 
     def twine_args(self) -> list[str]:
         if self.token:
