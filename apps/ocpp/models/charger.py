@@ -533,7 +533,7 @@ class Charger(Ownable):
             bucket.expires_at = expires_at
         return bucket
 
-    def _ftp_reports_feature_enabled(self) -> bool:
+    def _ftp_reports_feature_enabled(self, *, node: Node | None = None) -> bool:
         try:
             Feature = apps.get_model("features", "Feature")
         except LookupError:
@@ -545,13 +545,10 @@ class Charger(Ownable):
         )
         if not feature:
             return False
-        return feature.is_enabled_for_node()
+        return feature.is_enabled_for_node(node)
 
     def ensure_report_ftp_server(self, *, node: Node | None = None):
         """Ensure an FTP server exists for report uploads and link it."""
-
-        if not self._ftp_reports_feature_enabled():
-            return None
 
         try:
             FTPServer = apps.get_model("ftp", "FTPServer")
@@ -560,6 +557,8 @@ class Charger(Ownable):
 
         node = node or self.manager_node or Node.get_local()
         if not node:
+            return None
+        if not self._ftp_reports_feature_enabled(node=node):
             return None
 
         server, created = FTPServer.objects.get_or_create(
@@ -577,11 +576,10 @@ class Charger(Ownable):
     def sync_report_ftp_server(self, *, node: Node | None = None):
         """Keep the linked FTP server aligned with the manager node."""
 
-        if not self._ftp_reports_feature_enabled():
-            return None
-
         node = node or self.manager_node or Node.get_local()
         if not node:
+            return None
+        if not self._ftp_reports_feature_enabled(node=node):
             return None
 
         if self.ftp_server and self.ftp_server.node_id == node.pk:

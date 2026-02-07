@@ -977,42 +977,64 @@ class ChargerAdmin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
                 messages.WARNING,
             )
             return
-        if not feature.is_enabled_for_node():
+        local_node = Node.get_local()
+        chargers = list(queryset.select_related("manager_node"))
+        if not chargers:
             self.message_user(
                 request,
-                _("Suite feature %(slug)s is disabled; FTP linking skipped.")
-                % {"slug": Charger.FTP_REPORTS_FEATURE_SLUG},
-                messages.WARNING,
+                _("No chargers were selected for FTP configuration."),
+                messages.INFO,
             )
             return
 
-        local_node = Node.get_local()
-        if not local_node:
+        try:
+            FTPServer = apps.get_model("ftp", "FTPServer")
+        except LookupError:
             self.message_user(
                 request,
-                _("Local node is not registered; FTP linking skipped."),
-                messages.WARNING,
+                _("FTP application is not installed; cannot configure FTP servers."),
+                messages.ERROR,
             )
             return
+
+        by_node: dict[int, list[Charger]] = {}
+        skipped_missing_node = 0
+        for charger in chargers:
+            node = charger.manager_node or local_node
+            if not node:
+                skipped_missing_node += 1
+                continue
+            by_node.setdefault(node.pk, []).append(charger)
 
         configured = 0
-        for charger in queryset:
-            server = charger.ensure_report_ftp_server(node=local_node)
-            if not server:
+        skipped_feature = 0
+        for chargers_for_node in by_node.values():
+            node = chargers_for_node[0].manager_node or local_node
+            if not node:
+                skipped_missing_node += len(chargers_for_node)
                 continue
-            location = charger.build_report_ftp_location(
-                server=server, node=local_node
+            if not feature.is_enabled_for_node(node):
+                skipped_feature += len(chargers_for_node)
+                continue
+
+            server, created = FTPServer.objects.get_or_create(
+                node=node,
+                defaults={"enabled": True},
             )
-            updates = {}
-            if charger.ftp_server_id != server.pk:
-                updates["ftp_server"] = server
+            if not created and not server.enabled:
+                FTPServer.objects.filter(pk=server.pk).update(enabled=True)
+                server.enabled = True
+
+            location = chargers_for_node[0].build_report_ftp_location(
+                server=server,
+                node=node,
+            )
+            updates = {"ftp_server": server}
             if location:
                 updates["diagnostics_location"] = location
-            if updates:
-                Charger.objects.filter(pk=charger.pk).update(**updates)
-                for key, value in updates.items():
-                    setattr(charger, key, value)
-            configured += 1
+            configured += Charger.objects.filter(
+                pk__in=[charger.pk for charger in chargers_for_node]
+            ).update(**updates)
 
         if configured:
             self.message_user(
@@ -1028,7 +1050,29 @@ class ChargerAdmin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
         else:
             self.message_user(
                 request,
-                _("No FTP servers were configured."),
+                _("No FTP servers were configured for the selected chargers."),
+                messages.WARNING,
+            )
+        if skipped_feature:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d charger because the FTP suite feature is disabled for its node.",
+                    "Skipped %(count)d chargers because the FTP suite feature is disabled for their nodes.",
+                    skipped_feature,
+                )
+                % {"count": skipped_feature},
+                messages.WARNING,
+            )
+        if skipped_missing_node:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d charger because no node is available for FTP configuration.",
+                    "Skipped %(count)d chargers because no node is available for FTP configuration.",
+                    skipped_missing_node,
+                )
+                % {"count": skipped_missing_node},
                 messages.WARNING,
             )
 
