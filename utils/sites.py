@@ -3,6 +3,7 @@ from typing import Optional
 from django.contrib.sites.models import Site
 from django.contrib.sites.shortcuts import get_current_site
 from django.db import DatabaseError
+from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 
 
@@ -15,7 +16,11 @@ def get_site(request) -> Optional[Site]:
     do not accidentally treat a placeholder object as a fully-populated model.
     """
 
-    host, _ = split_domain_port(request.get_host())
+    try:
+        host = request.get_host()
+    except DisallowedHost:
+        host = request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME", "")
+    host, _ = split_domain_port(host)
     if host:
         try:
             return Site.objects.filter(domain__iexact=host).first()
