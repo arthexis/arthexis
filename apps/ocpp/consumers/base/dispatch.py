@@ -122,7 +122,7 @@ class DispatchMixin:
         )
 
     async def _handle_call_result(
-        self, message_id: str, payload: dict | None, raw: str
+        self, message_id: str, payload: dict | None, raw: str | None = None
     ) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
@@ -145,7 +145,7 @@ class DispatchMixin:
             log_key,
         )
         forward_reply = getattr(self, "_forward_charge_point_reply", None)
-        if callable(forward_reply):
+        if callable(forward_reply) and raw is not None:
             await forward_reply(message_id, raw)
         if handled:
             return
