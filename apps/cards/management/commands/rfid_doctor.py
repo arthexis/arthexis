@@ -1,11 +1,14 @@
 import json
 import sys
 import time
+from select import select
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.cards import rfid_service
 from apps.cards.background_reader import is_configured, lock_file_path
+from apps.cards.detect import detect_scanner
 from apps.cards.models import RFIDAttempt
 
 
@@ -21,7 +24,10 @@ class Command(BaseCommand):
             "--timeout",
             type=float,
             default=self.DEFAULT_SCAN_TIMEOUT,
-            help="Scan timeout in seconds (default: %(default)s)",
+            help=(
+                "Scan timeout in seconds when running non-interactively "
+                "(default: %(default)s)"
+            ),
         )
         parser.add_argument(
             "--scan",
@@ -66,6 +72,7 @@ class Command(BaseCommand):
         configured = is_configured()
         config_status = "configured" if configured else "not configured"
         self.stdout.write(f"RFID reader configuration: {config_status}")
+        self._report_device_status(configured)
 
         ping = rfid_service.request_service("ping", timeout=0.5)
         if ping:
@@ -125,9 +132,12 @@ class Command(BaseCommand):
         self.stdout.write(json.dumps(payload, indent=2, sort_keys=True))
 
     def _run_scan(self, timeout, *, show_raw=False):
+        interactive = sys.stdin.isatty()
         self.stdout.write(
             "Hold an RFID card near the reader, then wait for the scan result..."
         )
+        if interactive:
+            self.stdout.write("Press any key to stop scanning.")
         start = time.monotonic()
         latest_id = (
             RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
@@ -136,7 +146,10 @@ class Command(BaseCommand):
             .first()
         )
         attempt = None
-        while time.monotonic() - start < timeout:
+        while True:
+            if interactive and self._user_requested_stop():
+                self.stdout.write(self.style.WARNING("Scan cancelled by user."))
+                return
             attempt = (
                 RFIDAttempt.objects.filter(
                     source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0
@@ -145,6 +158,8 @@ class Command(BaseCommand):
                 .first()
             )
             if attempt:
+                break
+            if not interactive and time.monotonic() - start >= timeout:
                 break
             time.sleep(0.2)
         if not attempt:
@@ -162,3 +177,71 @@ class Command(BaseCommand):
         payload = self._format_payload(payload, show_raw=show_raw)
         self.stdout.write(self.style.SUCCESS("Scan response:"))
         self.stdout.write(json.dumps(payload, indent=2, sort_keys=True))
+
+    def _user_requested_stop(self) -> bool:
+        try:
+            ready, _, _ = select([sys.stdin], [], [], 0)
+        except Exception:
+            return False
+        if ready:
+            sys.stdin.read(1)
+            return True
+        return False
+
+    def _report_device_status(self, configured: bool) -> None:
+        detection = detect_scanner()
+        if detection.get("detected"):
+            irq_pin = detection.get("irq_pin")
+            assumed = detection.get("assumed")
+            status = "detected" if not assumed else "assumed active"
+            details = []
+            if irq_pin is not None:
+                details.append(f"IRQ pin {irq_pin}")
+            reason = detection.get("reason")
+            if reason:
+                details.append(f"reason: {reason}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            if assumed:
+                self.stdout.write(
+                    self.style.WARNING(f"RFID device status: {status}{suffix}")
+                )
+            else:
+                self.stdout.write(
+                    self.style.SUCCESS(f"RFID device status: {status}{suffix}")
+                )
+        else:
+            reason = detection.get("reason") or "unknown"
+            self.stdout.write(
+                self.style.WARNING(
+                    f"RFID device status: not detected (reason: {reason})"
+                )
+            )
+        lockfile = detection.get("lockfile")
+        if lockfile:
+            self.stdout.write(f"Scanner lockfile: {lockfile}")
+
+        if configured and detection.get("detected"):
+            return
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Troubleshooting checklist"))
+        hints = []
+        if not configured:
+            hints.append(
+                "Ensure the RFID reader lock file exists (./.locks/rfid.lck) or enable auto-detect."
+            )
+        if not detection.get("detected"):
+            hints.extend(
+                [
+                    "Confirm SPI is enabled and /dev/spidev* is present.",
+                    "Verify the MFRC522 and GPIO libraries are installed and accessible.",
+                    "Check wiring (3.3V, GND, SDA, SCK, MOSI, MISO, IRQ).",
+                ]
+            )
+        hints.append(
+            "Start the RFID service in debug mode to collect logs: ./command.sh rfid-service --debug"
+        )
+        hints.append(
+            f"Review RFID logs in {settings.LOG_DIR}/rfid.log for detailed errors."
+        )
+        for hint in hints:
+            self.stdout.write(f"- {hint}")

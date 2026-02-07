@@ -86,3 +86,14 @@ class CPForwarderFileHandler(ActiveAppFileHandler):
         if "test" in sys.argv:
             return log_dir / "tests-cp_forwarder.log"
         return log_dir / "cp_forwarder.log"
+
+
+class RFIDFileHandler(ActiveAppFileHandler):
+    """File handler dedicated to capturing RFID service output."""
+
+    def _current_file(self) -> Path:
+        log_dir = Path(settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if "test" in sys.argv:
+            return log_dir / "tests-rfid.log"
+        return log_dir / "rfid.log"
