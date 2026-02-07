@@ -20,7 +20,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--timeout",
             type=float,
-            default=DEFAULT_SCAN_TIMEOUT,
+            default=self.DEFAULT_SCAN_TIMEOUT,
             help="Scan timeout in seconds (default: %(default)s)",
         )
         parser.add_argument(
