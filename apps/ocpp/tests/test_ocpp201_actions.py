@@ -1,9 +1,9 @@
+import importlib
 import json
 
 import pytest
 
 from apps.ocpp import store
-import apps.ocpp.store.logs as store_logs
 from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.models import (
     Charger,
@@ -16,6 +16,8 @@ from apps.ocpp.views import actions
 from apps.ocpp.views.actions import charging_profiles
 from apps.ocpp.views.common import ActionContext, ActionCall
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+store_logs = importlib.import_module("apps.ocpp.store.logs")
 
 
 class DummyWebSocket:

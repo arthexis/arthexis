@@ -1,7 +1,7 @@
-import json
 from datetime import datetime, timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
+import importlib
 import json
 
 import anyio
@@ -10,7 +10,6 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.ocpp import store, call_error_handlers, call_result_handlers
-import apps.ocpp.store.logs as store_logs
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
 from apps.flows.models import Transition
@@ -43,6 +42,8 @@ from apps.ocpp.models import (
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 from apps.maps.models import Location
 from django.utils.dateparse import parse_datetime
+
+store_logs = importlib.import_module("apps.ocpp.store.logs")
 
 
 @pytest.fixture
@@ -95,11 +96,6 @@ def reset_store(monkeypatch, tmp_path):
     store.transaction_events.clear()
     store.monitoring_reports.clear()
     store.charging_profile_reports.clear()
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
 
 
 def _reset_pending_calls() -> None:

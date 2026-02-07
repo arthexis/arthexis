@@ -356,6 +356,12 @@ def find_transaction_requests(
             candidates.update(
                 _transaction_requests_by_connector.get(connector_key, set())
             )
+        if not transaction_key and not connector_key:
+            candidates.update(
+                message_id
+                for message_id, entry in transaction_requests.items()
+                if entry.get("charger_id") == charger_id
+            )
         results: list[tuple[str, dict[str, object]]] = []
         for message_id in candidates:
             entry = transaction_requests.get(message_id)
@@ -422,38 +428,38 @@ def forward_cost_update_to_billing(update: dict[str, object]) -> None:
 
 
 __all__ = [
-    "transaction_requests",
+    "_add_transaction_index_entry",
+    "_normalize_transaction_id",
+    "_remove_transaction_index_entry",
+    "_transaction_connector_key",
     "_transaction_requests_by_connector",
     "_transaction_requests_by_transaction",
     "_transaction_requests_lock",
     "billing_updates",
+    "charging_profile_reports",
+    "clear_display_message_compliance",
+    "connector_release_notifications",
+    "consume_reported_charging_profiles",
+    "display_message_compliance",
     "ev_charging_needs",
     "ev_charging_schedules",
-    "planner_notifications",
-    "observability_events",
-    "transaction_events",
-    "connector_release_notifications",
+    "find_transaction_requests",
+    "forward_connector_release",
+    "forward_cost_update_to_billing",
+    "forward_ev_charging_schedule",
+    "forward_event_to_observability",
+    "mark_transaction_requests",
     "monitoring_reports",
-    "display_message_compliance",
-    "charging_profile_reports",
-    "_normalize_transaction_id",
-    "_transaction_connector_key",
-    "_remove_transaction_index_entry",
-    "_add_transaction_index_entry",
-    "register_transaction_request",
+    "observability_events",
+    "planner_notifications",
     "record_display_message_compliance",
-    "clear_display_message_compliance",
-    "record_reported_charging_profile",
-    "consume_reported_charging_profiles",
     "record_ev_charging_needs",
     "record_ev_charging_schedule",
     "record_monitoring_report",
-    "forward_ev_charging_schedule",
-    "forward_event_to_observability",
+    "record_reported_charging_profile",
     "record_transaction_event",
-    "forward_connector_release",
+    "register_transaction_request",
+    "transaction_events",
+    "transaction_requests",
     "update_transaction_request",
-    "find_transaction_requests",
-    "mark_transaction_requests",
-    "forward_cost_update_to_billing",
 ]

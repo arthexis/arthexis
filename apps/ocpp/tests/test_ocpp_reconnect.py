@@ -1,6 +1,7 @@
 import asyncio
 import fnmatch
 from collections import defaultdict
+import importlib
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -10,9 +11,10 @@ from django.core.cache import cache
 from django.test.utils import override_settings
 
 from apps.ocpp import store
-import apps.ocpp.store.logs as store_logs
 import apps.ocpp.store.redis_state as redis_state
 from config.asgi import application
+
+store_logs = importlib.import_module("apps.ocpp.store.logs")
 
 pytestmark = pytest.mark.django_db(transaction=True)
 

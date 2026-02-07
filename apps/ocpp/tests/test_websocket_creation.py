@@ -1,6 +1,7 @@
 import asyncio
-import json
 import base64
+import importlib
+import json
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -17,7 +18,6 @@ from django.utils import timezone
 from apps.features.models import Feature
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.ocpp import store
-import apps.ocpp.store.logs as store_logs
 from apps.ocpp.consumers import (
     CSMSConsumer,
     OCPP_VERSION_16,
@@ -28,6 +28,8 @@ from apps.ocpp.models import Charger, Simulator
 from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
 from config.asgi import application
+
+store_logs = importlib.import_module("apps.ocpp.store.logs")
 
 pytestmark = pytest.mark.django_db(transaction=True)
 

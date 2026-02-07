@@ -220,6 +220,10 @@ def schedule_call_timeout(
     """Schedule a timeout notice if a pending call is not answered."""
 
     loop = _ensure_scheduler_loop()
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
 
     def _notify() -> None:
         target_log: str | None = None
@@ -245,18 +249,21 @@ def schedule_call_timeout(
         if target_log and entry_label:
             add_log(target_log, entry_label, log_type=log_type)
 
-    future: concurrent.futures.Future[asyncio.TimerHandle] = concurrent.futures.Future()
+    if running_loop is loop:
+        handle = loop.call_later(timeout, _notify)
+    else:
+        future: concurrent.futures.Future[asyncio.TimerHandle] = concurrent.futures.Future()
 
-    def _schedule_timer() -> None:
-        try:
-            handle = loop.call_later(timeout, _notify)
-        except Exception as exc:  # pragma: no cover - defensive
-            future.set_exception(exc)
-            return
-        future.set_result(handle)
+        def _schedule_timer() -> None:
+            try:
+                handle = loop.call_later(timeout, _notify)
+            except Exception as exc:  # pragma: no cover - defensive
+                future.set_exception(exc)
+                return
+            future.set_result(handle)
 
-    loop.call_soon_threadsafe(_schedule_timer)
-    handle = future.result()
+        loop.call_soon_threadsafe(_schedule_timer)
+        handle = future.result()
 
     with _pending_call_lock:
         previous = _pending_call_handles.pop(message_id, None)
@@ -394,31 +401,31 @@ def restore_pending_calls(serial: str) -> list[str]:
 
 
 __all__ = [
-    "pending_calls",
-    "_pending_call_events",
-    "_pending_call_results",
-    "_pending_call_lock",
-    "_pending_call_handles",
-    "triggered_followups",
-    "monitoring_report_requests",
+    "_clear_pending_redis",
+    "_load_pending_metadata_redis",
+    "_load_pending_result_redis",
     "_monitoring_report_lock",
+    "_pending_call_events",
+    "_pending_call_handles",
+    "_pending_call_lock",
+    "_pending_call_results",
     "_pending_metadata_key",
     "_pending_result_key",
     "_store_pending_metadata_redis",
-    "_load_pending_metadata_redis",
     "_store_pending_result_redis",
-    "_load_pending_result_redis",
-    "_clear_pending_redis",
-    "register_pending_call",
-    "register_monitoring_report_request",
+    "clear_pending_calls",
+    "consume_triggered_followup",
     "get_monitoring_report_request",
+    "monitoring_report_requests",
+    "pending_calls",
     "pop_monitoring_report_request",
     "pop_pending_call",
     "record_pending_call_result",
-    "wait_for_pending_call",
-    "schedule_call_timeout",
+    "register_monitoring_report_request",
+    "register_pending_call",
     "register_triggered_followup",
-    "consume_triggered_followup",
-    "clear_pending_calls",
     "restore_pending_calls",
+    "schedule_call_timeout",
+    "triggered_followups",
+    "wait_for_pending_call",
 ]

@@ -54,10 +54,12 @@ def _register_ip_connection_redis(ip: str, consumer: object) -> bool | None:
         pipe.expire(key, _IP_CONNECTION_TTL)
         pipe.scard(key)
         added, _expired, count = pipe.execute()
-        if count > MAX_CONNECTIONS_PER_IP and added:
-            client.srem(key, token)
-            return False
-        return count <= MAX_CONNECTIONS_PER_IP
+        if count > MAX_CONNECTIONS_PER_IP:
+            if added:
+                client.srem(key, token)
+                return False
+            return True
+        return True
     except RedisError:
         return None
 
@@ -108,15 +110,15 @@ def release_ip_connection(ip: str | None, consumer: object) -> None:
 
 
 __all__ = [
+    "_IP_CONNECTION_TTL",
+    "_PENDING_TTL",
     "_STATE_REDIS",
     "_STATE_REDIS_URL",
-    "_PENDING_TTL",
-    "_IP_CONNECTION_TTL",
-    "_state_redis",
     "_connection_token",
     "_redis_ip_key",
     "_register_ip_connection_redis",
     "_release_ip_connection_redis",
+    "_state_redis",
     "register_ip_connection",
     "release_ip_connection",
 ]
