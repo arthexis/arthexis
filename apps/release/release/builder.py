@@ -288,7 +288,7 @@ def build(
     from .uploader import upload_with_retries
 
     if all:
-        bump = dist = twine = git = tag = True
+        dist = twine = git = tag = True
 
     stashed = False
     if not _git_clean():
