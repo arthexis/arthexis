@@ -116,7 +116,8 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, object]]:
                     existing_unit["key"] = key
                 existing_unit["label"] = label or existing_unit["label"]
                 existing_unit["configured"] = configured
-                existing_unit["docs_url"] = docs_url
+                if docs_url:
+                    existing_unit["docs_url"] = docs_url
                 if pid_file and not existing_unit.get("pid_file"):
                     existing_unit["pid_file"] = pid_file
                 return

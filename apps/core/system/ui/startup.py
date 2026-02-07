@@ -27,7 +27,7 @@ def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
     timestamp_raw = parts[0] if parts else ""
     script = parts[1] if len(parts) > 1 else ""
     event = parts[2] if len(parts) > 2 else ""
-    detail = parts[3] if len(parts) > 3 else ""
+    detail = "\t".join(parts[3:]) if len(parts) > 3 else ""
 
     parsed_timestamp = None
     if timestamp_raw:
@@ -58,7 +58,7 @@ def _read_startup_report(
 ) -> dict[str, object]:
     """Read and parse the startup report log."""
 
-    normalized_limit = limit if limit is None or limit > 0 else None
+    normalized_limit = limit if limit is None or limit > 0 else 0
     log_path = _startup_report_log_path(base_dir)
     lines: deque[str] = deque(maxlen=normalized_limit)
 

@@ -13,7 +13,7 @@ def _format_timestamp(dt: datetime | None) -> str:
         return ""
     try:
         localized = timezone.localtime(dt)
-    except Exception:
+    except (ValueError, TypeError):
         localized = dt
     return date_format(localized, "DATETIME_FORMAT")
 

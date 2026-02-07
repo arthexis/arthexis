@@ -25,9 +25,11 @@ def _parse_runserver_port(command_line: str) -> int | None:
         match = pattern.search(command_line)
         if match:
             try:
-                return int(match.group(1))
+                port = int(match.group(1))
             except ValueError:
                 continue
+            if 1 <= port <= 65535:
+                return port
     return None
 
 
@@ -41,9 +43,7 @@ def _detect_runserver_process() -> tuple[bool, int | None]:
             text=True,
             check=False,
         )
-    except FileNotFoundError:
-        return False, None
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return False, None
 
     if result.returncode != 0:
@@ -104,8 +104,9 @@ def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[st
             capture_output=True,
             text=True,
             check=False,
+            timeout=2,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired):
         return {
             "status": str(_("Unknown")),
             "enabled": "",
@@ -124,9 +125,10 @@ def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[st
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=2,
             )
             enabled_state = (enabled_result.stdout or enabled_result.stderr).strip()
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired):
             enabled_state = ""
 
     return {
