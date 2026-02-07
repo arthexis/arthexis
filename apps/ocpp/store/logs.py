@@ -115,6 +115,7 @@ def _append_memory_log(cid: str, entry: str, *, log_type: str) -> str:
 
 def _write_log_file(cid: str, entry: str, *, log_type: str) -> None:
     path = _file_path(cid, log_type)
+    entry = entry.replace("\r", "\\r").replace("\n", "\\n")
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
 
