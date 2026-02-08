@@ -1,6 +1,8 @@
 from ..common_imports import *
 from django.core.exceptions import PermissionDenied
 
+from ..common import SimulatorDefaultAdminMixin
+
 from ...cpsim_service import (
     cpsim_service_enabled,
     get_cpsim_feature,
@@ -87,7 +89,12 @@ class LogViewAdminMixin:
 
 
 @admin.register(Simulator)
-class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin):
+class SimulatorAdmin(
+    SaveBeforeChangeAction,
+    LogViewAdminMixin,
+    SimulatorDefaultAdminMixin,
+    EntityModelAdmin,
+):
     change_list_template = "admin/ocpp/simulator/change_list.html"
     list_display = (
         "name",
@@ -290,30 +297,6 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def send_open_door(self, request, queryset):
         for obj in queryset:
             self._queue_door_open(request, obj)
-
-    @admin.action(description="Mark selected as default")
-    def mark_default(self, request, queryset):
-        selected = list(queryset.filter(is_deleted=False).order_by("pk"))
-        if not selected:
-            self.message_user(
-                request,
-                "No simulators were selected.",
-                level=messages.ERROR,
-            )
-            return
-        default_simulator = selected[0]
-        if len(selected) > 1:
-            self.message_user(
-                request,
-                f"Multiple simulators selected; {default_simulator.name} was set as default.",
-                level=messages.WARNING,
-            )
-        default_simulator.default = True
-        default_simulator.save(update_fields=["default"])
-        self.message_user(
-            request,
-            f"{default_simulator.name} marked as default.",
-        )
 
     def _start_simulators(self, request, queryset):
         for obj in queryset:
