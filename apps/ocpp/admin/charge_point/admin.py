@@ -379,14 +379,18 @@ class ChargerAdmin(
                 return HttpResponseRedirect(change_url)
             raise
 
+    @staticmethod
+    def _round_kw(value: float) -> float:
+        return round(value, 2)
+
     def total_kw_display(self, obj):
-        return round(obj.total_kw, 2)
+        return self._round_kw(obj.total_kw)
 
     total_kw_display.short_description = "Total kW"
 
     def today_kw(self, obj):
         start, end = self._today_range()
-        return round(obj.total_kw_for_range(start, end), 2)
+        return self._round_kw(obj.total_kw_for_range(start, end))
 
     today_kw.short_description = "Today kW"
 
@@ -452,8 +456,8 @@ class ChargerAdmin(
                 if availability_state.casefold() == "operative":
                     available_count += 1
 
-        stats["total_kw"] = round(stats["total_kw"], 2)
-        stats["today_kw"] = round(stats["today_kw"], 2)
+        stats["total_kw"] = self._round_kw(stats["total_kw"])
+        stats["today_kw"] = self._round_kw(stats["today_kw"])
         if cost_available:
             stats["estimated_cost"] = estimated_cost.quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP

@@ -1651,17 +1651,35 @@ class ChargerAdminActionsMixin:
         base = base[: max_length - len(suffix)] if len(base) + len(suffix) > max_length else base
         return f"{base}{suffix}"
 
-    def _unique_simulator_name(self, base: str) -> str:
-        base = (base or "Simulator").strip()
-        max_length = Simulator._meta.get_field("name").max_length
+    def _unique_with_suffix(
+        self,
+        base: str,
+        *,
+        default: str,
+        max_length: int,
+        exists,
+        suffix_format: str,
+    ) -> str:
+        base = (base or default).strip()
+        max_length = max(max_length, 1)
         base = base[:max_length]
-        candidate = base or "Simulator"
+        candidate = base or default
         counter = 2
-        while Simulator.objects.filter(name=candidate).exists():
-            suffix = f" ({counter})"
-            candidate = self._trim_with_suffix(base or "Simulator", suffix, max_length=max_length)
+        while exists(candidate):
+            suffix = suffix_format.format(counter=counter)
+            candidate = self._trim_with_suffix(base or default, suffix, max_length=max_length)
             counter += 1
         return candidate
+
+    def _unique_simulator_name(self, base: str) -> str:
+        max_length = Simulator._meta.get_field("name").max_length
+        return self._unique_with_suffix(
+            base,
+            default="Simulator",
+            max_length=max_length,
+            exists=lambda candidate: Simulator.objects.filter(name=candidate).exists(),
+            suffix_format=" ({counter})",
+        )
 
     def _simulator_cp_path_base(self, charger: Charger) -> str:
         path = (charger.last_path or "").strip().strip("/")
@@ -1675,14 +1693,13 @@ class ChargerAdminActionsMixin:
     def _unique_simulator_cp_path(self, base: str) -> str:
         base = (base or "SIMULATOR").strip().strip("/")
         max_length = Simulator._meta.get_field("cp_path").max_length
-        base = base[:max_length]
-        candidate = base or "SIMULATOR"
-        counter = 2
-        while Simulator.objects.filter(cp_path__iexact=candidate).exists():
-            suffix = f"-sim{counter}"
-            candidate = self._trim_with_suffix(base or "SIMULATOR", suffix, max_length=max_length)
-            counter += 1
-        return candidate
+        return self._unique_with_suffix(
+            base,
+            default="SIMULATOR",
+            max_length=max_length,
+            exists=lambda candidate: Simulator.objects.filter(cp_path__iexact=candidate).exists(),
+            suffix_format="-sim{counter}",
+        )
 
     def _simulator_configuration(self, charger: Charger) -> ChargerConfiguration | None:
         if charger.configuration_id:
