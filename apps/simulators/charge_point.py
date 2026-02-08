@@ -13,6 +13,7 @@ from config.offline import requires_network
 
 from apps.ocpp import store
 from apps.ocpp.utils import resolve_ws_scheme
+from apps.simulators.network import validate_simulator_endpoint
 
 
 class UnsupportedMessageError(RuntimeError):
@@ -27,6 +28,7 @@ class SimulatorConfig:
     ws_port: Optional[int] = 8000
     ws_scheme: Optional[str] = None
     use_tls: Optional[bool] = None
+    allow_private_network: bool = False
     rfid: str = "FFFFFFFF"
     vin: str = ""
     # WebSocket path for the charge point. Defaults to just the charger ID at the root.
@@ -425,6 +427,12 @@ class ChargePointSimulator:
         if fallback_scheme != scheme:
             candidate_schemes.append(fallback_scheme)
 
+        validate_simulator_endpoint(
+            cfg.host,
+            cfg.ws_port,
+            allow_private_network=cfg.allow_private_network,
+        )
+
         def _build_uri(ws_scheme: str) -> str:
             if cfg.ws_port:
                 return f"{ws_scheme}://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
@@ -480,7 +488,7 @@ class ChargePointSimulator:
                                 "Subprotocol connection attempts failed without a specific error."
                             )
                         raise last_error
-                except Exception as exc:
+                except Exception:
                     try:
                         ws = await websockets.connect(uri, **connect_kwargs)
                     except Exception as inner_exc:
@@ -527,7 +535,7 @@ class ChargePointSimulator:
                 while True:
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=60)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         self.status = "stopped"
                         self._stop_event.set()
                         store.add_log(
@@ -763,7 +771,7 @@ class ChargePointSimulator:
             self.status = "error"
             self._stop_event.set()
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             abnormal_disconnect = True
             if not self._connected.is_set():
                 self._connect_error = "Timeout waiting for response"
