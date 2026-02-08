@@ -13,6 +13,7 @@ import logging
 import os
 from pathlib import Path
 import re
+from threading import RLock
 from typing import Iterable, Iterator
 
 from django.utils import timezone
@@ -37,6 +38,7 @@ SESSION_DIR = LOG_DIR / "sessions"
 LOCK_DIR = BASE_DIR / ".locks"
 SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
+_logs_lock = RLock()
 
 SESSION_LOG_BUFFER_LIMIT = 16
 logger = logging.getLogger(__name__)
@@ -70,14 +72,15 @@ def _safe_name(name: str) -> str:
 def register_log_name(cid: str, name: str, log_type: str = "charger") -> None:
     """Register a friendly name for the id used in log files."""
 
-    names = log_names[log_type]
-    # Ensure lookups are case-insensitive by overwriting any existing entry
-    # that matches the provided cid regardless of case.
-    for key in list(names.keys()):
-        if key.lower() == cid.lower():
-            cid = key
-            break
-    names[cid] = name
+    with _logs_lock:
+        names = log_names[log_type]
+        # Ensure lookups are case-insensitive by overwriting any existing entry
+        # that matches the provided cid regardless of case.
+        for key in list(names.keys()):
+            if key.lower() == cid.lower():
+                cid = key
+                break
+        names[cid] = name
 
 
 def _charger_log_basename(cid: str) -> str:
@@ -105,25 +108,26 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
 
 
 def _append_memory_log(cid: str, entry: str, *, log_type: str) -> str:
-    store = logs[log_type]
-    # Store log entries under the cid as provided but allow retrieval using
-    # any casing by recording entries in a case-insensitive manner.
-    buffer = None
-    lower = cid.lower()
-    key = cid
-    for existing_key, entries in store.items():
-        if existing_key.lower() == lower:
-            key = existing_key
-            buffer = entries
-            break
-    if buffer is None:
-        buffer = deque(maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
-        store[key] = buffer
-    elif buffer.maxlen != MAX_IN_MEMORY_LOG_ENTRIES:
-        buffer = deque(buffer, maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
-        store[key] = buffer
-    buffer.append(entry)
-    return key
+    with _logs_lock:
+        store = logs[log_type]
+        # Store log entries under the cid as provided but allow retrieval using
+        # any casing by recording entries in a case-insensitive manner.
+        buffer = None
+        lower = cid.lower()
+        key = cid
+        for existing_key, entries in store.items():
+            if existing_key.lower() == lower:
+                key = existing_key
+                buffer = entries
+                break
+        if buffer is None:
+            buffer = deque(maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
+            store[key] = buffer
+        elif buffer.maxlen != MAX_IN_MEMORY_LOG_ENTRIES:
+            buffer = deque(buffer, maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
+            store[key] = buffer
+        buffer.append(entry)
+        return key
 
 
 def _write_log_file(cid: str, entry: str, *, log_type: str) -> None:
@@ -146,7 +150,8 @@ def _session_folder(cid: str) -> Path:
 def start_session_log(cid: str, tx_id: int) -> None:
     """Begin logging a session for the given charger and transaction id."""
 
-    existing = history.pop(cid, None)
+    with _logs_lock:
+        existing = history.pop(cid, None)
     if existing:
         try:
             _finalize_session(existing)
@@ -164,13 +169,14 @@ def start_session_log(cid: str, tx_id: int) -> None:
     date = start.strftime("%Y%m%d")
     filename = f"{date}_{tx_id}.json"
     path = folder / filename
-    history[cid] = {
-        "transaction": tx_id,
-        "start": start,
-        "path": path,
-        "buffer": [],
-        "first": True,
-    }
+    with _logs_lock:
+        history[cid] = {
+            "transaction": tx_id,
+            "start": start,
+            "path": path,
+            "buffer": [],
+            "first": True,
+        }
     with path.open("w", encoding="utf-8") as handle:
         handle.write("[")
 
@@ -178,28 +184,30 @@ def start_session_log(cid: str, tx_id: int) -> None:
 def add_session_message(cid: str, message: str) -> None:
     """Record a raw message for the current session if one is active."""
 
-    sess = history.get(cid)
-    if not sess:
-        return
-    buffer: list[str] = sess.setdefault("buffer", [])
-    payload = json.dumps(
-        {
-            "timestamp": datetime.now(dt_timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z"),
-            "message": message,
-        },
-        ensure_ascii=False,
-    )
-    buffer.append(payload)
-    if len(buffer) >= SESSION_LOG_BUFFER_LIMIT:
-        _flush_session_buffer(sess)
+    with _logs_lock:
+        sess = history.get(cid)
+        if not sess:
+            return
+        buffer: list[str] = sess.setdefault("buffer", [])
+        payload = json.dumps(
+            {
+                "timestamp": datetime.now(dt_timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "message": message,
+            },
+            ensure_ascii=False,
+        )
+        buffer.append(payload)
+        if len(buffer) >= SESSION_LOG_BUFFER_LIMIT:
+            _flush_session_buffer(sess)
 
 
 def end_session_log(cid: str) -> None:
     """Write any recorded session log to disk for the given charger."""
 
-    sess = history.pop(cid, None)
+    with _logs_lock:
+        sess = history.pop(cid, None)
     if not sess:
         return
     _finalize_session(sess)
@@ -521,9 +529,9 @@ def iter_log_entries(
             resolved, name = _resolve_log_identifier(key, log_type)
             sources.append((resolved, name))
 
-    heap: list[tuple[float, int, LogEntry, Iterator[LogEntry]]] = []
+    heap: list[tuple[float, int, str, LogEntry, Iterator[LogEntry]]] = []
     counter = itertools.count()
-    seen_entries: set[str] = set()
+    seen_entries: set[tuple[str, str]] = set()
     total_yielded = 0
 
     for resolved, name in sources:
@@ -543,15 +551,16 @@ def iter_log_entries(
             (
                 -entry.timestamp.timestamp(),
                 next(counter),
+                resolved,
                 entry,
                 iterator,
             ),
         )
 
     while heap:
-        _, _, entry, iterator = heapq.heappop(heap)
-        if entry.text not in seen_entries:
-            seen_entries.add(entry.text)
+        _, _, source_key, entry, iterator = heapq.heappop(heap)
+        if (source_key, entry.text) not in seen_entries:
+            seen_entries.add((source_key, entry.text))
             if since is not None and entry.timestamp < since:
                 return
             yield entry
@@ -567,6 +576,7 @@ def iter_log_entries(
             (
                 -next_entry.timestamp.timestamp(),
                 next(counter),
+                source_key,
                 next_entry,
                 iterator,
             ),
@@ -628,22 +638,23 @@ def resolve_log_path(identifier: str, *, log_type: str = "charger") -> Path | No
 
 def clear_log(cid: str, log_type: str = "charger") -> None:
     """Remove any stored logs for the given id and type."""
-    for key in _log_key_candidates(cid, log_type):
-        store_map = logs[log_type]
-        resolved = next(
-            (k for k in list(store_map.keys()) if k.lower() == key.lower()),
-            key,
-        )
-        store_map.pop(resolved, None)
-        path = _file_path(resolved, log_type)
-        if not path.exists():
-            target = f"{log_type}.{_safe_name(log_names[log_type].get(resolved, resolved)).lower()}"
-            for file in LOG_DIR.glob(f"{log_type}.*.log"):
-                if file.stem.lower() == target:
-                    path = file
-                    break
-        if path.exists():
-            path.unlink()
+    with _logs_lock:
+        for key in _log_key_candidates(cid, log_type):
+            store_map = logs[log_type]
+            resolved = next(
+                (k for k in list(store_map.keys()) if k.lower() == key.lower()),
+                key,
+            )
+            store_map.pop(resolved, None)
+            path = _file_path(resolved, log_type)
+            if not path.exists():
+                target = f"{log_type}.{_safe_name(log_names[log_type].get(resolved, resolved)).lower()}"
+                for file in LOG_DIR.glob(f"{log_type}.*.log"):
+                    if file.stem.lower() == target:
+                        path = file
+                        break
+            if path.exists():
+                path.unlink()
 
 
 __all__ = [
