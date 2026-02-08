@@ -107,8 +107,8 @@ class Command(BaseCommand):
                 )
             )
 
-    def _resolve_service_name(self, base_dir: Path) -> str | None:
-        service_file = base_dir / ".locks" / "service.lck"
+    def _resolve_service_name(self, lock_dir: Path) -> str | None:
+        service_file = lock_dir / "service.lck"
         if service_file.exists():
             return service_file.read_text(encoding="utf-8").strip() or None
         return None
