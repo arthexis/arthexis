@@ -28,16 +28,19 @@ def _lockfile_status() -> Tuple[bool, Path | None]:
     """Return whether a scanner lock file exists and its path when available."""
 
     try:
-        from .background_reader import lock_file_active
+        from .background_reader import lock_file_path
     except Exception:  # pragma: no cover - import edge cases
         return False, None
 
     try:
-        active, lock = lock_file_active()
+        lock = lock_file_path()
     except Exception:  # pragma: no cover - settings misconfiguration
         return False, None
 
-    return active, lock
+    if not lock.exists():
+        return False, None
+
+    return True, lock
 
 
 def _assume_detected(reason: str | None, lock: Path | None) -> Dict[str, Any]:
@@ -60,11 +63,12 @@ def detect_scanner() -> Dict[str, Any]:
 
     has_lock, lock_path = _lockfile_status()
 
+    if has_lock:
+        return _assume_detected("lock file present", lock_path)
+
     try:
         from .irq_wiring_check import check_irq_pin
     except Exception as exc:  # pragma: no cover - unexpected import error
-        if has_lock:
-            return _assume_detected(str(exc), lock_path)
         return {"detected": False, "reason": str(exc)}
 
     result = check_irq_pin()
