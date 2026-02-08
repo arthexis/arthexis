@@ -62,14 +62,11 @@ Cmnd_Alias ARTHEXIS_NGINX = \
     /bin/ln, \
     /bin/rm, \
     /bin/cp, \
-    /bin/sh, \
-    /bin/systemctl, \
-    /usr/bin/systemctl, \
-    /usr/sbin/nginx, \
-    /usr/local/sbin/nginx, \
-    /sbin/nginx
-
-$service_user ALL=(root) NOPASSWD: ARTHEXIS_NGINX
+    /bin/systemctl reload nginx, /bin/systemctl start nginx, \
+    /usr/bin/systemctl reload nginx, /usr/bin/systemctl start nginx, \
+    /usr/sbin/nginx -t, \
+    /usr/local/sbin/nginx -t, \
+    /sbin/nginx -t
 SUDOERS_EOF
 chmod 0440 "$sudoers_file"
 
