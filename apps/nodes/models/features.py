@@ -26,7 +26,7 @@ from apps.video import has_rpi_camera_stack
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking
-    from .node_core import Node
+    from .core.node import Node
 
 
 logger = logging.getLogger(__name__)
