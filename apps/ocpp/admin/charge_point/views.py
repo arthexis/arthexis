@@ -129,7 +129,10 @@ class ChargerAdminViewsMixin:
             charger.location_id for charger in chargers if charger.location_id
         }
         if len(existing_locations) == 1:
-            location_obj = chargers[0].location
+            location_obj = next(
+                (charger.location for charger in chargers if charger.location),
+                None,
+            )
             if location_obj:
                 initial["location"] = location_obj
                 initial["location_name"] = location_obj.name
