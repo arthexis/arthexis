@@ -946,7 +946,7 @@ def _start_simulator(
     state.phase = "Starting"
     state.params = filtered_params
     state.params.pop("daemon", None)
-    state.params.setdefault("allow_private_network", True)
+    state.params.setdefault("allow_private_network", False)
     state.running = True
     state.start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     state.stop_time = None
