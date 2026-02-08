@@ -11,6 +11,7 @@ from apps.sites import context_processors
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 def test_nav_links_handles_missing_modules_table(monkeypatch):
     request = RequestFactory().get("/admin/")
 
@@ -41,6 +42,7 @@ def test_nav_links_handles_missing_modules_table(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 def test_nav_links_hides_modules_with_disabled_features(monkeypatch):
     request = RequestFactory().get("/apps/")
 

@@ -1,7 +1,10 @@
 import importlib
 import sys
 
+import pytest
 
+
+@pytest.mark.integration
 def test_arthexis_lazy_app_import() -> None:
     target_module = "apps.flows"
     submodule = "apps.flows.node_workflow"

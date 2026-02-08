@@ -6,6 +6,8 @@ from apps.links.models import Reference
 from apps.links.templatetags.ref_tags import _get_current_module, build_footer_context
 from apps.modules.models import Module
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.django_db
 def test_get_current_module_prefers_request_attribute():

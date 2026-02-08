@@ -7,6 +7,7 @@ from django.http import Http404
 from apps.docs import assets
 
 
+@pytest.mark.integration
 def test_strip_http_subresources_removes_http_sources():
     html = (
         '<script src="http://example.com/app.js"></script>'

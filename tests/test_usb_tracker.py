@@ -61,6 +61,7 @@ def test_scan_usb_trackers_triggers_recipe(tmp_path, monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 def test_ensure_usb_tracker_poll_task_uses_configured_interval(tmp_path: Path):
     from django_celery_beat.models import IntervalSchedule, PeriodicTask
 

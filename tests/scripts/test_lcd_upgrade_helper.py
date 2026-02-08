@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 
 def _load_helper_module():
     helper_path = (
@@ -18,6 +19,7 @@ def _load_helper_module():
     return module
 
 
+@pytest.mark.integration
 def test_init_lcd_resets_after_init(monkeypatch):
     module = _load_helper_module()
 
