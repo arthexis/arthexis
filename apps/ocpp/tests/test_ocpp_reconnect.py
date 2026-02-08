@@ -117,19 +117,21 @@ def clear_store_state():
     store._pending_call_handles.clear()
     store.triggered_followups.clear()
     store.monitoring_report_requests.clear()
-    store._STATE_REDIS = None
-    store._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
+    store.configure_redis_for_testing(
+        redis_client=None,
+        redis_url=getattr(settings, "OCPP_STATE_REDIS_URL", ""),
+    )
 
 
 @pytest.fixture()
 def fake_state_redis(monkeypatch):
     fake = FakeRedis()
-    monkeypatch.setattr(store, "_STATE_REDIS", fake)
-    monkeypatch.setattr(store, "_STATE_REDIS_URL", "redis://test")
-    monkeypatch.setattr(store, "_state_redis", lambda: fake)
+    store.configure_redis_for_testing(redis_client=fake, redis_url="redis://test")
     yield fake
-    store._STATE_REDIS = None
-    store._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
+    store.configure_redis_for_testing(
+        redis_client=None,
+        redis_url=getattr(settings, "OCPP_STATE_REDIS_URL", ""),
+    )
 
 
 @pytest.fixture()

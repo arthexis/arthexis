@@ -620,27 +620,6 @@ def clear_log(cid: str, log_type: str = "charger") -> None:
             path.unlink()
 
 
-def reassign_identity(old_key: str, new_key: str) -> str:
-    """Move any stored data from ``old_key`` to ``new_key``."""
-
-    if old_key == new_key:
-        return new_key
-    if not old_key:
-        return new_key
-    for mapping in (state.connections, state.transactions, history):
-        if old_key in mapping:
-            mapping[new_key] = mapping.pop(old_key)
-    for log_type in logs:
-        store_map = logs[log_type]
-        if old_key in store_map:
-            store_map[new_key] = store_map.pop(old_key)
-    for log_type in log_names:
-        names = log_names[log_type]
-        if old_key in names:
-            names[new_key] = names.pop(old_key)
-    return new_key
-
-
 __all__ = [
     "BASE_DIR",
     "LOCK_DIR",
@@ -650,21 +629,6 @@ __all__ = [
     "SESSION_DIR",
     "SESSION_LOCK",
     "SESSION_LOG_BUFFER_LIMIT",
-    "_append_memory_log",
-    "_charger_log_basename",
-    "_file_path",
-    "_finalize_session",
-    "_flush_session_buffer",
-    "_iter_file_lines_reverse",
-    "_iter_log_entries_for_key",
-    "_log_file_for_identifier",
-    "_log_key_candidates",
-    "_memory_logs_for_identifier",
-    "_parse_log_timestamp",
-    "_resolve_log_identifier",
-    "_safe_name",
-    "_session_folder",
-    "_touch_lock",
     "add_log",
     "add_session_message",
     "append_log_capture",
@@ -677,7 +641,6 @@ __all__ = [
     "iter_log_entries",
     "log_names",
     "logs",
-    "reassign_identity",
     "register_log_name",
     "resolve_log_path",
     "start_log_capture",

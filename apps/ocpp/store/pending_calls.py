@@ -393,19 +393,6 @@ def restore_pending_calls(serial: str) -> list[str]:
 
 
 __all__ = [
-    "_PENDING_TTL",
-    "_clear_pending_redis",
-    "_load_pending_metadata_redis",
-    "_load_pending_result_redis",
-    "_monitoring_report_lock",
-    "_pending_call_events",
-    "_pending_call_handles",
-    "_pending_call_lock",
-    "_pending_call_results",
-    "_pending_metadata_key",
-    "_pending_result_key",
-    "_store_pending_metadata_redis",
-    "_store_pending_result_redis",
     "clear_pending_calls",
     "consume_triggered_followup",
     "get_monitoring_report_request",

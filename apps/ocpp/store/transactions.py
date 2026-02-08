@@ -202,13 +202,6 @@ def mark_transaction_requests(
 
 
 __all__ = [
-    "_add_transaction_index_entry",
-    "_normalize_transaction_id",
-    "_remove_transaction_index_entry",
-    "_transaction_connector_key",
-    "_transaction_requests_by_connector",
-    "_transaction_requests_by_transaction",
-    "_transaction_requests_lock",
     "find_transaction_requests",
     "mark_transaction_requests",
     "register_transaction_request",
