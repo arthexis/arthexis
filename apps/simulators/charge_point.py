@@ -427,11 +427,19 @@ class ChargePointSimulator:
         if fallback_scheme != scheme:
             candidate_schemes.append(fallback_scheme)
 
-        validate_simulator_endpoint(
-            cfg.host,
-            cfg.ws_port,
-            allow_private_network=cfg.allow_private_network,
-        )
+        try:
+            validate_simulator_endpoint(
+                cfg.host,
+                cfg.ws_port,
+                allow_private_network=cfg.allow_private_network,
+            )
+        except ValueError as exc:
+            if not self._connected.is_set():
+                self._connect_error = str(exc)
+                self._connected.set()
+            self.status = "error"
+            self._stop_event.set()
+            return
 
         def _build_uri(ws_scheme: str) -> str:
             if cfg.ws_port:
