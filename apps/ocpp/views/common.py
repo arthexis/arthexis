@@ -63,7 +63,7 @@ from ..models import (
     Simulator,
     annotate_transaction_energy_bounds,
 )
-from ..evcs import (
+from apps.simulators.evcs import (
     _start_simulator,
     _stop_simulator,
     get_simulator_state,

@@ -1,8 +1,8 @@
 import pytest
 from django.urls import reverse
 
-from apps.ocpp import evcs
-from apps.ocpp.evcs import _start_simulator, get_simulator_state
+from apps.simulators import evcs
+from apps.simulators.evcs import _start_simulator, get_simulator_state
 from apps.ocpp.views import simulator as simulator_view
 
 
