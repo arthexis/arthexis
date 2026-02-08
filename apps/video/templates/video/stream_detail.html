@@ -27,6 +27,7 @@
         class="ratio ratio-16x9 bg-dark rounded shadow-sm d-flex align-items-center justify-content-center overflow-hidden"
         data-stream-ws-path="{{ stream_ws_path }}"
         data-stream-webrtc-ws-path="{{ stream_webrtc_ws_path }}"
+        data-stream-url="{{ stream_url }}"
       >
         <video
           class="w-100 h-100 object-fit-cover"
@@ -57,6 +58,7 @@
     }
     const wsPath = container.dataset.streamWsPath;
     const webrtcPath = container.dataset.streamWebrtcWsPath;
+    const streamUrl = container.dataset.streamUrl;
     const video = container.querySelector("video");
     const image = container.querySelector("img");
     const iceServers = (() => {
@@ -96,7 +98,19 @@
     let websocketStarted = false;
     let websocketReconnectDelay = 1000;
     const maxWebsocketReconnectDelay = 30000;
+    let mjpegFallbackStarted = false;
+    const startMjpegStream = () => {
+      if (mjpegFallbackStarted || !streamUrl || !image) {
+        return;
+      }
+      mjpegFallbackStarted = true;
+      image.src = `${streamUrl}?ts=${Date.now()}`;
+      showImage();
+    };
     const startWebsocketStream = () => {
+      if (mjpegFallbackStarted) {
+        return;
+      }
       if (websocketStarted) {
         return;
       }
@@ -116,11 +130,13 @@
       const scheduleReconnect = () => {
         cleanup();
         websocketStarted = false;
-        setTimeout(startWebsocketStream, websocketReconnectDelay);
-        websocketReconnectDelay = Math.min(
-          websocketReconnectDelay * 2,
-          maxWebsocketReconnectDelay
-        );
+        if (!mjpegFallbackStarted) {
+          setTimeout(startWebsocketStream, websocketReconnectDelay);
+          websocketReconnectDelay = Math.min(
+            websocketReconnectDelay * 2,
+            maxWebsocketReconnectDelay
+          );
+        }
       };
       ws.addEventListener("message", (event) => {
         const blob = new Blob([event.data], { type: "image/jpeg" });
@@ -138,6 +154,7 @@
       ws.addEventListener("close", scheduleReconnect);
       ws.addEventListener("error", (event) => {
         console.error("WebSocket error:", event);
+        startMjpegStream();
         ws.close();
       });
     };
