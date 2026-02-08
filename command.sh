@@ -51,36 +51,57 @@ shift
 
 CACHE_DIR="$BASE_DIR/.cache"
 CACHE_TTL_SECONDS="${ARTHEXIS_COMMAND_CACHE_TTL:-30}"
+if ! [[ "$CACHE_TTL_SECONDS" =~ ^[0-9]+$ ]]; then
+  CACHE_TTL_SECONDS=30
+fi
 CACHE_KEY="${celery_flag#--}"
 CACHE_KEY="${CACHE_KEY//-/_}"
 CACHE_FILE="$CACHE_DIR/command_list_${CACHE_KEY}.txt"
 
-COMMAND_LIST="$(
-  if [ -f "$CACHE_FILE" ]; then
-    now="$(date +%s)"
-    cache_mtime="$(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)"
-    cache_age="$((now - cache_mtime))"
-    if [ "$cache_age" -lt "$CACHE_TTL_SECONDS" ]; then
-      cat "$CACHE_FILE"
-      exit 0
+use_cache=false
+if [ -f "$CACHE_FILE" ]; then
+  now="$(date +%s)"
+  cache_mtime="$(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)"
+  cache_age="$((now - cache_mtime))"
+  if [ "$cache_age" -lt "$CACHE_TTL_SECONDS" ]; then
+    use_cache=true
+  fi
+fi
+
+if [ "$use_cache" = "true" ]; then
+  COMMAND_LIST="$(cat "$CACHE_FILE")"
+else
+  mkdir -p "$CACHE_DIR" 2>/dev/null || true
+  cache_tmp=""
+  if cache_tmp="$(mktemp "${CACHE_FILE}.XXXXXX" 2>/dev/null)"; then
+    if python manage.py help --commands "$celery_flag" \
+      | tr '\t' ' ' \
+      | tr ' ' '\n' \
+      | sed '/^$/d' \
+      | grep -v '^\[.*]' \
+      > "$cache_tmp"; then
+      if mv "$cache_tmp" "$CACHE_FILE" 2>/dev/null; then
+        COMMAND_LIST="$(cat "$CACHE_FILE")"
+      else
+        COMMAND_LIST="$(cat "$cache_tmp")"
+        rm -f "$cache_tmp"
+      fi
+    else
+      rm -f "$cache_tmp"
+      exit 1
+    fi
+  else
+    if ! COMMAND_LIST="$(
+      python manage.py help --commands "$celery_flag" \
+        | tr '\t' ' ' \
+        | tr ' ' '\n' \
+        | sed '/^$/d' \
+        | grep -v '^\[.*]'
+    )"; then
+      exit 1
     fi
   fi
-
-  mkdir -p "$CACHE_DIR"
-  cache_tmp="$(mktemp "${CACHE_FILE}.XXXXXX")"
-  if python manage.py help --commands "$celery_flag" \
-    | tr '\t' ' ' \
-    | tr ' ' '\n' \
-    | sed '/^$/d' \
-    | grep -v '^\[.*]' \
-    > "$cache_tmp"; then
-    mv "$cache_tmp" "$CACHE_FILE"
-    cat "$CACHE_FILE"
-  else
-    rm -f "$cache_tmp"
-    exit 1
-  fi
-)"
+fi
 
 if ! printf '%s\n' "$COMMAND_LIST" | awk -v cmd="$COMMAND" '($0 == cmd) { found = 1 } END { exit (found ? 0 : 1) }'; then
   MATCHES_PREFIX="$(
