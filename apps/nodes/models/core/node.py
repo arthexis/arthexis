@@ -1307,9 +1307,13 @@ class NetMessage(Entity):
             },
         )
         if not created:
-            msg.subject = subject
-            msg.body = body
-            update_fields = ["subject", "body"]
+            update_fields = []
+            if msg.subject != subject:
+                msg.subject = subject
+                update_fields.append("subject")
+            if msg.body != body:
+                msg.body = body
+                update_fields.append("body")
             if reach_role and msg.reach_id != reach_role.id:
                 msg.reach = reach_role
                 update_fields.append("reach")
