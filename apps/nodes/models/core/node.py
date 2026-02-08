@@ -623,6 +623,11 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             )
             priv_path.write_bytes(private_bytes)
             pub_path.write_bytes(public_bytes)
+            try:
+                priv_path.chmod(0o600)
+                pub_path.chmod(0o644)
+            except OSError:
+                logger.warning("Unable to set key permissions for %s", self)
             public_text = public_bytes.decode()
             if self.public_key != public_text:
                 self.public_key = public_text
@@ -630,7 +635,6 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         elif not self.public_key:
             self.public_key = pub_path.read_text()
             self.save(update_fields=["public_key"])
-
     def get_private_key(self):
         """Return the private key for this node if available."""
 
