@@ -19,6 +19,7 @@ def stream_detail(request, slug):
         "stream": stream,
         "stream_ws_path": stream.get_stream_ws_path(),
         "stream_webrtc_ws_path": stream.get_webrtc_ws_path(),
+        "stream_url": stream.get_stream_url(),
         "webrtc_ice_servers": settings.VIDEO_WEBRTC_ICE_SERVERS,
     }
     return render(request, "video/stream_detail.html", context)
