@@ -208,6 +208,7 @@ def _run_test_group(
         "pytest",
         "-m",
         marker,
+        "--color=yes",
         f"--durations={PYTEST_DURATIONS_COUNT}",
         f"--durations-min={PYTEST_DURATIONS_MIN_SECONDS}",
     ]
