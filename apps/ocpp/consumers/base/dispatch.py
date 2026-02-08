@@ -2,8 +2,7 @@ import base64
 import json
 
 from ... import store
-from ...call_error_handlers import dispatch_call_error
-from ...call_result_handlers import dispatch_call_result
+from ...call_handlers import dispatch_call_error, dispatch_call_result
 from ...models import Charger
 
 
