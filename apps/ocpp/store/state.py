@@ -20,24 +20,7 @@ _STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
 _IP_CONNECTION_TTL = 3600
 
 def _state_redis() -> Redis | None:
-    global _STATE_REDIS, _STATE_REDIS_URL
-    store_module = None
-    try:
-        import sys
-
-        store_module = sys.modules.get("apps.ocpp.store")
-    except Exception:  # pragma: no cover - defensive
-        store_module = None
-
-    if store_module is not None:
-        override = getattr(store_module, "_state_redis", None)
-        if override is not None and override is not _state_redis:
-            return override()
-        if hasattr(store_module, "_STATE_REDIS"):
-            _STATE_REDIS = getattr(store_module, "_STATE_REDIS")
-        if hasattr(store_module, "_STATE_REDIS_URL"):
-            _STATE_REDIS_URL = getattr(store_module, "_STATE_REDIS_URL")
-
+    global _STATE_REDIS
     if not _STATE_REDIS_URL:
         return None
     if _STATE_REDIS is None:
