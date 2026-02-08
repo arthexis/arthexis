@@ -9,6 +9,7 @@ from datetime import datetime, timezone as dt_timezone
 import heapq
 import itertools
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -38,6 +39,7 @@ SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
 
 SESSION_LOG_BUFFER_LIMIT = 16
+logger = logging.getLogger(__name__)
 
 
 def ensure_log_dirs_exist() -> None:
@@ -149,9 +151,13 @@ def start_session_log(cid: str, tx_id: int) -> None:
         try:
             _finalize_session(existing)
         except Exception:
+            logger.warning(
+                "Failed to finalize previous session for %s",
+                cid,
+                exc_info=True,
+            )
             # If finalizing the previous session fails we still want to reset
             # the session metadata so the new session can proceed.
-            pass
 
     start = datetime.now(dt_timezone.utc)
     folder = _session_folder(cid)
@@ -335,7 +341,12 @@ def _resolve_log_identifier(cid: str, log_type: str) -> tuple[str, str | None]:
                         name = ch.name
                         names[cid] = name
             except Exception:  # pragma: no cover - best effort lookup
-                pass
+                logger.debug(
+                    "Failed to resolve log identifier %s for %s",
+                    cid,
+                    log_type,
+                    exc_info=True,
+                )
     return cid, name
 
 
