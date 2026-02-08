@@ -258,10 +258,10 @@ class Command(BaseCommand):
                 continue
             renewed += 1
 
+        if renewed:
+            self.stdout.write(self.style.SUCCESS(f"Renewed {renewed} certificate(s)."))
+
         if errors:
             raise CommandError("Certificate renewal failed:\n" + "\n".join(errors))
-
-        if renewed:
-            self.stdout.write(self.style.SUCCESS(f"Renewed {renewed} due certificate(s)."))
-        else:
+        if not renewed:
             self.stdout.write("No certificates were due for renewal.")

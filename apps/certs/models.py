@@ -64,9 +64,15 @@ class CertificateBase(Certificate):
     def update_expiration_date(self, *, sudo: str = "sudo") -> datetime | None:
         """Read expiration from disk and persist it to the database."""
         if not self.certificate_path:
+            if self.expiration_date is not None:
+                self.expiration_date = None
+                self.save(update_fields=["expiration_date", "updated_at"])
             return None
         certificate_path = Path(self.certificate_path)
         if not certificate_path.exists():
+            if self.expiration_date is not None:
+                self.expiration_date = None
+                self.save(update_fields=["expiration_date", "updated_at"])
             return None
         expiration = services.get_certificate_expiration(
             certificate_path=certificate_path,
@@ -88,11 +94,10 @@ class CertificateBase(Certificate):
         message = self._specific_certificate.provision(sudo=sudo)
         try:
             self.update_expiration_date(sudo=sudo)
-        except RuntimeError as exc:
-            logger.warning(
-                "Renewed certificate %s but failed to refresh expiration: %s",
+        except RuntimeError:
+            logger.exception(
+                "Failed to refresh expiration_date after renewal for certificate %s",
                 self.pk,
-                exc,
             )
         return message
 
