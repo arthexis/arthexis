@@ -5,7 +5,9 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.certs.models import CertbotCertificate, SelfSignedCertificate
+from django.utils import timezone
+
+from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.certs.services import CertificateVerificationResult
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
@@ -26,6 +28,11 @@ class Command(BaseCommand):
             "--disable",
             action="store_true",
             help="Disable HTTPS and apply nginx configuration.",
+        )
+        action_group.add_argument(
+            "--renew",
+            action="store_true",
+            help="Renew all due HTTPS certificates.",
         )
 
         cert_group = parser.add_mutually_exclusive_group()
@@ -54,12 +61,13 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         enable = options["enable"]
         disable = options["disable"]
+        renew = options["renew"]
         certbot_domain = options["certbot"]
         use_local = options["local"] or not certbot_domain
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
 
-        if not enable and not disable:
+        if not enable and not disable and not renew:
             if options["local"] or certbot_domain:
                 raise CommandError("Use --enable or --disable with certificate options.")
             self._render_report(sudo=sudo)
@@ -69,6 +77,10 @@ class Command(BaseCommand):
 
         if disable:
             self._disable_https(domain, reload=reload)
+            return
+
+        if renew:
+            self._renew_due_certificates(sudo=sudo)
             return
 
         certificate = self._enable_https(
@@ -222,3 +234,34 @@ class Command(BaseCommand):
         status = "valid" if result.ok else "invalid"
         summary = result.summary
         return f"Certificate status: {status}. {summary}"
+
+    def _renew_due_certificates(self, *, sudo: str) -> None:
+        now = timezone.now()
+        due_certificates = CertificateBase.objects.filter(
+            expiration_date__lte=now
+        ).select_related("certbotcertificate", "selfsignedcertificate")
+
+        if not due_certificates.exists():
+            if CertificateBase.objects.filter(expiration_date__isnull=False).exists():
+                self.stdout.write("No certificates were due for renewal.")
+            else:
+                self.stdout.write("No certificates are tracked for renewal.")
+            return
+
+        renewed = 0
+        errors: list[str] = []
+        for certificate in due_certificates:
+            try:
+                certificate.renew(sudo=sudo)
+            except Exception as exc:
+                errors.append(f"{certificate}: {exc}")
+                continue
+            renewed += 1
+
+        if renewed:
+            self.stdout.write(self.style.SUCCESS(f"Renewed {renewed} certificate(s)."))
+
+        if errors:
+            raise CommandError("Certificate renewal failed:\n" + "\n".join(errors))
+        if not renewed:
+            self.stdout.write("No certificates were due for renewal.")

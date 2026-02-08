@@ -29,8 +29,7 @@ def _invalidate_user_story_dashboard_rule_on_save(
 ) -> None:
     # Invalidate if a new story is created, if all fields are saved (update_fields is None),
     # or if one of the relevant fields for the rule has been updated.
-    if created or not update_fields or {"status", "assign_to", "owner"}.intersection(
-        update_fields
-    ):
+    relevant_fields = {"status", "assign_to", "owner", "is_deleted"}
+    if created or not update_fields or relevant_fields.intersection(update_fields):
         DashboardRule = django_apps.get_model("counters", "DashboardRule")
         DashboardRule.invalidate_model_cache(sender)

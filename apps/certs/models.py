@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from datetime import datetime
 from pathlib import Path
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -9,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.certs import services
 
+logger = logging.getLogger(__name__)
 
 class Certificate(models.Model):
     """Abstract base class for certificates."""
@@ -38,6 +41,9 @@ class Certificate(models.Model):
 
 
 class CertificateBase(Certificate):
+    expiration_date = models.DateTimeField(null=True, blank=True)
+    auto_renew = models.BooleanField(default=True)
+
     class Meta:
         verbose_name = _("Certificate")
         verbose_name_plural = _("Certificates")
@@ -54,6 +60,46 @@ class CertificateBase(Certificate):
             return certificate.generate(sudo=sudo)
 
         raise TypeError(f"Unsupported certificate type: {type(self).__name__}")
+
+    def update_expiration_date(self, *, sudo: str = "sudo") -> datetime | None:
+        """Read expiration from disk and persist it to the database."""
+        if not self.certificate_path:
+            if self.expiration_date is not None:
+                self.expiration_date = None
+                self.save(update_fields=["expiration_date", "updated_at"])
+            return None
+        certificate_path = Path(self.certificate_path)
+        if not certificate_path.exists():
+            if self.expiration_date is not None:
+                self.expiration_date = None
+                self.save(update_fields=["expiration_date", "updated_at"])
+            return None
+        expiration = services.get_certificate_expiration(
+            certificate_path=certificate_path,
+            sudo=sudo,
+        )
+        self.expiration_date = expiration
+        self.save(update_fields=["expiration_date", "updated_at"])
+        return expiration
+
+    def is_due_for_renewal(self, *, now: datetime | None = None) -> bool:
+        """Return True when the stored expiration is in the past."""
+        if not self.expiration_date:
+            return False
+        current_time = now or timezone.now()
+        return self.expiration_date <= current_time
+
+    def renew(self, *, sudo: str = "sudo") -> str:
+        """Renew the certificate and refresh its expiration date."""
+        message = self._specific_certificate.provision(sudo=sudo)
+        try:
+            self.update_expiration_date(sudo=sudo)
+        except RuntimeError:
+            logger.exception(
+                "Failed to refresh expiration_date after renewal for certificate %s",
+                self.pk,
+            )
+        return message
 
     def verify(self, *, sudo: str = "sudo") -> services.CertificateVerificationResult:
         """Verify certificate validity and filesystem alignment."""
@@ -101,12 +147,20 @@ class CertbotCertificate(CertificateBase):
             certificate_key_path=self.certificate_key_file,
             sudo=sudo,
         )
+        try:
+            self.expiration_date = services.get_certificate_expiration(
+                certificate_path=self.certificate_file,
+                sudo=sudo,
+            )
+        except RuntimeError:
+            self.expiration_date = None
         self.last_requested_at = timezone.now()
         self.last_message = message
         self.save(
             update_fields=[
                 "certificate_path",
                 "certificate_key_path",
+                "expiration_date",
                 "last_requested_at",
                 "last_message",
                 "updated_at",
@@ -141,10 +195,18 @@ class SelfSignedCertificate(CertificateBase):
             subject_alt_names=subject_alt_names,
             sudo=sudo,
         )
+        try:
+            self.expiration_date = services.get_certificate_expiration(
+                certificate_path=self.certificate_file,
+                sudo=sudo,
+            )
+        except RuntimeError:
+            self.expiration_date = None
         self.last_generated_at = timezone.now()
         self.last_message = message
         self.save(
             update_fields=[
+                "expiration_date",
                 "last_generated_at",
                 "last_message",
                 "updated_at",
