@@ -85,3 +85,31 @@ class LogViewAdminMixin:
             "log_limit": log_limit,
         }
         return TemplateResponse(request, self.log_template_name, context)
+
+
+class SimulatorDefaultAdminMixin:
+    """Mixin to mark a simulator as default from admin actions."""
+
+    @admin.action(description="Mark selected as default")
+    def mark_default(self, request, queryset):
+        selected = list(queryset.filter(is_deleted=False).order_by("pk")[:2])
+        if not selected:
+            self.message_user(
+                request,
+                "No non-deleted simulators were selected.",
+                level=messages.ERROR,
+            )
+            return
+        default_simulator = selected[0]
+        if len(selected) > 1:
+            self.message_user(
+                request,
+                f"Multiple simulators selected; {default_simulator.name} was set as default.",
+                level=messages.WARNING,
+            )
+        default_simulator.default = True
+        default_simulator.save(update_fields=["default"])
+        self.message_user(
+            request,
+            f"{default_simulator.name} marked as default.",
+        )
