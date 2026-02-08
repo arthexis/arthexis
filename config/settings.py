@@ -925,4 +925,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.content.tasks.run_scheduled_web_samplers",
         "schedule": timedelta(minutes=30),
     },
+    "certificate_expiration_refresh": {
+        "task": "apps.certs.tasks.refresh_certificate_expirations",
+        "schedule": crontab(minute=0, hour=2),
+    },
 }
