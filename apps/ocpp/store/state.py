@@ -19,6 +19,22 @@ _STATE_REDIS: Redis | None = None
 _STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
 _IP_CONNECTION_TTL = 3600
 
+
+_UNSET = object()
+
+
+def configure_redis_for_testing(
+    *, redis_client: Redis | None | object = _UNSET, redis_url: str | object = _UNSET
+) -> None:
+    """Override cached Redis state for tests."""
+
+    global _STATE_REDIS, _STATE_REDIS_URL
+    if redis_client is not _UNSET:
+        _STATE_REDIS = redis_client
+    if redis_url is not _UNSET:
+        _STATE_REDIS_URL = redis_url
+
+
 def _state_redis() -> Redis | None:
     global _STATE_REDIS
     if not _STATE_REDIS_URL:
@@ -466,18 +482,10 @@ __all__ = [
     "IDENTITY_SEPARATOR",
     "MAX_CONNECTIONS_PER_IP",
     "PENDING_SLUG",
-    "_IP_CONNECTION_TTL",
-    "_STATE_REDIS",
-    "_STATE_REDIS_URL",
-    "_candidate_keys",
-    "_connection_token",
-    "_redis_ip_key",
-    "_register_ip_connection_redis",
-    "_release_ip_connection_redis",
-    "_state_redis",
     "billing_updates",
     "charging_profile_reports",
     "clear_display_message_compliance",
+    "configure_redis_for_testing",
     "connector_release_notifications",
     "connector_slug",
     "connections",
