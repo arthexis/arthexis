@@ -13,7 +13,7 @@ for module in _modules:
 __all__ = [name for module in _modules for name in getattr(module, "__all__", [])]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     for module in _modules:
         if hasattr(module, name):
             return getattr(module, name)
