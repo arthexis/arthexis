@@ -461,11 +461,11 @@ def _iter_log_entries_for_key(
         timestamp = _parse_log_timestamp(entry)
         if timestamp is None:
             continue
+        if since is not None and timestamp < since:
+            return
         seen_for_key.add(entry)
         yield LogEntry(timestamp=timestamp, text=entry)
         yielded += 1
-        if since is not None and timestamp < since:
-            return
         if limit is not None and yielded >= limit:
             return
 
@@ -481,11 +481,11 @@ def _iter_log_entries_for_key(
         timestamp = _parse_log_timestamp(entry)
         if timestamp is None:
             continue
+        if since is not None and timestamp < since:
+            return
         seen_for_key.add(entry)
         yield LogEntry(timestamp=timestamp, text=entry)
         yielded += 1
-        if since is not None and timestamp < since:
-            return
         if limit is not None and yielded >= limit:
             return
 
@@ -552,11 +552,11 @@ def iter_log_entries(
         _, _, entry, iterator = heapq.heappop(heap)
         if entry.text not in seen_entries:
             seen_entries.add(entry.text)
+            if since is not None and entry.timestamp < since:
+                return
             yield entry
             total_yielded += 1
             if limit is not None and total_yielded >= limit:
-                return
-            if since is not None and entry.timestamp < since:
                 return
         try:
             next_entry = next(iterator)
