@@ -54,36 +54,51 @@ if ! id "$service_user" >/dev/null 2>&1; then
 fi
 
 sudoers_file="/etc/sudoers.d/arthexis-nginx"
-cat <<SUDOERS_EOF > "$sudoers_file"
+sudoers_tmp="$(mktemp)"
+cat <<SUDOERS_EOF > "$sudoers_tmp"
 # Allow Arthexis ($service_user) to manage nginx without sudo prompts.
 Defaults:$service_user !requiretty
 Cmnd_Alias ARTHEXIS_NGINX = \
-    /bin/mkdir, \
-    /bin/ln, \
-    /bin/rm, \
-    /bin/cp, \
-    /bin/systemctl reload nginx, /bin/systemctl start nginx, \
-    /usr/bin/systemctl reload nginx, /usr/bin/systemctl start nginx, \
+    /bin/systemctl reload nginx, /bin/systemctl restart nginx, \
+    /bin/systemctl start nginx, /bin/systemctl stop nginx, \
+    /bin/systemctl status nginx, \
+    /usr/bin/systemctl reload nginx, /usr/bin/systemctl restart nginx, \
+    /usr/bin/systemctl start nginx, /usr/bin/systemctl stop nginx, \
+    /usr/bin/systemctl status nginx, \
     /usr/sbin/nginx -t, \
     /usr/local/sbin/nginx -t, \
     /sbin/nginx -t
+$service_user ALL=(root) NOPASSWD: ARTHEXIS_NGINX
 SUDOERS_EOF
-chmod 0440 "$sudoers_file"
 
 if command -v visudo >/dev/null 2>&1; then
-  visudo -cf "$sudoers_file"
+  if ! visudo -cf "$sudoers_tmp"; then
+    rm -f "$sudoers_tmp"
+    echo "Sudoers syntax validation failed." >&2
+    exit 1
+  fi
+else
+  rm -f "$sudoers_tmp"
+  echo "visudo is required to validate sudoers entries." >&2
+  exit 1
 fi
+
+mv "$sudoers_tmp" "$sudoers_file"
+chmod 0440 "$sudoers_file"
 
 nginx_paths=(
   /etc/nginx
   /etc/nginx/sites-available
   /etc/nginx/sites-enabled
   /etc/nginx/conf.d
-  /etc/letsencrypt
-  /etc/letsencrypt/live
   /etc/letsencrypt/options-ssl-nginx.conf
   /etc/letsencrypt/ssl-dhparams.pem
 )
+
+# For Let's Encrypt live certs, prefer group-based access rather than broad ACLs.
+if getent group ssl-cert >/dev/null 2>&1; then
+  usermod -aG ssl-cert "$service_user"
+fi
 
 if command -v setfacl >/dev/null 2>&1; then
   for path in "${nginx_paths[@]}"; do
@@ -96,10 +111,11 @@ if command -v setfacl >/dev/null 2>&1; then
     fi
   done
 else
-  echo "Warning: setfacl not available; falling back to chmod for read access." >&2
+  echo "Warning: setfacl not available; falling back to group permissions for access." >&2
   for path in "${nginx_paths[@]}"; do
     if [ -e "$path" ]; then
-      chmod -R o+rX "$path"
+      chgrp -R "$service_user" "$path"
+      chmod -R g+rwX "$path"
     fi
   done
 fi
