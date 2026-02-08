@@ -8,7 +8,7 @@ from typing import Callable
 from django.utils import timezone
 from django.utils.translation import gettext, gettext_lazy as _, ngettext
 
-from apps.ocpp.models import Charger, ChargerConfiguration, CPFirmware
+from apps.ocpp.models import Charger, ChargerConfiguration, CPFirmware, Simulator
 from apps.nodes.models import Node
 from apps.nginx.models import SiteConfiguration
 from apps.sites.models import UserStory
@@ -248,6 +248,15 @@ def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
         return rule_failure(message)
 
     return rule_success()
+
+
+def evaluate_cp_simulator_default_rules() -> dict[str, object] | None:
+    """Warn when no CP simulator is marked as default."""
+
+    if Simulator.objects.filter(default=True, is_deleted=False).exists():
+        return rule_success()
+
+    return rule_failure(_("No default CP simulator."))
 
 
 def load_callable(handler_name: str) -> Callable[[], dict[str, object]] | None:
