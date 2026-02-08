@@ -161,6 +161,8 @@ def find_transaction_requests(
             candidates.update(
                 _transaction_requests_by_connector.get(connector_key, set())
             )
+        if connector_id is None and transaction_key is None:
+            candidates.update(transaction_requests.keys())
         results: list[tuple[str, dict[str, object]]] = []
         for message_id in candidates:
             entry = transaction_requests.get(message_id)
@@ -217,6 +219,8 @@ def mark_transaction_requests(
             candidates.update(
                 _transaction_requests_by_connector.get(connector_key, set())
             )
+        if connector_id is None and transaction_key is None:
+            candidates.update(transaction_requests.keys())
         for message_id in candidates:
             entry = transaction_requests.get(message_id)
             if not entry:
