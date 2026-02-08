@@ -134,7 +134,7 @@ class Simulator(Entity):
             repeat=self.repeat,
             username=self.username or None,
             password=self.password or None,
-            allow_private_network=True,
+            allow_private_network=False,
             configuration_keys=configuration_keys,
             configuration_unknown_keys=configuration_unknown_keys,
         )
