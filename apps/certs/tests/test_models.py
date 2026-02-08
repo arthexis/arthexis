@@ -23,12 +23,15 @@ def test_certbot_certificate_request_updates_state(monkeypatch):
         return "requested"
 
     monkeypatch.setattr(services, "request_certbot_certificate", fake_request_certbot_certificate)
+    expiration = now + timezone.timedelta(days=90)
+    monkeypatch.setattr(services, "get_certificate_expiration", lambda **kwargs: expiration)
 
     message = certificate.request(sudo="")
 
     certificate.refresh_from_db()
     assert message == "requested"
     assert certificate.last_requested_at == now
+    assert certificate.expiration_date == expiration
     assert certificate.certificate_path.endswith("fullchain.pem")
     assert certificate.certificate_key_path.endswith("privkey.pem")
     assert captured["domain"] == "example.com"
@@ -55,11 +58,14 @@ def test_self_signed_certificate_generate_updates_state(monkeypatch):
         return "generated"
 
     monkeypatch.setattr(services, "generate_self_signed_certificate", fake_generate_self_signed_certificate)
+    expiration = later + timezone.timedelta(days=30)
+    monkeypatch.setattr(services, "get_certificate_expiration", lambda **kwargs: expiration)
 
     message = certificate.generate(sudo="")
 
     certificate.refresh_from_db()
     assert message == "generated"
+    assert certificate.expiration_date == expiration
     assert certificate.last_generated_at == later
     assert captured["domain"] == "demo.example.com"
     assert captured["days_valid"] == 30

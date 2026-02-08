@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.certs.models import CertbotCertificate, SelfSignedCertificate
@@ -26,6 +27,24 @@ class CertificateProvisioningMixin:
                 level = messages.SUCCESS if result.ok else messages.ERROR
                 self.message_user(request, f"{certificate}: {result.summary}", level)
 
+    @admin.action(description=_("Renew due certificates"))
+    def renew_due_certificates(self, request, queryset):
+        now = timezone.now()
+        renewed = 0
+        for certificate in queryset:
+            if not certificate.is_due_for_renewal(now=now):
+                continue
+            try:
+                message = certificate.renew()
+            except Exception as exc:  # pragma: no cover - admin plumbing
+                self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
+            else:
+                renewed += 1
+                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)
+
+        if not renewed:
+            self.message_user(request, _("No due certificates were renewed."), messages.INFO)
+
 
 @admin.register(CertbotCertificate)
 class CertbotCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
@@ -34,11 +53,18 @@ class CertbotCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
         "domain",
         "email",
         "certificate_path",
+        "expiration_date",
+        "auto_renew",
         "last_requested_at",
     )
     search_fields = ("name", "domain", "email")
     readonly_fields = ("last_requested_at", "last_message")
-    actions = ["generate_certificates", "request_certbot", "verify_certificates"]
+    actions = [
+        "generate_certificates",
+        "request_certbot",
+        "verify_certificates",
+        "renew_due_certificates",
+    ]
 
     @admin.action(description=_("Request or renew with certbot"))
     def request_certbot(self, request, queryset):
@@ -57,12 +83,19 @@ class SelfSignedCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin)
         "name",
         "domain",
         "certificate_path",
+        "expiration_date",
+        "auto_renew",
         "valid_days",
         "last_generated_at",
     )
     search_fields = ("name", "domain")
     readonly_fields = ("last_generated_at", "last_message")
-    actions = ["generate_certificates", "generate_self_signed", "verify_certificates"]
+    actions = [
+        "generate_certificates",
+        "generate_self_signed",
+        "verify_certificates",
+        "renew_due_certificates",
+    ]
 
     @admin.action(description=_("Generate self-signed certificate"))
     def generate_self_signed(self, request, queryset):

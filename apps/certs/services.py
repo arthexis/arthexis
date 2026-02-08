@@ -202,6 +202,17 @@ def _parse_cert_enddate(enddate_output: str) -> datetime:
     return parsed.replace(tzinfo=timezone.utc)
 
 
+def get_certificate_expiration(
+    *,
+    certificate_path: Path,
+    sudo: str = "sudo",
+) -> datetime:
+    enddate_output = _run_command(
+        _with_sudo(["openssl", "x509", "-noout", "-enddate", "-in", str(certificate_path)], sudo)
+    )
+    return _parse_cert_enddate(enddate_output)
+
+
 def verify_certificate(
     *,
     domain: str,
@@ -229,10 +240,7 @@ def verify_certificate(
 
     if certificate_path and certificate_path.exists():
         try:
-            enddate_output = _run_command(
-                _with_sudo(["openssl", "x509", "-noout", "-enddate", "-in", str(certificate_path)], sudo)
-            )
-            enddate = _parse_cert_enddate(enddate_output)
+            enddate = get_certificate_expiration(certificate_path=certificate_path, sudo=sudo)
             if enddate < datetime.now(tz=timezone.utc):
                 add_issue(f"Certificate expired on {enddate.isoformat()}.")
             else:
