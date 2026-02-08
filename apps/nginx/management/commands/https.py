@@ -5,7 +5,9 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.certs.models import CertbotCertificate, SelfSignedCertificate
+from django.utils import timezone
+
+from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.certs.services import CertificateVerificationResult
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
@@ -234,21 +236,21 @@ class Command(BaseCommand):
         return f"Certificate status: {status}. {summary}"
 
     def _renew_due_certificates(self, *, sudo: str) -> None:
-        due_certificates = []
-        for model in (CertbotCertificate, SelfSignedCertificate):
-            due_certificates.extend(
-                list(model.objects.filter(expiration_date__isnull=False))
-            )
+        now = timezone.now()
+        due_certificates = CertificateBase.objects.filter(
+            expiration_date__lte=now
+        ).select_related("certbotcertificate", "selfsignedcertificate")
 
-        if not due_certificates:
-            self.stdout.write("No certificates are tracked for renewal.")
+        if not due_certificates.exists():
+            if CertificateBase.objects.filter(expiration_date__isnull=False).exists():
+                self.stdout.write("No certificates were due for renewal.")
+            else:
+                self.stdout.write("No certificates are tracked for renewal.")
             return
 
         renewed = 0
         errors: list[str] = []
         for certificate in due_certificates:
-            if not certificate.is_due_for_renewal():
-                continue
             try:
                 certificate.renew(sudo=sudo)
             except Exception as exc:

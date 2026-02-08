@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -32,6 +34,8 @@ class CertificateProvisioningMixin:
         now = timezone.now()
         renewed = 0
         for certificate in queryset:
+            if not certificate.auto_renew:
+                continue
             if not certificate.is_due_for_renewal(now=now):
                 continue
             try:
@@ -59,7 +63,7 @@ class CertbotCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
     )
     search_fields = ("name", "domain", "email")
     readonly_fields = ("last_requested_at", "last_message")
-    actions = [
+    actions: ClassVar[list[str]] = [
         "generate_certificates",
         "request_certbot",
         "verify_certificates",
@@ -90,7 +94,7 @@ class SelfSignedCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin)
     )
     search_fields = ("name", "domain")
     readonly_fields = ("last_generated_at", "last_message")
-    actions = [
+    actions: ClassVar[list[str]] = [
         "generate_certificates",
         "generate_self_signed",
         "verify_certificates",

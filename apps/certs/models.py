@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.certs import services
 
+logger = logging.getLogger(__name__)
 
 class Certificate(models.Model):
     """Abstract base class for certificates."""
@@ -60,6 +62,7 @@ class CertificateBase(Certificate):
         raise TypeError(f"Unsupported certificate type: {type(self).__name__}")
 
     def update_expiration_date(self, *, sudo: str = "sudo") -> datetime | None:
+        """Read expiration from disk and persist it to the database."""
         if not self.certificate_path:
             return None
         certificate_path = Path(self.certificate_path)
@@ -74,19 +77,23 @@ class CertificateBase(Certificate):
         return expiration
 
     def is_due_for_renewal(self, *, now: datetime | None = None) -> bool:
+        """Return True when the stored expiration is in the past."""
         if not self.expiration_date:
             return False
         current_time = now or timezone.now()
         return self.expiration_date <= current_time
 
     def renew(self, *, sudo: str = "sudo") -> str:
+        """Renew the certificate and refresh its expiration date."""
         message = self._specific_certificate.provision(sudo=sudo)
         try:
             self.update_expiration_date(sudo=sudo)
-        except RuntimeError:
-            # TODO: Log this failure. The renewal may have succeeded, but updating
-            # the expiration date failed. The periodic task will fix this later.
-            pass
+        except RuntimeError as exc:
+            logger.warning(
+                "Renewed certificate %s but failed to refresh expiration: %s",
+                self.pk,
+                exc,
+            )
         return message
 
     def verify(self, *, sudo: str = "sudo") -> services.CertificateVerificationResult:

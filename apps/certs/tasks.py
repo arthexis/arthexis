@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task(name="apps.certs.tasks.refresh_certificate_expirations")
 def refresh_certificate_expirations() -> dict[str, int]:
+    """Refresh certificate expirations and auto-renew due certificates."""
     now = timezone.now()
     updated = 0
     renewed = 0
@@ -22,18 +23,18 @@ def refresh_certificate_expirations() -> dict[str, int]:
     )
 
     for certificate in certificates:
-        if certificate.expiration_date is None:
-            try:
-                expiration = certificate.update_expiration_date()
-            except RuntimeError as exc:
-                logger.warning(
-                    "Failed to refresh expiration for certificate %s: %s",
-                    certificate.pk,
-                    exc,
-                )
-                continue
-            if expiration is not None:
-                updated += 1
+        previous_expiration = certificate.expiration_date
+        try:
+            expiration = certificate.update_expiration_date()
+        except RuntimeError as exc:
+            logger.warning(
+                "Failed to refresh expiration for certificate %s: %s",
+                certificate.pk,
+                exc,
+            )
+            continue
+        if expiration != previous_expiration:
+            updated += 1
 
         if certificate.auto_renew and certificate.is_due_for_renewal(now=now):
             try:
