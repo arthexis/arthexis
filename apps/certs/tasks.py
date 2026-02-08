@@ -39,11 +39,10 @@ def refresh_certificate_expirations() -> dict[str, int]:
         if certificate.auto_renew and certificate.is_due_for_renewal(now=now):
             try:
                 certificate.renew()
-            except Exception as exc:  # pragma: no cover - defensive logging
+            except Exception:  # pragma: no cover - defensive logging
                 logger.exception(
-                    "Failed to auto-renew certificate %s: %s",
+                    "Failed to auto-renew certificate %s.",
                     certificate.pk,
-                    exc,
                 )
             else:
                 renewed += 1
