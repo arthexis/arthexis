@@ -28,19 +28,14 @@ def _lockfile_status() -> Tuple[bool, Path | None]:
     """Return whether a scanner lock file exists and its path when available."""
 
     try:
-        from .background_reader import lock_file_path
+        from .background_reader import lock_file_active
     except Exception:  # pragma: no cover - import edge cases
         return False, None
 
     try:
-        lock = lock_file_path()
+        return lock_file_active()
     except Exception:  # pragma: no cover - settings misconfiguration
         return False, None
-
-    if not lock.exists():
-        return False, None
-
-    return True, lock
 
 
 def _assume_detected(reason: str | None, lock: Path | None) -> Dict[str, Any]:
