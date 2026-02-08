@@ -490,7 +490,20 @@ async def simulate_cp(
             )
             self.state.last_message = "StartTransaction"
             resp = await self.recv(ws)
-            tx_id = json.loads(resp)[2].get("transactionId")
+            try:
+                parsed = json.loads(resp)
+                if not isinstance(parsed, list) or len(parsed) < 3:
+                    raise ValueError("StartTransaction response is not a list")
+                response_payload = parsed[2]
+                if not isinstance(response_payload, dict):
+                    raise ValueError("StartTransaction response payload is invalid")
+                tx_id = response_payload.get("transactionId")
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                self.log(
+                    "Warning: Could not parse transactionId from StartTransaction "
+                    f"response: {exc}; raw response={resp}"
+                )
+                tx_id = None
             self.state.last_status = "Running"
             self.state.phase = "Charging"
             return tx_id
@@ -574,6 +587,7 @@ async def simulate_cp(
             while time.monotonic() - start_idle < idle_time and not stop_event.is_set():
                 await self.send(ws, [2, "hb", "Heartbeat", {}])
                 self.state.last_message = "Heartbeat"
+                await self.recv(ws)
                 await asyncio.sleep(5)
                 if time.monotonic() - last_mv >= 30:
                     idle_step = max(2, int(step_avg / 100))
@@ -955,9 +969,9 @@ def _start_simulator(
     if cpsim_service_enabled():
         queue_cpsim_request(
             action="start",
-            params=params,
+            params=state.params,
             slot=cp,
-            name=str(params.get("name") or f"Simulator {cp}"),
+            name=str(state.params.get("name") or f"Simulator {cp}"),
             source="landing",
         )
         state.last_status = "cpsim-service start requested"

@@ -185,8 +185,8 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert params_two["reconnect_slots"] == "2"
     assert params_two["demo_mode"] is False
     assert params_two["meter_interval"] == 3.5
-    assert params_two["username"] == "bob"
-    assert params_two["password"] == "builder"
+    assert "username" not in params_two
+    assert "password" not in params_two
     assert params_two["cp_path"] == "CP-BETA"
     assert params_two["serial_number"] == "SN-BETA"
     assert state_two["last_status"] == "Connection accepted"

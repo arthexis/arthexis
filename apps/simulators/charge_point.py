@@ -317,6 +317,19 @@ class ChargePointSimulator:
         if not isinstance(msg, list) or not msg or msg[0] != 2:
             return False
         message_id = msg[1] if len(msg) > 1 else ""
+        if len(msg) < 3:
+            store.add_log(
+                self.config.cp_path,
+                "Malformed CALL frame received; ignoring",
+                log_type="simulator",
+            )
+            if message_id:
+                await send(
+                    json.dumps(
+                        [4, str(message_id), "ProtocolError", "Malformed CALL", {}]
+                    )
+                )
+            return True
         if not isinstance(message_id, str):
             message_id = str(message_id)
         action = msg[2]
@@ -428,6 +441,14 @@ class ChargePointSimulator:
             candidate_schemes.append(fallback_scheme)
 
         try:
+            if cfg.username and cfg.password:
+                is_loopback = cfg.host in {"127.0.0.1", "localhost", "::1"}
+                if scheme != "wss" and not is_loopback:
+                    raise ValueError(
+                        "Basic auth requires TLS (wss) for non-loopback hosts"
+                    )
+                if not is_loopback:
+                    candidate_schemes = ["wss"]
             validate_simulator_endpoint(
                 cfg.host,
                 cfg.ws_port,
@@ -880,6 +901,9 @@ class ChargePointSimulator:
         log_file = str(store._file_path(self.config.cp_path, log_type="simulator"))
         if not self._connected.wait(15):
             self.status = "error"
+            self._stop_event.set()
+            if self._thread and self._thread.is_alive():
+                self._thread.join(timeout=1)
             return False, "Connection timeout", log_file
         if self._connect_error == "accepted":
             self.status = "running"
@@ -899,4 +923,4 @@ class ChargePointSimulator:
         self.status = "stopped"
 
 
-__all__ = ["SimulatorConfig", "ChargePointSimulator"]
+__all__ = ["ChargePointSimulator", "SimulatorConfig"]
