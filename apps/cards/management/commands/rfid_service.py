@@ -95,7 +95,7 @@ class Command(BaseCommand):
 
         unit_name = f"rfid-{service_name}.service"
         active = self._systemd_is_active(unit_name)
-        if active is True:
+        if active:
             self._stop_systemd_unit(unit_name)
             return
 
