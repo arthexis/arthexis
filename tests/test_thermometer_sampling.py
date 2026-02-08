@@ -57,6 +57,7 @@ def test_sample_thermometers_records_reading(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 def test_sample_thermometers_skips_when_not_due(monkeypatch):
     fixed_now = timezone.now()
     thermometer = Thermometer.objects.create(
@@ -92,6 +93,7 @@ def test_sample_thermometers_skips_when_not_due(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 def test_ensure_thermometer_sampling_task_uses_seconds_interval(tmp_path: Path):
     from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
