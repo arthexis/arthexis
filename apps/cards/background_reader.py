@@ -333,6 +333,8 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
         return False
 
     try:
+        if hasattr(GPIO, "setwarnings"):
+            GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(IRQ_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         logger.debug("Initialized GPIO on IRQ pin %s", IRQ_PIN)
