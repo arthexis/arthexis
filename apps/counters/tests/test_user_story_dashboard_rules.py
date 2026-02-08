@@ -34,7 +34,8 @@ class UserStoryDashboardRuleTests(TestCase):
         cached = DashboardRule.get_cached_value(content_type, rule.evaluate)
         self.assertFalse(cached["success"])
 
-        story.delete()
+        story.is_deleted = True
+        story.save(update_fields=["is_deleted"])
 
         refreshed = DashboardRule.get_cached_value(content_type, rule.evaluate)
         self.assertTrue(refreshed["success"])
