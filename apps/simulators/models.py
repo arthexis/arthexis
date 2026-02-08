@@ -80,9 +80,9 @@ class SimulatorSchedule(Entity):
     def window_minutes(self) -> int:
         """Return the number of minutes in the schedule window."""
 
-        today = timezone.localdate()
-        start = datetime.combine(today, self.start_time)
-        end = datetime.combine(today, self.end_time)
+        target_date = self.schedule_date or timezone.localdate()
+        start = datetime.combine(target_date, self.start_time)
+        end = datetime.combine(target_date, self.end_time)
         delta = end - start
         return int(delta.total_seconds() // 60)
 

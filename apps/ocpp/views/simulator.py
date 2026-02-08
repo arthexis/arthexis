@@ -29,6 +29,8 @@ def cp_simulator(request):
     user = getattr(request, "user", None)
     if not getattr(user, "is_authenticated", False):
         return redirect_to_login(request.get_full_path(), resolve_url("pages:login"))
+    if request.method == "POST" and not getattr(user, "is_staff", False):
+        return HttpResponse("Forbidden", status=403)
 
     ws_scheme = resolve_ws_scheme(request=request)
 
@@ -197,6 +199,7 @@ def cp_simulator(request):
             "repeat": repeat_value,
             "username": request.POST.get("username", ""),
             "password": request.POST.get("password", ""),
+            "allow_private_network": bool(getattr(user, "is_staff", False)),
             "ws_scheme": ws_scheme,
         }
         simulator_slot = _cast_value(

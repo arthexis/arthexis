@@ -52,6 +52,7 @@ import websockets
 from apps.ocpp import store
 from apps.ocpp.cpsim_service import cpsim_service_enabled, queue_cpsim_request
 from apps.ocpp.utils import resolve_ws_scheme
+from apps.simulators.network import validate_simulator_endpoint
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -103,6 +104,13 @@ def _unique_cp_path(cp_path: str, idx: int, total_threads: int) -> str:
     return f"{cp_path}-{tag}"
 
 
+def _sanitize_params(params: Dict[str, object]) -> Dict[str, object]:
+    sanitized = dict(params)
+    for key in ("username", "password"):
+        sanitized.pop(key, None)
+    return sanitized
+
+
 # ---------------------------------------------------------------------------
 # Simulator state handling
 # ---------------------------------------------------------------------------
@@ -151,7 +159,7 @@ def _save_state_file(states: Dict[int, SimulatorState]) -> None:
                 "phase": v.phase,
                 "start_time": v.start_time,
                 "stop_time": v.stop_time,
-                "params": v.params or {},
+                "params": _sanitize_params(v.params or {}),
             }
             for k, v in states.items()
         }
@@ -192,6 +200,7 @@ async def simulate_cp(
     password: Optional[str] = None,
     ws_scheme: Optional[str] = None,
     use_tls: Optional[bool] = None,
+    allow_private_network: bool = False,
     *,
     sim_state: SimulatorState | None = None,
 ) -> None:
@@ -203,6 +212,12 @@ async def simulate_cp(
     values.  The function is resilient to remote stop requests and reconnects
     if the server closes the connection.
     """
+
+    validate_simulator_endpoint(
+        host,
+        ws_port,
+        allow_private_network=allow_private_network,
+    )
 
     class ChargePointSimulator:
         CALL_MESSAGE = 2
@@ -674,6 +689,7 @@ def simulate(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    allow_private_network: bool = False,
     ws_scheme: Optional[str] = None,
     use_tls: Optional[bool] = None,
     cp: int = 1,
@@ -693,6 +709,12 @@ def simulate(
 
     session_count = parse_repeat(repeat)
     n_threads = int(threads) if threads else 1
+
+    validate_simulator_endpoint(
+        host,
+        ws_port,
+        allow_private_network=allow_private_network,
+    )
 
     state = _simulators.get(cp, _simulators[1])
     state.last_command = "start"
@@ -716,6 +738,7 @@ def simulate(
         "interval": interval,
         "username": username,
         "password": password,
+        "allow_private_network": allow_private_network,
         "ws_scheme": ws_scheme,
         "use_tls": use_tls,
         "name": name,
@@ -751,6 +774,7 @@ def simulate(
                 interval,
                 username,
                 password,
+                allow_private_network,
                 ws_scheme,
                 use_tls,
                 sim_state=state,
@@ -776,6 +800,7 @@ def simulate(
                     interval,
                     username,
                     password,
+                    allow_private_network,
                     ws_scheme,
                     use_tls,
                     sim_state=state,
@@ -831,6 +856,7 @@ def simulate(
                 interval,
                 username,
                 password,
+                allow_private_network,
                 ws_scheme,
                 use_tls,
                 sim_state=state,
@@ -860,6 +886,7 @@ def simulate(
                     interval,
                     username,
                     password,
+                    allow_private_network,
                     ws_scheme,
                     use_tls,
                 ),
@@ -918,6 +945,8 @@ def _start_simulator(
     state.last_message = ""
     state.phase = "Starting"
     state.params = filtered_params
+    state.params.pop("daemon", None)
+    state.params.setdefault("allow_private_network", True)
     state.running = True
     state.start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     state.stop_time = None
@@ -936,7 +965,15 @@ def _start_simulator(
         _save_state_file(_simulators)
         return True, state.last_status, log_file
 
-    coro = simulate(cp=cp, **state.params)
+    try:
+        coro = simulate(cp=cp, **state.params)
+    except ValueError as exc:
+        state.last_error = str(exc)
+        state.last_status = "Invalid simulator configuration"
+        state.phase = "Error"
+        state.running = False
+        _save_state_file(_simulators)
+        return False, state.last_status, log_file
     threading.Thread(target=lambda: asyncio.run(coro), daemon=True).start()
 
     # Wait for initial connection result
@@ -994,7 +1031,7 @@ def _export_state(state: SimulatorState) -> Dict[str, object]:
         "phase": state.phase,
         "start_time": state.start_time,
         "stop_time": state.stop_time,
-        "params": state.params or {},
+        "params": _sanitize_params(state.params or {}),
     }
 
 

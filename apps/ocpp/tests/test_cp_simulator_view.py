@@ -40,6 +40,7 @@ def fake_simulate(monkeypatch):
         interval: float = 5.0,
         username: str | None = None,
         password: str | None = None,
+        allow_private_network: bool = False,
         ws_scheme: str | None = None,
         use_tls: bool | None = None,
         cp: int = 1,
@@ -69,6 +70,7 @@ def fake_simulate(monkeypatch):
             "interval": interval,
             "username": username,
             "password": password,
+            "allow_private_network": allow_private_network,
             "ws_scheme": ws_scheme,
             "use_tls": use_tls,
             "name": name,
@@ -95,6 +97,8 @@ def logged_in_client(client, django_user_model):
     user = django_user_model.objects.create_user(
         username="simulator-user", email="sim@example.com", password="pass"
     )
+    user.is_staff = True
+    user.save()
     client.force_login(user)
     return client
 
@@ -138,8 +142,8 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert params["reconnect_slots"] == "1,2"
     assert params["demo_mode"] is True
     assert params["meter_interval"] == 12.5
-    assert params["username"] == "alice"
-    assert params["password"] == "wonder"
+    assert "username" not in params
+    assert "password" not in params
     assert params["host"] == "example.com"
     assert params["ws_port"] == 9000
     assert params["cp_path"] == "CP-ALPHA"
