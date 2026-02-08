@@ -73,7 +73,7 @@ from ..models import (
     MonitoringRule,
     MonitoringReport,
 )
-from ..simulator import ChargePointSimulator
+from apps.simulators import ChargePointSimulator
 from .. import store
 from ..transactions_io import export_transactions, import_transactions as import_transactions_data
 from ..status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES

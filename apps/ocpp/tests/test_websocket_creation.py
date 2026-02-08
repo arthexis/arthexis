@@ -24,7 +24,7 @@ from apps.ocpp.consumers import (
     OCPP_VERSION_21,
 )
 from apps.ocpp.models import Charger, Simulator
-from apps.ocpp.simulator import ChargePointSimulator
+from apps.simulators import ChargePointSimulator
 from apps.rates.models import RateLimit
 from config.asgi import application
 

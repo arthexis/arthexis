@@ -10,7 +10,7 @@ from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
 
 from .common import *  # noqa: F401,F403
-from ..evcs import _start_simulator, _stop_simulator, parse_repeat
+from apps.simulators.evcs import _start_simulator, _stop_simulator, parse_repeat
 
 REPEAT_TRUE_STRINGS = {
     "true",

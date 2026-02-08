@@ -8,7 +8,7 @@ from apps.screens import lcd_screen
 def _setup_simulator_lock(
     tmp_path, monkeypatch, *, running: bool | None = None, state_payload: str | None = None
 ) -> Path:
-    state_file = tmp_path / "apps" / "ocpp" / "simulator.json"
+    state_file = tmp_path / "apps" / "simulators" / "simulator.json"
     state_file.parent.mkdir(parents=True, exist_ok=True)
     if state_payload is None:
         state_payload = json.dumps({"1": {"running": running}})

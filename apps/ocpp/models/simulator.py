@@ -112,7 +112,7 @@ class Simulator(Entity):
         ]
 
     def as_config(self):
-        from ..simulator import SimulatorConfig
+        from apps.simulators import SimulatorConfig
 
         configuration_keys, configuration_unknown_keys = self._configuration_payload()
         ws_scheme = resolve_ws_scheme()
