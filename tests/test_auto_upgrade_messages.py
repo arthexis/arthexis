@@ -34,7 +34,7 @@ def test_send_auto_upgrade_check_message(monkeypatch):
             }
         )
 
-    from apps.nodes.models.node_core import NetMessage
+    from apps.nodes.models.core.node import NetMessage
 
     monkeypatch.setattr(NetMessage, "broadcast", classmethod(fake_broadcast))
 

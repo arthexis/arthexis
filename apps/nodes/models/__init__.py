@@ -7,20 +7,10 @@ from .features import (
     NodeFeatureManager,
     NodeFeatureMixin,
 )
-from .node_core import (
-    NetMessage,
-    Node,
-    NodeRole,
-    NodeRoleManager,
-    PendingNetMessage,
-    Platform,
-    ROLE_RENAMES,
-    User,
-    _format_upgrade_body,
-    _upgrade_in_progress,
-    get_terminal_role,
-    node_information_updated,
-)
+from .core.node import NetMessage, Node, PendingNetMessage, User, node_information_updated
+from .core.platform import Platform
+from .core.role import NodeRole, NodeRoleManager, get_terminal_role
+from .core.utils import ROLE_RENAMES, _format_upgrade_body, _upgrade_in_progress
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 from .upgrade_policy import NodeUpgradePolicyAssignment, UpgradePolicy
 
