@@ -134,6 +134,7 @@ class Command(BaseCommand):
         def _event_window(
             payload: lcd_screen.EventPayload, index: int
         ) -> tuple[str, str]:
+            """Return a two-line window for the event payload starting at *index*."""
             if not payload.lines:
                 return "", ""
             line1 = payload.lines[index] if index < len(payload.lines) else ""

@@ -92,6 +92,7 @@ def _handle_shutdown_request(lcd) -> bool:
 def _load_next_event(
     now_dt: datetime,
 ) -> tuple[locks.EventPayload | None, datetime | None, Path | None]:
+    """Return the next event payload, expiry, and lock file path."""
     for candidate in locks._event_lock_files():
         try:
             payload, expires_at = locks._parse_event_lock_file(candidate, now_dt)
@@ -114,6 +115,7 @@ def _load_next_event(
 
 
 def _event_window(payload: locks.EventPayload, index: int) -> tuple[str, str]:
+    """Return a two-line window for the event payload starting at *index*."""
     if not payload.lines:
         return "", ""
     line1 = payload.lines[index] if index < len(payload.lines) else ""
