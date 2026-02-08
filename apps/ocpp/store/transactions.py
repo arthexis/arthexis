@@ -178,8 +178,7 @@ def find_transaction_requests(
                 entry_tx_key = _normalize_transaction_id(
                     entry.get("transaction_id") or entry.get("ocpp_transaction_id")
                 )
-                if entry_tx_key and entry_tx_key != transaction_key:
-                    continue
+                if entry_tx_key != transaction_key:
             if action and entry.get("action") != action:
                 continue
             if statuses and entry.get("status") not in statuses:
