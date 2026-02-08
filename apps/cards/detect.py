@@ -64,7 +64,7 @@ def detect_scanner() -> Dict[str, Any]:
     has_lock, lock_path = _lockfile_status()
 
     if has_lock:
-        return _assume_detected("lock file present", lock_path)
+        return _assume_detected(None, lock_path)
 
     try:
         from .irq_wiring_check import check_irq_pin
