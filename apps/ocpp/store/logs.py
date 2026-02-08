@@ -33,13 +33,24 @@ log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
 BASE_DIR = Path(__file__).resolve().parents[3]
 LOG_DIR = select_log_dir(BASE_DIR)
 SESSION_DIR = LOG_DIR / "sessions"
-SESSION_DIR.mkdir(exist_ok=True)
 LOCK_DIR = BASE_DIR / ".locks"
-LOCK_DIR.mkdir(exist_ok=True)
 SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
 
 SESSION_LOG_BUFFER_LIMIT = 16
+
+
+def ensure_log_dirs_exist() -> None:
+    """Ensure log directories exist without failing on permission issues."""
+
+    try:
+        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    try:
+        LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 
 @dataclass(frozen=True)
@@ -114,6 +125,7 @@ def _append_memory_log(cid: str, entry: str, *, log_type: str) -> str:
 
 
 def _write_log_file(cid: str, entry: str, *, log_type: str) -> None:
+    ensure_log_dirs_exist()
     path = _file_path(cid, log_type)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
@@ -122,6 +134,7 @@ def _write_log_file(cid: str, entry: str, *, log_type: str) -> None:
 def _session_folder(cid: str) -> Path:
     """Return the folder path for session logs for the given charger."""
 
+    ensure_log_dirs_exist()
     name = log_names["charger"].get(cid, cid)
     folder = SESSION_DIR / _safe_name(name)
     folder.mkdir(parents=True, exist_ok=True)
@@ -231,8 +244,9 @@ async def _touch_lock() -> None:
 
 def start_session_lock() -> None:
     global _lock_task
+    ensure_log_dirs_exist()
     SESSION_LOCK.touch()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     if _lock_task is None or _lock_task.done():
         _lock_task = loop.create_task(_touch_lock())
 
