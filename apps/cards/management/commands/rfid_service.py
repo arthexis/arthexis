@@ -128,7 +128,8 @@ class Command(BaseCommand):
                 )
             )
             return None
-        return result.returncode == 0 and result.stdout.strip() == "active"
+        status = result.stdout.strip()
+        return result.returncode == 0 and status in {"active", "activating", "reloading"}
 
     def _stop_systemd_unit(self, unit_name: str) -> None:
         self.stdout.write(f"Stopping {unit_name} to start debug service...")
