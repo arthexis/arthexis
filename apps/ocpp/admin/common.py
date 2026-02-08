@@ -107,8 +107,13 @@ class SimulatorDefaultAdminMixin:
                 f"Multiple simulators selected; {default_simulator.name} was set as default.",
                 level=messages.WARNING,
             )
-        default_simulator.default = True
-        default_simulator.save(update_fields=["default"])
+        with transaction.atomic():
+            type(default_simulator).objects.filter(
+                is_deleted=False,
+                default=True,
+            ).exclude(pk=default_simulator.pk).update(default=False)
+            default_simulator.default = True
+            default_simulator.save(update_fields=["default"])
         self.message_user(
             request,
             f"{default_simulator.name} marked as default.",
