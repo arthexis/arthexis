@@ -1295,8 +1295,10 @@ class CSMSConsumer(
         else:
             vendor_message_id_text = str(vendor_message_id)
         connector_value = self.connector_value
-        if connector_value is None and connector_hint is not None:
-            connector_value = connector_hint
+        if connector_value is None:
+            connector_hint = payload.get("connectorId")
+            if connector_hint is not None:
+                connector_value = connector_hint
 
         def _get_or_create_charger():
             if self.charger and getattr(self.charger, "pk", None):
