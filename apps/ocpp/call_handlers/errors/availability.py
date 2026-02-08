@@ -30,6 +30,17 @@ async def handle_change_availability_error(
         requested_at,
         details=detail_text,
     )
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    if detail_text and detail_text != "Error":
+        parts.append(f"details={detail_text}")
+    message = "ChangeAvailability error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(
         message_id,
         metadata=metadata,
