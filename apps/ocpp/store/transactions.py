@@ -47,6 +47,52 @@ def _add_transaction_index_entry(
     mapping.setdefault(key, set()).add(message_id)
 
 
+def _update_transaction_request_locked(
+    message_id: str,
+    entry: dict[str, object],
+    *,
+    status: str | None = None,
+    connector_id: int | str | None = None,
+    transaction_id: str | int | None = None,
+    ocpp_transaction_id: str | int | None = None,
+) -> dict[str, object]:
+    if status:
+        entry["status"] = status
+        entry["status_at"] = datetime.now(dt_timezone.utc)
+    if connector_id is not None and state.connector_slug(entry.get("connector_id")) != state.connector_slug(
+        connector_id
+    ):
+        old_key = _transaction_connector_key(
+            str(entry.get("charger_id") or ""), entry.get("connector_id")
+        )
+        new_key = _transaction_connector_key(
+            str(entry.get("charger_id") or ""), connector_id
+        )
+        _remove_transaction_index_entry(
+            _transaction_requests_by_connector, old_key, message_id
+        )
+        _add_transaction_index_entry(
+            _transaction_requests_by_connector, new_key, message_id
+        )
+        entry["connector_id"] = connector_id
+    if transaction_id is not None or ocpp_transaction_id is not None:
+        old_tx_key = _normalize_transaction_id(
+            entry.get("transaction_id") or entry.get("ocpp_transaction_id")
+        )
+        new_tx_key = _normalize_transaction_id(
+            transaction_id if transaction_id is not None else ocpp_transaction_id
+        )
+        if new_tx_key and new_tx_key != old_tx_key:
+            _remove_transaction_index_entry(
+                _transaction_requests_by_transaction, old_tx_key, message_id
+            )
+            _add_transaction_index_entry(
+                _transaction_requests_by_transaction, new_tx_key, message_id
+            )
+            entry["transaction_id"] = new_tx_key
+    return dict(entry)
+
+
 def register_transaction_request(message_id: str, metadata: dict[str, object]) -> None:
     """Register a transaction-related request for later reconciliation."""
 
@@ -83,41 +129,14 @@ def update_transaction_request(
         entry = transaction_requests.get(message_id)
         if not entry:
             return None
-        if status:
-            entry["status"] = status
-            entry["status_at"] = datetime.now(dt_timezone.utc)
-        if connector_id is not None and state.connector_slug(entry.get("connector_id")) != state.connector_slug(
-            connector_id
-        ):
-            old_key = _transaction_connector_key(
-                str(entry.get("charger_id") or ""), entry.get("connector_id")
-            )
-            new_key = _transaction_connector_key(
-                str(entry.get("charger_id") or ""), connector_id
-            )
-            _remove_transaction_index_entry(
-                _transaction_requests_by_connector, old_key, message_id
-            )
-            _add_transaction_index_entry(
-                _transaction_requests_by_connector, new_key, message_id
-            )
-            entry["connector_id"] = connector_id
-        if transaction_id is not None or ocpp_transaction_id is not None:
-            old_tx_key = _normalize_transaction_id(
-                entry.get("transaction_id") or entry.get("ocpp_transaction_id")
-            )
-            new_tx_key = _normalize_transaction_id(
-                transaction_id if transaction_id is not None else ocpp_transaction_id
-            )
-            if new_tx_key and new_tx_key != old_tx_key:
-                _remove_transaction_index_entry(
-                    _transaction_requests_by_transaction, old_tx_key, message_id
-                )
-                _add_transaction_index_entry(
-                    _transaction_requests_by_transaction, new_tx_key, message_id
-                )
-                entry["transaction_id"] = new_tx_key
-        return dict(entry)
+        return _update_transaction_request_locked(
+            message_id,
+            entry,
+            status=status,
+            connector_id=connector_id,
+            transaction_id=transaction_id,
+            ocpp_transaction_id=ocpp_transaction_id,
+        )
 
 
 def find_transaction_requests(
@@ -179,24 +198,40 @@ def mark_transaction_requests(
     """Update matching transaction requests and return the updated entries."""
 
     actions_set = set(actions or [])
-    matches = find_transaction_requests(
-        charger_id=charger_id,
-        connector_id=connector_id,
-        transaction_id=transaction_id,
-    )
     updated: list[dict[str, object]] = []
-    for message_id, entry in matches:
-        if actions_set and entry.get("action") not in actions_set:
-            continue
-        if statuses and entry.get("status") not in statuses:
-            continue
-        update = update_transaction_request(
-            message_id,
-            status=status,
-            connector_id=connector_id,
-            transaction_id=transaction_id,
-        )
-        if update:
+    connector_key = _transaction_connector_key(charger_id, connector_id)
+    transaction_key = _normalize_transaction_id(transaction_id)
+    with _transaction_requests_lock:
+        candidates: set[str] = set()
+        if transaction_key:
+            candidates.update(
+                _transaction_requests_by_transaction.get(transaction_key, set())
+            )
+        if connector_key:
+            candidates.update(
+                _transaction_requests_by_connector.get(connector_key, set())
+            )
+        for message_id in candidates:
+            entry = transaction_requests.get(message_id)
+            if not entry:
+                continue
+            if entry.get("charger_id") != charger_id:
+                continue
+            if connector_id is not None and state.connector_slug(entry.get("connector_id")) != state.connector_slug(
+                connector_id
+            ):
+                continue
+            if actions_set and entry.get("action") not in actions_set:
+                continue
+            if statuses and entry.get("status") not in statuses:
+                continue
+            update = _update_transaction_request_locked(
+                message_id,
+                entry,
+                status=status,
+                connector_id=connector_id,
+                transaction_id=transaction_id,
+            )
             updated.append(update)
     return updated
 

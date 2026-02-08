@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime
+from threading import Lock
 
 from django.conf import settings
 from redis import Redis
@@ -52,6 +53,8 @@ transactions: dict[str, object] = {}
 # store per charger session logs before they are flushed to disk
 simulators: dict[str, object] = {}
 ip_connections: dict[str, set[object]] = {}
+_ip_connection_locks: dict[str, Lock] = {}
+_ip_connection_locks_guard = Lock()
 
 billing_updates: deque[dict[str, object]] = deque(maxlen=1000)
 ev_charging_needs: deque[dict[str, object]] = deque(maxlen=500)
@@ -104,6 +107,15 @@ def _redis_ip_key(ip: str) -> str:
     return f"ocpp:ip-connection:{ip}"
 
 
+def _ip_connection_lock(ip: str) -> Lock:
+    with _ip_connection_locks_guard:
+        lock = _ip_connection_locks.get(ip)
+        if lock is None:
+            lock = Lock()
+            _ip_connection_locks[ip] = lock
+        return lock
+
+
 def _register_ip_connection_redis(ip: str, consumer: object) -> bool | None:
     client = _state_redis()
     if not client:
@@ -141,18 +153,20 @@ def register_ip_connection(ip: str | None, consumer: object) -> bool:
 
     if not ip:
         return True
-    allowed = _register_ip_connection_redis(ip, consumer)
-    if allowed is False:
-        return False
-    conns = ip_connections.setdefault(ip, set())
-    if consumer in conns:
+    lock = _ip_connection_lock(ip)
+    with lock:
+        allowed = _register_ip_connection_redis(ip, consumer)
+        if allowed is False:
+            return False
+        conns = ip_connections.setdefault(ip, set())
+        if consumer in conns:
+            return True
+        if len(conns) >= MAX_CONNECTIONS_PER_IP:
+            if allowed:
+                _release_ip_connection_redis(ip, consumer)
+            return False
+        conns.add(consumer)
         return True
-    if len(conns) >= MAX_CONNECTIONS_PER_IP:
-        if allowed:
-            _release_ip_connection_redis(ip, consumer)
-        return False
-    conns.add(consumer)
-    return True
 
 
 def release_ip_connection(ip: str | None, consumer: object) -> None:
@@ -160,13 +174,17 @@ def release_ip_connection(ip: str | None, consumer: object) -> None:
 
     if not ip:
         return
-    _release_ip_connection_redis(ip, consumer)
-    conns = ip_connections.get(ip)
-    if not conns:
-        return
-    conns.discard(consumer)
-    if not conns:
-        ip_connections.pop(ip, None)
+    lock = _ip_connection_lock(ip)
+    with lock:
+        _release_ip_connection_redis(ip, consumer)
+        conns = ip_connections.get(ip)
+        if not conns:
+            return
+        conns.discard(consumer)
+        if not conns:
+            ip_connections.pop(ip, None)
+            with _ip_connection_locks_guard:
+                _ip_connection_locks.pop(ip, None)
 
 
 def _candidate_keys(serial: str, connector: int | str | None) -> list[str]:

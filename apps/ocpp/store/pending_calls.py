@@ -219,6 +219,7 @@ def schedule_call_timeout(
     """Schedule a timeout notice if a pending call is not answered."""
 
     loop = scheduler._ensure_scheduler_loop()
+    schedule_timeout_seconds = 5.0
 
     def _notify() -> None:
         target_log: str | None = None
@@ -255,7 +256,12 @@ def schedule_call_timeout(
         future.set_result(handle)
 
     loop.call_soon_threadsafe(_schedule_timer)
-    handle = future.result()
+    try:
+        handle = future.result(timeout=schedule_timeout_seconds)
+    except (concurrent.futures.TimeoutError, concurrent.futures.CancelledError):
+        return
+    except Exception:
+        return
 
     with _pending_call_lock:
         previous = _pending_call_handles.pop(message_id, None)
