@@ -205,7 +205,10 @@ def mark_transaction_requests(
 ) -> list[dict[str, object]]:
     """Update matching transaction requests and return the updated entries."""
 
-    actions_set = set(actions or [])
+    if isinstance(actions, str):
+        actions_set = {actions}
+    else:
+        actions_set = set(actions or [])
     updated: list[dict[str, object]] = []
     connector_key = _transaction_connector_key(charger_id, connector_id)
     transaction_key = _normalize_transaction_id(transaction_id)
