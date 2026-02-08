@@ -40,7 +40,12 @@ elif stat -c '%U' "$base_dir" >/dev/null 2>&1; then
 fi
 
 if [ -z "$service_user" ] || [ "$service_user" = "root" ]; then
-  service_user="${SUDO_USER:-$(id -un)}"
+  service_user="${SUDO_USER:-}"
+fi
+
+if [ -z "$service_user" ]; then
+  echo "Could not determine a non-root service user. Please specify one with --user <username>." >&2
+  exit 1
 fi
 
 if ! id "$service_user" >/dev/null 2>&1; then
