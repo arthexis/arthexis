@@ -225,7 +225,8 @@ async def _touch_lock() -> None:
             SESSION_LOCK.touch()
             await asyncio.sleep(60)
     except asyncio.CancelledError:
-        pass
+        SESSION_LOCK.touch()
+        raise
 
 
 def start_session_lock() -> None:
