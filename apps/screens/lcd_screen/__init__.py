@@ -37,6 +37,7 @@ from .locks import (
     SUITE_UPTIME_LOCK_MAX_AGE,
     SUITE_UPTIME_LOCK_NAME,
     UPTIME_LOCK_NAME,
+    EventPayload,
     LockPayload,
     _SUITE_AVAILABILITY_STATE,
     _SUITE_REACHABILITY_CACHE,
@@ -112,6 +113,7 @@ from .rendering import (
     _warn_on_non_ascii_payload,
 )
 from .runner import (
+    EVENT_LINE_SCROLL_SECONDS,
     ROTATION_SECONDS,
     _event_interrupt_requested,
     _handle_shutdown_request,

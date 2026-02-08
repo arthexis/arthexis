@@ -33,7 +33,7 @@ DEFAULT_SERVICE_HOST = os.environ.get("RFID_SERVICE_HOST", "127.0.0.1")
 DEFAULT_SERVICE_PORT = int(os.environ.get("RFID_SERVICE_PORT", "29801"))
 DEFAULT_SCAN_TIMEOUT = float(os.environ.get("RFID_SERVICE_SCAN_TIMEOUT", "0.3"))
 DEFAULT_QUEUE_MAX = int(os.environ.get("RFID_SERVICE_QUEUE_MAX", "50"))
-DEFAULT_EVENT_DURATION = int(os.environ.get("RFID_EVENT_DURATION", "30"))
+DEFAULT_EVENT_DURATION = int(os.environ.get("RFID_EVENT_DURATION", "10"))
 DEFAULT_SCAN_DEDUPE_SECONDS = float(
     os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0")
 )
@@ -144,9 +144,7 @@ class RFIDServiceState:
         rfid_value = str(result.get("rfid", "")).strip()
         color = str(result.get("color", "")).strip()
         body = " ".join(part for part in (rfid_value, color) if part)
-        notify_event_async(
-            subject, body, duration=DEFAULT_EVENT_DURATION, event_id=0
-        )
+        notify_event_async(subject, body, duration=DEFAULT_EVENT_DURATION, event_id=0)
 
     def _persist_scan(self, result: dict[str, Any]) -> None:
         rfid_value = str(result.get("rfid", "") or "").strip().upper()

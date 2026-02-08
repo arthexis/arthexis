@@ -42,7 +42,7 @@ SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 INSTALL_DATE_LOCK_NAME = "install_date.lck"
 EVENT_LOCK_GLOB = "lcd-event-*.lck"
 EVENT_LOCK_PREFIX = "lcd-event-"
-EVENT_DEFAULT_DURATION_SECONDS = 30
+EVENT_DEFAULT_DURATION_SECONDS = 3600
 SUITE_PORT_DEFAULT = "8888"
 SUITE_REACHABILITY_CACHE_SECONDS = 2.0
 SUITE_REACHABILITY_TIMEOUT_SECONDS = 0.25
@@ -52,6 +52,11 @@ SIMULATOR_STATE_FILE = BASE_DIR / "apps" / "ocpp" / "simulator.json"
 class LockPayload(NamedTuple):
     line1: str
     line2: str
+    scroll_ms: int
+
+
+class EventPayload(NamedTuple):
+    lines: list[str]
     scroll_ms: int
 
 
@@ -250,7 +255,7 @@ def _event_lock_sort_key(path: Path) -> tuple[int, str]:
     return 10**9, name
 
 
-def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[LockPayload, datetime]:
+def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[EventPayload, datetime]:
     try:
         lines = lock_file.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
@@ -259,25 +264,29 @@ def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[LockPayload,
         logger.debug("Failed to read event lock file: %s", lock_file, exc_info=True)
         raise
 
-    subject = lines[0][:64] if lines else ""
-    body = lines[1][:64] if len(lines) > 1 else ""
     expires_at: datetime | None = None
-    if len(lines) > 2:
-        raw = lines[2].strip()
+    message_lines = lines[:]
+    if lines:
+        raw = lines[-1].strip()
         if raw:
             if raw.isdigit():
                 expires_at = now + timedelta(seconds=int(raw))
+                message_lines = lines[:-1]
             else:
                 try:
                     parsed = datetime.fromisoformat(raw)
                     if parsed.tzinfo is None:
                         parsed = parsed.replace(tzinfo=datetime_timezone.utc)
                     expires_at = parsed.astimezone(datetime_timezone.utc)
+                    message_lines = lines[:-1]
                 except ValueError:
                     expires_at = None
     if expires_at is None:
         expires_at = now + timedelta(seconds=EVENT_DEFAULT_DURATION_SECONDS)
-    return LockPayload(subject, body, DEFAULT_SCROLL_MS), expires_at
+    if not message_lines:
+        message_lines = ["", ""]
+    normalized_lines = [line[:64] for line in message_lines]
+    return EventPayload(normalized_lines, DEFAULT_SCROLL_MS), expires_at
 
 
 def _parse_channel_order(text: str) -> list[str]:
@@ -289,6 +298,12 @@ def _parse_channel_order(text: str) -> list[str]:
         for token in line.replace(",", " ").split():
             normalized = token.strip().lower()
             if not normalized:
+                continue
+            if normalized in {"full", "all"}:
+                normalized = "event"
+            if normalized == "uptime":
+                normalized = "stats"
+            if normalized == "event":
                 continue
             channels.append(normalized)
     return channels

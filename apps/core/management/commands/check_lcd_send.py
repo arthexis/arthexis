@@ -70,11 +70,14 @@ class Command(BaseCommand):
         )
         lock_file.parent.mkdir(parents=True, exist_ok=True)
 
-        expected_payload = render_lcd_lock_file(
-            subject=subject,
-            body=body,
-            expires_at=expires_at,
-        )
+        normalized_type = manager._normalize_channel_type(channel_type, sticky=sticky)
+        expected_payload = None
+        if normalized_type != "event":
+            expected_payload = render_lcd_lock_file(
+                subject=subject,
+                body=body,
+                expires_at=expires_at,
+            )
 
         self.stdout.write(
             f"Sending test message to LCD: subject='{subject}' body='{body}'"
@@ -131,10 +134,12 @@ class Command(BaseCommand):
         return predicate()
 
     def _read_lock_payload_matches(
-        self, lock_file: Path, expected_payload: str
+        self, lock_file: Path, expected_payload: str | None
     ) -> bool:
         if not lock_file.exists():
             return False
+        if expected_payload is None:
+            return True
         try:
             raw = lock_file.read_text(encoding="utf-8")
         except OSError:
@@ -142,7 +147,11 @@ class Command(BaseCommand):
         return raw == expected_payload
 
     def _wait_for_lock_write(
-        self, lock_file: Path, expected_payload: str, timeout: float, poll_interval: float
+        self,
+        lock_file: Path,
+        expected_payload: str | None,
+        timeout: float,
+        poll_interval: float,
     ) -> bool:
         return self._wait_for_condition(
             lambda: self._read_lock_payload_matches(lock_file, expected_payload),
@@ -151,7 +160,11 @@ class Command(BaseCommand):
         )
 
     def _wait_for_lock_persist(
-        self, lock_file: Path, expected_payload: str, timeout: float, poll_interval: float
+        self,
+        lock_file: Path,
+        expected_payload: str | None,
+        timeout: float,
+        poll_interval: float,
     ) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
