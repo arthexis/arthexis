@@ -55,6 +55,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         "start_simulator",
         "stop_simulator",
         "send_open_door",
+        "mark_default",
     )
     changelist_actions = ["start_default"]
     change_actions = ["start_action", "stop_action"]
@@ -211,6 +212,30 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def send_open_door(self, request, queryset):
         for obj in queryset:
             self._queue_door_open(request, obj)
+
+    @admin.action(description="Mark selected as default")
+    def mark_default(self, request, queryset):
+        selected = list(queryset.filter(is_deleted=False).order_by("pk"))
+        if not selected:
+            self.message_user(
+                request,
+                "No simulators were selected.",
+                level=messages.ERROR,
+            )
+            return
+        default_simulator = selected[0]
+        if len(selected) > 1:
+            self.message_user(
+                request,
+                f"Multiple simulators selected; {default_simulator.name} was set as default.",
+                level=messages.WARNING,
+            )
+        default_simulator.default = True
+        default_simulator.save(update_fields=["default"])
+        self.message_user(
+            request,
+            f"{default_simulator.name} marked as default.",
+        )
 
     def _start_simulators(self, request, queryset):
         from django.urls import reverse
