@@ -41,6 +41,7 @@ from .rendering import (
 logger = logging.getLogger(__name__)
 
 ROTATION_SECONDS = 10
+EVENT_LINE_SCROLL_SECONDS = 10
 
 _SHUTDOWN_REQUESTED = False
 _EVENT_INTERRUPT_REQUESTED = False
@@ -90,7 +91,7 @@ def _handle_shutdown_request(lcd) -> bool:
 
 def _load_next_event(
     now_dt: datetime,
-) -> tuple[DisplayState | None, datetime | None, Path | None]:
+) -> tuple[locks.EventPayload | None, datetime | None, Path | None]:
     for candidate in locks._event_lock_files():
         try:
             payload, expires_at = locks._parse_event_lock_file(candidate, now_dt)
@@ -108,11 +109,16 @@ def _load_next_event(
                     exc_info=True,
                 )
             continue
-        event_state = _prepare_display_state(
-            payload.line1, payload.line2, payload.scroll_ms
-        )
-        return event_state, expires_at, candidate
+        return payload, expires_at, candidate
     return None, None, None
+
+
+def _event_window(payload: locks.EventPayload, index: int) -> tuple[str, str]:
+    if not payload.lines:
+        return "", ""
+    line1 = payload.lines[index] if index < len(payload.lines) else ""
+    line2 = payload.lines[index + 1] if index + 1 < len(payload.lines) else ""
+    return line1, line2
 
 
 def main() -> None:  # pragma: no cover - hardware dependent
@@ -120,12 +126,16 @@ def main() -> None:  # pragma: no cover - hardware dependent
     display_state: DisplayState | None = None
     next_display_state: DisplayState | None = None
     event_state: DisplayState | None = None
+    event_payload: locks.EventPayload | None = None
     event_deadline: datetime | None = None
     event_lock_file: Path | None = None
+    event_line_index = 0
+    event_line_deadline = 0.0
     rotation_deadline = 0.0
     scroll_scheduler = ScrollScheduler()
     state_order = ("high", "low", "stats", "clock")
     state_index = 0
+    stats_cycle = 0
     history_recorder = LCDHistoryRecorder(base_dir=BASE_DIR, history_dir_name="work")
     clock_cycle = 0
     health = LCDHealthMonitor()
@@ -147,8 +157,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
         nonlocal display_state
         nonlocal next_display_state
         nonlocal event_state
+        nonlocal event_payload
         nonlocal event_deadline
         nonlocal event_lock_file
+        nonlocal event_line_index
+        nonlocal event_line_deadline
         nonlocal frame_writer
         nonlocal lcd_disabled
         if lcd_disabled:
@@ -165,8 +178,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
         display_state = None
         next_display_state = None
         event_state = None
+        event_payload = None
         event_deadline = None
         event_lock_file = None
+        event_line_index = 0
+        event_line_deadline = 0.0
         frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
 
     def _load_channel_states(
@@ -218,6 +234,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
         advance: bool = True,
     ) -> locks.LockPayload:
         nonlocal clock_cycle
+        nonlocal stats_cycle
         state_label = state_order[index]
         channel_state = channel_info.get(state_label)
         if state_label == "high" and channel_state:
@@ -262,15 +279,33 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 clock_cycle += 1
                 return locks.LockPayload(line1, line2, speed)
         if state_label == "stats":
-            if channel_state and channel_text[state_label]:
-                payload = (
-                    channel_state.next_payload()
-                    if advance
-                    else channel_state.payloads[0]
-                    if channel_state.payloads
-                    else None
+            uptime_state = channel_info.get("uptime")
+            uptime_payload = (
+                uptime_state.next_payload()
+                if uptime_state and advance
+                else uptime_state.payloads[0]
+                if uptime_state and uptime_state.payloads
+                else locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
+            )
+            stats_payload = (
+                channel_state.next_payload()
+                if channel_state and advance
+                else channel_state.payloads[0]
+                if channel_state and channel_state.payloads
+                else None
+            )
+            use_uptime = stats_cycle % 2 == 0
+            stats_cycle += 1
+            if use_uptime:
+                if uptime_payload and _payload_has_text(uptime_payload):
+                    return _refresh_uptime_payload(uptime_payload)
+                return _select_low_payload(
+                    locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS),
+                    base_dir=BASE_DIR,
+                    now=now_dt,
                 )
-                return payload or locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
+            if stats_payload and _payload_has_text(stats_payload):
+                return stats_payload
             return _stats_payload()
         return locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
 
@@ -299,22 +334,28 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 if _event_interrupt_requested():
                     _reset_event_interrupt_flag()
                     (
-                        event_state,
+                        event_payload,
                         event_deadline,
                         event_lock_file,
                     ) = _load_next_event(now_dt)
-                elif event_state is None:
+                    event_state = None
+                    event_line_index = 0
+                    event_line_deadline = 0.0
+                elif event_payload is None:
                     (
-                        pending_state,
+                        pending_payload,
                         pending_deadline,
                         pending_lock_file,
                     ) = _load_next_event(now_dt)
-                    if pending_state is not None:
-                        event_state = pending_state
+                    if pending_payload is not None:
+                        event_payload = pending_payload
                         event_deadline = pending_deadline
                         event_lock_file = pending_lock_file
+                        event_state = None
+                        event_line_index = 0
+                        event_line_deadline = 0.0
 
-                if event_state is not None and event_deadline is not None:
+                if event_payload is not None and event_deadline is not None:
                     if now_dt >= event_deadline:
                         if event_lock_file:
                             try:
@@ -326,21 +367,52 @@ def main() -> None:  # pragma: no cover - hardware dependent
                                     exc_info=True,
                                 )
                         (
-                            event_state,
+                            event_payload,
                             event_deadline,
                             event_lock_file,
                         ) = _load_next_event(now_dt)
-                        if event_state is not None:
+                        if event_payload is not None:
+                            event_state = None
+                            event_line_index = 0
+                            event_line_deadline = 0.0
                             continue
+                        event_payload = None
                         event_state = None
                         event_deadline = None
                         event_lock_file = None
+                        event_line_index = 0
+                        event_line_deadline = 0.0
                         if state_order:
                             state_index = (state_index + 1) % len(state_order)
                         display_state = None
                         next_display_state = None
                         rotation_deadline = 0.0
                         continue
+
+                    if event_state is None and event_payload is not None:
+                        line1, line2 = _event_window(event_payload, event_line_index)
+                        event_state = _prepare_display_state(
+                            line1, line2, event_payload.scroll_ms
+                        )
+                        if len(event_payload.lines) > 2:
+                            event_line_deadline = now + EVENT_LINE_SCROLL_SECONDS
+                        else:
+                            event_line_deadline = 0.0
+
+                    if (
+                        event_payload is not None
+                        and len(event_payload.lines) > 2
+                        and event_line_deadline
+                        and now >= event_line_deadline
+                    ):
+                        max_index = max(len(event_payload.lines) - 2, 0)
+                        if event_line_index < max_index:
+                            event_line_index += 1
+                        line1, line2 = _event_window(event_payload, event_line_index)
+                        event_state = _prepare_display_state(
+                            line1, line2, event_payload.scroll_ms
+                        )
+                        event_line_deadline = now + EVENT_LINE_SCROLL_SECONDS
 
                     if lcd is None:
                         lcd = _initialize_lcd()
@@ -388,7 +460,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             return bool(channel_info[label].signature)
                         if label == "clock":
                             return channel_text[label] or _lcd_clock_enabled()
-                        if label in {"low", "uptime"}:
+                        if label == "low":
                             return True
                         if label == "stats":
                             return True

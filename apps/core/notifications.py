@@ -45,6 +45,7 @@ class LcdChannel(str, Enum):
     CLOCK = "clock"
     UPTIME = "uptime"
     STATS = "stats"
+    EVENT = "event"
 
 
 def get_base_dir() -> Path:
@@ -107,6 +108,8 @@ class NotificationManager:
         normalized = (channel_type or default_type).strip().lower()
         if not normalized:
             return LcdChannel.LOW.value
+        if normalized in {"full", "all"}:
+            return LcdChannel.EVENT.value
         return normalized
 
     @staticmethod
@@ -128,6 +131,9 @@ class NotificationManager:
 
         normalized_type = self._normalize_channel_type(channel_type, sticky=sticky)
         normalized_num = self._normalize_channel_num(channel_num)
+        if normalized_type == LcdChannel.EVENT.value:
+            event_id = normalized_num if channel_num is not None else None
+            return self._event_lock_file(event_id)
         filename = self.DEFAULT_CHANNEL_FILES.get(
             normalized_type, f"lcd-{normalized_type}"
         )
@@ -219,6 +225,20 @@ class NotificationManager:
         retrying in a loop when only the fallback is available.
         """
 
+        normalized_type = self._normalize_channel_type(channel_type, sticky=sticky)
+        if normalized_type == LcdChannel.EVENT.value:
+            event_id = (
+                self._normalize_channel_num(channel_num)
+                if channel_num is not None
+                else None
+            )
+            return self.send_event(
+                subject=subject,
+                body=body,
+                event_id=event_id,
+                expires_at=expires_at,
+            )
+
         if not lcd_feature_enabled(self.lock_dir):
             self._gui_display(subject, body)
             return True
@@ -229,7 +249,7 @@ class NotificationManager:
                 body[:64],
                 sticky=sticky,
                 expires_at=expires_at,
-                channel_type=channel_type,
+                channel_type=normalized_type,
                 channel_num=channel_num,
             )
             return True
@@ -243,7 +263,7 @@ class NotificationManager:
         subject: str,
         body: str = "",
         *,
-        duration: int = 30,
+        duration: int = 3600,
         event_id: int | None = None,
         expires_at=None,
     ) -> bool:
@@ -253,9 +273,39 @@ class NotificationManager:
             self._gui_display(subject, body)
             return True
 
+        lines = []
+        for value in (subject, body):
+            text = "" if value is None else str(value)
+            split_lines = text.splitlines() or [""]
+            lines.extend(split_lines)
+        if not lines:
+            lines = ["", ""]
+
+        resolved_expires = None
+        now = datetime.now(datetime_timezone.utc)
         if expires_at is None:
-            expires_at = datetime.now(datetime_timezone.utc) + timedelta(seconds=duration)
-        payload = render_lcd_lock_file(subject=subject[:64], body=body[:64], expires_at=expires_at)
+            resolved_expires = now + timedelta(seconds=duration)
+        elif isinstance(expires_at, datetime):
+            resolved_expires = expires_at
+        else:
+            raw = str(expires_at).strip()
+            if raw.isdigit():
+                resolved_expires = now + timedelta(seconds=int(raw))
+            else:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=datetime_timezone.utc)
+                    resolved_expires = parsed.astimezone(datetime_timezone.utc)
+                except ValueError:
+                    resolved_expires = now + timedelta(seconds=duration)
+
+        if resolved_expires.tzinfo is None:
+            resolved_expires = resolved_expires.replace(tzinfo=datetime_timezone.utc)
+
+        payload_lines = [line[:64] for line in lines]
+        payload_lines.append(resolved_expires.isoformat())
+        payload = "\n".join(payload_lines) + "\n"
         target = self._event_lock_file(event_id)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -424,7 +474,7 @@ def notify_event(
     subject: str,
     body: str = "",
     *,
-    duration: int = 30,
+    duration: int = 3600,
     event_id: int | None = None,
     expires_at=None,
 ) -> bool:
@@ -443,7 +493,7 @@ def notify_event_async(
     subject: str,
     body: str = "",
     *,
-    duration: int = 30,
+    duration: int = 3600,
     event_id: int | None = None,
     expires_at=None,
 ) -> None:
