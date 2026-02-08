@@ -84,6 +84,8 @@ class CertificateBase(Certificate):
         try:
             self.update_expiration_date(sudo=sudo)
         except RuntimeError:
+            # TODO: Log this failure. The renewal may have succeeded, but updating
+            # the expiration date failed. The periodic task will fix this later.
             pass
         return message
 
