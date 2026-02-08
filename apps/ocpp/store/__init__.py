@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import logs, pending_calls, scheduler, state, transactions
+from . import logs as logs_module, pending_calls, scheduler, state, transactions
 
-_modules = (state, logs, pending_calls, transactions, scheduler)
+_modules = (state, logs_module, pending_calls, transactions, scheduler)
 
 for module in _modules:
     for name in getattr(module, "__all__", []):
@@ -20,15 +20,15 @@ def reassign_identity(old_key: str, new_key: str) -> str:
         return new_key
     if not old_key:
         return new_key
-    for mapping in (state.connections, state.transactions, logs.history):
+    for mapping in (state.connections, state.transactions, logs_module.history):
         if old_key in mapping:
             mapping[new_key] = mapping.pop(old_key)
-    for log_type in logs.logs:
-        store_map = logs.logs[log_type]
+    for log_type in logs_module.logs:
+        store_map = logs_module.logs[log_type]
         if old_key in store_map:
             store_map[new_key] = store_map.pop(old_key)
-    for log_type in logs.log_names:
-        names = logs.log_names[log_type]
+    for log_type in logs_module.log_names:
+        names = logs_module.log_names[log_type]
         if old_key in names:
             names[new_key] = names.pop(old_key)
     return new_key
