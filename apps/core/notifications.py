@@ -16,7 +16,7 @@ import signal
 import subprocess
 import sys
 import threading
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import datetime, timezone as datetime_timezone
 from enum import Enum
 from pathlib import Path
 
@@ -29,6 +29,7 @@ from apps.screens.startup_notifications import (
     lcd_feature_enabled,
     render_lcd_lock_file,
 )
+from apps.screens.lcd_screen.event_utils import parse_event_expiry
 
 try:  # pragma: no cover - optional dependency
     from plyer import notification as plyer_notification
@@ -278,30 +279,13 @@ class NotificationManager:
             text = "" if value is None else str(value)
             split_lines = text.splitlines() or [""]
             lines.extend(split_lines)
-        if not lines:
-            lines = ["", ""]
 
-        resolved_expires = None
         now = datetime.now(datetime_timezone.utc)
-        if expires_at is None:
-            resolved_expires = now + timedelta(seconds=duration)
-        elif isinstance(expires_at, datetime):
-            resolved_expires = expires_at
-        else:
-            raw = str(expires_at).strip()
-            if raw.isdigit():
-                resolved_expires = now + timedelta(seconds=int(raw))
-            else:
-                try:
-                    parsed = datetime.fromisoformat(raw)
-                    if parsed.tzinfo is None:
-                        parsed = parsed.replace(tzinfo=datetime_timezone.utc)
-                    resolved_expires = parsed.astimezone(datetime_timezone.utc)
-                except ValueError:
-                    resolved_expires = now + timedelta(seconds=duration)
-
-        if resolved_expires.tzinfo is None:
-            resolved_expires = resolved_expires.replace(tzinfo=datetime_timezone.utc)
+        resolved_expires = parse_event_expiry(
+            expires_at,
+            now=now,
+            default_seconds=duration,
+        )
 
         payload_lines = [line[:64] for line in lines]
         payload_lines.append(resolved_expires.isoformat())

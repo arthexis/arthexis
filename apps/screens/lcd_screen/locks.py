@@ -26,6 +26,7 @@ from apps.screens.startup_notifications import (
     read_lcd_lock_file,
 )
 
+from .event_utils import parse_event_expiry, parse_event_expiry_candidate
 from .logging import BASE_DIR
 
 logger = logging.getLogger(__name__)
@@ -269,20 +270,15 @@ def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[EventPayload
     if lines:
         raw = lines[-1].strip()
         if raw:
-            if raw.isdigit():
-                expires_at = now + timedelta(seconds=int(raw))
+            expires_at = parse_event_expiry_candidate(raw, now=now)
+            if expires_at is not None:
                 message_lines = lines[:-1]
-            else:
-                try:
-                    parsed = datetime.fromisoformat(raw)
-                    if parsed.tzinfo is None:
-                        parsed = parsed.replace(tzinfo=datetime_timezone.utc)
-                    expires_at = parsed.astimezone(datetime_timezone.utc)
-                    message_lines = lines[:-1]
-                except ValueError:
-                    expires_at = None
     if expires_at is None:
-        expires_at = now + timedelta(seconds=EVENT_DEFAULT_DURATION_SECONDS)
+        expires_at = parse_event_expiry(
+            None,
+            now=now,
+            default_seconds=EVENT_DEFAULT_DURATION_SECONDS,
+        )
     if not message_lines:
         message_lines = ["", ""]
     normalized_lines = [line[:64] for line in message_lines]
@@ -291,6 +287,7 @@ def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[EventPayload
 
 def _parse_channel_order(text: str) -> list[str]:
     channels: list[str] = []
+    seen: set[str] = set()
     for raw_line in text.splitlines():
         line = raw_line.split("#", 1)[0]
         if not line.strip():
@@ -305,6 +302,9 @@ def _parse_channel_order(text: str) -> list[str]:
                 normalized = "stats"
             if normalized == "event":
                 continue
+            if normalized in seen:
+                continue
+            seen.add(normalized)
             channels.append(normalized)
     return channels
 
