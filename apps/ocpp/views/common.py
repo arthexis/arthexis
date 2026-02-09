@@ -725,10 +725,9 @@ def _has_active_session(tx_obj) -> bool:
 def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
     """Return an active transaction from cache or persistence."""
 
-    tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
-    if tx_obj:
-        return tx_obj
-    return (
+    return store.get_transaction(
+        charger.charger_id, charger.connector_id
+    ) or (
         Transaction.objects.filter(charger=charger, stop_time__isnull=True)
         .order_by("-start_time")
         .first()
