@@ -6,10 +6,12 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.video.models import VideoDevice
+from apps.video.frame_cache import get_frame, get_frame_cache, get_status
+from apps.video.models import MjpegStream, VideoDevice
 from apps.video.utils import WORK_DIR, has_rpi_camera_stack
 
 
@@ -50,8 +52,17 @@ class Command(BaseCommand):
             dest="samples",
             help="Capture a single frame and assemble a short video.",
         )
+        parser.add_argument(
+            "--doctor",
+            action="store_true",
+            help="Run server-side video diagnostics.",
+        )
 
     def handle(self, *args, **options) -> None:
+        if options["doctor"]:
+            self._run_doctor()
+            return
+
         if options["enable"] and options["disable"]:
             raise CommandError("Choose only one of --enable or --disable.")
 
@@ -135,6 +146,129 @@ class Command(BaseCommand):
 
         output_path = self._capture_samples_video(device, samples)
         self.stdout.write(self.style.SUCCESS(f"Sample video saved to {output_path}"))
+
+    def _run_doctor(self) -> None:
+        """Run server-side checks for video streaming diagnostics."""
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Video Doctor"))
+        node = Node.get_local()
+        if node is None:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Local node is not registered; node-specific checks skipped."
+                )
+            )
+        else:
+            self.stdout.write(
+                self.style.SUCCESS(f"Local node: {node.hostname} (id={node.pk})")
+            )
+
+        feature = NodeFeature.objects.filter(slug="video-cam").first()
+        if feature is None:
+            self.stdout.write(
+                self.style.WARNING("Video Camera feature is not configured.")
+            )
+        else:
+            assigned = False
+            if node is not None:
+                assigned = NodeFeatureAssignment.objects.filter(
+                    node=node, feature=feature
+                ).exists()
+            status_label = "enabled" if feature.is_enabled else "disabled"
+            assignment_label = "assigned" if assigned else "not assigned"
+            self.stdout.write(
+                f"Video Camera feature: {status_label} ({assignment_label})"
+            )
+
+        camera_stack = "available" if has_rpi_camera_stack() else "missing"
+        self.stdout.write(f"Camera stack: {camera_stack}")
+
+        self._report_devices(node)
+        self._report_streams()
+        self._report_frame_cache_status()
+
+    def _report_devices(self, node: Node | None) -> None:
+        """Report configured video devices for the doctor output."""
+
+        queryset = VideoDevice.objects.all()
+        if node is not None:
+            queryset = queryset.filter(node=node)
+        count = queryset.count()
+        self.stdout.write(f"Video devices: {count}")
+        default_device = VideoDevice.get_default_for_node(node)
+        if default_device:
+            self.stdout.write(
+                f"Default device: {default_device.pk} {default_device.display_name} "
+                f"identifier={default_device.identifier}"
+            )
+        elif count:
+            self.stdout.write("Default device: none configured")
+
+    def _report_streams(self) -> None:
+        """Report MJPEG stream counts for the doctor output."""
+
+        total = MjpegStream.objects.count()
+        active = MjpegStream.objects.filter(is_active=True).count()
+        self.stdout.write(f"MJPEG streams: {active} active / {total} total")
+
+    def _report_frame_cache_status(self) -> None:
+        """Report Redis-backed frame cache connectivity and sample data."""
+
+        if not settings.VIDEO_FRAME_REDIS_URL:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Frame cache: VIDEO_FRAME_REDIS_URL is not configured."
+                )
+            )
+            return
+
+        client = get_frame_cache()
+        if not client:
+            self.stdout.write(
+                self.style.WARNING("Frame cache: unable to initialize Redis client.")
+            )
+            return
+
+        try:
+            client.ping()
+        except Exception as exc:  # pragma: no cover - runtime dependency
+            self.stdout.write(
+                self.style.WARNING(f"Frame cache: Redis ping failed ({exc}).")
+            )
+            return
+
+        self.stdout.write(self.style.SUCCESS("Frame cache: Redis reachable."))
+
+        stream = MjpegStream.objects.filter(is_active=True).order_by("name").first()
+        if not stream:
+            self.stdout.write(
+                self.style.WARNING("Frame cache: no active streams to sample.")
+            )
+            return
+
+        cached = get_frame(stream)
+        if cached and cached.captured_at:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Latest cached frame: stream={stream.slug} "
+                    f"captured_at={cached.captured_at.isoformat()}"
+                )
+            )
+        else:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"No cached frames for stream={stream.slug}."
+                )
+            )
+
+        status_payload = get_status(stream) or {}
+        last_error = status_payload.get("last_error")
+        if last_error:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Camera service error for stream={stream.slug}: {last_error}"
+                )
+            )
 
     def _list_devices(self, node: Node | None) -> None:
         queryset = VideoDevice.objects.all()
