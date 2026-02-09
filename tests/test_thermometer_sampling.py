@@ -30,19 +30,20 @@ def test_sample_thermometers_records_reading(monkeypatch, tmp_path: Path):
     )
 
     fixed_now = timezone.now()
-    temperature_path = tmp_path / "devices" / thermometer.slug / "temperature"
+    devices_path = tmp_path / "devices"
+    temperature_path = devices_path / thermometer.slug / "temperature"
     temperature_path.parent.mkdir(parents=True, exist_ok=True)
     temperature_path.write_text("21500")
 
     monkeypatch.setattr(
         sensor_tasks.timezone,
         "localtime",
-        lambda *args, **kwargs: fixed_now,
+        lambda *_args, **_kwargs: fixed_now,
     )
 
     with override_settings(
         THERMOMETER_PATH_TEMPLATE=str(
-            tmp_path / "devices" / "{slug}" / "temperature"
+            devices_path / "{slug}" / "temperature"
         )
     ):
         result = sample_thermometers()
@@ -69,7 +70,7 @@ def test_sample_thermometers_skips_when_not_due(monkeypatch):
     monkeypatch.setattr(
         sensor_tasks.timezone,
         "localtime",
-        lambda *args, **kwargs: fixed_now,
+        lambda *_args, **_kwargs: fixed_now,
     )
 
     called = {"count": 0}
