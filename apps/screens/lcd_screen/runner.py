@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import signal
 import time
-from datetime import datetime, timezone as datetime_timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
 from apps.screens.history import LCDHistoryRecorder
@@ -42,9 +43,19 @@ logger = logging.getLogger(__name__)
 
 ROTATION_SECONDS = 10
 EVENT_LINE_SCROLL_SECONDS = 10
+BASE_RELIEF_BLOCKED_CYCLES = 3
+BASE_RELIEF_LONG_EXPIRY = timedelta(seconds=ROTATION_SECONDS * BASE_RELIEF_BLOCKED_CYCLES)
 
 _SHUTDOWN_REQUESTED = False
 _EVENT_INTERRUPT_REQUESTED = False
+
+
+@dataclass
+class ChannelReliefState:
+    """Track base-message relief cycles for sticky LCD channel payloads."""
+
+    blocked_cycles: int = 0
+    show_base_next: bool = False
 
 
 def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
@@ -77,6 +88,16 @@ def _event_interrupt_requested() -> bool:
 def _reset_event_interrupt_flag() -> None:
     global _EVENT_INTERRUPT_REQUESTED
     _EVENT_INTERRUPT_REQUESTED = False
+
+
+def _sticky_payload(payload: locks.LockPayload | None, now_dt: datetime) -> bool:
+    """Return True when a payload should trigger base-message relief."""
+
+    if payload is None or payload.is_base or not _payload_has_text(payload):
+        return False
+    if payload.expires_at is None:
+        return True
+    return payload.expires_at - now_dt >= BASE_RELIEF_LONG_EXPIRY
 
 
 def _handle_shutdown_request(lcd) -> bool:
@@ -143,6 +164,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
     channel_states: dict[str, ChannelCycle] = {}
+    relief_states: dict[str, ChannelReliefState] = {}
     frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
     lcd_disabled = False
     locks._clear_low_lock_file()
@@ -186,6 +208,37 @@ def main() -> None:  # pragma: no cover - hardware dependent
         event_line_index = 0
         event_line_deadline = 0.0
         frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
+
+    def _reset_relief_state(label: str) -> None:
+        """Reset the base-message relief counters for a channel."""
+
+        relief_state = relief_states.setdefault(label, ChannelReliefState())
+        relief_state.blocked_cycles = 0
+        relief_state.show_base_next = False
+
+    def _apply_relief_if_needed(
+        label: str,
+        payload: locks.LockPayload | None,
+        base_payload: locks.LockPayload,
+        now_dt: datetime,
+    ) -> locks.LockPayload:
+        """Return payload adjusted for base-message relief cycles."""
+
+        if not _sticky_payload(payload, now_dt):
+            _reset_relief_state(label)
+            return payload or base_payload
+
+        relief_state = relief_states.setdefault(label, ChannelReliefState())
+        if relief_state.show_base_next:
+            relief_state.show_base_next = False
+            relief_state.blocked_cycles = 0
+            return base_payload
+
+        relief_state.blocked_cycles += 1
+        if relief_state.blocked_cycles >= BASE_RELIEF_BLOCKED_CYCLES:
+            relief_state.blocked_cycles = 0
+            relief_state.show_base_next = True
+        return payload or base_payload
 
     def _load_channel_states(
         now_dt: datetime,
@@ -256,13 +309,20 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 if channel_state.payloads
                 else None
             )
-            if payload and _payload_has_text(payload):
-                return _refresh_uptime_payload(payload)
-            return _select_low_payload(
+            base_payload = _select_low_payload(
                 locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS),
                 base_dir=BASE_DIR,
                 now=now_dt,
             )
+            if payload and _payload_has_text(payload):
+                refreshed = _refresh_uptime_payload(
+                    payload, base_dir=BASE_DIR, now=now_dt
+                )
+                return _apply_relief_if_needed(
+                    "low", refreshed, base_payload, now_dt
+                )
+            _reset_relief_state("low")
+            return base_payload
         if state_label == "clock":
             if channel_state and channel_text[state_label]:
                 payload = (
@@ -272,14 +332,35 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     if channel_state.payloads
                     else None
                 )
-                return payload or locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
+                if _lcd_clock_enabled():
+                    line1, line2, speed, _ = _clock_payload(
+                        now_dt.astimezone(), use_fahrenheit=clock_cycle % 2 == 0
+                    )
+                    base_payload = locks.LockPayload(
+                        line1,
+                        line2,
+                        speed,
+                        is_base=True,
+                    )
+                else:
+                    base_payload = locks.LockPayload(
+                        "",
+                        "",
+                        locks.DEFAULT_SCROLL_MS,
+                        is_base=True,
+                    )
+                resolved = _apply_relief_if_needed("clock", payload, base_payload, now_dt)
+                if resolved.is_base:
+                    clock_cycle += 1
+                return resolved
             if _lcd_clock_enabled():
+                _reset_relief_state("clock")
                 use_fahrenheit = clock_cycle % 2 == 0
                 line1, line2, speed, _ = _clock_payload(
                     now_dt.astimezone(), use_fahrenheit=use_fahrenheit
                 )
                 clock_cycle += 1
-                return locks.LockPayload(line1, line2, speed)
+                return locks.LockPayload(line1, line2, speed, is_base=True)
         if state_label == "stats":
             uptime_state = channel_info.get("uptime")
             uptime_payload = (
@@ -307,7 +388,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     now=now_dt,
                 )
             if stats_payload and _payload_has_text(stats_payload):
-                return stats_payload
+                base_payload = _stats_payload()
+                return _apply_relief_if_needed(
+                    "stats", stats_payload, base_payload, now_dt
+                )
+            _reset_relief_state("stats")
             return _stats_payload()
         return locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
 
