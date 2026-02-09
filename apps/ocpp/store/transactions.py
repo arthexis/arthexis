@@ -237,8 +237,7 @@ def mark_transaction_requests(
                 entry_tx_key = _normalize_transaction_id(
                     entry.get("transaction_id") or entry.get("ocpp_transaction_id")
                 )
-                if entry_tx_key and entry_tx_key != transaction_key:
-                    continue
+                if entry_tx_key != transaction_key:
             if actions_set and entry.get("action") not in actions_set:
                 continue
             if statuses and entry.get("status") not in statuses:
