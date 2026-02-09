@@ -644,6 +644,9 @@
     setTimeout(() => el.classList.remove('text-update'), 1000);
   }
 
+  /**
+   * Reloads the charger status HTML fragment and updates the chart content.
+   */
   function reloadStatus() {
     const current = document.getElementById('status-content');
     const oldCanvas = current.querySelector('#kw-chart');
@@ -695,6 +698,40 @@
       });
   }
 
+  /**
+   * Starts polling only when the tab is visible and focused.
+   */
+  function startStatusPolling() {
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+      return;
+    }
+    if (window.statusPollIntervalId) {
+      return;
+    }
+    window.statusPollIntervalId = window.setInterval(reloadStatus, 5000);
+  }
+
+  /**
+   * Stops polling when the tab loses visibility or focus.
+   */
+  function stopStatusPolling() {
+    if (window.statusPollIntervalId) {
+      window.clearInterval(window.statusPollIntervalId);
+      window.statusPollIntervalId = null;
+    }
+  }
+
+  /**
+   * Keeps polling aligned with the current visibility/focus state.
+   */
+  function syncStatusPolling() {
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      startStatusPolling();
+    } else {
+      stopStatusPolling();
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const statusRoot = document.getElementById('status-content');
     if (statusRoot) {
@@ -704,9 +741,12 @@
     const payload = parseChartPayload(document);
     const chartChanged = applyChartPayload(payload);
     renderChart(chartChanged);
+    syncStatusPolling();
   });
 
-  setInterval(reloadStatus, 5000);
+  document.addEventListener('visibilitychange', syncStatusPolling);
+  window.addEventListener('focus', syncStatusPolling);
+  window.addEventListener('blur', syncStatusPolling);
 </script>
 {% else %}
 <script>
@@ -715,6 +755,9 @@
     setTimeout(() => el.classList.remove('text-update'), 1000);
   }
 
+  /**
+   * Reloads the charger status HTML fragment.
+   */
   function reloadStatus() {
     const current = document.getElementById('status-content');
     fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
@@ -744,8 +787,47 @@
       });
   }
 
-  document.addEventListener('DOMContentLoaded', reloadStatus);
-  setInterval(reloadStatus, 5000);
+  /**
+   * Starts polling only when the tab is visible and focused.
+   */
+  function startStatusPolling() {
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+      return;
+    }
+    if (window.statusPollIntervalId) {
+      return;
+    }
+    window.statusPollIntervalId = window.setInterval(reloadStatus, 5000);
+  }
+
+  /**
+   * Stops polling when the tab loses visibility or focus.
+   */
+  function stopStatusPolling() {
+    if (window.statusPollIntervalId) {
+      window.clearInterval(window.statusPollIntervalId);
+      window.statusPollIntervalId = null;
+    }
+  }
+
+  /**
+   * Keeps polling aligned with the current visibility/focus state.
+   */
+  function syncStatusPolling() {
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      startStatusPolling();
+    } else {
+      stopStatusPolling();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    reloadStatus();
+    syncStatusPolling();
+  });
+  document.addEventListener('visibilitychange', syncStatusPolling);
+  window.addEventListener('focus', syncStatusPolling);
+  window.addEventListener('blur', syncStatusPolling);
 </script>
 {% endif %}
 {% if can_remote_start %}
