@@ -21,7 +21,7 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     expected_mac = "00:11:22:33:44:55"
     Node._local_cache.clear()
 
-    monkeypatch.setattr(Node, "get_current_mac", classmethod(lambda _: expected_mac))
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: expected_mac))
     monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], [])))
     monkeypatch.setattr(socket, "gethostname", lambda: "test-host")
     monkeypatch.setattr(socket, "getfqdn", lambda *_: "test-host.local")
@@ -40,7 +40,19 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     assert payload["hostname"] == created_node.hostname
     assert payload["network_hostname"] == created_node.network_hostname
     assert payload["address"] == created_node.address
-    assert payload["port"] == created_node.port
+    host_domain = registration_views._get_host_domain(response.wsgi_request)
+    advertised_port = created_node.port or created_node.get_preferred_port()
+    base_domain = created_node.get_base_domain()
+    if base_domain:
+        advertised_port = created_node._preferred_site_port(True)
+    if host_domain and not base_domain:
+        host_port = registration_views._get_host_port(response.wsgi_request)
+        preferred_port = created_node.get_preferred_port()
+        if host_port in {preferred_port, created_node.port, 80, 443}:
+            advertised_port = host_port
+        else:
+            advertised_port = preferred_port
+    assert payload["port"] == advertised_port
     assert set(payload["features"]) == set(
         created_node.features.values_list("slug", flat=True)
     )
