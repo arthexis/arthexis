@@ -4,7 +4,6 @@ import json
 import logging
 import socket
 from uuid import uuid4
-from unittest.mock import Mock
 
 import requests
 
@@ -18,27 +17,24 @@ pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
-    )
+    """Ensure node info triggers registration when no local node exists."""
+    expected_mac = "00:11:22:33:44:55"
+    Node._local_cache.clear()
 
-    register_spy = Mock(return_value=(node, True))
-
-    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: None))
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: register_spy()))
+    monkeypatch.setattr(Node, "get_current_mac", classmethod(lambda cls: expected_mac))
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *_: ([], [])))
+    monkeypatch.setattr(socket, "gethostname", lambda: "test-host")
+    monkeypatch.setattr(socket, "getfqdn", lambda *_: "test-host.local")
+    monkeypatch.setattr(socket, "gethostbyname", lambda *_: "127.0.0.1")
 
     response = client.get(reverse("node-info"))
 
-    register_spy.assert_called_once_with()
     assert response.status_code == 200
+    created_node = Node.objects.get(mac_address=expected_mac)
     payload = response.json()
-    assert payload["mac_address"] == node.mac_address
-    assert payload["network_hostname"] == node.network_hostname
-    assert payload["features"] == []
+    assert payload["mac_address"] == created_node.mac_address
+    assert payload["network_hostname"] == created_node.network_hostname
+    assert payload["features"] == list(created_node.features.values_list("slug", flat=True))
 
 @pytest.mark.django_db
 def test_node_info_uses_site_domain_port(monkeypatch, client):
