@@ -454,6 +454,31 @@ class Forwarder:
             return False
         return target_id in self.active_target_ids(only_connected=True)
 
+    @staticmethod
+    def _select_forwarding_chargers(chargers) -> list:
+        """Choose a single forwarding entry per charger/target pairing."""
+
+        selected = {}
+        for charger in chargers:
+            charger_id = (getattr(charger, "charger_id", "") or "").strip()
+            target_id = getattr(charger, "forwarded_to_id", None)
+            key = (charger_id, target_id)
+            if key not in selected:
+                selected[key] = charger
+                continue
+            existing = selected[key]
+            connector_id = getattr(charger, "connector_id", None)
+            existing_connector = getattr(existing, "connector_id", None)
+            if existing_connector is None:
+                continue
+            if connector_id is None or (
+                connector_id is not None
+                and existing_connector is not None
+                and connector_id < existing_connector
+            ):
+                selected[key] = charger
+        return list(selected.values())
+
     def sync_forwarded_charge_points(self, *, refresh_forwarders: bool = True) -> int:
         """Ensure websocket connections exist for forwarded charge points."""
 
@@ -485,6 +510,7 @@ class Forwarder:
             node_filter |= Q(node_origin=local)
 
         chargers = list(chargers_qs.filter(node_filter))
+        chargers = self._select_forwarding_chargers(chargers)
         active_ids = {charger.pk for charger in chargers}
 
         self.prune_inactive_sessions(active_ids)
