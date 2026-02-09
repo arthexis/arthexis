@@ -33,8 +33,13 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     created_node = Node.objects.get(mac_address=expected_mac)
     payload = response.json()
     assert payload["mac_address"] == created_node.mac_address
+    assert payload["hostname"] == created_node.hostname
     assert payload["network_hostname"] == created_node.network_hostname
-    assert payload["features"] == list(created_node.features.values_list("slug", flat=True))
+    assert payload["address"] == created_node.address
+    assert payload["port"] == created_node.port
+    assert set(payload["features"]) == set(
+        created_node.features.values_list("slug", flat=True)
+    )
 
 @pytest.mark.django_db
 def test_node_info_uses_site_domain_port(monkeypatch, client):
