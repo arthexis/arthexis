@@ -21,13 +21,17 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     expected_mac = "00:11:22:33:44:55"
     Node._local_cache.clear()
 
-    monkeypatch.setattr(Node, "get_current_mac", classmethod(lambda cls: expected_mac))
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *_: ([], [])))
+    monkeypatch.setattr(Node, "get_current_mac", classmethod(lambda _: expected_mac))
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], [])))
     monkeypatch.setattr(socket, "gethostname", lambda: "test-host")
     monkeypatch.setattr(socket, "getfqdn", lambda *_: "test-host.local")
     monkeypatch.setattr(socket, "gethostbyname", lambda *_: "127.0.0.1")
 
-    response = client.get(reverse("node-info"))
+    response = client.get(
+        reverse("node-info"),
+        HTTP_X_FORWARDED_PROTO="http",
+        HTTP_X_FORWARDED_PORT="80",
+    )
 
     assert response.status_code == 200
     created_node = Node.objects.get(mac_address=expected_mac)
