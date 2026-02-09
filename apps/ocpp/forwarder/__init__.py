@@ -298,7 +298,7 @@ class Forwarder:
             if not isinstance(action, str):
                 action = str(action)
 
-            if session.forwarded_calls is not None and action not in session.forwarded_calls:
+            if session.forwarded_calls is None or action not in session.forwarded_calls:
                 error = json.dumps(
                     [
                         4,
@@ -461,6 +461,8 @@ class Forwarder:
         selected = {}
         for charger in chargers:
             charger_id = (getattr(charger, "charger_id", "") or "").strip()
+            if not charger_id:
+                continue
             target_id = getattr(charger, "forwarded_to_id", None)
             key = (charger_id, target_id)
             if key not in selected:
@@ -471,11 +473,7 @@ class Forwarder:
             existing_connector = getattr(existing, "connector_id", None)
             if existing_connector is None:
                 continue
-            if connector_id is None or (
-                connector_id is not None
-                and existing_connector is not None
-                and connector_id < existing_connector
-            ):
+            if connector_id is None or connector_id < existing_connector:
                 selected[key] = charger
         return list(selected.values())
 
