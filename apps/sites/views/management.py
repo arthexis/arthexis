@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import random
 import shutil
 from html import escape
 from types import SimpleNamespace
@@ -790,6 +791,22 @@ def admin_user_tools(request):
         "admin/includes/user_tools.html",
         {"user_tools_return_url": return_url},
     )
+
+
+@staff_member_required
+@never_cache
+def admin_random_view(request):
+    """Redirect to a random admin view available to the current user."""
+    app_list = admin.site.get_app_list(request)
+    model_urls = [
+        model["admin_url"]
+        for app in app_list
+        for model in app.get("models", [])
+        if model.get("admin_url")
+    ]
+    if not model_urls:
+        return redirect("admin:index")
+    return redirect(random.choice(model_urls))
 
 
 # WhatsApp callbacks originate outside the site and cannot include CSRF tokens.

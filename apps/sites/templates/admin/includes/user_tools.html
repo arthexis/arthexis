@@ -8,6 +8,7 @@
     <a href="{{ docsroot }}">{% trans 'Docs' %}</a> /
   {% endif %}
   <a href="{% url 'certs-trust' %}">{% trans 'Trust' %}</a> /
+  <a href="{% url 'admin-random-view' %}">{% trans 'Random' %}</a> /
   {% if user.pk %}
     {% admin_profile_url user as profile_url %}
     {% if profile_url %}

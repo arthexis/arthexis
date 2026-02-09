@@ -89,6 +89,11 @@ urlpatterns = [
         name="admin-user-tools",
     ),
     path(
+        "admin/random/",
+        pages_views.admin_random_view,
+        name="admin-random-view",
+    ),
+    path(
         "admin/doc/commands/",
         RedirectView.as_view(pattern_name="django-admindocs-commands"),
     ),
