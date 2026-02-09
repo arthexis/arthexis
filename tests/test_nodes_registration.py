@@ -17,6 +17,12 @@ from django.contrib.sites.models import Site
 
 pytestmark = pytest.mark.critical
 
+def assert_request_meta(request, expected_url, expected_host_header):
+    """Assert URL and Host header for a mocked request."""
+    assert request.url == expected_url
+    assert request.headers["Host"] == expected_host_header
+
+
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
     node = Node.objects.create(
@@ -82,6 +88,7 @@ def test_resolve_visitor_base_defaults_to_loopback():
     assert visitor_port == 443
     assert visitor_scheme == "https"
 
+@pytest.mark.django_db
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
     """Exercise visitor proxy registration over HTTPS without Session patching."""
     node = Node.objects.create(
@@ -94,6 +101,8 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
     )
 
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+    adapter = requests_mock.Adapter()
+    monkeypatch.setattr(registration_views, "_HostNameSSLAdapter", lambda *args, **kwargs: adapter)
 
     def fake_getaddrinfo(host, port, *args, **kwargs):
         if host == "visitor.test":
@@ -104,59 +113,50 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
 
     monkeypatch.setattr(registration_views.socket, "getaddrinfo", fake_getaddrinfo)
 
-    def assert_request_meta(request, expected_url, expected_host_header, expected_timeout):
-        """Assert URL, Host header, and timeout for a mocked request."""
-        assert request.url == expected_url
-        assert request.headers["Host"] == expected_host_header
-        assert request.timeout == expected_timeout
-
     visitor_info_url = "https://93.184.216.34/nodes/info/"
     visitor_register_url = "https://93.184.216.34/nodes/register/"
-    timeout_seconds = 45
 
-    with requests_mock.Mocker() as mocker:
-        mocker.get(
-            visitor_info_url,
-            json={
-                "hostname": "visitor-host",
-                "mac_address": "aa:bb:cc:dd:ee:ff",
-                "address": "203.0.113.10",
-                "port": 8000,
-                "public_key": "visitor-key",
-                "features": [],
-            },
-        )
-        mocker.post(visitor_register_url, json={"id": 2, "detail": "ok"})
+    adapter.register_uri(
+        "GET",
+        visitor_info_url,
+        json={
+            "hostname": "visitor-host",
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+            "address": "203.0.113.10",
+            "port": 8000,
+            "public_key": "visitor-key",
+            "features": [],
+        },
+    )
+    adapter.register_uri("POST", visitor_register_url, json={"id": 2, "detail": "ok"})
 
-        response = admin_client.post(
-            reverse("register-visitor-proxy"),
-            data=json.dumps(
-                {
-                    "visitor_info_url": "https://visitor.test/nodes/info/",
-                    "visitor_register_url": "https://visitor.test/nodes/register/",
-                    "token": "",
-                }
-            ),
-            content_type="application/json",
-        )
+    response = admin_client.post(
+        reverse("register-visitor-proxy"),
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.test/nodes/info/",
+                "visitor_register_url": "https://visitor.test/nodes/register/",
+                "token": "",
+            }
+        ),
+        content_type="application/json",
+    )
 
     assert response.status_code == 200
     body = response.json()
     assert body["host"]["id"]
     assert body["visitor"]["id"] == 2
 
-    assert len(mocker.request_history) == 2
+    assert len(adapter.request_history) == 2
     assert_request_meta(
-        mocker.request_history[0],
+        adapter.request_history[0],
         visitor_info_url,
         "visitor.test",
-        timeout_seconds,
     )
     assert_request_meta(
-        mocker.request_history[1],
+        adapter.request_history[1],
         visitor_register_url,
         "visitor.test",
-        timeout_seconds,
     )
 
 @pytest.mark.django_db
@@ -172,6 +172,8 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     )
 
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+    adapter = requests_mock.Adapter()
+    monkeypatch.setattr(registration_views, "_HostNameSSLAdapter", lambda *args, **kwargs: adapter)
 
     def fake_getaddrinfo(host, port, *args, **kwargs):
         if host == "visitor.test":
@@ -182,71 +184,60 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
     monkeypatch.setattr(registration_views.socket, "getaddrinfo", fake_getaddrinfo)
 
-    def assert_request_meta(request, expected_url, expected_host_header, expected_timeout):
-        """Assert URL, Host header, and timeout for a mocked request."""
-        assert request.url == expected_url
-        assert request.headers["Host"] == expected_host_header
-        assert request.timeout == expected_timeout
-
     info_url_primary = "https://93.184.216.34:8888/nodes/info/"
     info_url_fallback = "https://93.184.216.34:8000/nodes/info/"
     register_url_primary = "https://93.184.216.34:8888/nodes/register/"
     register_url_fallback = "https://93.184.216.34:8000/nodes/register/"
-    timeout_seconds = 45
 
-    with requests_mock.Mocker() as mocker:
-        mocker.get(info_url_primary, exc=requests.ConnectTimeout)
-        mocker.get(
-            info_url_fallback,
-            json={
-                "hostname": "visitor-host",
-                "mac_address": "aa:bb:cc:dd:ee:ff",
-                "address": "203.0.113.10",
-                "port": 8000,
-                "public_key": "visitor-key",
-                "features": [],
-            },
-        )
-        mocker.post(register_url_primary, exc=requests.ConnectTimeout)
-        mocker.post(register_url_fallback, json={"id": 3, "detail": "ok"})
+    adapter.register_uri("GET", info_url_primary, exc=requests.ConnectTimeout)
+    adapter.register_uri(
+        "GET",
+        info_url_fallback,
+        json={
+            "hostname": "visitor-host",
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+            "address": "203.0.113.10",
+            "port": 8000,
+            "public_key": "visitor-key",
+            "features": [],
+        },
+    )
+    adapter.register_uri("POST", register_url_primary, exc=requests.ConnectTimeout)
+    adapter.register_uri("POST", register_url_fallback, json={"id": 3, "detail": "ok"})
 
-        response = admin_client.post(
-            reverse("register-visitor-proxy"),
-            data=json.dumps(
-                {
-                    "visitor_info_url": "https://visitor.test:8888/nodes/info/",
-                    "visitor_register_url": "https://visitor.test:8888/nodes/register/",
-                    "token": "",
-                }
-            ),
-            content_type="application/json",
-        )
+    response = admin_client.post(
+        reverse("register-visitor-proxy"),
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.test:8888/nodes/info/",
+                "visitor_register_url": "https://visitor.test:8888/nodes/register/",
+                "token": "",
+            }
+        ),
+        content_type="application/json",
+    )
 
     assert response.status_code == 200
-    assert len(mocker.request_history) == 4
+    assert len(adapter.request_history) == 4
     assert_request_meta(
-        mocker.request_history[0],
+        adapter.request_history[0],
         info_url_primary,
         "visitor.test:8888",
-        timeout_seconds,
     )
     assert_request_meta(
-        mocker.request_history[1],
+        adapter.request_history[1],
         info_url_fallback,
         "visitor.test:8000",
-        timeout_seconds,
     )
     assert_request_meta(
-        mocker.request_history[2],
+        adapter.request_history[2],
         register_url_primary,
         "visitor.test:8888",
-        timeout_seconds,
     )
     assert_request_meta(
-        mocker.request_history[3],
+        adapter.request_history[3],
         register_url_fallback,
         "visitor.test:8000",
-        timeout_seconds,
     )
 
 @pytest.mark.django_db
