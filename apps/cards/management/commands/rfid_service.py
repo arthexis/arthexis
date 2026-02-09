@@ -111,7 +111,7 @@ class Command(BaseCommand):
     def _resolve_service_name(self, lock_dir: Path) -> str | None:
         """Return the configured service name from the lock directory."""
         service_file = lock_dir / "service.lck"
-        if service_file.exists():
+        if service_file.is_file():
             return service_file.read_text(encoding="utf-8").strip() or None
         return None
 
