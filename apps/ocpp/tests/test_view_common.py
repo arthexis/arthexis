@@ -127,3 +127,26 @@ def test_charger_state_offline_when_heartbeat_stale(monkeypatch, settings):
 
     assert str(label) == "Offline"
     assert color == "grey"
+
+
+@pytest.mark.django_db
+def test_connector_overview_uses_active_transaction_fallback(monkeypatch):
+    """Ensure connector summaries use persisted active sessions when needed."""
+
+    charger = common.Charger.objects.create(
+        charger_id="CP-FALLBACK",
+        connector_id=1,
+        last_status="Available",
+        last_error_code="NoError",
+    )
+    common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now(),
+    )
+
+    monkeypatch.setattr(common.store, "get_transaction", lambda *_args, **_kwargs: None)
+
+    overview = common._connector_overview(charger, connectors=[charger])
+
+    assert overview[0]["status"] == STATUS_BADGE_MAP["charging"][0]
+    assert overview[0]["color"] == STATUS_BADGE_MAP["charging"][1]

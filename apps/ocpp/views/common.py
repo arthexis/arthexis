@@ -260,7 +260,7 @@ def _connector_overview(
     for sibling in sibling_connectors:
         if user is not None and not sibling.is_visible_to(user):
             continue
-        tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
+        tx_obj = _active_transaction_for_charger(sibling)
         state, color = _charger_state(sibling, tx_obj)
         overview.append(
             {
@@ -605,7 +605,7 @@ def _live_sessions(
     sessions: list[tuple[Charger, Transaction]] = []
     seen: set[int] = set()
     for sibling in ordered:
-        tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
+        tx_obj = _active_transaction_for_charger(sibling)
         if not tx_obj:
             continue
         if tx_obj.pk and tx_obj.pk in seen:
@@ -722,6 +722,19 @@ def _has_active_session(tx_obj) -> bool:
     return stop_time is None
 
 
+def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
+    """Return an active transaction from cache or persistence."""
+
+    tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
+    if tx_obj:
+        return tx_obj
+    return (
+        Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+        .order_by("-start_time")
+        .first()
+    )
+
+
 def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
     """Return an aggregate badge for the charger when summarising connectors."""
 
@@ -740,13 +753,7 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
         if not connected and has_connection_data:
             statuses.append("offline")
             continue
-        tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
-        if not tx_obj:
-            tx_obj = (
-                Transaction.objects.filter(charger=sibling, stop_time__isnull=True)
-                .order_by("-start_time")
-                .first()
-            )
+        tx_obj = _active_transaction_for_charger(sibling)
         has_session = _has_active_session(tx_obj)
         status_value = (sibling.last_status or "").strip()
         normalized_status = status_value.casefold() if status_value else ""
