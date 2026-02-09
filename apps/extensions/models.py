@@ -34,6 +34,12 @@ class JsExtension(Entity):
         verbose_name = _("JS Extension")
         verbose_name_plural = _("JS Extensions")
         ordering = ("name",)
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(manifest_version__in=(2, 3)),
+                name="extensions_js_extension_manifest_version_valid",
+            ),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
@@ -93,7 +99,10 @@ class JsExtension(Entity):
                 }
 
         if self.options_page:
-            manifest["options_page"] = "options.html"
+            if self.manifest_version >= 3:
+                manifest["options_ui"] = {"page": "options.html"}
+            else:
+                manifest["options_page"] = "options.html"
 
         if self.permission_list:
             manifest["permissions"] = self.permission_list
