@@ -163,7 +163,7 @@
                   {% endfor %}
                 </select>
               </form>
-              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{{ login_url }}{% endif %}">
+              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{{ login_url }}{% endif %}"{% if request.user.is_authenticated %} aria-describedby="user-info-tooltip"{% endif %}>
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
@@ -175,7 +175,7 @@
                   {% endif %}
                 </span>
                 {% if request.user.is_authenticated %}
-                <div class="user-info-tooltip">
+                <div id="user-info-tooltip" class="user-info-tooltip" aria-hidden="true">
                   {{ request.user.username }}{% if request.user.is_staff %} - {% trans "Staff" %}{% endif %}
                 </div>
                 {% endif %}

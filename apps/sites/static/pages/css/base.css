@@ -168,6 +168,10 @@ nav.toc a:hover {
   z-index: 1000;
 }
 
+.user-info-tooltip.is-visible {
+  display: block;
+}
+
 .language-select {
   background-color: transparent;
   padding: 0.25rem 0.5rem;

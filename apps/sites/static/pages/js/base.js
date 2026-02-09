@@ -235,12 +235,19 @@ window.addEventListener('load', syncDebugToolbarTheme);
     if (!tooltip) {
       return;
     }
-    btn.addEventListener('mouseenter', () => {
-      tooltip.style.display = 'block';
-    });
-    btn.addEventListener('mouseleave', () => {
-      tooltip.style.display = 'none';
-    });
+    const showTooltip = () => {
+      tooltip.classList.add('is-visible');
+      tooltip.setAttribute('aria-hidden', 'false');
+    };
+    const hideTooltip = () => {
+      tooltip.classList.remove('is-visible');
+      tooltip.setAttribute('aria-hidden', 'true');
+    };
+
+    btn.addEventListener('mouseenter', showTooltip);
+    btn.addEventListener('mouseleave', hideTooltip);
+    btn.addEventListener('focus', showTooltip);
+    btn.addEventListener('blur', hideTooltip);
   });
 })();
 
