@@ -79,9 +79,10 @@ class TestResultAdmin(admin.ModelAdmin):
             deleted_count, _deleted_details = TestResult.objects.all().delete()
 
             name_max_len = TestResult._meta.get_field("name").max_length or 255
+            node_id_max_len = TestResult._meta.get_field("node_id").max_length or 512
             results = [
                 TestResult(
-                    node_id=node_id,
+                    node_id=node_id[:node_id_max_len],
                     name=node_id.split("::")[-1][:name_max_len],
                     status=TestResult.Status.SKIPPED,
                     duration=None,
