@@ -76,7 +76,7 @@ class TestResultAdmin(admin.ModelAdmin):
         )
 
         with transaction.atomic():
-            deleted_count, _ = TestResult.objects.all().delete()
+            deleted_count, _deleted_details = TestResult.objects.all().delete()
 
             results = [
                 TestResult(
@@ -119,7 +119,7 @@ class TestResultAdmin(admin.ModelAdmin):
     @admin.action(description=_("Run Suite"))
     def run_all_tests(self, request, queryset):
         """Execute the full test suite and refresh results."""
-        deleted_count, _ = TestResult.objects.all().delete()
+        deleted_count, _deleted_details = TestResult.objects.all().delete()
         self.message_user(
             request,
             _("Removed %(count)s existing test results.") % {"count": deleted_count},
