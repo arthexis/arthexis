@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+from pathlib import Path
 from unittest import mock
 
 from apps.vscode import migration_server
@@ -32,17 +33,13 @@ def test_stop_django_server_terminates_multiprocessing_process() -> None:
     process.join.assert_called_once_with(timeout=0.1)
 
 
-def test_resolve_base_dir_prefers_workspace_env(tmp_path) -> None:
-    """Prefer a VS Code workspace folder when it looks like the repo root."""
-
-    repo_dir = tmp_path / "repo"
-    repo_dir.mkdir()
-    (repo_dir / "manage.py").write_text("# stub", encoding="utf-8")
-    (repo_dir / "env-refresh.py").write_text("# stub", encoding="utf-8")
+def test_resolve_base_dir_uses_script_location(tmp_path) -> None:
+    """Resolve the base directory from the migration server location."""
 
     resolved = migration_server.resolve_base_dir(
-        env={"VSCODE_WORKSPACE_FOLDER": str(repo_dir)},
+        env={"VSCODE_WORKSPACE_FOLDER": str(tmp_path)},
         cwd=tmp_path,
     )
 
-    assert resolved == repo_dir.resolve()
+    expected = Path(migration_server.__file__).resolve().parents[2]
+    assert resolved == expected
