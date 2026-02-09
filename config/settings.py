@@ -427,6 +427,7 @@ LOCAL_APPS = [
     "apps.flows",
     "apps.release",
     "apps.emails",
+    "apps.extensions",
     "apps.payments",
     "apps.sponsors",
     "apps.links",
