@@ -8,6 +8,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Count, Q
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.video.frame_cache import get_frame, get_frame_cache, get_status
@@ -207,14 +208,18 @@ class Command(BaseCommand):
     def _report_streams(self) -> None:
         """Report MJPEG stream counts for the doctor output."""
 
-        total = MjpegStream.objects.count()
-        active = MjpegStream.objects.filter(is_active=True).count()
-        self.stdout.write(f"MJPEG streams: {active} active / {total} total")
+        counts = MjpegStream.objects.aggregate(
+            total=Count("pk"),
+            active=Count("pk", filter=Q(is_active=True)),
+        )
+        self.stdout.write(
+            f"MJPEG streams: {counts['active']} active / {counts['total']} total"
+        )
 
     def _report_frame_cache_status(self) -> None:
         """Report Redis-backed frame cache connectivity and sample data."""
 
-        if not settings.VIDEO_FRAME_REDIS_URL:
+        if not getattr(settings, "VIDEO_FRAME_REDIS_URL", ""):
             self.stdout.write(
                 self.style.WARNING(
                     "Frame cache: VIDEO_FRAME_REDIS_URL is not configured."
