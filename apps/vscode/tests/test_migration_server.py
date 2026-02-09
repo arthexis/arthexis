@@ -31,3 +31,18 @@ def test_stop_django_server_terminates_multiprocessing_process() -> None:
     wait_procs.assert_any_call([child, parent], timeout=5.0)
     process.join.assert_called_once_with(timeout=0.1)
 
+
+def test_resolve_base_dir_prefers_workspace_env(tmp_path) -> None:
+    """Prefer a VS Code workspace folder when it looks like the repo root."""
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "manage.py").write_text("# stub", encoding="utf-8")
+    (repo_dir / "env-refresh.py").write_text("# stub", encoding="utf-8")
+
+    resolved = migration_server.resolve_base_dir(
+        env={"VSCODE_WORKSPACE_FOLDER": str(repo_dir)},
+        cwd=tmp_path,
+    )
+
+    assert resolved == repo_dir.resolve()
