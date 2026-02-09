@@ -18,7 +18,7 @@ class TestResultAdmin(admin.ModelAdmin):
     search_fields = ("node_id", "name")
     ordering = ("-created_at", "node_id")
     readonly_fields = ("created_at",)
-    actions = ["discover_tests", "run_all_tests"]
+    actions = ("discover_tests", "run_all_tests")
 
     def _collect_test_nodes(self) -> list[str]:
         """Return pytest node identifiers discovered from the test suite."""
@@ -92,10 +92,13 @@ class TestResultAdmin(admin.ModelAdmin):
             TestResult.objects.bulk_create(results)
 
             if discovery:
+                label_max_len = (
+                    DiscoveryItem._meta.get_field("label").max_length or 255
+                )
                 discovery_items = [
                     DiscoveryItem(
                         discovery=discovery,
-                        label=node_id,
+                        label=node_id[:label_max_len],
                         data={"status": TestResult.Status.SKIPPED},
                     )
                     for node_id in nodes
@@ -134,7 +137,15 @@ class TestResultAdmin(admin.ModelAdmin):
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=60,
             )
+        except subprocess.TimeoutExpired:
+            self.message_user(
+                request,
+                _("Test suite execution timed out after 60 seconds."),
+                level=messages.ERROR,
+            )
+            return
         except Exception as exc:
             self.message_user(
                 request,
