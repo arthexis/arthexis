@@ -274,3 +274,57 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
 
     assert CPForwarder.objects.get(pk=cp_forwarder.pk).is_running is False
     assert CPForwarder.objects.get(pk=cp_forwarder_two.pk).is_running is True
+
+
+@pytest.mark.django_db
+def test_sync_forwarded_charge_points_dedupes_charger_ids(monkeypatch):
+    """Ensure only one forwarding session is created per charger identifier."""
+
+    forwarder = Forwarder()
+    mac_address = "00:11:22:33:44:55"
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: mac_address))
+    Node._local_cache.clear()
+
+    local = Node.objects.create(hostname="local", mac_address=mac_address)
+    target = Node.objects.create(hostname="remote", mac_address="66:77:88:99:AA:BB")
+    cp_forwarder = CPForwarder.objects.create(target_node=target, enabled=True)
+
+    charger_primary = Charger.objects.create(
+        charger_id="CP-200",
+        connector_id=None,
+        export_transactions=True,
+        forwarded_to=target,
+        node_origin=local,
+    )
+    Charger.objects.create(
+        charger_id="CP-200",
+        connector_id=1,
+        export_transactions=True,
+        forwarded_to=target,
+        node_origin=local,
+    )
+    Charger.objects.create(
+        charger_id="CP-200",
+        connector_id=2,
+        export_transactions=True,
+        forwarded_to=target,
+        node_origin=local,
+    )
+
+    monkeypatch.setattr(Node, "iter_remote_urls", lambda *_: ["http://remote/ws"])
+
+    connections = []
+
+    def fake_create_connection(url, timeout, subprotocols):
+        connection = SimpleNamespace(connected=True, close=Mock())
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
+
+    connected = forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
+
+    assert connected == 1
+    assert len(connections) == 1
+    assert forwarder.get_session(charger_primary.pk) is not None
+    assert CPForwarder.objects.get(pk=cp_forwarder.pk).is_running is True
