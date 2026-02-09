@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function getBreadcrumbCopyValue() {
         const breadcrumbLabel = breadcrumbs.dataset.breadcrumbText || breadcrumbText;
-        return `In ${breadcrumbLabel} (${window.location.href})`;
+        return `In ${breadcrumbLabel} (\`${window.location.href}\`)`;
     }
 
     function focusNavFilter() {
