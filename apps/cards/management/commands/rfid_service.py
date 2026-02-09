@@ -78,10 +78,11 @@ class Command(BaseCommand):
         logger.addHandler(handler)
 
     def _prepare_debug_service(self) -> None:
+        """Prepare the systemd unit state before running the debug service."""
         base_dir = Path(settings.BASE_DIR)
         lock_dir = base_dir / ".locks"
         feature_enabled = rfid_service_enabled(lock_dir)
-        service_name = self._resolve_service_name(base_dir)
+        service_name = self._resolve_service_name(lock_dir)
 
         if not service_name:
             if feature_enabled:
@@ -108,6 +109,7 @@ class Command(BaseCommand):
             )
 
     def _resolve_service_name(self, lock_dir: Path) -> str | None:
+        """Return the configured service name from the lock directory."""
         service_file = lock_dir / "service.lck"
         if service_file.exists():
             return service_file.read_text(encoding="utf-8").strip() or None
