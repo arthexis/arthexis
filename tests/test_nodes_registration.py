@@ -7,6 +7,7 @@ from uuid import uuid4
 from unittest.mock import Mock
 
 import requests
+import requests_mock
 
 from django.urls import reverse
 
@@ -82,6 +83,7 @@ def test_resolve_visitor_base_defaults_to_loopback():
     assert visitor_scheme == "https"
 
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
+    """Exercise visitor proxy registration over HTTPS without Session patching."""
     node = Node.objects.create(
         hostname="local",
         address="198.51.100.1",
@@ -102,63 +104,64 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
 
     monkeypatch.setattr(registration_views.socket, "getaddrinfo", fake_getaddrinfo)
 
-    class FakeResponse:
-        def __init__(self, payload, status_code=200):
-            self._payload = payload
-            self.status_code = status_code
+    def assert_request_meta(request, expected_url, expected_host_header, expected_timeout):
+        """Assert URL, Host header, and timeout for a mocked request."""
+        assert request.url == expected_url
+        assert request.headers["Host"] == expected_host_header
+        assert request.timeout == expected_timeout
 
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise requests.HTTPError()
+    visitor_info_url = "https://93.184.216.34/nodes/info/"
+    visitor_register_url = "https://93.184.216.34/nodes/register/"
+    timeout_seconds = 45
 
-        def json(self):
-            return self._payload
+    with requests_mock.Mocker() as mocker:
+        mocker.get(
+            visitor_info_url,
+            json={
+                "hostname": "visitor-host",
+                "mac_address": "aa:bb:cc:dd:ee:ff",
+                "address": "203.0.113.10",
+                "port": 8000,
+                "public_key": "visitor-key",
+                "features": [],
+            },
+        )
+        mocker.post(visitor_register_url, json={"id": 2, "detail": "ok"})
 
-    class FakeSession:
-        def __init__(self):
-            self.requests = []
-
-        def mount(self, prefix, adapter):
-            return None
-
-        def get(self, url, timeout=None, headers=None):
-            self.requests.append(("get", url, headers))
-            return FakeResponse(
+        response = admin_client.post(
+            reverse("register-visitor-proxy"),
+            data=json.dumps(
                 {
-                    "hostname": "visitor-host",
-                    "mac_address": "aa:bb:cc:dd:ee:ff",
-                    "address": "203.0.113.10",
-                    "port": 8000,
-                    "public_key": "visitor-key",
-                    "features": [],
+                    "visitor_info_url": "https://visitor.test/nodes/info/",
+                    "visitor_register_url": "https://visitor.test/nodes/register/",
+                    "token": "",
                 }
-            )
-
-        def post(self, url, json=None, timeout=None, headers=None):
-            self.requests.append(("post", url, json, headers))
-            return FakeResponse({"id": 2, "detail": "ok"})
-
-    monkeypatch.setattr(requests, "Session", lambda: FakeSession())
-
-    response = admin_client.post(
-        reverse("register-visitor-proxy"),
-        data=json.dumps(
-            {
-                "visitor_info_url": "https://visitor.test/nodes/info/",
-                "visitor_register_url": "https://visitor.test/nodes/register/",
-                "token": "",
-            }
-        ),
-        content_type="application/json",
-    )
+            ),
+            content_type="application/json",
+        )
 
     assert response.status_code == 200
     body = response.json()
     assert body["host"]["id"]
     assert body["visitor"]["id"] == 2
 
+    assert len(mocker.request_history) == 2
+    assert_request_meta(
+        mocker.request_history[0],
+        visitor_info_url,
+        "visitor.test",
+        timeout_seconds,
+    )
+    assert_request_meta(
+        mocker.request_history[1],
+        visitor_register_url,
+        "visitor.test",
+        timeout_seconds,
+    )
+
 @pytest.mark.django_db
 def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
+    """Verify fallback to port 8000 when 8888 is unreachable."""
     node = Node.objects.create(
         hostname="local",
         address="198.51.100.1",
@@ -179,74 +182,72 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
     monkeypatch.setattr(registration_views.socket, "getaddrinfo", fake_getaddrinfo)
 
-    class FakeResponse:
-        def __init__(self, payload, status_code=200):
-            self._payload = payload
-            self.status_code = status_code
+    def assert_request_meta(request, expected_url, expected_host_header, expected_timeout):
+        """Assert URL, Host header, and timeout for a mocked request."""
+        assert request.url == expected_url
+        assert request.headers["Host"] == expected_host_header
+        assert request.timeout == expected_timeout
 
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise requests.HTTPError()
+    info_url_primary = "https://93.184.216.34:8888/nodes/info/"
+    info_url_fallback = "https://93.184.216.34:8000/nodes/info/"
+    register_url_primary = "https://93.184.216.34:8888/nodes/register/"
+    register_url_fallback = "https://93.184.216.34:8000/nodes/register/"
+    timeout_seconds = 45
 
-        def json(self):
-            return self._payload
+    with requests_mock.Mocker() as mocker:
+        mocker.get(info_url_primary, exc=requests.ConnectTimeout)
+        mocker.get(
+            info_url_fallback,
+            json={
+                "hostname": "visitor-host",
+                "mac_address": "aa:bb:cc:dd:ee:ff",
+                "address": "203.0.113.10",
+                "port": 8000,
+                "public_key": "visitor-key",
+                "features": [],
+            },
+        )
+        mocker.post(register_url_primary, exc=requests.ConnectTimeout)
+        mocker.post(register_url_fallback, json={"id": 3, "detail": "ok"})
 
-    class FakeSession:
-        def __init__(self):
-            self.requests = []
-
-        def mount(self, prefix, adapter):
-            return None
-
-        def get(self, url, timeout=None, headers=None):
-            self.requests.append(("get", url, headers))
-            if url.startswith("https://93.184.216.34:8888"):
-                raise requests.ConnectTimeout()
-            return FakeResponse(
+        response = admin_client.post(
+            reverse("register-visitor-proxy"),
+            data=json.dumps(
                 {
-                    "hostname": "visitor-host",
-                    "mac_address": "aa:bb:cc:dd:ee:ff",
-                    "address": "203.0.113.10",
-                    "port": 8000,
-                    "public_key": "visitor-key",
-                    "features": [],
+                    "visitor_info_url": "https://visitor.test:8888/nodes/info/",
+                    "visitor_register_url": "https://visitor.test:8888/nodes/register/",
+                    "token": "",
                 }
-            )
-
-        def post(self, url, json=None, timeout=None, headers=None):
-            self.requests.append(("post", url, json, headers))
-            if url.startswith("https://93.184.216.34:8888"):
-                raise requests.ConnectTimeout()
-            return FakeResponse({"id": 3, "detail": "ok"})
-
-    sessions: list[FakeSession] = []
-
-    def fake_session_factory():
-        session = FakeSession()
-        sessions.append(session)
-        return session
-
-    monkeypatch.setattr(requests, "Session", fake_session_factory)
-
-    response = admin_client.post(
-        reverse("register-visitor-proxy"),
-        data=json.dumps(
-            {
-                "visitor_info_url": "https://visitor.test:8888/nodes/info/",
-                "visitor_register_url": "https://visitor.test:8888/nodes/register/",
-                "token": "",
-            }
-        ),
-        content_type="application/json",
-    )
+            ),
+            content_type="application/json",
+        )
 
     assert response.status_code == 200
-    assert sessions
-    session = sessions[-1]
-    assert session.requests[0][1].startswith("https://93.184.216.34:8888")
-    assert session.requests[1][1].startswith("https://93.184.216.34:8000")
-    assert session.requests[2][1].startswith("https://93.184.216.34:8888")
-    assert session.requests[3][1].startswith("https://93.184.216.34:8000")
+    assert len(mocker.request_history) == 4
+    assert_request_meta(
+        mocker.request_history[0],
+        info_url_primary,
+        "visitor.test:8888",
+        timeout_seconds,
+    )
+    assert_request_meta(
+        mocker.request_history[1],
+        info_url_fallback,
+        "visitor.test:8000",
+        timeout_seconds,
+    )
+    assert_request_meta(
+        mocker.request_history[2],
+        register_url_primary,
+        "visitor.test:8888",
+        timeout_seconds,
+    )
+    assert_request_meta(
+        mocker.request_history[3],
+        register_url_fallback,
+        "visitor.test:8000",
+        timeout_seconds,
+    )
 
 @pytest.mark.django_db
 def test_register_visitor_telemetry_logs(client, caplog):
