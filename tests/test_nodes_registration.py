@@ -4,7 +4,6 @@ import json
 import logging
 import socket
 from uuid import uuid4
-from unittest.mock import Mock
 
 import requests
 
@@ -18,27 +17,45 @@ pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
+    """Ensure node info triggers registration when no local node exists."""
+    expected_mac = "00:11:22:33:44:55"
+    Node._local_cache.clear()
+
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: expected_mac))
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], [])))
+    monkeypatch.setattr(socket, "gethostname", lambda: "test-host")
+    monkeypatch.setattr(socket, "getfqdn", lambda *_: "test-host.local")
+    monkeypatch.setattr(socket, "gethostbyname", lambda *_: "127.0.0.1")
+
+    response = client.get(
+        reverse("node-info"),
+        HTTP_X_FORWARDED_PROTO="http",
+        HTTP_X_FORWARDED_PORT="80",
     )
 
-    register_spy = Mock(return_value=(node, True))
-
-    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: None))
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: register_spy()))
-
-    response = client.get(reverse("node-info"))
-
-    register_spy.assert_called_once_with()
     assert response.status_code == 200
+    created_node = Node.objects.get(mac_address=expected_mac)
     payload = response.json()
-    assert payload["mac_address"] == node.mac_address
-    assert payload["network_hostname"] == node.network_hostname
-    assert payload["features"] == []
+    assert payload["mac_address"] == created_node.mac_address
+    assert payload["hostname"] == created_node.hostname
+    assert payload["network_hostname"] == created_node.network_hostname
+    assert payload["address"] == created_node.address
+    host_domain = registration_views._get_host_domain(response.wsgi_request)
+    advertised_port = created_node.port or created_node.get_preferred_port()
+    base_domain = created_node.get_base_domain()
+    if base_domain:
+        advertised_port = created_node._preferred_site_port(True)
+    if host_domain and not base_domain:
+        host_port = registration_views._get_host_port(response.wsgi_request)
+        preferred_port = created_node.get_preferred_port()
+        if host_port in {preferred_port, created_node.port, 80, 443}:
+            advertised_port = host_port
+        else:
+            advertised_port = preferred_port
+    assert payload["port"] == advertised_port
+    assert set(payload["features"]) == set(
+        created_node.features.values_list("slug", flat=True)
+    )
 
 @pytest.mark.django_db
 def test_node_info_uses_site_domain_port(monkeypatch, client):
