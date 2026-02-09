@@ -147,7 +147,12 @@ class Command(BaseCommand):
                 return lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
             if payload.expires_at and payload.expires_at <= now_dt:
                 return lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
-            return lcd_screen.LockPayload(payload.subject, payload.body, lcd_screen.DEFAULT_SCROLL_MS)
+            return lcd_screen.LockPayload(
+                payload.subject,
+                payload.body,
+                lcd_screen.DEFAULT_SCROLL_MS,
+                expires_at=payload.expires_at,
+            )
 
         def low_payload_fallback(
             payload: lcd_screen.LockPayload, now_dt: datetime
@@ -211,7 +216,7 @@ class Command(BaseCommand):
                     local_now, use_fahrenheit=use_fahrenheit
                 )
                 return (
-                    lcd_screen.LockPayload(line1, line2, speed),
+                    lcd_screen.LockPayload(line1, line2, speed, is_base=True),
                     clock_cycle + 1,
                     stats_cycle,
                 )

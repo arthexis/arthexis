@@ -189,7 +189,12 @@ def _select_low_payload(
     if interface_label:
         body_parts.append(interface_label)
     body = " ".join(body_parts).strip()
-    return locks.LockPayload(subject, body, locks.DEFAULT_SCROLL_MS)
+    return locks.LockPayload(
+        subject,
+        body,
+        locks.DEFAULT_SCROLL_MS,
+        is_base=True,
+    )
 
 
 def _apply_low_payload_fallback(payload: locks.LockPayload) -> locks.LockPayload:
@@ -294,7 +299,12 @@ def _stats_payload() -> locks.LockPayload:
             f"D{disk_label}SWP{swap_label}",
         ]
     )
-    return locks.LockPayload(line1, line2, locks.DEFAULT_SCROLL_MS)
+    return locks.LockPayload(
+        line1,
+        line2,
+        locks.DEFAULT_SCROLL_MS,
+        is_base=True,
+    )
 
 
 def _lcd_clock_enabled() -> bool:

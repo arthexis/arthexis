@@ -54,6 +54,8 @@ class LockPayload(NamedTuple):
     line1: str
     line2: str
     scroll_ms: int
+    expires_at: datetime | None = None
+    is_base: bool = False
 
 
 class EventPayload(NamedTuple):
@@ -160,7 +162,12 @@ def _read_lock_payload(lock_file: Path, *, now: datetime) -> LockPayload | None:
                     exc_info=True,
                 )
             return None
-    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+    return LockPayload(
+        payload.subject,
+        payload.body,
+        DEFAULT_SCROLL_MS,
+        expires_at=payload.expires_at,
+    )
 
 
 def _load_channel_payloads(
@@ -199,7 +206,12 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
         except OSError:
             logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
         return LockPayload("", "", DEFAULT_SCROLL_MS)
-    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+    return LockPayload(
+        payload.subject,
+        payload.body,
+        DEFAULT_SCROLL_MS,
+        expires_at=payload.expires_at,
+    )
 
 
 def _clear_low_lock_file(
