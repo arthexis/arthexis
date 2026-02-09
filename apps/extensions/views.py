@@ -40,4 +40,8 @@ def extension_options_page(request: HttpRequest, slug: str) -> HttpResponse:
     extension = _get_enabled_extension(slug)
     if not extension.options_page:
         raise Http404("Options page not available.")
-    return HttpResponse(extension.options_page, content_type="text/html")
+    return HttpResponse(
+        extension.options_page,
+        content_type="text/html",
+        headers={"Content-Security-Policy": "sandbox allow-scripts"},
+    )
