@@ -191,7 +191,7 @@
 
   const getPageCopyValue = () => {
     const pageLabel = document.title.replace(/\s+/g, ' ').trim() || window.location.pathname;
-    return `In ${pageLabel} (${window.location.href})`;
+    return `In \`${pageLabel}\` (\`${window.location.href}\`)`;
   };
 
   const getFieldLabel = fieldName => {
