@@ -475,7 +475,11 @@ class Forwarder:
         }
 
         chargers_qs = (
-            Charger.objects.filter(export_transactions=True, forwarded_to__isnull=False)
+            Charger.objects.filter(
+                export_transactions=True,
+                forwarded_to__isnull=False,
+                connector_id__isnull=True,
+            )
             .select_related("forwarded_to", "node_origin")
             .order_by("pk")
         )

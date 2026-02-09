@@ -274,3 +274,65 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
 
     assert CPForwarder.objects.get(pk=cp_forwarder.pk).is_running is False
     assert CPForwarder.objects.get(pk=cp_forwarder_two.pk).is_running is True
+
+
+@pytest.mark.critical
+@pytest.mark.django_db
+def test_sync_forwarded_charge_points_skips_connector_rows(monkeypatch):
+    """Ensure forwarding sessions only track aggregate charger records."""
+
+    forwarder = Forwarder()
+
+    mac_address = "AA:BB:CC:DD:EE:FF"
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: mac_address))
+    Node._local_cache.clear()
+
+    monkeypatch.setattr(
+        "apps.ocpp.forwarder.create_connection",
+        lambda *_args, **_kwargs: SimpleNamespace(connected=True, close=Mock()),
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.forwarder.logger", SimpleNamespace(warning=Mock(), info=Mock())
+    )
+
+    local = Node.objects.create(hostname="local", mac_address=mac_address)
+    target = Node.objects.create(hostname="remote", mac_address="11:22:33:44:55:66")
+
+    from apps.ocpp import forwarder as forwarder_module, forwarding_utils
+
+    monkeypatch.setitem(sys.modules, "apps.ocpp.models.forwarder", forwarder_module)
+    monkeypatch.setattr(
+        forwarding_utils, "load_local_node_credentials", lambda: (local, None, "")
+    )
+    monkeypatch.setattr(forwarding_utils, "attempt_forwarding_probe", lambda *_, **__: False)
+    monkeypatch.setattr(
+        forwarding_utils, "send_forwarding_metadata", lambda *_, **__: (True, None)
+    )
+    monkeypatch.setattr(
+        Node, "iter_remote_urls", lambda *_args, **_kwargs: ["http://remote/ws"]
+    )
+
+    CPForwarder.objects.create(
+        target_node=target,
+        enabled=True,
+        forwarded_messages=["Heartbeat"],
+    )
+    aggregate = Charger.objects.create(
+        charger_id="CP-200",
+        export_transactions=True,
+        forwarded_to=target,
+        node_origin=local,
+        connector_id=None,
+    )
+    Charger.objects.create(
+        charger_id="CP-200",
+        export_transactions=True,
+        forwarded_to=target,
+        node_origin=local,
+        connector_id=1,
+    )
+
+    connected = forwarder.sync_forwarded_charge_points()
+
+    assert connected == 1
+    assert forwarder.get_session(aggregate.pk) is not None
