@@ -23,27 +23,6 @@ def resolve_base_dir(
 ) -> Path:
     """Resolve the repository root for VS Code tooling."""
 
-    resolved_env = os.environ if env is None else env
-    candidates: list[Path] = []
-    for key in ("VSCODE_WORKSPACE_FOLDER", "VSCODE_CWD", "PWD"):
-        value = resolved_env.get(key)
-        if value and "://" not in value:
-            candidates.append(Path(value))
-    if cwd is None:
-        cwd = Path.cwd()
-    candidates.append(cwd)
-
-    def _is_repo_root(path: Path) -> bool:
-        return (path / "manage.py").exists() and (path / "env-refresh.py").exists()
-
-    for candidate in candidates:
-        try:
-            resolved = candidate.expanduser().resolve()
-        except OSError:
-            continue
-        if _is_repo_root(resolved):
-            return resolved
-
     return Path(__file__).resolve().parents[2]
 
 
