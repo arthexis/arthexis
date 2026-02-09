@@ -19,7 +19,8 @@ from apps.sensors.tasks import sample_thermometers
 
 @pytest.mark.critical
 @pytest.mark.django_db
-def test_sample_thermometers_records_reading(monkeypatch):
+def test_sample_thermometers_records_reading(monkeypatch, tmp_path: Path):
+    """Record a reading by sampling the real temperature file on disk."""
     thermometer = Thermometer.objects.create(
         name="Kitchen",
         slug="28-000000000000",
@@ -29,6 +30,9 @@ def test_sample_thermometers_records_reading(monkeypatch):
     )
 
     fixed_now = timezone.now()
+    temperature_path = tmp_path / "devices" / thermometer.slug / "temperature"
+    temperature_path.parent.mkdir(parents=True, exist_ok=True)
+    temperature_path.write_text("21500")
 
     monkeypatch.setattr(
         sensor_tasks.timezone,
@@ -36,16 +40,10 @@ def test_sample_thermometers_records_reading(monkeypatch):
         lambda *args, **kwargs: fixed_now,
     )
 
-    recorded_paths: list[str] = []
-
-    def _fake_read_w1_temperature(paths):
-        recorded_paths.extend(str(path) for path in paths)
-        return Decimal("21.5")
-
-    monkeypatch.setattr(sensor_tasks, "read_w1_temperature", _fake_read_w1_temperature)
-
     with override_settings(
-        THERMOMETER_PATH_TEMPLATE="/tmp/devices/{slug}/temperature"
+        THERMOMETER_PATH_TEMPLATE=str(
+            tmp_path / "devices" / "{slug}" / "temperature"
+        )
     ):
         result = sample_thermometers()
 
@@ -53,7 +51,6 @@ def test_sample_thermometers_records_reading(monkeypatch):
     assert result == {"sampled": 1, "skipped": 0, "failed": 0}
     assert thermometer.last_reading == Decimal("21.5")
     assert thermometer.last_read_at == fixed_now
-    assert recorded_paths == ["/tmp/devices/28-000000000000/temperature"]
 
 
 @pytest.mark.django_db
