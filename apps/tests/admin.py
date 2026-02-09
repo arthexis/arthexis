@@ -78,10 +78,11 @@ class TestResultAdmin(admin.ModelAdmin):
         with transaction.atomic():
             deleted_count, _deleted_details = TestResult.objects.all().delete()
 
+            name_max_len = TestResult._meta.get_field("name").max_length or 255
             results = [
                 TestResult(
                     node_id=node_id,
-                    name=node_id.split("::")[-1],
+                    name=node_id.split("::")[-1][:name_max_len],
                     status=TestResult.Status.SKIPPED,
                     duration=None,
                     log="Discovered from pytest collection.",
