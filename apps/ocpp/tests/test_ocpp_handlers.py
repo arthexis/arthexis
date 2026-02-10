@@ -1241,6 +1241,52 @@ async def test_transaction_event_updates_request_status(monkeypatch):
     assert store.transaction_requests["msg-req-2"]["status"] == "completed"
 
 
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_transaction_event_does_not_start_request_when_authorization_fails():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-TRX-RFID", require_rfid=True
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._start_consumption_updates = AsyncMock()
+    consumer._process_meter_value_entries = AsyncMock()
+    consumer._record_rfid_attempt = AsyncMock()
+
+    store.register_transaction_request(
+        "msg-req-rfid",
+        {
+            "action": "RequestStartTransaction",
+            "charger_id": charger.charger_id,
+            "connector_id": 1,
+            "status": "accepted",
+        },
+    )
+
+    payload = {
+        "eventType": "Started",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "evse": {"id": 1},
+        "idToken": {"idToken": "unknown-tag"},
+        "transactionInfo": {"transactionId": "TX-RFID"},
+    }
+
+    result = await consumer._handle_transaction_event_action(payload, "msg-evt-rfid", "", "")
+
+    assert result == {"idTokenInfo": {"status": "Invalid"}}
+    assert store.transaction_requests["msg-req-rfid"]["status"] == "accepted"
+    assert store.transaction_requests["msg-req-rfid"].get("transaction_id") in (None, "")
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_started_notifies_and_persists():
