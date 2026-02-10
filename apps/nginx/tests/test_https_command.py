@@ -135,8 +135,13 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
 
-    answers = iter(["y", "key-123", "customer-42", "n"])
-    monkeypatch.setattr("builtins.input", lambda _prompt='': next(answers))
+    prompt_map = {
+        "Enter credentials now and save to DNS Credentials? [y/N]: ": "y",
+        "GoDaddy API key: ": "key-123",
+        "GoDaddy customer ID (optional): ": "customer-42",
+        "Use GoDaddy OTE sandbox environment? [y/N]: ": "n",
+    }
+    monkeypatch.setattr("builtins.input", lambda prompt="": prompt_map[prompt])
     monkeypatch.setattr("apps.nginx.management.commands.https.getpass", lambda _prompt='': "secret-456")
 
     command = Command()
