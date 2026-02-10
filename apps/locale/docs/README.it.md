@@ -8,6 +8,8 @@
 
 Costellazione Arthexis è una suite software basata su Django che centralizza gli strumenti per gestire l'infrastruttura di ricarica dei veicoli elettrici e orchestrare prodotti e servizi legati all'energia.
 
+[Visualizza tutti i documenti per sviluppatori](/docs/library/)
+
 Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare funzionalità passate e future insieme ad altri aggiornamenti.
 
 ## Caratteristiche della suite
