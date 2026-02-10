@@ -1,7 +1,9 @@
 """Tests for archive-aware log rotation handlers."""
 
+import errno
 from contextlib import closing
 from pathlib import Path
+import time
 
 import pytest
 
@@ -64,16 +66,55 @@ def test_do_rollover_handles_permission_error(monkeypatch: pytest.MonkeyPatch, t
             delay=True,
         )
     ) as handler:
+        handler.rolloverAt = time.time() - 1
         original_rollover = handler.rolloverAt
 
-        def raise_permission_error() -> None:
-            raise PermissionError("file is locked")
+        def raise_windows_lock_error(_: object | None = None) -> None:
+            error = PermissionError(errno.EACCES, "sharing violation", str(log_path))
+            error.winerror = 32
+            raise error
 
         monkeypatch.setattr(
             "logging.handlers.TimedRotatingFileHandler.doRollover",
-            lambda self: raise_permission_error(),
+            raise_windows_lock_error,
         )
-
+        monkeypatch.setattr("apps.loggers.rotation.os.name", "nt")
         handler.doRollover()
 
-        assert handler.rolloverAt >= original_rollover
+        assert handler.rolloverAt > original_rollover
+
+
+def test_do_rollover_raises_non_lock_permission_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ensure non-transient PermissionError values are surfaced."""
+
+    log_path = tmp_path / "misconfigured.log"
+    with closing(
+        ArchiveTimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            backupCount=1,
+            encoding="utf-8",
+            delay=True,
+        )
+    ) as handler:
+        original_rollover = handler.rolloverAt
+
+        def raise_generic_permission_error(_: object | None = None) -> None:
+            raise PermissionError
+
+        monkeypatch.setattr(
+            "logging.handlers.TimedRotatingFileHandler.doRollover",
+            raise_generic_permission_error,
+        )
+        monkeypatch.setattr(
+            ArchiveTimedRotatingFileHandler,
+            "_is_windows_lock_conflict",
+            staticmethod(lambda _: False),
+        )
+
+        with pytest.raises(PermissionError):
+            handler.doRollover()
+
+        assert handler.rolloverAt == original_rollover

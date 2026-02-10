@@ -67,10 +67,21 @@ class ArchiveTimedRotatingFileHandler(TimedRotatingFileHandler):
     def _set_next_rollover_timestamp(self, *, current_time: int) -> None:
         """Advance rolloverAt so lock-related rotation failures do not repeat endlessly."""
 
+        if self.interval <= 0:
+            self.rolloverAt = current_time + 1
+            return
+
         next_rollover = self.computeRollover(current_time)
         while next_rollover <= current_time:
             next_rollover += self.interval
         self.rolloverAt = next_rollover
+
+    @staticmethod
+    def _is_windows_lock_conflict(error: PermissionError) -> bool:
+        """Return True for transient Windows sharing violations during rename."""
+
+        winerror = getattr(error, "winerror", None)
+        return os.name == "nt" and winerror in {32, 33}
 
     def doRollover(self) -> None:
         """Rotate logs and tolerate transient Windows file-lock conflicts.
@@ -82,7 +93,9 @@ class ArchiveTimedRotatingFileHandler(TimedRotatingFileHandler):
 
         try:
             super().doRollover()
-        except PermissionError:
+        except PermissionError as error:
+            if not self._is_windows_lock_conflict(error):
+                raise
             self._set_next_rollover_timestamp(current_time=int(time.time()))
 
 
