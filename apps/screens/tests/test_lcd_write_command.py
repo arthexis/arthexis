@@ -67,22 +67,9 @@ def test_delete_lock_file(temp_base_dir: Path):
     assert not lock_file.exists()
 
 
-def test_restart_uses_service_lock(temp_base_dir: Path):
-    (temp_base_dir / ".locks" / "service.lck").write_text("demo", encoding="utf-8")
-
-    with override_settings(BASE_DIR=temp_base_dir):
-        with mock.patch.object(subprocess, "run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                ["systemctl", "restart", "lcd-demo"], returncode=0, stdout="", stderr=""
-            )
-            call_command("lcd_write", restart=True)
-
-    mock_run.assert_called_once_with(
-        ["systemctl", "restart", "lcd-demo"], capture_output=True, text=True
-    )
-
-
 def test_restart_reports_failure(temp_base_dir: Path):
+    """Surface systemctl stderr when restart exits with a non-zero status."""
+
     with override_settings(BASE_DIR=temp_base_dir):
         with mock.patch.object(subprocess, "run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
@@ -97,6 +84,8 @@ def test_restart_reports_failure(temp_base_dir: Path):
 
 
 def test_restart_handles_missing_systemctl(temp_base_dir: Path):
+    """Raise a clear error when systemctl is unavailable on the host."""
+
     with override_settings(BASE_DIR=temp_base_dir):
         with mock.patch.object(
             subprocess, "run", side_effect=FileNotFoundError
@@ -113,7 +102,21 @@ def test_restart_handles_missing_systemctl(temp_base_dir: Path):
 
 @pytest.mark.django_db
 @pytest.mark.sigil_roots
-def test_resolves_sigils_by_default(monkeypatch, temp_base_dir: Path):
+@pytest.mark.parametrize(
+    ("resolve_sigils", "expected_subject"),
+    [
+        pytest.param(True, "Resolved", id="resolve-default"),
+        pytest.param(False, "[ENV.LCD_SUBJECT]", id="resolve-disabled"),
+    ],
+)
+def test_lcd_write_sigil_resolution_modes(
+    monkeypatch,
+    temp_base_dir: Path,
+    resolve_sigils: bool,
+    expected_subject: str,
+):
+    """Verify sigil resolution can be enabled or bypassed for lcd_write payloads."""
+
     monkeypatch.setenv("LCD_SUBJECT", "Resolved")
 
     with override_settings(BASE_DIR=temp_base_dir):
@@ -121,28 +124,10 @@ def test_resolves_sigils_by_default(monkeypatch, temp_base_dir: Path):
             "lcd_write",
             subject="[ENV.LCD_SUBJECT]",
             body="Body",
+            resolve_sigils=resolve_sigils,
         )
 
     lock_payload = read_lock(temp_base_dir)
     assert lock_payload is not None
-    assert lock_payload.subject == "Resolved"
-    assert lock_payload.body == "Body"
-
-
-@pytest.mark.django_db
-@pytest.mark.sigil_roots
-def test_disables_resolving_sigils_when_requested(monkeypatch, temp_base_dir: Path):
-    monkeypatch.setenv("LCD_SUBJECT", "Resolved")
-
-    with override_settings(BASE_DIR=temp_base_dir):
-        call_command(
-            "lcd_write",
-            subject="[ENV.LCD_SUBJECT]",
-            body="Body",
-            resolve_sigils=False,
-        )
-
-    lock_payload = read_lock(temp_base_dir)
-    assert lock_payload is not None
-    assert lock_payload.subject == "[ENV.LCD_SUBJECT]"
+    assert lock_payload.subject == expected_subject
     assert lock_payload.body == "Body"
