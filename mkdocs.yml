@@ -13,7 +13,6 @@ nav:
       - CP Statuses and Transitions: ocpp_cp_statuses.md
       - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
       - OCPP Connection Status: ocpp_connection_status.md
-      - CP Statuses and Transitions: ocpp_cp_statuses.md
   - Reference:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - Release Install Checks: release-install-checks.md
