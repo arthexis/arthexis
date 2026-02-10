@@ -3453,25 +3453,12 @@ class CSMSConsumer(
             id_tag = str(id_token.get("idToken") or "").strip()
 
         if event_type == "started":
-            store.mark_transaction_requests(
+            requests_to_start = store.find_transaction_requests(
                 charger_id=self.charger_id,
                 connector_id=connector_value,
-                actions={"RequestStartTransaction"},
+                action="RequestStartTransaction",
                 statuses={"accepted", "requested"},
-                status="started",
             )
-            if ocpp_tx_id:
-                started_requests = store.find_transaction_requests(
-                    charger_id=self.charger_id,
-                    connector_id=connector_value,
-                    action="RequestStartTransaction",
-                    statuses={"started"},
-                )
-                for request_message_id, _ in started_requests:
-                    store.update_transaction_request(
-                        request_message_id,
-                        transaction_id=ocpp_tx_id,
-                    )
             tag = None
             tag_created = False
             if id_tag:
@@ -3494,6 +3481,14 @@ class CSMSConsumer(
                 else:
                     authorized = False
             if authorized:
+                update_kwargs: dict[str, str] = {"status": "started"}
+                if ocpp_tx_id:
+                    update_kwargs["transaction_id"] = ocpp_tx_id
+                for request_message_id, _ in requests_to_start:
+                    store.update_transaction_request(
+                        request_message_id,
+                        **update_kwargs,
+                    )
                 if authorized_via_tag and tag:
                     self._log_unlinked_rfid(tag.rfid)
                 vid_value, vin_value = _extract_vehicle_identifier(payload)
