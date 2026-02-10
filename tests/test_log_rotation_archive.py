@@ -49,3 +49,31 @@ def test_get_files_to_delete_keeps_all_when_backup_count_zero(tmp_path: Path) ->
         )
     ) as handler:
         assert handler.getFilesToDelete() == []
+
+
+def test_do_rollover_handles_permission_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Ensure rollover lock conflicts reschedule rotation instead of crashing."""
+
+    log_path = tmp_path / "locked.log"
+    with closing(
+        ArchiveTimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            backupCount=1,
+            encoding="utf-8",
+            delay=True,
+        )
+    ) as handler:
+        original_rollover = handler.rolloverAt
+
+        def raise_permission_error() -> None:
+            raise PermissionError("file is locked")
+
+        monkeypatch.setattr(
+            "logging.handlers.TimedRotatingFileHandler.doRollover",
+            lambda self: raise_permission_error(),
+        )
+
+        handler.doRollover()
+
+        assert handler.rolloverAt >= original_rollover
