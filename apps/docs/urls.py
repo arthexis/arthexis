@@ -15,6 +15,7 @@ urlpatterns = [
     path("read/", views.readme, name="readme"),
     path("read/<path:doc>", views.readme, name="readme-document"),
     path("docs/", views.readme, {"prepend_docs": True}, name="docs-index"),
+    path("docs/library/", views.document_library, name="docs-library"),
     path(
         "docs/<path:doc>",
         views.readme,

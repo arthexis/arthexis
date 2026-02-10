@@ -10,7 +10,7 @@ import markdown
 from apps.docs import assets
 
 
-MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists"]
+MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists", "fenced_code"]
 
 _ALLOWED_MARKDOWN_TAGS = set(bleach.sanitizer.ALLOWED_TAGS) | {
     "blockquote",
@@ -82,6 +82,7 @@ def render_markdown_with_toc(text: str) -> tuple[str, str]:
     html = md.convert(text)
     html = assets.rewrite_markdown_asset_links(html)
     html = assets.strip_http_subresources(html)
+    html = _rewrite_mermaid_blocks(html)
     html = _sanitize_html(html)
     toc_html = md.toc
     toc_html = strip_toc_wrapper(toc_html)
@@ -158,6 +159,21 @@ def render_code_document(text: str) -> tuple[str, str]:
         "</pre>"
     )
     return html, ""
+
+
+def _rewrite_mermaid_blocks(html: str) -> str:
+    """Replace fenced mermaid code blocks with Mermaid container divs."""
+
+    def _replace(match: re.Match[str]) -> str:
+        diagram = match.group("diagram").strip("\n")
+        return f'<div class="mermaid">{diagram}</div>'
+
+    return re.sub(
+        r'<pre><code class="language-mermaid">(?P<diagram>.*?)</code></pre>',
+        _replace,
+        html,
+        flags=re.DOTALL,
+    )
 
 
 def read_document_text(file_path: Path) -> str:

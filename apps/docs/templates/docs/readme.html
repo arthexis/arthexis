@@ -1,5 +1,5 @@
 {% extends "pages/base.html" %}
-{% load i18n static %}
+{% load i18n static docs_mermaid %}
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
@@ -74,4 +74,5 @@
 {% block extra_scripts %}
   <script src="{% static 'docs/js/qrcode.min.js' %}"></script>
   {% include "includes/reader_qr_script.html" %}
+  {% mermaid_assets %}
 {% endblock %}

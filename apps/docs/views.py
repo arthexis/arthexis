@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils.cache import patch_vary_headers
 from django.http import FileResponse, Http404, HttpResponse
+from django.urls import reverse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
@@ -181,6 +182,62 @@ def _build_render_cache_key(file_path: Path, lang: str) -> str:
     return f"docs:render:{file_path}:{mtime}:{lang}"
 
 
+def _iter_document_paths(root: Path) -> list[Path]:
+    """Return allowed documentation files under ``root``."""
+
+    if not root.exists():
+        return []
+    documents: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if not _is_allowed_doc_path(path):
+            continue
+        documents.append(path)
+    return sorted(documents)
+
+
+def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
+    """Build a library index for docs and apps/docs content."""
+
+    docs_root = root_base / "docs"
+    apps_docs_root = root_base / "apps" / "docs"
+    sections: list[dict[str, object]] = []
+
+    docs_files = _iter_document_paths(docs_root)
+    if docs_files:
+        items = [
+            {
+                "label": path.relative_to(docs_root).as_posix(),
+                "url": reverse(
+                    "docs:docs-document",
+                    args=[path.relative_to(docs_root).as_posix()],
+                ),
+            }
+            for path in docs_files
+        ]
+        sections.append({"title": "Documentation", "items": items})
+
+    apps_docs_files = _iter_document_paths(apps_docs_root)
+    if apps_docs_files:
+        items = [
+            {
+                "label": path.relative_to(apps_docs_root).as_posix(),
+                "url": reverse(
+                    "docs:apps-docs-document",
+                    args=[path.relative_to(apps_docs_root).as_posix()],
+                ),
+            }
+            for path in apps_docs_files
+        ]
+        sections.append({"title": "Application Docs", "items": items})
+
+    return sections
+
+
 def render_readme_page(
     request,
     *,
@@ -232,6 +289,21 @@ def render_readme_page(
         "force_footer": force_footer,
     }
     response = render(request, "docs/readme.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
+
+
+def document_library(request):
+    """Render the developer documentation library index."""
+
+    root_base = Path(settings.BASE_DIR).resolve()
+    sections = _collect_document_library(root_base)
+    context = {
+        "sections": sections,
+        "page_url": request.build_absolute_uri(),
+        "title": "Developer Documents",
+    }
+    response = render(request, "docs/library.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
 

@@ -12,6 +12,8 @@ export TZ="${TZ:-America/Monterrey}"
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/staticfiles.sh
 . "$BASE_DIR/scripts/helpers/staticfiles.sh"
+# shellcheck source=scripts/helpers/suite-uptime-lock.sh
+. "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 ERROR_LOG="$LOG_DIR/error.log"
@@ -551,6 +553,7 @@ if [ "$AWAIT_START" = true ]; then
 
   if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
     record_startup_duration 0
+    arthexis_log_suite_uptime "$BASE_DIR" || true
     wait "$DJANGO_SERVER_PID"
   else
     record_startup_duration 1
@@ -567,6 +570,7 @@ else
   (
     if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
       record_startup_duration 0
+      arthexis_log_suite_uptime "$BASE_DIR" || true
     else
       record_startup_duration 1
     fi

@@ -8,6 +8,8 @@
 
 Die Arthexis-Konstellation ist eine auf Django basierende Softwaresuite, die Werkzeuge zur Verwaltung der Ladeinfrastruktur für Elektrofahrzeuge sowie zur Orchestrierung von energiebezogenen Produkten und Dienstleistungen zentralisiert.
 
+[Alle Entwicklerdokumente anzeigen](/docs/library/)
+
 Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene und geplante Funktionen sowie weitere Updates zu entdecken.
 
 ## Suite-Funktionen
