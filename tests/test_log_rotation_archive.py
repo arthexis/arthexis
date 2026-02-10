@@ -1,5 +1,6 @@
 """Tests for archive-aware log rotation handlers."""
 
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -13,19 +14,21 @@ def test_rotation_filename_uses_namer(tmp_path: Path) -> None:
 
     log_path = tmp_path / "app.log"
     archive_dir = tmp_path / "archive"
-    handler = ArchiveTimedRotatingFileHandler(
-        log_path,
-        when="midnight",
-        backupCount=1,
-        encoding="utf-8",
-        archive_dir=archive_dir,
-    )
-    handler.namer = lambda name: f"{name}.gz"
+    with closing(
+        ArchiveTimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            backupCount=1,
+            encoding="utf-8",
+            archive_dir=archive_dir,
+            delay=True,
+        )
+    ) as handler:
+        handler.namer = lambda name: f"{name}.gz"
 
-    rotated = handler.rotation_filename(str(log_path) + ".2024-01-01")
+        rotated = handler.rotation_filename(str(log_path) + ".2024-01-01")
 
-    assert rotated == str(archive_dir / "app.log.2024-01-01.gz")
-    handler.close()
+        assert rotated == str(archive_dir / "app.log.2024-01-01.gz")
 
 def test_get_files_to_delete_keeps_all_when_backup_count_zero(tmp_path: Path) -> None:
     """Ensure no log files are deleted when backupCount is zero."""
@@ -35,13 +38,14 @@ def test_get_files_to_delete_keeps_all_when_backup_count_zero(tmp_path: Path) ->
     archive_dir.mkdir()
     (archive_dir / "audit.log.2024-01-01").write_text("old log")
 
-    handler = ArchiveTimedRotatingFileHandler(
-        log_path,
-        when="midnight",
-        backupCount=0,
-        encoding="utf-8",
-        archive_dir=archive_dir,
-    )
-
-    assert handler.getFilesToDelete() == []
-    handler.close()
+    with closing(
+        ArchiveTimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            backupCount=0,
+            encoding="utf-8",
+            archive_dir=archive_dir,
+            delay=True,
+        )
+    ) as handler:
+        assert handler.getFilesToDelete() == []
