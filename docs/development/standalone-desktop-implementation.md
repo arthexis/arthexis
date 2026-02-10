@@ -12,7 +12,7 @@ This document proposes a concrete path to ship Arthexis as a standalone desktop 
 ## Recommended Stack
 
 - **Desktop shell:** Tauri (Rust host + native webview)
-- **Backend process:** existing Arthexis Python entrypoint (`manage.py` via current scripts)
+- **Backend process:** dedicated Python launcher module (`arthexis.desktop_launcher`)
 - **IPC contract:** local HTTP only (`http://127.0.0.1:<port>`)
 - **Packaging:**
   - Windows: NSIS/MSI from Tauri bundle
@@ -116,9 +116,9 @@ Also keep backend stdout/stderr capture in rotating files managed by launcher.
 
 ## 7) Incremental rollout plan
 
-- **Phase A (internal):** unsigned dev builds, internal testers only.
-- **Phase B (beta):** signed installers, upgrade path tested.
-- **Phase C (general):** release through standard channel, docs and support runbooks updated.
+- **Internal — Phase A:** unsigned dev builds, internal testers only.
+- **Beta — Phase B:** signed installers, upgrade path tested.
+- **General availability — Phase C:** release through standard channel, docs and support runbooks updated.
 
 ## Acceptance Criteria
 
