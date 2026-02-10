@@ -59,7 +59,7 @@
           {% endfor %}
         </select>
         <input type="submit" value="{% trans 'Generate certificates' %}" />
-        <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS.' %}</p>
+        <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS (Self-signed, Certbot HTTP-01, or GoDaddy DNS-01).' %}</p>
       </form>
     {% endif %}
 

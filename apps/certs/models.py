@@ -13,6 +13,7 @@ from apps.certs import services
 
 logger = logging.getLogger(__name__)
 
+
 class Certificate(models.Model):
     """Abstract base class for certificates."""
 
@@ -103,8 +104,12 @@ class CertificateBase(Certificate):
 
     def verify(self, *, sudo: str = "sudo") -> services.CertificateVerificationResult:
         """Verify certificate validity and filesystem alignment."""
-        certificate_path = Path(self.certificate_path) if self.certificate_path else None
-        certificate_key_path = Path(self.certificate_key_path) if self.certificate_key_path else None
+        certificate_path = (
+            Path(self.certificate_path) if self.certificate_path else None
+        )
+        certificate_key_path = (
+            Path(self.certificate_key_path) if self.certificate_key_path else None
+        )
         return services.verify_certificate(
             domain=self.domain,
             certificate_path=certificate_path,
@@ -125,8 +130,29 @@ class CertificateBase(Certificate):
 
 
 class CertbotCertificate(CertificateBase):
+    """Certificate obtained via certbot with selectable ACME validation methods."""
+
+    class ChallengeType(models.TextChoices):
+        """Supported ACME challenge workflows for certbot certificates."""
+
+        NGINX = "nginx", "Nginx (HTTP-01)"
+        GODADDY = "godaddy", "GoDaddy (DNS-01)"
+
     email = models.EmailField(blank=True)
     last_requested_at = models.DateTimeField(null=True, blank=True)
+    challenge_type = models.CharField(
+        max_length=20,
+        choices=ChallengeType.choices,
+        default=ChallengeType.NGINX,
+    )
+    dns_credential = models.ForeignKey(
+        "dns.DNSProviderCredential",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="certbot_certificates",
+    )
+    dns_propagation_seconds = models.PositiveIntegerField(default=120)
 
     class Meta:
         verbose_name = _("Certbot certificate")
@@ -138,13 +164,18 @@ class CertbotCertificate(CertificateBase):
         if not self.certificate_path:
             self.certificate_path = f"/etc/letsencrypt/live/{self.domain}/fullchain.pem"
         if not self.certificate_key_path:
-            self.certificate_key_path = f"/etc/letsencrypt/live/{self.domain}/privkey.pem"
+            self.certificate_key_path = (
+                f"/etc/letsencrypt/live/{self.domain}/privkey.pem"
+            )
 
         message = services.request_certbot_certificate(
             domain=self.domain,
             email=self.email or None,
             certificate_path=self.certificate_file,
             certificate_key_path=self.certificate_key_file,
+            challenge_type=self.challenge_type,
+            dns_credential=self.dns_credential,
+            dns_propagation_seconds=self.dns_propagation_seconds,
             sudo=sudo,
         )
         try:

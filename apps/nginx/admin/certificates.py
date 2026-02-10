@@ -9,13 +9,17 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
+from apps.dns.models import DNSProviderCredential
 from apps.nginx.config_utils import default_certificate_domain_from_settings, slugify
 from apps.nginx.models import SiteConfiguration
 
 
 class CertificateGenerationMixin:
+    """Admin helpers for creating and provisioning HTTPS certificates."""
+
     CERTIFICATE_TYPE_SELF_SIGNED = "self-signed"
     CERTIFICATE_TYPE_CERTBOT = "certbot"
+    CERTIFICATE_TYPE_GODADDY = "godaddy"
 
     def generate_certificates_view(self, request):  # pragma: no cover - admin plumbing
         if not self.has_change_permission(request):
@@ -104,7 +108,25 @@ class CertificateGenerationMixin:
     def _certificate_parameters(self, certificate_type: str, domain: str) -> dict:
         slug = slugify(domain)
 
-        if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
+        if certificate_type in {
+            self.CERTIFICATE_TYPE_CERTBOT,
+            self.CERTIFICATE_TYPE_GODADDY,
+        }:
+            challenge_type = (
+                CertbotCertificate.ChallengeType.GODADDY
+                if certificate_type == self.CERTIFICATE_TYPE_GODADDY
+                else CertbotCertificate.ChallengeType.NGINX
+            )
+            dns_credential = None
+            if challenge_type == CertbotCertificate.ChallengeType.GODADDY:
+                dns_credential = (
+                    DNSProviderCredential.objects.filter(
+                        provider=DNSProviderCredential.Provider.GODADDY,
+                        is_enabled=True,
+                    )
+                    .order_by("pk")
+                    .first()
+                )
             return {
                 "model": CertbotCertificate,
                 "name_suffix": f"{slug}-certbot",
@@ -112,6 +134,8 @@ class CertificateGenerationMixin:
                     "domain": domain,
                     "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
                     "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+                    "challenge_type": challenge_type,
+                    "dns_credential": dns_credential,
                 },
             }
 
@@ -128,12 +152,16 @@ class CertificateGenerationMixin:
             },
         }
 
-    def _upsert_certificate(self, config, *, model, name: str, defaults: dict) -> CertificateBase:
+    def _upsert_certificate(
+        self, config, *, model, name: str, defaults: dict
+    ) -> CertificateBase:
         certificate, created = model.objects.get_or_create(name=name, defaults=defaults)
 
         if not created:
             updated_fields = [
-                field for field, value in defaults.items() if getattr(certificate, field) != value
+                field
+                for field, value in defaults.items()
+                if getattr(certificate, field) != value
             ]
             for field in updated_fields:
                 setattr(certificate, field, defaults[field])
@@ -163,10 +191,11 @@ class CertificateGenerationMixin:
         return (
             (self.CERTIFICATE_TYPE_SELF_SIGNED, _("Self-signed")),
             (self.CERTIFICATE_TYPE_CERTBOT, _("Certbot")),
+            (self.CERTIFICATE_TYPE_GODADDY, _("GoDaddy DNS")),
         )
 
     def _normalize_certificate_type(self, value: str | None) -> str:
-        if value == self.CERTIFICATE_TYPE_CERTBOT:
+        if value in {self.CERTIFICATE_TYPE_CERTBOT, self.CERTIFICATE_TYPE_GODADDY}:
             return value
         return self.CERTIFICATE_TYPE_SELF_SIGNED
 
