@@ -58,8 +58,70 @@ def test_https_enable_with_godaddy_requires_dns_credential(monkeypatch):
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
-    with pytest.raises(CommandError, match="requires an enabled DNS credential"):
+    with pytest.raises(CommandError, match="requires credentials"):
         call_command("https", "--enable", "--godaddy", "example.com")
+
+
+@pytest.mark.django_db
+def test_https_godaddy_implies_enable(monkeypatch):
+    """`https --godaddy` should implicitly behave like `https --enable --godaddy`."""
+
+    provision_calls: dict[str, str] = {}
+
+    def fake_provision(self, *, sudo: str = "sudo"):
+        provision_calls["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    from apps.nginx.management.commands import https as https_module
+
+    monkeypatch.setattr(
+        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
+    )
+
+    call_command("https", "--godaddy", "example.net", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="example.net")
+    cert = config.certificate._specific_certificate
+    assert isinstance(cert, CertbotCertificate)
+    assert cert.challenge_type == CertbotCertificate.ChallengeType.GODADDY
+    assert provision_calls["sudo"] == ""
+
+
+@pytest.mark.django_db
+def test_https_certbot_implies_enable(monkeypatch):
+    """`https --certbot` should implicitly behave like `https --enable --certbot`."""
+
+    provision_calls: dict[str, str] = {}
+
+    def fake_provision(self, *, sudo: str = "sudo"):
+        provision_calls["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--certbot", "example.net", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="example.net")
+    cert = config.certificate._specific_certificate
+    assert isinstance(cert, CertbotCertificate)
+    assert cert.challenge_type == CertbotCertificate.ChallengeType.NGINX
+    assert provision_calls["sudo"] == ""
 
 
 @pytest.mark.django_db
