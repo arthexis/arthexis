@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import ipaddress
-import subprocess
-import tempfile
 import os
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,16 +69,18 @@ def request_certbot_certificate(
             sudo=sudo,
         )
     else:
-        command = [
+        command = _with_sudo(
+            [
+                "certbot",
+                "certonly",
+                "--nginx",
+                "-d",
+                domain,
+                "--agree-tos",
+                "--non-interactive",
+            ],
             sudo,
-            "certbot",
-            "certonly",
-            "--nginx",
-            "-d",
-            domain,
-            "--agree-tos",
-            "--non-interactive",
-        ]
+        )
         if email:
             command.extend(["--email", email])
         else:
@@ -165,29 +168,45 @@ def _build_godaddy_certbot_command(
     if not key or not secret:
         raise CertbotError("GoDaddy DNS validation requires API key and secret.")
 
-    command = [
+    preserve_env_values = (
+        "GODADDY_API_KEY,"
+        "GODADDY_API_SECRET,"
+        "GODADDY_USE_SANDBOX,"
+        "GODADDY_DNS_WAIT_SECONDS,"
+        "GODADDY_CUSTOMER_ID,"
+        "GODADDY_ZONE"
+    )
+    command = _with_sudo(
+        [
+            "certbot",
+            "--preserve-env",
+            preserve_env_values,
+        ],
         sudo,
-        "certbot",
+    )
+    hook_script_path = Path(__file__).resolve().parents[2] / "scripts" / "certbot" / "godaddy_hook.py"
+    hook_command = f"{sys.executable} {hook_script_path}"
+    command.extend([
         "certonly",
         "--manual",
         "--preferred-challenges",
         "dns",
         "--manual-auth-hook",
-        "python3 scripts/certbot/godaddy_hook.py auth",
+        f"{hook_command} auth",
         "--manual-cleanup-hook",
-        "python3 scripts/certbot/godaddy_hook.py cleanup",
+        f"{hook_command} cleanup",
         "--manual-public-ip-logging-ok",
         "--non-interactive",
         "--agree-tos",
         "-d",
         domain,
-    ]
+    ])
     if email:
         command.extend(["--email", email])
     else:
         command.append("--register-unsafely-without-email")
 
-    propagation_seconds = max(0, int(dns_propagation_seconds or 0))
+    propagation_seconds = max(0, dns_propagation_seconds)
     command.extend(["--issuance-timeout", str(max(propagation_seconds + 60, 90))])
 
     env = os.environ.copy()
@@ -200,6 +219,9 @@ def _build_godaddy_certbot_command(
     customer_id = (dns_credential.resolve_sigils("customer_id") or "").strip()
     if customer_id:
         env["GODADDY_CUSTOMER_ID"] = customer_id
+    default_domain = (getattr(dns_credential, "default_domain", "") or "").strip()
+    if default_domain:
+        env["GODADDY_ZONE"] = default_domain
 
     return command, env
 
