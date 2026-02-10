@@ -516,6 +516,7 @@ def charger_status(request, cid, connector=None):
         }
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
     chart_should_animate = bool(has_active_session and not past_session)
+    status_should_poll = bool(has_active_session and not past_session)
 
     tx_rfid_details = _transaction_rfid_details(tx_obj, cache=rfid_cache)
 
@@ -555,6 +556,7 @@ def charger_status(request, cid, connector=None):
             "pagination_query": pagination_query,
             "session_query": session_query,
             "chart_should_animate": chart_should_animate,
+            "status_should_poll": status_should_poll,
             "usage_timeline": usage_timeline,
             "usage_timeline_window": usage_timeline_window,
             "charger_error_code": _visible_error_code(charger.last_error_code),

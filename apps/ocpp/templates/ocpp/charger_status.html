@@ -707,7 +707,9 @@
     const payload = parseChartPayload(document);
     const chartChanged = applyChartPayload(payload);
     renderChart(chartChanged);
-    syncStatusPolling();
+    if (STATUS_SHOULD_POLL) {
+      syncStatusPolling();
+    }
   });
 
 </script>
@@ -751,18 +753,24 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    reloadStatus();
-    syncStatusPolling();
+    if (STATUS_SHOULD_POLL) {
+      reloadStatus();
+      syncStatusPolling();
+    }
   });
 </script>
 {% endif %}
 <script>
+  const STATUS_SHOULD_POLL = {{ status_should_poll|yesno:'true,false,false' }};
   const STATUS_POLL_INTERVAL_MS = 5000;
 
   /**
    * Starts polling only when the tab is visible and focused.
    */
   function startStatusPolling() {
+    if (!STATUS_SHOULD_POLL) {
+      return;
+    }
     if (document.visibilityState !== 'visible' || !document.hasFocus()) {
       return;
     }
@@ -786,6 +794,10 @@
    * Keeps polling aligned with the current visibility/focus state.
    */
   function syncStatusPolling() {
+    if (!STATUS_SHOULD_POLL) {
+      stopStatusPolling();
+      return;
+    }
     if (document.visibilityState === 'visible' && document.hasFocus()) {
       startStatusPolling();
     } else {
