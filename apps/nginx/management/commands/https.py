@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from getpass import getpass
+import sys
 from pathlib import Path
 
 from django.conf import settings
@@ -65,6 +67,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Dispatch https command actions and normalize implicit enable behavior."""
+
         enable = options["enable"]
         disable = options["disable"]
         renew = options["renew"]
@@ -75,11 +79,12 @@ class Command(BaseCommand):
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
 
+        if not enable and not disable and not renew and (certbot_domain or godaddy_domain):
+            enable = True
+
         if not enable and not disable and not renew:
-            if options["local"] or certbot_domain or godaddy_domain:
-                raise CommandError(
-                    "Use --enable or --disable with certificate options."
-                )
+            if options["local"]:
+                raise CommandError("Use --enable or --disable with certificate options.")
             self._render_report(sudo=sudo)
             return
 
@@ -246,15 +251,65 @@ class Command(BaseCommand):
                 .first()
             )
         if credential is None:
-            raise CommandError(
-                "GoDaddy DNS validation requires an enabled DNS credential in admin (DNS > DNS Credentials)."
-            )
+            credential = self._prompt_for_godaddy_credential(certbot.domain)
+            if credential is None:
+                raise CommandError(
+                    "GoDaddy DNS validation requires credentials. Re-run with an interactive terminal or configure DNS > DNS Credentials in admin."
+                )
         certbot.dns_credential = credential
         certbot.save(update_fields=["dns_credential", "updated_at"])
         self.stdout.write(
             "Using GoDaddy credential '%s'. Ensure certbot and Python requests are available to run DNS hooks."
             % credential
         )
+
+    def _prompt_for_godaddy_credential(self, domain: str) -> DNSProviderCredential | None:
+        """Prompt for GoDaddy credentials and persist them for DNS-01 validation."""
+
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            self.stdout.write(
+                "No enabled GoDaddy DNS credential was found."
+            )
+            self.stdout.write(
+                "Create one in admin (DNS > DNS Credentials) or re-run this command in an interactive terminal to enter credentials now."
+            )
+            return None
+
+        self.stdout.write(
+            "No enabled GoDaddy DNS credential was found."
+        )
+        self.stdout.write(
+            "Create API credentials in GoDaddy: Developer Portal -> API Keys -> Create New Key."
+        )
+        self.stdout.write(
+            "Docs: https://developer.godaddy.com/keys"
+        )
+        should_continue = input("Enter credentials now and save to DNS Credentials? [y/N]: ").strip().lower()
+        if should_continue not in {"y", "yes"}:
+            return None
+
+        api_key = input("GoDaddy API key: ").strip()
+        api_secret = getpass("GoDaddy API secret: ").strip()
+        customer_id = input("GoDaddy customer ID (optional): ").strip()
+        use_sandbox = input("Use GoDaddy OTE sandbox environment? [y/N]: ").strip().lower()
+
+        if not api_key or not api_secret:
+            self.stdout.write("API key and secret are required to save credentials.")
+            return None
+
+        credential = DNSProviderCredential.objects.create(
+            provider=DNSProviderCredential.Provider.GODADDY,
+            api_key=api_key,
+            api_secret=api_secret,
+            customer_id=customer_id,
+            default_domain=domain,
+            use_sandbox=use_sandbox in {"y", "yes"},
+            is_enabled=True,
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Saved GoDaddy DNS credential for automated DNS validation.")
+        )
+        return credential
 
     def _apply_config(self, config: SiteConfiguration, *, reload: bool) -> None:
         try:
