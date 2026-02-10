@@ -125,6 +125,34 @@ def test_https_certbot_implies_enable(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
+    """Credential prompts should still run when stdout is redirected but stdin is interactive."""
+
+    import sys
+    from apps.dns.models import DNSProviderCredential
+    from apps.nginx.management.commands.https import Command
+
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+
+    answers = iter(["y", "key-123", "customer-42", "n"])
+    monkeypatch.setattr("builtins.input", lambda _prompt='': next(answers))
+    monkeypatch.setattr("apps.nginx.management.commands.https.getpass", lambda _prompt='': "secret-456")
+
+    command = Command()
+    credential = command._prompt_for_godaddy_credential("example.edu")
+
+    assert credential is not None
+    assert credential.provider == DNSProviderCredential.Provider.GODADDY
+    assert credential.api_key == "key-123"
+    assert credential.api_secret == "secret-456"
+    assert credential.customer_id == "customer-42"
+    assert credential.default_domain == "example.edu"
+    assert credential.is_enabled is True
+    assert credential.use_sandbox is False
+
+
+@pytest.mark.django_db
 def test_https_enable_with_godaddy_reports_manual_steps(monkeypatch):
     """GoDaddy mode should print setup guidance for administrators."""
 

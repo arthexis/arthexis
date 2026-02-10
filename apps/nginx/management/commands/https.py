@@ -266,7 +266,7 @@ class Command(BaseCommand):
     def _prompt_for_godaddy_credential(self, domain: str) -> DNSProviderCredential | None:
         """Prompt for GoDaddy credentials and persist them for DNS-01 validation."""
 
-        if not sys.stdin.isatty() or not sys.stdout.isatty():
+        if not sys.stdin.isatty():
             self.stdout.write(
                 "No enabled GoDaddy DNS credential was found."
             )
