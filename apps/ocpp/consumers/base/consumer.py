@@ -3453,6 +3453,25 @@ class CSMSConsumer(
             id_tag = str(id_token.get("idToken") or "").strip()
 
         if event_type == "started":
+            store.mark_transaction_requests(
+                charger_id=self.charger_id,
+                connector_id=connector_value,
+                actions={"RequestStartTransaction"},
+                statuses={"accepted", "requested"},
+                status="started",
+            )
+            if ocpp_tx_id:
+                started_requests = store.find_transaction_requests(
+                    charger_id=self.charger_id,
+                    connector_id=connector_value,
+                    action="RequestStartTransaction",
+                    statuses={"started"},
+                )
+                for request_message_id, _ in started_requests:
+                    store.update_transaction_request(
+                        request_message_id,
+                        transaction_id=ocpp_tx_id,
+                    )
             tag = None
             tag_created = False
             if id_tag:
@@ -3500,15 +3519,6 @@ class CSMSConsumer(
                     payload.get("meterValue"), connector_value, tx_obj
                 )
                 _record_transaction_event(tx_obj)
-                transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
-                store.mark_transaction_requests(
-                    charger_id=self.charger_id,
-                    connector_id=connector_value,
-                    transaction_id=transaction_reference,
-                    actions={"RequestStartTransaction"},
-                    statuses={"accepted", "requested"},
-                    status="started",
-                )
                 await self._record_rfid_attempt(
                     rfid=id_tag or "",
                     status=RFIDAttempt.Status.ACCEPTED,

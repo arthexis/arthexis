@@ -175,6 +175,7 @@ def _handle_set_charging_profile(
 
 
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
 def _handle_clear_charging_profile(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:
