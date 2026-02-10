@@ -12,19 +12,19 @@ Charge points report their status through the OCPP `StatusNotification` message.
 
 ## Expected CP status values
 
-The system recognizes the following normalized status strings when rendering UI badges and aggregations:
+The system recognizes the following OCPP `StatusNotification` values. These are normalized to lowercase (for example, `Available` becomes `available`, and `SuspendedEVSE` becomes `suspendedevse`) for UI badges, aggregations, and analytics, while the PascalCase variants below reflect the raw values reported by the charge point:
 
-- `available`
-- `preparing`
-- `charging`
-- `suspendedevse`
-- `suspendedev`
-- `finishing`
-- `faulted`
-- `unavailable`
-- `reserved`
-- `occupied`
-- `outofservice`
+- `Available`
+- `Preparing`
+- `Charging`
+- `SuspendedEVSE`
+- `SuspendedEV`
+- `Finishing`
+- `Faulted`
+- `Unavailable`
+- `Reserved`
+- `Occupied`
+- `OutOfService`
 
 These values are used to build user-visible status labels and colors and to normalize status display logic.
 
@@ -92,7 +92,7 @@ The UI sometimes overrides the raw status so the badge reflects active transacti
 flowchart TD
     Input[Status + Active Session + Error Code]
     Input -->|Session active & no error & status empty/unknown/Available| DisplayCharging[Display Charging badge]
-    Input -->|No session & no error & status Charging/Finishing| DisplayAvailable[Display Available badge]
+    Input -->|No session & no error & status Charging/Finishing & derived state not Available| DisplayChargingFallback[Display Charging badge]
     Input -->|Error code present| DisplayFault[Display status + error badge]
     Input -->|Otherwise| DisplayRaw[Display normalized status badge]
 ```
