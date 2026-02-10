@@ -52,6 +52,7 @@ arthexis_log_suite_uptime() {
 from __future__ import annotations
 import sys
 from datetime import datetime, timezone
+import importlib.util
 from pathlib import Path
 
 
@@ -62,11 +63,10 @@ def _read_uptime_seconds(now: datetime) -> float | None:
         try:
             return float(proc_path.read_text(encoding="utf-8").split()[0])
         except (OSError, ValueError, IndexError):
-            return None
-    try:
-        import psutil
-    except Exception:
+            pass
+    if importlib.util.find_spec("psutil") is None:
         return None
+    import psutil
     try:
         return max(0.0, now.timestamp() - float(psutil.boot_time()))
     except (OSError, ValueError):
