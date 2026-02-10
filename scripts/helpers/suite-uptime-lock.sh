@@ -54,6 +54,7 @@ import sys
 from datetime import datetime, timezone
 import importlib.util
 from pathlib import Path
+import subprocess
 
 
 def _read_uptime_seconds(now: datetime) -> float | None:
@@ -66,11 +67,18 @@ def _read_uptime_seconds(now: datetime) -> float | None:
             pass
     if importlib.util.find_spec("psutil") is None:
         return None
-    import psutil
-    try:
-        return max(0.0, now.timestamp() - float(psutil.boot_time()))
-    except (OSError, ValueError):
+    result = subprocess.run(
+        [sys.executable, "-c", "import psutil; print(psutil.boot_time())"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
         return None
+    try:
+        boot_time = float(result.stdout.strip())
+    except ValueError:
+        return None
+    return max(0.0, now.timestamp() - boot_time)
 
 
 base_dir = Path(sys.argv[1])
