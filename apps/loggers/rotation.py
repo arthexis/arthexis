@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -62,6 +63,27 @@ class ArchiveTimedRotatingFileHandler(TimedRotatingFileHandler):
             result.sort()
             result = result[: len(result) - self.backupCount]
         return result
+
+    def _set_next_rollover_timestamp(self, *, current_time: int) -> None:
+        """Advance rolloverAt so lock-related rotation failures do not repeat endlessly."""
+
+        next_rollover = self.computeRollover(current_time)
+        while next_rollover <= current_time:
+            next_rollover += self.interval
+        self.rolloverAt = next_rollover
+
+    def doRollover(self) -> None:
+        """Rotate logs and tolerate transient Windows file-lock conflicts.
+
+        Windows refuses to rename files that are open in another process. When that
+        happens during midnight rotation we skip this attempt, keep writing to the
+        current file, and schedule the next rollover window.
+        """
+
+        try:
+            super().doRollover()
+        except PermissionError:
+            self._set_next_rollover_timestamp(current_time=int(time.time()))
 
 
 def build_daily_rotating_file_handler(
