@@ -8,6 +8,7 @@ import json
 import threading
 
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from redis.exceptions import RedisError
 
 from . import logs, scheduler, state
@@ -42,12 +43,18 @@ def _pending_result_key(message_id: str) -> str:
 
 
 def _store_pending_metadata_redis(message_id: str, metadata: dict[str, object]) -> None:
+    """Persist pending-call metadata in Redis with datetime-safe JSON serialization."""
+
     client = state._state_redis()
     if not client:
         return
     try:
-        client.set(_pending_metadata_key(message_id), json.dumps(metadata), ex=_PENDING_TTL)
-    except RedisError:
+        client.set(
+            _pending_metadata_key(message_id),
+            json.dumps(metadata, cls=DjangoJSONEncoder),
+            ex=_PENDING_TTL,
+        )
+    except (RedisError, TypeError, ValueError):
         return
 
 
@@ -63,12 +70,18 @@ def _load_pending_metadata_redis(message_id: str) -> dict[str, object] | None:
 
 
 def _store_pending_result_redis(message_id: str, payload: dict[str, object]) -> None:
+    """Persist pending-call results in Redis with datetime-safe JSON serialization."""
+
     client = state._state_redis()
     if not client:
         return
     try:
-        client.set(_pending_result_key(message_id), json.dumps(payload), ex=_PENDING_TTL)
-    except RedisError:
+        client.set(
+            _pending_result_key(message_id),
+            json.dumps(payload, cls=DjangoJSONEncoder),
+            ex=_PENDING_TTL,
+        )
+    except (RedisError, TypeError, ValueError):
         return
 
 
