@@ -5,7 +5,7 @@
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
-<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}">
+<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}">
   {% if show_connector_tabs and connector_links %}
   <div class="mb-3">
     <div class="nav nav-pills flex-wrap gap-2">
@@ -671,6 +671,13 @@
             current.setAttribute('data-chart-animate', newAnimateAttr);
           }
           chartShouldAnimate = newAnimateAttr === 'true';
+          const newStatusShouldPollAttr = newContent.getAttribute('data-status-should-poll');
+          STATUS_SHOULD_POLL = newStatusShouldPollAttr === 'true';
+          if (newStatusShouldPollAttr === null) {
+            current.removeAttribute('data-status-should-poll');
+          } else {
+            current.setAttribute('data-status-should-poll', newStatusShouldPollAttr);
+          }
           current.innerHTML = newContent.innerHTML;
           if (typeof window.setupRemoteStartForm === 'function') {
             window.setupRemoteStartForm(current);
@@ -738,6 +745,13 @@
               changedIds.push(el.id);
             }
           });
+          const newStatusShouldPollAttr = newContent.getAttribute('data-status-should-poll');
+          STATUS_SHOULD_POLL = newStatusShouldPollAttr === 'true';
+          if (newStatusShouldPollAttr === null) {
+            current.removeAttribute('data-status-should-poll');
+          } else {
+            current.setAttribute('data-status-should-poll', newStatusShouldPollAttr);
+          }
           current.innerHTML = newContent.innerHTML;
           if (typeof window.setupRemoteStartForm === 'function') {
             window.setupRemoteStartForm(current);
@@ -761,20 +775,14 @@
 </script>
 {% endif %}
 <script>
-  const STATUS_SHOULD_POLL = {{ status_should_poll|yesno:'true,false,false' }};
+  let STATUS_SHOULD_POLL = {{ status_should_poll|yesno:'true,false,false' }};
   const STATUS_POLL_INTERVAL_MS = 5000;
 
   /**
    * Starts polling only when the tab is visible and focused.
    */
   function startStatusPolling() {
-    if (!STATUS_SHOULD_POLL) {
-      return;
-    }
-    if (document.visibilityState !== 'visible' || !document.hasFocus()) {
-      return;
-    }
-    if (window.statusPollIntervalId) {
+    if (!STATUS_SHOULD_POLL || window.statusPollIntervalId) {
       return;
     }
     window.statusPollIntervalId = window.setInterval(reloadStatus, STATUS_POLL_INTERVAL_MS);
@@ -888,6 +896,12 @@
               feedback.className = 'mt-2 small text-success';
               input.value = '';
               input.classList.remove('is-invalid');
+              if (typeof reloadStatus === 'function') {
+                reloadStatus();
+              }
+              if (typeof syncStatusPolling === 'function') {
+                syncStatusPolling();
+              }
             } else {
               const detail = data && typeof data.detail === 'string' ? data.detail : '';
               feedback.textContent = detail || messages.error || '';

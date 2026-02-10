@@ -515,8 +515,9 @@ def charger_status(request, cid, connector=None):
             "error": str(_("Unable to send remote start request.")),
         }
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
-    chart_should_animate = bool(has_active_session and not past_session)
-    status_should_poll = bool(has_active_session and not past_session)
+    is_live_session_view = bool(has_active_session and not past_session)
+    chart_should_animate = is_live_session_view
+    status_should_poll = is_live_session_view
 
     tx_rfid_details = _transaction_rfid_details(tx_obj, cache=rfid_cache)
 
