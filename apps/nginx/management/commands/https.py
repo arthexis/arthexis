@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
+from apps.dns.models import DNSProviderCredential
 from apps.certs.services import CertificateVerificationResult
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
@@ -46,6 +47,11 @@ class Command(BaseCommand):
             metavar="DOMAIN",
             help="Use certbot for the specified domain.",
         )
+        cert_group.add_argument(
+            "--godaddy",
+            metavar="DOMAIN",
+            help="Use certbot DNS-01 with GoDaddy for the specified domain.",
+        )
 
         parser.add_argument(
             "--no-reload",
@@ -63,17 +69,21 @@ class Command(BaseCommand):
         disable = options["disable"]
         renew = options["renew"]
         certbot_domain = options["certbot"]
-        use_local = options["local"] or not certbot_domain
+        godaddy_domain = options["godaddy"]
+        use_local = options["local"] or not (certbot_domain or godaddy_domain)
+        use_godaddy = bool(godaddy_domain)
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
 
         if not enable and not disable and not renew:
-            if options["local"] or certbot_domain:
-                raise CommandError("Use --enable or --disable with certificate options.")
+            if options["local"] or certbot_domain or godaddy_domain:
+                raise CommandError(
+                    "Use --enable or --disable with certificate options."
+                )
             self._render_report(sudo=sudo)
             return
 
-        domain = "localhost" if use_local else certbot_domain
+        domain = "localhost" if use_local else (godaddy_domain or certbot_domain)
 
         if disable:
             self._disable_https(domain, reload=reload)
@@ -86,6 +96,7 @@ class Command(BaseCommand):
         certificate = self._enable_https(
             domain,
             use_local=use_local,
+            use_godaddy=use_godaddy,
             sudo=sudo,
             reload=reload,
         )
@@ -100,11 +111,17 @@ class Command(BaseCommand):
         domain: str,
         *,
         use_local: bool,
+        use_godaddy: bool,
         sudo: str,
         reload: bool,
     ):
         config = self._get_or_create_config(domain, protocol="https")
-        certificate = self._get_or_create_certificate(domain, config, use_local=use_local)
+        certificate = self._get_or_create_certificate(
+            domain,
+            config,
+            use_local=use_local,
+            use_godaddy=use_godaddy,
+        )
 
         if config.certificate_id != certificate.id:
             config.certificate = certificate
@@ -116,6 +133,8 @@ class Command(BaseCommand):
                 subject_alt_names=["localhost", "127.0.0.1", "::1"],
             )
         else:
+            if use_godaddy:
+                self._validate_godaddy_setup(certificate)
             certificate.provision(sudo=sudo)
 
         self._apply_config(config, reload=reload)
@@ -165,10 +184,17 @@ class Command(BaseCommand):
         config: SiteConfiguration,
         *,
         use_local: bool,
+        use_godaddy: bool,
     ):
         slug = slugify(domain)
         if use_local:
-            base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+            base_path = (
+                Path(settings.BASE_DIR)
+                / "scripts"
+                / "generated"
+                / "certificates"
+                / slug
+            )
             defaults = {
                 "domain": domain,
                 "certificate_path": str(base_path / "fullchain.pem"),
@@ -183,6 +209,11 @@ class Command(BaseCommand):
                 "domain": domain,
                 "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
                 "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+                "challenge_type": (
+                    CertbotCertificate.ChallengeType.GODADDY
+                    if use_godaddy
+                    else CertbotCertificate.ChallengeType.NGINX
+                ),
             }
             certificate, _ = CertbotCertificate.objects.update_or_create(
                 name=f"{config.name or 'nginx-site'}-{slug}-certbot",
@@ -190,6 +221,35 @@ class Command(BaseCommand):
             )
 
         return certificate
+
+    def _validate_godaddy_setup(self, certificate) -> None:
+        """Validate GoDaddy DNS challenge prerequisites before provisioning."""
+
+        if not isinstance(certificate._specific_certificate, CertbotCertificate):
+            return
+        certbot = certificate._specific_certificate
+        if certbot.challenge_type != CertbotCertificate.ChallengeType.GODADDY:
+            return
+
+        credential = (
+            certbot.dns_credential
+            or DNSProviderCredential.objects.filter(
+                provider=DNSProviderCredential.Provider.GODADDY,
+                is_enabled=True,
+            )
+            .order_by("pk")
+            .first()
+        )
+        if credential is None:
+            raise CommandError(
+                "GoDaddy DNS validation requires an enabled DNS credential in admin (DNS > DNS Credentials)."
+            )
+        certbot.dns_credential = credential
+        certbot.save(update_fields=["dns_credential", "updated_at"])
+        self.stdout.write(
+            "Using GoDaddy credential '%s'. Ensure certbot and Python requests are available to run DNS hooks."
+            % credential
+        )
 
     def _apply_config(self, config: SiteConfiguration, *, reload: bool) -> None:
         try:
@@ -199,7 +259,9 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(result.message))
         if not result.validated:
-            self.stdout.write("nginx configuration applied but validation was skipped or failed.")
+            self.stdout.write(
+                "nginx configuration applied but validation was skipped or failed."
+            )
         if not result.reloaded:
             self.stdout.write(
                 "nginx reload/start did not complete automatically; check the service status."

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import subprocess
 import tempfile
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,8 +29,10 @@ class CertificateVerificationResult:
         return "; ".join(self.messages)
 
 
-def _run_command(command: list[str]) -> str:
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+def _run_command(command: list[str], *, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(
+        command, capture_output=True, text=True, check=False, env=env
+    )
     if result.returncode != 0:
         stderr = result.stderr.strip()
         raise RuntimeError(stderr or "Command failed: " + " ".join(command))
@@ -42,6 +45,9 @@ def request_certbot_certificate(
     email: str | None = None,
     certificate_path: Path,
     certificate_key_path: Path,
+    challenge_type: str = "nginx",
+    dns_credential=None,
+    dns_propagation_seconds: int = 120,
     sudo: str = "sudo",
 ) -> str:
     """Run certbot to request or renew certificates for *domain*."""
@@ -53,14 +59,33 @@ def request_certbot_certificate(
         if base_dir_key != base_dir:
             subprocess.run([sudo, "mkdir", "-p", str(base_dir_key)], check=True)
 
-    command = [sudo, "certbot", "certonly", "--nginx", "-d", domain, "--agree-tos", "--non-interactive"]
-    if email:
-        command.extend(["--email", email])
+    if challenge_type == "godaddy":
+        command, env = _build_godaddy_certbot_command(
+            domain=domain,
+            email=email,
+            dns_credential=dns_credential,
+            dns_propagation_seconds=dns_propagation_seconds,
+            sudo=sudo,
+        )
     else:
-        command.append("--register-unsafely-without-email")
+        command = [
+            sudo,
+            "certbot",
+            "certonly",
+            "--nginx",
+            "-d",
+            domain,
+            "--agree-tos",
+            "--non-interactive",
+        ]
+        if email:
+            command.extend(["--email", email])
+        else:
+            command.append("--register-unsafely-without-email")
+        env = None
 
     try:
-        return _run_command(command)
+        return _run_command(command, env=env)
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         raise CertbotError(str(exc)) from exc
 
@@ -87,7 +112,9 @@ def generate_self_signed_certificate(
     config_path: Path | None = None
     config_contents = _build_self_signed_config(domain, subject_alt_names or [])
     if config_contents:
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp_file:
+        with tempfile.NamedTemporaryFile(
+            "w", delete=False, encoding="utf-8"
+        ) as temp_file:
             temp_file.write(config_contents)
             config_path = Path(temp_file.name)
 
@@ -118,6 +145,63 @@ def generate_self_signed_certificate(
     finally:
         if config_path:
             config_path.unlink(missing_ok=True)
+
+
+def _build_godaddy_certbot_command(
+    *,
+    domain: str,
+    email: str | None,
+    dns_credential,
+    dns_propagation_seconds: int,
+    sudo: str,
+) -> tuple[list[str], dict[str, str]]:
+    """Build certbot command and environment for GoDaddy DNS-01 validation."""
+
+    if dns_credential is None:
+        raise CertbotError("GoDaddy DNS validation requires a DNS credential.")
+
+    key = (dns_credential.resolve_sigils("api_key") or "").strip()
+    secret = (dns_credential.resolve_sigils("api_secret") or "").strip()
+    if not key or not secret:
+        raise CertbotError("GoDaddy DNS validation requires API key and secret.")
+
+    command = [
+        sudo,
+        "certbot",
+        "certonly",
+        "--manual",
+        "--preferred-challenges",
+        "dns",
+        "--manual-auth-hook",
+        "python3 scripts/certbot/godaddy_hook.py auth",
+        "--manual-cleanup-hook",
+        "python3 scripts/certbot/godaddy_hook.py cleanup",
+        "--manual-public-ip-logging-ok",
+        "--non-interactive",
+        "--agree-tos",
+        "-d",
+        domain,
+    ]
+    if email:
+        command.extend(["--email", email])
+    else:
+        command.append("--register-unsafely-without-email")
+
+    propagation_seconds = max(0, int(dns_propagation_seconds or 0))
+    command.extend(["--issuance-timeout", str(max(propagation_seconds + 60, 90))])
+
+    env = os.environ.copy()
+    env["GODADDY_API_KEY"] = key
+    env["GODADDY_API_SECRET"] = secret
+    env["GODADDY_USE_SANDBOX"] = (
+        "1" if getattr(dns_credential, "use_sandbox", False) else "0"
+    )
+    env["GODADDY_DNS_WAIT_SECONDS"] = str(propagation_seconds)
+    customer_id = (dns_credential.resolve_sigils("customer_id") or "").strip()
+    if customer_id:
+        env["GODADDY_CUSTOMER_ID"] = customer_id
+
+    return command, env
 
 
 def _build_self_signed_config(domain: str, subject_alt_names: list[str]) -> str:
@@ -208,7 +292,10 @@ def get_certificate_expiration(
     sudo: str = "sudo",
 ) -> datetime:
     enddate_output = _run_command(
-        _with_sudo(["openssl", "x509", "-noout", "-enddate", "-in", str(certificate_path)], sudo)
+        _with_sudo(
+            ["openssl", "x509", "-noout", "-enddate", "-in", str(certificate_path)],
+            sudo,
+        )
     )
     return _parse_cert_enddate(enddate_output)
 
@@ -240,7 +327,9 @@ def verify_certificate(
 
     if certificate_path and certificate_path.exists():
         try:
-            enddate = get_certificate_expiration(certificate_path=certificate_path, sudo=sudo)
+            enddate = get_certificate_expiration(
+                certificate_path=certificate_path, sudo=sudo
+            )
             if enddate < datetime.now(tz=timezone.utc):
                 add_issue(f"Certificate expired on {enddate.isoformat()}.")
             else:
@@ -250,10 +339,31 @@ def verify_certificate(
 
         try:
             subject_output = _run_command(
-                _with_sudo(["openssl", "x509", "-noout", "-subject", "-in", str(certificate_path)], sudo)
+                _with_sudo(
+                    [
+                        "openssl",
+                        "x509",
+                        "-noout",
+                        "-subject",
+                        "-in",
+                        str(certificate_path),
+                    ],
+                    sudo,
+                )
             )
             san_output = _run_command(
-                _with_sudo(["openssl", "x509", "-noout", "-ext", "subjectAltName", "-in", str(certificate_path)], sudo)
+                _with_sudo(
+                    [
+                        "openssl",
+                        "x509",
+                        "-noout",
+                        "-ext",
+                        "subjectAltName",
+                        "-in",
+                        str(certificate_path),
+                    ],
+                    sudo,
+                )
             )
             domain_present = domain in subject_output or f"DNS:{domain}" in san_output
             if domain and not domain_present:
@@ -269,10 +379,30 @@ def verify_certificate(
     ):
         try:
             cert_modulus = _run_command(
-                _with_sudo(["openssl", "x509", "-noout", "-modulus", "-in", str(certificate_path)], sudo)
+                _with_sudo(
+                    [
+                        "openssl",
+                        "x509",
+                        "-noout",
+                        "-modulus",
+                        "-in",
+                        str(certificate_path),
+                    ],
+                    sudo,
+                )
             )
             key_modulus = _run_command(
-                _with_sudo(["openssl", "rsa", "-noout", "-modulus", "-in", str(certificate_key_path)], sudo)
+                _with_sudo(
+                    [
+                        "openssl",
+                        "rsa",
+                        "-noout",
+                        "-modulus",
+                        "-in",
+                        str(certificate_key_path),
+                    ],
+                    sudo,
+                )
             )
             if cert_modulus != key_modulus:
                 add_issue("Certificate and key do not match.")
