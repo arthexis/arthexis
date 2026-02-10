@@ -12,4 +12,5 @@ This site aggregates operator guides, architecture notes, and development refere
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)
 - [Modeling System Proposal](modeling-system-proposal.md)
+- [Standalone Desktop Implementation Plan](development/standalone-desktop-implementation.md)
 - [Recipes](recipes.md)
