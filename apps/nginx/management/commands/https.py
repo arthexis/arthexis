@@ -231,15 +231,20 @@ class Command(BaseCommand):
         if certbot.challenge_type != CertbotCertificate.ChallengeType.GODADDY:
             return
 
-        credential = (
-            certbot.dns_credential
-            or DNSProviderCredential.objects.filter(
-                provider=DNSProviderCredential.Provider.GODADDY,
-                is_enabled=True,
+        credential = certbot.dns_credential
+        if not (
+            credential
+            and credential.is_enabled
+            and credential.provider == DNSProviderCredential.Provider.GODADDY
+        ):
+            credential = (
+                DNSProviderCredential.objects.filter(
+                    provider=DNSProviderCredential.Provider.GODADDY,
+                    is_enabled=True,
+                )
+                .order_by("pk")
+                .first()
             )
-            .order_by("pk")
-            .first()
-        )
         if credential is None:
             raise CommandError(
                 "GoDaddy DNS validation requires an enabled DNS credential in admin (DNS > DNS Credentials)."

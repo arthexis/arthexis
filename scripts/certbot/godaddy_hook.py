@@ -30,10 +30,19 @@ def _optional_env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
 
-def _zone_and_name(fqdn: str) -> tuple[str, str]:
+def _zone_and_name(fqdn: str, zone_override: str = "") -> tuple[str, str]:
     """Split ACME record fqdn into GoDaddy zone domain and relative host name."""
 
     value = fqdn.rstrip(".")
+    override = zone_override.strip().rstrip(".")
+    if override:
+        suffix = f".{override}"
+        if value == override:
+            return override, ""
+        if not value.endswith(suffix):
+            raise RuntimeError(f"ACME domain {fqdn} does not match zone {override}.")
+        return override, value[: -len(suffix)]
+
     labels = [part for part in value.split(".") if part]
     if len(labels) < 2:
         raise RuntimeError(f"Invalid DNS name for ACME challenge: {fqdn}")
@@ -77,7 +86,7 @@ def _upsert_txt_record() -> None:
         if not fqdn.startswith("*.")
         else f"_acme-challenge.{fqdn[2:]}"
     )
-    zone, host = _zone_and_name(challenge_domain)
+    zone, host = _zone_and_name(challenge_domain, _optional_env("GODADDY_ZONE"))
     payload = [{"data": validation, "ttl": 600}]
     response = _godaddy_request(
         "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=payload
@@ -87,7 +96,7 @@ def _upsert_txt_record() -> None:
             f"GoDaddy auth hook failed: {response.status_code} {response.text}"
         )
 
-    wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "120") or "120")
+    wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "120"))
     if wait_seconds > 0:
         time.sleep(wait_seconds)
 
@@ -101,7 +110,7 @@ def _cleanup_txt_record() -> None:
         if not fqdn.startswith("*.")
         else f"_acme-challenge.{fqdn[2:]}"
     )
-    zone, host = _zone_and_name(challenge_domain)
+    zone, host = _zone_and_name(challenge_domain, _optional_env("GODADDY_ZONE"))
     response = _godaddy_request(
         "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=[]
     )
