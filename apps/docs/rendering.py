@@ -1,7 +1,7 @@
 import csv
 import io
 import re
-from html import escape, unescape
+from html import escape
 from pathlib import Path
 
 import bleach
@@ -165,7 +165,7 @@ def _rewrite_mermaid_blocks(html: str) -> str:
     """Replace fenced mermaid code blocks with Mermaid container divs."""
 
     def _replace(match: re.Match[str]) -> str:
-        diagram = unescape(match.group("diagram")).strip("\n")
+        diagram = match.group("diagram").strip("\n")
         return f'<div class="mermaid">{diagram}</div>'
 
     return re.sub(
