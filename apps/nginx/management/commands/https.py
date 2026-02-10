@@ -5,6 +5,8 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.dns.models import DNSProviderCredential
+
 from django.utils import timezone
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
@@ -48,6 +50,18 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--godaddy",
+            action="store_true",
+            help="Use GoDaddy DNS validation with certbot (requires --certbot).",
+        )
+        parser.add_argument(
+            "--dns-propagation-seconds",
+            type=int,
+            default=60,
+            help="Propagation wait time for DNS-based certbot validation.",
+        )
+
+        parser.add_argument(
             "--no-reload",
             action="store_true",
             help="Skip nginx reload/restart after applying changes.",
@@ -63,9 +77,13 @@ class Command(BaseCommand):
         disable = options["disable"]
         renew = options["renew"]
         certbot_domain = options["certbot"]
+        use_godaddy = options["godaddy"]
         use_local = options["local"] or not certbot_domain
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
+
+        if use_godaddy and not certbot_domain:
+            raise CommandError("--godaddy requires --certbot DOMAIN.")
 
         if not enable and not disable and not renew:
             if options["local"] or certbot_domain:
@@ -88,6 +106,8 @@ class Command(BaseCommand):
             use_local=use_local,
             sudo=sudo,
             reload=reload,
+            validation_provider="godaddy" if use_godaddy else None,
+            dns_propagation_seconds=options["dns_propagation_seconds"],
         )
         self.stdout.write(
             self.style.SUCCESS(
@@ -102,6 +122,8 @@ class Command(BaseCommand):
         use_local: bool,
         sudo: str,
         reload: bool,
+        validation_provider: str | None = None,
+        dns_propagation_seconds: int = 60,
     ):
         config = self._get_or_create_config(domain, protocol="https")
         certificate = self._get_or_create_certificate(domain, config, use_local=use_local)
@@ -116,10 +138,53 @@ class Command(BaseCommand):
                 subject_alt_names=["localhost", "127.0.0.1", "::1"],
             )
         else:
-            certificate.provision(sudo=sudo)
+            provision_kwargs = self._get_dns_validation_kwargs(
+                domain,
+                validation_provider=validation_provider,
+                dns_propagation_seconds=dns_propagation_seconds,
+            )
+            certificate.provision(sudo=sudo, **provision_kwargs)
 
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _get_dns_validation_kwargs(
+        self,
+        domain: str,
+        *,
+        validation_provider: str | None,
+        dns_propagation_seconds: int,
+    ) -> dict[str, object]:
+        """Build certbot DNS validation settings for provider-backed challenges."""
+        provider = (validation_provider or "").strip().lower()
+        if provider != "godaddy":
+            return {}
+
+        credential = self._get_godaddy_credential_for_domain(domain)
+        return {
+            "validation_provider": "godaddy",
+            "dns_api_key": credential.resolve_sigils("api_key"),
+            "dns_api_secret": credential.resolve_sigils("api_secret"),
+            "dns_propagation_seconds": dns_propagation_seconds,
+        }
+
+    def _get_godaddy_credential_for_domain(self, domain: str) -> DNSProviderCredential:
+        """Return the best enabled GoDaddy DNS credential for a domain."""
+        credentials = DNSProviderCredential.objects.filter(
+            provider=DNSProviderCredential.Provider.GODADDY,
+            is_enabled=True,
+        )
+        domain = domain.lower()
+        for credential in credentials:
+            default_domain = (credential.get_default_domain() or "").lower()
+            if default_domain and (domain == default_domain or domain.endswith(f".{default_domain}")):
+                return credential
+        fallback = credentials.first()
+        if fallback is None:
+            raise CommandError(
+                "No enabled GoDaddy DNS credential found. Create one in Admin > DNS > DNS Credentials."
+            )
+        return fallback
 
     def _disable_https(self, domain: str, *, reload: bool) -> None:
         config = self._get_existing_config(domain)

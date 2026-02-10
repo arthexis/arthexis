@@ -239,6 +239,8 @@ class SiteConfigurationViewMixin:
             ),
             "certificate_type_choices": self._certificate_type_choices(),
             "default_certificate_type": self.default_certificate_type,
+            "validation_provider_choices": self._validation_provider_choices(),
+            "default_validation_provider": self.default_validation_provider,
             "subdomain_form": subdomain_form,
             "subdomain_mixed": subdomain_mixed,
         }

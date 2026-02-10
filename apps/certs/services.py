@@ -43,6 +43,10 @@ def request_certbot_certificate(
     certificate_path: Path,
     certificate_key_path: Path,
     sudo: str = "sudo",
+    validation_provider: str | None = None,
+    dns_api_key: str | None = None,
+    dns_api_secret: str | None = None,
+    dns_propagation_seconds: int = 60,
 ) -> str:
     """Run certbot to request or renew certificates for *domain*."""
 
@@ -53,16 +57,55 @@ def request_certbot_certificate(
         if base_dir_key != base_dir:
             subprocess.run([sudo, "mkdir", "-p", str(base_dir_key)], check=True)
 
-    command = [sudo, "certbot", "certonly", "--nginx", "-d", domain, "--agree-tos", "--non-interactive"]
+    command = [
+        "certbot",
+        "certonly",
+        "--agree-tos",
+        "--non-interactive",
+        "-d",
+        domain,
+    ]
+
+    provider = (validation_provider or "").strip().lower()
+    temp_credentials: Path | None = None
+    if provider == "godaddy":
+        if not dns_api_key or not dns_api_secret:
+            raise CertbotError(
+                "GoDaddy DNS validation requires DNS API key and secret."
+            )
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as handle:
+            handle.write(f"dns_godaddy_key = {dns_api_key}\n")
+            handle.write(f"dns_godaddy_secret = {dns_api_secret}\n")
+            temp_credentials = Path(handle.name)
+        temp_credentials.chmod(0o600)
+        command.extend(
+            [
+                "--authenticator",
+                "dns-godaddy",
+                "--dns-godaddy-credentials",
+                str(temp_credentials),
+                "--dns-godaddy-propagation-seconds",
+                str(max(0, int(dns_propagation_seconds))),
+            ]
+        )
+    else:
+        command.append("--nginx")
+
     if email:
         command.extend(["--email", email])
     else:
         command.append("--register-unsafely-without-email")
 
+    if sudo:
+        command = [sudo, *command]
+
     try:
         return _run_command(command)
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         raise CertbotError(str(exc)) from exc
+    finally:
+        if temp_credentials:
+            temp_credentials.unlink(missing_ok=True)
 
 
 def generate_self_signed_certificate(

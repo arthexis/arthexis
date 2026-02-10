@@ -58,6 +58,15 @@
             <option value="{{ value }}"{% if value == default_certificate_type %} selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
+        <label for="validation_provider">{% trans "DNS validation provider" %}</label>
+        <select name="validation_provider" id="validation_provider">
+          <option value="">{% trans "None" %}</option>
+          {% for value, label in validation_provider_choices %}
+            <option value="{{ value }}"{% if value == default_validation_provider %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <label for="dns_propagation_seconds">{% trans "DNS propagation seconds" %}</label>
+        <input type="number" min="0" name="dns_propagation_seconds" id="dns_propagation_seconds" value="60" />
         <input type="submit" value="{% trans 'Generate certificates' %}" />
         <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS.' %}</p>
       </form>

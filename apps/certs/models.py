@@ -49,13 +49,27 @@ class CertificateBase(Certificate):
         verbose_name_plural = _("Certificates")
         ordering = ("name",)
 
-    def provision(self, *, sudo: str = "sudo") -> str:
+    def provision(
+        self,
+        *,
+        sudo: str = "sudo",
+        validation_provider: str | None = None,
+        dns_api_key: str | None = None,
+        dns_api_secret: str | None = None,
+        dns_propagation_seconds: int = 60,
+    ) -> str:
         """Generate or request this certificate based on its type."""
 
         certificate = self._specific_certificate
 
         if isinstance(certificate, CertbotCertificate):
-            return certificate.request(sudo=sudo)
+            return certificate.request(
+                sudo=sudo,
+                validation_provider=validation_provider,
+                dns_api_key=dns_api_key,
+                dns_api_secret=dns_api_secret,
+                dns_propagation_seconds=dns_propagation_seconds,
+            )
         if isinstance(certificate, SelfSignedCertificate):
             return certificate.generate(sudo=sudo)
 
@@ -89,9 +103,23 @@ class CertificateBase(Certificate):
         current_time = now or timezone.now()
         return self.expiration_date <= current_time
 
-    def renew(self, *, sudo: str = "sudo") -> str:
+    def renew(
+        self,
+        *,
+        sudo: str = "sudo",
+        validation_provider: str | None = None,
+        dns_api_key: str | None = None,
+        dns_api_secret: str | None = None,
+        dns_propagation_seconds: int = 60,
+    ) -> str:
         """Renew the certificate and refresh its expiration date."""
-        message = self._specific_certificate.provision(sudo=sudo)
+        message = self._specific_certificate.provision(
+            sudo=sudo,
+            validation_provider=validation_provider,
+            dns_api_key=dns_api_key,
+            dns_api_secret=dns_api_secret,
+            dns_propagation_seconds=dns_propagation_seconds,
+        )
         try:
             self.update_expiration_date(sudo=sudo)
         except RuntimeError:
@@ -132,7 +160,15 @@ class CertbotCertificate(CertificateBase):
         verbose_name = _("Certbot certificate")
         verbose_name_plural = _("Certbot certificates")
 
-    def request(self, *, sudo: str = "sudo") -> str:
+    def request(
+        self,
+        *,
+        sudo: str = "sudo",
+        validation_provider: str | None = None,
+        dns_api_key: str | None = None,
+        dns_api_secret: str | None = None,
+        dns_propagation_seconds: int = 60,
+    ) -> str:
         """Trigger certbot for this certificate."""
 
         if not self.certificate_path:
@@ -146,6 +182,10 @@ class CertbotCertificate(CertificateBase):
             certificate_path=self.certificate_file,
             certificate_key_path=self.certificate_key_file,
             sudo=sudo,
+            validation_provider=validation_provider,
+            dns_api_key=dns_api_key,
+            dns_api_secret=dns_api_secret,
+            dns_propagation_seconds=dns_propagation_seconds,
         )
         try:
             self.expiration_date = services.get_certificate_expiration(
