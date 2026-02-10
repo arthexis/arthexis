@@ -12,7 +12,7 @@ Charge points report their status through the OCPP `StatusNotification` message.
 
 ## Expected CP status values
 
-The system recognizes the following normalized status strings when rendering UI badges and aggregations:
+The system recognizes the following normalized status strings when rendering UI badges and aggregations. These are the canonical lowercase keys used throughout the UI; raw OCPP status values (for example, `Available`, `SuspendedEV`, `SuspendedEVSE`) are normalized by trimming whitespace, collapsing internal spacing, and lowercasing before mapping to these keys.
 
 - `available`
 - `preparing`
@@ -26,11 +26,11 @@ The system recognizes the following normalized status strings when rendering UI 
 - `occupied`
 - `outofservice`
 
-These values are used to build user-visible status labels and colors and to normalize status display logic.
+These values are used to build user-visible status labels and colors and to normalize status display logic. TitleCase values elsewhere in this document refer to raw OCPP values received from the CP, which are matched case-insensitively to the lowercase normalized keys.
 
 ## Operative vs. Inoperative availability
 
-Arthexis derives a high-level availability state from OCPP status notifications:
+Arthexis derives a high-level availability state from OCPP status notifications. The TitleCase values below are raw OCPP status values; they are normalized case-insensitively (trimmed and lowercased) before availability mapping:
 
 - **Operative** statuses: `Available`, `Preparing`, `Charging`, `SuspendedEV`, `SuspendedEVSE`, `Finishing`, `Reserved`.
 - **Inoperative** statuses: `Unavailable`, `Faulted`.
@@ -45,17 +45,17 @@ Below is a summary of the expected statuses and their immediate cause in this sy
 
 | Status value | Immediate cause in Arthexis | Availability impact |
 | --- | --- | --- |
-| `Available` | CP sends `StatusNotification` with `status=Available`. | Marks availability as Operative. |
-| `Preparing` | CP sends `StatusNotification` with `status=Preparing`. | Marks availability as Operative. |
-| `Charging` | CP sends `StatusNotification` with `status=Charging`. | Marks availability as Operative. |
-| `SuspendedEV` | CP sends `StatusNotification` with `status=SuspendedEV`. | Marks availability as Operative. |
-| `SuspendedEVSE` | CP sends `StatusNotification` with `status=SuspendedEVSE`. | Marks availability as Operative. |
-| `Finishing` | CP sends `StatusNotification` with `status=Finishing`. | Marks availability as Operative. |
-| `Reserved` | CP sends `StatusNotification` with `status=Reserved`. | Marks availability as Operative. |
-| `Unavailable` | CP sends `StatusNotification` with `status=Unavailable`. | Marks availability as Inoperative. |
-| `Faulted` | CP sends `StatusNotification` with `status=Faulted`. | Marks availability as Inoperative. |
-| `Occupied` | CP sends `StatusNotification` with `status=Occupied` (OCPP 2.x). | No availability mapping. |
-| `OutOfService` | CP sends `StatusNotification` with `status=OutOfService` (OCPP 2.x). | No availability mapping. |
+| `available` | CP sends `StatusNotification` with `status=Available`. | Marks availability as Operative. |
+| `preparing` | CP sends `StatusNotification` with `status=Preparing`. | Marks availability as Operative. |
+| `charging` | CP sends `StatusNotification` with `status=Charging`. | Marks availability as Operative. |
+| `suspendedev` | CP sends `StatusNotification` with `status=SuspendedEV`. | Marks availability as Operative. |
+| `suspendedevse` | CP sends `StatusNotification` with `status=SuspendedEVSE`. | Marks availability as Operative. |
+| `finishing` | CP sends `StatusNotification` with `status=Finishing`. | Marks availability as Operative. |
+| `reserved` | CP sends `StatusNotification` with `status=Reserved`. | Marks availability as Operative. |
+| `unavailable` | CP sends `StatusNotification` with `status=Unavailable`. | Marks availability as Inoperative. |
+| `faulted` | CP sends `StatusNotification` with `status=Faulted`. | Marks availability as Inoperative. |
+| `occupied` | CP sends `StatusNotification` with `status=Occupied` (OCPP 2.x). | No availability mapping. |
+| `outofservice` | CP sends `StatusNotification` with `status=OutOfService` (OCPP 2.x). | No availability mapping. |
 
 ## Transition diagram: StatusNotification processing
 
