@@ -147,6 +147,10 @@ class SiteConfiguration(models.Model):
         ("http", "HTTP"),
         ("https", "HTTPS"),
     )
+    TRANSPORT_CHOICES = (
+        ("nginx", "nginx"),
+        ("daphne", "daphne"),
+    )
 
     name = models.CharField(max_length=64, unique=True, default="default")
     enabled = models.BooleanField(default=True)
@@ -156,6 +160,12 @@ class SiteConfiguration(models.Model):
         choices=PROTOCOL_CHOICES,
         default="http",
         help_text=_("Include HTTPS listeners when set to HTTPS."),
+    )
+    transport = models.CharField(
+        max_length=16,
+        choices=TRANSPORT_CHOICES,
+        default="nginx",
+        help_text=_("HTTPS orchestration transport backend."),
     )
     role = models.CharField(max_length=64, default="Terminal")
     port = models.PositiveIntegerField(
@@ -197,6 +207,18 @@ class SiteConfiguration(models.Model):
         default="/etc/nginx/sites-enabled/arthexis-sites.conf",
         help_text=_("Destination for the rendered managed site server blocks."),
     )
+    tls_certificate_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text=_("Resolved TLS certificate path for direct Daphne TLS mode."),
+    )
+    tls_certificate_key_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text=_("Resolved TLS private key path for direct Daphne TLS mode."),
+    )
     last_applied_at = models.DateTimeField(null=True, blank=True)
     last_validated_at = models.DateTimeField(null=True, blank=True)
     last_message = models.TextField(blank=True, default="")
@@ -222,6 +244,39 @@ class SiteConfiguration(models.Model):
 
     def get_subdomain_prefixes(self) -> list[str]:
         return parse_subdomain_prefixes(self.managed_subdomains, strict=False)
+
+    @property
+    def is_direct_tls_enabled(self) -> bool:
+        """Return ``True`` when HTTPS is served directly by Daphne."""
+
+        return (
+            self.enabled
+            and self.protocol == "https"
+            and self.transport == "daphne"
+            and bool(self.tls_certificate_path)
+            and bool(self.tls_certificate_key_path)
+        )
+
+    def resolve_tls_paths(self) -> tuple[Path | None, Path | None]:
+        """Resolve certificate and key paths from config overrides or certificate model."""
+
+        cert_path = self.tls_certificate_path or ""
+        key_path = self.tls_certificate_key_path or ""
+        if self.certificate_id:
+            certificate_path, certificate_key_path = self.certificate.resolve_material_paths()
+            cert_path = cert_path or (str(certificate_path) if certificate_path else "")
+            key_path = key_path or (str(certificate_key_path) if certificate_key_path else "")
+        cert_file = Path(cert_path) if cert_path else None
+        key_file = Path(key_path) if key_path else None
+        return cert_file, key_file
+
+    def sync_tls_paths_from_certificate(self) -> None:
+        """Persist TLS material paths from the linked certificate when available."""
+
+        if not self.certificate_id:
+            return
+        self.tls_certificate_path = self.certificate.certificate_path or ""
+        self.tls_certificate_key_path = self.certificate.certificate_key_path or ""
 
     def clean(self):
         super().clean()

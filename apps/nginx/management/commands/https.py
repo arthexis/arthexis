@@ -65,6 +65,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Run certificate provisioning without sudo.",
         )
+        parser.add_argument(
+            "--transport",
+            choices=["nginx", "daphne"],
+            help="Select HTTPS transport backend.",
+        )
 
     def handle(self, *args, **options):
         """Dispatch https command actions and normalize implicit enable behavior."""
@@ -78,6 +83,7 @@ class Command(BaseCommand):
         use_godaddy = bool(godaddy_domain)
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
+        selected_transport = options.get("transport")
 
         if not enable and not disable and not renew and (certbot_domain or godaddy_domain):
             enable = True
@@ -104,6 +110,7 @@ class Command(BaseCommand):
             use_godaddy=use_godaddy,
             sudo=sudo,
             reload=reload,
+            transport=selected_transport,
         )
         self.stdout.write(
             self.style.SUCCESS(
@@ -119,8 +126,9 @@ class Command(BaseCommand):
         use_godaddy: bool,
         sudo: str,
         reload: bool,
+        transport: str | None,
     ):
-        config = self._get_or_create_config(domain, protocol="https")
+        config = self._get_or_create_config(domain, protocol="https", transport=transport)
         certificate = self._get_or_create_certificate(
             domain,
             config,
@@ -128,9 +136,14 @@ class Command(BaseCommand):
             use_godaddy=use_godaddy,
         )
 
+        update_fields: list[str] = []
         if config.certificate_id != certificate.id:
             config.certificate = certificate
-            config.save(update_fields=["certificate"])
+            update_fields.append("certificate")
+
+        config.sync_tls_paths_from_certificate()
+        update_fields.extend(["tls_certificate_path", "tls_certificate_key_path"])
+        config.save(update_fields=list(dict.fromkeys(update_fields)))
 
         if use_local:
             certificate.generate(
@@ -150,9 +163,15 @@ class Command(BaseCommand):
         if config is None:
             raise CommandError(f"No site configuration found for {domain}.")
 
+        update_fields: list[str] = []
         if config.protocol != "http":
             config.protocol = "http"
-            config.save(update_fields=["protocol"])
+            update_fields.append("protocol")
+        if config.transport != "nginx":
+            config.transport = "nginx"
+            update_fields.append("transport")
+        if update_fields:
+            config.save(update_fields=update_fields)
 
         self._apply_config(config, reload=reload)
 
@@ -160,7 +179,13 @@ class Command(BaseCommand):
         name = "localhost" if domain == "localhost" else domain
         return SiteConfiguration.objects.filter(name=name).first()
 
-    def _get_or_create_config(self, domain: str, *, protocol: str) -> SiteConfiguration:
+    def _get_or_create_config(
+        self,
+        domain: str,
+        *,
+        protocol: str,
+        transport: str | None = None,
+    ) -> SiteConfiguration:
         defaults_source = SiteConfiguration.get_default()
         name = "localhost" if domain == "localhost" else domain
         config, created = SiteConfiguration.objects.get_or_create(name=name)
@@ -175,12 +200,21 @@ class Command(BaseCommand):
             config.site_entries_path = defaults_source.site_entries_path
             config.site_destination = defaults_source.site_destination
             config.expected_path = defaults_source.expected_path
+            config.transport = transport or defaults_source.transport
             config.save()
         else:
-            if config.protocol != protocol or not config.enabled:
+            update_fields: list[str] = []
+            if config.protocol != protocol:
                 config.protocol = protocol
+                update_fields.append("protocol")
+            if not config.enabled:
                 config.enabled = True
-                config.save(update_fields=["protocol", "enabled"])
+                update_fields.append("enabled")
+            if transport and config.transport != transport:
+                config.transport = transport
+                update_fields.append("transport")
+            if update_fields:
+                config.save(update_fields=update_fields)
         return config
 
     def _get_or_create_certificate(
@@ -312,6 +346,14 @@ class Command(BaseCommand):
         return credential
 
     def _apply_config(self, config: SiteConfiguration, *, reload: bool) -> None:
+        if config.transport == "daphne":
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "HTTPS active via Daphne direct TLS, nginx bypassed."
+                )
+            )
+            return
+
         try:
             result = config.apply(reload=reload)
         except (NginxUnavailableError, ValidationError) as exc:
@@ -341,9 +383,12 @@ class Command(BaseCommand):
             if cert:
                 cert_label = f"{cert.name} ({cert.__class__.__name__})"
                 cert_summary = self._verify_certificate(cert, sudo=sudo)
+            transport_summary = f"transport={config.transport}"
+            if config.is_direct_tls_enabled:
+                transport_summary += " (HTTPS active via Daphne direct TLS, nginx bypassed)"
             self.stdout.write(
                 f"- {config.name}: protocol={config.protocol}, enabled={config.enabled}, "
-                f"certificate={cert_label}"
+                f"{transport_summary}, certificate={cert_label}"
             )
             if cert_summary:
                 self.stdout.write(f"  - {cert_summary}")

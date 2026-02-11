@@ -191,3 +191,140 @@ def test_https_enable_with_godaddy_reports_manual_steps(monkeypatch):
     assert cert.dns_credential_id == credential.id
     rendered = out.getvalue()
     assert "Ensure certbot and Python requests are available" in rendered
+
+
+@pytest.mark.django_db
+def test_https_enable_direct_daphne_bypasses_nginx(monkeypatch):
+    """Direct Daphne HTTPS mode should not apply nginx configuration."""
+
+    from apps.certs.models import SelfSignedCertificate
+
+    monkeypatch.setattr(
+        SelfSignedCertificate,
+        "generate",
+        lambda self, **kwargs: "generated",
+    )
+
+    def fail_apply(self, *, reload: bool = True, remove: bool = False):
+        raise AssertionError("nginx apply should not be called for daphne transport")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fail_apply)
+
+    out = StringIO()
+    call_command(
+        "https",
+        "--enable",
+        "--local",
+        "--transport",
+        "daphne",
+        "--no-sudo",
+        stdout=out,
+    )
+
+    config = SiteConfiguration.objects.get(name="localhost")
+    assert config.transport == "daphne"
+    assert config.protocol == "https"
+    assert "HTTPS active via Daphne direct TLS, nginx bypassed." in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_https_disable_flow_from_direct_mode(monkeypatch):
+    """Disabling HTTPS should switch direct transport back to nginx."""
+
+    config = SiteConfiguration.objects.create(
+        name="localhost",
+        protocol="https",
+        transport="daphne",
+        enabled=True,
+    )
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True,
+            validated=True,
+            reloaded=True,
+            message="nginx applied",
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--disable", "--local")
+    config.refresh_from_db()
+    assert config.protocol == "http"
+    assert config.transport == "nginx"
+
+
+@pytest.mark.django_db
+def test_https_renew_due_certificates_still_works_for_direct_mode(monkeypatch):
+    """Renew command should still renew due certs regardless of transport selection."""
+
+    from django.utils import timezone
+    from apps.certs.models import SelfSignedCertificate
+
+    cert = SelfSignedCertificate.objects.create(
+        name="local-https-localhost",
+        domain="localhost",
+        certificate_path="/tmp/fullchain.pem",
+        certificate_key_path="/tmp/privkey.pem",
+        expiration_date=timezone.now(),
+    )
+    SiteConfiguration.objects.create(
+        name="localhost",
+        protocol="https",
+        transport="daphne",
+        enabled=True,
+        certificate=cert,
+    )
+
+    renewed = {"count": 0}
+
+    def fake_renew(self, *, sudo: str = "sudo"):
+        renewed["count"] += 1
+        return "renewed"
+
+    monkeypatch.setattr(SelfSignedCertificate, "renew", fake_renew)
+
+    out = StringIO()
+    call_command("https", "--renew", stdout=out)
+
+    assert renewed["count"] == 1
+    assert "Renewed 1 certificate(s)." in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_https_report_identifies_direct_transport(monkeypatch):
+    """Status report should identify direct TLS transport details."""
+
+    from apps.certs.models import SelfSignedCertificate
+
+    cert = SelfSignedCertificate.objects.create(
+        name="direct-local",
+        domain="localhost",
+        certificate_path="/tmp/fullchain.pem",
+        certificate_key_path="/tmp/privkey.pem",
+    )
+    SiteConfiguration.objects.create(
+        name="localhost",
+        protocol="https",
+        transport="daphne",
+        enabled=True,
+        certificate=cert,
+        tls_certificate_path=cert.certificate_path,
+        tls_certificate_key_path=cert.certificate_key_path,
+    )
+
+    monkeypatch.setattr(
+        SelfSignedCertificate,
+        "verify",
+        lambda self, *, sudo="sudo": services.CertificateVerificationResult(
+            ok=True,
+            messages=["certificate exists"],
+        ),
+    )
+
+    out = StringIO()
+    call_command("https", stdout=out)
+
+    rendered = out.getvalue()
+    assert "transport=daphne" in rendered
+    assert "HTTPS active via Daphne direct TLS, nginx bypassed" in rendered

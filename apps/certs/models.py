@@ -117,6 +117,15 @@ class CertificateBase(Certificate):
             sudo=sudo,
         )
 
+    def resolve_material_paths(self) -> tuple[Path | None, Path | None]:
+        """Return certificate and key paths when configured on this certificate."""
+
+        certificate_path = Path(self.certificate_path) if self.certificate_path else None
+        certificate_key_path = (
+            Path(self.certificate_key_path) if self.certificate_key_path else None
+        )
+        return certificate_path, certificate_key_path
+
     @property
     def _specific_certificate(self) -> "CertificateBase":
         if isinstance(self, (CertbotCertificate, SelfSignedCertificate)):

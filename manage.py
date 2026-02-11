@@ -14,9 +14,9 @@ from typing import Callable, Sequence
 from config.loadenv import loadenv
 from utils import revision
 
-
 _RUNSERVER_STARTED_AT: float | None = None
-
+_RUNSERVER_DIRECT_TLS_CERT: str | None = None
+_RUNSERVER_DIRECT_TLS_KEY: str | None = None
 
 def _resolve_interrupt_main() -> Callable[[], None]:
     """Return a callable that raises ``KeyboardInterrupt`` in the main thread."""
@@ -44,6 +44,50 @@ def _resolve_interrupt_main() -> Callable[[], None]:
 
     return _raise_keyboard_interrupt
 
+def _resolve_runserver_direct_tls_material() -> tuple[str | None, str | None]:
+    """Return direct TLS certificate material configured for Daphne runserver."""
+
+    try:
+        from apps.nginx.models import SiteConfiguration
+    except Exception:
+        return None, None
+
+    try:
+        config = (
+            SiteConfiguration.objects.filter(
+                enabled=True,
+                protocol="https",
+                transport="daphne",
+            )
+            .order_by("pk")
+            .first()
+        )
+    except Exception:
+        return None, None
+
+    if config is None:
+        return None, None
+
+    certificate_path, certificate_key_path = config.resolve_tls_paths()
+    if not certificate_path or not certificate_key_path:
+        return None, None
+    return str(certificate_path), str(certificate_key_path)
+
+def _build_daphne_endpoint(
+    host: str | None,
+    port: int | str | None,
+    cert_path: str,
+    key_path: str,
+) -> list[str]:
+    """Build a Twisted SSL endpoint for Daphne."""
+
+    if host is None or port is None:
+        return []
+    sanitized_host = host.strip("[]").replace(":", r"\:")
+    return [
+        "ssl:port=%d:interface=%s:privateKey=%s:certKey=%s"
+        % (int(port), sanitized_host, key_path, cert_path)
+    ]
 
 def _print_version(base_dir: Path) -> None:
     ver_path = base_dir / "VERSION"
@@ -55,7 +99,6 @@ def _print_version(base_dir: Path) -> None:
         msg += f" r{rev_short}"
     print(msg)
 
-
 def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
     _print_version(base_dir)
     try:
@@ -63,6 +106,7 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
         from daphne.management.commands.runserver import (
             Command as DaphneRunserver,
         )
+        from daphne.management.commands import runserver as daphne_runserver
         from django.core.management.commands import runserver as core_runserver
 
         try:
@@ -106,6 +150,41 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
 
         original_on_bind = core_runserver.Command.on_bind
         core_runserver.Command.on_bind = patched_on_bind
+
+        original_build_endpoints = daphne_runserver.build_endpoint_description_strings
+
+        def patched_build_endpoints(host=None, port=None, unix_socket=None, file_descriptor=None):
+            cert_path = _RUNSERVER_DIRECT_TLS_CERT
+            key_path = _RUNSERVER_DIRECT_TLS_KEY
+            if cert_path and key_path and host and port is not None:
+                return _build_daphne_endpoint(host, port, cert_path, key_path)
+            return original_build_endpoints(
+                host=host,
+                port=port,
+                unix_socket=unix_socket,
+                file_descriptor=file_descriptor,
+            )
+
+        daphne_runserver.build_endpoint_description_strings = patched_build_endpoints
+
+        original_inner_run = core_runserver.Command.inner_run
+
+        def patched_inner_run(self, *inner_args, **inner_options):
+            global _RUNSERVER_DIRECT_TLS_CERT
+            global _RUNSERVER_DIRECT_TLS_KEY
+
+            cert_path, key_path = _resolve_runserver_direct_tls_material()
+            _RUNSERVER_DIRECT_TLS_CERT = cert_path
+            _RUNSERVER_DIRECT_TLS_KEY = key_path
+            self.ssl_options = None
+            if cert_path and key_path:
+                self.protocol = "https"
+                self.ssl_options = {"certfile": cert_path, "keyfile": key_path}
+            else:
+                self.protocol = "http"
+            return original_inner_run(self, *inner_args, **inner_options)
+
+        core_runserver.Command.inner_run = patched_inner_run
     except ImportError as exc:  # pragma: no cover - Django bootstrap
         raise ImportError(
             "Couldn't import Django. Are you sure it's installed and "
@@ -115,7 +194,6 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
 
     execute_from_command_line(list(argv))
 
-
 def _run_env_refresh(base_dir: Path) -> None:
     """Execute ``env-refresh`` in *base_dir* using the local interpreter."""
 
@@ -123,7 +201,6 @@ def _run_env_refresh(base_dir: Path) -> None:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     subprocess.run(command, cwd=base_dir, check=True, env=env)
-
 
 def _is_process_alive(pid: int) -> bool:
     """Return ``True`` when *pid* refers to a running process."""
@@ -139,7 +216,6 @@ def _is_process_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
-
 
 def _is_migration_server_running(lock_dir: Path) -> bool:
     """Return ``True`` when the migration server lock indicates it is active."""
@@ -161,7 +237,6 @@ def _is_migration_server_running(lock_dir: Path) -> bool:
     except OSError:
         pass
     return False
-
 
 class RunserverSession:
     """Coordinate run/debug tasks with the migration server."""
@@ -263,7 +338,6 @@ class RunserverSession:
                     pass
             time.sleep(self.poll_interval)
 
-
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:
     global _RUNSERVER_STARTED_AT
     _RUNSERVER_STARTED_AT = time.monotonic()
@@ -285,7 +359,6 @@ def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> N
         return
     finally:
         _RUNSERVER_STARTED_AT = None
-
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Run administrative tasks."""
@@ -355,7 +428,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             worker.terminate()
         if beat:
             beat.terminate()
-
 
 if __name__ == "__main__":  # pragma: no cover - script entry
     main(sys.argv[1:])
