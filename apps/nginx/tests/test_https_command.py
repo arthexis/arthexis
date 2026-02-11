@@ -19,7 +19,7 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -68,7 +68,7 @@ def test_https_godaddy_implies_enable(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -102,7 +102,7 @@ def test_https_certbot_implies_enable(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -170,7 +170,7 @@ def test_https_enable_with_godaddy_reports_manual_steps(monkeypatch):
         is_enabled=True,
     )
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_provision)

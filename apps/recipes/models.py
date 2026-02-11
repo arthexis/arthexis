@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import re
+import subprocess
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -24,7 +27,15 @@ class RecipeExecutionResult:
 
 
 class Recipe(Ownable):
+    """Executable recipe definition with selectable script runtime."""
+
     objects = RecipeManager()
+
+    class BodyType(models.TextChoices):
+        """Supported runtimes for a recipe body."""
+
+        PYTHON = "python", _("Python")
+        BASH = "bash", _("Bash")
 
     uuid = models.UUIDField(
         default=uuid.uuid4,
@@ -40,8 +51,14 @@ class Recipe(Ownable):
     display = models.CharField(max_length=150, verbose_name=_("Verbose name"))
     script = models.TextField(
         help_text=_(
-            "Python script contents. [SIGILS] and [ARG.*] tokens are resolved before execution."
+            "Script contents. [SIGILS] and [ARG.*] tokens are resolved before execution."
         )
+    )
+    body_type = models.CharField(
+        max_length=16,
+        choices=BodyType.choices,
+        default=BodyType.PYTHON,
+        help_text=_("Runtime used to execute this recipe body."),
     )
     result_variable = models.CharField(
         max_length=64,
@@ -72,8 +89,40 @@ class Recipe(Ownable):
         return resolve_sigils(resolved, current=self)
 
     def execute(self, *args: Any, **kwargs: Any) -> RecipeExecutionResult:
+        """Execute a recipe and return the execution metadata and result."""
+
         resolved_script = self.resolve_script(*args, **kwargs)
         result_key = (self.result_variable or "result").strip() or "result"
+
+        if self.body_type == self.BodyType.BASH:
+            return self._execute_bash(
+                resolved_script=resolved_script,
+                result_variable=result_key,
+                args=args,
+                kwargs=kwargs,
+            )
+
+        if self.body_type != self.BodyType.PYTHON:
+            raise RuntimeError(
+                f"Unsupported recipe body type for '{self.slug}': {self.body_type}"
+            )
+
+        return self._execute_python(
+            resolved_script=resolved_script,
+            result_variable=result_key,
+            args=args,
+            kwargs=kwargs,
+        )
+
+    def _execute_python(
+        self,
+        *,
+        resolved_script: str,
+        result_variable: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> RecipeExecutionResult:
+        """Execute a Python recipe body in a restricted runtime."""
 
         safe_builtins = {
             "abs": abs,
@@ -109,20 +158,85 @@ class Recipe(Ownable):
                 f"Error executing recipe '{self.slug}': {exc}"
             ) from exc
 
-        if result_key in exec_locals:
-            result = exec_locals[result_key]
-        elif result_key in exec_globals:
-            result = exec_globals[result_key]
-        elif result_key != "result" and "result" in exec_locals:
+        if result_variable in exec_locals:
+            result = exec_locals[result_variable]
+        elif result_variable in exec_globals:
+            result = exec_globals[result_variable]
+        elif result_variable != "result" and "result" in exec_locals:
             result = exec_locals["result"]
-        elif result_key != "result" and "result" in exec_globals:
+        elif result_variable != "result" and "result" in exec_globals:
             result = exec_globals["result"]
         else:
             result = None
 
         return RecipeExecutionResult(
             result=result,
-            result_variable=result_key,
+            result_variable=result_variable,
+            resolved_script=resolved_script,
+        )
+
+    def _execute_bash(
+        self,
+        *,
+        resolved_script: str,
+        result_variable: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> RecipeExecutionResult:
+        """Execute a Bash recipe body and return its stdout as the recipe result."""
+
+        def normalize_key(key: str) -> str:
+            normalized = re.sub(r"[^A-Za-z0-9]", "_", key).upper()
+            if normalized and normalized[0].isdigit():
+                normalized = f"_{normalized}"
+            return normalized
+
+        allowed_env_keys = {
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "PATH",
+            "PWD",
+            "TERM",
+            "TZ",
+            "USER",
+        }
+
+        environment = {
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if key in allowed_env_keys
+            },
+            **{
+                f"RECIPE_KWARG_{normalize_key(key)}": str(value)
+                for key, value in kwargs.items()
+            },
+        }
+
+        try:
+            completed = subprocess.run(
+                ["bash", "-c", resolved_script, "recipe", *[str(value) for value in args]],
+                capture_output=True,
+                text=True,
+                check=True,
+                env=environment,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            message = stderr or str(exc)
+            raise RuntimeError(
+                f"Error executing recipe '{self.slug}': {message}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"Error executing recipe '{self.slug}': {exc}"
+            ) from exc
+
+        return RecipeExecutionResult(
+            result=completed.stdout.rstrip("\n") or None,
+            result_variable=result_variable,
             resolved_script=resolved_script,
         )
 

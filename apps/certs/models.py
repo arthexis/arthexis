@@ -50,13 +50,23 @@ class CertificateBase(Certificate):
         verbose_name_plural = _("Certificates")
         ordering = ("name",)
 
-    def provision(self, *, sudo: str = "sudo") -> str:
-        """Generate or request this certificate based on its type."""
+    def provision(
+        self,
+        *,
+        sudo: str = "sudo",
+        dns_use_sandbox: bool | None = None,
+    ) -> str:
+        """Generate or request this certificate based on its type.
+
+        Args:
+            sudo: Privilege escalation prefix used for certificate tooling.
+            dns_use_sandbox: Optional per-run override for DNS API sandbox mode.
+        """
 
         certificate = self._specific_certificate
 
         if isinstance(certificate, CertbotCertificate):
-            return certificate.request(sudo=sudo)
+            return certificate.request(sudo=sudo, dns_use_sandbox=dns_use_sandbox)
         if isinstance(certificate, SelfSignedCertificate):
             return certificate.generate(sudo=sudo)
 
@@ -167,8 +177,18 @@ class CertbotCertificate(CertificateBase):
         verbose_name = _("Certbot certificate")
         verbose_name_plural = _("Certbot certificates")
 
-    def request(self, *, sudo: str = "sudo") -> str:
-        """Trigger certbot for this certificate."""
+    def request(
+        self,
+        *,
+        sudo: str = "sudo",
+        dns_use_sandbox: bool | None = None,
+    ) -> str:
+        """Trigger certbot for this certificate.
+
+        Args:
+            sudo: Privilege escalation prefix used for certificate tooling.
+            dns_use_sandbox: Optional per-run override for DNS API sandbox mode.
+        """
 
         if not self.certificate_path:
             self.certificate_path = f"/etc/letsencrypt/live/{self.domain}/fullchain.pem"
@@ -185,6 +205,7 @@ class CertbotCertificate(CertificateBase):
             challenge_type=self.challenge_type,
             dns_credential=self.dns_credential,
             dns_propagation_seconds=self.dns_propagation_seconds,
+            dns_use_sandbox=dns_use_sandbox,
             sudo=sudo,
         )
         try:

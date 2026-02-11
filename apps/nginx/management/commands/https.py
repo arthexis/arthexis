@@ -55,6 +55,18 @@ class Command(BaseCommand):
             help="Use certbot DNS-01 with GoDaddy for the specified domain.",
         )
 
+        sandbox_group = parser.add_mutually_exclusive_group()
+        sandbox_group.add_argument(
+            "--sandbox",
+            action="store_true",
+            help="Force GoDaddy DNS requests to use the OTE sandbox API for this run.",
+        )
+        sandbox_group.add_argument(
+            "--no-sandbox",
+            action="store_true",
+            help="Force GoDaddy DNS requests to use the production API for this run.",
+        )
+
         parser.add_argument(
             "--no-reload",
             action="store_true",
@@ -81,6 +93,7 @@ class Command(BaseCommand):
         godaddy_domain = options["godaddy"]
         use_local = options["local"] or not (certbot_domain or godaddy_domain)
         use_godaddy = bool(godaddy_domain)
+        sandbox_override = self._parse_sandbox_override(options)
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
         selected_transport = options.get("transport")
@@ -108,6 +121,7 @@ class Command(BaseCommand):
             domain,
             use_local=use_local,
             use_godaddy=use_godaddy,
+            sandbox_override=sandbox_override,
             sudo=sudo,
             reload=reload,
             transport=selected_transport,
@@ -124,6 +138,7 @@ class Command(BaseCommand):
         *,
         use_local: bool,
         use_godaddy: bool,
+        sandbox_override: bool | None,
         sudo: str,
         reload: bool,
         transport: str | None,
@@ -153,10 +168,19 @@ class Command(BaseCommand):
         else:
             if use_godaddy:
                 self._validate_godaddy_setup(certificate)
-            certificate.provision(sudo=sudo)
+            certificate.provision(sudo=sudo, dns_use_sandbox=sandbox_override)
 
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _parse_sandbox_override(self, options: dict[str, object]) -> bool | None:
+        """Return a per-run GoDaddy sandbox override derived from CLI options."""
+
+        if options["sandbox"]:
+            return True
+        if options["no_sandbox"]:
+            return False
+        return None
 
     def _disable_https(self, domain: str, *, reload: bool) -> None:
         config = self._get_existing_config(domain)

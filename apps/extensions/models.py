@@ -25,7 +25,9 @@ class JsExtension(Entity):
     content_script = models.TextField(blank=True)
     background_script = models.TextField(blank=True)
     options_page = models.TextField(blank=True)
-    permissions = models.TextField(blank=True, help_text="Newline-separated permissions.")
+    permissions = models.TextField(
+        blank=True, help_text="Newline-separated permissions."
+    )
     host_permissions = models.TextField(
         blank=True, help_text="Newline-separated host permissions (MV3)."
     )
@@ -48,7 +50,9 @@ class JsExtension(Entity):
         """Validate supported manifest versions."""
         super().clean()
         if self.manifest_version not in {2, 3}:
-            raise ValidationError({"manifest_version": "Manifest version must be 2 or 3."})
+            raise ValidationError(
+                {"manifest_version": "Manifest version must be 2 or 3."}
+            )
 
     @staticmethod
     def _split_lines(value: str) -> list[str]:
@@ -84,7 +88,7 @@ class JsExtension(Entity):
         else:
             manifest["browser_action"] = {"default_title": self.name}
 
-        if self.content_script and self.match_patterns:
+        if self.match_patterns:
             manifest["content_scripts"] = [
                 {"matches": self.match_patterns, "js": ["content.js"]}
             ]
@@ -111,6 +115,95 @@ class JsExtension(Entity):
             manifest["host_permissions"] = self.host_permission_list
 
         return manifest
+
+    def build_content_script_payload(self) -> str:
+        """Return the content script with Arthexis-detection bootstrap code."""
+        bootstrap_script = """
+(function () {
+  var badgeId = "arthexis-extension-status";
+
+  function containsArthexisText() {
+    if (!document || !document.body) {
+      return false;
+    }
+    var bodyText = (document.body.innerText || "").toLowerCase();
+    return bodyText.indexOf("arthexis") !== -1;
+  }
+
+  function hasArthexisMeta() {
+    var generator = document.querySelector('meta[name="generator"]');
+    if (generator && /arthexis/i.test(generator.getAttribute("content") || "")) {
+      return true;
+    }
+
+    var appMeta = document.querySelector('meta[name="application-name"]');
+    if (appMeta && /arthexis/i.test(appMeta.getAttribute("content") || "")) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function isArthexisInstance() {
+    return hasArthexisMeta() || containsArthexisText();
+  }
+
+  function renderBadge() {
+    var existing = document.getElementById(badgeId);
+    if (existing) {
+      existing.remove();
+    }
+
+    var isArthexis = isArthexisInstance();
+    var badge = document.createElement("div");
+    badge.id = badgeId;
+    badge.textContent = isArthexis
+      ? "Arthexis site detected"
+      : "Not an Arthexis site";
+    badge.setAttribute("data-arthexis-instance", isArthexis ? "true" : "false");
+    badge.style.cssText = [
+      "position:fixed",
+      "top:12px",
+      "right:12px",
+      "z-index:2147483647",
+      "padding:8px 10px",
+      "border-radius:999px",
+      "font:600 12px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif",
+      "color:#fff",
+      "background:" + (isArthexis ? "#1b7f3b" : "#9b1c1c"),
+      "box-shadow:0 2px 8px rgba(0,0,0,0.25)",
+      "pointer-events:none"
+    ].join(";");
+
+    document.documentElement.appendChild(badge);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderBadge, { once: true });
+  } else {
+    renderBadge();
+  }
+})();
+""".strip()
+
+        parts = [bootstrap_script]
+        if self.content_script.strip():
+            parts.append(self.content_script.strip())
+        return "\n\n".join(parts) + "\n"
+
+    def build_extension_archive_files(self) -> dict[str, str | dict[str, object]]:
+        """Return the generated extension files keyed by archive filename."""
+        files = {
+            "manifest.json": self.build_manifest(),
+            "content.js": self.build_content_script_payload(),
+        }
+
+        if self.background_script.strip():
+            files["background.js"] = self.background_script
+        if self.options_page.strip():
+            files["options.html"] = self.options_page
+
+        return files
 
 
 __all__ = ["JsExtension"]

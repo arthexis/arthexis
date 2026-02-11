@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from unittest import mock
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -80,3 +81,96 @@ def test_parse_recipe_arguments_splits_kwargs():
 
     assert args == ["alpha", token]
     assert kwargs == {"count": "3", "mode": "fast"}
+
+
+@pytest.mark.django_db
+def test_execute_supports_bash_body_type():
+    """Bash recipe bodies return stdout as the recipe result."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-{uuid.uuid4()}",
+        display="Bash Recipe",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$1-$RECIPE_KWARG_COLOR"',
+    )
+
+    execution = recipe.execute("hello", color="green")
+
+    assert execution.result == "hello-green"
+
+
+@pytest.mark.django_db
+def test_execute_raises_for_failing_bash_script():
+    """Bash recipe failures are surfaced as runtime errors."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-fail-{uuid.uuid4()}",
+        display="Bash Failure",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "bad" >&2\nexit 5',
+    )
+
+    with pytest.raises(RuntimeError, match="bad"):
+        recipe.execute()
+
+
+@pytest.mark.django_db
+def test_execute_supports_bash_safe_normalized_kwarg_names():
+    """Bash kwargs are exported with normalized shell-safe environment variable names."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-normalize-{uuid.uuid4()}",
+        display="Bash Normalize",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$RECIPE_KWARG_MODE_FAST-$RECIPE_KWARG__7FLAG"',
+    )
+
+    execution = recipe.execute(**{"mode-fast": "rapid", "7flag": "on"})
+
+    assert execution.result == "rapid-on"
+
+
+@pytest.mark.django_db
+def test_execute_raises_for_unknown_body_type():
+    """Unknown body types raise a runtime error instead of silently falling back."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"unknown-body-{uuid.uuid4()}",
+        display="Unknown Body",
+        body_type=Recipe.BodyType.PYTHON,
+        script='result = "ok"',
+    )
+
+    Recipe.objects.filter(pk=recipe.pk).update(body_type="unknown")
+    recipe.refresh_from_db()
+
+    with pytest.raises(RuntimeError, match="Unsupported recipe body type"):
+        recipe.execute()
+
+
+@pytest.mark.django_db
+def test_execute_raises_runtime_error_for_bash_os_failures():
+    """Bash startup failures are surfaced as runtime errors."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-oserror-{uuid.uuid4()}",
+        display="Bash OS Error",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "never runs"',
+    )
+
+    with (
+        mock.patch("apps.recipes.models.subprocess.run", side_effect=FileNotFoundError("bash missing")),
+        pytest.raises(RuntimeError, match="bash missing"),
+    ):
+        recipe.execute()
