@@ -28,14 +28,7 @@ class CachedFrame:
 
 def frame_cache_url() -> str:
     """Return the effective Redis URL for the MJPEG frame cache."""
-
-    video_url = getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip()
-    if video_url:
-        return video_url
-    return (
-        getattr(settings, "CHANNEL_REDIS_URL", "").strip()
-        or getattr(settings, "CELERY_BROKER_URL", "").strip()
-    )
+    return getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip()
 
 
 def _frame_cache_ttl() -> int:
