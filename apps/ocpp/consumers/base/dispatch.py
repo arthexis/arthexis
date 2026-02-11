@@ -5,6 +5,7 @@ from ... import store
 from ...call_error_handlers import dispatch_call_error
 from ...call_result_handlers import dispatch_call_result
 from ...models import Charger
+from .consumer.routing import ActionRouter
 
 
 class DispatchMixin:
@@ -57,39 +58,8 @@ class DispatchMixin:
         connector_hint = payload.get("connectorId") if isinstance(payload, dict) else None
         self._log_triggered_follow_up(action, connector_hint)
         await self._assign_connector(payload.get("connectorId"))
-        action_handlers = {
-            "BootNotification": self._handle_boot_notification_action,
-            "DataTransfer": self._handle_data_transfer_action,
-            "Heartbeat": self._handle_heartbeat_action,
-            "StatusNotification": self._handle_status_notification_action,
-            "Authorize": self._handle_authorize_action,
-            "MeterValues": self._handle_meter_values_action,
-            "TransactionEvent": self._handle_transaction_event_action,
-            "SecurityEventNotification": self._handle_security_event_notification_action,
-            "NotifyChargingLimit": self._handle_notify_charging_limit_action,
-            "ClearedChargingLimit": self._handle_cleared_charging_limit_action,
-            "NotifyCustomerInformation": self._handle_notify_customer_information_action,
-            "NotifyDisplayMessages": self._handle_notify_display_messages_action,
-            "NotifyEVChargingNeeds": self._handle_notify_ev_charging_needs_action,
-            "NotifyEVChargingSchedule": self._handle_notify_ev_charging_schedule_action,
-            "NotifyEvent": self._handle_notify_event_action,
-            "NotifyMonitoringReport": self._handle_notify_monitoring_report_action,
-            "NotifyReport": self._handle_notify_report_action,
-            "CostUpdated": self._handle_cost_updated_action,
-            "PublishFirmwareStatusNotification": self._handle_publish_firmware_status_notification_action,
-            "ReportChargingProfiles": self._handle_report_charging_profiles_action,
-            "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
-            "LogStatusNotification": self._handle_log_status_notification_action,
-            "StartTransaction": self._handle_start_transaction_action,
-            "StopTransaction": self._handle_stop_transaction_action,
-            "FirmwareStatusNotification": self._handle_firmware_status_notification_action,
-            "ReservationStatusUpdate": self._handle_reservation_status_update_action,
-            "Get15118EVCertificate": self._handle_get_15118_ev_certificate_action,
-            "GetCertificateStatus": self._handle_get_certificate_status_action,
-            "SignCertificate": self._handle_sign_certificate_action,
-        }
         reply_payload = {}
-        handler = action_handlers.get(action)
+        handler = ActionRouter(self).resolve(action)
         if handler:
             reply_payload = await handler(payload, msg_id, raw, text_data)
         response = [3, msg_id, reply_payload]
