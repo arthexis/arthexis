@@ -49,6 +49,7 @@ def request_certbot_certificate(
     challenge_type: str = "nginx",
     dns_credential=None,
     dns_propagation_seconds: int = 120,
+    dns_use_sandbox: bool | None = None,
     sudo: str = "sudo",
 ) -> str:
     """Run certbot to request or renew certificates for *domain*."""
@@ -66,6 +67,7 @@ def request_certbot_certificate(
             email=email,
             dns_credential=dns_credential,
             dns_propagation_seconds=dns_propagation_seconds,
+            dns_use_sandbox=dns_use_sandbox,
             sudo=sudo,
         )
     else:
@@ -156,6 +158,7 @@ def _build_godaddy_certbot_command(
     email: str | None,
     dns_credential,
     dns_propagation_seconds: int,
+    dns_use_sandbox: bool | None,
     sudo: str,
 ) -> tuple[list[str], dict[str, str]]:
     """Build certbot command and environment for GoDaddy DNS-01 validation."""
@@ -204,9 +207,12 @@ def _build_godaddy_certbot_command(
     env = os.environ.copy()
     env["GODADDY_API_KEY"] = key
     env["GODADDY_API_SECRET"] = secret
-    env["GODADDY_USE_SANDBOX"] = (
-        "1" if getattr(dns_credential, "use_sandbox", False) else "0"
+    use_sandbox = (
+        dns_use_sandbox
+        if dns_use_sandbox is not None
+        else getattr(dns_credential, "use_sandbox", False)
     )
+    env["GODADDY_USE_SANDBOX"] = "1" if use_sandbox else "0"
     env["GODADDY_DNS_WAIT_SECONDS"] = str(propagation_seconds)
     customer_id = (dns_credential.resolve_sigils("customer_id") or "").strip()
     if customer_id:

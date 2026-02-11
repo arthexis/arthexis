@@ -116,6 +116,7 @@ def test_build_godaddy_certbot_command_uses_preserve_env_and_absolute_hook_path(
         email="ops@example.com",
         dns_credential=credential,
         dns_propagation_seconds=120,
+        dns_use_sandbox=None,
         sudo="sudo",
     )
 
@@ -159,3 +160,28 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     )
 
     assert captured["command"][0] == "certbot"
+
+
+def test_build_godaddy_certbot_command_honors_sandbox_override():
+    """GoDaddy certbot env should honor explicit sandbox override values."""
+
+    credential = SimpleNamespace(
+        use_sandbox=True,
+        default_domain="example.com",
+        resolve_sigils=lambda name: {
+            "api_key": "key",
+            "api_secret": "secret",
+            "customer_id": "",
+        }.get(name),
+    )
+
+    _command, env = services._build_godaddy_certbot_command(
+        domain="example.com",
+        email=None,
+        dns_credential=credential,
+        dns_propagation_seconds=60,
+        dns_use_sandbox=False,
+        sudo="",
+    )
+
+    assert env["GODADDY_USE_SANDBOX"] == "0"
