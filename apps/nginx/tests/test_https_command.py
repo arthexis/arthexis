@@ -19,7 +19,7 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -68,7 +68,7 @@ def test_https_godaddy_implies_enable(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -102,7 +102,7 @@ def test_https_certbot_implies_enable(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -170,7 +170,7 @@ def test_https_enable_with_godaddy_reports_manual_steps(monkeypatch):
         is_enabled=True,
     )
 
-    def fake_provision(self, *, sudo: str = "sudo"):
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None):
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
@@ -191,3 +191,84 @@ def test_https_enable_with_godaddy_reports_manual_steps(monkeypatch):
     assert cert.dns_credential_id == credential.id
     rendered = out.getvalue()
     assert "Ensure certbot and Python requests are available" in rendered
+
+
+@pytest.mark.django_db
+def test_https_enable_with_godaddy_sandbox_override(monkeypatch):
+    """`https --godaddy --sandbox` should override credential sandbox mode per run."""
+
+    from apps.dns.models import DNSProviderCredential
+
+    credential = DNSProviderCredential.objects.create(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        api_key="api-key",
+        api_secret="api-secret",
+        is_enabled=True,
+        use_sandbox=False,
+    )
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None):
+        provision_calls["sudo"] = sudo
+        provision_calls["dns_use_sandbox"] = dns_use_sandbox
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command(
+        "https",
+        "--enable",
+        "--godaddy",
+        "example.org",
+        "--sandbox",
+        stdout=out,
+    )
+
+    cert = SiteConfiguration.objects.get(
+        name="example.org"
+    ).certificate._specific_certificate
+    assert cert.dns_credential_id == credential.id
+    assert provision_calls["dns_use_sandbox"] is True
+
+
+@pytest.mark.django_db
+def test_https_enable_with_godaddy_no_sandbox_override(monkeypatch):
+    """`https --godaddy --no-sandbox` should force production DNS API for this run."""
+
+    from apps.dns.models import DNSProviderCredential
+
+    DNSProviderCredential.objects.create(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        api_key="api-key",
+        api_secret="api-secret",
+        is_enabled=True,
+        use_sandbox=True,
+    )
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None):
+        provision_calls["dns_use_sandbox"] = dns_use_sandbox
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--godaddy", "example.net", "--no-sandbox")
+
+    assert provision_calls["dns_use_sandbox"] is False
