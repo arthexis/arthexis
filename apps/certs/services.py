@@ -168,22 +168,15 @@ def _build_godaddy_certbot_command(
     if not key or not secret:
         raise CertbotError("GoDaddy DNS validation requires API key and secret.")
 
-    preserve_env_values = (
-        "GODADDY_API_KEY,"
-        "GODADDY_API_SECRET,"
-        "GODADDY_USE_SANDBOX,"
-        "GODADDY_DNS_WAIT_SECONDS,"
-        "GODADDY_CUSTOMER_ID,"
-        "GODADDY_ZONE"
-    )
-    command = _with_sudo(
-        [
-            "certbot",
-            "--preserve-env",
-            preserve_env_values,
-        ],
-        sudo,
-    )
+    preserve_env_values = [
+        "GODADDY_API_KEY",
+        "GODADDY_API_SECRET",
+        "GODADDY_USE_SANDBOX",
+        "GODADDY_DNS_WAIT_SECONDS",
+        "GODADDY_CUSTOMER_ID",
+        "GODADDY_ZONE",
+    ]
+    command = _with_sudo(["certbot"], sudo, preserve_env=preserve_env_values)
     hook_script_path = Path(__file__).resolve().parents[2] / "scripts" / "certbot" / "godaddy_hook.py"
     hook_command = f"{sys.executable} {hook_script_path}"
     command.extend([
@@ -207,7 +200,6 @@ def _build_godaddy_certbot_command(
         command.append("--register-unsafely-without-email")
 
     propagation_seconds = max(0, dns_propagation_seconds)
-    command.extend(["--issuance-timeout", str(max(propagation_seconds + 60, 90))])
 
     env = os.environ.copy()
     env["GODADDY_API_KEY"] = key
@@ -296,9 +288,19 @@ def _format_subject_alt_name_entries(subject_alt_names: list[str]) -> list[str]:
     return entries
 
 
-def _with_sudo(command: list[str], sudo: str) -> list[str]:
+def _with_sudo(
+    command: list[str],
+    sudo: str,
+    *,
+    preserve_env: list[str] | None = None,
+) -> list[str]:
+    """Prefix *command* with sudo and optional environment preservation flags."""
+
     if sudo:
-        return [sudo, *command]
+        sudo_command = [sudo]
+        if preserve_env:
+            sudo_command.append(f"--preserve-env={','.join(preserve_env)}")
+        return [*sudo_command, *command]
     return command
 
 
