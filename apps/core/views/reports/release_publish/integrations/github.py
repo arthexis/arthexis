@@ -115,6 +115,9 @@ def poll_workflow_completion(
     * None; polling is read-only and can be retried by callers.
     """
 
+    if interval_seconds <= 0:
+        raise ValueError("interval_seconds must be > 0")
+
     deadline = monotonic() + timeout_seconds
     while monotonic() <= deadline:
         run = fetch_run()

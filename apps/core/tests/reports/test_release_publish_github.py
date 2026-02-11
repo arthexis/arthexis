@@ -120,3 +120,19 @@ def test_poll_workflow_completion_times_out():
         sleep=sleep,
     )
     assert run is None
+
+
+def test_poll_workflow_completion_rejects_non_positive_interval():
+    def fetch_run():
+        return None
+
+    try:
+        poll_workflow_completion(
+            fetch_run=fetch_run,
+            timeout_seconds=2,
+            interval_seconds=0,
+        )
+    except ValueError as exc:
+        assert "interval_seconds" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for non-positive interval")
