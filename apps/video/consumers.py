@@ -12,7 +12,7 @@ from django.conf import settings
 from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
-from .frame_cache import get_frame, get_status
+from .frame_cache import frame_cache_url, get_frame, get_status
 from .models import MjpegStream
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def _stream_key(slug: str) -> str:
 
 
 def _redis_url() -> str:
-    return getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip()
+    return frame_cache_url()
 
 
 def _redis_pool() -> ConnectionPool | None:

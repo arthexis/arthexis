@@ -26,8 +26,16 @@ class CachedFrame:
     captured_at: datetime | None
 
 
-def _frame_cache_url() -> str:
-    return getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip()
+def frame_cache_url() -> str:
+    """Return the effective Redis URL for the MJPEG frame cache."""
+
+    video_url = getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip()
+    if video_url:
+        return video_url
+    return (
+        getattr(settings, "CHANNEL_REDIS_URL", "").strip()
+        or getattr(settings, "CELERY_BROKER_URL", "").strip()
+    )
 
 
 def _frame_cache_ttl() -> int:
@@ -58,7 +66,7 @@ def get_frame_cache() -> Redis | None:
     global _FRAME_REDIS
     if _FRAME_REDIS is not None:
         return _FRAME_REDIS
-    url = _frame_cache_url()
+    url = frame_cache_url()
     if not url:
         return None
     try:

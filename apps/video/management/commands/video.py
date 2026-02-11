@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, Q
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.video.frame_cache import get_frame, get_frame_cache, get_status
+from apps.video.frame_cache import frame_cache_url, get_frame, get_frame_cache, get_status
 from apps.video.models import MjpegStream, VideoDevice
 from apps.video.utils import WORK_DIR, has_rpi_camera_stack
 
@@ -219,10 +219,10 @@ class Command(BaseCommand):
     def _report_frame_cache_status(self) -> None:
         """Report Redis-backed frame cache connectivity and sample data."""
 
-        if not getattr(settings, "VIDEO_FRAME_REDIS_URL", ""):
+        if not frame_cache_url():
             self.stdout.write(
                 self.style.WARNING(
-                    "Frame cache: VIDEO_FRAME_REDIS_URL is not configured."
+                    "Frame cache: Redis URL is not configured."
                 )
             )
             return

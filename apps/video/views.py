@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 
-from .frame_cache import get_frame, get_status, mjpeg_frame_stream
+from .frame_cache import frame_cache_url, get_frame, get_status, mjpeg_frame_stream
 from .models import MjpegStream
 
 import logging
@@ -26,7 +26,7 @@ def stream_detail(request, slug):
 
 
 def _build_mjpeg_stream_response(stream: MjpegStream):
-    if not settings.VIDEO_FRAME_REDIS_URL:
+    if not frame_cache_url():
         logger.warning("Camera service unavailable for stream %s", stream.slug)
         return HttpResponse("Camera service unavailable.", status=503)
 
@@ -102,7 +102,7 @@ def mjpeg_debug_status(request, slug):
         "last_thumbnail_at": _format_timestamp(stream.last_thumbnail_at),
         "last_frame_sample_id": stream.last_frame_sample_id,
         "last_thumbnail_sample_id": stream.last_thumbnail_sample_id,
-        "camera_service": get_status(stream) if settings.VIDEO_FRAME_REDIS_URL else None,
+        "camera_service": get_status(stream) if frame_cache_url() else None,
     }
     return JsonResponse(data)
 
@@ -114,7 +114,7 @@ def _format_timestamp(value):
 
 
 def _build_mjpeg_probe_response(stream: MjpegStream):
-    if not settings.VIDEO_FRAME_REDIS_URL:
+    if not frame_cache_url():
         logger.warning("Camera service unavailable for probe %s", stream.slug)
         return HttpResponse("Camera service unavailable.", status=503)
 
