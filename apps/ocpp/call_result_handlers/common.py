@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, Awaitable, Callable, Protocol
 
 
@@ -28,9 +29,14 @@ class CallResultContext(Protocol):
         details: str = "",
     ) -> None: ...
 
-    def _apply_change_configuration_snapshot(self, key: str, value: str | None, connector_hint): ...
+    def _apply_change_configuration_snapshot(
+        self,
+        key: str,
+        value: str | None,
+        connector_hint: int | str | None,
+    ) -> object: ...
 
-    def _persist_configuration_result(self, payload: dict, connector_id): ...
+    def _persist_configuration_result(self, payload: dict, connector_id) -> object | None: ...
 
 
 @dataclass(slots=True)
@@ -77,6 +83,7 @@ def build_context(
 def legacy_adapter(handler: ContextHandler) -> LegacyHandler:
     """Adapt a context-based handler to the legacy call signature."""
 
+    @wraps(handler)
     async def _wrapped(consumer, message_id, metadata, payload_data, log_key):
         return await handler(build_context(consumer, message_id, metadata, payload_data, log_key))
 

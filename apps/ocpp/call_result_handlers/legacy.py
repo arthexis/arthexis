@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Awaitable, Callable, Protocol
+from typing import Awaitable, Callable
 
 from channels.db import database_sync_to_async
 from django.utils import timezone
 from ..utils import _parse_ocpp_timestamp
+from .common import CallResultContext
 
 from .. import store
 from ..models import (
@@ -47,40 +48,6 @@ def _extract_component_variable(entry: dict) -> tuple[str, str, str, str]:
     variable_name = str(variable_data.get("name") or "").strip()
     variable_instance = str(variable_data.get("instance") or "").strip()
     return component_name, component_instance, variable_name, variable_instance
-class CallResultContext(Protocol):
-    charger_id: str | None
-    store_key: str
-    charger: object | None
-    aggregate_charger: object | None
-
-    async def _update_local_authorization_state(self, version: int | None) -> None:
-        ...
-
-    async def _apply_local_authorization_entries(self, entries) -> int:
-        ...
-
-    async def _update_change_availability_state(
-        self,
-        connector_value: int | None,
-        requested_type: str | None,
-        status: str,
-        requested_at,
-        *,
-        details: str = "",
-    ) -> None:
-        ...
-
-    def _apply_change_configuration_snapshot(
-        self, key: str, value: str | None, connector_hint: int | str | None
-    ) -> ChargerConfiguration:
-        ...
-
-    def _persist_configuration_result(
-        self, payload: dict, connector_id
-    ) -> ChargerConfiguration | None:
-        ...
-
-
 CallResultHandler = Callable[
     [CallResultContext, str, dict, dict, str],
     Awaitable[bool],
@@ -1879,67 +1846,3 @@ async def handle_get_installed_certificate_ids_result(
         payload=payload_data,
     )
     return True
-
-
-CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
-    "ChangeConfiguration": handle_change_configuration_result,
-    "DataTransfer": handle_data_transfer_result,
-    "GetCompositeSchedule": handle_get_composite_schedule_result,
-    "GetLog": handle_get_log_result,
-    "SendLocalList": handle_send_local_list_result,
-    "GetLocalListVersion": handle_get_local_list_version_result,
-    "ClearCache": handle_clear_cache_result,
-    "UpdateFirmware": handle_update_firmware_result,
-    "PublishFirmware": handle_publish_firmware_result,
-    "UnpublishFirmware": handle_unpublish_firmware_result,
-    "GetConfiguration": handle_get_configuration_result,
-    "TriggerMessage": handle_trigger_message_result,
-    "ReserveNow": handle_reserve_now_result,
-    "CancelReservation": handle_cancel_reservation_result,
-    "RemoteStartTransaction": handle_remote_start_transaction_result,
-    "RemoteStopTransaction": handle_remote_stop_transaction_result,
-    "GetDiagnostics": handle_get_diagnostics_result,
-    "RequestStartTransaction": handle_request_start_transaction_result,
-    "RequestStopTransaction": handle_request_stop_transaction_result,
-    "GetTransactionStatus": handle_get_transaction_status_result,
-    "Reset": handle_reset_result,
-    "ChangeAvailability": handle_change_availability_result,
-    "UnlockConnector": handle_unlock_connector_result,
-    "SetChargingProfile": handle_set_charging_profile_result,
-    "ClearChargingProfile": handle_clear_charging_profile_result,
-    "ClearDisplayMessage": handle_clear_display_message_result,
-    "CustomerInformation": handle_customer_information_result,
-    "GetBaseReport": handle_get_base_report_result,
-    "GetChargingProfiles": handle_get_charging_profiles_result,
-    "GetDisplayMessages": handle_get_display_messages_result,
-    "GetReport": handle_get_report_result,
-    "SetDisplayMessage": handle_set_display_message_result,
-    "SetMonitoringBase": handle_set_monitoring_base_result,
-    "SetMonitoringLevel": handle_set_monitoring_level_result,
-    "SetNetworkProfile": handle_set_network_profile_result,
-    "InstallCertificate": handle_install_certificate_result,
-    "DeleteCertificate": handle_delete_certificate_result,
-    "CertificateSigned": handle_certificate_signed_result,
-    "GetInstalledCertificateIds": handle_get_installed_certificate_ids_result,
-    "GetVariables": handle_get_variables_result,
-    "SetVariables": handle_set_variables_result,
-    "SetVariableMonitoring": handle_set_variable_monitoring_result,
-    "ClearVariableMonitoring": handle_clear_variable_monitoring_result,
-    "GetMonitoringReport": handle_get_monitoring_report_result,
-}
-
-
-async def dispatch_call_result(
-    consumer: CallResultContext,
-    action: str | None,
-    message_id: str,
-    metadata: dict,
-    payload_data: dict,
-    log_key: str,
-) -> bool:
-    if not action:
-        return False
-    handler = CALL_RESULT_HANDLERS.get(action)
-    if not handler:
-        return False
-    return await handler(consumer, message_id, metadata, payload_data, log_key)

@@ -5,7 +5,6 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.ocpp.consumers import CSMSConsumer
-from apps.ocpp import store
 from apps.ocpp.call_result_handlers import (
     authorization,
     certificates,
