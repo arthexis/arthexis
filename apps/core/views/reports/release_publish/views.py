@@ -30,7 +30,6 @@ from utils import revision
 
 from ..common import (
     DIRTY_COMMIT_DEFAULT_MESSAGE,
-    DIRTY_STATUS_LABELS,
     PYPI_REQUEST_TIMEOUT,
 )
 from ..logs import (
@@ -52,7 +51,6 @@ from .services.pipeline import StepDefinition, run_release_step
 from .state.context import (
     load_release_context,
     persist_release_context as _persist_release_context,
-    sanitize_release_context as _sanitize_release_context,
     store_release_context as _store_release_context,
 )
 from .services.git_ops import (
@@ -955,11 +953,17 @@ def _fetch_publish_workflow_run(
     tag_name: str,
     token: str | None,
 ) -> dict[str, object] | None:
+    try:
+        tag_sha = _git_stdout(["git", "rev-list", "-n", "1", tag_name])
+    except Exception:
+        tag_sha = None
+
     return gh_fetch_publish_workflow_run(
         request=_github_request,
         owner=owner,
         repo=repo,
         tag_name=tag_name,
+        tag_sha=tag_sha,
         token=token,
     )
 
@@ -1369,8 +1373,6 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
         else:
             sync_error = None
 
-    previous_repo_version = getattr(release, "_repo_version_before_sync", "")
-
     if sync_error is not None:
         raise sync_error
 
@@ -1457,6 +1459,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     Side effects: may mutate release metadata and write publish logs.
     Rollback expectations: partial changes are committed/pushed by subsequent retry actions.
     """
+    _ = user
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping pre-release actions")
@@ -1482,9 +1485,6 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         version_path.read_text(encoding="utf-8").strip()
         if version_path.exists()
         else ""
-    )
-    repo_version_before_sync = getattr(
-        release, "_repo_version_before_sync", previous_version_text
     )
     if previous_version_text != release.version:
         version_path.write_text(f"{release.version}\n", encoding="utf-8")
@@ -1527,6 +1527,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     Side effects: may create git tags/commits and update release fields.
     Rollback expectations: promotion is append-only; retry or manual corrective commit expected.
     """
+    _ = user
     _append_log(log_path, "Generating build files")
     ctx.pop("build_revision", None)
     if ctx.get("dry_run"):

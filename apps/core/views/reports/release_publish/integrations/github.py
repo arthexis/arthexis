@@ -43,9 +43,14 @@ def fetch_publish_workflow_run(
     owner: str,
     repo: str,
     tag_name: str,
+    tag_sha: str | None,
     token: str | None,
 ) -> dict[str, object] | None:
-    """Fetch the latest publish workflow run matching a tag branch."""
+    """Fetch the latest publish workflow run for a release tag.
+
+    The primary query targets the tag branch, then falls back to an unfiltered
+    query and matches by ``head_sha`` when branch metadata is unavailable.
+    """
 
     runs_url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/publish.yml/runs"
 
@@ -60,8 +65,32 @@ def fetch_publish_workflow_run(
     runs = payload.get("workflow_runs") if isinstance(payload, dict) else None
     if not isinstance(runs, list):
         return None
+
     for run in runs:
-        if isinstance(run, dict) and run.get("head_branch") == tag_name:
+        if not isinstance(run, dict):
+            continue
+        run_head_sha = run.get("head_sha") if isinstance(run.get("head_sha"), str) else None
+        if run.get("head_branch") == tag_name or (tag_sha and run_head_sha == tag_sha):
+            return run
+
+    if not tag_sha:
+        return None
+
+    fallback = request(
+        "get",
+        runs_url,
+        token=token,
+        expected_status={200},
+        params={"event": "push", "per_page": 20},
+    )
+    fallback_payload = fallback.json()
+    fallback_runs = (
+        fallback_payload.get("workflow_runs") if isinstance(fallback_payload, dict) else None
+    )
+    if not isinstance(fallback_runs, list):
+        return None
+    for run in fallback_runs:
+        if isinstance(run, dict) and run.get("head_sha") == tag_sha:
             return run
     return None
 

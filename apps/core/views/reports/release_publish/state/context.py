@@ -35,15 +35,22 @@ def persist_release_context(request, session_key: str, ctx: dict, lock_path: Pat
 
 
 def load_release_context(session_ctx: dict | None, lock_path: Path) -> dict:
-    """Load release context from session, falling back to lockfile if available."""
+    """Load release context from session and lockfile with token recovery.
 
-    if session_ctx:
-        return dict(session_ctx)
+    Session state is sanitized before persistence, so sensitive keys (for example,
+    ``github_token``) are restored from lockfile when available.
+    """
+
+    context = dict(session_ctx) if session_ctx else {}
     if lock_path.exists():
         try:
             payload = json.loads(lock_path.read_text(encoding="utf-8"))
         except Exception:
-            return {}
+            return context
         if isinstance(payload, dict):
-            return payload
-    return {}
+            for key in SENSITIVE_CONTEXT_KEYS:
+                if key in payload and key not in context:
+                    context[key] = payload[key]
+            if not context:
+                return payload
+    return context
