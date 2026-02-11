@@ -137,6 +137,26 @@ def test_execute_supports_bash_safe_normalized_kwarg_names():
 
 
 @pytest.mark.django_db
+def test_execute_raises_for_unknown_body_type():
+    """Unknown body types raise a runtime error instead of silently falling back."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"unknown-body-{uuid.uuid4()}",
+        display="Unknown Body",
+        body_type=Recipe.BodyType.PYTHON,
+        script='result = "ok"',
+    )
+
+    Recipe.objects.filter(pk=recipe.pk).update(body_type="unknown")
+    recipe.refresh_from_db()
+
+    with pytest.raises(RuntimeError, match="Unsupported recipe body type"):
+        recipe.execute()
+
+
+@pytest.mark.django_db
 def test_execute_raises_runtime_error_for_bash_os_failures():
     """Bash startup failures are surfaced as runtime errors."""
 
