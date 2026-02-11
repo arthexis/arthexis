@@ -11,6 +11,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 import urllib3
+from django.conf import settings
 from django.http.request import split_domain_port
 
 from config.request_utils import is_https_request
@@ -19,13 +20,20 @@ from config.request_utils import is_https_request
 def get_client_ip(request) -> str:
     """Return the originating client IP extracted from request metadata."""
 
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded_for:
-        for value in forwarded_for.split(","):
-            candidate = value.strip()
-            if candidate:
-                return candidate
-    return request.META.get("REMOTE_ADDR", "")
+    remote_addr = request.META.get("REMOTE_ADDR", "")
+    trusted_proxies = getattr(settings, "TRUSTED_PROXIES", ())
+    if isinstance(trusted_proxies, str):
+        trusted_proxies = (trusted_proxies,)
+    trusted_proxy_set = {value.strip() for value in trusted_proxies if value and value.strip()}
+
+    if remote_addr in trusted_proxy_set:
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        if forwarded_for:
+            for value in forwarded_for.split(","):
+                candidate = value.strip()
+                if candidate:
+                    return candidate
+    return remote_addr
 
 
 def _get_route_address(remote_ip: str, port: int) -> str:
@@ -119,16 +127,6 @@ def _get_host_port(request) -> int | None:
     if port:
         return port
 
-    forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
-        "HTTP_X_FORWARDED_PROTO", ""
-    )
-    if forwarded_proto:
-        scheme = forwarded_proto.split(",")[0].strip().lower()
-        if scheme == "https":
-            return 443
-        if scheme == "http":
-            return 80
-
     try:
         host = request.get_host()
     except Exception:
@@ -138,6 +136,16 @@ def _get_host_port(request) -> int | None:
         port = _normalize_port(host_port)
         if port:
             return port
+
+    forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
+        "HTTP_X_FORWARDED_PROTO", ""
+    )
+    if forwarded_proto:
+        scheme = forwarded_proto.split(",")[0].strip().lower()
+        if scheme == "https":
+            return 443
+        if scheme == "http":
+            return 80
 
     if is_https_request(request):
         return 443

@@ -1,3 +1,5 @@
+import socket
+
 """Registration views package."""
 
 from .auth import _authenticate_basic_credentials, _enforce_authentication, _verify_signature
@@ -51,4 +53,5 @@ __all__ = [
     "register_node",
     "register_visitor_proxy",
     "register_visitor_telemetry",
+    "socket",
 ]
