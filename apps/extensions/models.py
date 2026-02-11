@@ -25,7 +25,9 @@ class JsExtension(Entity):
     content_script = models.TextField(blank=True)
     background_script = models.TextField(blank=True)
     options_page = models.TextField(blank=True)
-    permissions = models.TextField(blank=True, help_text="Newline-separated permissions.")
+    permissions = models.TextField(
+        blank=True, help_text="Newline-separated permissions."
+    )
     host_permissions = models.TextField(
         blank=True, help_text="Newline-separated host permissions (MV3)."
     )
@@ -48,7 +50,9 @@ class JsExtension(Entity):
         """Validate supported manifest versions."""
         super().clean()
         if self.manifest_version not in {2, 3}:
-            raise ValidationError({"manifest_version": "Manifest version must be 2 or 3."})
+            raise ValidationError(
+                {"manifest_version": "Manifest version must be 2 or 3."}
+            )
 
     @staticmethod
     def _split_lines(value: str) -> list[str]:
@@ -187,7 +191,7 @@ class JsExtension(Entity):
             parts.append(self.content_script.strip())
         return "\n\n".join(parts) + "\n"
 
-    def build_extension_archive_files(self) -> dict[str, str]:
+    def build_extension_archive_files(self) -> dict[str, str | dict[str, object]]:
         """Return the generated extension files keyed by archive filename."""
         files = {
             "manifest.json": self.build_manifest(),
