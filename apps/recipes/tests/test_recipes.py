@@ -80,3 +80,38 @@ def test_parse_recipe_arguments_splits_kwargs():
 
     assert args == ["alpha", token]
     assert kwargs == {"count": "3", "mode": "fast"}
+
+
+@pytest.mark.django_db
+def test_execute_supports_bash_body_type():
+    """Bash recipe bodies return stdout as the recipe result."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-{uuid.uuid4()}",
+        display="Bash Recipe",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$1-$RECIPE_KWARG_COLOR"',
+    )
+
+    execution = recipe.execute("hello", color="green")
+
+    assert execution.result == "hello-green"
+
+
+@pytest.mark.django_db
+def test_execute_raises_for_failing_bash_script():
+    """Bash recipe failures are surfaced as runtime errors."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-fail-{uuid.uuid4()}",
+        display="Bash Failure",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "bad" >&2\nexit 5',
+    )
+
+    with pytest.raises(RuntimeError, match="bad"):
+        recipe.execute()
