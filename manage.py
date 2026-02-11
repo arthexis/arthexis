@@ -44,7 +44,17 @@ def _resolve_interrupt_main() -> Callable[[], None]:
 
     return _raise_keyboard_interrupt
 
-def _resolve_runserver_direct_tls_material() -> tuple[str | None, str | None]:
+def _normalize_config_name(value: str | None) -> str:
+    """Normalize host/domain tokens used to match ``SiteConfiguration.name`` values."""
+
+    if not value:
+        return ""
+    return value.strip().strip("[]").lower()
+
+
+def _resolve_runserver_direct_tls_material(
+    preferred_names: Sequence[str] | None = None,
+) -> tuple[str | None, str | None]:
     """Return direct TLS certificate material configured for Daphne runserver."""
 
     try:
@@ -53,25 +63,45 @@ def _resolve_runserver_direct_tls_material() -> tuple[str | None, str | None]:
         return None, None
 
     try:
-        config = (
-            SiteConfiguration.objects.filter(
-                enabled=True,
-                protocol="https",
-                transport="daphne",
-            )
-            .order_by("pk")
-            .first()
+        queryset = SiteConfiguration.objects.filter(
+            enabled=True,
+            protocol="https",
+            transport="daphne",
         )
     except Exception:
         return None, None
 
-    if config is None:
-        return None, None
+    ordered_candidates: list[str] = []
+    seen: set[str] = set()
+    for candidate in preferred_names or ():
+        normalized = _normalize_config_name(candidate)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            ordered_candidates.append(normalized)
+    for fallback_name in ("localhost", "127.0.0.1", "::1"):
+        if fallback_name not in seen:
+            seen.add(fallback_name)
+            ordered_candidates.append(fallback_name)
 
-    certificate_path, certificate_key_path = config.resolve_tls_paths()
-    if not certificate_path or not certificate_key_path:
-        return None, None
-    return str(certificate_path), str(certificate_key_path)
+    for candidate in ordered_candidates:
+        config = queryset.filter(name__iexact=candidate).order_by("pk").first()
+        if config is None:
+            continue
+        certificate_path, certificate_key_path = config.resolve_tls_paths()
+        if certificate_path and certificate_key_path:
+            return str(certificate_path), str(certificate_key_path)
+
+    for config in queryset.order_by("pk"):
+        certificate_path, certificate_key_path = config.resolve_tls_paths()
+        if certificate_path and certificate_key_path:
+            return str(certificate_path), str(certificate_key_path)
+    return None, None
+
+
+def _is_runserver_asgi_enabled(inner_options: dict[str, object]) -> bool:
+    """Return ``True`` when Daphne is expected to serve ASGI for runserver."""
+
+    return bool(inner_options.get("use_asgi", True))
 
 def _build_daphne_endpoint(
     host: str | None,
@@ -173,15 +203,25 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
             global _RUNSERVER_DIRECT_TLS_CERT
             global _RUNSERVER_DIRECT_TLS_KEY
 
-            cert_path, key_path = _resolve_runserver_direct_tls_material()
-            _RUNSERVER_DIRECT_TLS_CERT = cert_path
-            _RUNSERVER_DIRECT_TLS_KEY = key_path
             self.ssl_options = None
-            if cert_path and key_path:
-                self.protocol = "https"
-                self.ssl_options = {"certfile": cert_path, "keyfile": key_path}
-            else:
-                self.protocol = "http"
+            _RUNSERVER_DIRECT_TLS_CERT = None
+            _RUNSERVER_DIRECT_TLS_KEY = None
+            if _is_runserver_asgi_enabled(inner_options):
+                preferred_names = [
+                    _normalize_config_name(getattr(self, "addr", None)),
+                    _normalize_config_name(getattr(self, "default_addr", None)),
+                    _normalize_config_name(getattr(self, "default_addr_ipv6", None)),
+                ]
+                cert_path, key_path = _resolve_runserver_direct_tls_material(
+                    preferred_names=preferred_names,
+                )
+                _RUNSERVER_DIRECT_TLS_CERT = cert_path
+                _RUNSERVER_DIRECT_TLS_KEY = key_path
+                if cert_path and key_path:
+                    self.protocol = "https"
+                    self.ssl_options = {"certfile": cert_path, "keyfile": key_path}
+                else:
+                    self.protocol = "http"
             return original_inner_run(self, *inner_args, **inner_options)
 
         core_runserver.Command.inner_run = patched_inner_run
