@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -179,10 +180,18 @@ class Recipe(Ownable):
     ) -> RecipeExecutionResult:
         """Execute a Bash recipe body and return its stdout as the recipe result."""
 
+        def normalize_key(key: str) -> str:
+            normalized = re.sub(r"[^A-Za-z0-9]", "_", key).upper()
+            if normalized and normalized[0].isdigit():
+                normalized = f"_{normalized}"
+            return normalized
+
         environment = {
             **os.environ,
-            **{f"RECIPE_ARG_{index}": str(value) for index, value in enumerate(args)},
-            **{f"RECIPE_KWARG_{key.upper()}": str(value) for key, value in kwargs.items()},
+            **{
+                f"RECIPE_KWARG_{normalize_key(key)}": str(value)
+                for key, value in kwargs.items()
+            },
         }
 
         try:
@@ -198,6 +207,10 @@ class Recipe(Ownable):
             message = stderr or str(exc)
             raise RuntimeError(
                 f"Error executing recipe '{self.slug}': {message}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"Error executing recipe '{self.slug}': {exc}"
             ) from exc
 
         return RecipeExecutionResult(
