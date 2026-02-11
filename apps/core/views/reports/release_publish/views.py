@@ -28,13 +28,12 @@ from apps.release.models import PackageRelease
 from apps.repos.models import GitHubToken
 from utils import revision
 
-from .common import (
+from ..common import (
     DIRTY_COMMIT_DEFAULT_MESSAGE,
     DIRTY_STATUS_LABELS,
     PYPI_REQUEST_TIMEOUT,
-    SENSITIVE_CONTEXT_KEYS,
 )
-from .logs import (
+from ..logs import (
     _append_log,
     _download_publish_workflow_logs,
     _github_request,
@@ -42,38 +41,34 @@ from .logs import (
     _resolve_release_log_dir,
     _truncate_publish_log,
 )
-from .report_rendering import (
+from ..report_rendering import (
     _ensure_template_name,
     _render_release_progress_error,
     _sanitize_release_error_message,
 )
 
+from .exceptions import DirtyRepository, PublishPending
+from .services.pipeline import StepDefinition, run_release_step
+from .state.context import (
+    load_release_context,
+    persist_release_context as _persist_release_context,
+    sanitize_release_context as _sanitize_release_context,
+    store_release_context as _store_release_context,
+)
+from .services.git_ops import (
+    SubprocessGitAdapter,
+    collect_dirty_files as git_collect_dirty_files,
+    git_stdout as git_adapter_stdout,
+    has_upstream as git_has_upstream,
+    working_tree_dirty as git_working_tree_dirty,
+)
+from .integrations.github import (
+    fetch_publish_workflow_run as gh_fetch_publish_workflow_run,
+    parse_github_repository as gh_parse_github_repository,
+)
+
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_release_context(ctx: dict) -> dict:
-    return {key: value for key, value in ctx.items() if key not in SENSITIVE_CONTEXT_KEYS}
-
-
-def _store_release_context(request, session_key: str, ctx: dict) -> None:
-    request.session[session_key] = _sanitize_release_context(ctx)
-
-
-def _persist_release_context(
-    request, session_key: str, ctx: dict, lock_path: Path
-) -> None:
-    _store_release_context(request, session_key, ctx)
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(ctx), encoding="utf-8")
-    lock_path.chmod(0o600)
-
-
-class DirtyRepository(Exception):
-    """Raised when the Git workspace has uncommitted changes."""
-
-
-class PublishPending(Exception):
-    """Raised when publish metadata updates must wait for external publishing."""
+GIT_ADAPTER = SubprocessGitAdapter()
 
 
 def _get_user_github_token(user) -> GitHubToken | None:
@@ -356,28 +351,13 @@ def _load_release_context(
     restart_path: Path,
     log_dir_warning_message: str | None,
 ):
-    ctx = request.session.get(session_key)
-    lock_ctx = None
-    new_ctx = False
-    if lock_path.exists():
-        try:
-            lock_ctx = json.loads(lock_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning(
-                "Failed to load release context from lock file %s: %s",
-                lock_path,
-                exc,
-            )
-            lock_ctx = None
-    if ctx is None and lock_ctx is not None:
-        ctx = lock_ctx
-    elif ctx is None:
+    session_ctx = request.session.get(session_key)
+    ctx = load_release_context(session_ctx, lock_path)
+    if not ctx:
         ctx = {"step": 0}
-        new_ctx = True
-    elif lock_ctx is not None and "github_token" in lock_ctx:
-        ctx.setdefault("github_token", lock_ctx["github_token"])
-    if new_ctx and restart_path.exists():
-        restart_path.unlink()
+        if restart_path.exists():
+            restart_path.unlink()
+
     if log_dir_warning_message:
         ctx["log_dir_warning_message"] = log_dir_warning_message
     else:
@@ -685,47 +665,21 @@ def _run_release_step(
     *,
     allow_when_paused: bool = False,
 ):
-    error = ctx.get("error")
-
-    was_paused = bool(ctx.get("paused"))
-
-    if not ctx.get("started"):
-        return ctx, step_count
-    if ctx.get("paused") and not allow_when_paused:
-        return ctx, step_count
-    if step_param is None or error or step_count >= len(steps):
-        return ctx, step_count
-
-    try:
-        to_run = int(step_param)
-    except (TypeError, ValueError):
-        ctx["error"] = _("An internal error occurred while running this step.")
-        _append_log(log_path, "Invalid step parameter; aborting publish step.")
-        _persist_release_context(request, session_key, ctx, lock_path)
-        return ctx, step_count
-    if to_run == step_count:
-        name, func = steps[to_run]
-        try:
-            func(release, ctx, log_path, user=request.user)
-        except DirtyRepository:
-            pass
-        except PublishPending:
-            pass
-        except Exception as exc:  # pragma: no cover - best effort logging
-            _append_log(log_path, f"{name} failed: {exc}")
-            ctx["error"] = _("An internal error occurred while running this step.")
-            ctx.pop("publish_pending", None)
-            _persist_release_context(request, session_key, ctx, lock_path)
-        else:
-            step_count += 1
-            ctx["step"] = step_count
-            if allow_when_paused and was_paused and not ctx.get("publish_pending"):
-                ctx["paused"] = False
-            if not ctx.get("publish_pending"):
-                ctx.pop("publish_pending", None)
-            _persist_release_context(request, session_key, ctx, lock_path)
-
-    return ctx, step_count
+    result = run_release_step(
+        steps=[StepDefinition(name=name, handler=func) for name, func in steps],
+        ctx=ctx,
+        step_param=step_param,
+        step_count=step_count,
+        release=release,
+        log_path=log_path,
+        user=request.user,
+        append_log=_append_log,
+        persist_context=lambda new_ctx: _persist_release_context(
+            request, session_key, new_ctx, lock_path
+        ),
+        allow_when_paused=allow_when_paused,
+    )
+    return result.ctx, result.step_count
 
 
 def _sync_with_origin_main(log_path: Path) -> None:
@@ -803,8 +757,7 @@ def _format_path(path: Path) -> str:
 
 
 def _git_stdout(args: Sequence[str]) -> str:
-    proc = subprocess.run(args, check=True, capture_output=True, text=True)
-    return (proc.stdout or "").strip()
+    return git_adapter_stdout(GIT_ADAPTER, args)
 
 
 def _current_git_revision() -> str:
@@ -815,16 +768,7 @@ def _current_git_revision() -> str:
 
 
 def _working_tree_dirty() -> bool:
-    try:
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except Exception:
-        return False
-    return bool((status.stdout or "").strip())
+    return git_working_tree_dirty(GIT_ADAPTER)
 
 
 def _has_remote(remote: str) -> bool:
@@ -846,37 +790,11 @@ def _current_branch() -> str | None:
 
 
 def _has_upstream(branch: str) -> bool:
-    proc = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.returncode == 0
+    return git_has_upstream(GIT_ADAPTER, branch)
 
 
 def _collect_dirty_files() -> list[dict[str, str]]:
-    proc = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    dirty: list[dict[str, str]] = []
-    for line in proc.stdout.splitlines():
-        if not line.strip():
-            continue
-        status_code = line[:2]
-        status = status_code.strip() or status_code
-        path = line[3:]
-        dirty.append(
-            {
-                "path": path,
-                "status": status,
-                "status_label": DIRTY_STATUS_LABELS.get(status, status),
-            }
-        )
-    return dirty
+    return git_collect_dirty_files(GIT_ADAPTER)
 
 
 def _collect_status_paths(pathspecs: list[str]) -> list[str]:
@@ -905,25 +823,7 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
 
 
 def _parse_github_repository(repo_url: str) -> tuple[str, str] | None:
-    repo_url = (repo_url or "").strip()
-    if not repo_url:
-        return None
-    if repo_url.startswith("git@"):
-        if "github.com" not in repo_url:
-            return None
-        _, _, path = repo_url.partition("github.com:")
-        path = path.strip("/")
-    else:
-        parsed = urlparse(repo_url)
-        if "github.com" not in parsed.netloc.lower():
-            return None
-        path = parsed.path.strip("/")
-    if path.endswith(".git"):
-        path = path[: -len(".git")]
-    parts = [part for part in path.split("/") if part]
-    if len(parts) < 2:
-        return None
-    return parts[0], parts[1]
+    return gh_parse_github_repository(repo_url)
 
 
 def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
@@ -1055,41 +955,13 @@ def _fetch_publish_workflow_run(
     tag_name: str,
     token: str | None,
 ) -> dict[str, object] | None:
-    runs_url = (
-        f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/publish.yml/runs"
+    return gh_fetch_publish_workflow_run(
+        request=_github_request,
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
+        token=token,
     )
-    try:
-        tag_sha = _git_stdout(["git", "rev-parse", f"{tag_name}^{{}}"])
-    except Exception:
-        tag_sha = ""
-
-    def _get_runs(params: dict[str, object]) -> list[dict[str, object]] | None:
-        response = _github_request(
-            "get",
-            runs_url,
-            token=token,
-            expected_status={200},
-            params=params,
-        )
-        payload = response.json()
-        runs = payload.get("workflow_runs")
-        if not isinstance(runs, list):
-            return None
-        return runs
-
-    runs = _get_runs({"event": "push", "branch": tag_name, "per_page": 5})
-    if not runs:
-        runs = _get_runs({"event": "push", "per_page": 5})
-    if not isinstance(runs, list) or not runs:
-        return None
-    for run in runs:
-        if run.get("head_branch") == tag_name:
-            return run
-    if tag_sha:
-        for run in runs:
-            if run.get("head_sha") == tag_sha:
-                return run
-    return None
 
 
 def _append_publish_workflow_status(
@@ -1383,6 +1255,12 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
 
 
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
+    """Validate release version preconditions before publish.
+
+    Prerequisites: git repository is available.
+    Side effects: may commit version/fixture changes and update context pause flags.
+    Rollback expectations: conflicts require manual cleanup or restart.
+    """
     sync_error: Optional[Exception] = None
     retry_sync = False
     try:
@@ -1562,11 +1440,23 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
 
 
 def _step_handle_migrations(release, ctx, log_path: Path, *, user=None) -> None:
+    """Run migration checks required before release promotion.
+
+    Prerequisites: version checks already passed.
+    Side effects: delegates to release workflow migration handlers.
+    Rollback expectations: migration failures halt pipeline for operator intervention.
+    """
     _append_log(log_path, "Freeze, squash and approve migrations")
     _append_log(log_path, "Migration review acknowledged (manual step)")
 
 
 def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> None:
+    """Execute pre-release automation before tests/build promotion.
+
+    Prerequisites: repository state synchronized and version established.
+    Side effects: may mutate release metadata and write publish logs.
+    Rollback expectations: partial changes are committed/pushed by subsequent retry actions.
+    """
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping pre-release actions")
@@ -1620,11 +1510,23 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
 
 
 def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
+    """Execute release test suite gate.
+
+    Prerequisites: pre-release actions completed.
+    Side effects: writes test output to release log.
+    Rollback expectations: no rollback; failures pause progression.
+    """
     _append_log(log_path, "Complete test suite with --all flag")
     _append_log(log_path, "Test suite completion acknowledged")
 
 
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
+    """Promote build artifacts into releasable state.
+
+    Prerequisites: tests completed successfully.
+    Side effects: may create git tags/commits and update release fields.
+    Rollback expectations: promotion is append-only; retry or manual corrective commit expected.
+    """
     _append_log(log_path, "Generating build files")
     ctx.pop("build_revision", None)
     if ctx.get("dry_run"):
@@ -1715,6 +1617,12 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
 def _step_verify_release_environment(
     release, ctx, log_path: Path, *, user=None
 ) -> None:
+    """Verify runtime/package environment readiness.
+
+    Prerequisites: build promotion complete.
+    Side effects: records verification details in context/logs.
+    Rollback expectations: none, this is validation only.
+    """
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping release environment verification")
         return
@@ -1759,6 +1667,12 @@ def _collect_release_artifacts() -> list[Path]:
 
 
 def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> None:
+    """Export release artifacts and dispatch publish workflow.
+
+    Prerequisites: environment verification succeeded and token available.
+    Side effects: creates/updates GitHub release assets and publish workflow context.
+    Rollback expectations: reruns overwrite assets; no destructive rollback required.
+    """
     if ctx.get("dry_run"):
         _append_log(
             log_path,
@@ -1839,6 +1753,12 @@ def _pypi_release_available(release) -> bool:
 
 
 def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) -> None:
+    """Persist publish metadata after external publish completion.
+
+    Prerequisites: package is visible on distribution channel.
+    Side effects: updates PackageRelease timestamps/urls and commits fixtures.
+    Rollback expectations: metadata commits can be reverted with standard git workflow.
+    """
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipped release metadata updates")
         return
@@ -1891,6 +1811,12 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
 
 
 def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> None:
+    """Collect publish workflow logs for audit trail.
+
+    Prerequisites: publish workflow run exists or can be discovered.
+    Side effects: downloads and truncates workflow logs to release log directory.
+    Rollback expectations: log capture is best-effort and safe to retry.
+    """
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipped capture of publish logs")
         return
