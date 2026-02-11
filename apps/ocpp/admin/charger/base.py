@@ -156,6 +156,7 @@ class ChargerAdminBaseMixin(LogViewAdminMixin):
         "configuration",
         "local_auth_list_version",
         "local_auth_list_updated_at",
+        "diagnostics_location",
         "diagnostics_bucket",
         "forwarded_to",
         "forwarding_watermark",

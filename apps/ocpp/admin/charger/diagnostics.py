@@ -1,5 +1,8 @@
 """Diagnostics-related admin helpers and actions."""
 
+import ipaddress
+import socket
+
 from ..common_imports import *
 
 
@@ -82,6 +85,38 @@ class ChargerDiagnosticsMixin:
             counter += 1
         return candidate
 
+
+    def _validated_diagnostics_hostname(self, location: str) -> str:
+        parsed = urlparse(location)
+        hostname = (parsed.hostname or "").strip()
+        if not hostname:
+            raise self.DiagnosticsDownloadError(_("Diagnostics location must include a hostname."))
+
+        allowed_hosts = set(getattr(settings, "OCPP_DIAGNOSTICS_ALLOWED_HOSTS", []) or [])
+        if hostname in allowed_hosts:
+            return hostname
+
+        try:
+            ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            ip = None
+
+        if ip is not None:
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                raise self.DiagnosticsDownloadError(_("Diagnostics location points to a disallowed private address."))
+            return hostname
+
+        try:
+            addrinfos = socket.getaddrinfo(hostname, None)
+        except socket.gaierror as exc:
+            raise self.DiagnosticsDownloadError(_("Unable to resolve diagnostics host: %s") % exc) from exc
+
+        for _, _, _, _, sockaddr in addrinfos:
+            candidate = ipaddress.ip_address(sockaddr[0])
+            if candidate.is_private or candidate.is_loopback or candidate.is_link_local or candidate.is_reserved or candidate.is_multicast:
+                raise self.DiagnosticsDownloadError(_("Diagnostics location resolves to a disallowed private address."))
+        return hostname
+
     def _download_diagnostics(
         self,
         request,
@@ -92,6 +127,7 @@ class ChargerDiagnosticsMixin:
     ) -> tuple[Path, str]:
         parsed = urlparse(location)
         scheme = (parsed.scheme or "").lower()
+        self._validated_diagnostics_hostname(location)
         if scheme not in {"http", "https"}:
             raise self.DiagnosticsDownloadError(
                 _("Diagnostics location must use HTTP or HTTPS.")

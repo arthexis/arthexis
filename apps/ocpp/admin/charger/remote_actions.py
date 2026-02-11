@@ -6,6 +6,25 @@ from ..common_imports import *
 class ChargerRemoteActionsMixin:
     """Mixin with remote/OCPP command dispatch helpers and actions."""
 
+    _REMOTE_UPDATE_ALLOWED_FIELDS = {
+        "availability_state",
+        "availability_state_updated_at",
+        "availability_requested_state",
+        "availability_requested_at",
+        "availability_request_status",
+        "availability_request_status_at",
+        "availability_request_details",
+        "last_online_at",
+        "firmware_status",
+        "firmware_status_info",
+        "firmware_timestamp",
+        "diagnostics_status",
+        "diagnostics_timestamp",
+        "require_rfid",
+        "local_auth_list_version",
+        "local_auth_list_updated_at",
+    }
+
     def _prepare_remote_credentials(self, request):
         local = Node.get_local()
         if not local or not local.uuid:
@@ -142,6 +161,8 @@ class ChargerRemoteActionsMixin:
 
         applied: dict[str, Any] = {}
         for field, value in updates.items():
+            if field not in self._REMOTE_UPDATE_ALLOWED_FIELDS:
+                continue
             if field in self._REMOTE_DATETIME_FIELDS and isinstance(value, str):
                 parsed = parse_datetime(value)
                 if parsed and timezone.is_naive(parsed):

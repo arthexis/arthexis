@@ -11,6 +11,7 @@ class ChargerMetricsMixin:
 
     total_kw_display.short_description = "Total kW"
 
+    @admin.display(description="Today kW")
     def today_kw(self, obj):
         start, end = self._today_range()
         return round(obj.total_kw_for_range(start, end), 2)

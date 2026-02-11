@@ -62,7 +62,7 @@ class ChargerRFIDMixin:
             )
             if success:
                 self._apply_remote_updates(charger, updates)
-                if charger.require_rfid:
+                if new_value:
                     enabled += 1
                 else:
                     disabled += 1
