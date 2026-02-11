@@ -98,3 +98,68 @@ def test_redact_mac_is_deterministic_and_non_plaintext():
     assert first == second
     assert first.startswith("***REDACTED***-")
     assert "AA-BB" not in first
+
+
+@override_settings(VISITOR_CORS_ALLOWED_ORIGINS=("https://trusted.example",))
+def test_add_cors_headers_reflects_only_allowed_origin():
+    """CORS credentials should only be enabled for allow-listed origins."""
+
+    from django.http import JsonResponse
+
+    from apps.nodes.views.registration.cors import add_cors_headers
+
+    trusted_request = RequestFactory().options(
+        "/nodes/register/",
+        HTTP_ORIGIN="https://trusted.example",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="X-Test-Header",
+    )
+    trusted_response = add_cors_headers(trusted_request, JsonResponse({"detail": "ok"}))
+    assert trusted_response["Access-Control-Allow-Origin"] == "https://trusted.example"
+    assert trusted_response["Access-Control-Allow-Credentials"] == "true"
+
+    untrusted_request = RequestFactory().options(
+        "/nodes/register/",
+        HTTP_ORIGIN="https://evil.example",
+    )
+    untrusted_response = add_cors_headers(untrusted_request, JsonResponse({"detail": "ok"}))
+    assert untrusted_response["Access-Control-Allow-Origin"] == "*"
+    assert untrusted_response["Access-Control-Allow-Credentials"] == "false"
+
+
+@override_settings(TRUSTED_PROXIES=("10.0.0.1",))
+def test_get_client_ip_uses_forwarded_for_only_for_trusted_proxy():
+    """X-Forwarded-For should be honored only when REMOTE_ADDR is trusted."""
+
+    from apps.nodes.views.registration.network import get_client_ip
+
+    trusted_request = RequestFactory().get(
+        "/nodes/info/",
+        REMOTE_ADDR="10.0.0.1",
+        HTTP_X_FORWARDED_FOR="203.0.113.9, 10.0.0.1",
+    )
+    assert get_client_ip(trusted_request) == "203.0.113.9"
+
+    untrusted_request = RequestFactory().get(
+        "/nodes/info/",
+        REMOTE_ADDR="198.51.100.7",
+        HTTP_X_FORWARDED_FOR="203.0.113.10",
+    )
+    assert get_client_ip(untrusted_request) == "198.51.100.7"
+
+
+def test_payload_helpers_handle_falsy_strings_and_invalid_utf8():
+    """Payload coercion should map falsy strings and tolerate invalid UTF-8."""
+
+    from apps.nodes.views.registration.payload import _coerce_bool, _extract_request_data
+
+    assert _coerce_bool("false") is False
+    assert _coerce_bool("  off  ") is False
+    assert _coerce_bool("1") is True
+
+    request = RequestFactory().post(
+        "/nodes/register/",
+        data=bytes([0x80]),
+        content_type="application/json",
+    )
+    data = _extract_request_data(request)
+    assert hasattr(data, "get")

@@ -62,7 +62,11 @@ def _coerce_bool(value) -> bool:
     """Coerce string and scalar values into booleans."""
 
     if isinstance(value, str):
-        return value.lower() in {"1", "true", "yes", "on"}
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
     return bool(value)
 
 
@@ -80,7 +84,7 @@ def _extract_request_data(request):
 
     try:
         return json.loads(request.body.decode())
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return request.POST
 
 
