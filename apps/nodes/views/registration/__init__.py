@@ -1,6 +1,7 @@
-import socket
-
 """Registration views package."""
+
+# Compatibility export for legacy monkeypatching in external tests.
+import socket
 
 from .auth import _authenticate_basic_credentials, _enforce_authentication, _verify_signature
 from .cors import add_cors_headers as _add_cors_headers
@@ -53,5 +54,4 @@ __all__ = [
     "register_node",
     "register_visitor_proxy",
     "register_visitor_telemetry",
-    "socket",
 ]
