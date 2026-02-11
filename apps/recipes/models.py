@@ -102,6 +102,11 @@ class Recipe(Ownable):
                 kwargs=kwargs,
             )
 
+        if self.body_type != self.BodyType.PYTHON:
+            raise RuntimeError(
+                f"Unsupported recipe body type for '{self.slug}': {self.body_type}"
+            )
+
         return self._execute_python(
             resolved_script=resolved_script,
             result_variable=result_key,
@@ -186,8 +191,24 @@ class Recipe(Ownable):
                 normalized = f"_{normalized}"
             return normalized
 
+        allowed_env_keys = {
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "PATH",
+            "PWD",
+            "TERM",
+            "TZ",
+            "USER",
+        }
+
         environment = {
-            **os.environ,
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if key in allowed_env_keys
+            },
             **{
                 f"RECIPE_KWARG_{normalize_key(key)}": str(value)
                 for key, value in kwargs.items()
