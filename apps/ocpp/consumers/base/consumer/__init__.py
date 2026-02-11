@@ -26,10 +26,10 @@ from config.offline import requires_network
 
 from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
-from ... import store
-from ...forwarder import forwarder
-from ...status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
-from ...models import (
+from .... import store
+from ....forwarder import forwarder
+from ....status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
+from ....models import (
     Transaction,
     Charger,
     ChargerConfiguration,
@@ -57,34 +57,39 @@ from ...models import (
 )
 from apps.links.reference_utils import host_is_local_loopback
 from apps.screens.startup_notifications import format_lcd_lines
-from ...evcs_discovery import (
+from ....evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
     HTTPS_PORTS,
     build_console_url,
     prioritise_ports,
     scan_open_ports,
 )
-from ..connection import (
+from ...connection import (
     RateLimitedConnectionMixin,
     SubprotocolConnectionMixin,
     WebsocketAuthMixin,
 )
-from ..constants import (
+from ...constants import (
     OCPP_CONNECT_RATE_LIMIT_FALLBACK,
     OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS,
     OCPP_VERSION_16,
     OCPP_VERSION_201,
     OCPP_VERSION_21,
 )
-from .certificates import CertificatesMixin
-from .dispatch import DispatchMixin
-from .identity import (
+from ..certificates import CertificatesMixin
+from ..dispatch import DispatchMixin
+from ..identity import (
     IdentityMixin,
     _extract_vehicle_identifier,
     _register_log_names_for_identity,
     _resolve_client_ip,
 )
-from ...utils import _parse_ocpp_timestamp
+from ....utils import _parse_ocpp_timestamp
+from .connection import ConnectionHandler
+from .forwarding import ForwardingHandler
+from .metering import MeteringHandler
+from .notifications import NotificationHandler
+from .transactions import TransactionHandler
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +150,116 @@ class CSMSConsumer(
             return None
         return super().get_rate_limit_identifier()
 
+    def _connection_handler(self) -> ConnectionHandler:
+        """Return connection helper for OCPP 1.6/2.x admission checks."""
+
+        return ConnectionHandler(self)
+
+    def _forwarding_handler(self) -> ForwardingHandler:
+        """Return forwarding helper for cross-node session relays."""
+
+        return ForwardingHandler(self)
+
+    def _metering_handler(self) -> MeteringHandler:
+        """Return metering helper for OCPP meter sample persistence."""
+
+        return MeteringHandler(self)
+
+    def _transaction_handler(self) -> TransactionHandler:
+        """Return transaction helper for OCPP 1.6/2.x transaction flows."""
+
+        return TransactionHandler(self)
+
+    def _notification_handler(self) -> NotificationHandler:
+        """Return notification helper for firmware/log/security event actions."""
+
+        return NotificationHandler(self)
+
+    async def _allow_charge_point_connection(
+        self, existing_charger: Charger | None
+    ) -> bool:
+        """Wrapper that delegates charge-point admission checks to connection helper."""
+
+        return await self._connection_handler().allow_charge_point_connection(
+            existing_charger
+        )
+
+    async def _forward_charge_point_message(self, action: str, raw: str | None) -> None:
+        """Wrapper that delegates message forwarding behavior."""
+
+        await self._forwarding_handler().forward_message(action, raw)
+
+    async def _forward_charge_point_reply(self, message_id: str, raw: str | None) -> None:
+        """Wrapper that delegates forwarded reply behavior."""
+
+        await self._forwarding_handler().forward_reply(message_id, raw)
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
+    async def _handle_meter_values_action(self, payload, msg_id, raw, text_data):
+        """Route OCPP meter values through the metering handler."""
+
+        return await self._metering_handler().handle_meter_values(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
+    async def _handle_transaction_event_action(self, payload, msg_id, raw, text_data):
+        """Route TransactionEvent through the transaction handler."""
+
+        return await self._transaction_handler().handle_transaction_event(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
+    async def _handle_start_transaction_action(self, payload, msg_id, raw, text_data):
+        """Route StartTransaction through the transaction handler."""
+
+        return await self._transaction_handler().handle_start_transaction(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
+    async def _handle_stop_transaction_action(self, payload, msg_id, raw, text_data):
+        """Route StopTransaction through the transaction handler."""
+
+        return await self._transaction_handler().handle_stop_transaction(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "PublishFirmwareStatusNotification")
+    async def _handle_publish_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
+        """Route firmware publish notifications through notification handler."""
+
+        return await self._notification_handler().handle_publish_firmware_status(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "DiagnosticsStatusNotification")
+    async def _handle_diagnostics_status_notification_action(self, payload, msg_id, raw, text_data):
+        """Route diagnostics notifications through notification handler."""
+
+        return await self._notification_handler().handle_diagnostics_status(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
+    async def _handle_log_status_notification_action(self, payload, msg_id, raw, text_data):
+        """Route log notifications through notification handler."""
+
+        return await self._notification_handler().handle_log_status(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "FirmwareStatusNotification")
+    async def _handle_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
+        """Route firmware status notifications through notification handler."""
+
+        return await self._notification_handler().handle_firmware_status(
+            payload, msg_id, raw, text_data
+        )
+
     async def _ensure_charger_record(
         self, existing_charger: Charger | None
     ) -> bool:
@@ -175,7 +290,7 @@ class CSMSConsumer(
         friendly_name = location_name or self.charger_id
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
-    async def _allow_charge_point_connection(
+    async def _allow_charge_point_connection_legacy(
         self, existing_charger: Charger | None
     ) -> bool:
         """Return whether the charge point connection should be accepted."""
@@ -626,7 +741,7 @@ class CSMSConsumer(
         session.forwarder_id = forwarder_pk
         return session, refreshed
 
-    async def _forward_charge_point_message(self, action: str, raw: str) -> None:
+    async def _forward_charge_point_message_legacy(self, action: str, raw: str) -> None:
         """Forward an OCPP message to the configured remote node when permitted."""
 
         if not action or not raw:
@@ -710,7 +825,7 @@ class CSMSConsumer(
         if current and current.pk == charger.pk and current is not aggregate:
             current.forwarding_watermark = timestamp
 
-    async def _forward_charge_point_reply(self, message_id: str, raw: str) -> None:
+    async def _forward_charge_point_reply_legacy(self, message_id: str, raw: str) -> None:
         """Forward a call result or error back to the remote node when needed."""
 
         if not message_id or not raw:
@@ -1683,7 +1798,7 @@ class CSMSConsumer(
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
-    async def _handle_meter_values_action(self, payload, msg_id, raw, text_data):
+    async def _handle_meter_values_legacy(self, payload, msg_id, raw, text_data):
         await self._store_meter_values(payload, text_data)
         self.charger.last_meter_values = payload
         await database_sync_to_async(
@@ -2826,7 +2941,7 @@ class CSMSConsumer(
         ProtocolCallModel.CP_TO_CSMS,
         "PublishFirmwareStatusNotification",
     )
-    async def _handle_publish_firmware_status_notification_action(
+    async def _handle_publish_firmware_status_notification_action_legacy(
         self, payload, msg_id, raw, text_data
     ):
         status_raw = payload.get("status")
@@ -3261,7 +3376,7 @@ class CSMSConsumer(
         ProtocolCallModel.CP_TO_CSMS,
         "DiagnosticsStatusNotification",
     )
-    async def _handle_diagnostics_status_notification_action(
+    async def _handle_diagnostics_status_notification_action_legacy(
         self, payload, msg_id, raw, text_data
     ):
         status_value = payload.get("status")
@@ -3324,7 +3439,7 @@ class CSMSConsumer(
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
-    async def _handle_log_status_notification_action(
+    async def _handle_log_status_notification_action_legacy(
         self, payload, msg_id, raw, text_data
     ):
         status_value = str(payload.get("status") or "").strip()
@@ -3412,7 +3527,7 @@ class CSMSConsumer(
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    async def _handle_transaction_event_action(
+    async def _handle_transaction_event_legacy(
         self, payload, msg_id, raw, text_data
     ):
         event_type = str(payload.get("eventType") or "").strip().lower()
@@ -3617,7 +3732,7 @@ class CSMSConsumer(
         return {}
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
-    async def _handle_start_transaction_action(
+    async def _handle_start_transaction_legacy(
         self, payload, msg_id, raw, text_data
     ):
         id_tag = payload.get("idTag")
@@ -3684,7 +3799,7 @@ class CSMSConsumer(
         return {"idTagInfo": {"status": "Invalid"}}
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
-    async def _handle_stop_transaction_action(
+    async def _handle_stop_transaction_legacy(
         self, payload, msg_id, raw, text_data
     ):
         tx_id = payload.get("transactionId")
@@ -3734,7 +3849,7 @@ class CSMSConsumer(
         ProtocolCallModel.CP_TO_CSMS,
         "FirmwareStatusNotification",
     )
-    async def _handle_firmware_status_notification_action(
+    async def _handle_firmware_status_notification_action_legacy(
         self, payload, msg_id, raw, text_data
     ):
         status_raw = payload.get("status")
