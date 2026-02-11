@@ -133,12 +133,21 @@ class ChargerDiagnosticsMixin:
                 _("Diagnostics location must use HTTP or HTTPS.")
             )
         try:
-            response = requests.get(location, stream=True, timeout=15)
+            response = requests.get(
+                location,
+                stream=True,
+                timeout=15,
+                allow_redirects=False,
+            )
         except RequestException as exc:
             raise self.DiagnosticsDownloadError(
                 _("Failed to download diagnostics: %s") % exc
             ) from exc
         try:
+            if response.is_redirect or response.is_permanent_redirect:
+                raise self.DiagnosticsDownloadError(
+                    _("Diagnostics download redirected to another host.")
+                )
             if response.status_code != 200:
                 raise self.DiagnosticsDownloadError(
                     _("Diagnostics download returned status %s.")

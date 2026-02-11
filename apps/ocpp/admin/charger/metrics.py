@@ -7,7 +7,7 @@ class ChargerMetricsMixin:
     """Mixin with tariff and energy aggregation helpers for admin list."""
 
     def total_kw_display(self, obj):
-        return round(obj.total_kw, 2)
+        return round(obj.total_kw(), 2)
 
     total_kw_display.short_description = "Total kW"
 
@@ -55,7 +55,7 @@ class ChargerMetricsMixin:
             if not include_totals:
                 continue
 
-            stats["total_kw"] += charger.total_kw
+            stats["total_kw"] += charger.total_kw()
             stats["today_kw"] += charger.total_kw_for_range(start, end)
 
             energy_window = Decimal(
