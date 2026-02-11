@@ -22,9 +22,12 @@ def extension_manifest(request: HttpRequest, slug: str) -> JsonResponse:
 def extension_content_script(request: HttpRequest, slug: str) -> HttpResponse:
     """Serve the content script for a hosted extension."""
     extension = _get_enabled_extension(slug)
-    if not extension.content_script:
+    if not extension.content_script and not extension.match_patterns:
         raise Http404("Content script not available.")
-    return HttpResponse(extension.content_script, content_type="application/javascript")
+    return HttpResponse(
+        extension.build_content_script_payload(),
+        content_type="application/javascript",
+    )
 
 
 def extension_background_script(request: HttpRequest, slug: str) -> HttpResponse:
