@@ -83,7 +83,11 @@ def test_certificate_provision_dispatches(monkeypatch):
         certificate_key_path="/tmp/dispatch/privkey.pem",
     )
 
-    monkeypatch.setattr(certbot, "request", lambda *, sudo="sudo": "requested")
+    monkeypatch.setattr(
+        certbot,
+        "request",
+        lambda *, sudo="sudo", dns_use_sandbox=None: "requested",
+    )
     monkeypatch.setattr(self_signed, "generate", lambda *, sudo="sudo": "generated")
 
     assert certbot.provision(sudo="") == "requested"
