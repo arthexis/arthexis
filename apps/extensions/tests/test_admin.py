@@ -93,5 +93,5 @@ def test_admin_download_archive_view_sanitizes_archive_filename(admin_client):
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == (
-        'attachment; filename="helper-1.2.3_r_n.._unsafe.zip"'
+        'attachment; filename="helper-1.2.3_.._unsafe.zip"'
     )
