@@ -119,16 +119,13 @@ def test_build_godaddy_certbot_command_uses_preserve_env_and_absolute_hook_path(
         sudo="sudo",
     )
 
-    assert command[:5] == [
+    assert command[:2] == [
         "sudo",
-        "certbot",
-        "--preserve-env",
-        (
-            "GODADDY_API_KEY,GODADDY_API_SECRET,GODADDY_USE_SANDBOX,"
-            "GODADDY_DNS_WAIT_SECONDS,GODADDY_CUSTOMER_ID,GODADDY_ZONE"
-        ),
-        "certonly",
+        "--preserve-env=GODADDY_API_KEY,GODADDY_API_SECRET,GODADDY_USE_SANDBOX,"
+        "GODADDY_DNS_WAIT_SECONDS,GODADDY_CUSTOMER_ID,GODADDY_ZONE",
     ]
+    assert command[2] == "certbot"
+    assert "certonly" in command
     hook_script = str(
         Path(__file__).resolve().parents[3]
         / "scripts"
@@ -138,6 +135,7 @@ def test_build_godaddy_certbot_command_uses_preserve_env_and_absolute_hook_path(
     assert f"{services.sys.executable} {hook_script} auth" in command
     assert f"{services.sys.executable} {hook_script} cleanup" in command
     assert env["GODADDY_ZONE"] == "example.co.uk"
+    assert "--issuance-timeout" not in command
 
 
 def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
