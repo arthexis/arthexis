@@ -167,3 +167,55 @@ def test_video_doctor_reports_frame_cache(
     assert "Video Doctor" in output
     assert "Frame cache: Redis reachable." in output
     assert "Latest cached frame" in output
+
+
+@override_settings(VIDEO_FRAME_REDIS_URL="", CHANNEL_REDIS_URL="redis://localhost:6379/0")
+@patch("apps.video.management.commands.video.get_status")
+@patch("apps.video.management.commands.video.get_frame")
+@patch("apps.video.management.commands.video.get_frame_cache")
+@patch("apps.video.management.commands.video.MjpegStream")
+@patch("apps.video.management.commands.video.VideoDevice")
+@patch("apps.video.management.commands.video.NodeFeatureAssignment")
+@patch("apps.video.management.commands.video.NodeFeature")
+@patch("apps.video.management.commands.video.Node")
+def test_video_doctor_uses_fallback_frame_cache_url(
+    node_mock,
+    feature_mock,
+    assignment_mock,
+    device_mock,
+    stream_mock,
+    frame_cache_mock,
+    frame_mock,
+    status_mock,
+    capsys,
+):
+    """Ensure doctor uses fallback Redis URL when the video-specific setting is empty."""
+
+    node = SimpleNamespace(hostname="local", pk=1)
+    node_mock.get_local.return_value = node
+
+    feature = SimpleNamespace(is_enabled=True, pk=7)
+    feature_mock.objects.filter.return_value.first.return_value = feature
+    assignment_mock.objects.filter.return_value.exists.return_value = True
+
+    device_queryset = device_mock.objects.all.return_value.filter.return_value
+    device_queryset.count.return_value = 1
+    device_mock.get_default_for_node.return_value = SimpleNamespace(
+        pk=11, display_name="Lobby Cam", identifier="/dev/video0"
+    )
+
+    stream_mock.objects.aggregate.return_value = {"total": 1, "active": 1}
+    stream_mock.objects.filter.return_value.order_by.return_value.first.return_value = (
+        SimpleNamespace(slug="lobby-stream")
+    )
+
+    redis_client = Mock()
+    frame_cache_mock.return_value = redis_client
+    frame_mock.return_value = SimpleNamespace(captured_at=timezone.now())
+    status_mock.return_value = {}
+
+    call_command("video", "--doctor")
+
+    output = capsys.readouterr().out
+    assert "Frame cache: Redis URL is not configured." not in output
+    assert "Frame cache: Redis reachable." in output

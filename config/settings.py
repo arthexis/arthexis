@@ -609,6 +609,10 @@ if not OCPP_STATE_REDIS_URL:
     OCPP_STATE_REDIS_URL = CHANNEL_REDIS_URL or os.environ.get("CELERY_BROKER_URL", "").strip()
 
 VIDEO_FRAME_REDIS_URL = os.environ.get("VIDEO_FRAME_REDIS_URL", "").strip()
+if not VIDEO_FRAME_REDIS_URL:
+    VIDEO_FRAME_REDIS_URL = CHANNEL_REDIS_URL or os.environ.get(
+        "CELERY_BROKER_URL", ""
+    ).strip()
 VIDEO_FRAME_CACHE_PREFIX = os.environ.get("VIDEO_FRAME_CACHE_PREFIX", "video:mjpeg")
 VIDEO_FRAME_CACHE_TTL = int(os.environ.get("VIDEO_FRAME_CACHE_TTL", "10") or 10)
 VIDEO_FRAME_MAX_AGE_SECONDS = int(

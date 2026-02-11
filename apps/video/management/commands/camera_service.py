@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.video.frame_cache import store_frame, store_status
+from apps.video.frame_cache import frame_cache_url, store_frame, store_status
 from apps.video.models import MjpegDependencyError, MjpegStream
 
 logger = logging.getLogger("apps.video.camera_service")
@@ -105,8 +105,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         interval = float(options["interval"])
         sleep = float(options["sleep"])
-        if not getattr(settings, "VIDEO_FRAME_REDIS_URL", "").strip():
-            raise CommandError("VIDEO_FRAME_REDIS_URL must be set to use camera_service.")
+        if not frame_cache_url():
+            raise CommandError("A Redis URL must be configured to use camera_service.")
 
         captures: dict[int, _StreamCapture] = {}
         self.stdout.write(self.style.SUCCESS("Starting camera service..."))
