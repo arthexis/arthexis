@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from unittest import mock
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -114,4 +115,42 @@ def test_execute_raises_for_failing_bash_script():
     )
 
     with pytest.raises(RuntimeError, match="bad"):
+        recipe.execute()
+
+
+@pytest.mark.django_db
+def test_execute_supports_bash_safe_normalized_kwarg_names():
+    """Bash kwargs are exported with normalized shell-safe environment variable names."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-normalize-{uuid.uuid4()}",
+        display="Bash Normalize",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$RECIPE_KWARG_MODE_FAST-$RECIPE_KWARG__7FLAG"',
+    )
+
+    execution = recipe.execute(**{"mode-fast": "rapid", "7flag": "on"})
+
+    assert execution.result == "rapid-on"
+
+
+@pytest.mark.django_db
+def test_execute_raises_runtime_error_for_bash_os_failures():
+    """Bash startup failures are surfaced as runtime errors."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-oserror-{uuid.uuid4()}",
+        display="Bash OS Error",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "never runs"',
+    )
+
+    with (
+        mock.patch("apps.recipes.models.subprocess.run", side_effect=FileNotFoundError("bash missing")),
+        pytest.raises(RuntimeError, match="bash missing"),
+    ):
         recipe.execute()
