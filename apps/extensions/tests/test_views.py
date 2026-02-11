@@ -34,6 +34,20 @@ def test_build_manifest_includes_assets():
     assert "https://example.com/*" in manifest["host_permissions"]
 
 
+def test_build_manifest_includes_bootstrap_content_script_when_matches_exist():
+    """Ensure matches generate content script registration even without custom JS."""
+    extension = JsExtension.objects.create(
+        slug="bootstrap-only",
+        name="Bootstrap Only",
+        matches="https://example.com/*",
+        content_script="",
+    )
+
+    manifest = extension.build_manifest()
+
+    assert manifest["content_scripts"][0]["js"] == ["content.js"]
+
+
 def test_build_manifest_mv2_uses_legacy_keys():
     """Ensure MV2 manifests use legacy background and options keys."""
     extension = JsExtension.objects.create(
@@ -81,7 +95,26 @@ def test_content_script_view_returns_js(client):
     response = client.get(url)
 
     assert response.status_code == 200
-    assert "console.log" in response.content.decode("utf-8")
+    response_payload = response.content.decode("utf-8")
+    assert "console.log" in response_payload
+    assert "Arthexis site detected" in response_payload
+
+
+def test_content_script_view_serves_bootstrap_for_match_only_extensions(client):
+    """Serve bootstrap detection script when only URL match patterns are configured."""
+    extension = JsExtension.objects.create(
+        slug="match-only",
+        name="Match Only",
+        matches="https://example.com/*",
+        content_script="",
+    )
+
+    url = reverse("extensions:content", args=[extension.slug])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    response_payload = response.content.decode("utf-8")
+    assert "Arthexis site detected" in response_payload
 
 
 def test_background_script_view_returns_js(client):
