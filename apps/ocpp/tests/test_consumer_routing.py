@@ -41,7 +41,7 @@ async def test_dispatch_routes_via_registry_for_transaction_event():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-ROUTE"
     consumer.charger_id = "CP-ROUTE"
-    consumer._log_triggered_follow_up = lambda *args, **kwargs: None
+    consumer._log_triggered_follow_up = lambda *_args, **_kwargs: None
     consumer._assign_connector = AsyncMock()
     consumer._forward_charge_point_message = AsyncMock()
     consumer._handle_transaction_event_action = AsyncMock(return_value={"idTokenInfo": {}})

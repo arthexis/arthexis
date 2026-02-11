@@ -184,12 +184,12 @@ class CSMSConsumer(
             existing_charger
         )
 
-    async def _forward_charge_point_message(self, action: str, raw: str | None) -> None:
+    async def _forward_charge_point_message(self, action: str, raw: str) -> None:
         """Wrapper that delegates message forwarding behavior."""
 
         await self._forwarding_handler().forward_message(action, raw)
 
-    async def _forward_charge_point_reply(self, message_id: str, raw: str | None) -> None:
+    async def _forward_charge_point_reply(self, message_id: str, raw: str) -> None:
         """Wrapper that delegates forwarded reply behavior."""
 
         await self._forwarding_handler().forward_reply(message_id, raw)
@@ -257,6 +257,14 @@ class CSMSConsumer(
         """Route firmware status notifications through notification handler."""
 
         return await self._notification_handler().handle_firmware_status(
+            payload, msg_id, raw, text_data
+        )
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
+    async def _handle_security_event_notification_action(self, payload, msg_id, raw, text_data):
+        """Route security event notifications through notification handler."""
+
+        return await self._notification_handler().handle_security_event(
             payload, msg_id, raw, text_data
         )
 
@@ -1798,7 +1806,7 @@ class CSMSConsumer(
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
-    async def _handle_meter_values_legacy(self, payload, msg_id, raw, text_data):
+    async def _handle_meter_values_legacy(self, payload, _msg_id, _raw, text_data):
         await self._store_meter_values(payload, text_data)
         self.charger.last_meter_values = payload
         await database_sync_to_async(
@@ -3302,8 +3310,7 @@ class CSMSConsumer(
         self._log_ocpp201_notification("ReportChargingProfiles", payload)
         return {}
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
-    async def _handle_security_event_notification_action(
+    async def _handle_security_event_notification_action_legacy(
         self, payload, msg_id, raw, text_data
     ):
         event_type = str(

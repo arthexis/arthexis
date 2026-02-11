@@ -1,5 +1,6 @@
 import base64
 import json
+from functools import cached_property
 
 from ... import store
 from ...call_error_handlers import dispatch_call_error
@@ -9,6 +10,13 @@ from .consumer.routing import ActionRouter
 
 
 class DispatchMixin:
+
+    @cached_property
+    def _action_router(self) -> ActionRouter:
+        """Cache action router for the life of a websocket consumer instance."""
+
+        return ActionRouter(self)
+
     async def receive(self, text_data=None, bytes_data=None):
         raw = self._normalize_raw_message(text_data, bytes_data)
         if raw is None:
@@ -59,7 +67,7 @@ class DispatchMixin:
         self._log_triggered_follow_up(action, connector_hint)
         await self._assign_connector(payload.get("connectorId"))
         reply_payload = {}
-        handler = ActionRouter(self).resolve(action)
+        handler = self._action_router.resolve(action)
         if handler:
             reply_payload = await handler(payload, msg_id, raw, text_data)
         response = [3, msg_id, reply_payload]
