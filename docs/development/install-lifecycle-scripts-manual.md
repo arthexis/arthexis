@@ -4,19 +4,22 @@ This manual explains how to deploy, operate, and retire an Arthexis node with th
 > If this repository is provided without Git remotes configured, `configure.sh`, `install.sh`, and `upgrade.sh` automatically add the official Arthexis GitHub remote as `upstream`. If no `origin` is configured, they also set `origin` to `https://github.com/arthexis/arthexis`. You can override `origin` later if you prefer a fork-based workflow.
 ## 1. Installation helpers
 ### 1.1 Linux: `install.sh`
-`install.sh` prepares a virtual environment, configures Nginx, seeds lock files, and optionally provisions systemd units. Run it from the repository root on a Debian/Ubuntu compatible host. The script stores its log in `logs/install.log` and exits on any error to prevent partial installations.
+`install.sh` prepares a virtual environment, configures Nginx, seeds lock files, and optionally provisions systemd units. Run it from the repository root on a Debian/Ubuntu-compatible host. The script stores its log in `logs/install.log` and exits on any error to prevent partial installations.
 Single-instance deployments are now the standard: `install.sh` no longer manages
 sibling primary/secondary installs, and each node should run exactly one suite
 instance.
 **Role presets**
-Passing a role flag applies a curated bundle of options. Each preset still honours additional command-line overrides you append afterwards.
+Passing a role flag applies a curated bundle of options. Each preset still honours additional command-line overrides you append afterward.
+
 | Flag | Description |
 | --- | --- |
 | `--terminal` (default) | Local workstation profile. Uses the internal Nginx template, reserves port 8888 unless overridden, enables Celery for email delivery, and defaults to fixed upgrades unless you pass `--unstable`/`--latest` or `--stable`. |
 | `--control` | Appliance profile. Requires Nginx and Redis, enables Celery, LCD, Control-specific locks, internal Nginx, and writes the `Control` role lock. Starts services automatically unless `--no-start` overrides and leaves upgrades fixed unless you select a channel with `--unstable`/`--latest` or `--stable`. Sets default service name `arthexis`. |
 | `--satellite` | Edge node profile. Requires Nginx and Redis, enables Celery, uses the internal Nginx template, and leaves upgrades fixed unless you add `--stable` or `--unstable`. |
 | `--watchtower` | Multi-tenant profile. Requires Nginx and Redis, keeps Celery on, switches to the public Nginx proxy with HTTPS expectations, and defaults to fixed upgrades until you choose `--stable` or `--unstable`. |
+
 **General options**
+
 | Flag | Purpose |
 | --- | --- |
 | `--service NAME` | Installs or updates systemd services (`NAME`, `celery-NAME`, `celery-beat-NAME`, and optionally `lcd-NAME`) and records the name in `.locks/service.lck` for the runtime helpers. |
@@ -32,6 +35,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `.locks/service.lck`. |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata. |
 | `--start` / `--no-start` | Launches or skips `start.sh` after setup completes, which is useful for unattended provisioning while still allowing explicit opt-outs. |
+
 The script also:
 - Verifies Nginx and Redis availability for roles that require them, writing `redis.env` when Redis is configured.
 - Creates `.venv`, installs dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
@@ -42,12 +46,14 @@ The Windows installer is intentionally simple: it bootstraps `.venv`, installs r
 ## 2. Runtime helpers
 ### 2.1 Linux: `start.sh`
 `start.sh` activates the virtual environment, loads `*.env` files, optionally restarts provisioned systemd units, and then launches Django. Static assets are hashed before running `collectstatic`, saving time on repeated starts. Supported options:
+
 | Flag | Purpose |
 | --- | --- |
 | `--port PORT` | Overrides the serving port; defaults to `8888` regardless of the Nginx mode lock. |
 | `--reload` | Runs Django with auto-reload enabled (useful for development). |
 | `--celery` / `--no-celery` | Enables or disables the Celery worker/beat pair that handles background email. Defaults to on. |
 | `--public` / `--internal` | Convenience shorthands to reset the port to the installer default (8888) without editing the lock file. |
+
 When a systemd service was previously installed, the script prefers restarting those units (plus `celery-*` and `lcd-*` companions) and exits once they are healthy. Otherwise it runs the development server in the foreground. Celery processes launched directly are cleaned up automatically when the script exits because of the `trap` handler.
 ### 2.2 Linux: `stop.sh`
 `stop.sh` mirrors the start helper: it stops systemd units when present, including Celery and LCD services, or falls back to killing `manage.py runserver` and Celery processes. It respects non-interactive sudo where available and displays service status for confirmation. Use:
@@ -57,13 +63,14 @@ On Control nodes with LCD support, it also sends a farewell notification before 
 ### 2.3 Windows: `start.bat`
 The Windows starter mirrors the Linux workflow without service management: it validates `.venv`, reruns `collectstatic` only when the static hash changes, and starts Django at the requested port (default 8888). Flags: `--port PORT` and `--reload`. Any other argument prints usage and aborts. Use `Ctrl+C` to stop the server.
 For background operation, install the suite as a Windows service with `service.bat install`. The helper uses NSSM (the Non-Sucking Service Manager); install `nssm.exe` and make sure it is on your PATH (or pass `--nssm` with the full path). Example:
-```
+```bat
 service.bat install --name arthexis --port 8888
 ```
 ## 3. Upgrades
 ### 3.1 Linux: `upgrade.sh`
 `upgrade.sh` keeps nodes current while protecting local changes. It infers the node role from `.locks/role.lck` to decide whether local commits should be discarded (Control/Constellation/Watchtower nodes auto-align to the remote branch).
 Supported options:
+
 | Flag | Purpose |
 | --- | --- |
 | `--latest` / `-l` / `--unstable` | Follows the unstable channel, upgrading whenever the origin/main revision changes even if `VERSION` remains the same. |
@@ -71,9 +78,10 @@ Supported options:
 | `--clean` | Deletes `db.sqlite3` (and any `db_*.sqlite3` snapshots) after confirmation so migrations start from a blank database. |
 | `--clear-logs` | Removes existing log files so the next start writes fresh logs without previous entries. |
 | `--clear-work` | Deletes the contents of `work/` before restarting, keeping temporary run artifacts from carrying over. |
-| `--start` / `--no-start` | Forces services to start after the upgrade (even if they were previously stopped) or keeps them offline afterwards; `--no-start` also accepts the legacy `--no-restart` alias. |
+| `--start` / `--no-start` | Forces services to start after the upgrade (even if they were previously stopped) or keeps them offline afterward; `--no-start` also accepts the legacy `--no-restart` alias. |
 | `--force` / `-f` | Forces services to stop and upgrades to proceed even when they would normally be blocked (for example, dirty trees or running services). |
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows). |
+
 Additional behaviour:
 - Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.

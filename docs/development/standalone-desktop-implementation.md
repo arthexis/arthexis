@@ -13,7 +13,7 @@ This document proposes a concrete path to ship Arthexis as a standalone desktop 
 
 - **Desktop shell:** Tauri (Rust host + native webview)
 - **Backend process:** dedicated Python launcher module (`arthexis.desktop_launcher`)
-- **IPC contract:** local HTTP only (`127.0.0.1:<port>` over HTTP)
+- **IPC contract:** local HTTP only (`http://127.0.0.1:<port>`)
 - **Packaging:**
   - Windows: NSIS/MSI from Tauri bundle
   - Linux: AppImage + `.deb`
@@ -65,7 +65,7 @@ Launcher sequence:
 1. Pick preferred port (default `8888`, fallback to available port).
 2. Spawn backend command with explicit env (`ARTHEXIS_PORT`, `DJANGO_SETTINGS_MODULE`, optional role flags).
 3. Poll `/healthz/` with timeout (for example 60s).
-4. Open webview to `127.0.0.1:<port>/` over HTTP.
+4. Open webview to `http://127.0.0.1:<port>/`.
 5. On close: send termination signal and wait graceful timeout before forced stop.
 
 ## 3) Add a stable Python launcher module
