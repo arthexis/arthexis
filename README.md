@@ -96,7 +96,7 @@ For preloaded environments without Git remotes configured, see the remotes note 
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
 
-For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload` or `--celery`), and execute a quick CI-aligned check with `pytest -m critical -q` (the `critical` marker is defined in `pytest.ini`). Override the role, port, reload, Celery, and test selection with the script flags when needed.
+For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload` or `--celery`), and execute a quick CI-aligned check with `pytest -m "critical or regression" -q` (the `critical` and `regression` markers are defined in `pytest.ini`). Override the role, port, reload, Celery, and test selection with the script flags when needed.
 
 - **VS Code**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
