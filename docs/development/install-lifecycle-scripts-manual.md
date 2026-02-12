@@ -38,7 +38,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--fixed` | Disables unattended upgrades and removes the auto-upgrade lock so future runs stay manual-only.【F:install.sh†L247-L259】【F:install.sh†L601-L603】 |
 | `--unstable` / `--latest` | Enables auto-upgrade on the unstable channel that follows origin/main revisions immediately.【F:install.sh†L251-L259】【F:install.sh†L578-L599】 |
 | `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the stable release channel with weekly Thursday-morning checks (before 5:00 AM).【F:install.sh†L256-L259】【F:install.sh†L578-L599】 |
-| `--celery` | Forces embedded Celery mode when role presets or environment defaults would use a different service mode.【F:install.sh†L261-L263】【F:install.sh†L354-L358】 |
+| `--celery` | Enables Celery support (`ENABLE_CELERY=true`) without changing service-management mode; pair with `--embedded` or `--systemd` when you need to force runtime mode explicitly.【F:install.sh†L238-L250】【F:install.sh†L361-L366】 |
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `.locks/service.lck`.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L61-L120】 |
 | `--start` / `--no-start` | Launches or skips `start.sh` after setup completes, which is useful for unattended provisioning while still allowing explicit opt-outs.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L611-L613】 |
@@ -87,7 +87,7 @@ When updating lifecycle script docs, verify every documented flag against each s
 2. Check the `case "$1" in ...` parser block to confirm accepted flags, aliases, and removed options.
 3. Keep examples limited to commands that the current parser accepts (`install.sh` and `start.sh` first, then any delegated helpers they call).
 
-This lightweight check prevents stale docs when options are added, renamed, or removed.【F:install.sh†L61-L64】【F:install.sh†L215-L301】【F:start.sh†L41-L66】【F:start.sh†L35-L71】【F:scripts/service-start.sh†L227-L288】
+This lightweight check prevents stale docs when options are added, renamed, or removed.【F:install.sh†L63】【F:install.sh†L204-L337】【F:start.sh†L36-L74】【F:scripts/service-start.sh†L234-L297】
 
 ### 2.4 Windows: `start.bat`
 
