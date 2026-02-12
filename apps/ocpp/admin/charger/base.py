@@ -8,6 +8,21 @@ from .utils import _charger_state, _live_sessions, store
 class ChargerAdminBaseMixin(LogViewAdminMixin, OwnableAdminMixin, EntityModelAdmin):
     """Core model admin configuration and common helper methods."""
 
+    _REMOTE_UPDATE_ALLOWED_FIELDS = {
+        "availability_state",
+        "availability_state_updated_at",
+        "availability_requested_state",
+        "availability_requested_at",
+        "availability_request_status",
+        "availability_request_status_at",
+        "availability_request_details",
+        "require_rfid",
+        "local_auth_list_version",
+        "local_auth_list_updated_at",
+        "last_online_at",
+        "configuration",
+    }
+
     _REMOTE_DATETIME_FIELDS = {
         "availability_state_updated_at",
         "availability_requested_at",

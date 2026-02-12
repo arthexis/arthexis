@@ -142,6 +142,8 @@ class ChargerRemoteActionsMixin:
 
         applied: dict[str, Any] = {}
         for field, value in updates.items():
+            if field not in self._REMOTE_UPDATE_ALLOWED_FIELDS:
+                continue
             if field in self._REMOTE_DATETIME_FIELDS and isinstance(value, str):
                 parsed = parse_datetime(value)
                 if parsed and timezone.is_naive(parsed):
@@ -149,6 +151,9 @@ class ChargerRemoteActionsMixin:
                 applied[field] = parsed
             else:
                 applied[field] = value
+
+        if not applied:
+            return
 
         Charger.objects.filter(pk=charger.pk).update(**applied)
         for field, value in applied.items():

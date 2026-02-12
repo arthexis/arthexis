@@ -31,3 +31,26 @@ def test_prepare_remote_credentials_reports_when_local_node_missing():
     assert private_key is None
     messages = [m.message for m in list(request._messages)]
     assert any("Local node is not registered" in msg for msg in messages)
+
+
+def test_apply_remote_updates_ignores_unexpected_fields():
+    """Remote updates should only persist explicit allow-listed fields."""
+    charger = Charger.objects.create(charger_id="CP-REMOTE-1", require_rfid=False)
+    original_allow_remote = charger.allow_remote
+    original_ws_auth_user = charger.ws_auth_user
+    admin = ChargerAdmin(Charger, AdminSite())
+
+    admin._apply_remote_updates(
+        charger,
+        {
+            "require_rfid": True,
+            "allow_remote": False,
+            "ws_auth_user": "evil-user",
+        },
+    )
+
+    charger.refresh_from_db()
+
+    assert charger.require_rfid is True
+    assert charger.allow_remote == original_allow_remote
+    assert charger.ws_auth_user == original_ws_auth_user

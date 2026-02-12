@@ -82,6 +82,47 @@ class ChargerDiagnosticsMixin:
             counter += 1
         return candidate
 
+    def _is_safe_diagnostics_location(self, location: str) -> bool:
+        parsed = urlparse(location)
+        host = parsed.hostname
+        if not host:
+            return False
+
+        try:
+            addr = ipaddress.ip_address(host)
+            return not (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_multicast
+                or addr.is_reserved
+                or addr.is_unspecified
+            )
+        except ValueError:
+            pass
+
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror:
+            return False
+
+        for info in infos:
+            candidate = info[4][0]
+            try:
+                addr = ipaddress.ip_address(candidate)
+            except ValueError:
+                return False
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_multicast
+                or addr.is_reserved
+                or addr.is_unspecified
+            ):
+                return False
+        return True
+
     def _download_diagnostics(
         self,
         request,
@@ -95,6 +136,10 @@ class ChargerDiagnosticsMixin:
         if scheme not in {"http", "https"}:
             raise self.DiagnosticsDownloadError(
                 _("Diagnostics location must use HTTP or HTTPS.")
+            )
+        if not self._is_safe_diagnostics_location(location):
+            raise self.DiagnosticsDownloadError(
+                _("Diagnostics location host is not allowed.")
             )
         try:
             response = requests.get(location, stream=True, timeout=15)
