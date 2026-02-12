@@ -1,4 +1,3 @@
-import base64
 import json
 from functools import cached_property
 
@@ -6,16 +5,17 @@ from ... import store
 from ...call_error_handlers import dispatch_call_error
 from ...call_result_handlers import dispatch_call_result
 from ...models import Charger
-from .consumer.routing import ActionRouter
+from .consumer.action_dispatch import ActionDispatchRegistry
+from .consumer.message_parsing import normalize_raw_message, parse_ocpp_message
 
 
 class DispatchMixin:
 
     @cached_property
-    def _action_router(self) -> ActionRouter:
+    def _action_router(self) -> ActionDispatchRegistry:
         """Cache action router for the life of a websocket consumer instance."""
 
-        return ActionRouter(self)
+        return ActionDispatchRegistry(self)
 
     async def receive(self, text_data=None, bytes_data=None):
         raw = self._normalize_raw_message(text_data, bytes_data)
@@ -41,24 +41,14 @@ class DispatchMixin:
             await self._handle_call_error(msg_id, error_code, description, details, raw)
 
     def _normalize_raw_message(self, text_data, bytes_data):
-        raw = text_data
-        if raw is None and bytes_data is not None:
-            raw = base64.b64encode(bytes_data).decode("ascii")
-        return raw
+        return normalize_raw_message(text_data, bytes_data)
 
     def _parse_message(self, raw: str):
-        try:
-            msg = json.loads(raw)
-        except json.JSONDecodeError:
+        parsed = parse_ocpp_message(raw)
+        if parsed is None:
             return None
-        if isinstance(msg, dict):
-            ocpp_payload = msg.get("ocpp")
-            if isinstance(ocpp_payload, list) and ocpp_payload:
-                self.forwarding_meta = msg.get("meta")
-                return ocpp_payload
-        if not isinstance(msg, list) or not msg:
-            return None
-        return msg
+        self.forwarding_meta = parsed.forwarding_meta
+        return parsed.ocpp_message
 
     async def _handle_call_message(self, msg, raw, text_data):
         msg_id, action = msg[1], msg[2]
