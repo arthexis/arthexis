@@ -33,6 +33,11 @@ repos:
         entry: python scripts/check_no_http_links.py
         language: system
         pass_filenames: false
+      - id: docs-no-citation-artifacts
+        name: Block documentation citation artifacts
+        entry: python scripts/check_no_citation_artifacts.py
+        language: system
+        pass_filenames: false
       - id: nested-git-repositories
         name: Prevent nested Git repositories
         entry: python scripts/check_nested_git_repositories.py
