@@ -46,16 +46,16 @@ class ConnectionAdmissionService:
         self,
         *,
         feature_state_resolver: Callable[[Charger | None], AdmissionDecision] | None = None,
-        db_call: Callable[[Callable[[], AdmissionDecision]], Awaitable[AdmissionDecision]] | None = None,
+        db_call: Callable[[Callable[[], AdmissionDecision]], Callable[[], Awaitable[AdmissionDecision]]] | None = None,
     ) -> None:
         self._feature_state_resolver = feature_state_resolver or self._resolve_feature_state
         self._db_call = db_call
 
-    async def allow_charge_point_connection(self, consumer: "CSMSConsumer", existing_charger: Charger | None) -> bool:
+    async def allow_charge_point_connection(self, _consumer: "CSMSConsumer", existing_charger: Charger | None) -> bool:
         """Return whether ``existing_charger`` may connect to the current node."""
 
         if self._db_call is not None:
-            decision = await self._db_call(lambda: self._feature_state_resolver(existing_charger))
+            decision = await self._db_call(lambda: self._feature_state_resolver(existing_charger))()
         else:
             decision = self._feature_state_resolver(existing_charger)
         return decision.allowed

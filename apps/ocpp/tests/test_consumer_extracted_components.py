@@ -117,6 +117,27 @@ def test_parse_ocpp_message_supports_forwarding_envelopes():
 def test_normalize_raw_message_prefers_text_and_encodes_binary():
     assert normalize_raw_message("hello", b"ignored") == "hello"
     assert normalize_raw_message(None, b"abc") == "YWJj"
+    assert normalize_raw_message(None, None) is None
+
+
+def test_parse_ocpp_message_rejects_short_call_frames():
+    assert parse_ocpp_message('[2, "msg-only"]') is None
+
+
+@pytest.mark.anyio
+async def test_connection_admission_service_supports_db_wrapper_callables():
+    def db_call(fn):
+        async def runner():
+            return fn()
+
+        return runner
+
+    service = ConnectionAdmissionService(
+        feature_state_resolver=lambda existing: AdmissionDecision(existing is not None),
+        db_call=db_call,
+    )
+
+    assert await service.allow_charge_point_connection(SimpleNamespace(), object()) is True
 
 
 @pytest.mark.anyio

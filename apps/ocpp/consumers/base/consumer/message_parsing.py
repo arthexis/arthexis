@@ -58,5 +58,7 @@ def parse_ocpp_message(raw: str) -> ParsedOcppMessage | None:
 
     if not isinstance(parsed, list) or not parsed:
         return None
+    if parsed[0] == 2 and len(parsed) < 3:
+        return None
 
     return ParsedOcppMessage(ocpp_message=parsed)
