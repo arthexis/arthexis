@@ -31,7 +31,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 | Flag | Purpose |
 | --- | --- |
-| `--service NAME` | Installs or updates systemd services (`NAME`, optional `lcd-NAME`, optional `rfid-NAME`, optional `camera-NAME`) and records the name in `.locks/service.lck` for runtime helpers.【F:install.sh†L519-L524】【F:install.sh†L973-L1027】 |
+| `--service NAME` | Installs or updates systemd services (`NAME`, optionally with `lcd-NAME`, `rfid-NAME`, and `camera-NAME` companions) and records the name in `.locks/service.lck` for runtime helpers.【F:install.sh†L663】【F:install.sh†L672-L674】 |
 | `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L234-L237】 |
 | `--upgrade` | Immediately runs `upgrade.sh` after installation, using the selected channel (stable by default, unstable when requested).【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |
 | `--auto-upgrade` | Explicitly enables unattended upgrades (off by default) and refreshes the Celery schedule when locks exist.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
@@ -67,7 +67,7 @@ The Windows installer is intentionally simple: it bootstraps `.venv`, installs r
 | `--log-follow` | Streams application logs during startup (defaults to `INFO` when no `--show` value is supplied).【F:start.sh†L62-L64】【F:scripts/service-start.sh†L284-L289】 |
 | `--clear-logs` | Stops relevant services, deletes existing log files, then starts with fresh logs. This is useful when debugging startup issues from a clean log baseline.【F:start.sh†L65-L95】 |
 
-When a systemd service was previously installed, the script prefers restarting those units (plus optional `rfid-*` and `camera-*` companions) and exits once they are healthy. Otherwise it delegates to `scripts/service-start.sh` for embedded startup behavior in the foreground.【F:start.sh†L168-L262】
+When a systemd service was previously installed, the script prefers restarting those units (plus optional `rfid-*` and `camera-*` companions) and exits once they are healthy. Otherwise it delegates to `scripts/service-start.sh` for embedded startup behavior in the foreground.【F:start.sh†L168-L256】
 
 ### 2.2 Linux: `stop.sh`
 
