@@ -127,7 +127,10 @@ class ChargerMetricsMixin:
             candidates = cache.get((None, None), [])
         if not candidates:
             return None
-        moment = reference_time.time()
+        if timezone.is_aware(reference_time):
+            moment = timezone.localtime(reference_time).time().replace(tzinfo=None)
+        else:
+            moment = reference_time.time()
         for tariff in candidates:
             if self._tariff_active_at(tariff, moment):
                 return tariff.price_mxn
