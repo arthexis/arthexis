@@ -96,7 +96,7 @@ For preloaded environments without Git remotes configured, see the remotes note 
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
 
-For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload` or `--celery`), and execute a quick smoke test with `pytest -k smoke`. Override the role, port, reload, Celery, and test selection with the script flags when needed.
+For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload`), and execute a quick smoke test with `pytest -k smoke`. Override the role, port, runtime mode, and test selection with the script flags when needed.
 
 - **VS Code**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
@@ -109,7 +109,7 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
 
 ### 3. Install and upgrade
 - **Linux:**
-  - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback) and control Celery with `--celery` or `--no-celery`. Use `./install.sh --help` to see every available option.
+  - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback) and use `--celery` only when you need to force embedded Celery mode explicitly. Use `./install.sh --help` to see every available option.
   - WebRTC streaming requires system media libraries (libavcodec, libavformat, libavutil, libvpx, opus) for the `aiortc` dependency.
   - Use [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh) with `--stable` (weekly) or `--latest`/`-l`/`--unstable` (daily) to follow the preferred release cadence.
    - Consult the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
