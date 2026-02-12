@@ -31,16 +31,14 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 | Flag | Purpose |
 | --- | --- |
-| `--service NAME` | Installs or updates systemd services (`NAME`, `celery-NAME`, `celery-beat-NAME`, and optionally `lcd-NAME`) and records the name in `.locks/service.lck` for the runtime helpers.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
-| `--internal` | Forces the internal Nginx template (HTTP ports 80/8000/8080/8900). This is the default unless a role preset changes it.【F:install.sh†L226-L229】【F:install.sh†L320-L373】 |
-| `--public` | Enables the public HTTPS reverse proxy template while continuing to proxy to the backend on port 8888 unless overridden.【F:install.sh†L230-L233】【F:install.sh†L305-L373】 |
+| `--service NAME` | Installs or updates systemd services (`NAME`, optionally with `lcd-NAME`, `rfid-NAME`, and `camera-NAME` companions) and records the name in `.locks/service.lck` for runtime helpers.【F:install.sh†L663】【F:install.sh†L672-L674】 |
 | `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L234-L237】 |
 | `--upgrade` | Immediately runs `upgrade.sh` after installation, using the selected channel (stable by default, unstable when requested).【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |
 | `--auto-upgrade` | Explicitly enables unattended upgrades (off by default) and refreshes the Celery schedule when locks exist.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
 | `--fixed` | Disables unattended upgrades and removes the auto-upgrade lock so future runs stay manual-only.【F:install.sh†L247-L259】【F:install.sh†L601-L603】 |
 | `--unstable` / `--latest` | Enables auto-upgrade on the unstable channel that follows origin/main revisions immediately.【F:install.sh†L251-L259】【F:install.sh†L578-L599】 |
 | `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the stable release channel with weekly Thursday-morning checks (before 5:00 AM).【F:install.sh†L256-L259】【F:install.sh†L578-L599】 |
-| `--celery` | Forces Celery services on even if the preset would leave them disabled. Rarely needed because all presets already enable Celery.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
+| `--celery` | Enables Celery support (`ENABLE_CELERY=true`) without changing service-management mode; pair with `--embedded` or `--systemd` when you need to force runtime mode explicitly.【F:install.sh†L238-L250】【F:install.sh†L361-L366】 |
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `.locks/service.lck`.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L61-L120】 |
 | `--start` / `--no-start` | Launches or skips `start.sh` after setup completes, which is useful for unattended provisioning while still allowing explicit opt-outs.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L611-L613】 |
@@ -63,12 +61,13 @@ The Windows installer is intentionally simple: it bootstraps `.venv`, installs r
 
 | Flag | Purpose |
 | --- | --- |
-| `--port PORT` | Overrides the serving port; defaults to `8888` regardless of the Nginx mode lock.【F:start.sh†L72-L112】 |
-| `--reload` | Runs Django with auto-reload enabled (useful for development).【F:start.sh†L106-L117】【F:start.sh†L136-L145】 |
-| `--celery` / `--no-celery` | Enables or disables the Celery worker/beat pair that handles background email. Defaults to on.【F:start.sh†L100-L145】 |
-| `--public` / `--internal` | Convenience shorthands to reset the port to the installer default (8888) without editing the lock file.【F:start.sh†L108-L119】 |
+| `--reload` | Passes through to `scripts/service-start.sh` to run Django with auto-reload enabled (useful for development).【F:start.sh†L39-L48】【F:scripts/service-start.sh†L228-L236】 |
+| `--debug` | Enables Django debug mode and forwards the flag to the service launcher. You can also trigger debug mode by combining `--show DEBUG` with optional log following.【F:start.sh†L49-L61】【F:scripts/service-start.sh†L237-L239】【F:scripts/service-start.sh†L300-L309】 |
+| `--show LEVEL` | Normalizes log levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) and can be paired with `--log-follow` to stream filtered logs while startup proceeds.【F:start.sh†L50-L61】【F:scripts/service-start.sh†L240-L248】【F:scripts/service-start.sh†L290-L299】 |
+| `--log-follow` | Streams application logs during startup (defaults to `INFO` when no `--show` value is supplied).【F:start.sh†L62-L64】【F:scripts/service-start.sh†L284-L289】 |
+| `--clear-logs` | Stops relevant services, deletes existing log files, then starts with fresh logs. This is useful when debugging startup issues from a clean log baseline.【F:start.sh†L65-L95】 |
 
-When a systemd service was previously installed, the script prefers restarting those units (plus `celery-*` and `lcd-*` companions) and exits once they are healthy. Otherwise it runs the development server in the foreground.【F:start.sh†L46-L101】 Celery processes launched directly are cleaned up automatically when the script exits because of the `trap` handler.【F:start.sh†L120-L145】
+When a systemd service was previously installed, the script prefers restarting those units (plus optional `rfid-*` and `camera-*` companions) and exits once they are healthy. Otherwise it delegates to `scripts/service-start.sh` for embedded startup behavior in the foreground.【F:start.sh†L168-L256】
 
 ### 2.2 Linux: `stop.sh`
 
@@ -79,7 +78,18 @@ When a systemd service was previously installed, the script prefers restarting t
 
 On Control nodes with LCD support, it also sends a farewell notification before shutting down the display updater.【F:stop.sh†L32-L68】【F:stop.sh†L110-L129】
 
-### 2.3 Windows: `start.bat`
+
+### 2.3 Documentation maintenance check
+
+When updating lifecycle script docs, verify every documented flag against each script parser before merging:
+
+1. Check the script `usage()` string for the top-level supported interface.
+2. Check the `case "$1" in ...` parser block to confirm accepted flags, aliases, and removed options.
+3. Keep examples limited to commands that the current parser accepts (`install.sh` and `start.sh` first, then any delegated helpers they call).
+
+This lightweight check prevents stale docs when options are added, renamed, or removed.【F:install.sh†L63】【F:install.sh†L204-L337】【F:start.sh†L36-L74】【F:scripts/service-start.sh†L234-L297】
+
+### 2.4 Windows: `start.bat`
 
 The Windows starter mirrors the Linux workflow without service management: it validates `.venv`, reruns `collectstatic` only when the static hash changes, and starts Django at the requested port (default 8888). Flags: `--port PORT` and `--reload`. Any other argument prints usage and aborts.【F:start.bat†L1-L57】 Use `Ctrl+C` to stop the server.
 
