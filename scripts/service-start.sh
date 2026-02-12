@@ -251,7 +251,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic] [--log-follow]" >&2
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--embedded|--systemd|--celery] [--force-collectstatic] [--log-follow]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
@@ -268,19 +268,6 @@ while [[ $# -gt 0 ]]; do
       CELERY_FLAG_SET=true
       shift
       ;;
-    --no-celery)
-      CELERY_MANAGEMENT_MODE="disabled"
-      CELERY_FLAG_SET=true
-      shift
-      ;;
-    --public)
-      PORT="$DEFAULT_PORT"
-      shift
-      ;;
-    --internal)
-      PORT="$DEFAULT_PORT"
-      shift
-      ;;
     --force-collectstatic)
       FORCE_COLLECTSTATIC=true
       shift
@@ -290,7 +277,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic] [--log-follow]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--embedded|--systemd|--celery] [--force-collectstatic] [--log-follow]" >&2
       exit 1
       ;;
   esac
