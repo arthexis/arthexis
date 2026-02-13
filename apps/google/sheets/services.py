@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+from io import StringIO
+from urllib.parse import quote
+
 import requests
 from django.core.exceptions import ValidationError
 
@@ -32,9 +36,11 @@ class GoogleSheetClient:
         props = first_sheet.get("properties") or {}
         worksheet_title = props.get("title", "Sheet1")
 
+        range_str = f"'{worksheet_title}'!1:1"
+        encoded_range = quote(range_str, safe="")
         values_url = (
             f"https://sheets.googleapis.com/v4/spreadsheets/{sheet.spreadsheet_id}/values/"
-            f"{worksheet_title}!1:1"
+            f"{encoded_range}"
         )
         values_response = requests.get(values_url, headers=headers, timeout=self.timeout)
         values_response.raise_for_status()
@@ -55,8 +61,9 @@ class GoogleSheetClient:
         csv_url = f"https://docs.google.com/spreadsheets/d/{sheet.spreadsheet_id}/gviz/tq?tqx=out:csv"
         response = requests.get(csv_url, timeout=self.timeout)
         response.raise_for_status()
-        first_line = response.text.splitlines()[0] if response.text else ""
-        headers = [part.strip().strip('"') for part in first_line.split(",") if part.strip()]
+        reader = csv.reader(StringIO(response.text or ""))
+        first_row = next(reader, [])
+        headers = [part.strip().lstrip("\ufeff") for part in first_row if part and part.strip()]
         if not headers:
             raise ValidationError("Could not detect headers in the public sheet.")
         return SheetLoadResult(

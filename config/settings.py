@@ -461,6 +461,7 @@ LOCAL_APPS = [
     "apps.survey",
     "apps.modules",
     "apps.features",
+    "apps.google.sheets.apps.GoogleSheetsConfig",
     "apps.widgets",
     "apps.sites",
     "apps.summary",
@@ -476,7 +477,6 @@ LOCAL_APPS = [
     "apps.nmcli",
     "apps.wikis",
     "apps.totp",
-    "apps.google.sheets.apps.GoogleSheetsConfig",
     "apps.terms",
 ]
 

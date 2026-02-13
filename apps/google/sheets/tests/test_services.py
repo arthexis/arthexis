@@ -4,20 +4,43 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import pytest
+
+from django.core.exceptions import ValidationError
+
 from apps.google.sheets.models import GoogleSheet
 from apps.google.sheets.services import load_sheet_headers
 
 
-def test_load_public_headers_from_csv(db):
+@pytest.mark.django_db
+def test_load_public_headers_from_csv():
     """Public sheet header loading should parse the first CSV row."""
 
     sheet = GoogleSheet.objects.create(spreadsheet_id="public-id", is_public=True)
 
     response = Mock()
-    response.text = 'name,email,city\nAlice,alice@example.com,Paris\n'
+    response.text = '"Name","Company, Inc.",city\nAlice,"Acme, Inc.",Paris\n'
     response.raise_for_status = Mock()
 
     with patch("apps.google.sheets.services.requests.get", return_value=response):
         result = load_sheet_headers(sheet)
 
-    assert result.headers == ["name", "email", "city"]
+    assert result.headers == ["Name", "Company, Inc.", "city"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("csv_text", ["", "\n\n"])
+def test_load_public_headers_requires_header_row(csv_text):
+    """Public loader should reject empty or whitespace-only CSV payloads."""
+
+    sheet = GoogleSheet.objects.create(spreadsheet_id="public-id", is_public=True)
+
+    response = Mock()
+    response.text = csv_text
+    response.raise_for_status = Mock()
+
+    with patch("apps.google.sheets.services.requests.get", return_value=response):
+        with pytest.raises(ValidationError) as exc_info:
+            load_sheet_headers(sheet)
+
+    assert "Could not detect headers" in str(exc_info.value)

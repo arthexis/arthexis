@@ -18,8 +18,32 @@ from .services import load_sheet_headers
 class DriveAccountAdmin(EntityModelAdmin):
     """Manage modelled Google Drive accounts."""
 
-    list_display = ("name", "email")
+    list_display = ("name", "email", "masked_access_token", "masked_refresh_token")
     search_fields = ("name", "email")
+    readonly_fields = ("masked_access_token", "masked_refresh_token")
+    exclude = ("access_token", "refresh_token")
+
+    @staticmethod
+    def _mask_token(value: str) -> str:
+        if not value:
+            return ""
+        if len(value) <= 8:
+            return "•" * len(value)
+        return f"{value[:4]}…{value[-4:]}"
+
+    def masked_access_token(self, obj: DriveAccount) -> str:
+        """Show a redacted preview of the access token."""
+
+        return self._mask_token(obj.access_token)
+
+    masked_access_token.short_description = "Access token"
+
+    def masked_refresh_token(self, obj: DriveAccount) -> str:
+        """Show a redacted preview of the refresh token."""
+
+        return self._mask_token(obj.refresh_token)
+
+    masked_refresh_token.short_description = "Refresh token"
 
 
 @admin.register(GoogleSheet)

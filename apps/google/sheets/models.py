@@ -12,8 +12,10 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 
+from .fields import EncryptedTextField
 
-SHEET_URL_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9-_]+)")
+
+SHEET_URL_RE = re.compile(r"/spreadsheets/(?:u/\d+/)?d/([a-zA-Z0-9-_]+)")
 
 
 @dataclass(slots=True)
@@ -31,8 +33,8 @@ class DriveAccount(Entity):
 
     name = models.CharField(max_length=120)
     email = models.EmailField(blank=True)
-    access_token = models.TextField(blank=True, help_text=_("OAuth access token."))
-    refresh_token = models.TextField(blank=True, help_text=_("OAuth refresh token."))
+    access_token = EncryptedTextField(blank=True, help_text=_("OAuth access token."))
+    refresh_token = EncryptedTextField(blank=True, help_text=_("OAuth refresh token."))
 
     class Meta:
         verbose_name = _("Drive Account")
@@ -101,7 +103,7 @@ class GoogleSheet(Entity):
         spreadsheet_id = cls.spreadsheet_id_from_url(sheet_url)
         if not spreadsheet_id:
             raise ValidationError({"sheet_url": _("Unable to parse spreadsheet id from URL.")})
-        obj, _ = cls.objects.update_or_create(
+        obj, _created = cls.objects.update_or_create(
             spreadsheet_id=spreadsheet_id,
             defaults={
                 "drive_account": drive_account,
