@@ -577,6 +577,10 @@ elif [ -n "$CURRENT_REQ_HASH" ] && [ "$CURRENT_REQ_HASH" != "$STORED_REQ_HASH" ]
 fi
 
 if [ "$PIP_UPGRADE" = true ]; then
+    if ! python -c 'import pip' >/dev/null 2>&1; then
+        echo "pip missing in venv; bootstrapping with ensurepip" >&2
+        python -m ensurepip --upgrade || python -m ensurepip
+    fi
     python -m pip install --upgrade pip
     python -c 'import pip; print(pip.__version__)' 2>/dev/null > "$PIP_VERSION_MARKER" || true
     arthexis_timing_end "pip_bootstrap"
