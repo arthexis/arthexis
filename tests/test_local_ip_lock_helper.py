@@ -49,8 +49,8 @@ def test_resolve_ip_helpers_uses_fallback_when_celery_missing(monkeypatch) -> No
     assert discover_fn is MODULE._discover_local_ip_addresses_fallback
 
 
-def test_resolve_ip_helpers_reraises_unexpected_missing_module(monkeypatch) -> None:
-    """Unexpected import errors should bubble up to avoid masking real issues."""
+def test_resolve_ip_helpers_falls_back_on_unexpected_import_error(monkeypatch) -> None:
+    """Unexpected import failures should also fallback to local helper implementations."""
 
     real_import = builtins.__import__
 
@@ -61,9 +61,7 @@ def test_resolve_ip_helpers_reraises_unexpected_missing_module(monkeypatch) -> N
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    try:
-        MODULE._resolve_ip_helpers()
-    except ModuleNotFoundError as exc:
-        assert exc.name == "totally_missing"
-    else:
-        raise AssertionError("Expected ModuleNotFoundError for unexpected missing module")
+    load_fn, discover_fn = MODULE._resolve_ip_helpers()
+
+    assert load_fn is MODULE._load_local_ip_lock_fallback
+    assert discover_fn is MODULE._discover_local_ip_addresses_fallback

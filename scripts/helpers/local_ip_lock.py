@@ -103,9 +103,7 @@ def _resolve_ip_helpers() -> tuple[Callable[[Path], set[str]], Callable[[], set[
         from config.settings_helpers import discover_local_ip_addresses, load_local_ip_lock
 
         return load_local_ip_lock, discover_local_ip_addresses
-    except ModuleNotFoundError as exc:
-        if exc.name not in {"celery", "django", "django_celery_beat"}:
-            raise
+    except Exception:
         return _load_local_ip_lock_fallback, _discover_local_ip_addresses_fallback
 
 
@@ -139,8 +137,7 @@ def main() -> int:
         lock_dir.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         return 0
-    except Exception as exc:
-        print(f"local_ip_lock warning: {exc}", file=sys.stderr)
+    except Exception:
         return 0
 
 
