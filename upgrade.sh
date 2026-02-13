@@ -5,7 +5,6 @@ set -eE
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 export TZ="${TZ:-America/Monterrey}"
 PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
-LOCAL_IP_LOCK_HELPER="$BASE_DIR/scripts/helpers/local_ip_lock.py"
 UPGRADE_STARTED_AT=$(date +%s)
 UPGRADE_DURATION_LOCK="$BASE_DIR/.locks/upgrade_duration.lck"
 # Track upgrade script changes triggered by git pull so the newer version can be re-run.
@@ -117,10 +116,6 @@ _discard_local_git_changes() {
 }
 
 mkdir -p "$LOCK_DIR"
-if [ -n "$PYTHON_BIN" ]; then
-  "$PYTHON_BIN" "$LOCAL_IP_LOCK_HELPER" "$BASE_DIR" || true
-fi
-
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
     return 0

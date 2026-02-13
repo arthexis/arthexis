@@ -20,7 +20,6 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/timing.sh
 . "$SCRIPT_DIR/scripts/helpers/timing.sh"
-LOCAL_IP_LOCK_HELPER="$SCRIPT_DIR/scripts/helpers/local_ip_lock.py"
 
 # Determine the target user and re-exec as needed before continuing.
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
@@ -419,10 +418,6 @@ elif [ -f "$DB_FILE" ]; then
 fi
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
-if command -v python3 >/dev/null 2>&1; then
-    python3 "$LOCAL_IP_LOCK_HELPER" "$BASE_DIR" || true
-fi
-
 if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
     reset_service_units_for_repair "$SERVICE"
 fi
@@ -551,6 +546,15 @@ echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
 source .venv/bin/activate
+
+if ! python -m pip --version >/dev/null 2>&1; then
+    echo "pip is unavailable in .venv; attempting to restore with ensurepip." >&2
+    if ! python -m ensurepip --upgrade >/dev/null 2>&1; then
+        echo "Failed to restore pip inside .venv. Recreating the virtual environment may be required." >&2
+        exit 1
+    fi
+fi
+
 arthexis_timing_start "pip_bootstrap"
 REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
 PIP_VERSION_MARKER="$LOCK_DIR/pip.version"
@@ -577,7 +581,7 @@ elif [ -n "$CURRENT_REQ_HASH" ] && [ "$CURRENT_REQ_HASH" != "$STORED_REQ_HASH" ]
 fi
 
 if [ "$PIP_UPGRADE" = true ]; then
-    pip install --upgrade pip
+    python -m pip install --upgrade pip
     python -c 'import pip; print(pip.__version__)' 2>/dev/null > "$PIP_VERSION_MARKER" || true
     arthexis_timing_end "pip_bootstrap"
 else
