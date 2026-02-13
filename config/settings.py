@@ -476,6 +476,7 @@ LOCAL_APPS = [
     "apps.nmcli",
     "apps.wikis",
     "apps.totp",
+    "apps.google.sheets.apps.GoogleSheetsConfig",
     "apps.terms",
 ]
 
