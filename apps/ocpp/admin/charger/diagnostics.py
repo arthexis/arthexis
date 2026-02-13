@@ -141,19 +141,58 @@ class ChargerDiagnosticsMixin:
             raise self.DiagnosticsDownloadError(
                 _("Diagnostics location host is not allowed.")
             )
-        try:
-            response = requests.get(location, stream=True, timeout=15)
-        except RequestException as exc:
+        current_location = location
+        response = None
+        max_redirects = 3
+        for _ in range(max_redirects + 1):
+            try:
+                response = requests.get(
+                    current_location,
+                    stream=True,
+                    timeout=15,
+                    allow_redirects=False,
+                )
+            except RequestException as exc:
+                raise self.DiagnosticsDownloadError(
+                    _("Failed to download diagnostics: %s") % exc
+                ) from exc
+
+            if not response.is_redirect:
+                break
+
+            redirect_location = response.headers.get("Location")
+            if not redirect_location:
+                raise self.DiagnosticsDownloadError(
+                    _("Diagnostics download redirected without a location.")
+                )
+
+            next_location = urljoin(current_location, redirect_location)
+            parsed_next = urlparse(next_location)
+            scheme = (parsed_next.scheme or "").lower()
+            if scheme not in {"http", "https"}:
+                raise self.DiagnosticsDownloadError(
+                    _("Diagnostics redirect location must use HTTP or HTTPS.")
+                )
+            if not self._is_safe_diagnostics_location(next_location):
+                raise self.DiagnosticsDownloadError(
+                    _("Diagnostics redirect location host is not allowed.")
+                )
+
+            with contextlib.suppress(Exception):
+                response.close()
+            current_location = next_location
+        else:
             raise self.DiagnosticsDownloadError(
-                _("Failed to download diagnostics: %s") % exc
-            ) from exc
+                _("Diagnostics download exceeded redirect limit.")
+            )
+
         try:
             if response.status_code != 200:
                 raise self.DiagnosticsDownloadError(
                     _("Diagnostics download returned status %s.")
                     % response.status_code
                 )
-            filename = self._diagnostics_filename(charger, location, response)
+            filename = self._diagnostics_filename(charger, current_location, response)
             destination = self._unique_diagnostics_path(diagnostics_dir, filename)
             try:
                 with destination.open("wb") as handle:

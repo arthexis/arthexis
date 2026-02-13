@@ -46,3 +46,36 @@ def test_is_safe_diagnostics_location_accepts_public_ip():
     admin = ChargerAdmin(Charger, AdminSite())
 
     assert admin._is_safe_diagnostics_location("https://8.8.8.8/file.log") is True
+
+
+def test_download_diagnostics_rejects_unsafe_redirect(monkeypatch, tmp_path):
+    """Diagnostics downloads should reject redirects to unsafe destinations."""
+    admin = ChargerAdmin(Charger, AdminSite())
+
+    class Response:
+        def __init__(self):
+            self.status_code = 302
+            self.headers = {"Location": "http://127.0.0.1/internal"}
+            self.is_redirect = True
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "apps.ocpp.admin.charger.diagnostics.requests.get",
+        lambda *_args, **_kwargs: Response(),
+    )
+    monkeypatch.setattr(
+        admin,
+        "_is_safe_diagnostics_location",
+        lambda location: location == "https://example.com/diagnostics.log",
+    )
+
+    with pytest.raises(admin.DiagnosticsDownloadError, match="redirect location host is not allowed"):
+        admin._download_diagnostics(
+            request=None,
+            charger=object(),
+            location="https://example.com/diagnostics.log",
+            diagnostics_dir=tmp_path,
+            user_dir=tmp_path,
+        )

@@ -10,7 +10,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 from asgiref.sync import async_to_sync
