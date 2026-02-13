@@ -577,7 +577,7 @@ elif [ -n "$CURRENT_REQ_HASH" ] && [ "$CURRENT_REQ_HASH" != "$STORED_REQ_HASH" ]
 fi
 
 if [ "$PIP_UPGRADE" = true ]; then
-    pip install --upgrade pip
+    python -m pip install --upgrade pip
     python -c 'import pip; print(pip.__version__)' 2>/dev/null > "$PIP_VERSION_MARKER" || true
     arthexis_timing_end "pip_bootstrap"
 else
