@@ -37,13 +37,6 @@ class OdooChatBridgeAdmin(EntityModelAdmin):
 class WhatsAppChatBridgeAdmin(EntityModelAdmin):
     """Admin configuration for setting up WhatsApp chat delivery bridges."""
 
-    wa_client_setup_help = _(
-        "In Meta Business Manager, open WhatsApp Manager and copy the Phone Number ID "
-        "from the connected number profile. Then open App Dashboard → WhatsApp → API "
-        "Setup to generate a permanent access token for the same business account. Use "
-        "the default API base URL unless support gives you a different Graph API endpoint."
-    )
-
     list_display = (
         "bridge_label",
         "site",
@@ -61,7 +54,13 @@ class WhatsAppChatBridgeAdmin(EntityModelAdmin):
             _("WhatsApp client"),
             {
                 "fields": ("api_base_url", "phone_number_id", "access_token"),
-                "description": wa_client_setup_help,
+                "description": _(
+                    "In Meta Business Manager, open WhatsApp Manager and copy the Phone "
+                    "Number ID from the connected number profile. Then open App Dashboard "
+                    "→ WhatsApp → API Setup to generate a permanent access token for the "
+                    "same business account. Use the default API base URL unless support "
+                    "gives you a different Graph API endpoint."
+                ),
             },
         ),
         (
