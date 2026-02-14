@@ -116,6 +116,9 @@ _discard_local_git_changes() {
 }
 
 mkdir -p "$LOCK_DIR"
+if [ -n "$PYTHON_BIN" ]; then
+  "$PYTHON_BIN" "$BASE_DIR/scripts/helpers/local_ip_lock.py" "$BASE_DIR" || true
+fi
 
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then

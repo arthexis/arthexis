@@ -41,6 +41,7 @@ from config.settings_helpers import (
     extract_ip_from_host,
     install_validate_host_with_subnets,
     load_secret_key,
+    load_stored_ip_addresses,
     strip_ipv6_brackets,
 )
 
@@ -165,6 +166,10 @@ with contextlib.suppress(Exception):
 for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
     if host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(host)
+
+for address in load_stored_ip_addresses(BASE_DIR):
+    if address not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(address)
 
 
 for address in discover_local_ip_addresses():

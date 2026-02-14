@@ -418,6 +418,10 @@ elif [ -f "$DB_FILE" ]; then
 fi
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
+PYTHON_BIN="$(command -v python3 || command -v python || true)"
+if [ -n "$PYTHON_BIN" ]; then
+    "$PYTHON_BIN" "$BASE_DIR/scripts/helpers/local_ip_lock.py" "$BASE_DIR" || true
+fi
 
 if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
     reset_service_units_for_repair "$SERVICE"
