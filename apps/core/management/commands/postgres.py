@@ -4,10 +4,10 @@ import json
 import os
 import subprocess
 import sys
+from getpass import getpass
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -26,7 +26,16 @@ class Command(BaseCommand):
         parser.add_argument("--port", default="5432", help="Postgres port")
         parser.add_argument("--name", default="postgres", help="Postgres database name")
         parser.add_argument("--user", default="postgres", help="Postgres database user")
-        parser.add_argument("--password", default="", help="Postgres database password")
+        parser.add_argument(
+            "--password-env",
+            default="POSTGRES_PASSWORD",
+            help="Environment variable name to read Postgres password from",
+        )
+        parser.add_argument(
+            "--prompt-password",
+            action="store_true",
+            help="Prompt for the Postgres password (hidden input)",
+        )
         parser.add_argument(
             "--migrate",
             action="store_true",
@@ -46,13 +55,18 @@ class Command(BaseCommand):
     def handle(self, *args, **options):  # type: ignore[override]
         """Execute command workflow."""
 
+        password_env_name = str(options["password_env"])
+        password = os.environ.get(password_env_name, "")
+        if options["prompt_password"]:
+            password = getpass("Postgres password: ")
+
         config = {
             "backend": "postgres",
             "host": str(options["host"]),
             "port": str(options["port"]),
             "name": str(options["name"]),
             "user": str(options["user"]),
-            "password": str(options["password"]),
+            "password": str(password),
         }
 
         if not options["no_store"]:
@@ -84,7 +98,7 @@ class Command(BaseCommand):
 
         try:
             import psycopg
-        except Exception as exc:  # pragma: no cover - environment dependent
+        except ImportError as exc:  # pragma: no cover - environment dependent
             return False, f"psycopg import failed: {exc}"
 
         params = {
@@ -98,7 +112,7 @@ class Command(BaseCommand):
         try:
             with psycopg.connect(**params):
                 return True, "connection established"
-        except Exception as exc:
+        except psycopg.Error as exc:
             return False, str(exc)
 
     def _write_lock(self, config: dict[str, str]) -> None:
@@ -106,7 +120,13 @@ class Command(BaseCommand):
 
         lock_path = Path(settings.BASE_DIR) / ".locks" / "postgres.lck"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        lock_payload = {
+            key: value
+            for key, value in config.items()
+            if key.casefold() not in {"password", "db_password"}
+        }
+        lock_path.write_text(json.dumps(lock_payload, indent=2), encoding="utf-8")
+        lock_path.chmod(0o600)
 
     def _upsert_runtime_config(self, config: dict[str, str]) -> None:
         """Create or update active ``DatabaseConfig`` row."""
@@ -118,7 +138,6 @@ class Command(BaseCommand):
             name=config["name"],
             defaults={
                 "user": config["user"],
-                "password": config["password"],
                 "is_active": True,
             },
         )
@@ -203,8 +222,19 @@ class Command(BaseCommand):
             (load_cmd, postgres_env),
             (loaddata_cmd, postgres_env),
         ):
-            result = subprocess.run(command, env=env, cwd=str(settings.BASE_DIR), check=False)
+            result = subprocess.run(
+                command,
+                env=env,
+                cwd=str(settings.BASE_DIR),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
             if result.returncode != 0:
-                raise CommandError(f"Migration step failed: {' '.join(command)}")
+                details = f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+                raise CommandError(f"Migration step failed: {' '.join(command)}\n{details}")
+
+        if dump_path.exists():
+            dump_path.unlink()
 
         return True

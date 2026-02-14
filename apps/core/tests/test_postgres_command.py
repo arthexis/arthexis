@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import stat
 
 import pytest
 from django.core.management import call_command
@@ -29,16 +30,17 @@ def test_postgres_command_stores_lock_and_runtime_config(settings, tmp_path, mon
         "appdb",
         "--user",
         "app",
-        "--password",
-        "secret",
         stdout=stdout,
     )
 
     lock_path = tmp_path / ".locks" / "postgres.lck"
     payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    mode = stat.S_IMODE(lock_path.stat().st_mode)
     assert payload["backend"] == "postgres"
     assert payload["host"] == "db.local"
     assert payload["name"] == "appdb"
+    assert "password" not in payload
+    assert mode == 0o600
 
     cfg = DatabaseConfig.objects.get(name="appdb", host="db.local")
     assert cfg.last_status_ok is True

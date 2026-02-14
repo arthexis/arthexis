@@ -16,7 +16,6 @@ def test_load_database_lock_reads_postgres_payload(tmp_path):
                 "backend": "postgres",
                 "name": "appdb",
                 "user": "app",
-                "password": "secret",
                 "host": "db",
                 "port": 5432,
             }

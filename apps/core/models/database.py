@@ -9,7 +9,6 @@ class DatabaseConfig(models.Model):
     backend = models.CharField(max_length=32, default="postgres")
     name = models.CharField(max_length=255)
     user = models.CharField(max_length=255)
-    password = models.CharField(max_length=255, blank=True, default="")
     host = models.CharField(max_length=255, default="localhost")
     port = models.PositiveIntegerField(default=5432)
     is_active = models.BooleanField(default=True)

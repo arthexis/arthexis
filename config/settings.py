@@ -702,8 +702,6 @@ DB_LOCK_CONFIG = load_database_lock(BASE_DIR) or {}
 DB_LOCK_CONFIGURED = bool(DB_LOCK_CONFIG)
 
 FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
-if not FORCED_DB_BACKEND and DB_LOCK_CONFIG.get("backend") == "postgres":
-    FORCED_DB_BACKEND = "postgres"
 
 if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
     raise ImproperlyConfigured(
@@ -711,24 +709,26 @@ if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
     )
 
 
+def _postgres_params() -> dict[str, str | int]:
+    return {
+        "dbname": DB_LOCK_CONFIG.get("name") or os.environ.get("POSTGRES_DB", "postgres"),
+        "user": DB_LOCK_CONFIG.get("user") or os.environ.get("POSTGRES_USER", "postgres"),
+        "password": os.environ.get("POSTGRES_PASSWORD", ""),
+        "host": DB_LOCK_CONFIG.get("host") or os.environ.get("POSTGRES_HOST", "localhost"),
+        "port": DB_LOCK_CONFIG.get("port") or os.environ.get("POSTGRES_PORT", "5432"),
+        "connect_timeout": 10,
+    }
+
+
 def _postgres_available() -> bool:
     if FORCED_DB_BACKEND == "sqlite":
         return False
     try:
         import psycopg
-    except Exception:
+    except ImportError:
         return False
 
-    params = {
-        "dbname": DB_LOCK_CONFIG.get("name") or os.environ.get("POSTGRES_DB", "postgres"),
-        "user": DB_LOCK_CONFIG.get("user") or os.environ.get("POSTGRES_USER", "postgres"),
-        "password": DB_LOCK_CONFIG.get("password")
-        if DB_LOCK_CONFIGURED
-        else os.environ.get("POSTGRES_PASSWORD", ""),
-        "host": DB_LOCK_CONFIG.get("host") or os.environ.get("POSTGRES_HOST", "localhost"),
-        "port": DB_LOCK_CONFIG.get("port") or os.environ.get("POSTGRES_PORT", "5432"),
-        "connect_timeout": 10,
-    }
+    params = _postgres_params()
     try:
         with contextlib.closing(psycopg.connect(**params)):
             return True
@@ -736,24 +736,21 @@ def _postgres_available() -> bool:
         return False
 
 
-if FORCED_DB_BACKEND == "postgres":
-    _use_postgres = True
-elif FORCED_DB_BACKEND == "sqlite":
+if FORCED_DB_BACKEND == "sqlite":
     _use_postgres = False
+elif FORCED_DB_BACKEND == "postgres":
+    _use_postgres = _postgres_available()
 else:
     _use_postgres = _postgres_available()
 
 
 if _use_postgres:
-    _postgres_name = DB_LOCK_CONFIG.get("name") or os.environ.get("POSTGRES_DB", "postgres")
-    _postgres_user = DB_LOCK_CONFIG.get("user") or os.environ.get("POSTGRES_USER", "postgres")
-    _postgres_password = (
-        DB_LOCK_CONFIG.get("password")
-        if DB_LOCK_CONFIGURED
-        else os.environ.get("POSTGRES_PASSWORD", "")
-    )
-    _postgres_host = DB_LOCK_CONFIG.get("host") or os.environ.get("POSTGRES_HOST", "localhost")
-    _postgres_port = DB_LOCK_CONFIG.get("port") or os.environ.get("POSTGRES_PORT", "5432")
+    _postgres_params_resolved = _postgres_params()
+    _postgres_name = str(_postgres_params_resolved["dbname"])
+    _postgres_user = str(_postgres_params_resolved["user"])
+    _postgres_password = str(_postgres_params_resolved["password"])
+    _postgres_host = str(_postgres_params_resolved["host"])
+    _postgres_port = str(_postgres_params_resolved["port"])
 
     DATABASES = {
         "default": {
@@ -776,6 +773,7 @@ else:
         warnings.warn(
             "Postgres lock configuration exists but connection failed; falling back to SQLite.",
             RuntimeWarning,
+            stacklevel=2,
         )
     _sqlite_override = os.environ.get("ARTHEXIS_SQLITE_PATH")
     if _sqlite_override:

@@ -315,7 +315,6 @@ def load_database_lock(base_dir: Path) -> dict[str, str] | None:
         "backend",
         "name",
         "user",
-        "password",
         "host",
         "port",
     }
