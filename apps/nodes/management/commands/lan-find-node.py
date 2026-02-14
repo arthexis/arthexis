@@ -19,9 +19,26 @@ from requests import RequestException
 
 from apps.nodes.models import Node
 from apps.nodes.views import register_node
-from config.settings_helpers import discover_local_ip_addresses
 
 logger = logging.getLogger(__name__)
+
+
+def collect_local_ip_addresses() -> set[str]:
+    """Return host IP addresses that should be excluded from LAN probing."""
+
+    addresses: set[str] = {"127.0.0.1", "::1"}
+    for interface_addresses in psutil.net_if_addrs().values():
+        for addr in interface_addresses:
+            if addr.family.name not in ("AF_INET", "AF_INET6"):
+                continue
+            if not addr.address:
+                continue
+            try:
+                normalized = ipaddress.ip_address(addr.address.split("%", 1)[0])
+            except ValueError:
+                continue
+            addresses.add(normalized.compressed)
+    return addresses
 
 
 class Command(BaseCommand):
@@ -61,7 +78,7 @@ class Command(BaseCommand):
 
         local_node = Node.get_local()
         local_mac = (local_node.mac_address or "").lower() if local_node else ""
-        local_ips = discover_local_ip_addresses()
+        local_ips = collect_local_ip_addresses()
 
         candidates: set[str] = set()
         for interface in interfaces:
