@@ -20,7 +20,6 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/timing.sh
 . "$SCRIPT_DIR/scripts/helpers/timing.sh"
-LOCAL_IP_LOCK_HELPER="$SCRIPT_DIR/scripts/helpers/local_ip_lock.py"
 
 # Determine the target user and re-exec as needed before continuing.
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
@@ -419,10 +418,6 @@ elif [ -f "$DB_FILE" ]; then
 fi
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
-if command -v python3 >/dev/null 2>&1; then
-    python3 "$LOCAL_IP_LOCK_HELPER" "$BASE_DIR" || true
-fi
-
 if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
     reset_service_units_for_repair "$SERVICE"
 fi
