@@ -40,6 +40,7 @@ from config.settings_helpers import (
     discover_local_ip_addresses,
     extract_ip_from_host,
     install_validate_host_with_subnets,
+    load_database_lock,
     load_local_ip_lock,
     load_secret_key,
     strip_ipv6_brackets,
@@ -697,7 +698,13 @@ LOGIN_URL = "pages:login"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+DB_LOCK_CONFIG = load_database_lock(BASE_DIR) or {}
+DB_LOCK_CONFIGURED = bool(DB_LOCK_CONFIG)
+
 FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
+if not FORCED_DB_BACKEND and DB_LOCK_CONFIG.get("backend") == "postgres":
+    FORCED_DB_BACKEND = "postgres"
+
 if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
     raise ImproperlyConfigured(
         "ARTHEXIS_DB_BACKEND must be 'sqlite' or 'postgres' when defined."
@@ -713,11 +720,13 @@ def _postgres_available() -> bool:
         return False
 
     params = {
-        "dbname": os.environ.get("POSTGRES_DB", "postgres"),
-        "user": os.environ.get("POSTGRES_USER", "postgres"),
-        "password": os.environ.get("POSTGRES_PASSWORD", ""),
-        "host": os.environ.get("POSTGRES_HOST", "localhost"),
-        "port": os.environ.get("POSTGRES_PORT", "5432"),
+        "dbname": DB_LOCK_CONFIG.get("name") or os.environ.get("POSTGRES_DB", "postgres"),
+        "user": DB_LOCK_CONFIG.get("user") or os.environ.get("POSTGRES_USER", "postgres"),
+        "password": DB_LOCK_CONFIG.get("password")
+        if DB_LOCK_CONFIGURED
+        else os.environ.get("POSTGRES_PASSWORD", ""),
+        "host": DB_LOCK_CONFIG.get("host") or os.environ.get("POSTGRES_HOST", "localhost"),
+        "port": DB_LOCK_CONFIG.get("port") or os.environ.get("POSTGRES_PORT", "5432"),
         "connect_timeout": 10,
     }
     try:
@@ -736,21 +745,38 @@ else:
 
 
 if _use_postgres:
+    _postgres_name = DB_LOCK_CONFIG.get("name") or os.environ.get("POSTGRES_DB", "postgres")
+    _postgres_user = DB_LOCK_CONFIG.get("user") or os.environ.get("POSTGRES_USER", "postgres")
+    _postgres_password = (
+        DB_LOCK_CONFIG.get("password")
+        if DB_LOCK_CONFIGURED
+        else os.environ.get("POSTGRES_PASSWORD", "")
+    )
+    _postgres_host = DB_LOCK_CONFIG.get("host") or os.environ.get("POSTGRES_HOST", "localhost")
+    _postgres_port = DB_LOCK_CONFIG.get("port") or os.environ.get("POSTGRES_PORT", "5432")
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("POSTGRES_DB", "postgres"),
-            "USER": os.environ.get("POSTGRES_USER", "postgres"),
-            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
-            "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "NAME": _postgres_name,
+            "USER": _postgres_user,
+            "PASSWORD": _postgres_password,
+            "HOST": _postgres_host,
+            "PORT": _postgres_port,
             "OPTIONS": {"options": "-c timezone=UTC"},
             "TEST": {
-                "NAME": f"{os.environ.get('POSTGRES_DB', 'postgres')}_test",
+                "NAME": f"{_postgres_name}_test",
             },
         }
     }
 else:
+    if DB_LOCK_CONFIGURED:
+        import warnings
+
+        warnings.warn(
+            "Postgres lock configuration exists but connection failed; falling back to SQLite.",
+            RuntimeWarning,
+        )
     _sqlite_override = os.environ.get("ARTHEXIS_SQLITE_PATH")
     if _sqlite_override:
         SQLITE_DB_PATH = Path(_sqlite_override)

@@ -23,6 +23,7 @@ __all__ = [
     "discover_local_ip_addresses",
     "extract_ip_from_host",
     "install_validate_host_with_subnets",
+    "load_database_lock",
     "load_local_ip_lock",
     "load_secret_key",
     "resolve_celery_shutdown_timeout",
@@ -289,6 +290,45 @@ def load_local_ip_lock(base_dir: Path) -> set[str]:
             normalized.add(normalized_ip)
 
     return normalized
+
+
+def load_database_lock(base_dir: Path) -> dict[str, str] | None:
+    """Return database configuration from ``.locks/postgres.lck`` when valid."""
+
+    lock_path = base_dir / ".locks" / "postgres.lck"
+    if not lock_path.exists():
+        return None
+
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    backend = str(payload.get("backend", "")).strip().lower()
+    if backend != "postgres":
+        return None
+
+    allowed_keys = {
+        "backend",
+        "name",
+        "user",
+        "password",
+        "host",
+        "port",
+    }
+    cleaned: dict[str, str] = {}
+    for key, value in payload.items():
+        if key not in allowed_keys or value is None:
+            continue
+        cleaned[key] = str(value)
+
+    if "backend" not in cleaned:
+        cleaned["backend"] = "postgres"
+
+    return cleaned
 
 
 def load_secret_key(

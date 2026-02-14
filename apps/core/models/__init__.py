@@ -1,4 +1,5 @@
 from .admin_notice import AdminNotice
+from .database import DatabaseConfig
 from .email import EmailArtifact, EmailTransaction, EmailTransactionAttachment
 from .invite_lead import InviteLead
 from .ownable import (
@@ -12,6 +13,7 @@ from .usage_event import UsageEvent
 
 __all__ = [
     "AdminNotice",
+    "DatabaseConfig",
     "EmailArtifact",
     "EmailTransaction",
     "EmailTransactionAttachment",
