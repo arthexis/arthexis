@@ -36,19 +36,10 @@ if %CLEAN%==1 (
     del "%SCRIPT_DIR%db*.sqlite3" >nul 2>&1
 )
 if exist "%SCRIPT_DIR%\requirements.txt" (
-    for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" SHA256') do (
-        if not defined REQ_HASH set REQ_HASH=%%h
-    )
-    if exist "%LOCK_DIR%\requirements.sha256" (
-        set /p STORED_HASH=<"%LOCK_DIR%\requirements.sha256"
-    )
-    if /I not "%REQ_HASH%"=="%STORED_HASH%" (
-        if exist "%PIP_HELPER%" (
-            "%VENV%\Scripts\python.exe" "%PIP_HELPER%" -r "%SCRIPT_DIR%\requirements.txt"
-        ) else (
-            "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
-        )
-        echo %REQ_HASH%>"%LOCK_DIR%\requirements.sha256"
+    if exist "%PIP_HELPER%" (
+        "%VENV%\Scripts\python.exe" "%PIP_HELPER%" -r "%SCRIPT_DIR%\requirements.txt"
+    ) else (
+        "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
     )
 )
 set "ARGS="

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import json
 import multiprocessing
@@ -29,7 +28,6 @@ def resolve_base_dir(
 BASE_DIR = resolve_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
-REQUIREMENTS_HASH_FILE = LOCK_DIR / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 
 if importlib.util.find_spec("apps.core.notifications"):
@@ -339,41 +337,13 @@ def stop_django_server(process: subprocess.Popen | multiprocessing.Process | Non
     process.join(timeout=0.1)
 
 
-def _hash_file(path: Path) -> str:
-    """Return the sha256 hash of *path*."""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8192), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def update_requirements(base_dir: Path) -> bool:
-    """Install Python requirements when ``requirements.txt`` changes."""
+    """Install Python requirements when ``requirements.txt`` is present."""
 
     req_file = base_dir / REQUIREMENTS_FILE
-    hash_file = base_dir / REQUIREMENTS_HASH_FILE
     helper_script = base_dir / PIP_INSTALL_HELPER
 
-    hash_file.parent.mkdir(parents=True, exist_ok=True)
-
     if not req_file.exists():
-        return False
-
-    try:
-        current_hash = _hash_file(req_file)
-    except OSError:
-        return False
-
-    try:
-        stored_hash = hash_file.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        stored_hash = ""
-    except OSError:
-        stored_hash = ""
-
-    if current_hash == stored_hash:
         return False
 
     print("[Migration Server] Installing Python requirements...")
@@ -397,11 +367,6 @@ def update_requirements(base_dir: Path) -> bool:
             "See migration server output for details.",
         )
         return False
-
-    try:
-        hash_file.write_text(current_hash, encoding="utf-8")
-    except OSError:
-        pass
 
     print("[Migration Server] Python requirements updated.")
     return True

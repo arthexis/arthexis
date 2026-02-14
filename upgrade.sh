@@ -5,7 +5,6 @@ set -eE
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 export TZ="${TZ:-America/Monterrey}"
 PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
-LOCAL_IP_LOCK_HELPER="$BASE_DIR/scripts/helpers/local_ip_lock.py"
 UPGRADE_STARTED_AT=$(date +%s)
 UPGRADE_DURATION_LOCK="$BASE_DIR/.locks/upgrade_duration.lck"
 # Track upgrade script changes triggered by git pull so the newer version can be re-run.
@@ -117,9 +116,6 @@ _discard_local_git_changes() {
 }
 
 mkdir -p "$LOCK_DIR"
-if [ -n "$PYTHON_BIN" ]; then
-  "$PYTHON_BIN" "$LOCAL_IP_LOCK_HELPER" "$BASE_DIR" || true
-fi
 
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
@@ -158,44 +154,6 @@ print_pending_commit_messages() {
     echo "$pending_commits"
   fi
 }
-
-collect_requirement_files() {
-  local -n out_array="$1"
-
-  mapfile -t out_array < <(find "$BASE_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
-}
-
-compute_requirements_checksum() {
-  local -a files=("$@")
-
-  if [ ${#files[@]} -eq 0 ]; then
-    echo ""
-    return 0
-  fi
-
-  (
-    for file in "${files[@]}"; do
-      printf '%s\n' "${file##*/}"
-      cat "$file"
-    done
-  ) | sha256sum | awk '{print $1}'
-}
-
-collect_requirement_files REQUIREMENT_FILES
-REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
-REQUIREMENTS_HASH=""
-STORED_REQ_HASH=""
-if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
-  REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
-  [ -f "$REQ_HASH_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_HASH_FILE")
-fi
-DEPENDENCY_REFRESH_REQUIRED=0
-if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]; then
-  DEPENDENCY_REFRESH_REQUIRED=1
-fi
-if [[ $FORCE_ENV_REFRESH -eq 1 ]]; then
-  DEPENDENCY_REFRESH_REQUIRED=1
-fi
 
 arthexis_timing_setup "upgrade"
 
@@ -877,42 +835,6 @@ cleanup_non_terminal_git_state() {
   if [ -f .git/CHERRY_PICK_HEAD ]; then
     echo "Detected interrupted cherry-pick; aborting before continuing upgrade..."
     git cherry-pick --abort >/dev/null 2>&1 || true
-  fi
-}
-
-install_requirements_if_changed() {
-  local req_file="$BASE_DIR/requirements.txt"
-  local hash_file="$LOCK_DIR/requirements.sha256"
-  local venv_python="$BASE_DIR/.venv/bin/python"
-  local new_hash=""
-  local stored_hash=""
-
-  if [ ! -f "$req_file" ]; then
-    echo "requirements.txt not found; skipping dependency sync."
-    return
-  fi
-
-  if ! ensure_virtualenv; then
-    echo "Virtual environment Python not found; run ./install.sh before upgrading dependencies." >&2
-    return 1
-  fi
-
-  local python_bin="$venv_python"
-
-  new_hash=$(sha256sum "$req_file" | awk '{print $1}')
-  if [ -f "$hash_file" ]; then
-    stored_hash=$(cat "$hash_file")
-  fi
-
-  if [ "$new_hash" != "$stored_hash" ]; then
-    if [ -f "$PIP_INSTALL_HELPER" ]; then
-      "$python_bin" "$PIP_INSTALL_HELPER" -r "$req_file"
-    else
-      "$python_bin" -m pip install -r "$req_file"
-    fi
-    echo "$new_hash" > "$hash_file"
-  else
-    echo "Requirements unchanged. Skipping installation."
   fi
 }
 
@@ -1878,16 +1800,10 @@ if [ $VENV_PRESENT -eq 1 ]; then
     pip_install_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
     pip_install_flags+=("--break-system-packages")
   fi
-  if [[ $DEPENDENCY_REFRESH_REQUIRED -eq 0 ]]; then
-    echo "Dependencies unchanged; skipping pip bootstrap."
-    arthexis_timing_record "pip_bootstrap" 0 "skipped"
-  else
-    arthexis_timing_start "pip_bootstrap"
-    env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
-    arthexis_timing_end "pip_bootstrap"
-  fi
-  # env-refresh.sh is responsible for syncing requirements and updating the
-  # requirements.sha256 lock file; avoid duplicating that work here.
+  arthexis_timing_start "pip_bootstrap"
+  env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
+  arthexis_timing_end "pip_bootstrap"
+  # env-refresh.sh is responsible for syncing requirements before runtime data refresh.
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
     if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
       echo "Warning: failed to broadcast upgrade Net Message" >&2

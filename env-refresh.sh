@@ -228,32 +228,6 @@ collect_requirement_files() {
   fi
 }
 
-compute_file_checksum() {
-  local file="$1"
-  if [ ! -f "$file" ]; then
-    echo ""
-    return 0
-  fi
-
-  sha256sum "$file" | awk '{print $1}'
-}
-
-compute_requirements_checksum() {
-  local -a files=("$@")
-
-  if [ ${#files[@]} -eq 0 ]; then
-    echo ""
-    return 0
-  fi
-
-  (
-    for file in "${files[@]}"; do
-      printf '%s\n' "${file##*/}"
-      cat "$file"
-    done
-  ) | sha256sum | awk '{print $1}'
-}
-
 install_watch_upgrade_helper() {
   local helper_path="$SCRIPT_DIR/scripts/helpers/watch-upgrade.sh"
   local target_path="/usr/local/bin/watch-upgrade"
@@ -314,105 +288,12 @@ fi
 
 REQ_SCAN_START_MS=$(now_ms)
 collect_requirement_files REQUIREMENT_FILES
-REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
-REQ_HASH_MANIFEST="$LOCK_DIR/requirements.hashes"
-REQ_TIMESTAMP_FILE="$LOCK_DIR/requirements.install-ts"
-STORED_REQ_HASH=""
-[ -f "$REQ_HASH_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_HASH_FILE")
-REQUIREMENTS_HASH=""
-if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
-  REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
-fi
-
-declare -A PREVIOUS_REQ_HASHES=()
-declare -A CURRENT_REQ_HASHES=()
-if [ -f "$REQ_HASH_MANIFEST" ]; then
-  while read -r req_file stored_hash; do
-    [ -z "$req_file" ] && continue
-    PREVIOUS_REQ_HASHES["$req_file"]="$stored_hash"
-  done <"$REQ_HASH_MANIFEST"
-fi
-
-CHANGED_REQUIREMENTS=()
-for req_file in "${REQUIREMENT_FILES[@]}"; do
-  req_key="$(basename "$req_file")"
-  current_hash=$(compute_file_checksum "$req_file")
-  CURRENT_REQ_HASHES["$req_key"]="$current_hash"
-  previous_hash="${PREVIOUS_REQ_HASHES[$req_key]:-}"
-  if [ "$current_hash" != "$previous_hash" ]; then
-    CHANGED_REQUIREMENTS+=("$req_file")
-  fi
-done
-
-REMOVED_REQUIREMENTS=0
-for stored_req in "${!PREVIOUS_REQ_HASHES[@]}"; do
-  found=0
-  for req_file in "${REQUIREMENT_FILES[@]}"; do
-    if [ "$stored_req" = "$(basename "$req_file")" ]; then
-      found=1
-      break
-    fi
-  done
-  if [ "$found" -eq 0 ]; then
-    REMOVED_REQUIREMENTS=1
-    break
-  fi
-done
-echo "Timing: requirement hash scan took $(elapsed_ms "$REQ_SCAN_START_MS")ms"
-
-NEED_INSTALL=$FORCE_REQUIREMENTS_INSTALL
-if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]; then
-  NEED_INSTALL=1
-fi
-if [ "$FORCE_REFRESH" -eq 1 ]; then
-  NEED_INSTALL=1
-fi
-RECENT_INSTALL=0
-if [ "$PIP_FRESHNESS_MINUTES" -gt 0 ] && [ -f "$REQ_TIMESTAMP_FILE" ]; then
-  LAST_INSTALL_TS=$(stat -c %Y "$REQ_TIMESTAMP_FILE" 2>/dev/null || echo 0)
-  NOW_TS=$(date +%s)
-  if [ $((NOW_TS - LAST_INSTALL_TS)) -lt $((PIP_FRESHNESS_MINUTES * 60)) ]; then
-    RECENT_INSTALL=1
-  fi
-fi
-if [ "$USE_SYSTEM_PYTHON" -eq 1 ] && [ "$NEED_INSTALL" -eq 0 ]; then
-  if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
-import importlib
-import sys
-
-try:
-    importlib.import_module("django")
-except ModuleNotFoundError:
-    sys.exit(1)
-PY
-  then
-    NEED_INSTALL=1
-  fi
-fi
-if [ "$NEED_INSTALL" -eq 1 ] && [ "$RECENT_INSTALL" -eq 1 ] && [ "$FORCE_REFRESH" -eq 0 ]; then
-  echo "requirements checksum changed recently—skipping pip (fresh within ${PIP_FRESHNESS_MINUTES}m)"
-  NEED_INSTALL=0
-fi
+echo "Timing: requirement scan took $(elapsed_ms "$REQ_SCAN_START_MS")ms"
 
 if [ ${#REQUIREMENT_FILES[@]} -eq 0 ]; then
   echo "No requirements*.txt files found; skipping dependency installation."
-elif [ "$NEED_INSTALL" -eq 0 ]; then
-  echo "dependencies unchanged—env refresh skipped"
 else
-  install_targets=()
-  if [ "$FORCE_REFRESH" -eq 1 ] || [ "$FORCE_REQUIREMENTS_INSTALL" -eq 1 ] || [ "$REMOVED_REQUIREMENTS" -eq 1 ]; then
-    install_targets=("${REQUIREMENT_FILES[@]}")
-  elif [ ${#CHANGED_REQUIREMENTS[@]} -gt 0 ]; then
-    install_targets=("${CHANGED_REQUIREMENTS[@]}")
-  else
-    install_targets=("${REQUIREMENT_FILES[@]}")
-  fi
-
-  if [ ${#CHANGED_REQUIREMENTS[@]} -gt 0 ] && [ "$FORCE_REFRESH" -eq 0 ] && [ "$FORCE_REQUIREMENTS_INSTALL" -eq 0 ]; then
-    echo "Detected updates in: ${CHANGED_REQUIREMENTS[*]}"
-  elif [ "$REMOVED_REQUIREMENTS" -eq 1 ]; then
-    echo "Detected removed requirement files; reinstalling remaining requirements"
-  fi
+  install_targets=("${REQUIREMENT_FILES[@]}")
 
   pip_args=(--cache-dir "$PIP_CACHE_DIR")
   if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
@@ -429,19 +310,7 @@ else
     echo "Timing: pip install ${req_file##*/} took $(elapsed_ms "$FILE_INSTALL_START_MS")ms"
   done
   echo "Timing: pip installation block took $(elapsed_ms "$PIP_SECTION_START_MS")ms"
-  if [ -n "$REQUIREMENTS_HASH" ]; then
-    echo "$REQUIREMENTS_HASH" > "$REQ_HASH_FILE"
-  fi
-  if [ ${#CURRENT_REQ_HASHES[@]} -gt 0 ]; then
-    : >"$REQ_HASH_MANIFEST"
-    for req_file in "${REQUIREMENT_FILES[@]}"; do
-      req_key="$(basename "$req_file")"
-      printf '%s %s\n' "$req_key" "${CURRENT_REQ_HASHES[$req_key]}" >>"$REQ_HASH_MANIFEST"
-    done
-  fi
-  date +%s > "$REQ_TIMESTAMP_FILE"
 fi
-
 ensure_celery_installed
 
 if [ "$DEPS_ONLY" -eq 1 ]; then

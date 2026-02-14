@@ -54,21 +54,12 @@ if not exist .venv\Scripts\python.exe (
 
 set VENV=.venv
 set REQ=requirements.txt
-set HASH=%LOCK_DIR%\requirements.sha256
-if not exist "%LOCK_DIR%" mkdir "%LOCK_DIR%" >nul 2>&1
-for /f "skip=1 tokens=1" %%h in ('certutil -hashfile %REQ% SHA256') do if not defined NEW_HASH set NEW_HASH=%%h
-if exist %HASH% (
-    set /p STORED_HASH=<%HASH%
-)
-if /I not "%NEW_HASH%"=="%STORED_HASH%" (
+if exist "%REQ%" (
     if exist "%PIP_HELPER%" (
         %VENV%\Scripts\python.exe "%PIP_HELPER%" -r %REQ%
     ) else (
         %VENV%\Scripts\python.exe -m pip install -r %REQ%
     )
-    echo %NEW_HASH%>%HASH%
-) else (
-    echo Requirements unchanged. Skipping installation.
 )
 
 :end

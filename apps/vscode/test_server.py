@@ -85,30 +85,12 @@ def test_server_state_creates_and_cleans(lock_dir: Path):
 
 
 def update_requirements(base_dir: Path) -> bool:
-    """Install Python requirements when the lockfile hash changes."""
+    """Install Python requirements when ``requirements.txt`` is present."""
 
     req_file = base_dir / migration.REQUIREMENTS_FILE
-    hash_file = base_dir / migration.REQUIREMENTS_HASH_FILE
     helper_script = base_dir / migration.PIP_INSTALL_HELPER
 
-    hash_file.parent.mkdir(parents=True, exist_ok=True)
-
     if not req_file.exists():
-        return False
-
-    try:
-        current_hash = migration._hash_file(req_file)
-    except OSError:
-        return False
-
-    try:
-        stored_hash = hash_file.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        stored_hash = ""
-    except OSError:
-        stored_hash = ""
-
-    if current_hash == stored_hash:
         return False
 
     print(f"{PREFIX} Installing Python requirements...")
@@ -132,11 +114,6 @@ def update_requirements(base_dir: Path) -> bool:
             "See test server output for details.",
         )
         return False
-
-    try:
-        hash_file.write_text(current_hash, encoding="utf-8")
-    except OSError:
-        pass
 
     print(f"{PREFIX} Python requirements updated.")
     return True
