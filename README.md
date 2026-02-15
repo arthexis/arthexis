@@ -146,3 +146,12 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 Arthexis Constellation is still under very active development and new features are added every day.
 
 If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.
+
+## PR Automation
+
+A dedicated workflow (`resolve-threads-from-task-comment.yml`) can auto-resolve all open PR review threads when both of the following are true:
+
+1. The PR has at least one comment containing a markdown link with the exact anchor text `View task →`.
+2. The newest such task comment is **older** than the newest commit on the PR.
+
+When those conditions are met, the workflow resolves all unresolved review threads and posts a summary comment that includes the original task link as `[View task →](...)`.

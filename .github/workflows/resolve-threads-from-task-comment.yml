@@ -1,0 +1,220 @@
+name: Resolve PR Threads From Task Comment
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  resolve-review-threads:
+    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, 'View task →') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve open review threads when latest task comment predates latest PR commit
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const VIEW_TASK_PATTERN = /\[View task →\]\((https?:\/\/[^\s)]+)\)/;
+            const ALLOWED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+            /**
+             * Parse an ISO-8601 timestamp into epoch milliseconds.
+             * @param {string} value
+             * @returns {number}
+             */
+            function toEpochMs(value) {
+              const parsed = Date.parse(value);
+              if (Number.isNaN(parsed)) {
+                throw new RangeError(`Invalid timestamp: ${value}`);
+              }
+              return parsed;
+            }
+
+            const prNumber = context.payload.issue?.number;
+            if (!prNumber) {
+              core.info('No pull request context found.');
+              return;
+            }
+
+            const incomingAssociation = context.payload.comment?.author_association;
+            if (!ALLOWED_ASSOCIATIONS.has(incomingAssociation)) {
+              core.info(`Skipping: commenter association ${incomingAssociation} is not authorized.`);
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100
+            });
+
+            const taskComments = comments
+              .map((comment) => {
+                const match = comment.body?.match(VIEW_TASK_PATTERN);
+                if (!match) {
+                  return null;
+                }
+                return {
+                  id: comment.id,
+                  body: comment.body,
+                  author: comment.user?.login ?? 'unknown',
+                  createdAt: comment.created_at,
+                  taskUrl: match[1]
+                };
+              })
+              .filter(Boolean)
+              .sort((left, right) => toEpochMs(right.createdAt) - toEpochMs(left.createdAt));
+
+            if (taskComments.length === 0) {
+              core.info('No task comments with a [View task →](...) link were found.');
+              return;
+            }
+
+            const latestTaskComment = taskComments[0];
+            const commitResponse = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 100
+            });
+
+            if (commitResponse.data.length === 0) {
+              core.info('No commits found on the PR.');
+              return;
+            }
+
+            const latestCommit = commitResponse.data
+              .map((commit) => ({
+                sha: commit.sha,
+                committedAt: commit.commit?.committer?.date,
+                authoredAt: commit.commit?.author?.date
+              }))
+              .filter((commit) => Boolean(commit.committedAt || commit.authoredAt))
+              .sort((left, right) => {
+                const leftEpoch = toEpochMs(left.committedAt || left.authoredAt);
+                const rightEpoch = toEpochMs(right.committedAt || right.authoredAt);
+                return rightEpoch - leftEpoch;
+              })[0];
+
+            if (!latestCommit) {
+              throw new TypeError('Unable to determine latest commit timestamp for the pull request.');
+            }
+
+            const latestTaskEpoch = toEpochMs(latestTaskComment.createdAt);
+            const latestCommitEpoch = toEpochMs(latestCommit.committedAt || latestCommit.authoredAt);
+
+            if (latestTaskEpoch >= latestCommitEpoch) {
+              core.info('Latest task comment is not older than latest PR commit; skipping review-thread resolution.');
+              return;
+            }
+
+            const pullRequestQuery = `
+              query($owner: String!, $repo: String!, $prNumber: Int!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $prNumber) {
+                    reviewThreads(first: 100, after: $cursor) {
+                      nodes {
+                        id
+                        isResolved
+                      }
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const unresolvedThreadIds = [];
+            let cursor = null;
+            do {
+              const result = await github.graphql(pullRequestQuery, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                prNumber,
+                cursor
+              });
+              const threads = result.repository.pullRequest.reviewThreads;
+              for (const thread of threads.nodes) {
+                if (!thread.isResolved) {
+                  unresolvedThreadIds.push(thread.id);
+                }
+              }
+              cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null;
+            } while (cursor);
+
+            if (unresolvedThreadIds.length === 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: [
+                  'No open review threads to resolve.',
+                  '',
+                  `[View task →](${latestTaskComment.taskUrl})`
+                ].join('\n')
+              });
+              return;
+            }
+
+            const resolveThreadMutation = `
+              mutation($threadId: ID!) {
+                resolveReviewThread(input: { threadId: $threadId }) {
+                  thread {
+                    id
+                    isResolved
+                  }
+                }
+              }
+            `;
+
+            let resolvedCount = 0;
+            const failures = [];
+            for (const threadId of unresolvedThreadIds) {
+              try {
+                await github.graphql(resolveThreadMutation, { threadId });
+                resolvedCount += 1;
+              } catch (error) {
+                failures.push({
+                  threadId,
+                  message: error instanceof Error ? error.message : String(error)
+                });
+              }
+            }
+
+            const summaryLines = [
+              'Review thread resolution was triggered from the latest task comment.',
+              '',
+              `- Latest task comment: ${latestTaskComment.createdAt} by @${latestTaskComment.author}`,
+              `- Latest PR commit: ${(latestCommit.committedAt || latestCommit.authoredAt)} (${latestCommit.sha})`,
+              `- Open threads found: ${unresolvedThreadIds.length}`,
+              `- Resolved: ${resolvedCount}`,
+              `- Failed: ${failures.length}`,
+              '',
+              `[View task →](${latestTaskComment.taskUrl})`,
+              '',
+              `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            ];
+
+            if (failures.length > 0) {
+              summaryLines.push('', '### Failures');
+              for (const failure of failures) {
+                summaryLines.push(`- ${failure.threadId}: ${failure.message}`);
+              }
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: summaryLines.join('\n')
+            });
