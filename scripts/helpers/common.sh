@@ -53,7 +53,7 @@ arthexis_python_bin() {
           fi
           ;;
       esac
-    done < <(compgen -c python3 | sort -u)
+    done < <(compgen -c python3 | sort -rV -u)
 
     if [ -z "${_arthexis_python_bin_cached-}" ]; then
       _arthexis_python_bin_cached="not_found"

@@ -631,7 +631,7 @@ arthexis_timing_end "requirements_install" "refreshed"
 
 if [ "$ENABLE_CONTROL" = true ]; then
     echo "Checking for RFID scanner hardware..."
-if "$PYTHON_BOOTSTRAP_BIN" -m apps.cards.detect; then
+if python -m apps.cards.detect; then
         touch "$RFID_LOCK"
         echo "Enabled node feature 'rfid-scanner' based on detected hardware."
     else
@@ -643,8 +643,8 @@ fi
 # Apply database migrations for a ready-to-run schema.
 arthexis_timing_start "django_migrate"
 run_migration=false
-if ! "$PYTHON_BOOTSTRAP_BIN" manage.py migrate --check; then
-    if migration_plan=$("$PYTHON_BOOTSTRAP_BIN" manage.py showmigrations --plan); then
+if ! python manage.py migrate --check; then
+    if migration_plan=$(python manage.py showmigrations --plan); then
         if grep -q '^[[:space:]]*\\[ \\]' <<< "$migration_plan"; then
             run_migration=true
         fi
@@ -655,7 +655,7 @@ if ! "$PYTHON_BOOTSTRAP_BIN" manage.py migrate --check; then
 fi
 
 if [ "$run_migration" = true ]; then
-    "$PYTHON_BOOTSTRAP_BIN" manage.py migrate --noinput
+    python manage.py migrate --noinput
     arthexis_timing_end "django_migrate"
 else
     arthexis_timing_record "django_migrate" 0 "skipped"
@@ -664,7 +664,7 @@ fi
 # Load personal user data fixtures if present
 if ls data/*.json >/dev/null 2>&1; then
     arthexis_timing_start "load_user_data"
-    "$PYTHON_BOOTSTRAP_BIN" manage.py load_user_data data/*.json
+    python manage.py load_user_data data/*.json
     arthexis_timing_end "load_user_data"
 else
     arthexis_timing_record "load_user_data" 0 "skipped"
