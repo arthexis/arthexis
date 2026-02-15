@@ -48,7 +48,55 @@ def _collect_actions_from_dict(node: ast.Assign, target_name: str) -> set[str]:
     return actions
 
 
-def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
+def _collect_actions_from_protocol_decorators(
+    source: str,
+    *,
+    protocol_slug: str | None,
+    direction: str,
+) -> set[str]:
+    """Collect protocol call names declared via ``@protocol_call`` decorators."""
+
+    def _direction_value(expr: ast.AST) -> str | None:
+        if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+            return expr.value
+        if isinstance(expr, ast.Attribute):
+            attr = expr.attr.upper()
+            if attr in {"CP_TO_CSMS", "CSMS_TO_CP"}:
+                return attr.lower()
+        return None
+
+    actions: set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            func = decorator.func
+            if isinstance(func, ast.Name):
+                decorator_name = func.id
+            elif isinstance(func, ast.Attribute):
+                decorator_name = func.attr
+            else:
+                decorator_name = ""
+            if decorator_name != "protocol_call" or len(decorator.args) < 3:
+                continue
+            slug_arg, direction_arg, call_arg = decorator.args[:3]
+            if not (
+                isinstance(slug_arg, ast.Constant)
+                and isinstance(slug_arg.value, str)
+                and isinstance(call_arg, ast.Constant)
+                and isinstance(call_arg.value, str)
+            ):
+                continue
+            parsed_direction = _direction_value(direction_arg)
+            if (protocol_slug is None or slug_arg.value == protocol_slug) and parsed_direction == direction:
+                actions.add(call_arg.value)
+    return actions
+
+
+def _implemented_cp_to_csms(app_dir: Path, *, protocol_slug: str | None = None) -> set[str]:
     candidate_paths = [
         app_dir / "consumers" / "base" / "dispatch.py",
         app_dir / "consumers" / "base" / "consumer.py",
@@ -57,59 +105,72 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
     source_path = next(
         (candidate for candidate in candidate_paths if candidate.exists()), None
     )
-    if source_path is None:
-        return set()
-    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    ast_actions: set[str] = set()
+    if source_path is not None:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
 
-    class Visitor(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.actions: set[str] = set()
-            self._in_call_handler = False
+        class Visitor(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.actions: set[str] = set()
+                self._in_call_handler = False
 
-        def visit_ClassDef(self, node: ast.ClassDef) -> None:
-            if node.name in {"CSMSConsumer", "DispatchMixin"}:
-                for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name in {
-                        "receive",
-                        "_handle_call_message",
-                    }:
-                        self.visit(item)
-                return
-            # Continue walking in case nested classes exist.
-            self.generic_visit(node)
-
-        def visit_Compare(self, node: ast.Compare) -> None:
-            self.actions.update(_collect_actions_from_compare(node, "action"))
-            self.generic_visit(node)
-
-        def visit_Assign(self, node: ast.Assign) -> None:
-            if self._in_call_handler:
-                self.actions.update(
-                    _collect_actions_from_dict(node, "action_handlers")
-                )
-            self.generic_visit(node)
-
-        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            if node.name == "_handle_call_message":
-                previous_state = self._in_call_handler
-                self._in_call_handler = True
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                if node.name in {"CSMSConsumer", "DispatchMixin"}:
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name in {
+                            "receive",
+                            "_handle_call_message",
+                        }:
+                            self.visit(item)
+                    return
                 self.generic_visit(node)
-                self._in_call_handler = previous_state
-                return
-            self.generic_visit(node)
 
-        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-            if node.name == "_handle_call_message":
-                previous_state = self._in_call_handler
-                self._in_call_handler = True
+            def visit_Compare(self, node: ast.Compare) -> None:
+                self.actions.update(_collect_actions_from_compare(node, "action"))
                 self.generic_visit(node)
-                self._in_call_handler = previous_state
-                return
-            self.generic_visit(node)
 
-    visitor = Visitor()
-    visitor.visit(tree)
-    return visitor.actions
+            def visit_Assign(self, node: ast.Assign) -> None:
+                if self._in_call_handler:
+                    self.actions.update(
+                        _collect_actions_from_dict(node, "action_handlers")
+                    )
+                self.generic_visit(node)
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                if node.name == "_handle_call_message":
+                    previous_state = self._in_call_handler
+                    self._in_call_handler = True
+                    self.generic_visit(node)
+                    self._in_call_handler = previous_state
+                    return
+                self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                if node.name == "_handle_call_message":
+                    previous_state = self._in_call_handler
+                    self._in_call_handler = True
+                    self.generic_visit(node)
+                    self._in_call_handler = previous_state
+                    return
+                self.generic_visit(node)
+
+        visitor = Visitor()
+        visitor.visit(tree)
+        ast_actions = visitor.actions
+
+    decorator_actions: set[str] = set()
+    for path in app_dir.rglob("*.py"):
+        if path.name.startswith("test_"):
+            continue
+        decorator_actions.update(
+            _collect_actions_from_protocol_decorators(
+                path.read_text(encoding="utf-8"),
+                protocol_slug=protocol_slug,
+                direction="cp_to_csms",
+            )
+        )
+
+    return ast_actions | decorator_actions
 
 
 class _CsmsToCpVisitor(ast.NodeVisitor):
@@ -187,7 +248,7 @@ def _collect_csms_to_cp_actions(source: str) -> set[str]:
     return visitor.actions
 
 
-def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
+def _implemented_csms_to_cp(app_dir: Path, *, protocol_slug: str | None = None) -> set[str]:
     actions: set[str] = set()
     candidate_files: list[Path] = []
 
@@ -208,7 +269,15 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
             candidate_files.extend(actions_pkg.glob("*.py"))
 
     for path in candidate_files:
-        actions.update(_collect_csms_to_cp_actions(path.read_text(encoding="utf-8")))
+        source = path.read_text(encoding="utf-8")
+        actions.update(_collect_csms_to_cp_actions(source))
+        actions.update(
+            _collect_actions_from_protocol_decorators(
+                source,
+                protocol_slug=protocol_slug,
+                direction="csms_to_cp",
+            )
+        )
 
     return actions
 

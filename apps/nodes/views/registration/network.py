@@ -127,16 +127,6 @@ def _get_host_port(request) -> int | None:
     if port:
         return port
 
-    try:
-        host = request.get_host()
-    except Exception:
-        host = request.META.get("HTTP_HOST", "")
-    if host:
-        _, host_port = split_domain_port(host)
-        port = _normalize_port(host_port)
-        if port:
-            return port
-
     forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
         "HTTP_X_FORWARDED_PROTO", ""
     )
@@ -146,6 +136,16 @@ def _get_host_port(request) -> int | None:
             return 443
         if scheme == "http":
             return 80
+
+    try:
+        host = request.get_host()
+    except Exception:
+        host = request.META.get("HTTP_HOST", "")
+    if host:
+        _, host_port = split_domain_port(host)
+        port = _normalize_port(host_port)
+        if port:
+            return port
 
     if is_https_request(request):
         return 443
