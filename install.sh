@@ -516,12 +516,18 @@ compute_requirements_checksum() {
 arthexis_timing_start "virtualenv_setup"
 # Create virtual environment if missing
 NEW_VENV=false
-if [ ! -d .venv ]; then
+
+recreate_virtualenv() {
+    rm -rf .venv
     if ! python3 -m venv .venv; then
         echo "Failed to create virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
     fi
     NEW_VENV=true
+}
+
+if [ ! -d .venv ]; then
+    recreate_virtualenv
     arthexis_timing_end "virtualenv_setup" "created"
 else
     arthexis_timing_end "virtualenv_setup" "existing"
@@ -529,17 +535,17 @@ fi
 
 if [ ! -f .venv/bin/activate ]; then
     echo "Virtual environment activation script not found at .venv/bin/activate. Attempting to recreate the virtual environment." >&2
-    rm -rf .venv
-    if ! python3 -m venv .venv; then
-        echo "Failed to recreate virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
-        exit 1
-    fi
-    NEW_VENV=true
+    recreate_virtualenv
 fi
 
 if [ ! -f .venv/bin/activate ]; then
     echo "Virtual environment activation script not found at .venv/bin/activate after recreation. The .venv directory may be corrupted. On Debian/Ubuntu, you may need to install the 'python3-venv' package." >&2
     exit 1
+fi
+
+if [ ! -x .venv/bin/python ] || [ ! -x .venv/bin/pip ] || ! .venv/bin/python -c 'import sys' >/dev/null 2>&1 || ! .venv/bin/pip --version >/dev/null 2>&1; then
+    echo "Virtual environment Python/pip is not executable. Recreating .venv to match the current Python runtime." >&2
+    recreate_virtualenv
 fi
 
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
