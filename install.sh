@@ -542,6 +542,25 @@ if [ ! -f .venv/bin/activate ]; then
     exit 1
 fi
 
+venv_is_runnable() {
+    # A cached virtualenv can become stale in CI when setup-python rolls forward
+    # to a newer patch release, leaving .venv entrypoints with a missing shebang
+    # interpreter (e.g. .venv/bin/pip -> old toolcache path).
+    .venv/bin/python -c 'import sys; print(sys.executable)' >/dev/null 2>&1 || return 1
+    .venv/bin/pip --version >/dev/null 2>&1 || return 1
+    return 0
+}
+
+if ! venv_is_runnable; then
+    echo "Detected stale virtual environment binaries in .venv. Recreating virtual environment." >&2
+    rm -rf .venv
+    if ! python3 -m venv .venv; then
+        echo "Failed to recreate virtual environment after stale-binary detection." >&2
+        exit 1
+    fi
+    NEW_VENV=true
+fi
+
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
