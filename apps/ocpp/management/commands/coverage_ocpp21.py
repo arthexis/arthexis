@@ -36,8 +36,8 @@ class Command(BaseCommand):
         project_root = app_dir.parent
         spec = _load_spec()
 
-        implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
-        implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
+        implemented_cp_to_csms = _implemented_cp_to_csms(app_dir, protocol_slug="ocpp21")
+        implemented_csms_to_cp = _implemented_csms_to_cp(app_dir, protocol_slug="ocpp21")
 
         spec_cp_to_csms = set(spec["cp_to_csms"])
         spec_csms_to_cp = set(spec["csms_to_cp"])

@@ -1,13 +1,12 @@
 {
   "coverage": {
     "cp_to_csms": {
-      "count": 26,
-      "percent": 100.0,
+      "count": 24,
+      "percent": 92.31,
       "supported": [
         "Authorize",
         "BootNotification",
         "ClearedChargingLimit",
-        "CostUpdated",
         "DataTransfer",
         "FirmwareStatusNotification",
         "Get15118EVCertificate",
@@ -25,7 +24,6 @@
         "NotifyReport",
         "PublishFirmwareStatusNotification",
         "ReportChargingProfiles",
-        "ReservationStatusUpdate",
         "SecurityEventNotification",
         "SignCertificate",
         "StatusNotification",
@@ -80,8 +78,8 @@
       "total": 39
     },
     "overall": {
-      "count": 64,
-      "percent": 100.0,
+      "count": 62,
+      "percent": 96.88,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -93,7 +91,6 @@
         "ClearDisplayMessage",
         "ClearVariableMonitoring",
         "ClearedChargingLimit",
-        "CostUpdated",
         "CustomerInformation",
         "DataTransfer",
         "DeleteCertificate",
@@ -128,7 +125,6 @@
         "ReportChargingProfiles",
         "RequestStartTransaction",
         "RequestStopTransaction",
-        "ReservationStatusUpdate",
         "ReserveNow",
         "Reset",
         "SecurityEventNotification",
@@ -156,9 +152,7 @@
       "Authorize",
       "BootNotification",
       "ClearedChargingLimit",
-      "CostUpdated",
       "DataTransfer",
-      "DiagnosticsStatusNotification",
       "FirmwareStatusNotification",
       "Get15118EVCertificate",
       "GetCertificateStatus",
@@ -175,12 +169,9 @@
       "NotifyReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
-      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "SignCertificate",
-      "StartTransaction",
       "StatusNotification",
-      "StopTransaction",
       "TransactionEvent"
     ],
     "csms_to_cp": [

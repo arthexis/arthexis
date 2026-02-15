@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import requests
 import urllib3
 from django.conf import settings
+from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 
 from config.request_utils import is_https_request
@@ -127,6 +128,18 @@ def _get_host_port(request) -> int | None:
     if port:
         return port
 
+    raw_host = request.META.get("HTTP_HOST", "")
+    if raw_host:
+        _, host_port = split_domain_port(raw_host)
+        port = _normalize_port(host_port)
+        if port:
+            return port
+
+    try:
+        request.get_host()
+    except DisallowedHost:
+        pass
+
     forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
         "HTTP_X_FORWARDED_PROTO", ""
     )
@@ -136,16 +149,6 @@ def _get_host_port(request) -> int | None:
             return 443
         if scheme == "http":
             return 80
-
-    try:
-        host = request.get_host()
-    except Exception:
-        host = request.META.get("HTTP_HOST", "")
-    if host:
-        _, host_port = split_domain_port(host)
-        port = _normalize_port(host_port)
-        if port:
-            return port
 
     if is_https_request(request):
         return 443

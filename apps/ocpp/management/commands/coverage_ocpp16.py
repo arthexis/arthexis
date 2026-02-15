@@ -51,6 +51,7 @@ def _collect_actions_from_dict(node: ast.Assign, target_name: str) -> set[str]:
 def _collect_actions_from_protocol_decorators(
     source: str,
     *,
+    source_path: Path | None = None,
     protocol_slug: str | None,
     direction: str,
 ) -> set[str]:
@@ -66,7 +67,12 @@ def _collect_actions_from_protocol_decorators(
         return None
 
     actions: set[str] = set()
-    tree = ast.parse(source)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        location = str(source_path) if source_path is not None else "<unknown>"
+        print(f"Skipping {location}: could not parse source")
+        return actions
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -165,6 +171,7 @@ def _implemented_cp_to_csms(app_dir: Path, *, protocol_slug: str | None = None) 
         decorator_actions.update(
             _collect_actions_from_protocol_decorators(
                 path.read_text(encoding="utf-8"),
+                source_path=path,
                 protocol_slug=protocol_slug,
                 direction="cp_to_csms",
             )
@@ -249,7 +256,7 @@ def _collect_csms_to_cp_actions(source: str) -> set[str]:
 
 
 def _implemented_csms_to_cp(app_dir: Path, *, protocol_slug: str | None = None) -> set[str]:
-    actions: set[str] = set()
+    ast_actions: set[str] = set()
     candidate_files: list[Path] = []
 
     for filename in ("views.py", "admin.py", "tasks.py"):
@@ -268,18 +275,24 @@ def _implemented_csms_to_cp(app_dir: Path, *, protocol_slug: str | None = None) 
         if actions_pkg.is_dir():
             candidate_files.extend(actions_pkg.glob("*.py"))
 
-    for path in candidate_files:
+    for path in set(candidate_files):
         source = path.read_text(encoding="utf-8")
-        actions.update(_collect_csms_to_cp_actions(source))
-        actions.update(
+        ast_actions.update(_collect_csms_to_cp_actions(source))
+
+    decorator_actions: set[str] = set()
+    for path in app_dir.rglob("*.py"):
+        if path.name.startswith("test_"):
+            continue
+        decorator_actions.update(
             _collect_actions_from_protocol_decorators(
-                source,
+                path.read_text(encoding="utf-8"),
+                source_path=path,
                 protocol_slug=protocol_slug,
                 direction="csms_to_cp",
             )
         )
 
-    return actions
+    return ast_actions | decorator_actions
 
 
 class Command(BaseCommand):
@@ -302,8 +315,8 @@ class Command(BaseCommand):
         project_root = app_dir.parent
         spec = _load_spec()
 
-        implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
-        implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
+        implemented_cp_to_csms = _implemented_cp_to_csms(app_dir, protocol_slug="ocpp16")
+        implemented_csms_to_cp = _implemented_csms_to_cp(app_dir, protocol_slug="ocpp16")
 
         spec_cp_to_csms = set(spec["cp_to_csms"])
         spec_csms_to_cp = set(spec["csms_to_cp"])
