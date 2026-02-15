@@ -4,6 +4,8 @@ set -e
 # Bootstrap logging and helper utilities used throughout the installation.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
+# shellcheck source=scripts/helpers/common.sh
+. "$SCRIPT_DIR/scripts/helpers/common.sh"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/git_remote.sh
@@ -190,8 +192,10 @@ EOF
 
 # Hardware support utilities.
 ensure_i2c_packages() {
-    if ! python3 -c 'import smbus' >/dev/null 2>&1 \
-        && ! python3 -c 'import smbus2' >/dev/null 2>&1; then
+    local python_bin="$1"
+
+    if ! "$python_bin" -c 'import smbus' >/dev/null 2>&1 \
+        && ! "$python_bin" -c 'import smbus2' >/dev/null 2>&1; then
         echo "smbus module not found. Installing i2c-tools and python3-smbus"
         sudo apt update
         sudo apt install -y i2c-tools python3-smbus
@@ -443,6 +447,12 @@ if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
     fi
 fi
 
+# Resolve Python 3 interpreter used during install and bootstrap.
+if ! PYTHON_BOOTSTRAP_BIN="$(arthexis_python_bin)"; then
+    echo "Python 3 interpreter not found (tried python3, python, and python3.x aliases)." >&2
+    exit 1
+fi
+
 # Record role-specific prerequisites and capture supporting state for service management.
 if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
@@ -458,7 +468,7 @@ LCD_LOCK="$LOCK_DIR/$ARTHEXIS_LCD_LOCK"
 if [ "$ENABLE_LCD_SCREEN" = true ]; then
     touch "$LCD_LOCK"
     arthexis_enable_lcd_feature_flag "$LOCK_DIR"
-    ensure_i2c_packages
+    ensure_i2c_packages "$PYTHON_BOOTSTRAP_BIN"
 else
     rm -f "$LCD_LOCK"
     arthexis_disable_lcd_feature_flag "$LOCK_DIR"
@@ -517,7 +527,7 @@ arthexis_timing_start "virtualenv_setup"
 # Create virtual environment if missing
 NEW_VENV=false
 if [ ! -d .venv ]; then
-    if ! python3 -m venv .venv; then
+    if ! "$PYTHON_BOOTSTRAP_BIN" -m venv .venv; then
         echo "Failed to create virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
     fi
@@ -530,7 +540,7 @@ fi
 if [ ! -f .venv/bin/activate ]; then
     echo "Virtual environment activation script not found at .venv/bin/activate. Attempting to recreate the virtual environment." >&2
     rm -rf .venv
-    if ! python3 -m venv .venv; then
+    if ! "$PYTHON_BOOTSTRAP_BIN" -m venv .venv; then
         echo "Failed to recreate virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
     fi
@@ -554,7 +564,7 @@ venv_is_runnable() {
 if ! venv_is_runnable; then
     echo "Detected stale virtual environment binaries in .venv. Recreating virtual environment." >&2
     rm -rf .venv
-    if ! python3 -m venv .venv; then
+    if ! "$PYTHON_BOOTSTRAP_BIN" -m venv .venv; then
         echo "Failed to recreate virtual environment after stale-binary detection." >&2
         exit 1
     fi
@@ -621,7 +631,7 @@ arthexis_timing_end "requirements_install" "refreshed"
 
 if [ "$ENABLE_CONTROL" = true ]; then
     echo "Checking for RFID scanner hardware..."
-if python -m apps.cards.detect; then
+if "$PYTHON_BOOTSTRAP_BIN" -m apps.cards.detect; then
         touch "$RFID_LOCK"
         echo "Enabled node feature 'rfid-scanner' based on detected hardware."
     else
@@ -633,8 +643,8 @@ fi
 # Apply database migrations for a ready-to-run schema.
 arthexis_timing_start "django_migrate"
 run_migration=false
-if ! python manage.py migrate --check; then
-    if migration_plan=$(python manage.py showmigrations --plan); then
+if ! "$PYTHON_BOOTSTRAP_BIN" manage.py migrate --check; then
+    if migration_plan=$("$PYTHON_BOOTSTRAP_BIN" manage.py showmigrations --plan); then
         if grep -q '^[[:space:]]*\\[ \\]' <<< "$migration_plan"; then
             run_migration=true
         fi
@@ -645,7 +655,7 @@ if ! python manage.py migrate --check; then
 fi
 
 if [ "$run_migration" = true ]; then
-    python manage.py migrate --noinput
+    "$PYTHON_BOOTSTRAP_BIN" manage.py migrate --noinput
     arthexis_timing_end "django_migrate"
 else
     arthexis_timing_record "django_migrate" 0 "skipped"
@@ -654,7 +664,7 @@ fi
 # Load personal user data fixtures if present
 if ls data/*.json >/dev/null 2>&1; then
     arthexis_timing_start "load_user_data"
-    python manage.py load_user_data data/*.json
+    "$PYTHON_BOOTSTRAP_BIN" manage.py load_user_data data/*.json
     arthexis_timing_end "load_user_data"
 else
     arthexis_timing_record "load_user_data" 0 "skipped"
