@@ -516,14 +516,24 @@ compute_requirements_checksum() {
 }
 
 arthexis_timing_start "virtualenv_setup"
-VENV_CREATOR="$(arthexis_python_venv_creator || true)"
-if [ -z "$VENV_CREATOR" ]; then
-    echo "Python 3 interpreter with venv support not found. Install python3-venv (Debian/Ubuntu) or the equivalent package for your distribution." >&2
-    exit 1
-fi
+VENV_CREATOR=""
+
+ensure_venv_creator() {
+    if [ -n "$VENV_CREATOR" ]; then
+        return 0
+    fi
+
+    VENV_CREATOR="$(arthexis_python_venv_creator || true)"
+    if [ -z "$VENV_CREATOR" ]; then
+        echo "Python 3 interpreter with venv support not found. Install python3-venv (Debian/Ubuntu) or the equivalent package for your distribution." >&2
+        return 1
+    fi
+}
+
 # Create virtual environment if missing
 NEW_VENV=false
 if [ ! -d .venv ]; then
+    ensure_venv_creator || exit 1
     if ! "$VENV_CREATOR" -m venv .venv; then
         echo "Failed to create virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
@@ -537,6 +547,7 @@ fi
 if [ ! -f .venv/bin/activate ]; then
     echo "Virtual environment activation script not found at .venv/bin/activate. Attempting to recreate the virtual environment." >&2
     rm -rf .venv
+    ensure_venv_creator || exit 1
     if ! "$VENV_CREATOR" -m venv .venv; then
         echo "Failed to recreate virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
@@ -554,6 +565,15 @@ echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
 source .venv/bin/activate
 arthexis_timing_start "pip_bootstrap"
+
+# Ensure pip is available; bootstrap if missing on minimal Python installs.
+if ! python -m pip --version >/dev/null 2>&1; then
+    if ! python -m ensurepip --upgrade >/dev/null 2>&1; then
+        echo "Failed to bootstrap pip. Ensure python3-venv is fully installed." >&2
+        exit 1
+    fi
+fi
+
 REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
 PIP_VERSION_MARKER="$LOCK_DIR/pip.version"
 STORED_REQ_HASH=""
@@ -579,7 +599,7 @@ elif [ -n "$CURRENT_REQ_HASH" ] && [ "$CURRENT_REQ_HASH" != "$STORED_REQ_HASH" ]
 fi
 
 if [ "$PIP_UPGRADE" = true ]; then
-    pip install --upgrade pip
+    python -m pip install --upgrade pip
     python -c 'import pip; print(pip.__version__)' 2>/dev/null > "$PIP_VERSION_MARKER" || true
     arthexis_timing_end "pip_bootstrap"
 else

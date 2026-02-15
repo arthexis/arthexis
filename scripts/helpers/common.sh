@@ -52,24 +52,20 @@ arthexis_python_bin() {
 arthexis_python_venv_creator() {
   local candidate
   local resolved
-  local -a ordered_candidates=()
+  local -a ordered_candidates=(python3 python3.13 python3.12 python3.11 python3.10 python3.9 python3.8)
+  local -A seen_resolved=()
 
   if candidate="$(arthexis_python_bin 2>/dev/null)"; then
-    ordered_candidates+=("$candidate")
+    ordered_candidates=("$candidate" "${ordered_candidates[@]}")
   fi
-
-  if command -v python3 >/dev/null 2>&1; then
-    ordered_candidates+=("python3")
-  fi
-
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    ordered_candidates+=("$candidate")
-  done < <(compgen -c python3 | sort -u)
 
   for candidate in "${ordered_candidates[@]}"; do
     resolved="$(command -v "$candidate" 2>/dev/null || true)"
     [ -n "$resolved" ] || continue
+    if [ -n "${seen_resolved["$resolved"]+x}" ]; then
+      continue
+    fi
+    seen_resolved["$resolved"]=1
 
     if "$resolved" -c 'import sys, venv; raise SystemExit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1; then
       printf '%s' "$resolved"
@@ -79,4 +75,3 @@ arthexis_python_venv_creator() {
 
   return 1
 }
-
