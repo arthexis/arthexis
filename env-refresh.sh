@@ -31,6 +31,9 @@ sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
+# shellcheck source=scripts/helpers/common.sh
+sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/common.sh"
+. "$SCRIPT_DIR/scripts/helpers/common.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 if [ -f "$SCRIPT_DIR/scripts/helpers/service_manager.sh" ]; then
@@ -117,14 +120,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ ! -f "$PYTHON" ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    if python3 -m venv "$VENV_DIR" >/dev/null 2>&1; then
+  VENV_CREATOR="$(arthexis_python_venv_creator || true)"
+  if [ -n "$VENV_CREATOR" ]; then
+    if "$VENV_CREATOR" -m venv "$VENV_DIR" >/dev/null 2>&1; then
       PYTHON="$VENV_DIR/bin/python"
       USE_SYSTEM_PYTHON=0
       FORCE_REQUIREMENTS_INSTALL=1
       echo "Virtual environment not found. Bootstrapping new virtual environment." >&2
     else
-      PYTHON="$(command -v python3)"
+      PYTHON="$VENV_CREATOR"
       USE_SYSTEM_PYTHON=1
       echo "Virtual environment not found and automatic creation failed. Using system Python." >&2
     fi

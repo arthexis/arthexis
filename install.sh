@@ -20,6 +20,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/timing.sh
 . "$SCRIPT_DIR/scripts/helpers/timing.sh"
+# shellcheck source=scripts/helpers/common.sh
+. "$SCRIPT_DIR/scripts/helpers/common.sh"
 
 # Determine the target user and re-exec as needed before continuing.
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
@@ -514,10 +516,15 @@ compute_requirements_checksum() {
 }
 
 arthexis_timing_start "virtualenv_setup"
+VENV_CREATOR="$(arthexis_python_venv_creator || true)"
+if [ -z "$VENV_CREATOR" ]; then
+    echo "Python 3 interpreter with venv support not found. Install python3-venv (Debian/Ubuntu) or the equivalent package for your distribution." >&2
+    exit 1
+fi
 # Create virtual environment if missing
 NEW_VENV=false
 if [ ! -d .venv ]; then
-    if ! python3 -m venv .venv; then
+    if ! "$VENV_CREATOR" -m venv .venv; then
         echo "Failed to create virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
     fi
@@ -530,7 +537,7 @@ fi
 if [ ! -f .venv/bin/activate ]; then
     echo "Virtual environment activation script not found at .venv/bin/activate. Attempting to recreate the virtual environment." >&2
     rm -rf .venv
-    if ! python3 -m venv .venv; then
+    if ! "$VENV_CREATOR" -m venv .venv; then
         echo "Failed to recreate virtual environment. Ensure the python3-venv package is installed (e.g. sudo apt install python3-venv)." >&2
         exit 1
     fi
