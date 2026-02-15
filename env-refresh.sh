@@ -25,6 +25,9 @@ sanitize_helper_newlines() {
     fi
   fi
 }
+# shellcheck source=scripts/helpers/common.sh
+sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/common.sh"
+. "$SCRIPT_DIR/scripts/helpers/common.sh"
 # shellcheck source=scripts/helpers/logging.sh
 sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/logging.sh"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
@@ -117,14 +120,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ ! -f "$PYTHON" ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    if python3 -m venv "$VENV_DIR" >/dev/null 2>&1; then
+  if bootstrap_python="$(arthexis_python_bin 2>/dev/null)"; then
+    if "$bootstrap_python" -m venv "$VENV_DIR" >/dev/null 2>&1; then
       PYTHON="$VENV_DIR/bin/python"
       USE_SYSTEM_PYTHON=0
       FORCE_REQUIREMENTS_INSTALL=1
       echo "Virtual environment not found. Bootstrapping new virtual environment." >&2
     else
-      PYTHON="$(command -v python3)"
+      PYTHON="$bootstrap_python"
       USE_SYSTEM_PYTHON=1
       echo "Virtual environment not found and automatic creation failed. Using system Python." >&2
     fi
