@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -19,6 +20,25 @@ def _write_executable(path: Path, content: str) -> None:
     path.write_text(content)
     mode = path.stat().st_mode
     path.chmod(mode | stat.S_IXUSR)
+
+
+def _find_bash() -> str:
+    """Return a runnable bash executable path for shell-helper tests."""
+
+    bash_from_path = shutil.which("bash")
+    if bash_from_path:
+        return bash_from_path
+
+    if Path("/bin/bash").exists():
+        return "/bin/bash"
+
+    pytest.skip("bash is required for scripts/helpers/common.sh tests")
+
+
+def _isolated_path(fake_bin: Path) -> str:
+    """Return a PATH value restricted to the temporary fake binary directory."""
+
+    return str(fake_bin)
 
 
 @pytest.mark.parametrize("binary_name", ["python3", "python"])
@@ -41,9 +61,10 @@ def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name:
         "arthexis_python_bin\n"
     )
     _write_executable(fake_bin / "sort", "#!/bin/sh\nexec /usr/bin/sort \"$@\"\n")
-    env = os.environ | {"PATH": str(fake_bin)}
+    env = os.environ | {"PATH": _isolated_path(fake_bin)}
+    bash_path = _find_bash()
     result = subprocess.run(
-        ["/bin/bash", "-c", script],
+        [bash_path, "-c", script],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
@@ -74,9 +95,10 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
         "arthexis_python_bin\n"
     )
     _write_executable(fake_bin / "sort", "#!/bin/sh\nexec /usr/bin/sort \"$@\"\n")
-    env = os.environ | {"PATH": str(fake_bin)}
+    env = os.environ | {"PATH": _isolated_path(fake_bin)}
+    bash_path = _find_bash()
     result = subprocess.run(
-        ["/bin/bash", "-c", script],
+        [bash_path, "-c", script],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
