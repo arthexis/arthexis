@@ -20,6 +20,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  containerized-ci:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Build CI container
+        run: docker build -f docker/ci.Dockerfile -t arthexis-ci:latest .
+      - name: Run CI sequence in container
+        run: |
+          docker run --rm \
+            --network host \
+            -e ARTHEXIS_DB_BACKEND=sqlite \
+            -e OCPP_STATE_REDIS_URL="${OCPP_STATE_REDIS_URL}" \
+            -v "${PWD}:/app" \
+            arthexis-ci:latest
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: containerized-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
+
   install:
     if: ${{ needs.upgrade.result == 'failure' }}
     needs: upgrade
