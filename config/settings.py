@@ -40,6 +40,7 @@ from config.settings_helpers import (
     extract_ip_from_host,
     install_validate_host_with_subnets,
     load_secret_key,
+    load_site_config_allowed_hosts,
     strip_ipv6_brackets,
 )
 
@@ -162,6 +163,10 @@ with contextlib.suppress(Exception):
     _local_fqdn = socket.getfqdn().strip()
 
 for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
+    if host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+
+for host in load_site_config_allowed_hosts(BASE_DIR):
     if host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(host)
 

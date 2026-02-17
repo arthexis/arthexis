@@ -124,6 +124,46 @@ def test_https_certbot_implies_enable(monkeypatch):
     assert provision_calls["sudo"] == ""
 
 
+
+
+@pytest.mark.django_db
+def test_https_site_url_implies_enable_and_creates_managed_site(monkeypatch):
+    """`https --site wss://...` should normalize host and stage managed site metadata."""
+
+    provision_calls: dict[str, str] = {}
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None):
+        provision_calls["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--site", "wss://porsche-abb-1.gelectriic.com/", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="porsche-abb-1.gelectriic.com")
+    cert = config.certificate._specific_certificate
+    assert isinstance(cert, CertbotCertificate)
+    assert cert.challenge_type == CertbotCertificate.ChallengeType.NGINX
+    assert provision_calls["sudo"] == ""
+
+    from django.contrib.sites.models import Site
+
+    site = Site.objects.get(domain="porsche-abb-1.gelectriic.com")
+    assert getattr(site, "managed", False) is True
+    assert getattr(site, "require_https", False) is True
+
+
+@pytest.mark.django_db
+def test_https_site_rejects_local_combination():
+    """`--site` and `--local` should fail to avoid contradictory certificate intent."""
+
+    with pytest.raises(CommandError, match="cannot be combined"):
+        call_command("https", "--enable", "--local", "--site", "example.com")
 @pytest.mark.django_db
 def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     """Credential prompts should still run when stdout is redirected but stdin is interactive."""

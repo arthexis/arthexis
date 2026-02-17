@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import ipaddress
+import json
 import os
 from pathlib import Path
 from typing import Mapping, MutableMapping
+from urllib.parse import urlsplit
 
 from django.core.management.utils import get_random_secret_key
 from django.http import request as http_request
@@ -18,10 +20,63 @@ __all__ = [
     "extract_ip_from_host",
     "install_validate_host_with_subnets",
     "load_secret_key",
+    "load_site_config_allowed_hosts",
+    "normalize_site_host",
     "resolve_celery_shutdown_timeout",
     "strip_ipv6_brackets",
     "validate_host_with_subnets",
 ]
+
+
+def normalize_site_host(candidate: str) -> str:
+    """Return a normalized hostname extracted from *candidate*.
+
+    ``candidate`` may be a bare hostname (``example.com``), host:port, or a full
+    URL such as ``wss://example.com/path``.
+    """
+
+    value = (candidate or "").strip()
+    if not value:
+        return ""
+
+    parsed = urlsplit(value if "://" in value else f"https://{value}")
+    hostname = (parsed.hostname or "").strip().strip(".").lower()
+    return hostname
+
+
+def load_site_config_allowed_hosts(base_dir: Path) -> list[str]:
+    """Return hostnames declared in ``scripts/generated/nginx-sites.json``.
+
+    The generated file is sourced from managed ``django.contrib.sites`` entries
+    and provides a reboot-persistent source of hostnames that should be accepted
+    by Django's host validation.
+    """
+
+    config_path = base_dir / "scripts" / "generated" / "nginx-sites.json"
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    try:
+        entries = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(entries, list):
+        return []
+
+    hosts: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        host = normalize_site_host(str(entry.get("domain") or ""))
+        if not host or host in seen:
+            continue
+        seen.add(host)
+        hosts.append(host)
+    return hosts
 
 
 def strip_ipv6_brackets(host: str) -> str:
