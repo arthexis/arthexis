@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
@@ -69,3 +70,25 @@ def test_summary_command_enabled_turns_on_prereqs(tmp_path: Path) -> None:
     assert node.features.filter(slug="llm-summary").exists()
     assert node.features.filter(slug="celery-queue").exists()
     assert node.features.filter(slug="lcd-screen").exists()
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_executes_task_before_status(tmp_path: Path) -> None:
+    """The --run-now flag should execute the summary task before status output."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            return_value="wrote:2",
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert "Run now: wrote:2" in output
+    assert "LCD Summary Status" in output
+    run_now.assert_called_once_with()
