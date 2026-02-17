@@ -387,6 +387,20 @@ class NodeFeatureMixin:
             return self._has_rpi_camera()
         if slug == "ap-router":
             return self._hosts_gelectriic_ap()
+        if slug == "llm-summary":
+            from apps.summary.node_features import get_llm_summary_prereq_state
+            from apps.summary.services import get_summary_config
+
+            prereqs = get_llm_summary_prereq_state(
+                base_dir=base_dir,
+                base_path=base_path,
+            )
+            config = get_summary_config()
+            return (
+                prereqs["lcd_enabled"]
+                and prereqs["celery_enabled"]
+                and config.is_active
+            )
         return False
 
     def refresh_features(self):
