@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.utils import bash_path
+
 
 pytestmark = pytest.mark.critical
 
@@ -29,7 +31,7 @@ def _find_bash() -> str:
     if bash_from_path:
         return bash_from_path
 
-    if Path("/bin/bash").exists():
+    if os.access("/bin/bash", os.X_OK):
         return "/bin/bash"
 
     pytest.skip("bash is required for scripts/helpers/common.sh tests")
@@ -38,7 +40,17 @@ def _find_bash() -> str:
 def _isolated_path(fake_bin: Path) -> str:
     """Return a PATH value restricted to the temporary fake binary directory."""
 
-    return str(fake_bin)
+    return bash_path(fake_bin)
+
+
+def _find_sort() -> str:
+    """Return a runnable sort executable path for shell-helper tests."""
+
+    sort_path = shutil.which("sort")
+    if sort_path:
+        return sort_path
+
+    pytest.skip("'sort' is required for scripts/helpers/common.sh tests")
 
 
 @pytest.mark.parametrize("binary_name", ["python3", "python"])
@@ -60,7 +72,8 @@ def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name:
         "source scripts/helpers/common.sh\n"
         "arthexis_python_bin\n"
     )
-    _write_executable(fake_bin / "sort", "#!/bin/sh\nexec /usr/bin/sort \"$@\"\n")
+    sort_path = _find_sort()
+    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
     bash_path = _find_bash()
     result = subprocess.run(
@@ -94,7 +107,8 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
         "source scripts/helpers/common.sh\n"
         "arthexis_python_bin\n"
     )
-    _write_executable(fake_bin / "sort", "#!/bin/sh\nexec /usr/bin/sort \"$@\"\n")
+    sort_path = _find_sort()
+    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
     bash_path = _find_bash()
     result = subprocess.run(
