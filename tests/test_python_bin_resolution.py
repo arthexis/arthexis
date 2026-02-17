@@ -87,7 +87,7 @@ def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name:
     )
 
     assert result.returncode == 0
-    assert result.stdout.strip() == binary_name
+    assert result.stdout.strip() == str(fake_bin / binary_name)
 
 
 def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) -> None:
@@ -122,4 +122,43 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
     )
 
     assert result.returncode == 0
-    assert result.stdout.strip() == "python3.12"
+    assert result.stdout.strip() == str(fake_bin / "python3.12")
+
+
+def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) -> None:
+    """A trailing ':' in PATH should preserve the implicit current-directory lookup."""
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    workspace_python = Path(__file__).resolve().parents[1] / "python3"
+    _write_executable(
+        workspace_python,
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+
+    try:
+        script = (
+            "source scripts/helpers/common.sh\n"
+            "arthexis_python_bin\n"
+        )
+        sort_path = shlex.quote(_find_sort())
+        _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
+        env = os.environ | {"PATH": f"{_isolated_path(fake_bin)}:"}
+        bash_path = _find_bash()
+        result = subprocess.run(
+            [bash_path, "-c", script],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        assert result.stdout.strip() == "./python3"
+    finally:
+        workspace_python.unlink(missing_ok=True)
