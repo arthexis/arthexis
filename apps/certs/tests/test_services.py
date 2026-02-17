@@ -215,3 +215,33 @@ def test_request_certbot_certificate_missing_certbot_includes_supported_os_guida
     assert "sudo: certbot: command not found" in message
     assert "Ubuntu 22.04 / 24.04" in message
     assert "apt install -y certbot python3-certbot-nginx" in message
+
+
+def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_guidance(
+    monkeypatch, tmp_path
+):
+    """Missing certbot binary should be mapped to CertbotError guidance without sudo."""
+
+    def fake_run(command: list[str], *, env=None):
+        raise FileNotFoundError(2, "No such file or directory", "certbot")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "_read_os_release_fields",
+        lambda: {"ID": "UBUNTU", "ID_LIKE": "Debian", "PRETTY_NAME": "Ubuntu 24.04 LTS"},
+    )
+
+    with pytest.raises(services.CertbotError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            sudo="",
+        )
+
+    message = str(exc_info.value)
+    assert "No such file or directory" in message
+    assert "Ubuntu 22.04 / 24.04 & Debian-based hosts" in message
+    assert "Detected Debian-family OS" in message
