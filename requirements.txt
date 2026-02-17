@@ -89,7 +89,7 @@ sqlparse==0.5.5
 tablib==3.9.0
 tinycss2==1.5.1
 toml==0.10.2
-trio==0.30.0
+trio==0.33.0
 trio-websocket==0.12.2
 aiortc==1.14.0
 Twisted==25.5.0
