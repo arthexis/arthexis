@@ -292,5 +292,131 @@
       "is_seed_data": true,
       "is_deleted": false
     }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/nginx/tests/test_admin.py::test_generate_certificates_view_creates_certbot_certificate_when_selected",
+      "name": "Certbot certificate generation is provisioned from admin",
+      "is_regression_guard": true,
+      "notes": "Guards HTTPS admin certificate provisioning for certbot.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/nginx/tests/test_admin.py::test_generate_certificates_view_creates_godaddy_certificate_when_selected",
+      "name": "GoDaddy DNS certificate generation is provisioned from admin",
+      "is_regression_guard": true,
+      "notes": "Guards HTTPS admin certificate provisioning for DNS challenge flow.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/recipes/tests/test_recipes.py::test_execute_supports_bash_body_type",
+      "name": "Bash recipe execution returns stdout",
+      "is_regression_guard": true,
+      "notes": "Protects bash runtime support for recipes.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/recipes/tests/test_recipes.py::test_execute_supports_bash_safe_normalized_kwarg_names",
+      "name": "Bash recipe kwargs normalize to safe env names",
+      "is_regression_guard": true,
+      "notes": "Protects normalized kwargs behavior in bash recipe execution.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/nodes/tests/test_registration_helpers.py::test_get_host_port_infers_from_proxy_headers[headers2-443]",
+      "name": "Host port inference honors HTTPS forwarded proto",
+      "is_regression_guard": true,
+      "notes": "Guards proxy header inference for HTTPS visitor registration.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp16_command.py::test_ocpp16_coverage_matches_fixture",
+      "name": "OCPP 1.6 coverage report matches fixture",
+      "is_regression_guard": true,
+      "notes": "Guards protocol coverage command output against committed fixture.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_notify_display_messages_in_cp_to_csms_coverage",
+      "name": "OCPP 2.x coverage includes NotifyDisplayMessages",
+      "is_regression_guard": true,
+      "notes": "Guards cp-to-csms action coverage extraction for NotifyDisplayMessages.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_ocpp21_coverage_matches_fixture",
+      "name": "OCPP 2.1 coverage report matches fixture",
+      "is_regression_guard": true,
+      "notes": "Guards OCPP 2.1 coverage command output against committed fixture.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "standard-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_ocpp201_coverage_matches_fixture",
+      "name": "OCPP 2.0.1 coverage report matches fixture",
+      "is_regression_guard": true,
+      "notes": "Guards OCPP 2.0.1 coverage command output against committed fixture.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
   }
 ]

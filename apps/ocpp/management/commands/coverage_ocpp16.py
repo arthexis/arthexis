@@ -49,33 +49,38 @@ def _collect_actions_from_dict(node: ast.Assign, target_name: str) -> set[str]:
 
 
 def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
-    candidate_paths = [
-        app_dir / "consumers" / "base" / "dispatch.py",
-        app_dir / "consumers" / "base" / "consumer.py",
-        app_dir / "consumers" / "base.py",
+    """Collect implemented CP->CSMS actions from dispatch and routing modules."""
+
+    source_paths = [
+        candidate
+        for candidate in (
+            app_dir / "consumers" / "base" / "dispatch.py",
+            app_dir / "consumers" / "base" / "consumer.py",
+            app_dir / "consumers" / "base.py",
+            app_dir / "consumers" / "base" / "consumer" / "routing.py",
+        )
+        if candidate.exists()
     ]
-    source_path = next(
-        (candidate for candidate in candidate_paths if candidate.exists()), None
-    )
-    if source_path is None:
+    if not source_paths:
         return set()
-    tree = ast.parse(source_path.read_text(encoding="utf-8"))
 
     class Visitor(ast.NodeVisitor):
+        """AST visitor that extracts action names from known dispatch patterns."""
+
         def __init__(self) -> None:
             self.actions: set[str] = set()
             self._in_call_handler = False
 
         def visit_ClassDef(self, node: ast.ClassDef) -> None:
-            if node.name in {"CSMSConsumer", "DispatchMixin"}:
+            if node.name in {"CSMSConsumer", "DispatchMixin", "ActionRouter"}:
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name in {
                         "receive",
                         "_handle_call_message",
+                        "_build_registry",
                     }:
                         self.visit(item)
                 return
-            # Continue walking in case nested classes exist.
             self.generic_visit(node)
 
         def visit_Compare(self, node: ast.Compare) -> None:
@@ -89,8 +94,16 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
                 )
             self.generic_visit(node)
 
+        def visit_Dict(self, node: ast.Dict) -> None:
+            self.actions.update(
+                key.value
+                for key in node.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            )
+            self.generic_visit(node)
+
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            if node.name == "_handle_call_message":
+            if node.name in {"_handle_call_message", "_build_registry"}:
                 previous_state = self._in_call_handler
                 self._in_call_handler = True
                 self.generic_visit(node)
@@ -107,9 +120,12 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
                 return
             self.generic_visit(node)
 
-    visitor = Visitor()
-    visitor.visit(tree)
-    return visitor.actions
+    actions: set[str] = set()
+    for source_path in source_paths:
+        visitor = Visitor()
+        visitor.visit(ast.parse(source_path.read_text(encoding="utf-8")))
+        actions.update(visitor.actions)
+    return actions
 
 
 class _CsmsToCpVisitor(ast.NodeVisitor):
