@@ -388,19 +388,33 @@ class NodeFeatureMixin:
         if slug == "ap-router":
             return self._hosts_gelectriic_ap()
         if slug == "llm-summary":
-            from apps.summary.node_features import get_llm_summary_prereq_state
-            from apps.summary.services import get_summary_config
+            from django.db.utils import OperationalError
 
-            prereqs = get_llm_summary_prereq_state(
-                base_dir=base_dir,
-                base_path=base_path,
-            )
-            config = get_summary_config()
-            return (
-                prereqs["lcd_enabled"]
-                and prereqs["celery_enabled"]
-                and config.is_active
-            )
+            try:
+                from apps.summary.node_features import get_llm_summary_prereq_state
+                from apps.summary.services import get_summary_config
+            except ImportError:
+                logger.exception("LLM summary detection import failed")
+                return False
+
+            try:
+                prereqs = get_llm_summary_prereq_state(
+                    base_dir=base_dir,
+                    base_path=base_path,
+                )
+                if not (
+                    prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")
+                ):
+                    return False
+                config = get_summary_config()
+            except OperationalError:
+                logger.exception("LLM summary detection DB check failed")
+                return False
+            except Exception:
+                logger.exception("LLM summary detection failed")
+                return False
+
+            return bool(config.is_active)
         return False
 
     def refresh_features(self):
