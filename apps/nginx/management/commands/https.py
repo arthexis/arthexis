@@ -3,6 +3,7 @@ from __future__ import annotations
 from getpass import getpass
 import sys
 from pathlib import Path
+import ipaddress
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -188,6 +189,18 @@ class Command(BaseCommand):
         normalized = normalize_site_host(candidate or "")
         if not normalized:
             raise CommandError("--site must include a valid hostname or URL.")
+
+        if normalized == "localhost":
+            raise CommandError("--site requires a public host. Use --local for local development.")
+
+        try:
+            parsed_ip = ipaddress.ip_address(normalized)
+        except ValueError:
+            parsed_ip = None
+
+        if parsed_ip is not None and parsed_ip.is_loopback:
+            raise CommandError("--site requires a public host. Use --local for local development.")
+
         return normalized
 
     def _ensure_managed_site(self, domain: str, *, require_https: bool) -> None:
@@ -198,10 +211,10 @@ class Command(BaseCommand):
         site, created = Site.objects.get_or_create(domain=domain, defaults={"name": domain})
         updated_fields: list[str] = []
 
-        if hasattr(site, "managed") and not bool(getattr(site, "managed")):
+        if hasattr(site, "managed") and not getattr(site, "managed"):
             setattr(site, "managed", True)
             updated_fields.append("managed")
-        if hasattr(site, "require_https") and bool(getattr(site, "require_https")) != require_https:
+        if hasattr(site, "require_https") and getattr(site, "require_https") != require_https:
             setattr(site, "require_https", require_https)
             updated_fields.append("require_https")
         if created:
@@ -230,6 +243,7 @@ class Command(BaseCommand):
             config.save(update_fields=["protocol"])
 
         self._apply_config(config, reload=reload)
+        self._ensure_managed_site(domain, require_https=False)
 
     def _get_existing_config(self, domain: str) -> SiteConfiguration | None:
         name = "localhost" if domain == "localhost" else domain

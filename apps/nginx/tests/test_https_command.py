@@ -159,6 +159,46 @@ def test_https_site_url_implies_enable_and_creates_managed_site(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_disable_clears_managed_site_require_https(monkeypatch):
+    """`https --disable` should clear managed Site HTTPS requirement."""
+
+    from django.contrib.sites.models import Site
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--site", "example.com", "--no-sudo")
+
+    site = Site.objects.get(domain="example.com")
+    assert getattr(site, "require_https", False) is True
+
+    call_command("https", "--disable", "--certbot", "example.com")
+
+    site.refresh_from_db()
+    assert getattr(site, "require_https", True) is False
+
+
+@pytest.mark.django_db
+def test_https_site_rejects_loopback_host():
+    """`--site` should reject localhost/loopback targets and direct users to --local."""
+
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "localhost")
+
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "127.0.0.1")
+
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "http://[::1]")
+
+@pytest.mark.django_db
 def test_https_site_rejects_local_combination():
     """`--site` and `--local` should fail to avoid contradictory certificate intent."""
 

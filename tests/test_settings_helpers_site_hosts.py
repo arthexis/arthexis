@@ -30,3 +30,9 @@ def test_load_site_config_allowed_hosts_reads_generated_file(tmp_path) -> None:
         "porsche-abb-1.gelectriic.com",
         "example.test",
     ]
+
+
+def test_normalize_site_host_rejects_malformed_url() -> None:
+    """normalize_site_host should return empty for malformed URL inputs."""
+
+    assert normalize_site_host("http://[::1") == ""
