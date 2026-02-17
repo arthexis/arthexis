@@ -216,3 +216,68 @@ def normalize_screens(screens: Iterable[tuple[str, str]]) -> list[tuple[str, str
 
 def render_lcd_payload(subject: str, body: str) -> str:
     return render_lcd_lock_file(subject=subject, body=body)
+
+
+def execute_log_summary_generation() -> str:
+    """Generate LCD log summary output and persist latest run metadata."""
+
+    from apps.nodes.models import Node
+    from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
+    from apps.tasks.tasks import (
+        DEFAULT_PROMPT_TIMEOUT,
+        LocalLLMSummarizer,
+        _write_lcd_frames,
+    )
+
+    node = Node.get_local()
+    if not node:
+        return "skipped:no-node"
+
+    if not node.has_feature("llm-summary"):
+        return "skipped:feature-disabled"
+
+    config = get_summary_config()
+    if not config.is_active:
+        return "skipped:inactive"
+
+    ensure_local_model(config)
+
+    now = timezone.now()
+    since = config.last_run_at or (now - timedelta(minutes=5))
+    chunks = collect_recent_logs(config, since=since)
+    compacted_logs = compact_log_chunks(chunks)
+    if not compacted_logs:
+        config.last_run_at = now
+        config.save(update_fields=["last_run_at", "log_offsets", "model_path", "installed_at", "updated_at"])
+        return "skipped:no-logs"
+
+    prompt = build_summary_prompt(compacted_logs, now=now)
+    command = config.model_command or getattr(settings, "LLM_SUMMARY_COMMAND", "") or None
+    summarizer = LocalLLMSummarizer(
+        command=command,
+        timeout=getattr(settings, "LLM_SUMMARY_TIMEOUT", DEFAULT_PROMPT_TIMEOUT),
+    )
+    output = summarizer.summarize(prompt)
+    screens = normalize_screens(parse_screens(output))
+
+    if not screens:
+        screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
+
+    lock_file = Path(settings.BASE_DIR) / ".locks" / LCD_LOW_LOCK_FILE
+    _write_lcd_frames(screens[:10], lock_file=lock_file)
+
+    config.last_run_at = now
+    config.last_prompt = prompt
+    config.last_output = output
+    config.save(
+        update_fields=[
+            "last_run_at",
+            "last_prompt",
+            "last_output",
+            "log_offsets",
+            "model_path",
+            "installed_at",
+            "updated_at",
+        ]
+    )
+    return f"wrote:{len(screens)}"

@@ -252,67 +252,6 @@ def _write_lcd_frames(
 
 @shared_task(name="summary.tasks.generate_lcd_log_summary")
 def generate_lcd_log_summary() -> str:
-    from apps.nodes.models import Node
-    from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
-    from apps.summary.services import (
-        build_summary_prompt,
-        collect_recent_logs,
-        compact_log_chunks,
-        ensure_local_model,
-        get_summary_config,
-        normalize_screens,
-        parse_screens,
-    )
+    from apps.summary.services import execute_log_summary_generation
 
-    node = Node.get_local()
-    if not node:
-        return "skipped:no-node"
-
-    if not node.has_feature("llm-summary"):
-        return "skipped:feature-disabled"
-
-    config = get_summary_config()
-    if not config.is_active:
-        return "skipped:inactive"
-
-    ensure_local_model(config)
-
-    now = timezone.now()
-    since = config.last_run_at or (now - timedelta(minutes=5))
-    chunks = collect_recent_logs(config, since=since)
-    compacted_logs = compact_log_chunks(chunks)
-    if not compacted_logs:
-        config.last_run_at = now
-        config.save(update_fields=["last_run_at", "log_offsets", "model_path", "installed_at", "updated_at"])
-        return "skipped:no-logs"
-
-    prompt = build_summary_prompt(compacted_logs, now=now)
-    command = config.model_command or getattr(settings, "LLM_SUMMARY_COMMAND", "") or None
-    summarizer = LocalLLMSummarizer(
-        command=command,
-        timeout=getattr(settings, "LLM_SUMMARY_TIMEOUT", DEFAULT_PROMPT_TIMEOUT),
-    )
-    output = summarizer.summarize(prompt)
-    screens = normalize_screens(parse_screens(output))
-
-    if not screens:
-        screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
-
-    lock_file = Path(settings.BASE_DIR) / ".locks" / LCD_LOW_LOCK_FILE
-    _write_lcd_frames(screens[:10], lock_file=lock_file)
-
-    config.last_run_at = now
-    config.last_prompt = prompt
-    config.last_output = output
-    config.save(
-        update_fields=[
-            "last_run_at",
-            "last_prompt",
-            "last_output",
-            "log_offsets",
-            "model_path",
-            "installed_at",
-            "updated_at",
-        ]
-    )
-    return f"wrote:{len(screens)}"
+    return execute_log_summary_generation()
