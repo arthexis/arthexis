@@ -129,13 +129,40 @@ jobs:
           restore-keys: |
             pip-${{ runner.os }}-
       - name: Cache virtualenv
+        id: cache-venv
         uses: actions/cache@v5
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             venv-${{ runner.os }}-
+      - name: Verify cached installation
+        id: verify-cache
+        run: |
+          set -Eeuo pipefail
+
+          if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
+            echo "needs_install=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f .venv/bin/activate ]; then
+            echo "Cached .venv is missing activation script; reinstalling."
+            echo "needs_install=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          source .venv/bin/activate
+          if ! python -c "import django" >/dev/null 2>&1; then
+            echo "Cached environment is incomplete; reinstalling."
+            echo "needs_install=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Using cached virtualenv from a previous run."
+          echo "needs_install=false" >> "$GITHUB_OUTPUT"
       - name: Install from default branch
+        if: steps.verify-cache.outputs.needs_install == 'true'
         run: |
           ./install.sh --no-start
       - name: Checkout PR changes
