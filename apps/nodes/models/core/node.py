@@ -292,38 +292,36 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
             stored_mac = (node.mac_address or "").strip().lower()
             current_mac = mac.strip().lower()
-            if stored_mac and stored_mac != current_mac:
+            should_cache = True
+            if stored_mac != current_mac:
+                node.mac_address = mac
                 try:
-                    mac_in_use = cls.objects.filter(mac_address__iexact=mac).exclude(pk=node.pk).exists()
-                except DatabaseError:
+                    node.save(update_fields=["mac_address"])
+                except IntegrityError:
+                    node.mac_address = stored_mac
                     logger.warning(
-                        "nodes.Node.get_local detected MAC mismatch for self node but could not validate MAC uniqueness",
-                        extra={"runtime_mac": mac, "stored_mac": node.mac_address, "node_id": node.pk},
+                        "nodes.Node.get_local detected MAC mismatch for self node and could not update due to MAC uniqueness conflict",
+                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                        exc_info=True,
+                    )
+                    node = cls.objects.filter(mac_address__iexact=mac).first() or node
+                    should_cache = (node.mac_address or "").strip().lower() == current_mac
+                except DatabaseError:
+                    node.mac_address = stored_mac
+                    should_cache = False
+                    logger.warning(
+                        "nodes.Node.get_local could not save MAC update for self node due to a database error",
+                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
                         exc_info=True,
                     )
                 else:
-                    if mac_in_use:
-                        logger.warning(
-                            "nodes.Node.get_local detected MAC mismatch for self node and kept stored MAC because runtime MAC is already used",
-                            extra={"runtime_mac": mac, "stored_mac": node.mac_address, "node_id": node.pk},
-                        )
-                    else:
-                        node.mac_address = mac
-                        try:
-                            node.save(update_fields=["mac_address"])
-                        except IntegrityError:
-                            logger.warning(
-                                "nodes.Node.get_local detected MAC mismatch for self node and could not update due to MAC uniqueness conflict",
-                                extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
-                                exc_info=True,
-                            )
-                        else:
-                            logger.warning(
-                                "nodes.Node.get_local refreshed stale self-node MAC address",
-                                extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
-                            )
+                    logger.warning(
+                        "nodes.Node.get_local refreshed stale self-node MAC address",
+                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                    )
 
-            cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
+            if should_cache:
+                cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
             return node
         except DatabaseError:
             logger.debug("nodes.Node.get_local skipped: database unavailable", exc_info=True)
