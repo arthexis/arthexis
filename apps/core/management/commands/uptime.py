@@ -8,8 +8,13 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.core.system.filesystem import _suite_uptime_lock_info
-from apps.core.system.ui import _format_datetime, _suite_uptime_details, _system_boot_time
+from apps.core.system.ui import (
+    _format_datetime,
+    _suite_uptime_details,
+    _system_boot_time,
+)
 from apps.nodes import tasks as node_tasks
+from apps.core.mcp.remote_commands import remote_command
 
 
 def _lcd_lines(
@@ -39,7 +44,9 @@ def _lcd_lines(
 
 def _lock_heartbeat(lock_path: Path) -> datetime | None:
     try:
-        return datetime.fromtimestamp(lock_path.stat().st_mtime, tz=datetime_timezone.utc)
+        return datetime.fromtimestamp(
+            lock_path.stat().st_mtime, tz=datetime_timezone.utc
+        )
     except OSError:
         return None
 
@@ -58,14 +65,20 @@ def _lock_issues(
         issues.append(f"Suite uptime lock missing at {lock_path}")
         return issues
 
-    started_at = lock_info.get("started_at") if isinstance(lock_info.get("started_at"), datetime) else None
+    started_at = (
+        lock_info.get("started_at")
+        if isinstance(lock_info.get("started_at"), datetime)
+        else None
+    )
     if started_at is None:
         issues.append("Suite uptime lock is missing a valid started_at timestamp")
     else:
         if started_at > now:
             issues.append("Suite uptime lock reports a start time in the future")
         if boot_time and started_at < boot_time:
-            issues.append("Suite uptime lock predates the current boot and may be stale")
+            issues.append(
+                "Suite uptime lock predates the current boot and may be stale"
+            )
 
     heartbeat = _lock_heartbeat(lock_path) if isinstance(lock_path, Path) else None
     if heartbeat and heartbeat > now.astimezone(datetime_timezone.utc):
@@ -80,6 +93,7 @@ def _lock_issues(
     return issues
 
 
+@remote_command(description="Display suite uptime and lock status.")
 class Command(BaseCommand):
     help = "Display suite uptime and lockfile status"
 
@@ -99,7 +113,11 @@ class Command(BaseCommand):
             node_tasks._ap_mode_enabled(),
         )
 
-        started_at = lock_info.get("started_at") if isinstance(lock_info.get("started_at"), datetime) else None
+        started_at = (
+            lock_info.get("started_at")
+            if isinstance(lock_info.get("started_at"), datetime)
+            else None
+        )
         heartbeat = _lock_heartbeat(lock_path) if isinstance(lock_path, Path) else None
         uptime_details = _suite_uptime_details()
 
@@ -111,9 +129,7 @@ class Command(BaseCommand):
         self.stdout.write("Details:")
         self.stdout.write(f"  Lock path: {lock_path}")
         self.stdout.write(f"  Started at: {_format_datetime(started_at) or 'unknown'}")
-        self.stdout.write(
-            f"  Heartbeat: {_format_datetime(heartbeat) or 'unknown'}"
-        )
+        self.stdout.write(f"  Heartbeat: {_format_datetime(heartbeat) or 'unknown'}")
         self.stdout.write(
             f"  Suite uptime: {uptime_details.get('uptime') or 'unavailable'}"
         )
