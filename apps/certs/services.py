@@ -91,6 +91,12 @@ def request_certbot_certificate(
 
     try:
         return _run_command(command, env=env)
+    except FileNotFoundError as exc:  # pragma: no cover - thin wrapper
+        missing_binary = Path(exc.filename or command[0]).name
+        if missing_binary == "certbot":
+            message = str(exc) or "certbot: command not found"
+            raise CertbotError(_build_missing_certbot_guidance(message)) from exc
+        raise CertbotError(str(exc)) from exc
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         if _is_missing_certbot_error(str(exc)):
             raise CertbotError(_build_missing_certbot_guidance(str(exc))) from exc
@@ -108,8 +114,8 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
     """Build an actionable certbot installation message for supported Linux hosts."""
 
     distro = _read_os_release_fields()
-    distro_id = distro.get("ID", "")
-    distro_like = distro.get("ID_LIKE", "")
+    distro_id = distro.get("ID", "").strip().lower()
+    distro_like = distro.get("ID_LIKE", "").strip().lower()
     distro_name = distro.get("PRETTY_NAME") or distro_id or "this host"
 
     guidance = [
@@ -119,8 +125,7 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
             "Install certbot, then rerun the https command."
         ),
         "Supported Arthexis hosts and recommended commands:",
-        "- Ubuntu 22.04 / 24.04: sudo apt update && sudo apt install -y certbot python3-certbot-nginx",
-        "- Debian-based hosts: sudo apt update && sudo apt install -y certbot python3-certbot-nginx",
+        "- Ubuntu 22.04 / 24.04 & Debian-based hosts: sudo apt update && sudo apt install -y certbot python3-certbot-nginx",
     ]
 
     if distro_id in {"ubuntu", "debian"} or "debian" in distro_like:
@@ -144,7 +149,12 @@ def _read_os_release_fields() -> dict[str, str]:
         return {}
 
     fields: dict[str, str] = {}
-    for line in os_release.read_text(encoding="utf-8").splitlines():
+    try:
+        content = os_release.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {}
+
+    for line in content.splitlines():
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
