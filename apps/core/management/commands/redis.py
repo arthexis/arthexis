@@ -13,6 +13,8 @@ from django.core.management.base import BaseCommand
 from redis import Redis
 from redis.exceptions import RedisError
 
+from apps.core.mcp.remote_commands import remote_command
+
 SYSTEMD_REDIS_UNITS = ("redis-server", "redis")
 ENV_KEYS_PREFIXES = ("REDIS", "CELERY")
 MASKED_VALUE = "****"
@@ -126,6 +128,7 @@ def _info_section(client: Redis, section: str) -> dict[str, object]:
         return {}
 
 
+@remote_command(description="Show Redis status and connectivity diagnostics.")
 class Command(BaseCommand):
     help = "Show Redis service status and configuration"
 
@@ -186,7 +189,9 @@ class Command(BaseCommand):
                     f"Redis connectivity: FAILED ({_mask_redis_url(report.url)}) -> {report.error}"
                 )
         else:
-            self.stdout.write("Redis connectivity: unavailable (no Redis URLs configured)")
+            self.stdout.write(
+                "Redis connectivity: unavailable (no Redis URLs configured)"
+            )
 
         if not options.get("report"):
             return
@@ -210,9 +215,7 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f"  URL: {_mask_redis_url(url)}")
-        self.stdout.write(
-            f"  Version: {server_info.get('redis_version', 'unknown')}"
-        )
+        self.stdout.write(f"  Version: {server_info.get('redis_version', 'unknown')}")
         self.stdout.write(
             f"  Uptime (days): {server_info.get('uptime_in_days', 'unknown')}"
         )
