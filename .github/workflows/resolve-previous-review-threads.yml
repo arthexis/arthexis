@@ -1,0 +1,114 @@
+name: Resolve Previous Review Threads
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  resolve-older-threads:
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == 'View task →' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve unresolved review threads older than trigger comment
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            /**
+             * Resolve unresolved pull request review threads whose latest comment
+             * predates the trigger issue comment timestamp.
+             */
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.issue.number;
+            const triggerTimestamp = context.payload.comment.created_at;
+
+            if (!triggerTimestamp) {
+              throw new Error('Missing issue comment timestamp in payload.');
+            }
+
+            const { data: prData } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: issueNumber,
+            });
+
+            const triggerDate = new Date(triggerTimestamp);
+            if (Number.isNaN(triggerDate.getTime())) {
+              throw new TypeError(`Invalid trigger timestamp: ${triggerTimestamp}`);
+            }
+
+            const reviewThreads = await github.paginate(
+              `query($owner: String!, $repo: String!, $pullNumber: Int!, $cursor: String) {
+                 repository(owner: $owner, name: $repo) {
+                   pullRequest(number: $pullNumber) {
+                     reviewThreads(first: 100, after: $cursor) {
+                       nodes {
+                         id
+                         isResolved
+                         comments(first: 100) {
+                           nodes {
+                             createdAt
+                           }
+                         }
+                       }
+                       pageInfo {
+                         hasNextPage
+                         endCursor
+                       }
+                     }
+                   }
+                 }
+               }`,
+              {
+                owner,
+                repo,
+                pullNumber: prData.number,
+              },
+              (response) => response.repository.pullRequest.reviewThreads,
+            );
+
+            const getLatestTimestamp = (thread) => {
+              const commentTimestamps = (thread.comments?.nodes || [])
+                .map((comment) => comment.createdAt)
+                .filter(Boolean)
+                .map((value) => new Date(value))
+                .filter((date) => !Number.isNaN(date.getTime()));
+
+              if (commentTimestamps.length === 0) {
+                return null;
+              }
+
+              return new Date(Math.max(...commentTimestamps.map((date) => date.getTime())));
+            };
+
+            const threadsToResolve = reviewThreads.filter((thread) => {
+              if (thread.isResolved) {
+                return false;
+              }
+              const latestTimestamp = getLatestTimestamp(thread);
+              return latestTimestamp !== null && latestTimestamp < triggerDate;
+            });
+
+            core.info(`Found ${threadsToResolve.length} unresolved review thread(s) older than ${triggerTimestamp}.`);
+
+            for (const thread of threadsToResolve) {
+              await github.graphql(
+                `mutation($threadId: ID!) {
+                   resolveReviewThread(input: {threadId: $threadId}) {
+                     thread {
+                       id
+                       isResolved
+                     }
+                   }
+                 }`,
+                { threadId: thread.id },
+              );
+            }
+
+            core.info(`Resolved ${threadsToResolve.length} thread(s).`);
