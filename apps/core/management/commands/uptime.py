@@ -65,11 +65,8 @@ def _lock_issues(
         issues.append(f"Suite uptime lock missing at {lock_path}")
         return issues
 
-    started_at = (
-        lock_info.get("started_at")
-        if isinstance(lock_info.get("started_at"), datetime)
-        else None
-    )
+    raw_started_at = lock_info.get("started_at")
+    started_at = raw_started_at if isinstance(raw_started_at, datetime) else None
     if started_at is None:
         issues.append("Suite uptime lock is missing a valid started_at timestamp")
     else:
@@ -113,11 +110,8 @@ class Command(BaseCommand):
             node_tasks._ap_mode_enabled(),
         )
 
-        started_at = (
-            lock_info.get("started_at")
-            if isinstance(lock_info.get("started_at"), datetime)
-            else None
-        )
+        raw_started_at = lock_info.get("started_at")
+        started_at = raw_started_at if isinstance(raw_started_at, datetime) else None
         heartbeat = _lock_heartbeat(lock_path) if isinstance(lock_path, Path) else None
         uptime_details = _suite_uptime_details()
 

@@ -16,13 +16,12 @@ def test_redis_command_shows_status_and_config(monkeypatch, settings, tmp_path):
         settings, "CHANNEL_REDIS_URL", "redis://user:secret@example.test/0"
     )
     monkeypatch.setattr(settings, "OCPP_STATE_REDIS_URL", "")
-    monkeypatch.setattr(
-        settings, "CELERY_BROKER_URL", "redis://:s3cr3t@example.test/1"
-    )
+    monkeypatch.setattr(settings, "CELERY_BROKER_URL", "redis://:s3cr3t@example.test/1")
     monkeypatch.setattr(settings, "CELERY_RESULT_BACKEND", "cache+memory://")
     monkeypatch.setattr(settings, "VIDEO_FRAME_REDIS_URL", "")
     (tmp_path / "redis.env").write_text(
-        "CELERY_BROKER_URL=redis://:p4ss@localhost:6379/0\n", encoding="utf-8"
+        "CELERY_BROKER_URL=redis://:p4ss@localhost:6379/0\nREDIS_PASSWORD=plainsecret\n",
+        encoding="utf-8",
     )
 
     def fake_run(args, capture_output=False, text=False):
@@ -33,7 +32,9 @@ def test_redis_command_shows_status_and_config(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(redis_command.shutil, "which", lambda _: "/bin/systemctl")
 
     fake_client = SimpleNamespace(ping=lambda: True)
-    monkeypatch.setattr(redis_command.Redis, "from_url", lambda *_args, **_kwargs: fake_client)
+    monkeypatch.setattr(
+        redis_command.Redis, "from_url", lambda *_args, **_kwargs: fake_client
+    )
 
     stdout = io.StringIO()
     call_command("redis", stdout=stdout)
@@ -44,6 +45,8 @@ def test_redis_command_shows_status_and_config(monkeypatch, settings, tmp_path):
     assert "CELERY_BROKER_URL: redis://:****@example.test/1" in output
     assert "redis.env:" in output
     assert "CELERY_BROKER_URL=redis://:****@localhost:6379/0" in output
+    assert "REDIS_PASSWORD=****" in output
+    assert "REDIS_PASSWORD=plainsecret" not in output
     assert "Redis connectivity: OK" in output
 
 
@@ -78,7 +81,9 @@ def test_redis_command_report_includes_memory(monkeypatch, settings, tmp_path):
         return {}
 
     fake_client = SimpleNamespace(ping=lambda: True, info=fake_info)
-    monkeypatch.setattr(redis_command.Redis, "from_url", lambda *_args, **_kwargs: fake_client)
+    monkeypatch.setattr(
+        redis_command.Redis, "from_url", lambda *_args, **_kwargs: fake_client
+    )
 
     stdout = io.StringIO()
     call_command("redis", "--report", stdout=stdout)

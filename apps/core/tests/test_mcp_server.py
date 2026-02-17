@@ -9,7 +9,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.core.mcp.remote_commands import discover_remote_commands
-from apps.core.mcp.server import DjangoCommandMCPServer
+from apps.core.mcp.server import DjangoCommandMCPServer, McpProtocolError
 
 pytestmark = pytest.mark.critical
 
@@ -20,7 +20,7 @@ def test_discover_remote_commands_includes_decorated_commands() -> None:
     commands = discover_remote_commands()
 
     assert "uptime" in commands
-    assert "redis" in commands
+    assert "redis" not in commands
 
 
 def test_mcp_tools_list_returns_remote_tools() -> None:
@@ -61,6 +61,7 @@ def test_mcp_tools_call_executes_selected_command(monkeypatch) -> None:
     def _fake_call_command(
         name: str, *args: str, stdout: StringIO, stderr: StringIO
     ) -> None:
+        _ = stderr
         assert name == "uptime"
         assert args == ("--help",)
         stdout.write("ok")
@@ -105,3 +106,45 @@ def test_mcp_management_command_accepts_allow_and_deny(monkeypatch) -> None:
 
     assert captured["allow"] == {"uptime", "redis"}
     assert captured["deny"] == {"redis"}
+
+
+def test_mcp_rejects_non_object_payload() -> None:
+    """Non-object JSON payloads should return a protocol error."""
+
+    server = DjangoCommandMCPServer(allow={"uptime"})
+
+    with pytest.raises(McpProtocolError) as exc_info:
+        server.handle_request([])
+
+    assert "payload must be an object" in str(exc_info.value)
+
+
+def test_mcp_tools_call_handles_system_exit(monkeypatch) -> None:
+    """SystemExit from call_command should be returned as tool error payload."""
+
+    def _fake_call_command(
+        _name: str, *_args: str, stdout: StringIO, stderr: StringIO
+    ) -> None:
+        _ = stderr
+        stdout.write("usage")
+        raise SystemExit(0)
+
+    monkeypatch.setattr("apps.core.mcp.server.call_command", _fake_call_command)
+
+    server = DjangoCommandMCPServer(allow={"uptime"})
+    response = server.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "django.command.uptime",
+                "arguments": {"args": ["--help"]},
+            },
+        }
+    )
+
+    assert response is not None
+    assert response["id"] == 7
+    assert response["result"]["isError"] is True
+    assert response["result"]["content"][0]["text"] == "Command exited: 0"

@@ -13,8 +13,6 @@ from django.core.management.base import BaseCommand
 from redis import Redis
 from redis.exceptions import RedisError
 
-from apps.core.mcp.remote_commands import remote_command
-
 SYSTEMD_REDIS_UNITS = ("redis-server", "redis")
 ENV_KEYS_PREFIXES = ("REDIS", "CELERY")
 MASKED_VALUE = "****"
@@ -50,7 +48,9 @@ def _mask_redis_url(value: str) -> str:
 
 
 def _mask_value(value: str) -> str:
-    return _mask_redis_url(value) if _is_redis_url(value) else value
+    if _is_redis_url(value):
+        return _mask_redis_url(value)
+    return MASKED_VALUE if value else value
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -128,7 +128,6 @@ def _info_section(client: Redis, section: str) -> dict[str, object]:
         return {}
 
 
-@remote_command(description="Show Redis status and connectivity diagnostics.")
 class Command(BaseCommand):
     help = "Show Redis service status and configuration"
 
