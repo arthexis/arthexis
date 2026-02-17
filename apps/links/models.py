@@ -148,6 +148,14 @@ class Reference(Entity):
         blank=True,
         related_name="references",
     )
+    application = models.ForeignKey(
+        "app.Application",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="references",
+        help_text="Optional application this reference belongs to.",
+    )
 
     objects = ReferenceManager()
 
