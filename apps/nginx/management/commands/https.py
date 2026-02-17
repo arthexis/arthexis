@@ -8,6 +8,10 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
+from django.contrib.sites.models import Site
+
+from apps.sites.site_config import update_local_nginx_scripts
+from config.settings_helpers import normalize_site_host
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.dns.models import DNSProviderCredential
@@ -68,6 +72,14 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--site",
+            metavar="HOST_OR_URL",
+            help=(
+                "Target host or URL to enable (for example, porsche.example.com or "
+                "wss://porsche.example.com/)."
+            ),
+        )
+        parser.add_argument(
             "--no-reload",
             action="store_true",
             help="Skip nginx reload/restart after applying changes.",
@@ -86,13 +98,20 @@ class Command(BaseCommand):
         renew = options["renew"]
         certbot_domain = options["certbot"]
         godaddy_domain = options["godaddy"]
+        explicit_site = options["site"]
+        parsed_site = self._parse_site_domain(explicit_site) if explicit_site else None
+
+        if parsed_site and options["local"]:
+            raise CommandError("--local cannot be combined with --site. Use --certbot/--godaddy or omit --local.")
+
+        certbot_domain = certbot_domain or (parsed_site if parsed_site and not godaddy_domain else None)
         use_local = options["local"] or not (certbot_domain or godaddy_domain)
         use_godaddy = bool(godaddy_domain)
         sandbox_override = self._parse_sandbox_override(options)
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
 
-        if not enable and not disable and not renew and (certbot_domain or godaddy_domain):
+        if not enable and not disable and not renew and (certbot_domain or godaddy_domain or parsed_site):
             enable = True
 
         if not enable and not disable and not renew:
@@ -102,6 +121,8 @@ class Command(BaseCommand):
             return
 
         domain = "localhost" if use_local else (godaddy_domain or certbot_domain)
+        if not domain:
+            raise CommandError("No target domain was provided. Use --site, --certbot, --godaddy, or --local.")
 
         if disable:
             self._disable_https(domain, reload=reload)
@@ -157,8 +178,38 @@ class Command(BaseCommand):
                 self._validate_godaddy_setup(certificate)
             certificate.provision(sudo=sudo, dns_use_sandbox=sandbox_override)
 
+        self._ensure_managed_site(domain, require_https=True)
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _parse_site_domain(self, candidate: str | None) -> str | None:
+        """Return a normalized host parsed from ``--site`` input."""
+
+        normalized = normalize_site_host(candidate or "")
+        if not normalized:
+            raise CommandError("--site must include a valid hostname or URL.")
+        return normalized
+
+    def _ensure_managed_site(self, domain: str, *, require_https: bool) -> None:
+        """Persist the target domain as a managed Site and refresh staged nginx hosts."""
+
+        if domain == "localhost":
+            return
+        site, created = Site.objects.get_or_create(domain=domain, defaults={"name": domain})
+        updated_fields: list[str] = []
+
+        if hasattr(site, "managed") and not bool(getattr(site, "managed")):
+            setattr(site, "managed", True)
+            updated_fields.append("managed")
+        if hasattr(site, "require_https") and bool(getattr(site, "require_https")) != require_https:
+            setattr(site, "require_https", require_https)
+            updated_fields.append("require_https")
+        if created:
+            site.save()
+        elif updated_fields:
+            site.save(update_fields=updated_fields)
+
+        update_local_nginx_scripts()
 
     def _parse_sandbox_override(self, options: dict[str, object]) -> bool | None:
         """Return a per-run GoDaddy sandbox override derived from CLI options."""
