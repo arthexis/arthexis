@@ -103,7 +103,7 @@ wcwidth==0.6.0
 webencodings==0.5.1
 websocket-client==1.8.0
 websockets>=15,<17
-webauthn==2.7.0
+webauthn==2.7.1
 whitenoise==6.11.0
 plyer==2.1.0; sys_platform == "win32"
 wsproto==1.3.2
