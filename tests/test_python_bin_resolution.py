@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -48,7 +49,7 @@ def _find_sort() -> str:
 
     sort_path = shutil.which("sort")
     if sort_path:
-        return sort_path
+        return bash_path(Path(sort_path))
 
     pytest.skip("'sort' is required for scripts/helpers/common.sh tests")
 
@@ -72,7 +73,7 @@ def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name:
         "source scripts/helpers/common.sh\n"
         "arthexis_python_bin\n"
     )
-    sort_path = _find_sort()
+    sort_path = shlex.quote(_find_sort())
     _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
     bash_path = _find_bash()
@@ -107,7 +108,7 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
         "source scripts/helpers/common.sh\n"
         "arthexis_python_bin\n"
     )
-    sort_path = _find_sort()
+    sort_path = shlex.quote(_find_sort())
     _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
     bash_path = _find_bash()
