@@ -1,0 +1,197 @@
+name: Issue Intake
+
+env:
+  NODE_OPTIONS: '--no-deprecation'
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage, validate, and acknowledge issue
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            /**
+             * Manage new/edited issues in a single flow:
+             * - classify and apply labels
+             * - check report completeness
+             * - post/update an acknowledgement + routing comment
+             */
+            const issue = context.payload.issue;
+            if (!issue || issue.pull_request) {
+              core.info('Skipping because this event does not target a standard issue.');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const actor = context.actor || issue.user?.login || 'unknown';
+
+            const title = (issue.title || '').toLowerCase();
+            const bodyRaw = issue.body || '';
+            const body = bodyRaw.toLowerCase();
+
+            const hasAny = (text, needles) => needles.some((needle) => text.includes(needle));
+            const addSet = new Set();
+
+            // Classification labels
+            if (hasAny(title + '\n' + body, ['bug', 'error', 'fails', 'failure', 'crash', 'regression'])) {
+              addSet.add('type:bug');
+            }
+            if (hasAny(title + '\n' + body, ['feature', 'enhancement', 'proposal', 'request'])) {
+              addSet.add('type:feature');
+            }
+            if (hasAny(title + '\n' + body, ['question', 'how do i', 'how to', 'help'])) {
+              addSet.add('type:question');
+            }
+
+            // Area labels
+            if (hasAny(title + '\n' + body, ['docs', 'documentation', 'readme'])) {
+              addSet.add('area:docs');
+            }
+            if (hasAny(title + '\n' + body, ['install', 'setup', 'pip', 'venv', 'dependency'])) {
+              addSet.add('area:install');
+            }
+            if (hasAny(title + '\n' + body, ['dashboard', 'ui', 'frontend', 'css'])) {
+              addSet.add('area:dashboard');
+            }
+            if (hasAny(title + '\n' + body, ['security', 'vulnerability', 'xss', 'csrf', 'auth'])) {
+              addSet.add('area:security');
+            }
+
+            // Priority hints
+            if (hasAny(title + '\n' + body, ['urgent', 'critical', 'sev1', 'p0'])) {
+              addSet.add('priority:high');
+            }
+
+            // Completeness checks
+            const requiredSections = [
+              { key: 'Steps to reproduce', patterns: ['steps to reproduce', 'reproduction steps', 'repro steps'] },
+              { key: 'Expected behavior', patterns: ['expected behavior', 'expected result'] },
+              { key: 'Actual behavior', patterns: ['actual behavior', 'actual result', 'what happened'] },
+              { key: 'Environment / version', patterns: ['environment', 'version', 'os', 'python', 'browser'] },
+            ];
+
+            const missingSections = requiredSections
+              .filter((section) => !hasAny(body, section.patterns))
+              .map((section) => section.key);
+
+            if (missingSections.length > 0) {
+              addSet.add('needs-info');
+            } else {
+              addSet.add('triage-ready');
+            }
+
+            if (addSet.size === 0) {
+              addSet.add('needs-triage');
+            }
+
+            // Ensure base tracking label for newly opened issues
+            if (context.payload.action === 'opened') {
+              addSet.add('new-issue');
+            }
+
+            const { data: existingLabels } = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number });
+            const existingNames = new Set(existingLabels.map((label) => label.name));
+
+            const { data: repoLabels } = await github.rest.issues.listLabelsForRepo({
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const repoLabelNames = new Set(repoLabels.map((label) => label.name));
+
+            const labelsToAdd = [...addSet].filter((name) => repoLabelNames.has(name) && !existingNames.has(name));
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: labelsToAdd });
+              core.info(`Added labels: ${labelsToAdd.join(', ')}`);
+            }
+
+            const unavailableLabels = [...addSet].filter((name) => !repoLabelNames.has(name));
+            if (unavailableLabels.length > 0) {
+              core.warning(`Skipped unavailable labels: ${unavailableLabels.join(', ')}`);
+            }
+
+            // Remove stale needs-info or triage-ready label based on completeness state
+            const removeLabelIfPresent = async (name) => {
+              if (!existingNames.has(name)) {
+                return;
+              }
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+                core.info(`Removed label: ${name}`);
+              } catch (error) {
+                if (error.status === 404) {
+                  return;
+                }
+                throw error;
+              }
+            };
+
+            if (missingSections.length > 0) {
+              await removeLabelIfPresent('triage-ready');
+            } else {
+              await removeLabelIfPresent('needs-info');
+            }
+
+            const isBotActor = actor.endsWith('[bot]') || actor === 'dependabot[bot]';
+
+            const routingMentions = [];
+            if (addSet.has('area:security')) {
+              routingMentions.push('@arthexis/security-maintainers');
+            }
+            if (addSet.has('area:docs')) {
+              routingMentions.push('@arthexis/docs-maintainers');
+            }
+
+            const qualityMessage = missingSections.length > 0
+              ? [
+                  '### Missing details to triage',
+                  ...missingSections.map((section) => `- ${section}`),
+                  '',
+                  'Please update the issue with the missing information so maintainers can reproduce and prioritize quickly.',
+                ].join('\n')
+              : '### Triage readiness\nThanks — this report appears complete enough for triage.';
+
+            const acknowledgementLines = [
+              '<!-- issue-intake-bot-comment -->',
+              'Thanks for opening this issue! 🎉',
+              '',
+              'A maintainer will review based on queue priority.',
+              qualityMessage,
+              '',
+              isBotActor ? '_Bot-originated issue detected; maintainer routing skipped._' : '',
+              !isBotActor && routingMentions.length > 0 ? `Routing hint: ${routingMentions.join(' ')}` : '',
+            ].filter(Boolean);
+
+            const bodyComment = acknowledgementLines.join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const botComment = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes('<!-- issue-intake-bot-comment -->')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: botComment.id,
+                body: bodyComment,
+              });
+              core.info(`Updated existing intake comment ${botComment.id}`);
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: bodyComment });
+              core.info('Created intake comment');
+            }
