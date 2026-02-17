@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import signal
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
@@ -56,6 +58,15 @@ class ChannelReliefState:
 
     blocked_cycles: int = 0
     show_base_next: bool = False
+
+
+@dataclass(frozen=True)
+class PrefetchedCycle:
+    """Represent a prepared display state for an upcoming rotation index."""
+
+    order: tuple[str, ...]
+    index: int
+    display_state: DisplayState
 
 
 def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
@@ -148,6 +159,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     display_state: DisplayState | None = None
     next_display_state: DisplayState | None = None
+    cycle_prefetch_future: Future[PrefetchedCycle] | None = None
     event_state: DisplayState | None = None
     event_payload: locks.EventPayload | None = None
     event_deadline: datetime | None = None
@@ -166,6 +178,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
     channel_states: dict[str, ChannelCycle] = {}
     relief_states: dict[str, ChannelReliefState] = {}
     frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
+    cycle_prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lcd-cycle")
+    cycle_state_lock = threading.Lock()
     lcd_disabled = False
     locks._clear_low_lock_file()
 
@@ -278,6 +292,37 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 _payload_has_text(payload) for payload in existing.payloads
             )
         return channel_info, channel_text
+
+    def _schedule_cycle_prefetch(
+        order: tuple[str, ...],
+        index: int,
+        now_dt: datetime,
+    ) -> None:
+        """Prepare a future cycle in a worker thread to reduce rotation gap latency."""
+
+        nonlocal cycle_prefetch_future
+
+        def _prefetch() -> PrefetchedCycle:
+            with cycle_state_lock:
+                channel_info, channel_text = _load_channel_states(now_dt)
+                payload = _payload_for_state(
+                    order,
+                    index,
+                    channel_info,
+                    channel_text,
+                    now_dt,
+                )
+            _warn_on_non_ascii_payload(payload, order[index])
+            prepared_state = _prepare_display_state(
+                payload.line1,
+                payload.line2,
+                payload.scroll_ms,
+            )
+            return PrefetchedCycle(order=order, index=index, display_state=prepared_state)
+
+        if cycle_prefetch_future and not cycle_prefetch_future.done():
+            return
+        cycle_prefetch_future = cycle_prefetch_executor.submit(_prefetch)
 
     def _payload_for_state(
         state_order: tuple[str, ...],
@@ -538,7 +583,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     continue
 
                 if display_state is None or now >= rotation_deadline:
-                    channel_info, channel_text = _load_channel_states(now_dt)
+                    with cycle_state_lock:
+                        channel_info, channel_text = _load_channel_states(now_dt)
 
                     configured_order = locks._load_channel_order(locks.LOCK_DIR)
 
@@ -604,13 +650,14 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                     if len(state_order) > 1:
                         next_index = (state_index + 1) % len(state_order)
-                        next_payload = _payload_for_state(
-                            state_order,
-                            next_index,
-                            channel_info,
-                            channel_text,
-                            now_dt,
-                        )
+                        with cycle_state_lock:
+                            next_payload = _payload_for_state(
+                                state_order,
+                                next_index,
+                                channel_info,
+                                channel_text,
+                                now_dt,
+                            )
                         _warn_on_non_ascii_payload(
                             next_payload, state_order[next_index]
                         )
@@ -621,6 +668,10 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         )
                     else:
                         next_display_state = None
+
+                    if len(state_order) > 1:
+                        upcoming_index = (state_index + 2) % len(state_order)
+                        _schedule_cycle_prefetch(state_order, upcoming_index, now_dt)
 
                 if lcd is None:
                     lcd = _initialize_lcd()
@@ -666,30 +717,50 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     if len(state_order) > 1:
                         display_state = next_display_state
 
-                        # Prepare the following state in advance for predictable timing.
-                        channel_info, channel_text = _load_channel_states(now_dt)
                         next_index = (state_index + 1) % len(state_order)
-                        next_payload = _payload_for_state(
-                            state_order,
-                            next_index,
-                            channel_info,
-                            channel_text,
-                            now_dt,
-                        )
-                        next_display_state = _prepare_display_state(
-                            next_payload.line1,
-                            next_payload.line2,
-                            next_payload.scroll_ms,
-                        )
+                        prefetched_cycle: PrefetchedCycle | None = None
+                        if cycle_prefetch_future and cycle_prefetch_future.done():
+                            try:
+                                prefetched_cycle = cycle_prefetch_future.result()
+                            except Exception:
+                                logger.exception("LCD cycle prefetch failed")
+
+                        if (
+                            prefetched_cycle is not None
+                            and prefetched_cycle.order == state_order
+                            and prefetched_cycle.index == next_index
+                        ):
+                            next_display_state = prefetched_cycle.display_state
+                        else:
+                            with cycle_state_lock:
+                                channel_info, channel_text = _load_channel_states(now_dt)
+                                next_payload = _payload_for_state(
+                                    state_order,
+                                    next_index,
+                                    channel_info,
+                                    channel_text,
+                                    now_dt,
+                                )
+                            _warn_on_non_ascii_payload(next_payload, state_order[next_index])
+                            next_display_state = _prepare_display_state(
+                                next_payload.line1,
+                                next_payload.line2,
+                                next_payload.scroll_ms,
+                            )
+
+                        cycle_prefetch_future = None
+                        upcoming_index = (state_index + 2) % len(state_order)
+                        _schedule_cycle_prefetch(state_order, upcoming_index, now_dt)
                     else:
-                        channel_info, channel_text = _load_channel_states(now_dt)
-                        current_payload = _payload_for_state(
-                            state_order,
-                            state_index,
-                            channel_info,
-                            channel_text,
-                            now_dt,
-                        )
+                        with cycle_state_lock:
+                            channel_info, channel_text = _load_channel_states(now_dt)
+                            current_payload = _payload_for_state(
+                                state_order,
+                                state_index,
+                                channel_info,
+                                channel_text,
+                                now_dt,
+                            )
                         display_state = _prepare_display_state(
                             current_payload.line1,
                             current_payload.line2,
@@ -707,6 +778,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 continue
 
     finally:
+        cycle_prefetch_executor.shutdown(wait=False, cancel_futures=True)
         _blank_display(lcd)
         _reset_shutdown_flag()
         _reset_event_interrupt_flag()
