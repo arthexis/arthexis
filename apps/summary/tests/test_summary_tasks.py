@@ -19,11 +19,26 @@ def test_write_lcd_frames_updates_lock_file(tmp_path):
 
 def test_write_lcd_frames_removes_stale_channel_files(tmp_path):
     lock_file = tmp_path / "lcd-low"
+    (tmp_path / "lcd-low-0").write_text("old\n", encoding="utf-8")
     (tmp_path / "lcd-low-1").write_text("old\n", encoding="utf-8")
     (tmp_path / "lcd-low-2").write_text("old\n", encoding="utf-8")
 
     _write_lcd_frames([("ONLY", "ONE")], lock_file=lock_file)
 
     assert lock_file.exists()
+    assert not (tmp_path / "lcd-low-0").exists()
     assert not (tmp_path / "lcd-low-1").exists()
     assert not (tmp_path / "lcd-low-2").exists()
+
+
+def test_write_lcd_frames_removes_all_files_when_no_frames(tmp_path):
+    lock_file = tmp_path / "lcd-low"
+    lock_file.write_text("old\n", encoding="utf-8")
+    (tmp_path / "lcd-low-0").write_text("old\n", encoding="utf-8")
+    (tmp_path / "lcd-low-1").write_text("old\n", encoding="utf-8")
+
+    _write_lcd_frames([], lock_file=lock_file)
+
+    assert not lock_file.exists()
+    assert not (tmp_path / "lcd-low-0").exists()
+    assert not (tmp_path / "lcd-low-1").exists()

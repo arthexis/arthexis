@@ -247,20 +247,26 @@ def _write_lcd_frames(
 
     from apps.summary.services import render_lcd_payload
 
-    lock_file.parent.mkdir(parents=True, exist_ok=True)
     base_name = lock_file.name
+    prefix = f"{base_name}-"
+
+    if not frames:
+        lock_file.unlink(missing_ok=True)
+        for candidate in lock_file.parent.glob(f"{prefix}*"):
+            suffix = candidate.name[len(prefix) :]
+            if suffix.isdigit():
+                candidate.unlink(missing_ok=True)
+        return
+
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
     for idx, (subject, body) in enumerate(frames):
         target = lock_file if idx == 0 else lock_file.with_name(f"{base_name}-{idx}")
         payload = render_lcd_payload(subject, body)
         target.write_text(payload, encoding="utf-8")
 
-    prefix = f"{base_name}-"
-    for candidate in lock_file.parent.iterdir():
-        name = candidate.name
-        if not name.startswith(prefix):
-            continue
-        suffix = name[len(prefix) :]
-        if not suffix.isdigit() or int(suffix) < len(frames):
+    for candidate in lock_file.parent.glob(f"{prefix}*"):
+        suffix = candidate.name[len(prefix) :]
+        if not suffix.isdigit() or (0 < int(suffix) < len(frames)):
             continue
         candidate.unlink(missing_ok=True)
 
