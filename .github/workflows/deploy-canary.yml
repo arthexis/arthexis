@@ -1,0 +1,76 @@
+name: Deploy Canary
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit SHA to deploy.
+        required: false
+        default: main
+        type: string
+      dry_run:
+        description: Validate deployment without applying changes.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-canary
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to canary
+    runs-on:
+      - self-hosted
+      - linux
+      - canary
+    environment:
+      name: canary
+    timeout-minutes: 45
+    env:
+      CANARY_DEPLOY_PATH: ${{ vars.CANARY_DEPLOY_PATH || '/home/arthe/canary' }}
+      REQUESTED_REF: ${{ github.event.inputs.ref }}
+      REQUESTED_DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - name: Checkout workflow sources
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve deployment inputs
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_ref="${GITHUB_SHA}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${REQUESTED_REF:-}" ]]; then
+            target_ref="${REQUESTED_REF}"
+          fi
+
+          dry_run=0
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${REQUESTED_DRY_RUN:-false}" == "true" ]]; then
+            dry_run=1
+          fi
+
+          echo "target_ref=${target_ref}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${dry_run}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--ref "${{ steps.resolve.outputs.target_ref }}")
+          if [[ -n "${CANARY_DEPLOY_PATH:-}" ]]; then
+            args+=(--deploy-path "${CANARY_DEPLOY_PATH}")
+          fi
+          if [[ "${{ steps.resolve.outputs.dry_run }}" == "1" ]]; then
+            args+=(--dry-run)
+          fi
+          ./scripts/github-canary-deploy.sh "${args[@]}"
