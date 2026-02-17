@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   resolve-older-threads:
-    if: ${{ github.event.issue.pull_request && github.event.comment.body == 'View task →' }}
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == 'View task →' && github.event.comment.user.login == 'chatgpt-codex-connector[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve unresolved review threads older than trigger comment
@@ -27,9 +27,20 @@ jobs:
             const repo = context.repo.repo;
             const issueNumber = context.payload.issue.number;
             const triggerTimestamp = context.payload.comment.created_at;
+            const triggerCommentUrl = context.payload.comment.html_url;
+            const triggerAppSlug = context.payload.comment?.performed_via_github_app?.slug;
+
+            if (triggerAppSlug !== 'chatgpt-codex-connector') {
+              core.info(`Skipping: triggering comment app was "${triggerAppSlug || 'unknown'}", expected "chatgpt-codex-connector".`);
+              return;
+            }
 
             if (!triggerTimestamp) {
               throw new Error('Missing issue comment timestamp in payload.');
+            }
+
+            if (!triggerCommentUrl) {
+              throw new Error('Missing issue comment URL in payload.');
             }
 
             const { data: prData } = await github.rest.pulls.get({
@@ -43,35 +54,46 @@ jobs:
               throw new TypeError(`Invalid trigger timestamp: ${triggerTimestamp}`);
             }
 
-            const reviewThreads = await github.paginate(
-              `query($owner: String!, $repo: String!, $pullNumber: Int!, $cursor: String) {
-                 repository(owner: $owner, name: $repo) {
-                   pullRequest(number: $pullNumber) {
-                     reviewThreads(first: 100, after: $cursor) {
-                       nodes {
-                         id
-                         isResolved
-                         comments(first: 100) {
-                           nodes {
-                             createdAt
+            const reviewThreads = [];
+            let cursor = null;
+            let hasNextPage = true;
+
+            while (hasNextPage) {
+              const response = await github.graphql(
+                `query($owner: String!, $repo: String!, $pullNumber: Int!, $cursor: String) {
+                   repository(owner: $owner, name: $repo) {
+                     pullRequest(number: $pullNumber) {
+                       reviewThreads(first: 100, after: $cursor) {
+                         nodes {
+                           id
+                           isResolved
+                           comments(last: 1) {
+                             nodes {
+                               createdAt
+                             }
                            }
                          }
-                       }
-                       pageInfo {
-                         hasNextPage
-                         endCursor
+                         pageInfo {
+                           hasNextPage
+                           endCursor
+                         }
                        }
                      }
                    }
-                 }
-               }`,
-              {
-                owner,
-                repo,
-                pullNumber: prData.number,
-              },
-              (response) => response.repository.pullRequest.reviewThreads,
-            );
+                 }`,
+                {
+                  owner,
+                  repo,
+                  pullNumber: prData.number,
+                  cursor,
+                },
+              );
+
+              const threads = response.repository.pullRequest.reviewThreads;
+              reviewThreads.push(...threads.nodes);
+              hasNextPage = threads.pageInfo.hasNextPage;
+              cursor = threads.pageInfo.endCursor;
+            }
 
             const getLatestTimestamp = (thread) => {
               const commentTimestamps = (thread.comments?.nodes || [])
@@ -97,18 +119,39 @@ jobs:
 
             core.info(`Found ${threadsToResolve.length} unresolved review thread(s) older than ${triggerTimestamp}.`);
 
+            let resolvedCount = 0;
+            const failedThreads = [];
+
             for (const thread of threadsToResolve) {
-              await github.graphql(
-                `mutation($threadId: ID!) {
-                   resolveReviewThread(input: {threadId: $threadId}) {
-                     thread {
-                       id
-                       isResolved
+              try {
+                await github.graphql(
+                  `mutation($threadId: ID!) {
+                     resolveReviewThread(input: {threadId: $threadId}) {
+                       thread {
+                         id
+                         isResolved
+                       }
                      }
-                   }
-                 }`,
-                { threadId: thread.id },
-              );
+                   }`,
+                  { threadId: thread.id },
+                );
+                resolvedCount += 1;
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                failedThreads.push(thread.id);
+                core.warning(`Failed to resolve thread ${thread.id}: ${message}`);
+              }
             }
 
-            core.info(`Resolved ${threadsToResolve.length} thread(s).`);
+            if (failedThreads.length > 0) {
+              core.warning(`Failed thread IDs: ${failedThreads.join(', ')}`);
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: `Resolved by [trigger comment](${triggerCommentUrl}).`,
+            });
+
+            core.info(`Resolved ${resolvedCount} of ${threadsToResolve.length} thread(s).`);
