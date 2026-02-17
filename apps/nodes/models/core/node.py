@@ -22,7 +22,7 @@ from django.contrib.sites.models import Site
 from django.core import serializers
 from django.core.serializers.base import DeserializationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
-from django.db import IntegrityError, models
+from django.db import IntegrityError, models, transaction
 from django.db.models import Q
 from django.db.utils import DatabaseError
 from django.dispatch import Signal, receiver
@@ -304,8 +304,13 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                         extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
                         exc_info=True,
                     )
-                    node = cls.objects.filter(mac_address__iexact=mac).first() or node
-                    should_cache = (node.mac_address or "").strip().lower() == current_mac
+                    if transaction.get_connection().in_atomic_block:
+                        transaction.set_rollback(False)
+                    try:
+                        node = cls.objects.filter(mac_address__iexact=mac).first() or node
+                        should_cache = (node.mac_address or "").strip().lower() == current_mac
+                    except DatabaseError:
+                        should_cache = False
                 except DatabaseError:
                     node.mac_address = stored_mac
                     should_cache = False
