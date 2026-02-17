@@ -321,6 +321,12 @@ def _parse_channel_order(text: str) -> list[str]:
     return channels
 
 
+def parse_channel_order(text: str) -> list[str]:
+    """Parse channel-order text into normalized channel names."""
+
+    return _parse_channel_order(text)
+
+
 def _load_channel_order(lock_dir: Path = LOCK_DIR) -> list[str] | None:
     path = lock_dir / CHANNEL_ORDER_LOCK_NAME
     try:

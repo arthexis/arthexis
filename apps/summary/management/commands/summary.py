@@ -13,11 +13,14 @@ from apps.screens.startup_notifications import (
     read_lcd_lock_file,
 )
 from apps.summary.node_features import get_llm_summary_prereq_state
-from apps.summary.services import ensure_local_model, get_summary_config, parse_screens
+from apps.summary.models import LLMSummaryConfig
+from apps.summary.services import ensure_local_model, get_summary_config, normalize_screens, parse_screens
 
 
 class Command(BaseCommand):
     """Report LCD summarizer status and optionally auto-enable prerequisites."""
+
+    REQUIRED_FEATURE_SLUGS = ("celery-queue", "lcd-screen", "llm-summary")
 
     help = "Show LCD summarizer status and the current summary LCD rotation plan."
 
@@ -46,7 +49,7 @@ class Command(BaseCommand):
 
         prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
         current_message = read_lcd_lock_file(base_dir / ".locks" / lcd_locks.LOW_LOCK_FILE.name)
-        planned_screens = parse_screens(config.last_output)
+        planned_screens = normalize_screens(parse_screens(config.last_output))
         current_pair = (
             (current_message.subject.strip(), current_message.body.strip())
             if current_message is not None
@@ -59,7 +62,7 @@ class Command(BaseCommand):
             "Feature assignments: "
             + self._feature_assignment_line(
                 node,
-                slugs=("llm-summary", "celery-queue", "lcd-screen"),
+                slugs=self.REQUIRED_FEATURE_SLUGS,
             )
         )
         self.stdout.write(f"Summary config active: {'yes' if config.is_active else 'no'}")
@@ -90,7 +93,9 @@ class Command(BaseCommand):
             marker = "*" if current_pair == (subject.strip(), body.strip()) else " "
             self.stdout.write(f"{marker} {index:02d}. {subject} | {body}")
 
-    def _enable_prerequisites(self, *, node: Node, config, base_dir: Path) -> None:
+    def _enable_prerequisites(
+        self, *, node: Node, config: LLMSummaryConfig, base_dir: Path
+    ) -> None:
         """Enable lock files, feature assignments, and model artifacts for summaries."""
 
         lock_dir = base_dir / ".locks"
@@ -101,11 +106,13 @@ class Command(BaseCommand):
         config.is_active = True
         config.save(update_fields=["is_active", "model_path", "installed_at", "updated_at"])
 
-        for slug, display in (
-            ("celery-queue", "Celery Queue"),
-            ("lcd-screen", "LCD Screen"),
-            ("llm-summary", "LLM Summary"),
-        ):
+        feature_displays = {
+            "celery-queue": "Celery Queue",
+            "lcd-screen": "LCD Screen",
+            "llm-summary": "LLM Summary",
+        }
+        for slug in self.REQUIRED_FEATURE_SLUGS:
+            display = feature_displays[slug]
             feature, _created = NodeFeature.objects.get_or_create(
                 slug=slug,
                 defaults={"display": display},
@@ -126,6 +133,10 @@ class Command(BaseCommand):
         channel_lock = base_dir / ".locks" / LCD_CHANNELS_LOCK_FILE
         try:
             raw = channel_lock.read_text(encoding="utf-8")
-        except FileNotFoundError:
+        except (FileNotFoundError, OSError):
             return []
-        return lcd_locks._parse_channel_order(raw)
+
+        try:
+            return lcd_locks.parse_channel_order(raw)
+        except Exception:
+            return []
