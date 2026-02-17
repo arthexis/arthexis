@@ -8,6 +8,11 @@ from django.core.management import call_command
 from django.test import override_settings
 
 from apps.nodes.models import Node
+from apps.screens.startup_notifications import (
+    LCD_CHANNELS_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
+    LCD_RUNTIME_LOCK_FILE,
+)
 from apps.summary.services import get_summary_config
 
 
@@ -29,8 +34,8 @@ HOLD
 
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
-    (lock_dir / "lcd-low").write_text("TEMP OK\nHOLD\n", encoding="utf-8")
-    (lock_dir / "lcd-channels.lck").write_text("high, low, stats\n", encoding="utf-8")
+    (lock_dir / LCD_LOW_LOCK_FILE).write_text("TEMP OK\nHOLD\n", encoding="utf-8")
+    (lock_dir / LCD_CHANNELS_LOCK_FILE).write_text("high, low, stats\n", encoding="utf-8")
 
     out = StringIO()
     with override_settings(BASE_DIR=tmp_path):
@@ -39,8 +44,8 @@ HOLD
     output = out.getvalue()
     assert f"Node: {node.hostname}" in output
     assert "Summary Plan" in output
-    assert "  01. ALARM | CHECK PUMP" in output
-    assert "* 02. TEMP OK | HOLD" in output
+    assert "  01. ALARM            | CHECK PUMP" in output
+    assert "* 02. TEMP OK          | HOLD" in output
     assert "Channel order: high, low, stats" in output
 
 
@@ -60,7 +65,7 @@ def test_summary_command_enabled_turns_on_prereqs(tmp_path: Path) -> None:
     assert config.is_active is True
     assert config.model_path
     assert (tmp_path / ".locks" / "celery.lck").exists()
-    assert (tmp_path / ".locks" / "lcd_screen.lck").exists()
+    assert (tmp_path / ".locks" / LCD_RUNTIME_LOCK_FILE).exists()
     assert node.features.filter(slug="llm-summary").exists()
     assert node.features.filter(slug="celery-queue").exists()
     assert node.features.filter(slug="lcd-screen").exists()
