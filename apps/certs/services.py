@@ -54,12 +54,10 @@ def request_certbot_certificate(
 ) -> str:
     """Run certbot to request or renew certificates for *domain*."""
 
-    base_dir = certificate_path.parent
-    base_dir_key = certificate_key_path.parent
-    if sudo:
-        subprocess.run([sudo, "mkdir", "-p", str(base_dir)], check=True)
-        if base_dir_key != base_dir:
-            subprocess.run([sudo, "mkdir", "-p", str(base_dir_key)], check=True)
+    # Certbot manages output locations under /etc/letsencrypt/live/<domain>/ by
+    # default. We avoid pre-creating these directories so certbot can maintain
+    # its expected symlink layout.
+    _ = certificate_path, certificate_key_path
 
     if challenge_type == "godaddy":
         command, env = _build_godaddy_certbot_command(
@@ -71,22 +69,11 @@ def request_certbot_certificate(
             sudo=sudo,
         )
     else:
-        command = _with_sudo(
-            [
-                "certbot",
-                "certonly",
-                "--nginx",
-                "-d",
-                domain,
-                "--agree-tos",
-                "--non-interactive",
-            ],
-            sudo,
+        command = _build_http01_certbot_command(
+            domain=domain,
+            email=email,
+            sudo=sudo,
         )
-        if email:
-            command.extend(["--email", email])
-        else:
-            command.append("--register-unsafely-without-email")
         env = None
 
     try:
@@ -125,7 +112,7 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
             "Install certbot, then rerun the https command."
         ),
         "Supported Arthexis hosts and recommended commands:",
-        "- Ubuntu 22.04 / 24.04 & Debian-based hosts: sudo apt update && sudo apt install -y certbot python3-certbot-nginx",
+        "- Ubuntu 22.04 / 24.04 & Debian-based hosts: sudo apt update && sudo apt install -y certbot",
     ]
 
     if distro_id in {"ubuntu", "debian"} or "debian" in distro_like:
@@ -139,6 +126,32 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
         )
 
     return "\n".join(guidance)
+
+
+def _build_http01_certbot_command(*, domain: str, email: str | None, sudo: str) -> list[str]:
+    """Build a certbot command that uses standalone HTTP-01 validation."""
+
+    command = _with_sudo(
+        [
+            "certbot",
+            "certonly",
+            "--standalone",
+            "--preferred-challenges",
+            "http",
+            "-d",
+            domain,
+            "--agree-tos",
+            "--non-interactive",
+        ],
+        sudo,
+    )
+
+    if email:
+        command.extend(["--email", email])
+    else:
+        command.append("--register-unsafely-without-email")
+
+    return command
 
 
 def _read_os_release_fields() -> dict[str, str]:

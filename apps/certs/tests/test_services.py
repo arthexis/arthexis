@@ -162,6 +162,48 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     assert captured["command"][0] == "certbot"
 
 
+def test_build_http01_certbot_command_uses_standalone_http01():
+    """HTTP-01 certbot command should avoid the nginx plugin."""
+
+    command = services._build_http01_certbot_command(
+        domain="example.com",
+        email="ops@example.com",
+        sudo="sudo",
+    )
+
+    assert command[:2] == ["sudo", "certbot"]
+    assert "--standalone" in command
+    assert "--preferred-challenges" in command
+    assert "http" in command
+    assert "--nginx" not in command
+
+
+def test_request_certbot_certificate_nginx_challenge_uses_standalone(
+    monkeypatch, tmp_path
+):
+    """Legacy nginx challenge type should run standalone HTTP-01 certbot."""
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(command: list[str], *, env=None):
+        captured["command"] = command
+        return "ok"
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+
+    services.request_certbot_certificate(
+        domain="example.com",
+        email="ops@example.com",
+        certificate_path=tmp_path / "fullchain.pem",
+        certificate_key_path=tmp_path / "privkey.pem",
+        challenge_type="nginx",
+        sudo="",
+    )
+
+    assert "--standalone" in captured["command"]
+    assert "--nginx" not in captured["command"]
+
+
 def test_build_godaddy_certbot_command_honors_sandbox_override():
     """GoDaddy certbot env should honor explicit sandbox override values."""
 
@@ -214,7 +256,7 @@ def test_request_certbot_certificate_missing_certbot_includes_supported_os_guida
     message = str(exc_info.value)
     assert "sudo: certbot: command not found" in message
     assert "Ubuntu 22.04 / 24.04" in message
-    assert "apt install -y certbot python3-certbot-nginx" in message
+    assert "apt install -y certbot" in message
 
 
 def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_guidance(
