@@ -233,3 +233,48 @@ def test_node_info_prefers_base_site_domain(monkeypatch):
     assert data["address"] == "base.example.test"
     assert data["contact_hosts"][0] == "base.example.test"
     assert data["base_site_domain"] == site.domain
+
+@pytest.mark.django_db
+def test_get_local_refreshes_self_node_mac_on_mismatch(monkeypatch, caplog):
+    """Node.get_local should refresh stale SELF node MAC addresses."""
+    stale_node = Node.objects.create(
+        hostname="self-node",
+        mac_address="00:11:22:33:44:55",
+        current_relation=Node.Relation.SELF,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.core.node")
+    local = Node.get_local()
+
+    assert local is not None
+    assert local.pk == stale_node.pk
+    stale_node.refresh_from_db()
+    assert stale_node.mac_address == "aa:bb:cc:dd:ee:ff"
+    assert any("refreshed stale self-node MAC address" in rec.getMessage() for rec in caplog.records)
+
+
+@pytest.mark.django_db
+def test_get_local_keeps_self_node_mac_when_runtime_mac_is_in_use(monkeypatch, caplog):
+    """Node.get_local should avoid stealing a MAC already assigned to another node."""
+    self_node = Node.objects.create(
+        hostname="self-node",
+        mac_address="00:11:22:33:44:55",
+        current_relation=Node.Relation.SELF,
+    )
+    Node.objects.create(
+        hostname="other-node",
+        mac_address="aa:bb:cc:dd:ee:ff",
+        current_relation=Node.Relation.PEER,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.core.node")
+    local = Node.get_local()
+
+    assert local is not None
+    assert local.hostname == "other-node"
+    self_node.refresh_from_db()
+    assert self_node.mac_address == "00:11:22:33:44:55"
