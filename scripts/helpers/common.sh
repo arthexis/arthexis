@@ -62,54 +62,54 @@ arthexis_python_bin() {
     path_entry=${_arthexis_path_remainder%%:*}
     _arthexis_path_remainder=${_arthexis_path_remainder#*:}
 
-      if [ -z "$path_entry" ]; then
-        path_entry='.'
-      fi
+    if [ -z "$path_entry" ]; then
+      path_entry='.'
+    fi
 
-      candidate=$(_arthexis_python_path_entry_for_name "$path_entry" "python3")
-      if [ -n "$candidate" ] && _arthexis_python_candidate_is_py3 "$candidate"; then
+    candidate=$(_arthexis_python_path_entry_for_name "$path_entry" "python3")
+    if [ -n "$candidate" ] && _arthexis_python_candidate_is_py3 "$candidate"; then
+      _arthexis_python_bin_cached="$candidate"
+      break
+    fi
+
+    candidate=$(_arthexis_python_path_entry_for_name "$path_entry" "python")
+    if [ -n "$candidate" ] && _arthexis_python_candidate_is_py3 "$candidate"; then
+      _arthexis_python_bin_cached="$candidate"
+      break
+    fi
+
+    versioned_candidates=""
+    while IFS= read -r candidate; do
+      if [ -z "$candidate" ]; then
+        continue
+      fi
+      if [ -n "$versioned_candidates" ]; then
+        versioned_candidates+=$'\n'
+      fi
+      versioned_candidates+="$candidate"
+    done < <(
+      compgen -f "$path_entry/python3" | while IFS= read -r resolved; do
+        candidate=${resolved##*/}
+        case "$candidate" in
+          python3|python3[0-9]|python3.[0-9]*)
+            printf '%s\n' "$resolved"
+            ;;
+          python3.exe|python3.bat|python3.cmd|python3[0-9].exe|python3[0-9].bat|python3[0-9].cmd|python3.[0-9]*.exe|python3.[0-9]*.bat|python3.[0-9]*.cmd)
+            printf '%s\n' "$resolved"
+            ;;
+        esac
+      done | sort -rV -u
+    )
+
+    while IFS= read -r candidate; do
+      if [ -z "$candidate" ]; then
+        continue
+      fi
+      if _arthexis_python_candidate_is_py3 "$candidate"; then
         _arthexis_python_bin_cached="$candidate"
         break 2
       fi
-
-      candidate=$(_arthexis_python_path_entry_for_name "$path_entry" "python")
-      if [ -n "$candidate" ] && _arthexis_python_candidate_is_py3 "$candidate"; then
-        _arthexis_python_bin_cached="$candidate"
-        break 2
-      fi
-
-      versioned_candidates=""
-      while IFS= read -r candidate; do
-        if [ -z "$candidate" ]; then
-          continue
-        fi
-        if [ -n "$versioned_candidates" ]; then
-          versioned_candidates+=$'\n'
-        fi
-        versioned_candidates+="$candidate"
-      done < <(
-        compgen -f "$path_entry/python3" | while IFS= read -r resolved; do
-          candidate=${resolved##*/}
-          case "$candidate" in
-            python3|python3[0-9]|python3.[0-9]*)
-              printf '%s\n' "$resolved"
-              ;;
-            python3.exe|python3.bat|python3.cmd|python3[0-9].exe|python3[0-9].bat|python3[0-9].cmd|python3.[0-9]*.exe|python3.[0-9]*.bat|python3.[0-9]*.cmd)
-              printf '%s\n' "$resolved"
-              ;;
-          esac
-        done | sort -rV -u
-      )
-
-      while IFS= read -r candidate; do
-        if [ -z "$candidate" ]; then
-          continue
-        fi
-        if _arthexis_python_candidate_is_py3 "$candidate"; then
-          _arthexis_python_bin_cached="$candidate"
-          break 2
-        fi
-      done <<<"$versioned_candidates"
+    done <<<"$versioned_candidates"
   done
 
   if [ -z "${_arthexis_python_bin_cached-}" ]; then

@@ -130,7 +130,7 @@ def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) 
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    workspace_python = Path(__file__).resolve().parents[1] / "python3"
+    workspace_python = tmp_path / "python3"
     _write_executable(
         workspace_python,
         "#!/bin/sh\n"
@@ -140,25 +140,22 @@ def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) 
         "exit 0\n",
     )
 
-    try:
-        script = (
-            "source scripts/helpers/common.sh\n"
-            "arthexis_python_bin\n"
-        )
-        sort_path = shlex.quote(_find_sort())
-        _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
-        env = os.environ | {"PATH": f"{_isolated_path(fake_bin)}:"}
-        bash_path = _find_bash()
-        result = subprocess.run(
-            [bash_path, "-c", script],
-            cwd=Path(__file__).resolve().parents[1],
-            capture_output=True,
-            text=True,
-            env=env,
-            check=False,
-        )
+    script = (
+        f"source {shlex.quote(str(Path(__file__).resolve().parents[1] / 'scripts/helpers/common.sh'))}\n"
+        "arthexis_python_bin\n"
+    )
+    sort_path = shlex.quote(_find_sort())
+    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
+    env = os.environ | {"PATH": f"{_isolated_path(fake_bin)}:"}
+    bash_path = _find_bash()
+    result = subprocess.run(
+        [bash_path, "-c", script],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
 
-        assert result.returncode == 0
-        assert result.stdout.strip() == "./python3"
-    finally:
-        workspace_python.unlink(missing_ok=True)
+    assert result.returncode == 0
+    assert result.stdout.strip() == "./python3"
