@@ -181,16 +181,25 @@ def run_stdio_server(
             response = server.handle_request(payload)
             if response is None:
                 continue
-        except (
-            json.JSONDecodeError,
-            McpProtocolError,
-            RemoteCommandError,
-        ) as exc:
+        except json.JSONDecodeError:
+            response = {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32700, "message": "Parse error"},
+            }
+        except McpProtocolError as exc:
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
                 "id": request_id,
-                "error": {"code": -32602, "message": str(exc)},
+                "error": {"code": -32600, "message": str(exc)},
+            }
+        except RemoteCommandError as exc:
+            request_id = payload.get("id") if isinstance(payload, dict) else None
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {"code": -32000, "message": str(exc)},
             }
 
         print(json.dumps(response), flush=True)
