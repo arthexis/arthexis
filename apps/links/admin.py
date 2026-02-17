@@ -124,6 +124,7 @@ class ReferenceAdmin(EntityModelAdmin):
         "roles",
         "features",
         "sites",
+        "application",
         "footer_modules",
         "include_in_footer",
         "show_in_header",
