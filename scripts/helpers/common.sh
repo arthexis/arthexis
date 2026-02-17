@@ -39,7 +39,7 @@ arthexis_python_bin() {
 
     for candidate in "$entry/$name" "$entry/$name.exe" "$entry/$name.bat" "$entry/$name.cmd"; do
       if [ -f "$candidate" ] && [ -x "$candidate" ]; then
-        printf '%s' "$name"
+        printf '%s' "$candidate"
         return 0
       fi
     done
@@ -55,8 +55,13 @@ arthexis_python_bin() {
     return 0
   fi
 
-  while IFS=':' read -r -a _arthexis_python_path_entries; do
-    for path_entry in "${_arthexis_python_path_entries[@]}"; do
+  local _arthexis_path_remainder
+  _arthexis_path_remainder="${PATH}:"
+
+  while [ -n "$_arthexis_path_remainder" ]; do
+    path_entry=${_arthexis_path_remainder%%:*}
+    _arthexis_path_remainder=${_arthexis_path_remainder#*:}
+
       if [ -z "$path_entry" ]; then
         path_entry='.'
       fi
@@ -87,10 +92,10 @@ arthexis_python_bin() {
           candidate=${resolved##*/}
           case "$candidate" in
             python3|python3[0-9]|python3.[0-9]*)
-              printf '%s\n' "$candidate"
+              printf '%s\n' "$resolved"
               ;;
             python3.exe|python3.bat|python3.cmd|python3[0-9].exe|python3[0-9].bat|python3[0-9].cmd|python3.[0-9]*.exe|python3.[0-9]*.bat|python3.[0-9]*.cmd)
-              printf '%s\n' "${candidate%.*}"
+              printf '%s\n' "$resolved"
               ;;
           esac
         done | sort -rV -u
@@ -102,11 +107,10 @@ arthexis_python_bin() {
         fi
         if _arthexis_python_candidate_is_py3 "$candidate"; then
           _arthexis_python_bin_cached="$candidate"
-          break 3
+          break 2
         fi
       done <<<"$versioned_candidates"
-    done
-  done <<<"$PATH"
+  done
 
   if [ -z "${_arthexis_python_bin_cached-}" ]; then
     _arthexis_python_bin_cached="not_found"
