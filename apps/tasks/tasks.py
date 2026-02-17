@@ -238,16 +238,31 @@ def _write_lcd_frames(
     frames: list[tuple[str, str]],
     *,
     lock_file: Path,
-    sleep_seconds: int = DEFAULT_SLEEP_SECONDS,
-    sleep_fn=time.sleep,
 ) -> None:
+    """Persist LCD frames into channel lock files.
+
+    The base lock path stores frame zero and additional frames are written to
+    ``<base>-<index>`` files so the LCD runner can rotate them as one channel.
+    """
+
     from apps.summary.services import render_lcd_payload
 
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-    for subject, body in frames:
+    base_name = lock_file.name
+    for idx, (subject, body) in enumerate(frames):
+        target = lock_file if idx == 0 else lock_file.with_name(f"{base_name}-{idx}")
         payload = render_lcd_payload(subject, body)
-        lock_file.write_text(payload, encoding="utf-8")
-        sleep_fn(sleep_seconds)
+        target.write_text(payload, encoding="utf-8")
+
+    prefix = f"{base_name}-"
+    for candidate in lock_file.parent.iterdir():
+        name = candidate.name
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix) :]
+        if not suffix.isdigit() or int(suffix) < len(frames):
+            continue
+        candidate.unlink(missing_ok=True)
 
 
 @shared_task(name="summary.tasks.generate_lcd_log_summary")
