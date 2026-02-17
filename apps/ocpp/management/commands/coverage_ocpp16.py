@@ -95,11 +95,12 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             self.generic_visit(node)
 
         def visit_Dict(self, node: ast.Dict) -> None:
-            self.actions.update(
-                key.value
-                for key in node.keys
-                if isinstance(key, ast.Constant) and isinstance(key.value, str)
-            )
+            if self._in_call_handler:
+                self.actions.update(
+                    key.value
+                    for key in node.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                )
             self.generic_visit(node)
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -112,7 +113,7 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             self.generic_visit(node)
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-            if node.name == "_handle_call_message":
+            if node.name in {"_handle_call_message", "_build_registry"}:
                 previous_state = self._in_call_handler
                 self._in_call_handler = True
                 self.generic_visit(node)
