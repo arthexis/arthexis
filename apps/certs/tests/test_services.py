@@ -162,8 +162,8 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     assert captured["command"][0] == "certbot"
 
 
-def test_build_http01_certbot_command_uses_standalone_http01():
-    """HTTP-01 certbot command should avoid the nginx plugin."""
+def test_build_http01_certbot_command_uses_nginx_plugin():
+    """HTTP-01 certbot command should use the nginx plugin."""
 
     command = services._build_http01_certbot_command(
         domain="example.com",
@@ -172,16 +172,14 @@ def test_build_http01_certbot_command_uses_standalone_http01():
     )
 
     assert command[:2] == ["sudo", "certbot"]
-    assert "--standalone" in command
-    assert "--preferred-challenges" in command
-    assert "http" in command
-    assert "--nginx" not in command
+    assert "--nginx" in command
+    assert "--standalone" not in command
 
 
-def test_request_certbot_certificate_nginx_challenge_uses_standalone(
+def test_request_certbot_certificate_nginx_challenge_uses_nginx_plugin(
     monkeypatch, tmp_path
 ):
-    """Legacy nginx challenge type should run standalone HTTP-01 certbot."""
+    """Legacy nginx challenge type should run certbot with nginx plugin."""
 
     captured: dict[str, list[str]] = {}
 
@@ -200,8 +198,8 @@ def test_request_certbot_certificate_nginx_challenge_uses_standalone(
         sudo="",
     )
 
-    assert "--standalone" in captured["command"]
-    assert "--nginx" not in captured["command"]
+    assert "--nginx" in captured["command"]
+    assert "--standalone" not in captured["command"]
 
 
 def test_build_godaddy_certbot_command_honors_sandbox_override():
