@@ -19,6 +19,7 @@ from .models import LLMSummaryConfig
 logger = logging.getLogger(__name__)
 
 LCD_COLUMNS = 16
+LCD_SUMMARY_FRAME_COUNT = 10
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -214,6 +215,15 @@ def normalize_screens(screens: Iterable[tuple[str, str]]) -> list[tuple[str, str
     return normalized
 
 
+def fixed_frame_window(screens: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Return exactly 10 LCD frames by truncating or padding with blanks."""
+
+    padded = list(screens[:LCD_SUMMARY_FRAME_COUNT])
+    while len(padded) < LCD_SUMMARY_FRAME_COUNT:
+        padded.append((" " * LCD_COLUMNS, " " * LCD_COLUMNS))
+    return padded
+
+
 def render_lcd_payload(subject: str, body: str) -> str:
     return render_lcd_lock_file(subject=subject, body=body)
 
@@ -264,7 +274,7 @@ def execute_log_summary_generation() -> str:
         screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
 
     lock_file = Path(settings.BASE_DIR) / ".locks" / LCD_LOW_LOCK_FILE
-    _write_lcd_frames(screens[:10], lock_file=lock_file)
+    _write_lcd_frames(fixed_frame_window(screens), lock_file=lock_file)
 
     config.last_run_at = now
     config.last_prompt = prompt
@@ -280,4 +290,4 @@ def execute_log_summary_generation() -> str:
             "updated_at",
         ]
     )
-    return f"wrote:{len(screens)}"
+    return f"wrote:{LCD_SUMMARY_FRAME_COUNT}"

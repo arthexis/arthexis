@@ -5,6 +5,7 @@ import pytest
 from apps.summary.services import (
     LogChunk,
     compact_log_chunks,
+    fixed_frame_window,
     normalize_screens,
     parse_screens,
 )
@@ -45,3 +46,14 @@ def test_parse_and_normalize_screens():
     for subject, body in screens:
         assert len(subject) == 16
         assert len(body) == 16
+
+
+def test_fixed_frame_window_always_returns_ten_frames():
+    screens = [("A" * 16, "B" * 16), ("C" * 16, "D" * 16)]
+
+    window = fixed_frame_window(screens)
+
+    assert len(window) == 10
+    assert window[0] == ("A" * 16, "B" * 16)
+    assert window[1] == ("C" * 16, "D" * 16)
+    assert all(frame == (" " * 16, " " * 16) for frame in window[2:])
