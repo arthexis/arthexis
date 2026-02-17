@@ -14,7 +14,13 @@ from apps.screens.startup_notifications import (
 )
 from apps.summary.node_features import get_llm_summary_prereq_state
 from apps.summary.models import LLMSummaryConfig
-from apps.summary.services import ensure_local_model, get_summary_config, normalize_screens, parse_screens
+from apps.summary.services import (
+    ensure_local_model,
+    execute_log_summary_generation,
+    get_summary_config,
+    normalize_screens,
+    parse_screens,
+)
 
 
 class Command(BaseCommand):
@@ -155,7 +161,4 @@ class Command(BaseCommand):
 
     def _run_summary_task_now(self) -> str:
         """Execute the summary task inline and return the resulting status string."""
-
-        from apps.tasks.tasks import generate_lcd_log_summary
-
-        return generate_lcd_log_summary()
+        return execute_log_summary_generation()
