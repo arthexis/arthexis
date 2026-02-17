@@ -39,7 +39,10 @@ def normalize_site_host(candidate: str) -> str:
     if not value:
         return ""
 
-    parsed = urlsplit(value if "://" in value else f"https://{value}")
+    try:
+        parsed = urlsplit(value if "://" in value else f"https://{value}")
+    except ValueError:
+        return ""
     hostname = (parsed.hostname or "").strip().strip(".").lower()
     return hostname
 
@@ -55,12 +58,8 @@ def load_site_config_allowed_hosts(base_dir: Path) -> list[str]:
     config_path = base_dir / "scripts" / "generated" / "nginx-sites.json"
     try:
         raw = config_path.read_text(encoding="utf-8")
-    except OSError:
-        return []
-
-    try:
         entries = json.loads(raw)
-    except json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return []
 
     if not isinstance(entries, list):
