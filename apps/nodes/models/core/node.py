@@ -22,7 +22,7 @@ from django.contrib.sites.models import Site
 from django.core import serializers
 from django.core.serializers.base import DeserializationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models import Q
 from django.db.utils import DatabaseError
 from django.dispatch import Signal, receiver
@@ -253,7 +253,14 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
     @classmethod
     def get_local(cls):
-        """Return the node representing the current host if it exists."""
+        """Return the node representing the current host if it exists.
+
+        When the runtime MAC address changes (for example after NIC
+        replacement, virtualization changes, or image cloning), the local
+        ``SELF`` node may still exist with a stale MAC. In that case this
+        method attempts to refresh the stored MAC so local-only tasks keep
+        running without manual re-registration.
+        """
         mac = cls.get_current_mac()
         now = timezone.now()
 
@@ -279,12 +286,46 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             if node:
                 cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
                 return node
-            node = (
-                cls.objects.filter(current_relation=cls.Relation.SELF)
-                .filter(mac_address__in=["", None])
-                .first()
-            )
-            if node:
+            node = cls.objects.filter(current_relation=cls.Relation.SELF).first()
+            if not node:
+                return None
+
+            stored_mac = (node.mac_address or "").strip().lower()
+            current_mac = mac.strip().lower()
+            should_cache = True
+            if stored_mac != current_mac:
+                node.mac_address = mac
+                try:
+                    node.save(update_fields=["mac_address"])
+                except IntegrityError:
+                    node.mac_address = stored_mac
+                    logger.warning(
+                        "nodes.Node.get_local detected MAC mismatch for self node and could not update due to MAC uniqueness conflict",
+                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                        exc_info=True,
+                    )
+                    if transaction.get_connection().in_atomic_block:
+                        transaction.set_rollback(False)
+                    try:
+                        node = cls.objects.filter(mac_address__iexact=mac).first() or node
+                        should_cache = (node.mac_address or "").strip().lower() == current_mac
+                    except DatabaseError:
+                        should_cache = False
+                except DatabaseError:
+                    node.mac_address = stored_mac
+                    should_cache = False
+                    logger.warning(
+                        "nodes.Node.get_local could not save MAC update for self node due to a database error",
+                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                        exc_info=True,
+                    )
+                else:
+                    logger.warning(
+                        "nodes.Node.get_local refreshed stale self-node MAC address",
+                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                    )
+
+            if should_cache:
                 cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
             return node
         except DatabaseError:
