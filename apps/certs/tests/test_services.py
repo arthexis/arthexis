@@ -185,3 +185,33 @@ def test_build_godaddy_certbot_command_honors_sandbox_override():
     )
 
     assert env["GODADDY_USE_SANDBOX"] == "0"
+
+
+def test_request_certbot_certificate_missing_certbot_includes_supported_os_guidance(
+    monkeypatch, tmp_path
+):
+    """Missing certbot errors should include actionable guidance for supported hosts."""
+
+    def fake_run(command: list[str], *, env=None):
+        raise RuntimeError("sudo: certbot: command not found")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "_read_os_release_fields",
+        lambda: {"ID": "ubuntu", "PRETTY_NAME": "Ubuntu 24.04 LTS"},
+    )
+
+    with pytest.raises(services.CertbotError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            sudo="",
+        )
+
+    message = str(exc_info.value)
+    assert "sudo: certbot: command not found" in message
+    assert "Ubuntu 22.04 / 24.04" in message
+    assert "apt install -y certbot python3-certbot-nginx" in message

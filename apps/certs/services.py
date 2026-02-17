@@ -92,7 +92,64 @@ def request_certbot_certificate(
     try:
         return _run_command(command, env=env)
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
+        if _is_missing_certbot_error(str(exc)):
+            raise CertbotError(_build_missing_certbot_guidance(str(exc))) from exc
         raise CertbotError(str(exc)) from exc
+
+
+def _is_missing_certbot_error(message: str) -> bool:
+    """Return True when stderr output indicates that certbot is not installed."""
+
+    lowered = message.lower()
+    return "certbot" in lowered and "command not found" in lowered
+
+
+def _build_missing_certbot_guidance(base_message: str) -> str:
+    """Build an actionable certbot installation message for supported Linux hosts."""
+
+    distro = _read_os_release_fields()
+    distro_id = distro.get("ID", "")
+    distro_like = distro.get("ID_LIKE", "")
+    distro_name = distro.get("PRETTY_NAME") or distro_id or "this host"
+
+    guidance = [
+        base_message,
+        (
+            f"certbot is required to provision Let's Encrypt certificates on {distro_name}. "
+            "Install certbot, then rerun the https command."
+        ),
+        "Supported Arthexis hosts and recommended commands:",
+        "- Ubuntu 22.04 / 24.04: sudo apt update && sudo apt install -y certbot python3-certbot-nginx",
+        "- Debian-based hosts: sudo apt update && sudo apt install -y certbot python3-certbot-nginx",
+    ]
+
+    if distro_id in {"ubuntu", "debian"} or "debian" in distro_like:
+        guidance.append(
+            "Detected Debian-family OS, so the apt command above is the supported path."
+        )
+    else:
+        guidance.append(
+            "Detected a non-Debian OS; Arthexis install scripts target Ubuntu 22.04/24.04, "
+            "so use one of those supported environments for managed HTTPS provisioning."
+        )
+
+    return "\n".join(guidance)
+
+
+def _read_os_release_fields() -> dict[str, str]:
+    """Return parsed key/value fields from /etc/os-release."""
+
+    os_release = Path("/etc/os-release")
+    if not os_release.exists():
+        return {}
+
+    fields: dict[str, str] = {}
+    for line in os_release.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        fields[key] = value.strip().strip('"')
+    return fields
 
 
 def generate_self_signed_certificate(
