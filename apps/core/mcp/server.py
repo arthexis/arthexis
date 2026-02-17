@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from functools import cached_property
 from io import StringIO
 from typing import Any
 
@@ -12,7 +13,6 @@ from django.core.management.base import CommandError
 
 from .remote_commands import (
     RemoteCommandError,
-    RemoteCommandNotAllowedError,
     discover_remote_commands,
 )
 
@@ -30,6 +30,7 @@ class DjangoCommandMCPServer:
         self._allow = allow or set()
         self._deny = deny or set()
 
+    @cached_property
     def _tools(self) -> dict[str, dict[str, Any]]:
         discovered = discover_remote_commands(allow=self._allow, deny=self._deny)
         tools: dict[str, dict[str, Any]] = {}
@@ -50,7 +51,6 @@ class DjangoCommandMCPServer:
                     },
                     "additionalProperties": False,
                 },
-                "_command_name": name,
             }
         return tools
 
@@ -64,12 +64,12 @@ class DjangoCommandMCPServer:
         return "\n\n".join(chunks) or "Command completed without output."
 
     def _call_tool(self, tool_name: str, args: list[str]) -> dict[str, Any]:
-        tools = self._tools()
+        tools = self._tools
         tool = tools.get(tool_name)
         if tool is None:
-            raise RemoteCommandNotAllowedError(f"Tool '{tool_name}' is not available.")
+            raise RemoteCommandError(f"Tool '{tool_name}' is not available.")
 
-        command_name = tool["_command_name"]
+        command_name = tool_name.removeprefix("django.command.")
         stdout = StringIO()
         stderr = StringIO()
 
@@ -87,6 +87,11 @@ class DjangoCommandMCPServer:
                 ],
                 "isError": True,
             }
+        except SystemExit as exc:
+            return {
+                "content": [{"type": "text", "text": f"Command exited: {exc}"}],
+                "isError": True,
+            }
 
         return {
             "content": [
@@ -97,8 +102,11 @@ class DjangoCommandMCPServer:
             ]
         }
 
-    def handle_request(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def handle_request(self, payload: Any) -> dict[str, Any] | None:
         """Handle a single JSON-RPC request and return its response payload."""
+
+        if not isinstance(payload, dict):
+            raise McpProtocolError("JSON-RPC payload must be an object.")
 
         if payload.get("jsonrpc") != "2.0":
             raise McpProtocolError("Only JSON-RPC 2.0 payloads are supported.")
@@ -127,9 +135,7 @@ class DjangoCommandMCPServer:
             return None
 
         if method == "tools/list":
-            tools = list(self._tools().values())
-            for tool in tools:
-                tool.pop("_command_name", None)
+            tools = list(self._tools.values())
             return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools}}
 
         if method == "tools/call":
@@ -161,8 +167,13 @@ def run_stdio_server(
 
     server = DjangoCommandMCPServer(allow=allow, deny=deny)
 
+    # input() raises EOFError when stdin closes; that is expected shutdown behavior.
     while True:
-        raw = input()
+        payload: Any = None
+        try:
+            raw = input()
+        except EOFError:
+            break
         if not raw:
             continue
         try:
@@ -174,11 +185,11 @@ def run_stdio_server(
             json.JSONDecodeError,
             McpProtocolError,
             RemoteCommandError,
-            RemoteCommandNotAllowedError,
         ) as exc:
+            request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
-                "id": None,
+                "id": request_id,
                 "error": {"code": -32602, "message": str(exc)},
             }
 

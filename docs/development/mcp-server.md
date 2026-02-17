@@ -29,7 +29,11 @@ The command runs a JSON-RPC MCP loop on stdio.
 You can configure an allow/deny list from CLI flags:
 
 ```bash
-python manage.py mcp_server --allow uptime,redis --deny redis
+# Allow specific commands
+python manage.py mcp_server --allow uptime
+
+# Or deny specific commands from the full set
+python manage.py mcp_server --deny some-dangerous-command
 ```
 
 Or from environment variables:
@@ -48,7 +52,7 @@ Register the process in your MCP client/agent host so it launches:
   "mcpServers": {
     "arthexis": {
       "command": "python",
-      "args": ["manage.py", "mcp_server", "--allow", "uptime,redis"]
+      "args": ["manage.py", "mcp_server", "--allow", "uptime"]
     }
   }
 }
@@ -57,6 +61,5 @@ Register the process in your MCP client/agent host so it launches:
 The server exposes tools named:
 
 - `django.command.uptime`
-- `django.command.redis`
 
 (and any other decorated command).

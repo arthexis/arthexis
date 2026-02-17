@@ -47,10 +47,8 @@ class Command(BaseCommand):
         allow_from_env = _parse_csv_names(os.getenv("ARTHEXIS_MCP_REMOTE_ALLOW"))
         deny_from_env = _parse_csv_names(os.getenv("ARTHEXIS_MCP_REMOTE_DENY"))
 
-        if allow_from_env:
-            allow = allow.union(allow_from_env)
-        if deny_from_env:
-            deny = deny.union(deny_from_env)
+        allow.update(allow_from_env)
+        deny.update(deny_from_env)
 
         if allow and deny and allow.issubset(deny):
             raise CommandError("The deny-list blocks every allowed command.")
