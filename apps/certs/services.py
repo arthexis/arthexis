@@ -129,15 +129,13 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
 
 
 def _build_http01_certbot_command(*, domain: str, email: str | None, sudo: str) -> list[str]:
-    """Build a certbot command that uses standalone HTTP-01 validation."""
+    """Build a certbot command that uses nginx-managed HTTP-01 validation."""
 
     command = _with_sudo(
         [
             "certbot",
             "certonly",
-            "--standalone",
-            "--preferred-challenges",
-            "http",
+            "--nginx",
             "-d",
             domain,
             "--agree-tos",
