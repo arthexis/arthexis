@@ -55,6 +55,9 @@ class Command(BaseCommand):
         if options["run_now"]:
             run_status = self._run_summary_task_now()
             self.stdout.write(f"Run now: {run_status}")
+            # The task updates summary config fields on its own model instance,
+            # so reload to report the run that just completed.
+            config = get_summary_config()
 
         prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
         current_message = read_lcd_lock_file(base_dir / ".locks" / lcd_locks.LOW_LOCK_FILE.name)

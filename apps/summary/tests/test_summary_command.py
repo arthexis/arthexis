@@ -8,6 +8,8 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
+from django.utils import timezone
+
 from apps.nodes.models import Node
 from apps.screens.startup_notifications import (
     LCD_CHANNELS_LOCK_FILE,
@@ -91,4 +93,37 @@ def test_summary_command_run_now_executes_task_before_status(tmp_path: Path) -> 
     output = out.getvalue()
     assert "Run now: wrote:2" in output
     assert "LCD Summary Status" in output
+    run_now.assert_called_once_with()
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_refreshes_config_before_reporting(tmp_path: Path) -> None:
+    """The --run-now flag should print refreshed config fields updated by the task."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+    config = get_summary_config()
+    config.last_run_at = None
+    config.save(update_fields=["last_run_at", "updated_at"])
+
+    refreshed_run_at = timezone.now().replace(microsecond=0)
+
+    def _run_now_side_effect() -> str:
+        run_config = get_summary_config()
+        run_config.last_run_at = refreshed_run_at
+        run_config.save(update_fields=["last_run_at", "updated_at"])
+        return "wrote:1"
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            side_effect=_run_now_side_effect,
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert "Run now: wrote:1" in output
+    assert f"Last run: {refreshed_run_at.isoformat()}" in output
     run_now.assert_called_once_with()
