@@ -76,9 +76,9 @@ def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name:
     sort_path = shlex.quote(_find_sort())
     _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
-    bash_path = _find_bash()
+    bash_executable = _find_bash()
     result = subprocess.run(
-        [bash_path, "-c", script],
+        [bash_executable, "-c", script],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
@@ -87,7 +87,7 @@ def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name:
     )
 
     assert result.returncode == 0
-    assert result.stdout.strip() == str(fake_bin / binary_name)
+    assert result.stdout.strip() == bash_path(fake_bin / binary_name)
 
 
 def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) -> None:
@@ -111,9 +111,9 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
     sort_path = shlex.quote(_find_sort())
     _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
-    bash_path = _find_bash()
+    bash_executable = _find_bash()
     result = subprocess.run(
-        [bash_path, "-c", script],
+        [bash_executable, "-c", script],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
@@ -122,7 +122,7 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
     )
 
     assert result.returncode == 0
-    assert result.stdout.strip() == str(fake_bin / "python3.12")
+    assert result.stdout.strip() == bash_path(fake_bin / "python3.12")
 
 
 def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) -> None:
@@ -141,15 +141,15 @@ def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) 
     )
 
     script = (
-        f"source {shlex.quote(str(Path(__file__).resolve().parents[1] / 'scripts/helpers/common.sh'))}\n"
+        f"source {shlex.quote(bash_path(Path(__file__).resolve().parents[1] / 'scripts/helpers/common.sh'))}\n"
         "arthexis_python_bin\n"
     )
     sort_path = shlex.quote(_find_sort())
     _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": f"{_isolated_path(fake_bin)}:"}
-    bash_path = _find_bash()
+    bash_executable = _find_bash()
     result = subprocess.run(
-        [bash_path, "-c", script],
+        [bash_executable, "-c", script],
         cwd=tmp_path,
         capture_output=True,
         text=True,
