@@ -32,6 +32,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Enable required locks/features so LCD summary can run.",
         )
+        parser.add_argument(
+            "--run-now",
+            action="store_true",
+            help="Generate the LCD summary immediately before printing status.",
+        )
 
     def handle(self, *args, **options) -> None:
         """Render status output and apply optional auto-enable actions."""
@@ -46,6 +51,10 @@ class Command(BaseCommand):
 
         if options["enabled"]:
             self._enable_prerequisites(node=node, config=config, base_dir=base_dir)
+
+        if options["run_now"]:
+            run_status = self._run_summary_task_now()
+            self.stdout.write(f"Run now: {run_status}")
 
         prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
         current_message = read_lcd_lock_file(base_dir / ".locks" / lcd_locks.LOW_LOCK_FILE.name)
@@ -140,3 +149,10 @@ class Command(BaseCommand):
             return lcd_locks.parse_channel_order(raw)
         except Exception:
             return []
+
+    def _run_summary_task_now(self) -> str:
+        """Execute the summary task inline and return the resulting status string."""
+
+        from apps.tasks.tasks import generate_lcd_log_summary
+
+        return generate_lcd_log_summary()
