@@ -44,6 +44,7 @@ def test_register_node_rejects_invalid_signature_without_authenticated_user():
     "headers,expected",
     [
         ({"HTTP_X_FORWARDED_PORT": "8443"}, 8443),
+        ({"HTTP_X_FORWARDED_PROTO": "https", "HTTP_X_FORWARDED_PORT": "8443"}, 8443),
         ({"HTTP_HOST": "edge.example.com:9443"}, 9443),
         ({"HTTP_X_FORWARDED_PROTO": "https"}, 443),
         ({"HTTP_X_FORWARDED_PROTO": "http"}, 80),

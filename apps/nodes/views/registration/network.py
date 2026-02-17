@@ -120,6 +120,13 @@ def _normalize_port(value: str | int | None) -> int | None:
 def _get_host_port(request) -> int | None:
     """Return best-effort inferred host port for request context."""
 
+    forwarded_port = request.headers.get("X-Forwarded-Port") or request.META.get(
+        "HTTP_X_FORWARDED_PORT"
+    )
+    port = _normalize_port(forwarded_port)
+    if port:
+        return port
+
     forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
         "HTTP_X_FORWARDED_PROTO", ""
     )
@@ -129,13 +136,6 @@ def _get_host_port(request) -> int | None:
             return 443
         if scheme == "http":
             return 80
-
-    forwarded_port = request.headers.get("X-Forwarded-Port") or request.META.get(
-        "HTTP_X_FORWARDED_PORT"
-    )
-    port = _normalize_port(forwarded_port)
-    if port:
-        return port
 
     try:
         host = request.get_host()
