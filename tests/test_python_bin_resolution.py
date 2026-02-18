@@ -173,6 +173,30 @@ def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) 
     assert result.stdout.strip() == "./python3"
 
 
+
+
+def test_arthexis_python_bin_supports_semicolon_path_with_drive_letters(tmp_path: Path) -> None:
+    """Windows-style drive letters should not force ':' PATH splitting."""
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "python3",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+
+    windows_like_path = f"C:\\Python312;{_isolated_path(fake_bin)}"
+    env = os.environ | {"PATH": windows_like_path}
+    result = _run_arthexis_python_bin(env=env, cwd=Path(__file__).resolve().parents[1])
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == bash_path(fake_bin / "python3")
+
+
 def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
     """An empty PATH should still reuse cached not_found results."""
 
