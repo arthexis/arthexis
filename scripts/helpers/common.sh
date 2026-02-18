@@ -28,6 +28,8 @@ arthexis_python_bin() {
   local candidate
   local versioned_candidates
   local current_path
+  local cache_owner
+  local path_separator
 
   _arthexis_python_candidate_is_py3() {
     local python_candidate="$1"
@@ -67,7 +69,11 @@ arthexis_python_bin() {
   # Cache is PATH-dependent so inherited shell state cannot override lookup
   # results when the caller provides a different PATH.
   current_path="${PATH-}"
-  if [ "${_arthexis_python_bin_cached_path+x}" = "x" ] && [ "$_arthexis_python_bin_cached_path" = "$current_path" ] && [ -n "${_arthexis_python_bin_cached-}" ]; then
+  cache_owner="${BASHPID:-$$}"
+  if [ "${_arthexis_python_bin_cached_owner-}" = "$cache_owner" ] \
+    && [ "${_arthexis_python_bin_cached_path+x}" = "x" ] \
+    && [ "$_arthexis_python_bin_cached_path" = "$current_path" ] \
+    && [ -n "${_arthexis_python_bin_cached-}" ]; then
     if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
       return 1
     fi
@@ -77,13 +83,20 @@ arthexis_python_bin() {
 
   unset _arthexis_python_bin_cached
   _arthexis_python_bin_cached_path="$current_path"
+  _arthexis_python_bin_cached_owner="$cache_owner"
+
+  # Bash on Windows can surface PATH-like values separated by ';'.
+  path_separator=':'
+  if [[ "$current_path" == *';'* && "$current_path" != *:* ]]; then
+    path_separator=';'
+  fi
 
   local _arthexis_path_remainder
-  _arthexis_path_remainder="${PATH}:"
+  _arthexis_path_remainder="${PATH}${path_separator}"
 
   while [ -n "$_arthexis_path_remainder" ]; do
-    path_entry=${_arthexis_path_remainder%%:*}
-    _arthexis_path_remainder=${_arthexis_path_remainder#*:}
+    path_entry=${_arthexis_path_remainder%%"$path_separator"*}
+    _arthexis_path_remainder=${_arthexis_path_remainder#*"$path_separator"}
 
     if [ -z "$path_entry" ]; then
       path_entry='.'
