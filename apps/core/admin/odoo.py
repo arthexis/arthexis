@@ -203,6 +203,8 @@ class OdooProductAdmin(EntityModelAdmin):
             raise PermissionDenied
 
         raw_ids = request.GET.get("ids", "")
+        if not raw_ids and request.method == "POST":
+            raw_ids = ",".join(request.POST.getlist("_selected_action"))
         selected_model_ids: list[int] = []
         for value in raw_ids.split(","):
             if not value.strip():
@@ -274,7 +276,20 @@ class OdooProductAdmin(EntityModelAdmin):
                 continue
             order_to_lines.setdefault(order_id, []).append(line)
 
-        orders = self._prepare_orders(profile, list(order_to_lines.keys()))
+        try:
+            orders = self._prepare_orders(profile, list(order_to_lines.keys()))
+        except (Fault, ProtocolError, OSError):
+            logger.exception(
+                "Failed to fetch sale orders for selected Odoo products %s (user_id=%s)",
+                selected_ids,
+                getattr(request.user, "pk", None),
+            )
+            context["error"] = _("Unable to fetch matching orders from Odoo.")
+            return TemplateResponse(
+                request,
+                "admin/core/product/search_orders_for_selected.html",
+                context,
+            )
         prepared_orders = []
         for order in orders:
             order_id = order.get("id")
