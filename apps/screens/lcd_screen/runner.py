@@ -338,23 +338,21 @@ def main() -> None:  # pragma: no cover - hardware dependent
         nonlocal stats_cycle
         state_label = state_order[index]
         channel_state = channel_info.get(state_label)
+
+        def _peek_payload(cycle: ChannelCycle | None) -> locks.LockPayload | None:
+            if cycle is None:
+                return None
+            if advance:
+                return cycle.next_payload()
+            if not cycle.payloads:
+                return None
+            return cycle.payloads[cycle.index % len(cycle.payloads)]
+
         if state_label == "high" and channel_state:
-            payload = (
-                channel_state.next_payload()
-                if advance
-                else channel_state.payloads[0]
-                if channel_state.payloads
-                else None
-            )
+            payload = _peek_payload(channel_state)
             return payload or locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
         if state_label in {"low", "uptime"} and channel_state:
-            payload = (
-                channel_state.next_payload()
-                if advance
-                else channel_state.payloads[0]
-                if channel_state.payloads
-                else None
-            )
+            payload = _peek_payload(channel_state)
             base_payload = _select_low_payload(
                 locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS),
                 base_dir=BASE_DIR,
@@ -371,13 +369,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
             return base_payload
         if state_label == "clock":
             if channel_state and channel_text[state_label]:
-                payload = (
-                    channel_state.next_payload()
-                    if advance
-                    else channel_state.payloads[0]
-                    if channel_state.payloads
-                    else None
-                )
+                payload = _peek_payload(channel_state)
                 if _lcd_clock_enabled():
                     line1, line2, speed, _ = _clock_payload(
                         now_dt.astimezone(), use_fahrenheit=clock_cycle % 2 == 0
@@ -396,7 +388,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         is_base=True,
                     )
                 resolved = _apply_relief_if_needed("clock", payload, base_payload, now_dt)
-                if resolved.is_base:
+                if advance and resolved.is_base:
                     clock_cycle += 1
                 return resolved
             if _lcd_clock_enabled():
@@ -405,26 +397,18 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 line1, line2, speed, _ = _clock_payload(
                     now_dt.astimezone(), use_fahrenheit=use_fahrenheit
                 )
-                clock_cycle += 1
+                if advance:
+                    clock_cycle += 1
                 return locks.LockPayload(line1, line2, speed, is_base=True)
         if state_label == "stats":
             uptime_state = channel_info.get("uptime")
-            uptime_payload = (
-                uptime_state.next_payload()
-                if uptime_state and advance
-                else uptime_state.payloads[0]
-                if uptime_state and uptime_state.payloads
-                else locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
+            uptime_payload = _peek_payload(uptime_state) or locks.LockPayload(
+                "", "", locks.DEFAULT_SCROLL_MS
             )
-            stats_payload = (
-                channel_state.next_payload()
-                if channel_state and advance
-                else channel_state.payloads[0]
-                if channel_state and channel_state.payloads
-                else None
-            )
+            stats_payload = _peek_payload(channel_state)
             use_uptime = stats_cycle % 2 == 0
-            stats_cycle += 1
+            if advance:
+                stats_cycle += 1
             if use_uptime:
                 if uptime_payload and _payload_has_text(uptime_payload):
                     return _refresh_uptime_payload(uptime_payload)
@@ -678,7 +662,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         _schedule_cycle_prefetch(
                             state_order,
                             upcoming_index,
-                            now_dt + timedelta(seconds=2 * ROTATION_SECONDS),
+                            now_dt,
                         )
 
                 if lcd is None:
@@ -761,7 +745,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         _schedule_cycle_prefetch(
                             state_order,
                             upcoming_index,
-                            now_dt + timedelta(seconds=2 * ROTATION_SECONDS),
+                            now_dt,
                         )
                     else:
                         with cycle_state_lock:
