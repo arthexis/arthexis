@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+HTTP01_WEBROOT_PATH = Path("/var/www/arthexis")
+
+
 class CertbotError(RuntimeError):
     """Raised when certbot fails to request a certificate."""
 
@@ -69,6 +72,10 @@ def request_certbot_certificate(
             sudo=sudo,
         )
     else:
+        if sudo:
+            _run_command(_with_sudo(["mkdir", "-p", str(HTTP01_WEBROOT_PATH)], sudo))
+        else:
+            HTTP01_WEBROOT_PATH.mkdir(parents=True, exist_ok=True)
         command = _build_http01_certbot_command(
             domain=domain,
             email=email,
@@ -129,13 +136,15 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
 
 
 def _build_http01_certbot_command(*, domain: str, email: str | None, sudo: str) -> list[str]:
-    """Build a certbot command that uses nginx-managed HTTP-01 validation."""
+    """Build a certbot command that uses webroot HTTP-01 validation."""
 
     command = _with_sudo(
         [
             "certbot",
             "certonly",
-            "--nginx",
+            "--webroot",
+            "--webroot-path",
+            str(HTTP01_WEBROOT_PATH),
             "-d",
             domain,
             "--agree-tos",
