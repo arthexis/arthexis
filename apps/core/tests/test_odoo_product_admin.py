@@ -67,10 +67,12 @@ def test_search_orders_for_selected_action_renders_matching_orders(
         },
     )
 
-    assert response.status_code == 200
-    assert "S0001" in response.rendered_content
-    assert "Acme" in response.rendered_content
-    assert "Odoo line" in response.rendered_content
+    assert response.status_code == 302
+    follow_response = admin_client.get(response.url)
+    assert follow_response.status_code == 200
+    assert "S0001" in follow_response.rendered_content
+    assert "Acme" in follow_response.rendered_content
+    assert "Odoo line" in follow_response.rendered_content
 
 
 @pytest.mark.django_db
@@ -104,8 +106,10 @@ def test_search_orders_for_selected_action_requires_odoo_link(admin_client):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 302
+    follow_response = admin_client.get(response.url)
+    assert follow_response.status_code == 200
     assert (
         "None of the selected products are linked to an Odoo product ID."
-        in response.rendered_content
+        in follow_response.rendered_content
     )
