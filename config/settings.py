@@ -472,6 +472,7 @@ LOCAL_APPS = [
     "apps.wikis",
     "apps.totp",
     "apps.terms",
+    "apps.evergo",
 ]
 
 INSTALLED_APPS = [
