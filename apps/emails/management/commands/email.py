@@ -189,13 +189,13 @@ class Command(BaseCommand):
     def _has_bridge_changes(self, options: dict[str, Any]) -> bool:
         """Return whether bridge configuration flags were supplied."""
 
-        return any(options.get(key) not in {None, False} for key in self.BRIDGE_EDITABLE_KEYS)
+        return any(options.get(key) is not None for key in self.BRIDGE_EDITABLE_KEYS)
 
     def _configure_inbox(self, options: dict[str, Any]) -> EmailInbox:
         """Create or update an inbox profile from command options."""
 
         inbox_id = options.get("inbox")
-        if inbox_id:
+        if inbox_id is not None:
             try:
                 inbox = EmailInbox.objects.get(pk=inbox_id)
             except EmailInbox.DoesNotExist as exc:
@@ -239,7 +239,7 @@ class Command(BaseCommand):
         """Create or update an outbox profile from command options."""
 
         outbox_id = options.get("outbox")
-        if outbox_id:
+        if outbox_id is not None:
             try:
                 outbox = EmailOutbox.objects.get(pk=outbox_id)
             except EmailOutbox.DoesNotExist as exc:
@@ -287,7 +287,7 @@ class Command(BaseCommand):
         """Create or update a bridge profile from command options."""
 
         bridge_id = options.get("bridge")
-        if bridge_id:
+        if bridge_id is not None:
             try:
                 bridge = EmailBridge.objects.get(pk=bridge_id)
             except EmailBridge.DoesNotExist as exc:

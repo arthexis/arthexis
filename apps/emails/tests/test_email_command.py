@@ -266,3 +266,24 @@ def test_email_command_search_rejects_non_positive_limit():
 
     with pytest.raises(CommandError, match="--search-limit must be a positive integer"):
         call_command("email", "--search", "--search-limit", "0")
+
+
+def test_email_command_bridge_flag_zero_surfaces_not_found():
+    """Explicit --bridge 0 should attempt lookup and fail clearly."""
+
+    with pytest.raises(CommandError, match="Bridge not found: 0"):
+        call_command("email", "--bridge", "0", "--bridge-name", "renamed")
+
+
+def test_email_command_inbox_flag_zero_surfaces_not_found():
+    """Explicit --inbox 0 should not fall through to create mode."""
+
+    with pytest.raises(CommandError, match="Inbox not found: 0"):
+        call_command("email", "--inbox", "0", "--inbox-host", "imap.invalid")
+
+
+def test_email_command_outbox_flag_zero_surfaces_not_found():
+    """Explicit --outbox 0 should not fall through to create mode."""
+
+    with pytest.raises(CommandError, match="Outbox not found: 0"):
+        call_command("email", "--outbox", "0", "--outbox-host", "smtp.invalid")
