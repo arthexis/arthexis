@@ -93,8 +93,47 @@ class OdooEmployeeAdmin(
 @admin.register(OdooProduct)
 class OdooProductAdmin(EntityModelAdmin):
     form = OdooProductAdminForm
-    actions = ["register_from_odoo"]
+    actions = ["register_from_odoo", "search_orders_for_selected"]
     change_list_template = "admin/core/product/change_list.html"
+
+    def _selected_odoo_product_ids(self, queryset):
+        """Return Odoo product IDs extracted from selected Arthexis products."""
+
+        selected_ids: list[int] = []
+        for item in queryset:
+            odoo_product = item.odoo_product or {}
+            odoo_id = odoo_product.get("id")
+            try:
+                parsed_odoo_id = int(odoo_id)
+            except (TypeError, ValueError):
+                continue
+            selected_ids.append(parsed_odoo_id)
+        return selected_ids
+
+    def _prepare_order_lines(self, profile, selected_ids):
+        """Fetch and normalize Odoo order lines that match selected product IDs."""
+
+        return profile.execute(
+            "sale.order.line",
+            "search_read",
+            [[("product_id", "in", selected_ids), ("order_id", "!=", False)]],
+            fields=["order_id", "product_id", "name", "product_uom_qty", "price_total"],
+            limit=0,
+        )
+
+    def _prepare_orders(self, profile, order_ids):
+        """Fetch sale orders by id and normalize sorting order."""
+
+        if not order_ids:
+            return []
+        return profile.execute(
+            "sale.order",
+            "search_read",
+            [[("id", "in", order_ids)]],
+            fields=["name", "partner_id", "state", "date_order", "amount_total"],
+            order="date_order desc",
+            limit=0,
+        )
 
     def _odoo_employee_admin(self):
         return self.admin_site._registry.get(OdooEmployee)
@@ -111,7 +150,9 @@ class OdooProductAdmin(EntityModelAdmin):
         return custom + urls
 
     @admin.action(description=_("Discover"))
-    def register_from_odoo(self, request, queryset=None):  # pragma: no cover - simple redirect
+    def register_from_odoo(
+        self, request, queryset=None
+    ):  # pragma: no cover - simple redirect
         return HttpResponseRedirect(
             reverse(
                 f"admin:{self.opts.app_label}_{self.opts.model_name}_register_from_odoo"
@@ -119,6 +160,109 @@ class OdooProductAdmin(EntityModelAdmin):
         )
 
     register_from_odoo.is_discover_action = True
+
+    @admin.action(description=_("Search Orders for selected"))
+    def search_orders_for_selected(self, request, queryset):
+        """Show Odoo sale orders that include at least one selected product."""
+
+        profile = getattr(request.user, "odoo_employee", None)
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Orders containing selected products"),
+            "selected_products": list(queryset),
+            "orders": [],
+            "error": None,
+            "has_credentials": bool(profile and profile.is_verified),
+        }
+
+        if not profile or not profile.is_verified:
+            context["error"] = _(
+                "Configure and verify your Odoo employee before searching orders."
+            )
+            return TemplateResponse(
+                request,
+                "admin/core/product/search_orders_for_selected.html",
+                context,
+            )
+
+        selected_ids = self._selected_odoo_product_ids(queryset)
+        if not selected_ids:
+            context["error"] = _(
+                "None of the selected products are linked to an Odoo product ID."
+            )
+            return TemplateResponse(
+                request,
+                "admin/core/product/search_orders_for_selected.html",
+                context,
+            )
+
+        try:
+            order_lines = self._prepare_order_lines(profile, selected_ids)
+        except Exception:
+            logger.exception(
+                "Failed to fetch sale order lines for selected Odoo products %s (user_id=%s)",
+                selected_ids,
+                getattr(request.user, "pk", None),
+            )
+            context["error"] = _("Unable to fetch matching orders from Odoo.")
+            return TemplateResponse(
+                request,
+                "admin/core/product/search_orders_for_selected.html",
+                context,
+            )
+
+        order_to_lines: dict[int, list[dict]] = {}
+        for line in order_lines:
+            order_info = line.get("order_id")
+            if not isinstance(order_info, (list, tuple)) or not order_info:
+                continue
+            order_id = order_info[0]
+            if not isinstance(order_id, int):
+                continue
+            order_to_lines.setdefault(order_id, []).append(line)
+
+        orders = self._prepare_orders(profile, list(order_to_lines.keys()))
+        prepared_orders = []
+        for order in orders:
+            order_id = order.get("id")
+            if not isinstance(order_id, int):
+                continue
+            partner = order.get("partner_id")
+            partner_name = ""
+            if isinstance(partner, (list, tuple)) and len(partner) > 1:
+                partner_name = partner[1]
+            prepared_lines = []
+            for line in order_to_lines.get(order_id, []):
+                product_info = line.get("product_id")
+                product_name = ""
+                if isinstance(product_info, (list, tuple)) and len(product_info) > 1:
+                    product_name = product_info[1]
+                prepared_lines.append(
+                    {
+                        "name": line.get("name") or product_name,
+                        "product_name": product_name,
+                        "quantity": line.get("product_uom_qty"),
+                        "total": line.get("price_total"),
+                    }
+                )
+            prepared_orders.append(
+                {
+                    "name": order.get("name", ""),
+                    "customer": partner_name,
+                    "state": order.get("state", ""),
+                    "date_order": order.get("date_order"),
+                    "amount_total": order.get("amount_total"),
+                    "lines": prepared_lines,
+                }
+            )
+
+        context["orders"] = prepared_orders
+        return TemplateResponse(
+            request,
+            "admin/core/product/search_orders_for_selected.html",
+            context,
+        )
 
     def _build_register_context(self, request):
         opts = self.model._meta

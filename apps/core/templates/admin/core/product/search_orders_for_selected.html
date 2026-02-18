@@ -1,0 +1,70 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+  <a href="{% url 'admin:app_list' opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+  <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
+  {% trans 'Search Orders for selected' %}
+</div>
+{% endblock %}
+
+{% block content %}
+  <h1>{% trans 'Orders containing selected products' %}</h1>
+
+  {% if error %}
+    <div class="messagelist">
+      <div class="error">{{ error }}</div>
+    </div>
+  {% endif %}
+
+  <h2>{% trans 'Selected products' %}</h2>
+  <ul>
+    {% for product in selected_products %}
+      <li>{{ product.name }}</li>
+    {% empty %}
+      <li>{% trans 'No products selected.' %}</li>
+    {% endfor %}
+  </ul>
+
+  <h2>{% trans 'Matching orders' %}</h2>
+  {% if orders %}
+    {% for order in orders %}
+      <div class="module aligned" style="margin-bottom: 1.5rem;">
+        <h3>{{ order.name }}</h3>
+        <p>
+          <strong>{% trans 'Customer' %}:</strong> {{ order.customer|default:'-' }}
+          &nbsp;|&nbsp;
+          <strong>{% trans 'State' %}:</strong> {{ order.state|default:'-' }}
+          &nbsp;|&nbsp;
+          <strong>{% trans 'Date' %}:</strong> {{ order.date_order|default:'-' }}
+          &nbsp;|&nbsp;
+          <strong>{% trans 'Total' %}:</strong> {{ order.amount_total|default:'-' }}
+        </p>
+        <table class="adminlist">
+          <thead>
+            <tr>
+              <th>{% trans 'Line description' %}</th>
+              <th>{% trans 'Product' %}</th>
+              <th>{% trans 'Quantity' %}</th>
+              <th>{% trans 'Line total' %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in order.lines %}
+              <tr>
+                <td>{{ line.name }}</td>
+                <td>{{ line.product_name }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ line.total }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>{% trans 'No matching orders found.' %}</p>
+  {% endif %}
+{% endblock %}
