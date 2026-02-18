@@ -10,9 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import base64
 import contextlib
 import json
 import importlib.util
+import hashlib
 import ipaddress
 import os
 import socket
@@ -60,6 +62,21 @@ APPS_DIR = BASE_DIR / "apps"
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = load_secret_key(BASE_DIR)
 
+
+def _default_field_encryption_key() -> str:
+    """Build a deterministic Fernet-compatible key from SECRET_KEY for local defaults."""
+    return base64.urlsafe_b64encode(
+        hashlib.sha256(SECRET_KEY.encode("utf-8")).digest()
+    ).decode("ascii")
+
+
+FIELD_ENCRYPTION_KEY = os.environ.get(
+    "FIELD_ENCRYPTION_KEY", _default_field_encryption_key()
+)
+EVERGO_API_LOGIN_URL = os.environ.get(
+    "EVERGO_API_LOGIN_URL", "https://portal-backend.evergo.com/api/mex/v1/login"
+)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 
 # Determine the current node role for role-specific settings while leaving
@@ -98,11 +115,10 @@ def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
 
     return deduped
 
+
 # Disable NetMessage propagation when running maintenance commands that should
 # avoid contacting remote peers.
-NET_MESSAGE_DISABLE_PROPAGATION = env_bool(
-    "NET_MESSAGE_DISABLE_PROPAGATION", False
-)
+NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
 
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 
@@ -171,7 +187,6 @@ for host in load_site_config_allowed_hosts(BASE_DIR):
         ALLOWED_HOSTS.append(host)
 
 
-
 CACHE_LOCATION = os.environ.get("DJANGO_CACHE_DIR", str(BASE_DIR / "cache"))
 with contextlib.suppress(OSError):
     os.makedirs(CACHE_LOCATION, exist_ok=True)
@@ -218,7 +233,10 @@ def _parse_forwarded_header(header_value: str) -> list[dict[str, str]]:
 def _get_request_scheme(request, forwarded_entry: dict[str, str] | None = None) -> str:
     """Return the scheme used by the client, honoring proxy headers."""
 
-    if forwarded_entry and forwarded_entry.get("proto", "").lower() in {"http", "https"}:
+    if forwarded_entry and forwarded_entry.get("proto", "").lower() in {
+        "http",
+        "https",
+    }:
         return forwarded_entry["proto"].lower()
 
     if is_https_request(request):
@@ -239,7 +257,9 @@ def _get_request_scheme(request, forwarded_entry: dict[str, str] | None = None) 
     return "http"
 
 
-def _normalize_origin_tuple(scheme: str | None, host: str) -> tuple[str, str, str | None] | None:
+def _normalize_origin_tuple(
+    scheme: str | None, host: str
+) -> tuple[str, str, str | None] | None:
     if not scheme or scheme.lower() not in {"http", "https"}:
         return None
     domain, port = split_domain_port(host)
@@ -602,13 +622,15 @@ ASGI_APPLICATION = "config.asgi.application"
 CHANNEL_REDIS_URL = os.environ.get("CHANNEL_REDIS_URL", "").strip()
 OCPP_STATE_REDIS_URL = os.environ.get("OCPP_STATE_REDIS_URL", "").strip()
 if not OCPP_STATE_REDIS_URL:
-    OCPP_STATE_REDIS_URL = CHANNEL_REDIS_URL or os.environ.get("CELERY_BROKER_URL", "").strip()
+    OCPP_STATE_REDIS_URL = (
+        CHANNEL_REDIS_URL or os.environ.get("CELERY_BROKER_URL", "").strip()
+    )
 
 VIDEO_FRAME_REDIS_URL = os.environ.get("VIDEO_FRAME_REDIS_URL", "").strip()
 if not VIDEO_FRAME_REDIS_URL:
-    VIDEO_FRAME_REDIS_URL = CHANNEL_REDIS_URL or os.environ.get(
-        "CELERY_BROKER_URL", ""
-    ).strip()
+    VIDEO_FRAME_REDIS_URL = (
+        CHANNEL_REDIS_URL or os.environ.get("CELERY_BROKER_URL", "").strip()
+    )
 VIDEO_FRAME_CACHE_PREFIX = os.environ.get("VIDEO_FRAME_CACHE_PREFIX", "video:mjpeg")
 VIDEO_FRAME_CACHE_TTL = int(os.environ.get("VIDEO_FRAME_CACHE_TTL", "10") or 10)
 VIDEO_FRAME_MAX_AGE_SECONDS = int(
@@ -637,8 +659,6 @@ VIDEO_FRAME_SERVICE_SLEEP = float(
 )
 
 if CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL:
-    from channels_redis.core import RedisChannelLayer
-
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",

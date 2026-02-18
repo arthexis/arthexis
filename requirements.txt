@@ -28,6 +28,7 @@ daphne==4.2.1
 diff-match-patch==20241021
 defusedxml==0.7.1
 Django==5.2.11
+django-encrypted-model-fields==0.6.5
 django-celery-beat==2.8.1
 # Debug tooling for local runs
 django-debug-toolbar==6.2.0

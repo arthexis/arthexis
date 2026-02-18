@@ -19,7 +19,7 @@ def test_test_login_populates_remote_fields(mock_post):
     profile = EvergoUser.objects.create(
         user=suite_user,
         evergo_email="reginaldocts@evergo.com",
-        evergo_password="top-secret",
+        evergo_password="top-secret",  # noqa: S106
     )
 
     mock_response = Mock()

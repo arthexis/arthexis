@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.evergo.models import EvergoUser
 
@@ -17,7 +18,9 @@ from apps.evergo.models import EvergoUser
 def test_evergo_command_saves_credentials_and_tests_login(mock_post):
     """Command should save credentials, test login, and sync API fields."""
     User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-user", email="suite@example.com")
+    suite_user = User.objects.create_user(
+        username="suite-user", email="suite@example.com"
+    )
 
     mock_response = Mock()
     mock_response.status_code = 200
@@ -49,3 +52,45 @@ def test_evergo_command_saves_credentials_and_tests_login(mock_post):
     assert profile.evergo_email == "suite.evergo@example.com"
     assert profile.evergo_user_id == 100
     assert "Evergo login successful" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_evergo_command_reuses_existing_profile_when_duplicates_exist():
+    """Command should update the oldest profile when duplicate rows exist."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(
+        username="suite-dup", email="suite-dup@example.com"
+    )
+    first = EvergoUser.objects.create(user=suite_user, evergo_email="old@example.com")
+    EvergoUser.objects.create(user=suite_user, evergo_email="newer@example.com")
+
+    call_command(
+        "evergo",
+        suite_user.username,
+        "--email",
+        "resolved@example.com",
+        "--password",
+        "secret",
+    )
+
+    first.refresh_from_db()
+    assert first.evergo_email == "resolved@example.com"
+    assert EvergoUser.objects.filter(user=suite_user).count() == 2
+
+
+@pytest.mark.django_db
+def test_evergo_command_raises_for_ambiguous_user_identifier():
+    """Command should reject identifiers that match different users by username/email."""
+    User = get_user_model()
+    User.objects.create_user(username="admin@example.com", email="owner1@example.com")
+    User.objects.create_user(username="owner2", email="admin@example.com")
+
+    with pytest.raises(CommandError, match="matches multiple users"):
+        call_command(
+            "evergo",
+            "admin@example.com",
+            "--email",
+            "suite.evergo@example.com",
+            "--password",
+            "secret",
+        )

@@ -7,12 +7,12 @@ from datetime import datetime
 from typing import Any
 
 import requests
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-
-from apps.sigils.fields import SigilShortAutoField
+from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
 from apps.users.models import Profile
 
 from .exceptions import EvergoAPIError
@@ -29,12 +29,16 @@ class EvergoLoginResult:
 class EvergoUser(Profile):
     """Stores Evergo credentials and synchronized remote profile data for a Suite owner."""
 
-    API_LOGIN_URL = "https://portal-backend.evergo.com/api/mex/v1/login"
+    API_LOGIN_URL = getattr(
+        settings,
+        "EVERGO_API_LOGIN_URL",
+        "https://portal-backend.evergo.com/api/mex/v1/login",
+    )
 
     profile_fields = ("evergo_email", "evergo_password")
 
     evergo_email = models.EmailField(blank=True)
-    evergo_password = SigilShortAutoField(max_length=255, blank=True)
+    evergo_password = EncryptedCharField(max_length=255, blank=True)
 
     evergo_user_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     name = models.CharField(max_length=255, blank=True)
@@ -47,7 +51,7 @@ class EvergoUser(Profile):
 
     two_fa_enabled = models.BooleanField(default=False)
     two_fa_authenticated = models.BooleanField(default=False)
-    two_factor_secret = models.TextField(blank=True)
+    two_factor_secret = EncryptedTextField(blank=True)
 
     evergo_created_at = models.DateTimeField(null=True, blank=True)
     evergo_updated_at = models.DateTimeField(null=True, blank=True)
@@ -88,7 +92,7 @@ class EvergoUser(Profile):
 
         if response.status_code >= 400:
             raise EvergoAPIError(
-                f"Evergo login failed with status {response.status_code}: {response.text[:200]}"
+                f"Evergo login failed with status {response.status_code}."
             )
 
         try:
@@ -109,8 +113,8 @@ class EvergoUser(Profile):
         self.evergo_user_id = _to_int(payload.get("id"))
         self.name = str(payload.get("name") or "")
         self.email = str(payload.get("email") or "")
-        self.two_fa_enabled = bool(int(payload.get("two_fa_enabled") or 0))
-        self.two_fa_authenticated = bool(int(payload.get("two_fa_authenticated") or 0))
+        self.two_fa_enabled = bool(_to_int(payload.get("two_fa_enabled")))
+        self.two_fa_authenticated = bool(_to_int(payload.get("two_fa_authenticated")))
         self.two_factor_secret = str(payload.get("two_factor_secret") or "")
 
         subempresa = _first_dict(payload.get("subempresas"))
