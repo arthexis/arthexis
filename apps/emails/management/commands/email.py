@@ -15,6 +15,34 @@ from apps.emails.models import EmailBridge, EmailInbox, EmailOutbox
 class Command(BaseCommand):
     """Report and manage email inbox/outbox/bridge profiles from the CLI."""
 
+    INBOX_EDITABLE_KEYS = {
+        "inbox_username",
+        "inbox_host",
+        "inbox_port",
+        "inbox_protocol",
+        "inbox_password",
+        "inbox_priority",
+        "inbox_use_ssl",
+        "inbox_no_ssl",
+        "inbox_enabled",
+        "inbox_disabled",
+    }
+    OUTBOX_EDITABLE_KEYS = {
+        "outbox_host",
+        "outbox_port",
+        "outbox_username",
+        "outbox_password",
+        "outbox_from_email",
+        "outbox_priority",
+        "outbox_use_tls",
+        "outbox_no_tls",
+        "outbox_use_ssl",
+        "outbox_no_ssl",
+        "outbox_enabled",
+        "outbox_disabled",
+    }
+    BRIDGE_EDITABLE_KEYS = {"bridge", "bridge_name", "bridge_inbox", "bridge_outbox"}
+
     help = (
         "Report email profile configuration, configure inbox/outbox/bridge records, "
         "send outbound emails, and search inbound emails."
@@ -145,44 +173,23 @@ class Command(BaseCommand):
     def _has_inbox_changes(self, options: dict[str, Any]) -> bool:
         """Return whether inbox configuration flags were supplied."""
 
-        editable_keys = {
-            "inbox_username",
-            "inbox_host",
-            "inbox_port",
-            "inbox_protocol",
-            "inbox_password",
-            "inbox_priority",
-            "inbox_use_ssl",
-            "inbox_no_ssl",
-            "inbox_enabled",
-            "inbox_disabled",
-        }
-        return any(options.get(key) not in {None, False} for key in editable_keys)
+        return any(
+            (value := options.get(key)) is not None and not (isinstance(value, bool) and value is False)
+            for key in self.INBOX_EDITABLE_KEYS
+        )
 
     def _has_outbox_changes(self, options: dict[str, Any]) -> bool:
         """Return whether outbox configuration flags were supplied."""
 
-        editable_keys = {
-            "outbox_host",
-            "outbox_port",
-            "outbox_username",
-            "outbox_password",
-            "outbox_from_email",
-            "outbox_priority",
-            "outbox_use_tls",
-            "outbox_no_tls",
-            "outbox_use_ssl",
-            "outbox_no_ssl",
-            "outbox_enabled",
-            "outbox_disabled",
-        }
-        return any(options.get(key) not in {None, False} for key in editable_keys)
+        return any(
+            (value := options.get(key)) is not None and not (isinstance(value, bool) and value is False)
+            for key in self.OUTBOX_EDITABLE_KEYS
+        )
 
     def _has_bridge_changes(self, options: dict[str, Any]) -> bool:
         """Return whether bridge configuration flags were supplied."""
 
-        keys = {"bridge", "bridge_name", "bridge_inbox", "bridge_outbox"}
-        return any(options.get(key) not in {None, False} for key in keys)
+        return any(options.get(key) not in {None, False} for key in self.BRIDGE_EDITABLE_KEYS)
 
     def _configure_inbox(self, options: dict[str, Any]) -> EmailInbox:
         """Create or update an inbox profile from command options."""
@@ -328,11 +335,15 @@ class Command(BaseCommand):
             except EmailOutbox.DoesNotExist as exc:
                 raise CommandError(f"Outbox not found: {outbox_id}") from exc
 
+        from_email = options.get("from_email")
+        if from_email and outbox is not None:
+            outbox.from_email = from_email
+
         mailer.send(
             options.get("subject") or "",
             options.get("message") or "",
             recipients,
-            from_email=options.get("from_email"),
+            from_email=from_email,
             outbox=outbox,
             fail_silently=False,
         )
@@ -340,6 +351,15 @@ class Command(BaseCommand):
 
     def _search_email(self, options: dict[str, Any]) -> None:
         """Search inbound messages and print results as JSON."""
+
+        limit = options.get("search_limit")
+        try:
+            limit = int(limit) if limit is not None else 10
+        except (TypeError, ValueError):
+            limit = 10
+
+        if limit <= 0:
+            raise CommandError("--search-limit must be a positive integer.")
 
         inbox_id = options.get("inbox")
         if inbox_id is None:
@@ -356,7 +376,7 @@ class Command(BaseCommand):
             subject=options.get("subject") or "",
             from_address=options.get("search_from") or "",
             body=options.get("search_body") or "",
-            limit=options.get("search_limit") or 10,
+            limit=limit,
             use_regular_expressions=bool(options.get("regex")),
         )
         self.stdout.write(json.dumps(results, indent=2, sort_keys=True, default=str))
@@ -377,7 +397,7 @@ class Command(BaseCommand):
                     "is_enabled": inbox.is_enabled,
                     "priority": inbox.priority,
                 }
-                for inbox in EmailInbox.objects.all()
+                for inbox in EmailInbox.objects.select_related("user", "group", "avatar")
             ],
             "outboxes": [
                 {
@@ -392,7 +412,7 @@ class Command(BaseCommand):
                     "is_enabled": outbox.is_enabled,
                     "priority": outbox.priority,
                 }
-                for outbox in EmailOutbox.objects.all()
+                for outbox in EmailOutbox.objects.select_related("user", "group", "avatar", "node")
             ],
             "bridges": [
                 {

@@ -7,6 +7,7 @@ import json
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.management.base import CommandError
 from django.core.management import call_command
 
 from apps.emails.models import EmailBridge, EmailInbox, EmailOutbox
@@ -210,3 +211,58 @@ def test_email_command_search_uses_inbox(monkeypatch):
     assert payload[0]["body"] == "needle"
     assert payload[0]["limit"] == 3
     assert payload[0]["regex"] is True
+
+
+def test_email_command_inbox_priority_can_be_reset_to_zero():
+    """Inbox updates should treat --inbox-priority 0 as a valid change."""
+
+    owner = _create_owner("priority-owner")
+    inbox = _create_inbox(owner, "priority-inbox@example.com")
+    inbox.priority = 5
+    inbox.save(update_fields=["priority"])
+
+    call_command(
+        "email",
+        "--inbox",
+        str(inbox.pk),
+        "--inbox-priority",
+        "0",
+    )
+
+    inbox.refresh_from_db()
+    assert inbox.priority == 0
+
+
+def test_email_command_send_from_email_overrides_outbox(monkeypatch):
+    """--from-email should override the selected outbox sender address."""
+
+    owner = _create_owner("send-override-owner")
+    outbox = _create_outbox(owner, "send-override-outbox@example.com")
+    captured: dict[str, object] = {}
+
+    def _fake_send(subject, message, recipients, **kwargs):
+        captured["kwargs"] = kwargs
+        return None
+
+    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
+
+    call_command(
+        "email",
+        "--send",
+        "--outbox",
+        str(outbox.pk),
+        "--to",
+        "alpha@example.com",
+        "--from-email",
+        "override@example.com",
+    )
+
+    assert captured["kwargs"]["from_email"] == "override@example.com"
+    assert captured["kwargs"]["outbox"].from_email == "override@example.com"
+
+
+def test_email_command_search_rejects_non_positive_limit():
+    """Search should reject non-positive limits to keep message slicing predictable."""
+
+    with pytest.raises(CommandError, match="--search-limit must be a positive integer"):
+        call_command("email", "--search", "--search-limit", "0")
