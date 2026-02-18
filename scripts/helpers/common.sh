@@ -34,12 +34,28 @@ arthexis_python_bin() {
     "$python_candidate" -c 'import sys; raise SystemExit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1
   }
 
+  _arthexis_python_candidate_is_executable() {
+    local python_candidate="$1"
+
+    if [ ! -f "$python_candidate" ]; then
+      return 1
+    fi
+
+    if [ -x "$python_candidate" ]; then
+      return 0
+    fi
+
+    # Some WSL-mounted files (especially Windows temp directories) can be
+    # runnable even when POSIX execute bits are reported as unset.
+    "$python_candidate" -c 'raise SystemExit(0)' >/dev/null 2>&1
+  }
+
   _arthexis_python_path_entry_for_name() {
     local entry="$1"
     local name="$2"
 
     for candidate in "$entry/$name" "$entry/$name.exe" "$entry/$name.bat" "$entry/$name.cmd"; do
-      if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+      if _arthexis_python_candidate_is_executable "$candidate"; then
         printf '%s' "$candidate"
         return 0
       fi
@@ -112,7 +128,7 @@ arthexis_python_bin() {
       if [ -z "$candidate" ]; then
         continue
       fi
-      if _arthexis_python_candidate_is_py3 "$candidate"; then
+      if _arthexis_python_candidate_is_executable "$candidate" && _arthexis_python_candidate_is_py3 "$candidate"; then
         _arthexis_python_bin_cached="$candidate"
         break 2
       fi

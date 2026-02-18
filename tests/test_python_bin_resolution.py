@@ -54,44 +54,79 @@ def _find_sort() -> str:
     pytest.skip("'sort' is required for scripts/helpers/common.sh tests")
 
 
-@pytest.mark.parametrize("binary_name", ["python3", "python"])
-def test_arthexis_python_bin_prefers_standard_names(tmp_path: Path, binary_name: str) -> None:
-    """The helper should return python3 or python when either is available."""
+def _run_arthexis_python_bin(
+    *,
+    env: dict[str, str],
+    cwd: Path,
+    script_source: str = "source scripts/helpers/common.sh\n",
+) -> subprocess.CompletedProcess[str]:
+    """Run ``arthexis_python_bin`` and return the completed process."""
 
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    _write_executable(
-        fake_bin / binary_name,
-        "#!/bin/sh\n"
-        "if [ \"$1\" = \"-c\" ]; then\n"
-        "  exit 0\n"
-        "fi\n"
-        "exit 0\n",
-    )
-
-    script = (
-        "source scripts/helpers/common.sh\n"
-        "arthexis_python_bin\n"
-    )
-    sort_path = shlex.quote(_find_sort())
-    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
-    env = os.environ | {"PATH": _isolated_path(fake_bin)}
+    script = script_source + "arthexis_python_bin\n"
     bash_executable = _find_bash()
-    result = subprocess.run(
+    return subprocess.run(
         [bash_executable, "-c", script],
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=cwd,
         capture_output=True,
         text=True,
         env=env,
         check=False,
     )
 
+
+def _install_sort_shim(fake_bin: Path) -> None:
+    """Install a fake ``sort`` command in ``fake_bin`` that forwards to system sort."""
+
+    sort_path = shlex.quote(_find_sort())
+    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
+
+
+def test_arthexis_python_bin_prefers_python3_in_fake_bin(tmp_path: Path) -> None:
+    """The helper should resolve ``python3`` from the fake PATH entry."""
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "python3",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    _install_sort_shim(fake_bin)
+
+    env = os.environ | {"PATH": _isolated_path(fake_bin)}
+    result = _run_arthexis_python_bin(env=env, cwd=Path(__file__).resolve().parents[1])
+
     assert result.returncode == 0
-    assert result.stdout.strip() == bash_path(fake_bin / binary_name)
+    assert result.stdout.strip() == bash_path(fake_bin / "python3")
 
 
-def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) -> None:
-    """The helper should discover python3.x aliases when python3 is missing."""
+def test_arthexis_python_bin_prefers_python_in_fake_bin(tmp_path: Path) -> None:
+    """The helper should resolve ``python`` from the fake PATH entry."""
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "python",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    _install_sort_shim(fake_bin)
+
+    env = os.environ | {"PATH": _isolated_path(fake_bin)}
+    result = _run_arthexis_python_bin(env=env, cwd=Path(__file__).resolve().parents[1])
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == bash_path(fake_bin / "python")
+
+
+def test_arthexis_python_bin_accepts_python312_in_fake_bin(tmp_path: Path) -> None:
+    """The helper should discover ``python3.12`` when ``python3`` is absent."""
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -103,23 +138,10 @@ def test_arthexis_python_bin_accepts_version_suffixed_python3(tmp_path: Path) ->
         "fi\n"
         "exit 0\n",
     )
+    _install_sort_shim(fake_bin)
 
-    script = (
-        "source scripts/helpers/common.sh\n"
-        "arthexis_python_bin\n"
-    )
-    sort_path = shlex.quote(_find_sort())
-    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
     env = os.environ | {"PATH": _isolated_path(fake_bin)}
-    bash_executable = _find_bash()
-    result = subprocess.run(
-        [bash_executable, "-c", script],
-        cwd=Path(__file__).resolve().parents[1],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
+    result = _run_arthexis_python_bin(env=env, cwd=Path(__file__).resolve().parents[1])
 
     assert result.returncode == 0
     assert result.stdout.strip() == bash_path(fake_bin / "python3.12")
@@ -140,25 +162,16 @@ def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) 
         "exit 0\n",
     )
 
-    script = (
+    script_source = (
         f"source {shlex.quote(bash_path(Path(__file__).resolve().parents[1] / 'scripts/helpers/common.sh'))}\n"
-        "arthexis_python_bin\n"
     )
-    sort_path = shlex.quote(_find_sort())
-    _write_executable(fake_bin / "sort", f"#!/bin/sh\nexec {sort_path} \"$@\"\n")
+    _install_sort_shim(fake_bin)
     env = os.environ | {"PATH": f"{_isolated_path(fake_bin)}:"}
-    bash_executable = _find_bash()
-    result = subprocess.run(
-        [bash_executable, "-c", script],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
+    result = _run_arthexis_python_bin(env=env, cwd=tmp_path, script_source=script_source)
 
     assert result.returncode == 0
     assert result.stdout.strip() == "./python3"
+
 
 def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
     """An empty PATH should still reuse cached not_found results."""
