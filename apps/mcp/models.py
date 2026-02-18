@@ -5,10 +5,14 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
 
 
 @dataclass(frozen=True)
@@ -56,7 +60,7 @@ class McpApiKeyManager(models.Manager["McpApiKey"]):
     def create_for_user(
         self,
         *,
-        user: settings.AUTH_USER_MODEL,
+        user: "AbstractBaseUser",
         label: str,
         expires_at=None,
     ) -> tuple["McpApiKey", str]:
