@@ -17,6 +17,10 @@ class CertbotError(RuntimeError):
     """Raised when certbot fails to request a certificate."""
 
 
+class CertbotChallengeError(CertbotError):
+    """Raised when ACME challenge validation fails during certbot issuance."""
+
+
 class SelfSignedError(RuntimeError):
     """Raised when self-signed certificate generation fails."""
 
@@ -92,8 +96,17 @@ def request_certbot_certificate(
             raise CertbotError(_build_missing_certbot_guidance(message)) from exc
         raise CertbotError(str(exc)) from exc
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
-        if _is_missing_certbot_error(str(exc)):
-            raise CertbotError(_build_missing_certbot_guidance(str(exc))) from exc
+        error_message = str(exc)
+        if _is_missing_certbot_error(error_message):
+            raise CertbotError(_build_missing_certbot_guidance(error_message)) from exc
+        if _is_challenge_failure_error(error_message):
+            raise CertbotChallengeError(
+                _build_challenge_failure_guidance(
+                    base_message=error_message,
+                    domain=domain,
+                    challenge_type=challenge_type,
+                )
+            ) from exc
         raise CertbotError(str(exc)) from exc
 
 
@@ -133,6 +146,40 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
         )
 
     return "\n".join(guidance)
+
+
+def _is_challenge_failure_error(message: str) -> bool:
+    """Return True when certbot output indicates an ACME challenge validation failure."""
+
+    lowered = message.lower()
+    return "some challenges have failed" in lowered
+
+
+def _build_challenge_failure_guidance(
+    *,
+    base_message: str,
+    domain: str,
+    challenge_type: str,
+) -> str:
+    """Build actionable guidance when certbot challenge validation fails."""
+
+    hints = [
+        base_message,
+        (
+            f"Challenge validation failed for {domain}. Confirm the hostname resolves to this "
+            "server and that Let's Encrypt can reach it from the public internet."
+        ),
+    ]
+    if challenge_type == "godaddy":
+        hints.append(
+            "Using DNS-01: verify GoDaddy API credentials, propagation delay, and matching authoritative DNS zone."
+        )
+    else:
+        hints.append(
+            "Using HTTP-01 webroot: ensure port 80 is open and serving /.well-known/acme-challenge/ from /var/www/arthexis."
+        )
+    hints.append("Re-run with certbot -v and inspect /var/log/letsencrypt/letsencrypt.log for challenge-specific details.")
+    return "\n".join(hints)
 
 
 def _build_http01_certbot_command(*, domain: str, email: str | None, sudo: str) -> list[str]:
