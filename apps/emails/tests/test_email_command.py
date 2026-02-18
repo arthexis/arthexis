@@ -7,6 +7,7 @@ import json
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management.base import CommandError
 from django.core.management import call_command
 
@@ -259,6 +260,25 @@ def test_email_command_send_from_email_overrides_outbox(monkeypatch):
 
     assert captured["kwargs"]["from_email"] == "override@example.com"
     assert captured["kwargs"]["outbox"].from_email == "override@example.com"
+
+
+def test_email_command_search_wraps_validation_error(monkeypatch):
+    """Search should present inbox validation issues as CommandError."""
+
+    owner = _create_owner("search-validation-owner")
+    inbox = _create_inbox(owner, "search-validation@example.com")
+
+    def _fake_search_messages(**kwargs):
+        raise ValidationError("Invalid search pattern")
+
+    monkeypatch.setattr(inbox, "search_messages", _fake_search_messages)
+    monkeypatch.setattr(
+        "apps.emails.management.commands.email.EmailInbox.objects.get",
+        lambda *args, **kwargs: inbox,
+    )
+
+    with pytest.raises(CommandError, match="Search failed: "):
+        call_command("email", "--search", "--inbox", str(inbox.pk), "--regex", "--subject", "(")
 
 
 def test_email_command_search_rejects_non_positive_limit():

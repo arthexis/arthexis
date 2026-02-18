@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.emails import mailer
@@ -15,7 +16,8 @@ from apps.emails.models import EmailBridge, EmailInbox, EmailOutbox
 class Command(BaseCommand):
     """Report and manage email inbox/outbox/bridge profiles from the CLI."""
 
-    INBOX_EDITABLE_KEYS = {
+    INBOX_EDITABLE_KEYS = frozenset(
+        {
         "inbox_username",
         "inbox_host",
         "inbox_port",
@@ -26,8 +28,10 @@ class Command(BaseCommand):
         "inbox_no_ssl",
         "inbox_enabled",
         "inbox_disabled",
-    }
-    OUTBOX_EDITABLE_KEYS = {
+        }
+    )
+    OUTBOX_EDITABLE_KEYS = frozenset(
+        {
         "outbox_host",
         "outbox_port",
         "outbox_username",
@@ -40,8 +44,9 @@ class Command(BaseCommand):
         "outbox_no_ssl",
         "outbox_enabled",
         "outbox_disabled",
-    }
-    BRIDGE_EDITABLE_KEYS = {"bridge", "bridge_name", "bridge_inbox", "bridge_outbox"}
+        }
+    )
+    BRIDGE_EDITABLE_KEYS = frozenset({"bridge", "bridge_name", "bridge_inbox", "bridge_outbox"})
 
     help = (
         "Report email profile configuration, configure inbox/outbox/bridge records, "
@@ -372,13 +377,16 @@ class Command(BaseCommand):
             except EmailInbox.DoesNotExist as exc:
                 raise CommandError(f"Inbox not found: {inbox_id}") from exc
 
-        results = inbox.search_messages(
-            subject=options.get("subject") or "",
-            from_address=options.get("search_from") or "",
-            body=options.get("search_body") or "",
-            limit=limit,
-            use_regular_expressions=bool(options.get("regex")),
-        )
+        try:
+            results = inbox.search_messages(
+                subject=options.get("subject") or "",
+                from_address=options.get("search_from") or "",
+                body=options.get("search_body") or "",
+                limit=limit,
+                use_regular_expressions=bool(options.get("regex")),
+            )
+        except ValidationError as exc:
+            raise CommandError(f"Search failed: {exc}") from exc
         self.stdout.write(json.dumps(results, indent=2, sort_keys=True, default=str))
 
     def _report(self) -> None:
