@@ -62,15 +62,20 @@ jobs:
             const shouldProcessComment =
               isExpectedTriggerComment(normalizedCommentBody)
               && isTrustedTriggerAuthor(triggerCommentAuthor, triggerAppSlug);
+            const bodySummary = normalizedCommentBody
+              ? `len=${normalizedCommentBody.length}`
+              : 'empty';
 
             if (!shouldProcessComment) {
               core.info(
-                `Skipping comment: body="${normalizedCommentBody}" author="${triggerCommentAuthor || 'unknown'}" app="${triggerAppSlug || 'unknown'}".`,
+                `Skipping comment: body=${bodySummary} author="${triggerCommentAuthor || 'unknown'}" app="${triggerAppSlug || 'unknown'}".`,
               );
               return;
             }
 
-            core.info(`Matched trigger comment from "${triggerCommentAuthor || 'unknown'}" using app "${triggerAppSlug || 'unknown'}".`);
+            core.info(
+              `Matched trigger comment: body=${bodySummary} author="${triggerCommentAuthor || 'unknown'}" app="${triggerAppSlug || 'unknown'}".`,
+            );
 
             if (!triggerTimestamp) {
               throw new Error('Missing issue comment timestamp in payload.');
