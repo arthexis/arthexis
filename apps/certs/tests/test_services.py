@@ -295,3 +295,61 @@ def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_gu
     assert "No such file or directory" in message
     assert "Ubuntu 22.04 / 24.04 & Debian-based hosts" in message
     assert "Detected Debian-family OS" in message
+
+
+def test_request_certbot_certificate_challenge_failure_raises_specific_exception(
+    monkeypatch, tmp_path
+):
+    """ACME challenge failures should raise CertbotChallengeError with remediation hints."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError(
+            "Saving debug log to /var/log/letsencrypt/letsencrypt.log\n"
+            "Some challenges have failed."
+        )
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+
+    with pytest.raises(services.CertbotChallengeError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="nginx",
+            sudo="",
+        )
+
+    message = str(exc_info.value)
+    assert "Some challenges have failed" in message
+    assert "Using HTTP-01 webroot" in message
+    assert "/var/log/letsencrypt/letsencrypt.log" in message
+
+
+def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint(
+    monkeypatch, tmp_path
+):
+    """DNS-01 challenge failures should include GoDaddy-specific troubleshooting guidance."""
+
+    def fake_build(*, domain, email, dns_credential, dns_propagation_seconds, dns_use_sandbox, sudo):
+        return ["certbot"], {}
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("Some challenges have failed.")
+
+    monkeypatch.setattr(services, "_build_godaddy_certbot_command", fake_build)
+    monkeypatch.setattr(services, "_run_command", fake_run)
+
+    with pytest.raises(services.CertbotChallengeError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="godaddy",
+            dns_credential=SimpleNamespace(),
+            sudo="",
+        )
+
+    assert "Using DNS-01" in str(exc_info.value)
