@@ -144,7 +144,7 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
 ):
     captured: dict[str, list[str]] = {}
 
-    def fake_run(command: list[str], *, env=None):
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
         captured["command"] = command
         return "ok"
 
@@ -162,8 +162,8 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     assert captured["command"][0] == "certbot"
 
 
-def test_build_http01_certbot_command_uses_nginx_plugin():
-    """HTTP-01 certbot command should use the nginx plugin."""
+def test_build_http01_certbot_command_uses_webroot_plugin():
+    """HTTP-01 certbot command should use direct webroot validation."""
 
     command = services._build_http01_certbot_command(
         domain="example.com",
@@ -172,14 +172,17 @@ def test_build_http01_certbot_command_uses_nginx_plugin():
     )
 
     assert command[:2] == ["sudo", "certbot"]
-    assert "--nginx" in command
+    assert "--webroot" in command
+    assert "--webroot-path" in command
+    assert str(services.HTTP01_WEBROOT_PATH) in command
+    assert "--nginx" not in command
     assert "--standalone" not in command
 
 
-def test_request_certbot_certificate_nginx_challenge_uses_nginx_plugin(
+def test_request_certbot_certificate_nginx_challenge_uses_webroot_validation(
     monkeypatch, tmp_path
 ):
-    """Legacy nginx challenge type should run certbot with nginx plugin."""
+    """Legacy nginx challenge type should run certbot with direct webroot validation."""
 
     captured: dict[str, list[str]] = {}
 
@@ -198,7 +201,10 @@ def test_request_certbot_certificate_nginx_challenge_uses_nginx_plugin(
         sudo="",
     )
 
-    assert "--nginx" in captured["command"]
+    assert "--webroot" in captured["command"]
+    assert "--webroot-path" in captured["command"]
+    assert str(services.HTTP01_WEBROOT_PATH) in captured["command"]
+    assert "--nginx" not in captured["command"]
     assert "--standalone" not in captured["command"]
 
 

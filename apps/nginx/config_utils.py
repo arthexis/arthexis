@@ -19,6 +19,7 @@ SSL_DHPARAM_PATH = Path("/etc/letsencrypt/ssl-dhparams.pem")
 BUNDLED_SSL_OPTIONS_PATH = Path(__file__).with_name("options-ssl-nginx.conf")
 BUNDLED_SSL_DHPARAM_PATH = Path(__file__).with_name("ssl-dhparams.pem")
 MAINTENANCE_ROOT = "/usr/share/arthexis-fallback"
+HTTP01_WEBROOT = "/var/www/arthexis"
 MAINTENANCE_ERROR_LINES = (
     "error_page 404 /maintenance/404.html;",
     "error_page 500 502 503 504 /maintenance/app-down.html;",
@@ -94,6 +95,16 @@ def websocket_directives() -> tuple[str, ...]:
         WEBSOCKET_READ_TIMEOUT,
         WEBSOCKET_SEND_TIMEOUT,
     )
+
+
+def http01_challenge_block_lines() -> list[str]:
+    return [
+        "    location ^~ /.well-known/acme-challenge/ {",
+        f"        root {HTTP01_WEBROOT};",
+        "        default_type text/plain;",
+        "        try_files $uri =404;",
+        "    }",
+    ]
 
 
 def maintenance_block_lines() -> list[str]:
@@ -249,6 +260,8 @@ def http_proxy_server(
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
     lines.append("")
+    lines.extend(http01_challenge_block_lines())
+    lines.append("")
     lines.extend(maintenance_block_lines())
     lines.append("")
     lines.append(
@@ -276,6 +289,8 @@ def http_redirect_server(server_names: str, listens: Iterable[str] | None = None
     for listen in _unique_preserve_order(listens):
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
+    lines.append("")
+    lines.extend(http01_challenge_block_lines())
     lines.append("    return 301 https://$host$request_uri;")
     lines.append("}")
     return _format_server_block(lines)
@@ -340,6 +355,8 @@ def https_proxy_server(
         '    add_header Strict-Transport-Security '
         '"max-age=31536000; includeSubDomains; preload" always;'
     )
+    lines.append("")
+    lines.extend(http01_challenge_block_lines())
     lines.append("")
     lines.extend(maintenance_block_lines())
     lines.append("")
