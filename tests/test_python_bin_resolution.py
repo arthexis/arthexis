@@ -14,7 +14,7 @@ import pytest
 from tests.utils import bash_path
 
 
-pytestmark = pytest.mark.critical
+pytestmark = [pytest.mark.critical, pytest.mark.regression]
 
 
 def _write_executable(path: Path, content: str) -> None:
