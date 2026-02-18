@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
+from datetime import timedelta
 from django.contrib.sites.models import Site
 
 from apps.sites.site_config import update_local_nginx_scripts
@@ -90,6 +91,17 @@ class Command(BaseCommand):
             action="store_true",
             help="Run certificate provisioning without sudo.",
         )
+        parser.add_argument(
+            "--force-renewal",
+            action="store_true",
+            help="Force certbot to issue a fresh certificate even if one already exists.",
+        )
+        parser.add_argument(
+            "--warn-days",
+            type=int,
+            default=14,
+            help="Warn when certificate expiration is within this many days (default: 14).",
+        )
 
     def handle(self, *args, **options):
         """Dispatch https command actions and normalize implicit enable behavior."""
@@ -111,6 +123,14 @@ class Command(BaseCommand):
         sandbox_override = self._parse_sandbox_override(options)
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
+        force_renewal = options["force_renewal"]
+        warn_days = options["warn_days"]
+
+        if warn_days < 0:
+            raise CommandError("--warn-days must be zero or a positive integer.")
+
+        if use_local and force_renewal:
+            raise CommandError("--force-renewal is only supported for certbot/godaddy certificates.")
 
         if not enable and not disable and not renew and (certbot_domain or godaddy_domain or parsed_site):
             enable = True
@@ -140,6 +160,8 @@ class Command(BaseCommand):
             sandbox_override=sandbox_override,
             sudo=sudo,
             reload=reload,
+            force_renewal=force_renewal,
+            warn_days=warn_days,
         )
         self.stdout.write(
             self.style.SUCCESS(
@@ -156,6 +178,8 @@ class Command(BaseCommand):
         sandbox_override: bool | None,
         sudo: str,
         reload: bool,
+        force_renewal: bool,
+        warn_days: int,
     ):
         config = self._get_or_create_config(domain, protocol="https")
         certificate = self._get_or_create_certificate(
@@ -177,11 +201,39 @@ class Command(BaseCommand):
         else:
             if use_godaddy:
                 self._validate_godaddy_setup(certificate)
-            certificate.provision(sudo=sudo, dns_use_sandbox=sandbox_override)
+            certificate.provision(
+                sudo=sudo,
+                dns_use_sandbox=sandbox_override,
+                force_renewal=force_renewal,
+            )
 
+        self._warn_if_certificate_expiring_soon(certificate, warn_days=warn_days)
         self._ensure_managed_site(domain, require_https=True)
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _warn_if_certificate_expiring_soon(self, certificate, *, warn_days: int) -> None:
+        """Emit actionable guidance when certificate expiration is near or in the past."""
+
+        expiration = getattr(certificate, "expiration_date", None)
+        if expiration is None:
+            return
+
+        now = timezone.now()
+        threshold = now + timedelta(days=warn_days)
+        if expiration <= threshold:
+            if expiration <= now:
+                status = "has expired"
+            else:
+                status = "expires soon"
+
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Certificate for {certificate.domain} {status} at {expiration.isoformat()}. "
+                    "Run './command.sh https --enable --force-renewal "
+                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
+                )
+            )
 
     def _parse_site_domain(self, candidate: str | None) -> str | None:
         """Return a normalized host parsed from ``--site`` input."""
