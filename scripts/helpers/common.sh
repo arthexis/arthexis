@@ -87,7 +87,7 @@ arthexis_python_bin() {
 
   # Bash on Windows can surface PATH-like values separated by ';'.
   path_separator=':'
-  if [[ "$current_path" == *';'* && "$current_path" != *:* ]]; then
+  if [[ "$current_path" == *';'* && ( "$current_path" != *:* || "$current_path" == *[A-Za-z]:* ) ]]; then
     path_separator=';'
   fi
 
