@@ -1,5 +1,7 @@
-"""MCP utilities for exposing selected Django management commands."""
+from __future__ import annotations
 
-from .remote_commands import RemoteCommandMetadata, remote_command
+"""Compatibility exports for MCP helpers moved to ``apps.mcp``."""
+
+from apps.mcp.remote_commands import RemoteCommandMetadata, remote_command
 
 __all__ = ["RemoteCommandMetadata", "remote_command"]

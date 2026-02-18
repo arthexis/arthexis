@@ -415,6 +415,7 @@ LOCAL_APPS = [
     "apps.energy",
     "apps.groups",
     "apps.core",
+    "apps.mcp",
     "apps.users",
     "apps.leads",
     "apps.embeds",
