@@ -51,14 +51,12 @@ arthexis_python_bin() {
   # Cache is PATH-dependent so inherited shell state cannot override lookup
   # results when the caller provides a different PATH.
   current_path="${PATH-}"
-  if [ -n "${_arthexis_python_bin_cached_path-}" ] && [ "$_arthexis_python_bin_cached_path" = "$current_path" ]; then
-    if [ -n "${_arthexis_python_bin_cached-}" ]; then
-      if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
-        return 1
-      fi
-      printf '%s' "$_arthexis_python_bin_cached"
-      return 0
+  if [ "${_arthexis_python_bin_cached_path+x}" = "x" ] && [ "$_arthexis_python_bin_cached_path" = "$current_path" ] && [ -n "${_arthexis_python_bin_cached-}" ]; then
+    if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
+      return 1
     fi
+    printf '%s' "$_arthexis_python_bin_cached"
+    return 0
   fi
 
   unset _arthexis_python_bin_cached
@@ -123,10 +121,8 @@ arthexis_python_bin() {
 
   if [ -z "${_arthexis_python_bin_cached-}" ]; then
     _arthexis_python_bin_cached="not_found"
-    _arthexis_python_bin_cached_path="$current_path"
     return 1
   fi
 
-  _arthexis_python_bin_cached_path="$current_path"
   printf '%s' "$_arthexis_python_bin_cached"
 }

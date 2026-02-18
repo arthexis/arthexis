@@ -159,3 +159,28 @@ def test_arthexis_python_bin_supports_trailing_empty_path_entry(tmp_path: Path) 
 
     assert result.returncode == 0
     assert result.stdout.strip() == "./python3"
+
+def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
+    """An empty PATH should still reuse cached not_found results."""
+
+    script = (
+        "source scripts/helpers/common.sh\n"
+        "PATH=''\n"
+        "arthexis_python_bin >/dev/null 2>&1\n"
+        "first=$?\n"
+        "arthexis_python_bin >/dev/null 2>&1\n"
+        "second=$?\n"
+        "printf '%s:%s:%s' \"$first\" \"$second\" \"${_arthexis_python_bin_cached_path+set}\"\n"
+    )
+    bash_executable = _find_bash()
+    result = subprocess.run(
+        [bash_executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        env=os.environ,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "1:1:set"
