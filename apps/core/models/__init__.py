@@ -1,6 +1,7 @@
 from .admin_notice import AdminNotice
 from .email import EmailArtifact, EmailTransaction, EmailTransactionAttachment
 from .invite_lead import InviteLead
+from .mcp_api_key import GeneratedMcpApiKey, McpApiKey
 from .ownable import (
     OwnedObjectLink,
     Ownable,
@@ -16,6 +17,8 @@ __all__ = [
     "EmailTransaction",
     "EmailTransactionAttachment",
     "InviteLead",
+    "GeneratedMcpApiKey",
+    "McpApiKey",
     "OwnedObjectLink",
     "Ownable",
     "UsageEvent",

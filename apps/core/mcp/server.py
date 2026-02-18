@@ -4,21 +4,41 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from functools import cached_property
 from io import StringIO
 from typing import Any
 
+from django.contrib.auth.models import AbstractBaseUser
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from apps.core.models import McpApiKey
+
 from .remote_commands import (
     RemoteCommandError,
+    RemoteCommandMetadata,
     discover_remote_commands,
 )
 
 
 class McpProtocolError(ValueError):
     """Raised when an incoming JSON-RPC payload is invalid."""
+
+class McpAuthenticationError(PermissionError):
+    """Raised when an MCP request does not include a valid API key."""
+
+
+class McpAuthorizationError(PermissionError):
+    """Raised when an authenticated key lacks command group permissions."""
+
+
+@dataclass(frozen=True)
+class AuthenticatedMcpKey:
+    """Authenticated key payload used during command authorization."""
+
+    key: McpApiKey
+    user: AbstractBaseUser
 
 
 class DjangoCommandMCPServer:
@@ -37,6 +57,7 @@ class DjangoCommandMCPServer:
         for name, metadata in discovered.items():
             tool_name = f"django.command.{name}"
             tools[tool_name] = {
+                "_metadata": metadata,
                 "name": tool_name,
                 "description": metadata.description,
                 "inputSchema": {
@@ -47,12 +68,54 @@ class DjangoCommandMCPServer:
                             "items": {"type": "string"},
                             "description": "Positional CLI arguments for the Django command.",
                             "default": [],
-                        }
+                        },
+                        "api_key": {
+                            "type": "string",
+                            "description": "MCP API key generated via manage.py create_mcp_api_key.",
+                        },
                     },
+                    "required": ["api_key"],
                     "additionalProperties": False,
                 },
             }
         return tools
+
+    @staticmethod
+    def _extract_api_key(arguments: dict[str, Any]) -> str:
+        """Extract and normalize the API key from tool call arguments."""
+
+        api_key = arguments.get("api_key")
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise McpProtocolError("tools/call requires a non-empty 'api_key'.")
+        return api_key.strip()
+
+    @staticmethod
+    def _authenticate(api_key: str) -> AuthenticatedMcpKey:
+        """Authenticate and return the API key model and owning user."""
+
+        key_obj = McpApiKey.objects.authenticate_key(api_key)
+        if key_obj is None:
+            raise McpAuthenticationError("Invalid or expired MCP API key.")
+        key_obj.mark_used()
+        return AuthenticatedMcpKey(key=key_obj, user=key_obj.user)
+
+    @staticmethod
+    def _assert_command_group_access(
+        *, metadata: RemoteCommandMetadata, authenticated_key: AuthenticatedMcpKey
+    ) -> None:
+        """Validate group access rules for a remote command."""
+
+        if not metadata.security_groups:
+            return
+
+        user_group_names = set(
+            authenticated_key.user.groups.values_list("name", flat=True)
+        )
+        if metadata.security_groups.isdisjoint(user_group_names):
+            required = ", ".join(sorted(metadata.security_groups))
+            raise McpAuthorizationError(
+                f"Command requires one of these security groups: {required}"
+            )
 
     @staticmethod
     def _result_text(stdout: str, stderr: str) -> str:
@@ -63,11 +126,22 @@ class DjangoCommandMCPServer:
             chunks.append(f"stderr:\n{stderr.rstrip()}")
         return "\n\n".join(chunks) or "Command completed without output."
 
-    def _call_tool(self, tool_name: str, args: list[str]) -> dict[str, Any]:
+    def _call_tool(
+        self, *, tool_name: str, args: list[str], api_key: str
+    ) -> dict[str, Any]:
         tools = self._tools
         tool = tools.get(tool_name)
         if tool is None:
             raise RemoteCommandError(f"Tool '{tool_name}' is not available.")
+
+        metadata = tool.get("_metadata")
+        if not isinstance(metadata, RemoteCommandMetadata):
+            raise RemoteCommandError(f"Tool '{tool_name}' metadata is unavailable.")
+
+        authenticated_key = self._authenticate(api_key)
+        self._assert_command_group_access(
+            metadata=metadata, authenticated_key=authenticated_key
+        )
 
         command_name = tool_name.removeprefix("django.command.")
         stdout = StringIO()
@@ -135,7 +209,10 @@ class DjangoCommandMCPServer:
             return None
 
         if method == "tools/list":
-            tools = list(self._tools.values())
+            tools = []
+            for tool in self._tools.values():
+                tool_payload = {k: v for k, v in tool.items() if k != "_metadata"}
+                tools.append(tool_payload)
             return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools}}
 
         if method == "tools/call":
@@ -150,7 +227,8 @@ class DjangoCommandMCPServer:
             if not isinstance(args, list) or not all(isinstance(v, str) for v in args):
                 raise McpProtocolError("'args' must be an array of strings.")
 
-            result = self._call_tool(name, args)
+            api_key = self._extract_api_key(arguments)
+            result = self._call_tool(tool_name=name, args=args, api_key=api_key)
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
         return {
@@ -194,12 +272,19 @@ def run_stdio_server(
                 "id": request_id,
                 "error": {"code": -32600, "message": str(exc)},
             }
-        except RemoteCommandError as exc:
+        except (RemoteCommandError, McpAuthenticationError) as exc:
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "error": {"code": -32000, "message": str(exc)},
+            }
+        except McpAuthorizationError as exc:
+            request_id = payload.get("id") if isinstance(payload, dict) else None
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {"code": -32001, "message": str(exc)},
             }
 
         print(json.dumps(response), flush=True)

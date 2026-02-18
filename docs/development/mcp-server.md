@@ -9,7 +9,10 @@ Use `@remote_command` on a management command class:
 ```python
 from apps.core.mcp.remote_commands import remote_command
 
-@remote_command(description="Display suite uptime and lock status.")
+@remote_command(
+    description="Display suite uptime and lock status.",
+    security_groups=["ops"],  # Optional: omit to allow any valid key
+)
 class Command(BaseCommand):
     ...
 ```
@@ -63,3 +66,21 @@ The server exposes tools named:
 - `django.command.uptime`
 
 (and any other decorated command).
+
+
+## 5) API keys and command security groups
+
+Every `tools/call` request must include an `api_key` argument. Generate per-user keys with:
+
+```bash
+python manage.py create_mcp_api_key --username <username> --label "agent"
+```
+
+Default behavior: decorated commands are callable by any user who presents a valid, non-expired key.
+
+To restrict a command to specific security groups, pass `security_groups` to `@remote_command`. A user only needs membership in one listed group.
+
+Key defaults:
+
+- `--expires-in-days` defaults to `90`
+- use `--expires-in-days 0` for non-expiring keys

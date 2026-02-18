@@ -24,19 +24,29 @@ class RemoteCommandMetadata:
     command_name: str
     description: str
     allow_remote: bool = True
+    security_groups: frozenset[str] = frozenset()
 
 
-def remote_command(*, description: str) -> Any:
+def remote_command(
+    *, description: str, security_groups: list[str] | tuple[str, ...] | None = None
+) -> Any:
     """Mark a Django management command class as remotely callable via MCP.
 
     Args:
         description: Human-readable description surfaced in the MCP tool listing.
+        security_groups: Optional list of required Django security-group names.
+            When omitted, any authenticated MCP API key may execute the command.
     """
+
+    normalized_groups = {
+        value.strip() for value in (security_groups or []) if value.strip()
+    }
 
     def _decorate(command_class: type[BaseCommand]) -> type[BaseCommand]:
         command_class._mcp_remote_metadata = {  # type: ignore[attr-defined]
             "description": description,
             "allow_remote": True,
+            "security_groups": tuple(sorted(normalized_groups)),
         }
         return command_class
 
@@ -66,10 +76,23 @@ def _command_metadata(command_name: str) -> RemoteCommandMetadata | None:
     if not allow_remote:
         return None
 
+    raw_security_groups = metadata.get("security_groups", ())
+    if not isinstance(raw_security_groups, (list, tuple)):
+        raise RemoteCommandError(
+            f"Remote command '{command_name}' has invalid security group metadata."
+        )
+
+    security_groups = {
+        value.strip()
+        for value in raw_security_groups
+        if isinstance(value, str) and value.strip()
+    }
+
     return RemoteCommandMetadata(
         command_name=command_name,
         description=description.strip(),
         allow_remote=allow_remote,
+        security_groups=frozenset(security_groups),
     )
 
 
