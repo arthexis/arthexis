@@ -34,8 +34,8 @@ def _find_bash() -> str:
     if os.access("/usr/bin/bash", os.X_OK):
         return "/usr/bin/bash"
 
-    bash_from_path = shutil.which("bash")
-    if bash_from_path and not _is_windows_bash_launcher_shim(bash_from_path):
+    bash_from_path = _find_bash_on_path()
+    if bash_from_path:
         return bash_from_path
 
     pytest.skip("bash is required for scripts/helpers/common.sh tests")
@@ -53,6 +53,28 @@ def _is_windows_bash_launcher_shim(path: str) -> bool:
     return "/microsoft/windowsapps/" in normalized
 
 
+def _find_bash_on_path() -> str | None:
+    """Return the first non-shim ``bash`` executable found on ``PATH``."""
+
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    seen: set[str] = set()
+    for entry in path_entries:
+        lookup_path = entry or os.curdir
+        bash_from_entry = shutil.which("bash", path=lookup_path)
+        if bash_from_entry is None:
+            continue
+
+        normalized = bash_from_entry.lower() if os.name == "nt" else bash_from_entry
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+
+        if not _is_windows_bash_launcher_shim(bash_from_entry):
+            return bash_from_entry
+
+    return None
+
+
 def _isolated_path(fake_bin: Path) -> str:
     """Return a PATH value restricted to the temporary fake binary directory."""
 
@@ -67,14 +89,12 @@ def _shell_test_env(path_value: str) -> dict[str, str]:
     if home is not None:
         env["HOME"] = home
 
+    env["PATH"] = path_value
     if os.name == "nt":
         system_root = os.environ.get("SYSTEMROOT")
         if system_root is not None:
             env["SYSTEMROOT"] = system_root
-        env["PATH"] = path_value
         env["Path"] = path_value
-    else:
-        env["PATH"] = path_value
 
     return env
 
@@ -250,7 +270,7 @@ def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
-        env=os.environ,
+        env=_shell_test_env(""),
         check=False,
     )
 
