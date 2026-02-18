@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   resolve-older-threads:
-    if: ${{ github.event.issue.pull_request && github.event.comment.body == 'View task →' && github.event.comment.user.login == 'chatgpt-codex-connector[bot]' }}
+    if: ${{ github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve unresolved review threads older than trigger comment
@@ -28,12 +28,49 @@ jobs:
             const issueNumber = context.payload.issue.number;
             const triggerTimestamp = context.payload.comment.created_at;
             const triggerCommentUrl = context.payload.comment.html_url;
+            const triggerCommentBody = context.payload.comment.body;
+            const triggerCommentAuthor = context.payload.comment.user?.login;
             const triggerAppSlug = context.payload.comment?.performed_via_github_app?.slug;
+            const normalizedCommentBody = (triggerCommentBody || '').trim();
 
-            if (triggerAppSlug !== 'chatgpt-codex-connector') {
-              core.info(`Skipping: triggering comment app was "${triggerAppSlug || 'unknown'}", expected "chatgpt-codex-connector".`);
+            /**
+             * Determine whether the triggering comment text is one of the expected
+             * "view task" variants posted by Codex-related integrations.
+             */
+            const isExpectedTriggerComment = (body) => {
+              const allowedBodies = new Set([
+                'View task →',
+                'View task ->',
+                'View task',
+              ]);
+              return allowedBodies.has(body);
+            };
+
+            /**
+             * Determine whether the comment was posted by a trusted Codex actor.
+             */
+            const isTrustedTriggerAuthor = (author, appSlug) => {
+              const allowedAuthors = new Set([
+                'chatgpt-codex-connector[bot]',
+              ]);
+              const allowedAppSlugs = new Set([
+                'chatgpt-codex-connector',
+              ]);
+              return allowedAuthors.has(author || '') || allowedAppSlugs.has(appSlug || '');
+            };
+
+            const shouldProcessComment =
+              isExpectedTriggerComment(normalizedCommentBody)
+              && isTrustedTriggerAuthor(triggerCommentAuthor, triggerAppSlug);
+
+            if (!shouldProcessComment) {
+              core.info(
+                `Skipping comment: body="${normalizedCommentBody}" author="${triggerCommentAuthor || 'unknown'}" app="${triggerAppSlug || 'unknown'}".`,
+              );
               return;
             }
+
+            core.info(`Matched trigger comment from "${triggerCommentAuthor || 'unknown'}" using app "${triggerAppSlug || 'unknown'}".`);
 
             if (!triggerTimestamp) {
               throw new Error('Missing issue comment timestamp in payload.');
