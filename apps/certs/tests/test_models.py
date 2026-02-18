@@ -86,7 +86,7 @@ def test_certificate_provision_dispatches(monkeypatch):
     monkeypatch.setattr(
         certbot,
         "request",
-        lambda *, sudo="sudo", dns_use_sandbox=None: "requested",
+        lambda *, sudo="sudo", dns_use_sandbox=None, force_renewal=False: "requested",
     )
     monkeypatch.setattr(self_signed, "generate", lambda *, sudo="sudo": "generated")
 

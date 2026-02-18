@@ -55,12 +55,15 @@ class CertificateBase(Certificate):
         *,
         sudo: str = "sudo",
         dns_use_sandbox: bool | None = None,
+        force_renewal: bool = False,
     ) -> str:
         """Generate or request this certificate based on its type.
 
         Args:
             sudo: Privilege escalation prefix used for certificate tooling.
             dns_use_sandbox: Optional per-run override for DNS API sandbox mode.
+            force_renewal: Force certificate re-issuance even when certbot would reuse
+                an existing valid certificate.
         """
 
         certificate = self._specific_certificate
@@ -69,6 +72,7 @@ class CertificateBase(Certificate):
             request_kwargs = {"sudo": sudo}
             if dns_use_sandbox is not None:
                 request_kwargs["dns_use_sandbox"] = dns_use_sandbox
+            request_kwargs["force_renewal"] = force_renewal
             return certificate.request(**request_kwargs)
         if isinstance(certificate, SelfSignedCertificate):
             return certificate.generate(sudo=sudo)
@@ -176,12 +180,15 @@ class CertbotCertificate(CertificateBase):
         *,
         sudo: str = "sudo",
         dns_use_sandbox: bool | None = None,
+        force_renewal: bool = False,
     ) -> str:
         """Trigger certbot for this certificate.
 
         Args:
             sudo: Privilege escalation prefix used for certificate tooling.
             dns_use_sandbox: Optional per-run override for DNS API sandbox mode.
+            force_renewal: Force certbot to renew even if the current certificate
+                is still considered valid.
         """
 
         if not self.certificate_path:
@@ -200,6 +207,7 @@ class CertbotCertificate(CertificateBase):
             dns_credential=self.dns_credential,
             dns_propagation_seconds=self.dns_propagation_seconds,
             dns_use_sandbox=dns_use_sandbox,
+            force_renewal=force_renewal,
             sudo=sudo,
         )
         try:

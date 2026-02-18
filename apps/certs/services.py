@@ -57,9 +57,14 @@ def request_certbot_certificate(
     dns_credential=None,
     dns_propagation_seconds: int = 120,
     dns_use_sandbox: bool | None = None,
+    force_renewal: bool = False,
     sudo: str = "sudo",
 ) -> str:
-    """Run certbot to request or renew certificates for *domain*."""
+    """Run certbot to request or renew certificates for *domain*.
+
+    Args:
+        force_renewal: Force certbot to re-issue an existing certificate.
+    """
 
     # Certbot manages output locations under /etc/letsencrypt/live/<domain>/ by
     # default. We avoid pre-creating these directories so certbot can maintain
@@ -73,6 +78,7 @@ def request_certbot_certificate(
             dns_credential=dns_credential,
             dns_propagation_seconds=dns_propagation_seconds,
             dns_use_sandbox=dns_use_sandbox,
+            force_renewal=force_renewal,
             sudo=sudo,
         )
     else:
@@ -84,6 +90,7 @@ def request_certbot_certificate(
             domain=domain,
             email=email,
             sudo=sudo,
+            force_renewal=force_renewal,
         )
         env = None
 
@@ -182,7 +189,13 @@ def _build_challenge_failure_guidance(
     return "\n".join(hints)
 
 
-def _build_http01_certbot_command(*, domain: str, email: str | None, sudo: str) -> list[str]:
+def _build_http01_certbot_command(
+    *,
+    domain: str,
+    email: str | None,
+    sudo: str,
+    force_renewal: bool = False,
+) -> list[str]:
     """Build a certbot command that uses webroot HTTP-01 validation."""
 
     command = _with_sudo(
@@ -204,6 +217,9 @@ def _build_http01_certbot_command(*, domain: str, email: str | None, sudo: str) 
         command.extend(["--email", email])
     else:
         command.append("--register-unsafely-without-email")
+
+    if force_renewal:
+        command.append("--force-renewal")
 
     return command
 
@@ -293,6 +309,7 @@ def _build_godaddy_certbot_command(
     dns_credential,
     dns_propagation_seconds: int,
     dns_use_sandbox: bool | None,
+    force_renewal: bool,
     sudo: str,
 ) -> tuple[list[str], dict[str, str]]:
     """Build certbot command and environment for GoDaddy DNS-01 validation."""
@@ -335,6 +352,9 @@ def _build_godaddy_certbot_command(
         command.extend(["--email", email])
     else:
         command.append("--register-unsafely-without-email")
+
+    if force_renewal:
+        command.append("--force-renewal")
 
     propagation_seconds = max(0, dns_propagation_seconds)
 
