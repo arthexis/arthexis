@@ -333,7 +333,16 @@ def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint
 ):
     """DNS-01 challenge failures should include GoDaddy-specific troubleshooting guidance."""
 
-    def fake_build(*, domain, email, dns_credential, dns_propagation_seconds, dns_use_sandbox, sudo):  # noqa: ARG001
+    def fake_build(
+        *,
+        domain,
+        email,
+        dns_credential,
+        dns_propagation_seconds,
+        dns_use_sandbox,
+        force_renewal,
+        sudo,
+    ):  # noqa: ARG001
         return ["certbot"], {}
 
     def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
