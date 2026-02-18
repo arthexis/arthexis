@@ -14,7 +14,7 @@ from apps.core.system.ui import (
     _system_boot_time,
 )
 from apps.nodes import tasks as node_tasks
-from apps.core.mcp.remote_commands import remote_command
+from apps.mcp.remote_commands import remote_command
 
 
 def _lcd_lines(
