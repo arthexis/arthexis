@@ -10,6 +10,15 @@
 </div>
 {% endblock %}
 
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .search-orders-result {
+      margin-bottom: 1.5rem;
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
   <h1>{% trans 'Orders containing selected products' %}</h1>
   <p>
@@ -34,7 +43,7 @@
   <h2>{% trans 'Matching orders' %}</h2>
   {% if orders %}
     {% for order in orders %}
-      <div class="module aligned" style="margin-bottom: 1.5rem;">
+      <div class="module aligned search-orders-result">
         <h3>{{ order.name }}</h3>
         <p>
           <strong>{% trans 'Customer' %}:</strong> {{ order.customer|default:'-' }}

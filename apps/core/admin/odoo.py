@@ -147,6 +147,13 @@ class OdooProductAdmin(EntityModelAdmin):
     def _odoo_employee_admin(self):
         return self.admin_site._registry.get(OdooEmployee)
 
+    def _m2o_name(self, value):
+        """Extract the display name from an Odoo many2one [id, name] value."""
+
+        if isinstance(value, (list, tuple)) and len(value) > 1:
+            return value[1]
+        return ""
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -295,16 +302,10 @@ class OdooProductAdmin(EntityModelAdmin):
             order_id = order.get("id")
             if not isinstance(order_id, int):
                 continue
-            partner = order.get("partner_id")
-            partner_name = ""
-            if isinstance(partner, (list, tuple)) and len(partner) > 1:
-                partner_name = partner[1]
+            partner_name = self._m2o_name(order.get("partner_id"))
             prepared_lines = []
             for line in order_to_lines.get(order_id, []):
-                product_info = line.get("product_id")
-                product_name = ""
-                if isinstance(product_info, (list, tuple)) and len(product_info) > 1:
-                    product_name = product_info[1]
+                product_name = self._m2o_name(line.get("product_id"))
                 prepared_lines.append(
                     {
                         "name": line.get("name") or product_name,
