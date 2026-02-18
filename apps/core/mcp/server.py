@@ -5,4 +5,20 @@ from __future__ import annotations
 Use ``apps.mcp.server`` instead.
 """
 
-from apps.mcp.server import *  # noqa: F403
+from apps.mcp.server import (
+    AuthenticatedMcpKey,
+    DjangoCommandMCPServer,
+    McpAuthenticationError,
+    McpAuthorizationError,
+    McpProtocolError,
+    run_stdio_server,
+)
+
+__all__ = [
+    "AuthenticatedMcpKey",
+    "DjangoCommandMCPServer",
+    "McpAuthenticationError",
+    "McpAuthorizationError",
+    "McpProtocolError",
+    "run_stdio_server",
+]
