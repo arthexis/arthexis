@@ -27,6 +27,7 @@ arthexis_python_bin() {
   local path_entry
   local candidate
   local versioned_candidates
+  local current_path
 
   _arthexis_python_candidate_is_py3() {
     local python_candidate="$1"
@@ -47,13 +48,21 @@ arthexis_python_bin() {
     return 1
   }
 
-  if [ -n "${_arthexis_python_bin_cached-}" ]; then
-    if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
-      return 1
+  # Cache is PATH-dependent so inherited shell state cannot override lookup
+  # results when the caller provides a different PATH.
+  current_path="${PATH-}"
+  if [ -n "${_arthexis_python_bin_cached_path-}" ] && [ "$_arthexis_python_bin_cached_path" = "$current_path" ]; then
+    if [ -n "${_arthexis_python_bin_cached-}" ]; then
+      if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
+        return 1
+      fi
+      printf '%s' "$_arthexis_python_bin_cached"
+      return 0
     fi
-    printf '%s' "$_arthexis_python_bin_cached"
-    return 0
   fi
+
+  unset _arthexis_python_bin_cached
+  _arthexis_python_bin_cached_path="$current_path"
 
   local _arthexis_path_remainder
   _arthexis_path_remainder="${PATH}:"
@@ -114,8 +123,10 @@ arthexis_python_bin() {
 
   if [ -z "${_arthexis_python_bin_cached-}" ]; then
     _arthexis_python_bin_cached="not_found"
+    _arthexis_python_bin_cached_path="$current_path"
     return 1
   fi
 
+  _arthexis_python_bin_cached_path="$current_path"
   printf '%s' "$_arthexis_python_bin_cached"
 }
