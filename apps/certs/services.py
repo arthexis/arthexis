@@ -309,7 +309,7 @@ def _build_godaddy_certbot_command(
     dns_credential,
     dns_propagation_seconds: int,
     dns_use_sandbox: bool | None,
-    force_renewal: bool,
+    force_renewal: bool = False,
     sudo: str,
 ) -> tuple[list[str], dict[str, str]]:
     """Build certbot command and environment for GoDaddy DNS-01 validation."""
