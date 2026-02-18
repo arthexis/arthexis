@@ -149,6 +149,7 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
         return "ok"
 
     monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
 
     services.request_certbot_certificate(
         domain="example.com",
@@ -186,11 +187,12 @@ def test_request_certbot_certificate_nginx_challenge_uses_webroot_validation(
 
     captured: dict[str, list[str]] = {}
 
-    def fake_run(command: list[str], *, env=None):
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
         captured["command"] = command
         return "ok"
 
     monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
 
     services.request_certbot_certificate(
         domain="example.com",
@@ -238,10 +240,11 @@ def test_request_certbot_certificate_missing_certbot_includes_supported_os_guida
 ):
     """Missing certbot errors should include actionable guidance for supported hosts."""
 
-    def fake_run(command: list[str], *, env=None):
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
         raise RuntimeError("sudo: certbot: command not found")
 
     monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
     monkeypatch.setattr(
         services,
         "_read_os_release_fields",
@@ -268,10 +271,11 @@ def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_gu
 ):
     """Missing certbot binary should be mapped to CertbotError guidance without sudo."""
 
-    def fake_run(command: list[str], *, env=None):
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
         raise FileNotFoundError(2, "No such file or directory", "certbot")
 
     monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
     monkeypatch.setattr(
         services,
         "_read_os_release_fields",
