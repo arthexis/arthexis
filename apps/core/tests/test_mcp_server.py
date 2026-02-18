@@ -1,4 +1,9 @@
-"""Compatibility import test module for moved MCP tests.
+"""Compatibility import test module for moved MCP tests."""
 
-Regression coverage now resides in ``apps.mcp.tests.test_mcp_server``.
-"""
+
+def test_compat_imports_mcp_server() -> None:
+    """Verify the compatibility MCP server command entrypoint is importable."""
+
+    from apps.core.management.commands.mcp_server import Command
+
+    assert Command is not None

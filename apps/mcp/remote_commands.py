@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Helpers for marking and discovering Django management commands for MCP use."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any

@@ -1,3 +1,3 @@
 from django.contrib import admin
 
-__all__ = ["admin"]
+# Placeholder admin module; register MCP ModelAdmin classes here.
