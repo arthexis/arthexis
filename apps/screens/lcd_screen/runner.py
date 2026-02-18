@@ -311,6 +311,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     channel_info,
                     channel_text,
                     now_dt,
+                    advance=False,
                 )
             _warn_on_non_ascii_payload(payload, order[index])
             prepared_state = _prepare_display_state(
@@ -633,13 +634,15 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     else:
                         state_index = 0
 
-                    current_payload = _payload_for_state(
-                        state_order,
-                        state_index,
-                        channel_info,
-                        channel_text,
-                        now_dt,
-                    )
+                    with cycle_state_lock:
+                        channel_info, channel_text = _load_channel_states(now_dt)
+                        current_payload = _payload_for_state(
+                            state_order,
+                            state_index,
+                            channel_info,
+                            channel_text,
+                            now_dt,
+                        )
                     _warn_on_non_ascii_payload(current_payload, state_order[state_index])
                     display_state = _prepare_display_state(
                         current_payload.line1,
@@ -651,6 +654,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     if len(state_order) > 1:
                         next_index = (state_index + 1) % len(state_order)
                         with cycle_state_lock:
+                            channel_info, channel_text = _load_channel_states(now_dt)
                             next_payload = _payload_for_state(
                                 state_order,
                                 next_index,
@@ -671,7 +675,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                     if len(state_order) > 1:
                         upcoming_index = (state_index + 2) % len(state_order)
-                        _schedule_cycle_prefetch(state_order, upcoming_index, now_dt)
+                        _schedule_cycle_prefetch(
+                            state_order,
+                            upcoming_index,
+                            now_dt + timedelta(seconds=2 * ROTATION_SECONDS),
+                        )
 
                 if lcd is None:
                     lcd = _initialize_lcd()
@@ -750,7 +758,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                         cycle_prefetch_future = None
                         upcoming_index = (state_index + 2) % len(state_order)
-                        _schedule_cycle_prefetch(state_order, upcoming_index, now_dt)
+                        _schedule_cycle_prefetch(
+                            state_order,
+                            upcoming_index,
+                            now_dt + timedelta(seconds=2 * ROTATION_SECONDS),
+                        )
                     else:
                         with cycle_state_lock:
                             channel_info, channel_text = _load_channel_states(now_dt)
@@ -778,7 +790,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 continue
 
     finally:
-        cycle_prefetch_executor.shutdown(wait=False, cancel_futures=True)
+        cycle_prefetch_executor.shutdown(wait=True, cancel_futures=True)
         _blank_display(lcd)
         _reset_shutdown_flag()
         _reset_event_interrupt_flag()
