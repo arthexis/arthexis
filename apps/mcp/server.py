@@ -3,6 +3,7 @@ from __future__ import annotations
 """Minimal MCP-compatible JSON-RPC server for selected Django commands."""
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from functools import cached_property
@@ -20,6 +21,9 @@ from .remote_commands import (
     RemoteCommandMetadata,
     discover_remote_commands,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class McpProtocolError(ValueError):
@@ -274,6 +278,7 @@ def run_stdio_server(
                 "error": {"code": -32600, "message": str(exc)},
             }
         except (RemoteCommandError, McpAuthenticationError) as exc:
+            logger.exception("MCP request failed during command discovery/authentication.")
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
@@ -281,6 +286,7 @@ def run_stdio_server(
                 "error": {"code": -32000, "message": str(exc)},
             }
         except McpAuthorizationError as exc:
+            logger.exception("MCP request failed due to authorization error.")
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
