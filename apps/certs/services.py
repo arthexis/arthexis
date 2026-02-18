@@ -176,7 +176,7 @@ def _build_challenge_failure_guidance(
         )
     else:
         hints.append(
-            "Using HTTP-01 webroot: ensure port 80 is open and serving /.well-known/acme-challenge/ from /var/www/arthexis."
+            f"Using HTTP-01 webroot: ensure port 80 is open and serving /.well-known/acme-challenge/ from {HTTP01_WEBROOT_PATH}."
         )
     hints.append("Re-run with certbot -v and inspect /var/log/letsencrypt/letsencrypt.log for challenge-specific details.")
     return "\n".join(hints)

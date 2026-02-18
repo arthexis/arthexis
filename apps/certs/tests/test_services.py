@@ -302,7 +302,7 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
 ):
     """ACME challenge failures should raise CertbotChallengeError with remediation hints."""
 
-    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
         raise RuntimeError(
             "Saving debug log to /var/log/letsencrypt/letsencrypt.log\n"
             "Some challenges have failed."
@@ -324,6 +324,7 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
     message = str(exc_info.value)
     assert "Some challenges have failed" in message
     assert "Using HTTP-01 webroot" in message
+    assert str(tmp_path / "acme-webroot") in message
     assert "/var/log/letsencrypt/letsencrypt.log" in message
 
 
@@ -332,10 +333,10 @@ def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint
 ):
     """DNS-01 challenge failures should include GoDaddy-specific troubleshooting guidance."""
 
-    def fake_build(*, domain, email, dns_credential, dns_propagation_seconds, dns_use_sandbox, sudo):
+    def fake_build(*, domain, email, dns_credential, dns_propagation_seconds, dns_use_sandbox, sudo):  # noqa: ARG001
         return ["certbot"], {}
 
-    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
         raise RuntimeError("Some challenges have failed.")
 
     monkeypatch.setattr(services, "_build_godaddy_certbot_command", fake_build)
