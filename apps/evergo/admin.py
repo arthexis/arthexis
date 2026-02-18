@@ -2,12 +2,14 @@
 
 from django.contrib import admin, messages
 
+from apps.core.admin import OwnableAdminMixin
+
 from .exceptions import EvergoAPIError
 from .models import EvergoUser
 
 
 @admin.register(EvergoUser)
-class EvergoUserAdmin(admin.ModelAdmin):
+class EvergoUserAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Manage Evergo users and allow login verification from admin actions."""
 
     list_display = (
