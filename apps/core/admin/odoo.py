@@ -1,7 +1,9 @@
 import logging
+from xmlrpc.client import Fault, ProtocolError
 
 from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -135,6 +137,13 @@ class OdooProductAdmin(EntityModelAdmin):
             limit=0,
         )
 
+    def _search_orders_for_selected_url(self) -> str:
+        """Return the admin URL for the selected-products order search view."""
+
+        return reverse(
+            f"admin:{self.opts.app_label}_{self.opts.model_name}_search_orders_for_selected"
+        )
+
     def _odoo_employee_admin(self):
         return self.admin_site._registry.get(OdooEmployee)
 
@@ -145,7 +154,12 @@ class OdooProductAdmin(EntityModelAdmin):
                 "register-from-odoo/",
                 self.admin_site.admin_view(self.register_from_odoo_view),
                 name=f"{self.opts.app_label}_{self.opts.model_name}_register_from_odoo",
-            )
+            ),
+            path(
+                "search-orders-for-selected/",
+                self.admin_site.admin_view(self.search_orders_for_selected_view),
+                name=f"{self.opts.app_label}_{self.opts.model_name}_search_orders_for_selected",
+            ),
         ]
         return custom + urls
 
@@ -163,7 +177,42 @@ class OdooProductAdmin(EntityModelAdmin):
 
     @admin.action(description=_("Search Orders for selected"))
     def search_orders_for_selected(self, request, queryset):
+        """Redirect to the selected-products order search results view."""
+
+        selected_ids = [str(pk) for pk in queryset.values_list("pk", flat=True)]
+        if not selected_ids:
+            self.message_user(
+                request,
+                _("Select at least one product before searching orders."),
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(
+                reverse(
+                    f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+                )
+            )
+
+        return HttpResponseRedirect(
+            f"{self._search_orders_for_selected_url()}?ids={','.join(selected_ids)}"
+        )
+
+    def search_orders_for_selected_view(self, request):
         """Show Odoo sale orders that include at least one selected product."""
+
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+
+        raw_ids = request.GET.get("ids", "")
+        selected_model_ids: list[int] = []
+        for value in raw_ids.split(","):
+            if not value.strip():
+                continue
+            try:
+                selected_model_ids.append(int(value))
+            except ValueError:
+                continue
+
+        queryset = self.model.objects.filter(pk__in=selected_model_ids)
 
         profile = getattr(request.user, "odoo_employee", None)
         context = {
@@ -174,6 +223,9 @@ class OdooProductAdmin(EntityModelAdmin):
             "orders": [],
             "error": None,
             "has_credentials": bool(profile and profile.is_verified),
+            "changelist_url": reverse(
+                f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+            ),
         }
 
         if not profile or not profile.is_verified:
@@ -199,7 +251,7 @@ class OdooProductAdmin(EntityModelAdmin):
 
         try:
             order_lines = self._prepare_order_lines(profile, selected_ids)
-        except Exception:
+        except (Fault, ProtocolError, OSError):
             logger.exception(
                 "Failed to fetch sale order lines for selected Odoo products %s (user_id=%s)",
                 selected_ids,

@@ -12,6 +12,9 @@
 
 {% block content %}
   <h1>{% trans 'Orders containing selected products' %}</h1>
+  <p>
+    <a href="{{ changelist_url }}">{% trans 'Back to Odoo products' %}</a>
+  </p>
 
   {% if error %}
     <div class="messagelist">
