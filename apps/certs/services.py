@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,19 @@ def _run_command(command: list[str], *, env: dict[str, str] | None = None) -> st
         stderr = result.stderr.strip()
         raise RuntimeError(stderr or "Command failed: " + " ".join(command))
     return result.stdout.strip()
+
+
+def extract_live_certificate_paths_from_certbot_output(
+    output: str,
+) -> tuple[Path, Path] | None:
+    """Return live certificate paths reported by certbot output when present."""
+
+    cert_match = re.search(r"Certificate is saved at:\s*(\S+)", output)
+    key_match = re.search(r"Key is saved at:\s*(\S+)", output)
+    if not cert_match or not key_match:
+        return None
+
+    return Path(cert_match.group(1)), Path(key_match.group(1))
 
 
 def request_certbot_certificate(

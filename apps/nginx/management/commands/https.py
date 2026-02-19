@@ -212,10 +212,17 @@ class Command(BaseCommand):
         else:
             if use_godaddy:
                 self._validate_godaddy_setup(certificate)
+            previous_certificate_path = certificate.certificate_path
+            previous_certificate_key_path = certificate.certificate_key_path
             certificate.provision(
                 sudo=sudo,
                 dns_use_sandbox=sandbox_override,
                 force_renewal=force_renewal,
+            )
+            self._warn_if_certificate_paths_changed(
+                certificate,
+                previous_certificate_path=previous_certificate_path,
+                previous_certificate_key_path=previous_certificate_key_path,
             )
             if force_renewal:
                 self._validate_force_renewal_result(certificate)
@@ -240,6 +247,29 @@ class Command(BaseCommand):
 
         if expiration <= timezone.now():
             raise CommandError(FORCE_RENEWAL_STILL_EXPIRED_ERROR)
+
+    def _warn_if_certificate_paths_changed(
+        self,
+        certificate,
+        *,
+        previous_certificate_path: str,
+        previous_certificate_key_path: str,
+    ) -> None:
+        """Surface certbot lineage path changes so operators can verify consumers."""
+
+        if (
+            certificate.certificate_path == previous_certificate_path
+            and certificate.certificate_key_path == previous_certificate_key_path
+        ):
+            return
+
+        self.stdout.write(
+            self.style.WARNING(
+                "Certificate storage paths changed after certbot issuance: "
+                f"cert={certificate.certificate_path} key={certificate.certificate_key_path}. "
+                "If external services reference old paths, reload or update them accordingly."
+            )
+        )
 
     def _warn_if_certificate_expiring_soon(self, certificate, *, warn_days: int) -> None:
         """Emit actionable guidance when certificate expiration is near or in the past."""

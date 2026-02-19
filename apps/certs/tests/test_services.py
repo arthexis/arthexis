@@ -139,6 +139,29 @@ def test_build_godaddy_certbot_command_uses_preserve_env_and_absolute_hook_path(
     assert "--issuance-timeout" not in command
 
 
+def test_extract_live_certificate_paths_from_certbot_output_returns_lineage_paths():
+    output = "\n".join(
+        [
+            "Successfully received certificate.",
+            "Certificate is saved at: /etc/letsencrypt/live/arthexis.com-0001/fullchain.pem",
+            "Key is saved at: /etc/letsencrypt/live/arthexis.com-0001/privkey.pem",
+        ]
+    )
+
+    extracted = services.extract_live_certificate_paths_from_certbot_output(output)
+
+    assert extracted is not None
+    cert_path, key_path = extracted
+    assert cert_path == Path("/etc/letsencrypt/live/arthexis.com-0001/fullchain.pem")
+    assert key_path == Path("/etc/letsencrypt/live/arthexis.com-0001/privkey.pem")
+
+
+def test_extract_live_certificate_paths_from_certbot_output_returns_none_without_paths():
+    output = "Certificate not due for renewal, no changes made."
+
+    assert services.extract_live_certificate_paths_from_certbot_output(output) is None
+
+
 def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     monkeypatch, tmp_path
 ):

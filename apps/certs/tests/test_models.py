@@ -37,6 +37,37 @@ def test_certbot_certificate_request_updates_state(monkeypatch):
     assert captured["domain"] == "example.com"
     assert captured["certificate_path"].name == "fullchain.pem"
 
+
+@pytest.mark.django_db
+def test_certbot_certificate_request_updates_lineage_paths_from_certbot_output(monkeypatch):
+    """Regression: certbot force-renewal lineage suffixes should update stored paths."""
+
+    certificate = CertbotCertificate.objects.create(
+        name="certbot-lineage", domain="example.com", certificate_path="", certificate_key_path=""
+    )
+
+    now = timezone.now()
+    monkeypatch.setattr(timezone, "now", lambda: now)
+
+    output = "\n".join(
+        [
+            "Successfully received certificate.",
+            "Certificate is saved at: /etc/letsencrypt/live/example.com-0001/fullchain.pem",
+            "Key is saved at: /etc/letsencrypt/live/example.com-0001/privkey.pem",
+        ]
+    )
+
+    monkeypatch.setattr(services, "request_certbot_certificate", lambda **kwargs: output)
+    expiration = now + timezone.timedelta(days=90)
+    monkeypatch.setattr(services, "get_certificate_expiration", lambda **kwargs: expiration)
+
+    certificate.request(sudo="")
+
+    certificate.refresh_from_db()
+    assert certificate.certificate_path == "/etc/letsencrypt/live/example.com-0001/fullchain.pem"
+    assert certificate.certificate_key_path == "/etc/letsencrypt/live/example.com-0001/privkey.pem"
+    assert certificate.expiration_date == expiration
+
 @pytest.mark.django_db
 def test_self_signed_certificate_generate_updates_state(monkeypatch):
     certificate = SelfSignedCertificate.objects.create(
