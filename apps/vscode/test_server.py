@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import re
@@ -282,10 +283,8 @@ def run_tests(base_dir: Path) -> bool:
     """Execute the test suite grouped by markers."""
 
     groups = [
-        ("critical", "critical"),
-        ("unmarked", "not critical and not integration and not slow"),
-        ("integration", "integration"),
-        ("slow", "slow"),
+        (label, _build_marker_expression(include=include, exclude=exclude))
+        for label, include, exclude in _marker_segments()
     ]
     results: list[tuple[str, bool, int | None]] = []
     for label, marker in groups:
@@ -299,6 +298,49 @@ def run_tests(base_dir: Path) -> bool:
     overall_success = all(result[1] for result in results)
     _report_test_failures(results)
     return overall_success
+
+
+def _marker_segments() -> list[tuple[str, str | None, tuple[str, ...]]]:
+    """Return ordered marker segments for deterministic, non-overlapping test runs."""
+
+    return [
+        ("critical", "critical", ()),
+        ("unmarked", None, ("critical", "integration", "slow")),
+        ("integration", "integration", ("critical",)),
+        ("slow", "slow", ("critical", "integration")),
+    ]
+
+
+def _build_marker_expression(*, include: str | None, exclude: tuple[str, ...]) -> str:
+    """Build a pytest marker expression from a required marker and excluded markers."""
+
+    exclusions = " and ".join(f"not {marker}" for marker in exclude)
+    if include is None:
+        return exclusions
+    if not exclusions:
+        return include
+    return f"{include} and {exclusions}"
+
+
+def test_marker_segments_are_mutually_exclusive_regression():
+    """Regression: ensure one test belongs to at most one marker segment."""
+
+    marker_segments = _marker_segments()
+    tracked_markers = ("critical", "integration", "slow")
+    for presence in itertools.product((False, True), repeat=len(tracked_markers)):
+        active_markers = {
+            marker
+            for marker, is_present in zip(tracked_markers, presence, strict=True)
+            if is_present
+        }
+        matches = 0
+        for _, include, exclude in marker_segments:
+            if include is not None and include not in active_markers:
+                continue
+            if any(marker in active_markers for marker in exclude):
+                continue
+            matches += 1
+        assert matches == 1
 
 
 def _report_test_failures(results: Iterable[tuple[str, bool, int | None]]) -> None:
