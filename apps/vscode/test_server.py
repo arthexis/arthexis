@@ -35,7 +35,8 @@ PYTEST_DURATIONS_COUNT = 5
 PYTEST_DURATIONS_MIN_SECONDS = 0.0
 SUMMARY_LINE_RE = re.compile(r"=+ (.+?) =+")
 SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
-SCREENSHOT_PORT = 8888
+DEFAULT_SCREENSHOT_PORT = 8888
+SCREENSHOT_PORT_ENV = "TEST_SERVER_SCREENSHOT_PORT"
 
 
 @pytest.fixture
@@ -90,6 +91,28 @@ def test_server_state_creates_and_cleans(lock_dir: Path):
 
 
 
+
+
+
+def test_get_screenshot_port_uses_default_without_env(monkeypatch):
+    """Return the default screenshot port when no override exists."""
+
+    monkeypatch.delenv(SCREENSHOT_PORT_ENV, raising=False)
+
+    assert _get_screenshot_port() == DEFAULT_SCREENSHOT_PORT
+
+
+def test_get_screenshot_port_falls_back_for_invalid_env(monkeypatch):
+    """Return the default screenshot port when override is invalid."""
+
+    monkeypatch.setenv(SCREENSHOT_PORT_ENV, "invalid")
+    assert _get_screenshot_port() == DEFAULT_SCREENSHOT_PORT
+
+    monkeypatch.setenv(SCREENSHOT_PORT_ENV, "70000")
+    assert _get_screenshot_port() == DEFAULT_SCREENSHOT_PORT
+
+    monkeypatch.setenv(SCREENSHOT_PORT_ENV, "8123")
+    assert _get_screenshot_port() == 8123
 
 def test_run_tests_triggers_screenshot_after_unmarked_group(monkeypatch):
     """Ensure screenshot capture runs after successful regular tests."""
@@ -330,6 +353,24 @@ def _strip_ansi(text: str) -> str:
     return re.sub("\x1b\\[[0-9;]*m", "", text)
 
 
+
+
+def _get_screenshot_port() -> int:
+    """Return the screenshot server port from the environment or the default."""
+
+    raw_port = os.environ.get(SCREENSHOT_PORT_ENV)
+    if raw_port is None:
+        return DEFAULT_SCREENSHOT_PORT
+
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return DEFAULT_SCREENSHOT_PORT
+
+    if port < 1 or port > 65535:
+        return DEFAULT_SCREENSHOT_PORT
+    return port
+
 def run_tests(base_dir: Path) -> bool:
     """Execute the test suite grouped by markers."""
 
@@ -352,6 +393,8 @@ def run_tests(base_dir: Path) -> bool:
 
 def _capture_ci_style_screenshots(base_dir: Path) -> bool:
     """Capture public and admin screenshots using the CI-style Playwright flow."""
+
+    screenshot_port = _get_screenshot_port()
 
     if not _playwright_is_available(base_dir):
         print(f"{PREFIX} Skipping screenshot capture: Playwright is unavailable.")
@@ -380,7 +423,7 @@ def _capture_ci_style_screenshots(base_dir: Path) -> bool:
         sys.executable,
         str(base_dir / "manage.py"),
         "runserver",
-        f"0.0.0.0:{SCREENSHOT_PORT}",
+        f"0.0.0.0:{screenshot_port}",
         "--noreload",
     ]
     server_env = manage_env.copy()
@@ -396,7 +439,7 @@ def _capture_ci_style_screenshots(base_dir: Path) -> bool:
             text=True,
         )
     try:
-        if not _wait_for_server(f"http://localhost:{SCREENSHOT_PORT}/admin/login/?next=/admin/"):
+        if not _wait_for_server(f"http://localhost:{screenshot_port}/admin/login/?next=/admin/"):
             print(
                 f"{PREFIX} Skipping screenshot capture: application server did not become healthy."
             )
@@ -439,6 +482,8 @@ def _wait_for_server(url: str, *, attempts: int = 30, delay_seconds: float = 1.0
 
 def _run_screenshot_capture_script(base_dir: Path) -> bool:
     """Run a temporary Node.js script that captures admin and public screenshots."""
+
+    screenshot_port = _get_screenshot_port()
 
     script_content = """
 const { chromium } = require('playwright');
@@ -484,9 +529,9 @@ const publicUrl = process.env.PUBLIC_URL || 'http://localhost:8888/';
     env.setdefault("ADMIN_USERNAME", "admin")
     env.setdefault("ADMIN_PASSWORD", os.environ.get("DOCS_ADMIN_PASSWORD", "admin"))
     env.setdefault(
-        "ADMIN_URL", f"http://localhost:{SCREENSHOT_PORT}/admin/login/?next=/admin/"
+        "ADMIN_URL", f"http://localhost:{screenshot_port}/admin/login/?next=/admin/"
     )
-    env.setdefault("PUBLIC_URL", f"http://localhost:{SCREENSHOT_PORT}/")
+    env.setdefault("PUBLIC_URL", f"http://localhost:{screenshot_port}/")
 
     try:
         result = subprocess.run(["node", str(script_path)], cwd=base_dir, env=env)
@@ -526,9 +571,9 @@ def _marker_groups() -> list[tuple[str, str]]:
 
     return [
         ("critical", "critical"),
-        ("slow", "slow and not critical"),
-        ("integration", "integration and not critical and not slow"),
         ("unmarked", "not critical and not integration and not slow"),
+        ("integration", "integration and not critical and not slow"),
+        ("slow", "slow and not critical"),
     ]
 
 
