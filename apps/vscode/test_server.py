@@ -316,6 +316,10 @@ def _build_marker_expression(*, include: str | None, exclude: tuple[str, ...]) -
 
     exclusions = " and ".join(f"not {marker}" for marker in exclude)
     if include is None:
+        if not exclusions:
+            raise ValueError(
+                "_build_marker_expression requires include or exclude; empty expression is invalid"
+            )
         return exclusions
     if not exclusions:
         return include
@@ -323,10 +327,15 @@ def _build_marker_expression(*, include: str | None, exclude: tuple[str, ...]) -
 
 
 def test_marker_segments_are_mutually_exclusive_regression():
-    """Regression: ensure one test belongs to at most one marker segment."""
+    """Regression: ensure every test belongs to exactly one marker segment."""
 
     marker_segments = _marker_segments()
-    tracked_markers = ("critical", "integration", "slow")
+    all_markers: set[str] = set()
+    for _, include, exclude in marker_segments:
+        if include:
+            all_markers.add(include)
+        all_markers.update(exclude)
+    tracked_markers = tuple(sorted(all_markers))
     for presence in itertools.product((False, True), repeat=len(tracked_markers)):
         active_markers = {
             marker
