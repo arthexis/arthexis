@@ -210,7 +210,10 @@ class CertbotCertificate(CertificateBase):
             force_renewal=force_renewal,
             sudo=sudo,
         )
-        if resolved_paths := services.extract_live_certificate_paths_from_certbot_output(message):
+        resolved_paths = services.extract_live_certificate_paths_from_certbot_output(
+            message
+        )
+        if resolved_paths:
             self.certificate_path = str(resolved_paths[0])
             self.certificate_key_path = str(resolved_paths[1])
         try:
