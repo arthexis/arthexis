@@ -6,8 +6,11 @@ import contextlib
 import ipaddress
 import json
 import os
+import queue
+import socket
+import threading
 from pathlib import Path
-from typing import Mapping, MutableMapping
+from typing import Callable, Mapping, MutableMapping
 from urllib.parse import urlsplit
 
 from django.core.management.utils import get_random_secret_key
@@ -22,6 +25,7 @@ __all__ = [
     "load_secret_key",
     "load_site_config_allowed_hosts",
     "normalize_site_host",
+    "resolve_local_fqdn",
     "resolve_celery_shutdown_timeout",
     "strip_ipv6_brackets",
     "validate_host_with_subnets",
@@ -76,6 +80,39 @@ def load_site_config_allowed_hosts(base_dir: Path) -> list[str]:
         seen.add(host)
         hosts.append(host)
     return hosts
+
+
+def resolve_local_fqdn(
+    hostname: str,
+    resolver: Callable[[str], str] | None = None,
+    timeout_seconds: float = 0.2,
+) -> str:
+    """Return the local FQDN while avoiding blocking reverse-DNS lookups.
+
+    Some systems can block indefinitely when resolving ``socket.getfqdn``. This
+    helper executes the resolver in a daemon thread and returns an empty string
+    when the timeout is exceeded or resolution fails.
+    """
+
+    lookup = resolver or socket.getfqdn
+    result_queue: queue.SimpleQueue[str | BaseException] = queue.SimpleQueue()
+
+    def _run_lookup() -> None:
+        try:
+            result_queue.put(lookup(hostname))
+        except (OSError, ValueError) as exc:
+            result_queue.put(exc)
+
+    worker = threading.Thread(target=_run_lookup, daemon=True)
+    worker.start()
+    worker.join(timeout_seconds)
+    if worker.is_alive() or result_queue.empty():
+        return ""
+
+    result = result_queue.get_nowait()
+    if isinstance(result, BaseException):
+        return ""
+    return result.strip()
 
 
 def strip_ipv6_brackets(host: str) -> str:
