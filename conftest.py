@@ -22,14 +22,14 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 
 def _configure_ephemeral_sqlite_paths() -> None:
-    """Route SQLite primary and test databases to an isolated temp directory."""
+    """Route SQLite DBs to an isolated temp directory unless already configured."""
 
     global _PYTEST_SQLITE_TMP_DIR
     _PYTEST_SQLITE_TMP_DIR = tempfile.TemporaryDirectory(prefix=f"arthexis-pytest-{os.getpid()}-")
     atexit.register(_PYTEST_SQLITE_TMP_DIR.cleanup)
     db_root = Path(_PYTEST_SQLITE_TMP_DIR.name)
-    os.environ["ARTHEXIS_SQLITE_PATH"] = str(db_root / "default.sqlite3")
-    os.environ["ARTHEXIS_SQLITE_TEST_PATH"] = str(db_root / "test.sqlite3")
+    os.environ.setdefault("ARTHEXIS_SQLITE_PATH", str(db_root / "default.sqlite3"))
+    os.environ.setdefault("ARTHEXIS_SQLITE_TEST_PATH", str(db_root / "test.sqlite3"))
 
 
 _configure_ephemeral_sqlite_paths()
@@ -47,7 +47,6 @@ def _ensure_clean_test_databases() -> None:
         if path.exists():
             path.unlink()
 
-    (base_dir / "work" / "test_db").mkdir(parents=True, exist_ok=True)
 
 
 _ensure_clean_test_databases()
