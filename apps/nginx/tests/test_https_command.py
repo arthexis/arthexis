@@ -384,7 +384,7 @@ def test_https_enable_passes_force_renewal_to_certbot(monkeypatch):
 
     assert provision_calls["force_renewal"] is True
 
-
+@pytest.mark.django_db
 def test_https_enable_force_renewal_warns_when_paths_change(monkeypatch):
     """`--force-renewal` should include old/new cert and key paths when lineage shifts."""
 
