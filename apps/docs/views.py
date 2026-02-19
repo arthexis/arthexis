@@ -26,6 +26,9 @@ ALLOWED_DOC_EXTENSIONS = (
     | rendering.CSV_FILE_EXTENSIONS
     | {".rst"}
 )
+DOCUMENT_NOT_FOUND_MESSAGE = "Document not found"
+DOCUMENT_LIBRARY_CACHE_KEY = "docs:library:index"
+DOCUMENT_LIBRARY_CACHE_TIMEOUT = 300
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -62,10 +65,10 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
             normalized = normalized[2:]
         normalized = normalized.lstrip("/")
         if not normalized:
-            raise Http404("Document not found")
+            raise Http404(DOCUMENT_NOT_FOUND_MESSAGE)
         doc_path = Path(normalized)
         if doc_path.is_absolute() or any(part == ".." for part in doc_path.parts):
-            raise Http404("Document not found")
+            raise Http404(DOCUMENT_NOT_FOUND_MESSAGE)
 
         relative_candidates: list[Path] = []
 
@@ -147,7 +150,7 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
         None,
     )
     if readme_file is None:
-        raise Http404("Document not found")
+        raise Http404(DOCUMENT_NOT_FOUND_MESSAGE)
 
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
     return SimpleNamespace(
@@ -238,6 +241,38 @@ def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
     return sections
 
 
+def _get_cached_document_library(root_base: Path) -> list[dict[str, object]]:
+    """Return a cached library index to avoid repeated filesystem scans."""
+
+    sections = cache.get(DOCUMENT_LIBRARY_CACHE_KEY)
+    if sections is not None:
+        return sections
+    sections = _collect_document_library(root_base)
+    cache.set(DOCUMENT_LIBRARY_CACHE_KEY, sections, timeout=DOCUMENT_LIBRARY_CACHE_TIMEOUT)
+    return sections
+
+
+def _render_document_library(
+    request,
+    *,
+    status: int = 200,
+    missing_document: str | None = None,
+) -> HttpResponse:
+    """Render the docs library page for both standard and fallback flows."""
+
+    root_base = Path(settings.BASE_DIR).resolve()
+    context = {
+        "sections": _get_cached_document_library(root_base),
+        "page_url": request.build_absolute_uri(),
+        "title": "Developer Documents",
+    }
+    if missing_document:
+        context["missing_document"] = missing_document
+    response = render(request, "docs/library.html", context, status=status)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
+
+
 def render_readme_page(
     request,
     *,
@@ -296,16 +331,14 @@ def render_readme_page(
 def document_library(request):
     """Render the developer documentation library index."""
 
-    root_base = Path(settings.BASE_DIR).resolve()
-    sections = _collect_document_library(root_base)
-    context = {
-        "sections": sections,
-        "page_url": request.build_absolute_uri(),
-        "title": "Developer Documents",
-    }
-    response = render(request, "docs/library.html", context)
-    patch_vary_headers(response, ["Accept-Language", "Cookie"])
-    return response
+    return _render_document_library(request)
+
+
+def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) -> HttpResponse:
+    """Render a helpful fallback page when a documentation path is missing."""
+
+    missing_path = _normalize_docs_path(doc, prepend_docs) or ""
+    return _render_document_library(request, status=404, missing_document=missing_path)
 
 
 def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) -> HttpResponse:
@@ -331,7 +364,7 @@ def readme(request, doc=None, prepend_docs: bool = False):
         return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
     except Http404 as exc:
         message = str(exc)
-        if message == "Document not found":
+        if message == DOCUMENT_NOT_FOUND_MESSAGE:
             return _render_missing_document(request, doc=doc, prepend_docs=prepend_docs)
         raise
 
