@@ -333,12 +333,7 @@ def _strip_ansi(text: str) -> str:
 def run_tests(base_dir: Path) -> bool:
     """Execute the test suite grouped by markers."""
 
-    groups = [
-        ("critical", "critical"),
-        ("unmarked", "not critical and not integration and not slow"),
-        ("integration", "integration"),
-        ("slow", "slow"),
-    ]
+    groups = _marker_groups()
     results: list[tuple[str, bool, int | None]] = []
     for label, marker in groups:
         success, failed_count = _run_test_group(
@@ -524,6 +519,36 @@ def _report_test_failures(results: Iterable[tuple[str, bool, int | None]]) -> No
         parts.append(f"{label}: {count_display} failed")
     if failures_present:
         print(f"{PREFIX} WARNING: Test failures summary - {', '.join(parts)}")
+
+
+def _marker_groups() -> list[tuple[str, str]]:
+    """Return mutually-exclusive marker expressions for segmented test runs."""
+
+    return [
+        ("critical", "critical"),
+        ("slow", "slow and not critical"),
+        ("integration", "integration and not critical and not slow"),
+        ("unmarked", "not critical and not integration and not slow"),
+    ]
+
+
+def test_marker_groups_are_mutually_exclusive() -> None:
+    """Regression: marker groups must prevent duplicate test execution."""
+
+    labels = {label for label, _ in _marker_groups()}
+    assert labels == {"critical", "slow", "integration", "unmarked"}
+
+    marker_expr_by_label = dict(_marker_groups())
+    assert marker_expr_by_label["critical"] == "critical"
+    assert marker_expr_by_label["slow"] == "slow and not critical"
+    assert (
+        marker_expr_by_label["integration"]
+        == "integration and not critical and not slow"
+    )
+    assert (
+        marker_expr_by_label["unmarked"]
+        == "not critical and not integration and not slow"
+    )
 
 
 def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
