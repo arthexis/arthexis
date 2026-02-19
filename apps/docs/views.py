@@ -308,9 +308,32 @@ def document_library(request):
     return response
 
 
+def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) -> HttpResponse:
+    """Render a helpful fallback page when a documentation path is missing."""
+
+    root_base = Path(settings.BASE_DIR).resolve()
+    sections = _collect_document_library(root_base)
+    missing_path = _normalize_docs_path(doc, prepend_docs) or ""
+    context = {
+        "sections": sections,
+        "page_url": request.build_absolute_uri(),
+        "title": "Developer Documents",
+        "missing_document": missing_path,
+    }
+    response = render(request, "docs/library.html", context, status=404)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
+
+
 @never_cache
 def readme(request, doc=None, prepend_docs: bool = False):
-    return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
+    try:
+        return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
+    except Http404 as exc:
+        message = str(exc)
+        if message == "Document not found":
+            return _render_missing_document(request, doc=doc, prepend_docs=prepend_docs)
+        raise
 
 
 def readme_asset(request, source: str, asset: str):

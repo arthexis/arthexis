@@ -212,8 +212,15 @@ def test_generate_certificates_view_creates_certbot_certificate_when_selected(
 
     requested: dict[str, str] = {}
 
-    def fake_request(self, *, sudo: str = "sudo"):
+    def fake_request(
+        self,
+        *,
+        sudo: str = "sudo",
+        dns_use_sandbox=None,
+        force_renewal: bool = False,
+    ):
         requested["sudo"] = sudo
+        requested["force_renewal"] = force_renewal
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
@@ -234,6 +241,7 @@ def test_generate_certificates_view_creates_certbot_certificate_when_selected(
     assert isinstance(certificate._specific_certificate, CertbotCertificate)
     assert certificate.domain == "certbot.example.com"
     assert requested["sudo"] == "sudo"
+    assert requested["force_renewal"] is False
 
     messages = [str(message) for message in response.context["messages"]]
     assert any("requested" in message for message in messages)
@@ -256,8 +264,15 @@ def test_generate_certificates_view_creates_godaddy_certificate_when_selected(
 
     requested: dict[str, str] = {}
 
-    def fake_request(self, *, sudo: str = "sudo"):
+    def fake_request(
+        self,
+        *,
+        sudo: str = "sudo",
+        dns_use_sandbox=None,
+        force_renewal: bool = False,
+    ):
         requested["sudo"] = sudo
+        requested["force_renewal"] = force_renewal
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
@@ -280,6 +295,7 @@ def test_generate_certificates_view_creates_godaddy_certificate_when_selected(
     assert certbot.challenge_type == CertbotCertificate.ChallengeType.GODADDY
     assert certbot.dns_credential_id == credential.id
     assert requested["sudo"] == "sudo"
+    assert requested["force_renewal"] is False
 
     messages = [str(message) for message in response.context["messages"]]
     assert any("requested" in message for message in messages)
