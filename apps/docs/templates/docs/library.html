@@ -8,6 +8,11 @@
     <div class="markdown-body">
       <h1>{{ title }}</h1>
       <p>{% trans "Browse the full developer document library below." %}</p>
+      {% if missing_document %}
+        <div class="alert alert-warning" role="alert">
+          {% blocktrans with missing_document=missing_document %}The requested document "{{ missing_document }}" was not found. Choose one of the available documents below.{% endblocktrans %}
+        </div>
+      {% endif %}
       {% if sections %}
         {% for section in sections %}
           <h2>{{ section.title }}</h2>
