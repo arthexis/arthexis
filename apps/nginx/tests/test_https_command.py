@@ -417,6 +417,37 @@ def test_https_enable_force_renewal_raises_if_certificate_stays_expired(monkeypa
 
 
 @pytest.mark.django_db
+def test_https_enable_force_renewal_warns_when_expiration_unavailable(monkeypatch):
+    """`--force-renewal` should warn when certbot cannot report expiration metadata."""
+
+    from apps.dns.models import DNSProviderCredential
+
+    DNSProviderCredential.objects.create(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        api_key="api-key",
+        api_secret="api-secret",
+        is_enabled=True,
+    )
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        self.expiration_date = None
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal", stdout=out)
+
+    rendered = out.getvalue()
+    assert "expiration could not be determined" in rendered
+    assert "services.get_certificate_expiration" in rendered
+
+@pytest.mark.django_db
 def test_https_enable_warns_when_certificate_is_expired(monkeypatch):
     """`https --enable` should warn with remediation when the issued cert is already expired."""
 

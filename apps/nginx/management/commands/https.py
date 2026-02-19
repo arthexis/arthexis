@@ -23,6 +23,17 @@ from apps.nginx.models import SiteConfiguration
 from apps.nginx.services import NginxUnavailableError, ValidationError
 
 
+FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING = (
+    "--force-renewal completed but certificate expiration could not be determined for {domain}. "
+    "CertbotCertificate.request may have continued after services.get_certificate_expiration failed. "
+    "Inspect certbot logs and DNS challenge status, then verify the certificate manually."
+)
+FORCE_RENEWAL_STILL_EXPIRED_ERROR = (
+    "--force-renewal completed but the certificate is still expired. "
+    "Inspect certbot logs and DNS challenge status, then retry."
+)
+
+
 class Command(BaseCommand):
     help = "Manage HTTPS certificates and nginx configuration."
 
@@ -219,13 +230,16 @@ class Command(BaseCommand):
 
         expiration = getattr(certificate, "expiration_date", None)
         if expiration is None:
+            domain = getattr(certificate, "domain", "the requested domain")
+            self.stdout.write(
+                self.style.WARNING(
+                    FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING.format(domain=domain)
+                )
+            )
             return
 
         if expiration <= timezone.now():
-            raise CommandError(
-                "--force-renewal completed but the certificate is still expired. "
-                "Inspect certbot logs and DNS challenge status, then retry."
-            )
+            raise CommandError(FORCE_RENEWAL_STILL_EXPIRED_ERROR)
 
     def _warn_if_certificate_expiring_soon(self, certificate, *, warn_days: int) -> None:
         """Emit actionable guidance when certificate expiration is near or in the past."""
