@@ -359,17 +359,14 @@ def _get_screenshot_port() -> int:
     """Return the screenshot server port from the environment or the default."""
 
     raw_port = os.environ.get(SCREENSHOT_PORT_ENV)
-    if raw_port is None:
-        return DEFAULT_SCREENSHOT_PORT
-
-    try:
-        port = int(raw_port)
-    except ValueError:
-        return DEFAULT_SCREENSHOT_PORT
-
-    if port < 1 or port > 65535:
-        return DEFAULT_SCREENSHOT_PORT
-    return port
+    if raw_port:
+        try:
+            port = int(raw_port)
+            if 1 <= port <= 65535:
+                return port
+        except ValueError:
+            pass
+    return DEFAULT_SCREENSHOT_PORT
 
 def run_tests(base_dir: Path) -> bool:
     """Execute the test suite grouped by markers."""
@@ -444,7 +441,7 @@ def _capture_ci_style_screenshots(base_dir: Path) -> bool:
                 f"{PREFIX} Skipping screenshot capture: application server did not become healthy."
             )
             return False
-        return _run_screenshot_capture_script(base_dir)
+        return _run_screenshot_capture_script(base_dir, screenshot_port=screenshot_port)
     finally:
         server_process.terminate()
         try:
@@ -480,40 +477,38 @@ def _wait_for_server(url: str, *, attempts: int = 30, delay_seconds: float = 1.0
     return False
 
 
-def _run_screenshot_capture_script(base_dir: Path) -> bool:
+def _run_screenshot_capture_script(base_dir: Path, *, screenshot_port: int) -> bool:
     """Run a temporary Node.js script that captures admin and public screenshots."""
 
-    screenshot_port = _get_screenshot_port()
-
-    script_content = """
-const { chromium } = require('playwright');
+    script_content = f"""
+const {{ chromium }} = require('playwright');
 
 const username = process.env.ADMIN_USERNAME || 'admin';
 const password = process.env.ADMIN_PASSWORD || 'admin';
-const adminUrl = process.env.ADMIN_URL || 'http://localhost:8888/admin/login/?next=/admin/';
-const publicUrl = process.env.PUBLIC_URL || 'http://localhost:8888/';
+const adminUrl = process.env.ADMIN_URL || 'http://localhost:{screenshot_port}/admin/login/?next=/admin/';
+const publicUrl = process.env.PUBLIC_URL || 'http://localhost:{screenshot_port}/';
 
-(async () => {
-  const browser = await chromium.launch({ headless: true });
+(async () => {{
+  const browser = await chromium.launch({{ headless: true }});
   const page = await browser.newPage();
 
-  await page.goto(adminUrl, { waitUntil: 'domcontentloaded' });
+  await page.goto(adminUrl, {{ waitUntil: 'domcontentloaded' }});
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
   await Promise.all([
-    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.waitForNavigation({{ waitUntil: 'domcontentloaded' }}),
     page.click('input[type="submit"], button[type="submit"]'),
   ]);
-  await page.screenshot({ path: 'artifacts/admin-dashboard.png', fullPage: true });
+  await page.screenshot({{ path: 'artifacts/admin-dashboard.png', fullPage: true }});
 
-  await page.goto(publicUrl, { waitUntil: 'domcontentloaded' });
-  await page.screenshot({ path: 'artifacts/public-site.png', fullPage: true });
+  await page.goto(publicUrl, {{ waitUntil: 'domcontentloaded' }});
+  await page.screenshot({{ path: 'artifacts/public-site.png', fullPage: true }});
 
   await browser.close();
-})().catch((error) => {
+}})().catch((error) => {{
   console.error(error);
   process.exit(1);
-});
+}});
 """.strip()
     with tempfile.NamedTemporaryFile(
         mode="w",
