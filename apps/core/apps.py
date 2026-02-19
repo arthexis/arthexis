@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.apps import AppConfig
 
@@ -400,12 +401,27 @@ def _connect_sqlite_wal():
     from django.db.backends.signals import connection_created
     from django.apps import apps
 
+    def _should_skip_sqlite_wal() -> bool:
+        """Skip WAL mode in test runs where ephemeral filesystems can be unstable."""
+        if os.environ.get("ARTHEXIS_DISABLE_SQLITE_WAL", "0") == "1":
+            return True
+        return "PYTEST_CURRENT_TEST" in os.environ
+
     def enable_sqlite_wal(**kwargs):
         if not apps.ready:
             return
         connection = kwargs.get("connection")
         if connection and connection.vendor == "sqlite":
             from django.db import DatabaseError
+
+            if _should_skip_sqlite_wal():
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("PRAGMA journal_mode=DELETE;")
+                        cursor.execute("PRAGMA busy_timeout=60000;")
+                except DatabaseError as exc:
+                    logger.warning("SQLite fallback journal mode setup failed: %s", exc)
+                return
 
             try:
                 with connection.cursor() as cursor:

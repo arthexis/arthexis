@@ -776,7 +776,7 @@ else:
     if _sqlite_test_override:
         SQLITE_TEST_DB_PATH = Path(_sqlite_test_override)
     else:
-        SQLITE_TEST_DB_PATH = BASE_DIR / "work" / "test_db" / "test_db.sqlite3"
+        SQLITE_TEST_DB_PATH = Path("/dev/shm") / "arthexis" / "test_db.sqlite3"
     SQLITE_TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     DATABASES = {
