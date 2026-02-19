@@ -263,18 +263,8 @@ def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
         "export PATH Path\n"
         "arthexis_python_bin >/dev/null 2>&1\n"
         "first=$?\n"
-        "if [ -z \"${first+x}\" ]; then\n"
-        "  printf 'DEBUG:first-status-unset\\n' >&2\n"
-        "elif [ \"$first\" -ne 1 ] && [ \"$first\" -ne 0 ]; then\n"
-        "  printf 'DEBUG:first-status-unexpected:%s\\n' \"$first\" >&2\n"
-        "fi\n"
         "arthexis_python_bin >/dev/null 2>&1\n"
         "second=$?\n"
-        "if [ -z \"${second+x}\" ]; then\n"
-        "  printf 'DEBUG:second-status-unset\\n' >&2\n"
-        "elif [ \"$second\" -ne 1 ] && [ \"$second\" -ne 0 ]; then\n"
-        "  printf 'DEBUG:second-status-unexpected:%s\\n' \"$second\" >&2\n"
-        "fi\n"
         "printf '%s:%s:%s' \"$first\" \"$second\" \"${_arthexis_python_bin_cached_path+set}\"\n"
     )
     bash_executable = _find_bash()
