@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import tempfile
@@ -20,7 +21,9 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 def _configure_ephemeral_sqlite_paths() -> None:
     """Route SQLite primary and test databases to an isolated temp directory."""
 
-    db_root = Path(tempfile.mkdtemp(prefix=f"arthexis-pytest-{os.getpid()}-"))
+    tmp_dir = tempfile.TemporaryDirectory(prefix=f"arthexis-pytest-{os.getpid()}-")
+    atexit.register(tmp_dir.cleanup)
+    db_root = Path(tmp_dir.name)
     os.environ.setdefault("ARTHEXIS_SQLITE_PATH", str(db_root / "default.sqlite3"))
     os.environ.setdefault("ARTHEXIS_SQLITE_TEST_PATH", str(db_root / "test.sqlite3"))
 
