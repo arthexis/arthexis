@@ -43,6 +43,7 @@ from config.settings_helpers import (
     install_validate_host_with_subnets,
     load_secret_key,
     load_site_config_allowed_hosts,
+    resolve_local_fqdn,
     strip_ipv6_brackets,
 )
 
@@ -174,9 +175,7 @@ def _iter_local_hostnames(hostname: str, fqdn: str | None = None) -> list[str]:
 
 
 _local_hostname = socket.gethostname().strip()
-_local_fqdn = ""
-with contextlib.suppress(Exception):
-    _local_fqdn = socket.getfqdn().strip()
+_local_fqdn = resolve_local_fqdn(_local_hostname)
 
 for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
     if host not in ALLOWED_HOSTS:
