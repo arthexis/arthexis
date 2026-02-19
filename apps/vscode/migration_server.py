@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import multiprocessing
 import os
@@ -13,8 +12,9 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Callable, Dict, Iterable
 
 import psutil
 
@@ -32,13 +32,28 @@ REQUIREMENTS_FILE = Path("requirements.txt")
 REQUIREMENTS_HASH_FILE = LOCK_DIR / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 
-if importlib.util.find_spec("apps.core.notifications"):
-    from apps.core.notifications import notify_async as notify_async  # type: ignore
-else:
-    def notify_async(subject: str, body: str = "") -> None:
-        """Fallback notification when :mod:`core.notifications` is unavailable."""
+def _fallback_notify_async(subject: str, body: str = "") -> None:
+    """Print notifications when the optional app notifier is unavailable."""
 
-        print(f"Notification: {subject} - {body}")
+    print(f"Notification: {subject} - {body}")
+
+
+@lru_cache(maxsize=1)
+def _resolve_notify_async() -> Callable[[str, str], None]:
+    """Return the project notifier without importing it during module import."""
+
+    try:
+        from apps.core.notifications import notify_async as project_notify_async
+    except (ImportError, ModuleNotFoundError):
+        return _fallback_notify_async
+    return project_notify_async
+
+
+def notify_async(subject: str, body: str = "") -> None:
+    """Dispatch notifications via the app notifier with a safe fallback."""
+
+    notifier = _resolve_notify_async()
+    notifier(subject, body)
 
 
 WATCH_EXTENSIONS = {

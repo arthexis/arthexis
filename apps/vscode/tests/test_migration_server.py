@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import types
 from pathlib import Path
 from unittest import mock
 
@@ -43,3 +44,37 @@ def test_resolve_base_dir_uses_script_location(tmp_path) -> None:
 
     expected = Path(migration_server.__file__).resolve().parents[2]
     assert resolved == expected
+
+
+def test_notify_async_uses_fallback_when_notifications_import_fails() -> None:
+    """Verify fallback notification is used when project notifications are unavailable."""
+
+    migration_server._resolve_notify_async.cache_clear()
+
+    original_import = __import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "apps.core.notifications":
+            raise ModuleNotFoundError("apps.core.notifications")
+        return original_import(name, globals, locals, fromlist, level)
+
+    with mock.patch("builtins.__import__", side_effect=fake_import), mock.patch(
+        "builtins.print"
+    ) as mocked_print:
+        migration_server.notify_async("Subject", "Body")
+
+    mocked_print.assert_called_once_with("Notification: Subject - Body")
+
+
+def test_notify_async_uses_project_notifier_when_available() -> None:
+    """Verify project notifier is preferred when import succeeds."""
+
+    migration_server._resolve_notify_async.cache_clear()
+    fake_module = types.ModuleType("apps.core.notifications")
+    fake_notify = mock.Mock()
+    fake_module.notify_async = fake_notify
+
+    with mock.patch.dict("sys.modules", {"apps.core.notifications": fake_module}):
+        migration_server.notify_async("Hello", "World")
+
+    fake_notify.assert_called_once_with("Hello", "World")
