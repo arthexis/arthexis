@@ -57,9 +57,9 @@ def test_certbot_certificate_request_updates_lineage_paths_from_certbot_output(m
         ]
     )
 
-    monkeypatch.setattr(services, "request_certbot_certificate", lambda **kwargs: output)
+    monkeypatch.setattr(services, "request_certbot_certificate", lambda **_: output)
     expiration = now + timezone.timedelta(days=90)
-    monkeypatch.setattr(services, "get_certificate_expiration", lambda **kwargs: expiration)
+    monkeypatch.setattr(services, "get_certificate_expiration", lambda **_: expiration)
 
     certificate.request(sudo="")
 
