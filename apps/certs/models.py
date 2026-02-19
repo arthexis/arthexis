@@ -210,11 +210,9 @@ class CertbotCertificate(CertificateBase):
             force_renewal=force_renewal,
             sudo=sudo,
         )
-        resolved_paths = services.extract_live_certificate_paths_from_certbot_output(message)
-        if resolved_paths is not None:
-            cert_path, key_path = resolved_paths
-            self.certificate_path = str(cert_path)
-            self.certificate_key_path = str(key_path)
+        if resolved_paths := services.extract_live_certificate_paths_from_certbot_output(message):
+            self.certificate_path = str(resolved_paths[0])
+            self.certificate_key_path = str(resolved_paths[1])
         try:
             self.expiration_date = services.get_certificate_expiration(
                 certificate_path=self.certificate_file,

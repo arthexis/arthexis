@@ -385,6 +385,40 @@ def test_https_enable_passes_force_renewal_to_certbot(monkeypatch):
     assert provision_calls["force_renewal"] is True
 
 
+def test_https_enable_force_renewal_warns_when_paths_change(monkeypatch):
+    """`--force-renewal` should include old/new cert and key paths when lineage shifts."""
+
+    from apps.dns.models import DNSProviderCredential
+
+    DNSProviderCredential.objects.create(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        api_key="api-key",
+        api_secret="api-secret",
+        is_enabled=True,
+    )
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        self.certificate_path = "/etc/letsencrypt/live/example.dev-0001/fullchain.pem"
+        self.certificate_key_path = "/etc/letsencrypt/live/example.dev-0001/privkey.pem"
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal", stdout=out)
+
+    rendered = out.getvalue()
+    assert "cert old=/etc/letsencrypt/live/example.dev/fullchain.pem" in rendered
+    assert "new=/etc/letsencrypt/live/example.dev-0001/fullchain.pem" in rendered
+    assert "key old=/etc/letsencrypt/live/example.dev/privkey.pem" in rendered
+    assert "new=/etc/letsencrypt/live/example.dev-0001/privkey.pem" in rendered
+
+
 @pytest.mark.django_db
 def test_https_enable_force_renewal_raises_if_certificate_stays_expired(monkeypatch):
     """Regression: --force-renewal must fail when certbot leaves an expired cert in place."""
