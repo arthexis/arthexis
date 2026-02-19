@@ -91,6 +91,7 @@ def test_server_state_creates_and_cleans(lock_dir: Path):
 
 
 
+@pytest.mark.regression
 def test_run_tests_triggers_screenshot_after_unmarked_group(monkeypatch):
     """Ensure screenshot capture runs after successful regular tests."""
 
@@ -104,14 +105,17 @@ def test_run_tests_triggers_screenshot_after_unmarked_group(monkeypatch):
     screenshot_calls = {"count": 0}
 
     def fake_capture(_base_dir: Path) -> bool:
+        """Record screenshot capture timing relative to grouped test execution."""
+
         screenshot_calls["count"] += 1
+        calls.append("capture")
         return True
 
     monkeypatch.setattr(sys.modules[__name__], "_run_test_group", fake_group)
     monkeypatch.setattr(sys.modules[__name__], "_capture_ci_style_screenshots", fake_capture)
 
     assert run_tests(Path(".")) is True
-    assert calls == ["critical", "unmarked", "integration", "slow"]
+    assert calls == ["critical", "slow", "integration", "unmarked", "capture"]
     assert screenshot_calls["count"] == 1
 
 

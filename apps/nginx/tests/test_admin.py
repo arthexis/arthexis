@@ -205,15 +205,26 @@ def test_generate_certificates_view_creates_certificate_when_missing(
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_generate_certificates_view_creates_certbot_certificate_when_selected(
     monkeypatch, admin_client, settings
 ):
     settings.ALLOWED_HOSTS = ["certbot.example.com", "testserver"]
 
-    requested: dict[str, str] = {}
+    requested: dict[str, str | bool | None] = {}
 
-    def fake_request(self, *, sudo: str = "sudo"):
+    def fake_request(
+        self,
+        *,
+        sudo: str = "sudo",
+        dns_use_sandbox: bool | None = None,
+        force_renewal: bool = False,
+    ):
+        """Record certbot provisioning options passed from the admin workflow."""
+
         requested["sudo"] = sudo
+        requested["dns_use_sandbox"] = dns_use_sandbox
+        requested["force_renewal"] = force_renewal
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
@@ -240,6 +251,7 @@ def test_generate_certificates_view_creates_certbot_certificate_when_selected(
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_generate_certificates_view_creates_godaddy_certificate_when_selected(
     monkeypatch, admin_client, settings
 ):
@@ -254,10 +266,20 @@ def test_generate_certificates_view_creates_godaddy_certificate_when_selected(
         is_enabled=True,
     )
 
-    requested: dict[str, str] = {}
+    requested: dict[str, str | bool | None] = {}
 
-    def fake_request(self, *, sudo: str = "sudo"):
+    def fake_request(
+        self,
+        *,
+        sudo: str = "sudo",
+        dns_use_sandbox: bool | None = None,
+        force_renewal: bool = False,
+    ):
+        """Record certbot provisioning options passed from the admin workflow."""
+
         requested["sudo"] = sudo
+        requested["dns_use_sandbox"] = dns_use_sandbox
+        requested["force_renewal"] = force_renewal
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
