@@ -42,11 +42,12 @@ def test_autodiscovery_includes_known_apps_with_app_namespaces():
     assert "api/rfid/" not in routes
     assert "rfid/" not in routes
 
-def test_pages_and_docs_are_excluded_from_autodiscovery():
+def test_pages_docs_and_blog_are_excluded_from_autodiscovery():
     routes = _pattern_routes()
 
     assert "pages/" not in routes
     assert "docs/" not in routes
+    assert "blog/" not in routes
 
 def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
     class ExternalConfig(AppConfig):
@@ -107,7 +108,7 @@ def test_api_routes_are_only_namespaced_by_app():
         except ValueError:
             continue
 
-        if app_config.label in {"pages", "docs"}:
+        if app_config.label in {"pages", "docs", "blog"}:
             continue
 
         app_api_prefixes.add(f"{app_config.label}/api/")
@@ -127,3 +128,9 @@ def test_admin_modules_are_loaded_during_url_configuration(monkeypatch):
     importlib.reload(urls)
 
     assert all(module_name in sys.modules for module_name in admin_modules)
+
+
+def test_blog_route_is_explicitly_registered():
+    from django.urls import reverse
+
+    assert reverse("blog:home") == "/blog/"

@@ -470,6 +470,7 @@ LOCAL_APPS = [
     "apps.simulators",
     "apps.meta",
     "apps.awg",
+    "apps.blog",
     "apps.chats",
     "apps.aws",
     "apps.socials",

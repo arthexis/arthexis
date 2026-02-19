@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>{{ post.title }}</title>
+</head>
+<body>
+<a href="{% url 'blog:home' %}">← Back to blog</a>
+<article>
+    <h1>{{ post.title }}</h1>
+    <h2>{{ post.subtitle }}</h2>
+    <p>{{ post.summary }}</p>
+    <div>{{ post.body|linebreaks }}</div>
+</article>
+
+<section>
+    <h3>Comments</h3>
+    {% for comment in comments %}
+        <div>
+            <strong>{{ comment.author_name }}</strong>
+            <p>{{ comment.body }}</p>
+        </div>
+    {% empty %}
+        <p>No approved comments yet.</p>
+    {% endfor %}
+
+    {% if post.allow_comments %}
+    <form method="post" action="{% url 'blog:submit-comment' post.slug %}">
+        {% csrf_token %}
+        {{ comment_form.as_p }}
+        <button type="submit">Submit comment</button>
+    </form>
+    {% endif %}
+</section>
+
+<section>
+    <h3>Related posts</h3>
+    <ul>
+    {% for candidate in related_posts %}
+        <li><a href="{{ candidate.get_absolute_url }}">{{ candidate.title }}</a></li>
+    {% empty %}
+        <li>No related posts yet.</li>
+    {% endfor %}
+    </ul>
+</section>
+</body>
+</html>

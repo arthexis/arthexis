@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>{{ scope }}</title></head>
+<body>
+<h1>{{ scope }}</h1>
+<ul>
+{% for post in posts %}
+    <li><a href="{{ post.get_absolute_url }}">{{ post.title }}</a> — {{ post.summary|truncatewords:20 }}</li>
+{% empty %}
+    <li>No posts found for this filter.</li>
+{% endfor %}
+</ul>
+</body>
+</html>
