@@ -206,11 +206,26 @@ class Command(BaseCommand):
                 dns_use_sandbox=sandbox_override,
                 force_renewal=force_renewal,
             )
+            if force_renewal:
+                self._validate_force_renewal_result(certificate)
 
         self._warn_if_certificate_expiring_soon(certificate, warn_days=warn_days)
         self._ensure_managed_site(domain, require_https=True)
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _validate_force_renewal_result(self, certificate) -> None:
+        """Raise when force-renewal returns but the certificate is still expired."""
+
+        expiration = getattr(certificate, "expiration_date", None)
+        if expiration is None:
+            return
+
+        if expiration <= timezone.now():
+            raise CommandError(
+                "--force-renewal completed but the certificate is still expired. "
+                "Inspect certbot logs and DNS challenge status, then retry."
+            )
 
     def _warn_if_certificate_expiring_soon(self, certificate, *, warn_days: int) -> None:
         """Emit actionable guidance when certificate expiration is near or in the past."""
