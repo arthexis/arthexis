@@ -403,9 +403,10 @@ def _connect_sqlite_wal():
 
     def _should_skip_sqlite_wal() -> bool:
         """Skip WAL mode in test runs where ephemeral filesystems can be unstable."""
-        if os.environ.get("ARTHEXIS_DISABLE_SQLITE_WAL", "0") == "1":
-            return True
-        return "PYTEST_CURRENT_TEST" in os.environ
+        return (
+            os.environ.get("ARTHEXIS_DISABLE_SQLITE_WAL", "0") == "1"
+            or "PYTEST_CURRENT_TEST" in os.environ
+        )
 
     def enable_sqlite_wal(**kwargs):
         if not apps.ready:
@@ -435,6 +436,7 @@ def _connect_sqlite_wal():
                         )
                         try:
                             cursor.execute("PRAGMA journal_mode=DELETE;")
+                            cursor.execute("PRAGMA busy_timeout=60000;")
                         except DatabaseError as fallback_exc:
                             logger.warning(
                                 "SQLite DELETE journal mode fallback failed: %s",

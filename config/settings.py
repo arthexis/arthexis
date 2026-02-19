@@ -18,6 +18,7 @@ import hashlib
 import ipaddress
 import os
 import socket
+import tempfile
 from pathlib import Path
 from apps.loggers import build_logging_settings
 from django.utils.translation import gettext_lazy as _
@@ -777,7 +778,11 @@ else:
     if _sqlite_test_override:
         SQLITE_TEST_DB_PATH = Path(_sqlite_test_override)
     else:
-        SQLITE_TEST_DB_PATH = Path("/dev/shm") / "arthexis" / "test_db.sqlite3"
+        _shm = Path("/dev/shm")
+        if _shm.is_dir() and os.access(_shm, os.W_OK):
+            SQLITE_TEST_DB_PATH = _shm / "arthexis" / "test_db.sqlite3"
+        else:
+            SQLITE_TEST_DB_PATH = Path(tempfile.gettempdir()) / "arthexis" / "test_db.sqlite3"
     SQLITE_TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     DATABASES = {
