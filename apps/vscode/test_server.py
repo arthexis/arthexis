@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import locale
 import os
 import re
 import shutil
@@ -158,7 +157,6 @@ def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
         stdout = b"\x96 migration output"
 
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: Completed())
-    monkeypatch.setattr(locale, "getpreferredencoding", lambda _do_setlocale=False: "utf-8")
 
     assert _migration_merge_required(Path(".")) is False
 
@@ -278,10 +276,7 @@ def _migration_merge_required(base_dir: Path) -> bool:
         )
         return True
 
-    output = (result.stdout or b"").decode(
-        locale.getpreferredencoding(False),
-        errors="replace",
-    )
+    output = (result.stdout or b"").decode("utf-8", errors="replace")
     if "Conflicting migrations detected" in output:
         print(f"{PREFIX} Migration merge required. Stopping.")
         NOTIFY(
