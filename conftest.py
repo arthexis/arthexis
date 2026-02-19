@@ -15,10 +15,17 @@ import pytest
 # connection attempts when checking availability inside config.settings.
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-os.environ.setdefault(
-    "ARTHEXIS_SQLITE_TEST_PATH",
-    str(Path(tempfile.gettempdir()) / f"arthexis-test-db-{os.getpid()}.sqlite3"),
-)
+
+
+def _configure_ephemeral_sqlite_paths() -> None:
+    """Route SQLite primary and test databases to an isolated temp directory."""
+
+    db_root = Path(tempfile.mkdtemp(prefix=f"arthexis-pytest-{os.getpid()}-"))
+    os.environ.setdefault("ARTHEXIS_SQLITE_PATH", str(db_root / "default.sqlite3"))
+    os.environ.setdefault("ARTHEXIS_SQLITE_TEST_PATH", str(db_root / "test.sqlite3"))
+
+
+_configure_ephemeral_sqlite_paths()
 
 
 def _ensure_clean_test_databases() -> None:
