@@ -46,6 +46,22 @@ Use `@pytest.mark.regression` for tests that guard against reported regressions.
 Regression tests should run whenever critical tests are selected, so the
 regression marker is treated as a critical marker in test collection.
 
+
+## Segmented marker groups in `apps/vscode/test_server.py`
+
+When running the local segmented test runner (`apps/vscode/test_server.py`),
+marker groups are intentionally mutually exclusive to prevent duplicate test
+execution across segments:
+
+- `critical`: `critical`
+- `slow`: `slow and not critical`
+- `integration`: `integration and not critical and not slow`
+- `unmarked`: `not critical and not integration and not slow`
+
+This means slow tests that are also marked critical are executed in the
+critical group, and integration tests that are also marked slow or critical
+are executed in the higher-priority segment only.
+
 ## Local filtering
 
 Pytest honours the following environment variables for local filtering:
