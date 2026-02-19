@@ -12,6 +12,9 @@ from typing import Any, Dict, List
 import django
 import pytest
 
+
+_PYTEST_SQLITE_TMP_DIR: tempfile.TemporaryDirectory[str] | None = None
+
 # Force lightweight SQLite settings during tests to avoid slow Postgres
 # connection attempts when checking availability inside config.settings.
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
@@ -21,11 +24,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 def _configure_ephemeral_sqlite_paths() -> None:
     """Route SQLite primary and test databases to an isolated temp directory."""
 
-    tmp_dir = tempfile.TemporaryDirectory(prefix=f"arthexis-pytest-{os.getpid()}-")
-    atexit.register(tmp_dir.cleanup)
-    db_root = Path(tmp_dir.name)
-    os.environ.setdefault("ARTHEXIS_SQLITE_PATH", str(db_root / "default.sqlite3"))
-    os.environ.setdefault("ARTHEXIS_SQLITE_TEST_PATH", str(db_root / "test.sqlite3"))
+    global _PYTEST_SQLITE_TMP_DIR
+    _PYTEST_SQLITE_TMP_DIR = tempfile.TemporaryDirectory(prefix=f"arthexis-pytest-{os.getpid()}-")
+    atexit.register(_PYTEST_SQLITE_TMP_DIR.cleanup)
+    db_root = Path(_PYTEST_SQLITE_TMP_DIR.name)
+    os.environ["ARTHEXIS_SQLITE_PATH"] = str(db_root / "default.sqlite3")
+    os.environ["ARTHEXIS_SQLITE_TEST_PATH"] = str(db_root / "test.sqlite3")
 
 
 _configure_ephemeral_sqlite_paths()

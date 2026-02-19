@@ -8,13 +8,14 @@ import pytest
 from apps.odoo.models import OdooEmployee, OdooProduct
 
 
+@pytest.mark.regression
 @pytest.mark.django_db
 def test_search_orders_for_selected_action_renders_matching_orders(
-    admin_client, monkeypatch
+    admin_client, admin_user, monkeypatch
 ):
     """The Odoo product action renders orders containing the selected Odoo products."""
 
-    user = admin_client._force_user
+    user = admin_user
     OdooEmployee.objects.create(
         user=user,
         host="https://odoo.example.com",
@@ -75,11 +76,12 @@ def test_search_orders_for_selected_action_renders_matching_orders(
     assert "Odoo line" in follow_response.rendered_content
 
 
+@pytest.mark.regression
 @pytest.mark.django_db
-def test_search_orders_for_selected_action_requires_odoo_link(admin_client):
+def test_search_orders_for_selected_action_requires_odoo_link(admin_client, admin_user):
     """The action shows an error when selected products have no linked Odoo IDs."""
 
-    user = admin_client._force_user
+    user = admin_user
     OdooEmployee.objects.create(
         user=user,
         host="https://odoo.example.com",
@@ -115,11 +117,12 @@ def test_search_orders_for_selected_action_requires_odoo_link(admin_client):
     )
 
 
+@pytest.mark.regression
 @pytest.mark.django_db
-def test_search_orders_view_accepts_post_selected_action(admin_client, monkeypatch):
+def test_search_orders_view_accepts_post_selected_action(admin_client, admin_user, monkeypatch):
     """The dedicated view accepts POSTed admin selections for preview compatibility."""
 
-    user = admin_client._force_user
+    user = admin_user
     OdooEmployee.objects.create(
         user=user,
         host="https://odoo.example.com",
