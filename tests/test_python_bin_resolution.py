@@ -256,12 +256,25 @@ def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
     """An empty PATH should still reuse cached not_found results."""
 
     script = (
+        "set +e\n"
         "source scripts/helpers/common.sh\n"
         "PATH=''\n"
+        "Path=''\n"
+        "export PATH Path\n"
         "arthexis_python_bin >/dev/null 2>&1\n"
         "first=$?\n"
+        "if [ -z \"${first+x}\" ]; then\n"
+        "  printf 'DEBUG:first-status-unset\\n' >&2\n"
+        "elif [ \"$first\" -ne 1 ] && [ \"$first\" -ne 0 ]; then\n"
+        "  printf 'DEBUG:first-status-unexpected:%s\\n' \"$first\" >&2\n"
+        "fi\n"
         "arthexis_python_bin >/dev/null 2>&1\n"
         "second=$?\n"
+        "if [ -z \"${second+x}\" ]; then\n"
+        "  printf 'DEBUG:second-status-unset\\n' >&2\n"
+        "elif [ \"$second\" -ne 1 ] && [ \"$second\" -ne 0 ]; then\n"
+        "  printf 'DEBUG:second-status-unexpected:%s\\n' \"$second\" >&2\n"
+        "fi\n"
         "printf '%s:%s:%s' \"$first\" \"$second\" \"${_arthexis_python_bin_cached_path+set}\"\n"
     )
     bash_executable = _find_bash()
@@ -275,4 +288,7 @@ def test_arthexis_python_bin_caches_not_found_with_empty_path() -> None:
     )
 
     assert result.returncode == 0
-    assert result.stdout.strip() == "1:1:set"
+    first_status, second_status, cache_state = result.stdout.strip().split(":")
+    assert first_status == "1"
+    assert second_status == "1"
+    assert cache_state == "set"
