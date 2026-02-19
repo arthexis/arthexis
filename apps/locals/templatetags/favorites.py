@@ -1,6 +1,7 @@
 from django import template
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Model
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 
@@ -12,6 +13,11 @@ register = template.Library()
 
 @register.simple_tag
 def favorite_ct_id(app_label, model_name):
+    """Return a content type id for a model.
+
+    Kept for backwards compatibility with templates that still resolve
+    content types row-by-row.
+    """
     try:
         model = apps.get_model(app_label, model_name)
     except LookupError:
@@ -25,6 +31,93 @@ def favorite_ct_id(app_label, model_name):
         model=opts.model_name,
     )
     return ct.id
+
+
+def _collect_app_models(app_list):
+    """Collect unique model classes from an app list in display order."""
+    model_classes = []
+    key_map = {}
+
+    if not app_list:
+        return model_classes, key_map
+
+    for app in app_list:
+        if isinstance(app, dict):
+            app_label = app.get("app_label")
+            models = app.get("models") or []
+        else:
+            app_label = getattr(app, "app_label", None)
+            models = getattr(app, "models", None) or []
+
+        if not app_label:
+            continue
+
+        for model in models:
+            if isinstance(model, dict):
+                object_name = model.get("object_name")
+                model_app_label = model.get("app_label")
+                model_class = model.get("model")
+            else:
+                object_name = getattr(model, "object_name", None)
+                model_app_label = getattr(model, "app_label", None)
+                model_class = getattr(model, "model", None)
+
+            if not object_name:
+                continue
+
+            resolved_app_label = (
+                model_app_label
+                or getattr(getattr(model_class, "_meta", None), "app_label", None)
+                or app_label
+            )
+            key = (resolved_app_label, object_name)
+
+            if model_class is None:
+                try:
+                    model_class = apps.get_model(resolved_app_label, object_name)
+                except LookupError:
+                    model_class = None
+
+            key_map[key] = model_class
+            if model_class is not None and model_class not in model_classes:
+                model_classes.append(model_class)
+
+    return model_classes, key_map
+
+
+@register.simple_tag
+def favorite_ct_map(app_list):
+    """Return content type ids keyed by `(app_label, object_name)` and class."""
+    model_classes, key_map = _collect_app_models(app_list)
+    if not model_classes:
+        return {}
+
+    ct_by_model = ContentType.objects.get_for_models(
+        *model_classes,
+        for_concrete_models=False,
+    )
+    ct_id_map = {}
+
+    for key, model_class in key_map.items():
+        if model_class is None:
+            ct_id_map[key] = None
+            continue
+        ct = ct_by_model.get(model_class)
+        ct_id = ct.id if ct else None
+        ct_id_map[key] = ct_id
+        ct_id_map[model_class] = ct_id
+
+    return ct_id_map
+
+
+@register.simple_tag
+def favorite_ct_from_map(content_type_map, app_label, object_name, model_class=None):
+    """Read a content type id from a precomputed map."""
+    if not content_type_map:
+        return None
+    if isinstance(model_class, type) and issubclass(model_class, Model):
+        return content_type_map.get(model_class)
+    return content_type_map.get((app_label, object_name))
 
 
 _FAVORITES_RENDER_CONTEXT_KEY = "pages:favorites_map"
@@ -93,7 +186,7 @@ def favorite_entries(app_list, favorites_map):
 
     entries = []
     seen_ct_ids = set()
-    ct_cache = {}
+    ct_map = favorite_ct_map(app_list)
 
     for app in app_list:
         if isinstance(app, dict):
@@ -123,20 +216,12 @@ def favorite_entries(app_list, favorites_map):
                 or getattr(getattr(model_class, "_meta", None), "app_label", None)
                 or app_label
             )
-            cache_key = (resolved_app_label, object_name)
-            if cache_key in ct_cache:
-                ct_id = ct_cache[cache_key]
-            else:
-                if model_class is None:
-                    try:
-                        model_class = apps.get_model(resolved_app_label, object_name)
-                    except LookupError:
-                        model_class = None
-                if model_class is None:
-                    ct_id = None
-                else:
-                    ct_id = ContentType.objects.get_for_model(model_class).id
-                ct_cache[cache_key] = ct_id
+            ct_id = favorite_ct_from_map(
+                ct_map,
+                resolved_app_label,
+                object_name,
+                model_class=model_class,
+            )
 
             if not ct_id:
                 continue

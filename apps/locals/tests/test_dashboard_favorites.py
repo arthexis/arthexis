@@ -9,6 +9,62 @@ from apps.locals.models import Favorite
 from apps.locals.templatetags.favorites import favorite_entries
 
 
+class FavoriteContentTypeMapTests(TestCase):
+    def test_favorite_ct_map_batches_model_content_type_lookup(self):
+        from apps.locals.templatetags.favorites import favorite_ct_map
+
+        app_list = [
+            {
+                "app_label": "auth",
+                "models": [
+                    {"object_name": "User", "app_label": "auth"},
+                    {"object_name": "Group", "app_label": "auth"},
+                ],
+            }
+        ]
+
+        with patch(
+            "apps.locals.templatetags.favorites.ContentType.objects.get_for_models",
+            wraps=ContentType.objects.get_for_models,
+        ) as get_for_models, patch(
+            "apps.locals.templatetags.favorites.ContentType.objects.get_for_model",
+            side_effect=AssertionError("Row-by-row content type lookup regression"),
+        ):
+            ct_map = favorite_ct_map(app_list)
+
+        self.assertTrue(ct_map[("auth", "User")])
+        self.assertTrue(ct_map[("auth", "Group")])
+        self.assertEqual(get_for_models.call_count, 1)
+
+
+class DashboardContentTypeQueryTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="dashboardperf",
+            email="dashboardperf@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+
+    def test_dashboard_uses_precomputed_content_type_map(self):
+        get_for_models_original = ContentType.objects.get_for_models
+
+        def guarded_get_for_model(*args, **kwargs):
+            raise AssertionError("Per-model content type lookup regression on dashboard render")
+
+        with patch(
+            "apps.locals.templatetags.favorites.ContentType.objects.get_for_models",
+            wraps=get_for_models_original,
+        ) as get_for_models, patch(
+            "apps.locals.templatetags.favorites.ContentType.objects.get_for_model",
+            side_effect=guarded_get_for_model,
+        ):
+            response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(get_for_models.call_count, 0)
+
+
 class DashboardFavoritesTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser(

@@ -2,6 +2,7 @@
 
 {% if app_list %}
   {% favorite_map as favorites_map %}
+  {% favorite_ct_map app_list as favorite_content_type_map %}
   {% dashboard_model_status_map app_list as model_statuses %}
   {% if show_favorites is not False %}
     {% with show_model_badges=False %}
@@ -38,7 +39,7 @@
         {% for model in app.models %}
           {% model_app_label model app.app_label as model_app_label %}
           {% with model_name=model.object_name|lower %}
-            {% favorite_ct_id model_app_label model.object_name as ct_id %}
+            {% favorite_ct_from_map favorite_content_type_map model_app_label model.object_name model.model as ct_id %}
             {% favorite_from_map favorites_map ct_id as fav %}
             {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id=model_app_label|add:"-"|add:model_name show_model_badges=show_model_badges model_statuses=model_statuses %}
           {% endwith %}

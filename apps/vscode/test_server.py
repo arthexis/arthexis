@@ -36,6 +36,7 @@ PYTEST_DURATIONS_MIN_SECONDS = 0.0
 SUMMARY_LINE_RE = re.compile(r"=+ (.+?) =+")
 SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
 SCREENSHOT_PORT = 8888
+MIGRATION_CHECK_TIMEOUT_SECONDS = 60
 
 
 @pytest.fixture
@@ -140,6 +141,30 @@ def test_run_tests_skips_screenshot_when_regular_group_fails(monkeypatch):
     assert run_tests(Path(".")) is False
     assert screenshot_calls["count"] == 0
 
+
+def test_migration_merge_required_handles_timeout(monkeypatch):
+    """Regression: timeout during migration check should stop the loop safely."""
+
+    def fake_run(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["manage.py"], timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert _migration_merge_required(Path(".")) is True
+
+
+def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
+    """Regression: non-UTF-8 migration output should not crash decode."""
+
+    class Completed:
+        returncode = 0
+        stdout = b"\x96 migration output"
+
+    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: Completed())
+
+    assert _migration_merge_required(Path(".")) is False
+
+
 def update_requirements(base_dir: Path) -> bool:
     """Install Python requirements when the lockfile hash changes."""
 
@@ -234,15 +259,28 @@ def _migration_merge_required(base_dir: Path) -> bool:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Checking for merge migrations:", " ".join(command))
-    result = subprocess.run(
-        command,
-        cwd=base_dir,
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    output = result.stdout or ""
+    try:
+        result = subprocess.run(
+            command,
+            cwd=base_dir,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=MIGRATION_CHECK_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            f"{PREFIX} Migration merge check timed out after "
+            f"{MIGRATION_CHECK_TIMEOUT_SECONDS} seconds. Stopping."
+        )
+        NOTIFY(
+            "Migration merge check timed out",
+            "Investigate makemigrations output before restarting the test server.",
+        )
+        return True
+
+    output = (result.stdout or b"").decode("utf-8", errors="replace")
     if "Conflicting migrations detected" in output:
         print(f"{PREFIX} Migration merge required. Stopping.")
         NOTIFY(
