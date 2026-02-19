@@ -161,6 +161,17 @@ def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
     assert _migration_merge_required(Path(".")) is False
 
 
+def test_migration_merge_required_handles_keyboard_interrupt(monkeypatch):
+    """Regression: interrupted migration checks should exit without traceback."""
+
+    def fake_run(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert _migration_merge_required(Path(".")) is True
+
+
 def update_requirements(base_dir: Path) -> bool:
     """Install Python requirements when the lockfile hash changes."""
 
@@ -265,6 +276,9 @@ def _migration_merge_required(base_dir: Path) -> bool:
             timeout=MIGRATION_CHECK_TIMEOUT_SECONDS,
             check=False,
         )
+    except KeyboardInterrupt:
+        print(f"{PREFIX} Migration merge check interrupted. Stopping.")
+        return True
     except subprocess.TimeoutExpired:
         print(
             f"{PREFIX} Migration merge check timed out after "
