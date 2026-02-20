@@ -35,9 +35,11 @@ def _resolve_request_host(request: HttpRequest) -> str:
     elif host_value.count(":") > 1:
         host_or_port = host_value.rsplit(":", 1)
         # Heuristic for non-standard bare IPv6-with-port input (e.g. ``::1:8080``):
-        # strip a trailing numeric segment only when the remaining portion parses
-        # as IPv6. This prevents false positives such as ``fc00::1:2:3:4`` while
-        # preserving best-effort behavior for abbreviated literals like ``::1:8080``.
+        # strip a trailing numeric segment only when the remaining portion also
+        # parses as IPv6. This reduces (but does not eliminate) false positives;
+        # inputs like ``fc00::1:2:3:4`` may still be transformed because
+        # ``fc00::1:2:3`` is itself valid IPv6. Proper Host syntax uses
+        # brackets (``[::1]:8080``), so this path is best-effort fallback only.
         if (
             len(host_or_port) == 2
             and host_or_port[1].isdigit()
