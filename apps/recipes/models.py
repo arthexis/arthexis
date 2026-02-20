@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import re
 import subprocess
 import uuid
@@ -215,7 +216,7 @@ class Recipe(Ownable):
             },
         }
 
-        shell_candidates = ("bash", "sh")
+        shell_candidates = self._bash_shell_candidates()
         last_error: subprocess.CalledProcessError | OSError | None = None
 
         for shell in shell_candidates:
@@ -267,7 +268,7 @@ class Recipe(Ownable):
         continues to the next shell candidate if one exists.
         """
 
-        if os.name != "nt" or shell != "bash":
+        if os.name != "nt" or Path(shell).name.lower() not in {"bash", "bash.exe"}:
             return False
         output = f"{exc.stdout or ''}\n{exc.stderr or ''}".lower()
         return "wsl" in output or "rpc call" in output
@@ -276,7 +277,38 @@ class Recipe(Ownable):
     def _is_shell_missing(exc: OSError, *, shell: str) -> bool:
         """Return True when a shell candidate is unavailable on this host."""
 
-        return shell in {"bash", "sh"} and isinstance(exc, FileNotFoundError)
+        if not isinstance(exc, FileNotFoundError):
+            return False
+        shell_name = Path(shell).name.lower()
+        return shell_name in {"bash", "bash.exe", "sh", "sh.exe"}
+
+    @staticmethod
+    def _bash_shell_candidates() -> tuple[str, ...]:
+        """Return shell candidates for bash recipes in priority order.
+
+        Regression: on Windows, plain ``bash`` can resolve to the WSL launcher,
+        which fails before running scripts. Prefer local POSIX shell binaries from
+        common Git/MSYS installations as additional fallbacks.
+        """
+
+        candidates: list[str] = ["bash", "sh"]
+
+        if os.name == "nt":
+            candidates.extend(
+                [
+                    "C:/Program Files/Git/bin/bash.exe",
+                    "C:/Program Files/Git/usr/bin/sh.exe",
+                    "C:/msys64/usr/bin/bash.exe",
+                ]
+            )
+
+        # Preserve order but remove duplicates.
+        deduped_candidates: list[str] = []
+        for candidate in candidates:
+            if candidate not in deduped_candidates:
+                deduped_candidates.append(candidate)
+
+        return tuple(deduped_candidates)
 
 
 __all__ = ["Recipe", "RecipeExecutionResult"]
