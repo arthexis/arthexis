@@ -52,7 +52,9 @@ def _should_import_pytest(*, argv: list[str] | None = None) -> bool:
         return True
     if argv is None:
         argv = sys.argv
-    return any("pytest" in Path(arg).name for arg in argv)
+    # NOTE: `python -m pytest` sets argv[0] to pytest's `__main__.py` path,
+    # so this argv check is only a fallback for direct pytest executables.
+    return any(Path(arg).name in ("pytest", "pytest.exe") for arg in argv[:1])
 
 
 if _should_import_pytest():
@@ -202,6 +204,13 @@ def test_should_import_pytest_only_for_pytest_execution(monkeypatch):
 
     assert _should_import_pytest(argv=["python", "-m", "apps.vscode.test_server"]) is False
     assert _should_import_pytest(argv=["pytest", "apps/vscode/test_server.py"]) is True
+
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "1")
+    assert _should_import_pytest(argv=["python", "-m", "apps.vscode.test_server"]) is True
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    monkeypatch.setitem(sys.modules, "pytest", object())
+    assert _should_import_pytest(argv=["python", "-m", "apps.vscode.test_server"]) is True
 
 
 def update_requirements(base_dir: Path) -> bool:
