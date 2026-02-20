@@ -967,9 +967,11 @@ LOCAL_ONLY=0
 DETACHED=0
 CHECK_ONLY=0
 PRE_CHECK=0
+REVERT_UPGRADE=0
 CLEAR_LOGS=0
 CLEAR_WORK=0
 REQUESTED_BRANCH=""
+REVERT_TARGET_REVISION=""
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
@@ -1060,6 +1062,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --check)
       CHECK_ONLY=1
+      shift
+      ;;
+    --revert)
+      REVERT_UPGRADE=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --branch)
@@ -1663,6 +1670,27 @@ LOCAL_VERSION="0"
 [ -f VERSION ] && LOCAL_VERSION=$(tr -d '\r\n' < VERSION)
 LOCAL_REVISION="$(git rev-parse HEAD 2>/dev/null || echo "")"
 
+UPGRADE_REVERT_LOCK="$LOCK_DIR/upgrade_revert_revision.lck"
+if [[ $REVERT_UPGRADE -eq 1 ]]; then
+  if [ ! -f "$UPGRADE_REVERT_LOCK" ]; then
+    echo "No previous upgrade revision is recorded; cannot revert." >&2
+    exit 1
+  fi
+
+  REVERT_TARGET_REVISION="$(tr -d '\r\n' < "$UPGRADE_REVERT_LOCK")"
+  if [[ -z "$REVERT_TARGET_REVISION" ]]; then
+    echo "Recorded revert revision is empty; cannot revert." >&2
+    exit 1
+  fi
+
+  if ! git rev-parse --verify "${REVERT_TARGET_REVISION}^{commit}" >/dev/null 2>&1; then
+    echo "Recorded revert revision ${REVERT_TARGET_REVISION} is not available locally; cannot revert." >&2
+    exit 1
+  fi
+
+  LOCAL_ONLY=1
+fi
+
 REMOTE_VERSION="$LOCAL_VERSION"
 REMOTE_REVISION="$LOCAL_REVISION"
 if [[ $LOCAL_ONLY -eq 1 ]]; then
@@ -1702,7 +1730,9 @@ fi
 
 UPGRADE_PLANNED=1
 if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
-  if [[ $LOCAL_ONLY -eq 1 ]]; then
+  if [[ $REVERT_UPGRADE -eq 1 ]]; then
+    echo "Reverting working tree to revision $REVERT_TARGET_REVISION."
+  elif [[ $LOCAL_ONLY -eq 1 ]]; then
     echo "Proceeding with local refresh despite matching version $LOCAL_VERSION."
   elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]]; then
     echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
@@ -1805,6 +1835,19 @@ fi
 
 stop_running_instance 0
 
+if [[ $REVERT_UPGRADE -eq 1 ]]; then
+  if [[ -n "$LOCAL_REVISION" ]]; then
+    printf '%s\n' "$LOCAL_REVISION" > "$UPGRADE_REVERT_LOCK"
+  fi
+
+  if [[ "$LOCAL_REVISION" == "$REVERT_TARGET_REVISION" ]]; then
+    echo "Already at revision $REVERT_TARGET_REVISION; no git reset required."
+  else
+    echo "Resetting repository to $REVERT_TARGET_REVISION..."
+    git reset --hard "$REVERT_TARGET_REVISION"
+  fi
+fi
+
 # Pull latest changes
 if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Skipping git pull for local refresh."
@@ -1816,6 +1859,9 @@ if [[ $LOCAL_ONLY -eq 1 ]]; then
 else
   echo "Pulling latest changes..."
   stash_local_changes_for_upgrade
+  if [[ $CHECK_ONLY -ne 1 ]] && [[ -n "$LOCAL_REVISION" ]]; then
+    printf '%s\n' "$LOCAL_REVISION" > "$UPGRADE_REVERT_LOCK"
+  fi
   git pull --rebase
 
   # If the upgrade script itself was updated, stop so the new version is executed on the next run.
