@@ -31,3 +31,6 @@ The Celery worker is the background job processor for Arthexis. It executes asyn
 
 ## Notes
 - The Suite Services Report still lists the Celery worker row when disabled so operators know the unit name to enable later.
+
+- The worker starts with a unique worker node name (`-n worker.<service>@%h`) to avoid `DuplicateNodenameWarning` when multiple nodes share the same host.
+- In embedded mode without a configured service lock, the worker falls back to `worker.embedded-<pid>@%h` so concurrently started terminal instances still get unique nodenames.
