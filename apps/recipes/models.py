@@ -215,7 +215,7 @@ class Recipe(Ownable):
             },
         }
 
-        shell_candidates = ("sh", "bash") if os.name == "nt" else ("bash", "sh")
+        shell_candidates = ("bash", "sh")
         last_error: subprocess.CalledProcessError | OSError | None = None
 
         for shell in shell_candidates:
@@ -238,7 +238,7 @@ class Recipe(Ownable):
                     ) from exc
             except OSError as exc:
                 last_error = exc
-                if not self._is_windows_shell_missing(exc, shell=shell):
+                if not self._is_shell_missing(exc, shell=shell):
                     raise RuntimeError(
                         f"Error executing recipe '{self.slug}': {exc}"
                     ) from exc
@@ -261,7 +261,11 @@ class Recipe(Ownable):
     def _is_windows_bash_launcher_failure(
         exc: subprocess.CalledProcessError, *, shell: str
     ) -> bool:
-        """Return True when Windows bash launcher fails before script execution."""
+        """Return True when Windows bash launcher fails before script execution.
+
+        The caller treats this as a bootstrap problem (not a script failure) and
+        continues to the next shell candidate if one exists.
+        """
 
         if os.name != "nt" or shell != "bash":
             return False
@@ -269,12 +273,10 @@ class Recipe(Ownable):
         return "wsl" in output or "rpc call" in output
 
     @staticmethod
-    def _is_windows_shell_missing(exc: OSError, *, shell: str) -> bool:
-        """Return True when a Windows shell candidate is unavailable."""
+    def _is_shell_missing(exc: OSError, *, shell: str) -> bool:
+        """Return True when a shell candidate is unavailable on this host."""
 
-        return os.name == "nt" and shell in {"bash", "sh"} and isinstance(
-            exc, FileNotFoundError
-        )
+        return shell in {"bash", "sh"} and isinstance(exc, FileNotFoundError)
 
 
 __all__ = ["Recipe", "RecipeExecutionResult"]
