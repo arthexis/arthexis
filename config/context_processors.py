@@ -1,9 +1,10 @@
 import logging
+import re
 import socket
 
 from django.contrib.sites.models import Site
-from django.db.utils import OperationalError, ProgrammingError
 from django.core.exceptions import DisallowedHost
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest
 from django.conf import settings
 
@@ -28,7 +29,18 @@ def _resolve_request_host(request: HttpRequest) -> str:
     except DisallowedHost:
         host_value = request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME", "")
 
-    return host_value.split(":", 1)[0]
+    if host_value.startswith("["):
+        host_value = host_value.split("]", 1)[0].lstrip("[")
+    elif host_value.count(":") > 1:
+        host_or_port = host_value.rsplit(":", 1)
+        if len(host_or_port) == 2 and host_or_port[1].isdigit():
+            host_value = host_or_port[0]
+    else:
+        host_value = host_value.split(":", 1)[0]
+
+    if not re.fullmatch(r"[A-Za-z0-9.-]+|[0-9A-Fa-f:.]+", host_value or ""):
+        return ""
+    return host_value
 
 
 def site_and_node(request: HttpRequest):
