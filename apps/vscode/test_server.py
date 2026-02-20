@@ -18,8 +18,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable, NamedTuple
 
-import pytest
-
 from . import migration_server as migration
 
 BASE_DIR = migration.BASE_DIR
@@ -39,7 +37,31 @@ SCREENSHOT_PORT = 8888
 MIGRATION_CHECK_TIMEOUT_SECONDS = 60
 
 
-@pytest.fixture
+def _should_import_pytest(*, argv: list[str] | None = None) -> bool:
+    """Return ``True`` when this process is running under pytest.
+
+    VS Code launches this module directly to run the long-lived test server.
+    Importing pytest in that mode is unnecessary and can be interrupted while
+    the debugger session is still initializing. We therefore only import
+    pytest when the current process is clearly a pytest invocation.
+    """
+
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    if "pytest" in sys.modules:
+        return True
+    if argv is None:
+        argv = sys.argv
+    return any("pytest" in Path(arg).name for arg in argv)
+
+
+if _should_import_pytest():
+    import pytest
+else:
+    pytest = None
+
+
+@pytest.fixture if pytest is not None else (lambda function: function)
 def lock_dir(tmp_path: Path) -> Path:
     """Provide an isolated lock directory for tests."""
 
@@ -69,7 +91,7 @@ def server_state(lock_dir: Path):
             pass
 
 
-@pytest.fixture(name="test_server_state")
+@pytest.fixture(name="test_server_state") if pytest is not None else (lambda function: function)
 def test_server_state_fixture(lock_dir: Path):
     """Fixture wrapper to align with existing test usage."""
 
@@ -170,6 +192,16 @@ def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: Completed())
 
     assert _migration_merge_required(Path(".")) is False
+
+
+def test_should_import_pytest_only_for_pytest_execution(monkeypatch):
+    """Regression: direct module execution should skip pytest imports."""
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delitem(sys.modules, "pytest", raising=False)
+
+    assert _should_import_pytest(argv=["python", "-m", "apps.vscode.test_server"]) is False
+    assert _should_import_pytest(argv=["pytest", "apps/vscode/test_server.py"]) is True
 
 
 def update_requirements(base_dir: Path) -> bool:
