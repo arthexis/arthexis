@@ -486,6 +486,8 @@ def request_runserver_restart(lock_dir: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the migration server event loop."""
+
     parser = argparse.ArgumentParser(
         description="Run env-refresh whenever source code changes are detected."
     )
@@ -521,10 +523,10 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
     with migration_server_state(LOCK_DIR):
-        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-        snapshot = collect_source_mtimes(BASE_DIR)
-
         try:
+            run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+            snapshot = collect_source_mtimes(BASE_DIR)
+
             while True:
                 updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
                 if args.debounce > 0:
@@ -551,7 +553,11 @@ def main(argv: list[str] | None = None) -> int:
                 run_env_refresh_with_report(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:
-            print("[Migration Server] Stopped.")
+            print(
+                "[Migration Server] Stopped after receiving an interrupt signal. "
+                "If you did not press Ctrl+C, this likely came from your IDE/debugger "
+                "stopping or restarting the session."
+            )
             return 0
 
 
