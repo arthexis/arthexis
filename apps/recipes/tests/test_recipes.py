@@ -138,6 +138,7 @@ def test_execute_supports_bash_safe_normalized_kwarg_names():
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
     """Regression: Windows WSL bash launcher failures fall back to sh."""
 
@@ -181,6 +182,7 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_execute_supports_windows_git_bash_fallback(monkeypatch):
     """Regression: Windows recipes fall back to Git Bash paths when WSL bash fails."""
 
@@ -213,6 +215,7 @@ def test_execute_supports_windows_git_bash_fallback(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_execute_recognizes_missing_windows_shell_paths(monkeypatch):
     """Regression: missing Git/MSYS shell paths report runtime errors consistently."""
 
