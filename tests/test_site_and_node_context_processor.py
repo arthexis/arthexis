@@ -38,7 +38,11 @@ def test_site_and_node_disallowed_host_uses_ipv6_literal(monkeypatch):
 @pytest.mark.django_db
 @pytest.mark.regression
 def test_site_and_node_disallowed_host_strips_ipv6_port(monkeypatch):
-    """Bare IPv6 fallback with :port strips a trailing numeric segment as a port."""
+    """Bare IPv6 fallback with :port strips a trailing numeric segment as a port.
+
+    NOTE: ``::1:8080`` is ambiguous under RFC 2732; canonical IPv6+port uses
+    ``[::1]:8080``. This pins the _resolve_request_host best-effort heuristic.
+    """
     request = RequestFactory().get("/admin/", HTTP_HOST="::1:8080")
 
     monkeypatch.setattr(request, "get_host", _raise_disallowed_host)

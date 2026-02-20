@@ -1,4 +1,5 @@
 import logging
+import ipaddress
 import re
 import socket
 
@@ -34,18 +35,24 @@ def _resolve_request_host(request: HttpRequest) -> str:
     elif host_value.count(":") > 1:
         host_or_port = host_value.rsplit(":", 1)
         # Heuristic for non-standard bare IPv6-with-port input (e.g. ``::1:8080``):
-        # only strip a trailing numeric segment when the host portion does not end
-        # with a colon. This preserves bare IPv6 literals like ``::1``.
+        # strip a trailing numeric segment only when the remaining portion parses
+        # as IPv6. This prevents false positives such as ``fc00::1:2:3:4`` while
+        # preserving best-effort behavior for abbreviated literals like ``::1:8080``.
         if (
             len(host_or_port) == 2
             and host_or_port[1].isdigit()
             and not host_or_port[0].endswith(":")
         ):
-            host_value = host_or_port[0]
+            try:
+                ipaddress.ip_address(host_or_port[0])
+            except ValueError:
+                pass
+            else:
+                host_value = host_or_port[0]
     else:
         host_value = host_value.split(":", 1)[0]
 
-    if not re.fullmatch(r"[A-Za-z0-9.-]+|[0-9A-Fa-f:.]+", host_value or ""):
+    if not re.fullmatch(r"[A-Za-z0-9._-]+|[0-9A-Fa-f:.]+", host_value or ""):
         return ""
     return host_value
 
