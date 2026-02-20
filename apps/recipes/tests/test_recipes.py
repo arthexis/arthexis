@@ -178,6 +178,60 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
     assert execution.result == "hello-green"
 
 
+
+
+@pytest.mark.django_db
+def test_execute_supports_windows_git_bash_fallback(monkeypatch):
+    """Regression: Windows recipes fall back to Git Bash paths when WSL bash fails."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-git-fallback-{uuid.uuid4()}",
+        display="Bash Git Fallback",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$1-$RECIPE_KWARG_COLOR"',
+    )
+
+    def fake_run(command, **_kwargs):
+        shell = command[0]
+        if shell in {"bash", "sh"}:
+            raise FileNotFoundError(f"{shell} missing")
+        if shell == "C:/Program Files/Git/bin/bash.exe":
+            return subprocess.CompletedProcess(command, 0, stdout="hello-green\n", stderr="")
+        raise AssertionError(f"Unexpected shell call: {command}")
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello", color="green")
+
+    assert execution.result == "hello-green"
+
+
+@pytest.mark.django_db
+def test_execute_recognizes_missing_windows_shell_paths(monkeypatch):
+    """Regression: missing Git/MSYS shell paths report runtime errors consistently."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-path-missing-{uuid.uuid4()}",
+        display="Bash Path Missing",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "never runs"',
+    )
+
+    def fake_run(command, **_kwargs):
+        raise FileNotFoundError(f"{command[0]} missing")
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="missing"):
+        recipe.execute()
+
+
 @pytest.mark.django_db
 def test_execute_raises_for_unknown_body_type():
     """Unknown body types raise a runtime error instead of silently falling back."""
