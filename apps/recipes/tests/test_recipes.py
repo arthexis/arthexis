@@ -197,9 +197,10 @@ def test_execute_supports_windows_git_bash_fallback(monkeypatch):
 
     def fake_run(command, **_kwargs):
         shell = command[0]
+        normalized_shell = shell.replace("\\", "/")
         if shell in {"bash", "sh"}:
             raise FileNotFoundError(f"{shell} missing")
-        if shell == "D:/Tools/Git/bin/bash.exe":
+        if normalized_shell == "D:/Tools/Git/bin/bash.exe":
             return subprocess.CompletedProcess(command, 0, stdout="hello-green\n", stderr="")
         raise AssertionError(f"Unexpected shell call: {command}")
 
@@ -262,7 +263,7 @@ def test_execute_escapes_bash_arg_sigils(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_execute_resolves_sigils_before_arg_substitution_for_bash():
+def test_execute_resolves_sigils_before_arg_substitution_for_bash(monkeypatch):
     """Arg values that look like sigils are not recursively resolved in bash mode."""
 
     user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
@@ -274,8 +275,17 @@ def test_execute_resolves_sigils_before_arg_substitution_for_bash():
         script="echo [ARG.0]",
     )
 
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.append(command[2])
+        return subprocess.CompletedProcess(command, 0, stdout="[ENV.PATH]\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
     execution = recipe.execute("[ENV.PATH]")
 
+    assert captured[0] == "echo '[ENV.PATH]'"
     assert execution.result == "[ENV.PATH]"
 
 

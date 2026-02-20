@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import shlex
 import subprocess
@@ -307,11 +307,13 @@ class Recipe(Ownable):
 
         if os.name == "nt":
             program_files = os.environ.get("PROGRAMFILES", "C:/Program Files")
+            program_files_path = PureWindowsPath(program_files)
             candidates.extend(
                 [
-                    f"{program_files}/Git/bin/bash.exe",
-                    f"{program_files}/Git/usr/bin/sh.exe",
-                    f"{program_files}/msys64/usr/bin/bash.exe",
+                    str(program_files_path / "Git" / "bin" / "bash.exe"),
+                    str(program_files_path / "Git" / "usr" / "bin" / "sh.exe"),
+                    "C:/msys64/usr/bin/bash.exe",
+                    "C:/msys64/usr/bin/sh.exe",
                 ]
             )
 
