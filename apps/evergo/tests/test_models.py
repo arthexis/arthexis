@@ -28,7 +28,9 @@ def test_test_login_populates_remote_fields(mock_post):
         "id": 58642,
         "name": "Reginaldo Gutiérrez",
         "email": "reginaldocts@evergo.com",
-        "two_factor_secret": None,
+        "two_factor_secret": "s3cr3t",
+        "two_factor_recovery_codes": "[\"code-a\",\"code-b\"]",
+        "two_factor_confirmed_at": "2025-12-15T21:00:00.000000Z",
         "two_fa_enabled": 0,
         "two_fa_authenticated": 1,
         "created_at": "2025-12-11T18:18:48.000000Z",
@@ -55,6 +57,9 @@ def test_test_login_populates_remote_fields(mock_post):
     assert profile.subempresa_name == "Reginaldo Gutiérrez"
     assert profile.two_fa_enabled is False
     assert profile.two_fa_authenticated is True
+    assert profile.two_factor_secret == "s3cr3t"
+    assert profile.two_factor_recovery_codes == '["code-a","code-b"]'
+    assert profile.two_factor_confirmed_at is not None
     assert profile.evergo_created_at is not None
     assert profile.evergo_updated_at is not None
     assert profile.last_login_test_at is not None
