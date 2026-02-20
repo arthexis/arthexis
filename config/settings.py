@@ -24,7 +24,6 @@ from apps.loggers import build_logging_settings
 from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 
-from django.apps import AppConfig as DjangoAppConfig
 from celery.schedules import crontab
 from django.http import HttpRequest, request as http_request
 from django.http.request import split_domain_port
@@ -103,16 +102,21 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 
 
 def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
-    """Return a list of app paths with duplicate labels removed."""
+    """Return app entries with exact duplicates removed while preserving order.
+
+    This avoids importing app modules during settings import. Import-time
+    deduplication by label can trigger side effects before Django is fully
+    initialized.
+    """
 
     deduped: list[str] = []
-    seen_labels: set[str] = set()
+    seen_entries: set[str] = set()
     for entry in app_paths:
-        label = DjangoAppConfig.create(entry).label
-        if label in seen_labels:
+        normalized = entry.strip()
+        if normalized in seen_entries:
             continue
 
-        seen_labels.add(label)
+        seen_entries.add(normalized)
         deduped.append(entry)
 
     return deduped
