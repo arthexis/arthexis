@@ -291,7 +291,7 @@ Type=simple
 WorkingDirectory=$base_dir
 EnvironmentFile=-$base_dir/redis.env
 EnvironmentFile=-$base_dir/debug.env
-ExecStart=$base_dir/.venv/bin/celery -A config worker -l info --concurrency=1
+ExecStart=$base_dir/.venv/bin/celery -A config worker -l info --concurrency=1 -n worker.${service_name}@%h
 Restart=always
 TimeoutStartSec=500
 User=$service_user
