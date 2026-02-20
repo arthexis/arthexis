@@ -193,7 +193,7 @@ class WhatsAppWebhook(Entity):
         """Persist webhook defaults when credentials were not explicitly set."""
 
         if not self.route_key:
-            self.route_key = secrets.token_urlsafe(18).replace("-", "a")[:48]
+            self.route_key = secrets.token_urlsafe(18)[:48]
         if not self.verify_token:
             self.verify_token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
