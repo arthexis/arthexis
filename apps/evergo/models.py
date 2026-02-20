@@ -52,6 +52,8 @@ class EvergoUser(Profile):
     two_fa_enabled = models.BooleanField(default=False)
     two_fa_authenticated = models.BooleanField(default=False)
     two_factor_secret = EncryptedTextField(blank=True)
+    two_factor_recovery_codes = EncryptedTextField(blank=True)
+    two_factor_confirmed_at = models.DateTimeField(null=True, blank=True)
 
     evergo_created_at = models.DateTimeField(null=True, blank=True)
     evergo_updated_at = models.DateTimeField(null=True, blank=True)
@@ -116,6 +118,10 @@ class EvergoUser(Profile):
         self.two_fa_enabled = bool(_to_int(payload.get("two_fa_enabled")))
         self.two_fa_authenticated = bool(_to_int(payload.get("two_fa_authenticated")))
         self.two_factor_secret = str(payload.get("two_factor_secret") or "")
+        self.two_factor_recovery_codes = str(
+            payload.get("two_factor_recovery_codes") or ""
+        )
+        self.two_factor_confirmed_at = _parse_dt(payload.get("two_factor_confirmed_at"))
 
         subempresa = _first_dict(payload.get("subempresas"))
         self.subempresa_id = _to_int(subempresa.get("id"))

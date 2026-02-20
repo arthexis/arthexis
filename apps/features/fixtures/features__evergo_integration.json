@@ -1,0 +1,35 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "evergo-integration",
+      "display": "Evergo Integration",
+      "summary": "Bind Suite users to Evergo credentials and sync profile metadata from Evergo login.",
+      "is_enabled": true,
+      "main_app": [
+        "evergo"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Provide admin model management for Evergo credentials with an action to test login and sync user/company metadata.",
+      "public_requirements": "",
+      "service_requirements": "Provide a Django management command for CLI credential setup and login validation.",
+      "admin_views": [
+        "admin:evergo_evergouser_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "Command: python manage.py evergo"
+      ],
+      "code_locations": [
+        "apps/evergo/models.py",
+        "apps/evergo/admin.py",
+        "apps/evergo/management/commands/evergo.py"
+      ],
+      "protocol_coverage": {},
+      "created_at": "2026-02-20T00:00:00Z",
+      "updated_at": "2026-02-20T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  }
+]
