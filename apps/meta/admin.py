@@ -79,7 +79,7 @@ class WhatsAppWebhookMessageAdmin(EntityModelAdmin):
         "message_type",
         "timestamp",
     )
-    list_filter = ("message_type", "webhook", "timestamp")
+    list_filter = ("message_type", "webhook")
     search_fields = ("message_id", "from_phone", "wa_id", "text_body")
     readonly_fields = (
         "webhook",
