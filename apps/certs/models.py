@@ -72,7 +72,8 @@ class CertificateBase(Certificate):
             request_kwargs = {"sudo": sudo}
             if dns_use_sandbox is not None:
                 request_kwargs["dns_use_sandbox"] = dns_use_sandbox
-            request_kwargs["force_renewal"] = force_renewal
+            if force_renewal:
+                request_kwargs["force_renewal"] = force_renewal
             return certificate.request(**request_kwargs)
         if isinstance(certificate, SelfSignedCertificate):
             return certificate.generate(sudo=sudo)
