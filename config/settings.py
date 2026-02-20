@@ -101,7 +101,7 @@ DEBUG = env_bool("DEBUG", _debugpy_attached)
 HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 
-def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
+def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
     """Return app entries with exact duplicates removed while preserving order.
 
     This avoids importing app modules during settings import. Import-time
@@ -117,7 +117,7 @@ def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
             continue
 
         seen_entries.add(normalized)
-        deduped.append(entry)
+        deduped.append(normalized)
 
     return deduped
 
@@ -518,7 +518,7 @@ INSTALLED_APPS = [
     "apps.celery.beat_app.CeleryBeatConfig",
 ] + LOCAL_APPS
 
-INSTALLED_APPS = _dedupe_app_labels(INSTALLED_APPS)
+INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS += ["debug_toolbar"]
