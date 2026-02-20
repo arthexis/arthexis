@@ -208,6 +208,7 @@ def test_generate_certificates_view_creates_certificate_when_missing(
 def test_generate_certificates_view_creates_certbot_certificate_when_selected(
     monkeypatch, admin_client, settings
 ):
+    """Regression: certbot provisioning forwards the default sudo kwarg."""
     settings.ALLOWED_HOSTS = ["certbot.example.com", "testserver"]
 
     requested: dict[str, str] = {}
@@ -243,6 +244,7 @@ def test_generate_certificates_view_creates_certbot_certificate_when_selected(
 def test_generate_certificates_view_creates_godaddy_certificate_when_selected(
     monkeypatch, admin_client, settings
 ):
+    """Regression: GoDaddy certbot provisioning forwards the default sudo kwarg."""
     settings.ALLOWED_HOSTS = ["dns.example.com", "testserver"]
 
     from apps.dns.models import DNSProviderCredential

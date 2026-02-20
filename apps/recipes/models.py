@@ -215,29 +215,65 @@ class Recipe(Ownable):
             },
         }
 
-        try:
-            completed = subprocess.run(
-                ["bash", "-c", resolved_script, "recipe", *[str(value) for value in args]],
-                capture_output=True,
-                text=True,
-                check=True,
-                env=environment,
-            )
-        except subprocess.CalledProcessError as exc:
-            stderr = (exc.stderr or "").strip()
-            message = stderr or str(exc)
-            raise RuntimeError(
-                f"Error executing recipe '{self.slug}': {message}"
-            ) from exc
-        except OSError as exc:
-            raise RuntimeError(
-                f"Error executing recipe '{self.slug}': {exc}"
-            ) from exc
+        shell_candidates = ("sh", "bash") if os.name == "nt" else ("bash", "sh")
+        last_error: subprocess.CalledProcessError | OSError | None = None
+
+        for shell in shell_candidates:
+            try:
+                completed = subprocess.run(
+                    [shell, "-c", resolved_script, "recipe", *[str(value) for value in args]],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    env=environment,
+                )
+                break
+            except subprocess.CalledProcessError as exc:
+                last_error = exc
+                if not self._is_windows_bash_launcher_failure(exc, shell=shell):
+                    stderr = (exc.stderr or "").strip()
+                    message = stderr or str(exc)
+                    raise RuntimeError(
+                        f"Error executing recipe '{self.slug}': {message}"
+                    ) from exc
+            except OSError as exc:
+                last_error = exc
+                if not self._is_windows_shell_missing(exc, shell=shell):
+                    raise RuntimeError(
+                        f"Error executing recipe '{self.slug}': {exc}"
+                    ) from exc
+        else:
+            if isinstance(last_error, subprocess.CalledProcessError):
+                stderr = (last_error.stderr or "").strip()
+                stdout = (last_error.stdout or "").strip()
+                message = stderr or stdout or str(last_error)
+            else:
+                message = str(last_error) if last_error is not None else "No shell available"
+            raise RuntimeError(f"Error executing recipe '{self.slug}': {message}")
 
         return RecipeExecutionResult(
             result=completed.stdout.rstrip("\n") or None,
             result_variable=result_variable,
             resolved_script=resolved_script,
+        )
+
+    @staticmethod
+    def _is_windows_bash_launcher_failure(
+        exc: subprocess.CalledProcessError, *, shell: str
+    ) -> bool:
+        """Return True when Windows bash launcher fails before script execution."""
+
+        if os.name != "nt" or shell != "bash":
+            return False
+        output = f"{exc.stdout or ''}\n{exc.stderr or ''}".lower()
+        return "wsl" in output or "rpc call" in output
+
+    @staticmethod
+    def _is_windows_shell_missing(exc: OSError, *, shell: str) -> bool:
+        """Return True when a Windows shell candidate is unavailable."""
+
+        return os.name == "nt" and shell in {"bash", "sh"} and isinstance(
+            exc, FileNotFoundError
         )
 
 

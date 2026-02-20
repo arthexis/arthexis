@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import uuid
 from unittest import mock
 
@@ -85,7 +86,7 @@ def test_parse_recipe_arguments_splits_kwargs():
 
 @pytest.mark.django_db
 def test_execute_supports_bash_body_type():
-    """Bash recipe bodies return stdout as the recipe result."""
+    """Regression: bash recipes execute successfully on Windows and POSIX shells."""
 
     user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
     recipe = Recipe.objects.create(
@@ -120,7 +121,7 @@ def test_execute_raises_for_failing_bash_script():
 
 @pytest.mark.django_db
 def test_execute_supports_bash_safe_normalized_kwarg_names():
-    """Bash kwargs are exported with normalized shell-safe environment variable names."""
+    """Regression: normalized bash kwarg env vars resolve across shell backends."""
 
     user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
     recipe = Recipe.objects.create(
@@ -134,6 +135,47 @@ def test_execute_supports_bash_safe_normalized_kwarg_names():
     execution = recipe.execute(**{"mode-fast": "rapid", "7flag": "on"})
 
     assert execution.result == "rapid-on"
+
+
+@pytest.mark.django_db
+def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
+    """Regression: Windows WSL bash launcher failures fall back to sh."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-fallback-{uuid.uuid4()}",
+        display="Bash Fallback",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$1-$RECIPE_KWARG_COLOR"',
+    )
+
+    bash_failure = subprocess.CalledProcessError(
+        1,
+        ["bash", "-c", recipe.script],
+        output="The RPC call contains a handle to a WSL service.",
+        stderr="",
+    )
+
+    def fake_run(command, **kwargs):
+        shell = command[0]
+        if shell == "bash":
+            raise bash_failure
+        if shell == "sh":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hello-green\n",
+                stderr="",
+            )
+        raise AssertionError(f"Unexpected shell call: {command}")
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello", color="green")
+
+    assert execution.result == "hello-green"
 
 
 @pytest.mark.django_db
