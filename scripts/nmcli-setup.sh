@@ -22,15 +22,17 @@ clear_wifi_mac_pins() {
   local connection_id="$1"
   nmcli connection modify "$connection_id" \
     802-11-wireless.mac-address "" \
-    802-11-wireless.cloned-mac-address ""
+    802-11-wireless.cloned-mac-address "" || return
 }
 
 configure_wifi_profile() {
   local connection_id="$1"
   local mode iface
+  local -a props
 
-  mode="$(nmcli --get-values 802-11-wireless.mode connection show "$connection_id" | head -n1)"
-  iface="$(nmcli --get-values connection.interface-name connection show "$connection_id" | head -n1)"
+  mapfile -t props < <(LC_ALL=C nmcli --get-values 802-11-wireless.mode,connection.interface-name connection show "$connection_id") || return
+  mode="${props[0]:-}"
+  iface="${props[1]:-}"
 
   clear_wifi_mac_pins "$connection_id"
 
@@ -38,7 +40,7 @@ configure_wifi_profile() {
     nmcli connection modify "$connection_id" \
       connection.interface-name "$AP_IFACE" \
       connection.autoconnect yes \
-      ipv4.method shared
+      ipv4.method shared || return
     log "AP profile '$connection_id' pinned to $AP_IFACE."
     return
   fi
@@ -46,20 +48,28 @@ configure_wifi_profile() {
   if [[ "$iface" == "$AP_IFACE" || "$iface" == "$INTERNET_IFACE" || -z "$iface" ]]; then
     nmcli connection modify "$connection_id" \
       connection.interface-name "$INTERNET_IFACE" \
-      connection.autoconnect yes
+      connection.autoconnect yes || return
     log "Wi-Fi client profile '$connection_id' pinned to $INTERNET_IFACE."
+  else
+    log "Wi-Fi client profile '$connection_id' pinned to '$iface'; leaving interface-name unchanged."
   fi
 }
 
 configure_ethernet_profile() {
   local connection_id="$1"
+  local ipv4_method
 
-  nmcli connection modify "$connection_id" \
-    ipv4.never-default yes \
-    ipv6.never-default yes
+  ipv4_method="$(LC_ALL=C nmcli --get-values ipv4.method connection show "$connection_id" | head -n1)" || return
 
-  if [[ "$(nmcli --get-values ipv4.method connection show "$connection_id" | head -n1)" == "shared" ]]; then
-    nmcli connection modify "$connection_id" ipv4.method auto
+  if [[ "$ipv4_method" == "shared" ]]; then
+    nmcli connection modify "$connection_id" \
+      ipv4.never-default yes \
+      ipv6.never-default yes \
+      ipv4.method auto || return
+  else
+    nmcli connection modify "$connection_id" \
+      ipv4.never-default yes \
+      ipv6.never-default yes || return
   fi
 
   log "Ethernet profile '$connection_id' updated to avoid default gateway usage."
@@ -69,18 +79,26 @@ main() {
   require_nmcli
   log "Applying wlan0/wlan1 role swap in NetworkManager profiles."
 
-  while IFS=: read -r connection_id connection_type; do
-    [[ -z "$connection_id" ]] && continue
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    connection_type="${line##*:}"
+    connection_id="${line%:"$connection_type"}"
+    connection_id="${connection_id//\\:/:}"
+    connection_id="${connection_id//\\\\/\\}"
 
     case "$connection_type" in
       wifi)
-        configure_wifi_profile "$connection_id"
+        if ! configure_wifi_profile "$connection_id"; then
+          log "WARNING: failed to configure wifi profile '$connection_id'; skipping."
+        fi
         ;;
       ethernet)
-        configure_ethernet_profile "$connection_id"
+        if ! configure_ethernet_profile "$connection_id"; then
+          log "WARNING: failed to configure ethernet profile '$connection_id'; skipping."
+        fi
         ;;
     esac
-  done < <(nmcli --terse --fields NAME,TYPE connection show)
+  done < <(LC_ALL=C nmcli --terse --fields NAME,TYPE connection show)
 
   log "Done. Reconnect interfaces or reboot for active sessions to pick up profile updates."
 }
