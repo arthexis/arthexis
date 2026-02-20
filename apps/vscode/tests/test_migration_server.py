@@ -52,3 +52,19 @@ def test_notify_async_is_a_noop() -> None:
         migration_server.notify_async("Subject", "Body")
 
     mocked_print.assert_not_called()
+
+
+def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
+    """Ensure migration-server refresh forces SQLite fallback for responsiveness."""
+
+    script = tmp_path / "env-refresh.py"
+    script.write_text("print('ok')", encoding="utf-8")
+
+    completed = mock.Mock(returncode=0)
+    with mock.patch.object(migration_server.subprocess, "run", return_value=completed) as mocked_run:
+        assert migration_server.run_env_refresh(tmp_path, latest=True) is True
+
+    _command, kwargs = mocked_run.call_args
+    env = kwargs["env"]
+    assert env["DJANGO_SETTINGS_MODULE"] == "config.settings"
+    assert env["ARTHEXIS_DB_BACKEND"] == "sqlite"

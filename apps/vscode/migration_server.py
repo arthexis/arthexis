@@ -175,6 +175,10 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     command = build_env_refresh_command(base_dir, latest=latest)
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    # Keep VS Code migration checks responsive on developer machines where
+    # PostgreSQL is not running. env-refresh only needs to validate migration
+    # state, and SQLite is the expected local fallback backend.
+    env.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
     print("[Migration Server] Running:", " ".join(command))
     result = subprocess.run(command, cwd=base_dir, env=env)
     if result.returncode != 0:
