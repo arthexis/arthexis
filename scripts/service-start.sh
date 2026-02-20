@@ -509,7 +509,12 @@ RUNSERVER_EXTRA_ARGS=()
 
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
-  celery -A config worker -l info --concurrency=2 -n worker.${SERVICE_NAME:-embedded}@%h &
+  CELERY_NODE_SERVICE_NAME="${SERVICE_NAME:-}"
+  if [ -z "$CELERY_NODE_SERVICE_NAME" ]; then
+    CELERY_NODE_SERVICE_NAME="embedded-$$"
+  fi
+
+  celery -A config worker -l info --concurrency=2 -n worker.${CELERY_NODE_SERVICE_NAME}@%h &
   CELERY_WORKER_PID=$!
   record_pid_file "$CELERY_WORKER_PID" "$CELERY_WORKER_PID_FILE"
   celery -A config beat -l info &
