@@ -193,11 +193,13 @@ def test_execute_supports_windows_git_bash_fallback(monkeypatch):
         script='echo "$1-$RECIPE_KWARG_COLOR"',
     )
 
+    monkeypatch.setenv("PROGRAMFILES", "D:/Tools")
+
     def fake_run(command, **_kwargs):
         shell = command[0]
         if shell in {"bash", "sh"}:
             raise FileNotFoundError(f"{shell} missing")
-        if shell == "C:/Program Files/Git/bin/bash.exe":
+        if shell == "D:/Tools/Git/bin/bash.exe":
             return subprocess.CompletedProcess(command, 0, stdout="hello-green\n", stderr="")
         raise AssertionError(f"Unexpected shell call: {command}")
 
@@ -230,6 +232,51 @@ def test_execute_recognizes_missing_windows_shell_paths(monkeypatch):
 
     with pytest.raises(RuntimeError, match="missing"):
         recipe.execute()
+
+
+@pytest.mark.django_db
+def test_execute_escapes_bash_arg_sigils(monkeypatch):
+    """Bash arg sigils are shell-escaped to avoid command injection."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-arg-escape-{uuid.uuid4()}",
+        display="Bash Arg Escape",
+        body_type=Recipe.BodyType.BASH,
+        script="echo [ARG.0]",
+    )
+
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.append(command[2])
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello; cat /etc/passwd")
+
+    assert execution.result == "ok"
+    assert captured[0] == "echo 'hello; cat /etc/passwd'"
+
+
+@pytest.mark.django_db
+def test_execute_resolves_sigils_before_arg_substitution_for_bash():
+    """Arg values that look like sigils are not recursively resolved in bash mode."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-sigil-order-{uuid.uuid4()}",
+        display="Bash Sigil Order",
+        body_type=Recipe.BodyType.BASH,
+        script="echo [ARG.0]",
+    )
+
+    execution = recipe.execute("[ENV.PATH]")
+
+    assert execution.result == "[ENV.PATH]"
 
 
 @pytest.mark.django_db
