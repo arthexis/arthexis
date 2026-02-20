@@ -68,3 +68,33 @@ def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     env = kwargs["env"]
     assert env["DJANGO_SETTINGS_MODULE"] == "config.settings"
     assert env["ARTHEXIS_DB_BACKEND"] == "sqlite"
+
+
+def test_run_env_refresh_handles_keyboard_interrupt(tmp_path: Path) -> None:
+    """Treat external interrupts during env-refresh as recoverable failures."""
+
+    script = tmp_path / "env-refresh.py"
+    script.write_text("print('ok')", encoding="utf-8")
+
+    with mock.patch.object(
+        migration_server.subprocess,
+        "run",
+        side_effect=KeyboardInterrupt,
+    ), mock.patch.object(migration_server, "notify_async") as mocked_notify:
+        assert migration_server.run_env_refresh(tmp_path, latest=True) is False
+
+    mocked_notify.assert_called_once_with(
+        "Migration refresh interrupted",
+        "The env-refresh subprocess was interrupted before completion.",
+    )
+
+
+def test_main_handles_interrupt_during_initial_refresh() -> None:
+    """Exit cleanly when the first refresh is interrupted by external signals."""
+
+    with mock.patch.object(migration_server, "update_requirements", return_value=False), mock.patch.object(
+        migration_server, "collect_source_mtimes", return_value={}
+    ), mock.patch.object(
+        migration_server, "run_env_refresh_with_report", side_effect=KeyboardInterrupt
+    ):
+        assert migration_server.main([]) == 0

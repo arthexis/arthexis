@@ -180,7 +180,18 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     # state, and SQLite is the expected local fallback backend.
     env.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
     print("[Migration Server] Running:", " ".join(command))
-    result = subprocess.run(command, cwd=base_dir, env=env)
+    try:
+        result = subprocess.run(command, cwd=base_dir, env=env)
+    except KeyboardInterrupt:
+        print(
+            "[Migration Server] env-refresh was interrupted by an external signal "
+            "(for example debugger/terminal shutdown)."
+        )
+        notify_async(
+            "Migration refresh interrupted",
+            "The env-refresh subprocess was interrupted before completion.",
+        )
+        return False
     if result.returncode != 0:
         notify_async(
             "Migration failure",
@@ -521,10 +532,10 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
     with migration_server_state(LOCK_DIR):
-        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-        snapshot = collect_source_mtimes(BASE_DIR)
-
         try:
+            run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+            snapshot = collect_source_mtimes(BASE_DIR)
+
             while True:
                 updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
                 if args.debounce > 0:
