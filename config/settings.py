@@ -24,7 +24,6 @@ from apps.loggers import build_logging_settings
 from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 
-from django.apps import AppConfig as DjangoAppConfig
 from celery.schedules import crontab
 from django.http import HttpRequest, request as http_request
 from django.http.request import split_domain_port
@@ -45,6 +44,7 @@ from config.settings_helpers import (
     load_secret_key,
     load_site_config_allowed_hosts,
     resolve_local_fqdn,
+    should_probe_postgres,
     strip_ipv6_brackets,
 )
 
@@ -102,18 +102,23 @@ DEBUG = env_bool("DEBUG", _debugpy_attached)
 HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 
-def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
-    """Return a list of app paths with duplicate labels removed."""
+def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
+    """Return app entries with exact duplicates removed while preserving order.
+
+    This avoids importing app modules during settings import. Import-time
+    deduplication by label can trigger side effects before Django is fully
+    initialized.
+    """
 
     deduped: list[str] = []
-    seen_labels: set[str] = set()
+    seen_entries: set[str] = set()
     for entry in app_paths:
-        label = DjangoAppConfig.create(entry).label
-        if label in seen_labels:
+        normalized = entry.strip()
+        if normalized in seen_entries:
             continue
 
-        seen_labels.add(label)
-        deduped.append(entry)
+        seen_entries.add(normalized)
+        deduped.append(normalized)
 
     return deduped
 
@@ -514,7 +519,7 @@ INSTALLED_APPS = [
     "apps.celery.beat_app.CeleryBeatConfig",
 ] + LOCAL_APPS
 
-INSTALLED_APPS = _dedupe_app_labels(INSTALLED_APPS)
+INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS += ["debug_toolbar"]
@@ -721,12 +726,28 @@ if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
 
 
 def _postgres_available() -> bool:
+    """Return whether the configured PostgreSQL endpoint is reachable quickly.
+
+    Startup probes should fail fast so local tooling (for example the VS Code
+    migration watcher) can fall back to SQLite when PostgreSQL is unavailable.
+    """
+
     if FORCED_DB_BACKEND == "sqlite":
+        return False
+    if not should_probe_postgres():
         return False
     try:
         import psycopg
-    except Exception:
+    except ImportError:
         return False
+
+    try:
+        connect_timeout = int(os.environ.get("ARTHEXIS_POSTGRES_PROBE_TIMEOUT", "1"))
+    except (TypeError, ValueError):
+        connect_timeout = 1
+
+    if connect_timeout <= 0:
+        connect_timeout = 1
 
     params = {
         "dbname": os.environ.get("POSTGRES_DB", "postgres"),
@@ -734,12 +755,12 @@ def _postgres_available() -> bool:
         "password": os.environ.get("POSTGRES_PASSWORD", ""),
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": os.environ.get("POSTGRES_PORT", "5432"),
-        "connect_timeout": 10,
+        "connect_timeout": connect_timeout,
     }
     try:
         with contextlib.closing(psycopg.connect(**params)):
             return True
-    except psycopg.OperationalError:
+    except (psycopg.Error, OSError):
         return False
 
 

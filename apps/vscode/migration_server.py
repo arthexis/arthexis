@@ -175,6 +175,10 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     command = build_env_refresh_command(base_dir, latest=latest)
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    # Keep VS Code migration checks responsive on developer machines where
+    # PostgreSQL is not running. env-refresh only needs to validate migration
+    # state, and SQLite is the expected local fallback backend.
+    env.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
     print("[Migration Server] Running:", " ".join(command))
     result = subprocess.run(command, cwd=base_dir, env=env)
     if result.returncode != 0:
@@ -482,6 +486,8 @@ def request_runserver_restart(lock_dir: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the migration server event loop."""
+
     parser = argparse.ArgumentParser(
         description="Run env-refresh whenever source code changes are detected."
     )
@@ -517,10 +523,10 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
     with migration_server_state(LOCK_DIR):
-        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-        snapshot = collect_source_mtimes(BASE_DIR)
-
         try:
+            run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+            snapshot = collect_source_mtimes(BASE_DIR)
+
             while True:
                 updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
                 if args.debounce > 0:
@@ -547,7 +553,11 @@ def main(argv: list[str] | None = None) -> int:
                 run_env_refresh_with_report(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:
-            print("[Migration Server] Stopped.")
+            print(
+                "[Migration Server] Stopped after receiving an interrupt signal. "
+                "If you did not press Ctrl+C, this likely came from your IDE/debugger "
+                "stopping or restarting the session."
+            )
             return 0
 
 
