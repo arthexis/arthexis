@@ -1836,15 +1836,20 @@ fi
 stop_running_instance 0
 
 if [[ $REVERT_UPGRADE -eq 1 ]]; then
-  if [[ -n "$LOCAL_REVISION" ]]; then
-    printf '%s\n' "$LOCAL_REVISION" > "$UPGRADE_REVERT_LOCK"
-  fi
-
-  if [[ "$LOCAL_REVISION" == "$REVERT_TARGET_REVISION" ]]; then
-    echo "Already at revision $REVERT_TARGET_REVISION; no git reset required."
+  if [[ $CHECK_ONLY -eq 1 ]]; then
+    echo "Check mode enabled; skipping revert reset."
   else
-    echo "Resetting repository to $REVERT_TARGET_REVISION..."
-    git reset --hard "$REVERT_TARGET_REVISION"
+    stash_local_changes_for_upgrade
+    if [[ -n "$LOCAL_REVISION" ]]; then
+      printf '%s\n' "$LOCAL_REVISION" > "$UPGRADE_REVERT_LOCK"
+    fi
+
+    if [[ "$LOCAL_REVISION" == "$REVERT_TARGET_REVISION" ]]; then
+      echo "Already at revision $REVERT_TARGET_REVISION; no git reset required."
+    else
+      echo "Resetting repository to $REVERT_TARGET_REVISION..."
+      git reset --hard "$REVERT_TARGET_REVISION"
+    fi
   fi
 fi
 
@@ -1860,7 +1865,11 @@ else
   echo "Pulling latest changes..."
   stash_local_changes_for_upgrade
   if [[ $CHECK_ONLY -ne 1 ]] && [[ -n "$LOCAL_REVISION" ]]; then
-    printf '%s\n' "$LOCAL_REVISION" > "$UPGRADE_REVERT_LOCK"
+    if [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ -s "$UPGRADE_REVERT_LOCK" ]]; then
+      echo "Preserving existing revert target $UPGRADE_REVERT_LOCK during self-update rerun."
+    else
+      printf '%s\n' "$LOCAL_REVISION" > "$UPGRADE_REVERT_LOCK"
+    fi
   fi
   git pull --rebase
 
