@@ -157,7 +157,7 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
         stderr="",
     )
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, **_kwargs):
         shell = command[0]
         if shell == "bash":
             raise bash_failure
