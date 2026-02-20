@@ -271,6 +271,17 @@ class Recipe(Ownable):
         )
 
     @staticmethod
+    def _shell_basename(shell: str) -> str:
+        """Return a shell executable name for both POSIX and Windows path strings."""
+
+        candidates = [Path(shell).name, PureWindowsPath(shell).name]
+        for candidate in candidates:
+            normalized = candidate.strip().lower()
+            if normalized:
+                return normalized
+        return shell.strip().lower()
+
+    @staticmethod
     def _is_windows_bash_launcher_failure(
         exc: subprocess.CalledProcessError, *, shell: str
     ) -> bool:
@@ -280,9 +291,9 @@ class Recipe(Ownable):
         continues to the next shell candidate if one exists.
         """
 
-        if os.name != "nt" or Path(shell).name.lower() not in {"bash", "bash.exe"}:
+        if os.name != "nt" or Recipe._shell_basename(shell) not in {"bash", "bash.exe"}:
             return False
-        output = f"{exc.stdout or ''}\n{exc.stderr or ''}".lower()
+        output = f"{exc.stdout or exc.output or ''}\n{exc.stderr or ''}\n{exc}".lower()
         return "wsl" in output or "rpc call" in output
 
     @staticmethod
@@ -291,7 +302,7 @@ class Recipe(Ownable):
 
         if not isinstance(exc, FileNotFoundError):
             return False
-        shell_name = Path(shell).name.lower()
+        shell_name = Recipe._shell_basename(shell)
         return shell_name in {"bash", "bash.exe", "sh", "sh.exe"}
 
     @staticmethod
