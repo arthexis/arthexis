@@ -214,8 +214,8 @@ class CertbotCertificate(CertificateBase):
             message
         )
         if resolved_paths:
-            self.certificate_path = str(resolved_paths[0])
-            self.certificate_key_path = str(resolved_paths[1])
+            self.certificate_path = resolved_paths[0].as_posix()
+            self.certificate_key_path = resolved_paths[1].as_posix()
         try:
             self.expiration_date = services.get_certificate_expiration(
                 certificate_path=self.certificate_file,
