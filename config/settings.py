@@ -725,6 +725,12 @@ if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
 
 
 def _postgres_available() -> bool:
+    """Return whether the configured PostgreSQL endpoint is reachable quickly.
+
+    Startup probes should fail fast so local tooling (for example the VS Code
+    migration watcher) can fall back to SQLite when PostgreSQL is unavailable.
+    """
+
     if FORCED_DB_BACKEND == "sqlite":
         return False
     try:
@@ -732,18 +738,26 @@ def _postgres_available() -> bool:
     except Exception:
         return False
 
+    try:
+        connect_timeout = int(os.environ.get("ARTHEXIS_POSTGRES_PROBE_TIMEOUT", "1"))
+    except (TypeError, ValueError):
+        connect_timeout = 1
+
+    if connect_timeout <= 0:
+        connect_timeout = 1
+
     params = {
         "dbname": os.environ.get("POSTGRES_DB", "postgres"),
         "user": os.environ.get("POSTGRES_USER", "postgres"),
         "password": os.environ.get("POSTGRES_PASSWORD", ""),
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": os.environ.get("POSTGRES_PORT", "5432"),
-        "connect_timeout": 10,
+        "connect_timeout": connect_timeout,
     }
     try:
         with contextlib.closing(psycopg.connect(**params)):
             return True
-    except psycopg.OperationalError:
+    except (psycopg.Error, OSError):
         return False
 
 
