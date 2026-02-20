@@ -33,7 +33,14 @@ def _resolve_request_host(request: HttpRequest) -> str:
         host_value = host_value.split("]", 1)[0].lstrip("[")
     elif host_value.count(":") > 1:
         host_or_port = host_value.rsplit(":", 1)
-        if len(host_or_port) == 2 and host_or_port[1].isdigit():
+        # Heuristic for non-standard bare IPv6-with-port input (e.g. ``::1:8080``):
+        # only strip a trailing numeric segment when the host portion does not end
+        # with a colon. This preserves bare IPv6 literals like ``::1``.
+        if (
+            len(host_or_port) == 2
+            and host_or_port[1].isdigit()
+            and not host_or_port[0].endswith(":")
+        ):
             host_value = host_or_port[0]
     else:
         host_value = host_value.split(":", 1)[0]
