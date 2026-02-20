@@ -238,6 +238,14 @@ def test_execute_recognizes_missing_windows_shell_paths(monkeypatch):
         recipe.execute()
 
 
+def test_shell_basename_handles_windows_paths_on_posix():
+    """Windows-style shell paths normalize to executable names cross-platform."""
+
+    assert Recipe._shell_basename(r"D:\Tools\Git\bin\bash.exe") == "bash.exe"
+    assert Recipe._shell_basename("C:/msys64/usr/bin/sh.exe") == "sh.exe"
+
+
+
 @pytest.mark.django_db
 def test_execute_escapes_bash_arg_sigils(monkeypatch):
     """Bash arg sigils are shell-escaped to avoid command injection."""
