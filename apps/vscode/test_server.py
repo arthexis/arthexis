@@ -149,6 +149,17 @@ def test_migration_merge_required_handles_timeout(monkeypatch):
     assert _migration_merge_required(Path(".")) is True
 
 
+def test_migration_merge_required_handles_interrupt(monkeypatch):
+    """Regression: interrupt during migration check should stop the loop safely."""
+
+    def fake_run(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert _migration_merge_required(Path(".")) is True
+
+
 def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
     """Regression: non-UTF-8 migration output should not crash decode."""
 
@@ -273,6 +284,12 @@ def _migration_merge_required(base_dir: Path) -> bool:
         NOTIFY(
             "Migration merge check timed out",
             "Investigate makemigrations output before restarting the test server.",
+        )
+        return True
+    except KeyboardInterrupt:
+        print(
+            f"{PREFIX} Migration merge check interrupted. "
+            "If you did not press Ctrl+C, your IDE/debugger likely restarted the session."
         )
         return True
 
@@ -639,11 +656,11 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = collect_source_mtimes(BASE_DIR)
     print(PREFIX, "Watching for changes... Press Ctrl+C to stop.")
     with server_state(LOCK_DIR):
-        if not run_env_refresh_with_tests(BASE_DIR, latest=args.latest):
-            return 0
-        snapshot = collect_source_mtimes(BASE_DIR)
-
         try:
+            if not run_env_refresh_with_tests(BASE_DIR, latest=args.latest):
+                return 0
+            snapshot = collect_source_mtimes(BASE_DIR)
+
             while True:
                 updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
                 if args.debounce > 0:
@@ -670,7 +687,11 @@ def main(argv: list[str] | None = None) -> int:
                     return 0
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:
-            print(f"{PREFIX} Stopped.")
+            print(
+                f"{PREFIX} Stopped after receiving an interrupt signal. "
+                "If you did not press Ctrl+C, this likely came from your IDE/debugger "
+                "stopping or restarting the session."
+            )
             return 0
 
 
