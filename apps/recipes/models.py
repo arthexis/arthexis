@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -83,25 +84,36 @@ class Recipe(Ownable):
         return self.display
 
     def resolve_script(self, *args: Any, **kwargs: Any) -> str:
-        resolved = resolve_arg_sigils(self.script or "", args, kwargs)
         # Local import to avoid circular dependency with the sigils app.
         from apps.sigils.sigil_resolver import resolve_sigils
 
-        return resolve_sigils(resolved, current=self)
+        resolved = resolve_sigils(self.script or "", current=self)
+        return resolve_arg_sigils(resolved, args, kwargs)
+
+    def _resolve_bash_script(self, *args: Any, **kwargs: Any) -> str:
+        """Resolve bash script content with safely shell-quoted argument sigils."""
+
+        quoted_args = tuple(shlex.quote(str(value)) for value in args)
+        quoted_kwargs = {
+            key: shlex.quote(str(value)) for key, value in kwargs.items()
+        }
+        return self.resolve_script(*quoted_args, **quoted_kwargs)
 
     def execute(self, *args: Any, **kwargs: Any) -> RecipeExecutionResult:
         """Execute a recipe and return the execution metadata and result."""
 
-        resolved_script = self.resolve_script(*args, **kwargs)
         result_key = (self.result_variable or "result").strip() or "result"
 
         if self.body_type == self.BodyType.BASH:
+            resolved_script = self._resolve_bash_script(*args, **kwargs)
             return self._execute_bash(
                 resolved_script=resolved_script,
                 result_variable=result_key,
                 args=args,
                 kwargs=kwargs,
             )
+
+        resolved_script = self.resolve_script(*args, **kwargs)
 
         if self.body_type != self.BodyType.PYTHON:
             raise RuntimeError(
@@ -294,21 +306,16 @@ class Recipe(Ownable):
         candidates: list[str] = ["bash", "sh"]
 
         if os.name == "nt":
+            program_files = os.environ.get("PROGRAMFILES", "C:/Program Files")
             candidates.extend(
                 [
-                    "C:/Program Files/Git/bin/bash.exe",
-                    "C:/Program Files/Git/usr/bin/sh.exe",
-                    "C:/msys64/usr/bin/bash.exe",
+                    f"{program_files}/Git/bin/bash.exe",
+                    f"{program_files}/Git/usr/bin/sh.exe",
+                    f"{program_files}/msys64/usr/bin/bash.exe",
                 ]
             )
 
-        # Preserve order but remove duplicates.
-        deduped_candidates: list[str] = []
-        for candidate in candidates:
-            if candidate not in deduped_candidates:
-                deduped_candidates.append(candidate)
-
-        return tuple(deduped_candidates)
+        return tuple(dict.fromkeys(candidates))
 
 
 __all__ = ["Recipe", "RecipeExecutionResult"]
