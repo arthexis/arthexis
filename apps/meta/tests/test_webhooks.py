@@ -150,3 +150,49 @@ def test_whatsapp_webhook_updates_existing_message(client):
 
     assert WhatsAppWebhookMessage.objects.count() == 1
     assert WhatsAppWebhookMessage.objects.get().text_body == "updated"
+
+
+@pytest.mark.django_db
+def test_whatsapp_webhook_ignores_non_list_contacts(client):
+    site = Site.objects.create(domain="example.test", name="example")
+    bridge = WhatsAppChatBridge.objects.create(
+        site=site,
+        phone_number_id="12345",
+        access_token="token",
+    )
+    webhook = WhatsAppWebhook.objects.create(
+        bridge=bridge,
+        route_key="route-key-4",
+        verify_token="verify-token-4",
+    )
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "contacts": "malformed",
+                            "messages": [
+                                {
+                                    "id": "wamid.NONLIST",
+                                    "type": "text",
+                                    "text": {"body": "hello"},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = client.post(
+        reverse("meta:whatsapp-webhook", kwargs={"route_key": webhook.route_key}),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    message = WhatsAppWebhookMessage.objects.get(webhook=webhook, message_id="wamid.NONLIST")
+    assert message.wa_id == ""
