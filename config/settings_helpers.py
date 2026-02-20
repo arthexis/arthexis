@@ -27,6 +27,7 @@ __all__ = [
     "normalize_site_host",
     "resolve_local_fqdn",
     "resolve_celery_shutdown_timeout",
+    "should_probe_postgres",
     "strip_ipv6_brackets",
     "validate_host_with_subnets",
 ]
@@ -170,6 +171,38 @@ def install_validate_host_with_subnets() -> None:
 
     http_request.validate_host = _patched
 
+
+
+def should_probe_postgres(env: Mapping[str, str] | None = None) -> bool:
+    """Return whether startup should attempt a PostgreSQL reachability probe.
+
+    The probe is skipped unless PostgreSQL is explicitly configured, which
+    prevents avoidable startup stalls on SQLite-based local setups.
+    """
+
+    source = os.environ if env is None else env
+
+    configured_backend = str(source.get("ARTHEXIS_DB_BACKEND", "")).strip().lower()
+    if configured_backend == "sqlite":
+        return False
+    if configured_backend == "postgres":
+        return True
+
+    postgres_env_vars = (
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    )
+    if any(str(source.get(name, "")).strip() for name in postgres_env_vars):
+        return True
+
+    database_url = str(source.get("DATABASE_URL", "")).strip().lower()
+    if database_url.startswith(("postgres://", "postgresql://")):
+        return True
+
+    return False
 
 
 def load_secret_key(

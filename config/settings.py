@@ -44,6 +44,7 @@ from config.settings_helpers import (
     load_secret_key,
     load_site_config_allowed_hosts,
     resolve_local_fqdn,
+    should_probe_postgres,
     strip_ipv6_brackets,
 )
 
@@ -733,9 +734,11 @@ def _postgres_available() -> bool:
 
     if FORCED_DB_BACKEND == "sqlite":
         return False
+    if not should_probe_postgres():
+        return False
     try:
         import psycopg
-    except Exception:
+    except ImportError:
         return False
 
     try:
