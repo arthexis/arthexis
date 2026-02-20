@@ -3,6 +3,7 @@ import socket
 
 from django.contrib.sites.models import Site
 from django.db.utils import OperationalError, ProgrammingError
+from django.core.exceptions import DisallowedHost
 from django.http import HttpRequest
 from django.conf import settings
 
@@ -12,6 +13,22 @@ CAMERA_BADGE_COLOR = DEFAULT_BADGE_COLOR
 
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_request_host(request: HttpRequest) -> str:
+    """Return the best-effort hostname for template badge lookups.
+
+    ``request.get_host()`` can raise ``DisallowedHost`` when deployments are
+    reached through an unexpected hostname. Admin templates should still render
+    instead of failing with HTTP 500, so this helper falls back to raw WSGI
+    metadata and strips any optional port suffix.
+    """
+    try:
+        host_value = request.get_host()
+    except DisallowedHost:
+        host_value = request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME", "")
+
+    return host_value.split(":", 1)[0]
 
 
 def site_and_node(request: HttpRequest):
@@ -27,7 +44,7 @@ def site_and_node(request: HttpRequest):
     the palette color used for the corresponding badge. Badges always use green
     when the entity is known and grey when the value cannot be determined.
     """
-    host = request.get_host().split(":")[0]
+    host = _resolve_request_host(request)
 
     site = getattr(request, "badge_site", None) or getattr(request, "site", None)
     if site is None:
