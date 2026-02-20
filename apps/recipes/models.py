@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path, PureWindowsPath
+from pathlib import PureWindowsPath
 import re
 import shlex
 import subprocess
@@ -274,12 +274,8 @@ class Recipe(Ownable):
     def _shell_basename(shell: str) -> str:
         """Return a shell executable name for both POSIX and Windows path strings."""
 
-        candidates = [Path(shell).name, PureWindowsPath(shell).name]
-        for candidate in candidates:
-            normalized = candidate.strip().lower()
-            if normalized:
-                return normalized
-        return shell.strip().lower()
+        normalized = PureWindowsPath(shell).name.strip().lower()
+        return normalized or shell.strip().lower()
 
     @staticmethod
     def _is_windows_bash_launcher_failure(
@@ -293,7 +289,14 @@ class Recipe(Ownable):
 
         if os.name != "nt" or Recipe._shell_basename(shell) not in {"bash", "bash.exe"}:
             return False
-        output = f"{exc.stdout or exc.output or ''}\n{exc.stderr or ''}\n{exc}".lower()
+
+        messages: list[str] = []
+        for stream in (exc.stdout, exc.stderr, str(exc)):
+            text = (stream or "").strip()
+            if text:
+                messages.append(text)
+
+        output = "\n".join(messages).lower()
         return "wsl" in output or "rpc call" in output
 
     @staticmethod
