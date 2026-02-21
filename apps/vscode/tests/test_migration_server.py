@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -33,6 +34,20 @@ def test_stop_django_server_terminates_multiprocessing_process() -> None:
     process.join.assert_called_once_with(timeout=0.1)
 
 
+
+
+def test_stop_django_server_uses_direct_terminate_without_psutil() -> None:
+    """Regression: fallback termination should run when psutil process lookup fails."""
+
+    process = mock.Mock(spec=subprocess.Popen)
+    process.poll.return_value = None
+    process.pid = 999
+
+    with mock.patch.object(migration_server, "_terminate_process_tree", return_value=False):
+        migration_server.stop_django_server(process)
+
+    process.terminate.assert_called_once_with()
+
 def test_resolve_base_dir_uses_script_location(tmp_path) -> None:
     """Resolve the base directory from the migration server location."""
 
@@ -55,6 +70,34 @@ def test_notify_async_is_a_noop() -> None:
 
 
 
+
+
+
+def test_load_psutil_retries_after_transient_keyboard_interrupt() -> None:
+    """Regression: psutil import should retry once after transient interrupt."""
+
+    calls = {"count": 0}
+
+    def fake_import_module(name: str):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise KeyboardInterrupt
+        return object()
+
+    with mock.patch.object(migration_server.importlib, "import_module", side_effect=fake_import_module):
+        loaded = migration_server._load_psutil()
+
+    assert loaded is not None
+    assert calls["count"] == 2
+
+
+def test_load_psutil_falls_back_when_module_is_missing() -> None:
+    """Regression: migration server should handle missing psutil dependency."""
+
+    with mock.patch.object(migration_server.importlib, "import_module", side_effect=ModuleNotFoundError):
+        loaded = migration_server._load_psutil()
+
+    assert isinstance(loaded, migration_server._PsutilUnavailable)
 
 def test_windows_process_group_kwargs_uses_creation_flags() -> None:
     """Use a dedicated process group on Windows to avoid interrupt propagation."""
@@ -102,7 +145,11 @@ def test_update_requirements_passes_windows_process_group_kwargs(tmp_path: Path)
     hash_file.write_text("different", encoding="utf-8")
 
     completed = mock.Mock(returncode=0)
-    with mock.patch.object(migration_server.subprocess, "run", return_value=completed) as mocked_run, mock.patch.object(
+    with mock.patch.object(migration_server, "REQUIREMENTS_FILE", Path("requirements.txt")), mock.patch.object(
+        migration_server, "REQUIREMENTS_HASH_FILE", Path(".locks") / "requirements.sha256"
+    ), mock.patch.object(
+        migration_server.subprocess, "run", return_value=completed
+    ) as mocked_run, mock.patch.object(
         migration_server, "_windows_process_group_kwargs", return_value={"creationflags": 512}
     ):
         assert migration_server.update_requirements(tmp_path) is True

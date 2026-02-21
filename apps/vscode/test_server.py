@@ -35,6 +35,7 @@ SUMMARY_LINE_RE = re.compile(r"=+ (.+?) =+")
 SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
 SCREENSHOT_PORT = 8888
 MIGRATION_CHECK_TIMEOUT_SECONDS = 60
+MIGRATION_CHECK_INTERRUPT_RETRIES = 1
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -180,7 +181,28 @@ def test_migration_merge_required_handles_timeout(monkeypatch):
 
 
 def test_migration_merge_required_handles_interrupt(monkeypatch):
-    """Regression: interrupt during migration check should stop the loop safely."""
+    """Regression: transient interrupt during migration check should retry once."""
+
+    run_calls = {"count": 0}
+
+    class Completed:
+        returncode = 0
+        stdout = b""
+
+    def fake_run(*_args, **_kwargs):
+        run_calls["count"] += 1
+        if run_calls["count"] == 1:
+            raise KeyboardInterrupt
+        return Completed()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert _migration_merge_required(Path(".")) is False
+    assert run_calls["count"] == 2
+
+
+def test_migration_merge_required_handles_repeated_interrupt(monkeypatch):
+    """Regression: repeated interrupts should still stop the loop safely."""
 
     def fake_run(*_args, **_kwargs):
         raise KeyboardInterrupt
@@ -355,33 +377,41 @@ def _migration_merge_required(base_dir: Path) -> bool:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Checking for merge migrations:", " ".join(command))
-    try:
-        result = subprocess.run(
-            command,
-            cwd=base_dir,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=MIGRATION_CHECK_TIMEOUT_SECONDS,
-            check=False,
-            **_windows_process_group_kwargs(),
-        )
-    except subprocess.TimeoutExpired:
-        print(
-            f"{PREFIX} Migration merge check timed out after "
-            f"{MIGRATION_CHECK_TIMEOUT_SECONDS} seconds. Stopping."
-        )
-        NOTIFY(
-            "Migration merge check timed out",
-            "Investigate makemigrations output before restarting the test server.",
-        )
-        return True
-    except KeyboardInterrupt:
-        print(
-            f"{PREFIX} Migration merge check interrupted. "
-            "If you did not press Ctrl+C, your IDE/debugger likely restarted the session."
-        )
-        return True
+    for attempt in range(MIGRATION_CHECK_INTERRUPT_RETRIES + 1):
+        try:
+            result = subprocess.run(
+                command,
+                cwd=base_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=MIGRATION_CHECK_TIMEOUT_SECONDS,
+                check=False,
+                **_windows_process_group_kwargs(),
+            )
+            break
+        except subprocess.TimeoutExpired:
+            print(
+                f"{PREFIX} Migration merge check timed out after "
+                f"{MIGRATION_CHECK_TIMEOUT_SECONDS} seconds. Stopping."
+            )
+            NOTIFY(
+                "Migration merge check timed out",
+                "Investigate makemigrations output before restarting the test server.",
+            )
+            return True
+        except KeyboardInterrupt:
+            if attempt < MIGRATION_CHECK_INTERRUPT_RETRIES:
+                print(
+                    f"{PREFIX} Migration merge check interrupted while the "
+                    "debug session was starting. Retrying once."
+                )
+                continue
+            print(
+                f"{PREFIX} Migration merge check interrupted. "
+                "If you did not press Ctrl+C, your IDE/debugger likely restarted the session."
+            )
+            return True
 
     output = (result.stdout or b"").decode("utf-8", errors="replace")
     if "Conflicting migrations detected" in output:

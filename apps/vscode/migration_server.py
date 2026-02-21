@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import multiprocessing
 import os
@@ -15,7 +16,48 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Iterable
 
-import psutil
+PSUTIL_IMPORT_INTERRUPT_RETRIES = 1
+
+
+class _PsutilUnavailable:
+    """Fallback object used when :mod:`psutil` is unavailable during startup."""
+
+    class Error(Exception):
+        """Raised when psutil-backed process helpers are unavailable."""
+
+    def Process(self, pid: int):
+        """Raise a specific error because psutil is required for process-tree termination."""
+
+        raise self.Error(f"psutil unavailable; unable to inspect process {pid}")
+
+    @staticmethod
+    def wait_procs(_procs, timeout: float = 0.0):
+        """Return empty process results when psutil is not importable."""
+
+        _ = timeout
+        return [], []
+
+
+def _load_psutil():
+    """Import :mod:`psutil`, tolerating one transient startup interrupt."""
+
+    for attempt in range(PSUTIL_IMPORT_INTERRUPT_RETRIES + 1):
+        try:
+            return importlib.import_module("psutil")
+        except KeyboardInterrupt:
+            if attempt < PSUTIL_IMPORT_INTERRUPT_RETRIES:
+                print(
+                    "[Migration Server] psutil import interrupted while the "
+                    "debug session was starting. Retrying once."
+                )
+                continue
+            raise
+        except ModuleNotFoundError:
+            print("[Migration Server] psutil is not installed. Falling back to direct termination.")
+            return _PsutilUnavailable()
+
+
+psutil = _load_psutil()
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -288,13 +330,13 @@ def _run_django_server(
         print(f"[Migration Server] Failed to run Django server: {exc}")
 
 
-def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> None:
-    """Terminate a process and its children using :mod:`psutil`."""
+def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> bool:
+    """Terminate a process tree using :mod:`psutil` and return success state."""
 
     try:
         parent = psutil.Process(pid)
     except psutil.Error:
-        return
+        return False
 
     children = parent.children(recursive=True)
 
@@ -317,6 +359,7 @@ def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> None:
             continue
     if alive:
         psutil.wait_procs(alive, timeout=timeout / 2)
+    return True
 
 
 def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.Popen | None:
@@ -355,14 +398,17 @@ def stop_django_server(process: subprocess.Popen | multiprocessing.Process | Non
             return
 
         print("[Migration Server] Stopping Django server...")
-        _terminate_process_tree(process.pid)
+        if not _terminate_process_tree(process.pid):
+            process.terminate()
         return
 
     if not process.is_alive():
         return
 
     print("[Migration Server] Stopping Django server...")
-    _terminate_process_tree(process.pid)
+    terminated = _terminate_process_tree(process.pid)
+    if not terminated and hasattr(process, "terminate"):
+        process.terminate()
     process.join(timeout=0.1)
 
 
