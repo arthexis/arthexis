@@ -13,7 +13,7 @@ This document proposes a concrete path to ship Arthexis as a standalone desktop 
 
 - **Desktop shell:** Tauri (Rust host + native webview)
 - **Backend process:** dedicated Python launcher module (`arthexis.desktop_launcher`)
-- **IPC contract:** local HTTP only (`127.0.0.1:<port>` over HTTP)
+- **IPC contract:** local HTTP only (`127.0.0.1:<port>`)
 - **Packaging:**
   - Windows: NSIS/MSI from Tauri bundle
   - Linux: AppImage + `.deb`
