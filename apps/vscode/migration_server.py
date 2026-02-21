@@ -14,7 +14,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -439,8 +439,15 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def update_requirements(base_dir: Path) -> bool:
-    """Install Python requirements when ``requirements.txt`` changes."""
+def _update_requirements_impl(
+    base_dir: Path,
+    *,
+    prefix: str,
+    notify: Callable[[str, str], None],
+    notify_body: str,
+    swallow_keyboard_interrupt: bool,
+) -> bool:
+    """Shared requirements installer for VS Code helper servers."""
 
     req_file = base_dir / REQUIREMENTS_FILE
     hash_file = base_dir / REQUIREMENTS_HASH_FILE
@@ -466,7 +473,7 @@ def update_requirements(base_dir: Path) -> bool:
     if current_hash == stored_hash:
         return False
 
-    print("[Migration Server] Installing Python requirements...")
+    print(f"{prefix} Installing Python requirements...")
     if helper_script.exists():
         command = [sys.executable, str(helper_script), "-r", str(req_file)]
     else:
@@ -479,16 +486,23 @@ def update_requirements(base_dir: Path) -> bool:
             str(req_file),
         ]
 
-    result = subprocess.run(
-        command,
-        cwd=base_dir,
-        **_windows_process_group_kwargs(),
-    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=base_dir,
+            **_windows_process_group_kwargs(),
+        )
+    except KeyboardInterrupt:
+        if not swallow_keyboard_interrupt:
+            raise
+        print(f"{prefix} Python requirements update cancelled.")
+        return False
+
     if result.returncode != 0:
-        print("[Migration Server] Failed to install Python requirements.")
-        notify_async(
+        print(f"{prefix} Failed to install Python requirements.")
+        notify(
             "Python requirements update failed",
-            "See migration server output for details.",
+            notify_body,
         )
         return False
 
@@ -497,8 +511,20 @@ def update_requirements(base_dir: Path) -> bool:
     except OSError:
         pass
 
-    print("[Migration Server] Python requirements updated.")
+    print(f"{prefix} Python requirements updated.")
     return True
+
+
+def update_requirements(base_dir: Path) -> bool:
+    """Install Python requirements when ``requirements.txt`` changes."""
+
+    return _update_requirements_impl(
+        base_dir,
+        prefix="[Migration Server]",
+        notify=notify_async,
+        notify_body="See migration server output for details.",
+        swallow_keyboard_interrupt=False,
+    )
 
 
 def wait_for_changes(base_dir: Path, snapshot: Dict[str, int], *, interval: float) -> Dict[str, int]:
