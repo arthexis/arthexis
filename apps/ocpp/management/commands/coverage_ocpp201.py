@@ -25,7 +25,7 @@ def _load_spec() -> dict[str, list[str]]:
 def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
     """Generate OCPP 2.0.1 coverage output and badge."""
     app_dir = Path(__file__).resolve().parents[2]
-    project_root = app_dir.parent
+    project_root = app_dir.parent.parent
     spec = _load_spec()
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
     implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
@@ -39,7 +39,33 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     overall_implemented = implemented_cp_to_csms | implemented_csms_to_cp
     overall_coverage = sorted(overall_spec & overall_implemented)
     overall_percentage = len(overall_coverage) / len(overall_spec) * 100 if overall_spec else 0.0
-    summary = {"spec": spec, "implemented": {"cp_to_csms": sorted(implemented_cp_to_csms), "csms_to_cp": sorted(implemented_csms_to_cp)}, "coverage": {"cp_to_csms": {"supported": cp_to_csms_coverage, "count": len(cp_to_csms_coverage), "total": len(spec_cp_to_csms), "percent": round(cp_to_csms_percentage, 2)}, "csms_to_cp": {"supported": csms_to_cp_coverage, "count": len(csms_to_cp_coverage), "total": len(spec_csms_to_cp), "percent": round(csms_to_cp_percentage, 2)}, "overall": {"supported": overall_coverage, "count": len(overall_coverage), "total": len(overall_spec), "percent": round(overall_percentage, 2)}}}
+    summary = {
+        "spec": spec,
+        "implemented": {
+            "cp_to_csms": sorted(implemented_cp_to_csms),
+            "csms_to_cp": sorted(implemented_csms_to_cp),
+        },
+        "coverage": {
+            "cp_to_csms": {
+                "supported": cp_to_csms_coverage,
+                "count": len(cp_to_csms_coverage),
+                "total": len(spec_cp_to_csms),
+                "percent": round(cp_to_csms_percentage, 2),
+            },
+            "csms_to_cp": {
+                "supported": csms_to_cp_coverage,
+                "count": len(csms_to_cp_coverage),
+                "total": len(spec_csms_to_cp),
+                "percent": round(csms_to_cp_percentage, 2),
+            },
+            "overall": {
+                "supported": overall_coverage,
+                "count": len(overall_coverage),
+                "total": len(overall_spec),
+                "percent": round(overall_percentage, 2),
+            },
+        },
+    }
     output = json.dumps(summary, indent=2, sort_keys=True)
     if stdout:
         stdout.write(output)
@@ -60,7 +86,8 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     if overall_percentage < 100 and stderr:
         stderr.write("OCPP 2.0.1 coverage is incomplete; consider adding more handlers.")
         stderr.write(f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.")
-        stderr.write("Command completed without failure.")
+    if stdout:
+        stdout.write("Command completed without failure.")
 
 
 class Command(BaseCommand):
@@ -71,5 +98,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         warn_deprecated_command("coverage_ocpp201", "ocpp coverage --version 2.0.1")
-        command_options = {key: value for key, value in options.items() if key in {"badge_path", "json_path"} and value is not None}
-        call_command("ocpp", "coverage", "--version", "2.0.1", **command_options)
+        command_options = {
+            key: value
+            for key, value in options.items()
+            if key in {"badge_path", "json_path"} and value is not None
+        }
+        call_command(
+            "ocpp",
+            "coverage",
+            "--version",
+            "2.0.1",
+            stdout=self.stdout,
+            stderr=self.stderr,
+            **command_options,
+        )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, time
 from typing import Iterable
 
 from django.core.management import call_command
@@ -23,7 +23,7 @@ def parse_datetime_option(value: str) -> datetime:
         parsed_date = parse_date(value)
         if parsed_date is None:
             raise CommandError(f"Invalid date/datetime: {value}")
-        parsed_datetime = datetime.combine(parsed_date, datetime.min.time())
+        parsed_datetime = datetime.combine(parsed_date, time.min)
     if timezone.is_naive(parsed_datetime):
         parsed_datetime = timezone.make_aware(parsed_datetime)
     return parsed_datetime
@@ -54,4 +54,12 @@ class Command(BaseCommand):
             for key, value in options.items()
             if key in {"output", "start", "end", "chargers"} and value is not None
         }
-        call_command("ocpp", "transactions", "export", **command_options)
+        args = ["ocpp", "transactions", "export", command_options["output"]]
+        if "start" in command_options:
+            args.extend(["--start", command_options["start"]])
+        if "end" in command_options:
+            args.extend(["--end", command_options["end"]])
+        if "chargers" in command_options:
+            args.append("--chargers")
+            args.extend(command_options["chargers"])
+        call_command(*args, stdout=self.stdout, stderr=self.stderr)

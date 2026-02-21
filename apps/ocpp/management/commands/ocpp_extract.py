@@ -7,13 +7,6 @@ from apps.ocpp.management.commands._ocpp_command_helpers import (
     add_trace_extract_arguments,
     warn_deprecated_command,
 )
-from apps.ocpp.management.commands._trace_extract_impl import TraceExtractCommand
-
-
-def run_trace_extract(**options) -> None:
-    """Execute the trace extract flow with parsed options."""
-    command = TraceExtractCommand()
-    command.handle(**options)
 
 
 class Command(BaseCommand):
@@ -29,4 +22,15 @@ class Command(BaseCommand):
             for key, value in options.items()
             if key in {"all", "next", "txn", "out", "log"} and value is not None
         }
-        call_command("ocpp", "trace", "extract", **command_options)
+        args = ["ocpp", "trace", "extract"]
+        if "all" in command_options and command_options["all"]:
+            args.append("--all")
+        if "next" in command_options:
+            args.extend(["--next", str(command_options["next"])])
+        if "txn" in command_options:
+            args.extend(["--txn", command_options["txn"]])
+        if "out" in command_options:
+            args.extend(["--out", command_options["out"]])
+        if "log" in command_options:
+            args.extend(["--log", command_options["log"]])
+        call_command(*args, stdout=self.stdout, stderr=self.stderr)

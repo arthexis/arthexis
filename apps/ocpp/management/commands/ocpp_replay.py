@@ -42,9 +42,10 @@ def run_replay_extract(*, extract: str) -> ReplayResult:
     session_log_written = False
     session_entries = data.get("session_log", [])
     if imported_transactions and session_entries:
-        transaction = imported_transactions[0]
-        session_path = _session_log_path(transaction)
-        if not session_path.exists():
+        for transaction in imported_transactions:
+            session_path = _session_log_path(transaction)
+            if session_path.exists():
+                continue
             session_path.write_text(
                 json.dumps(session_entries, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
@@ -65,10 +66,10 @@ def _session_log_path(transaction) -> Path:
         start_time = start_time.replace(tzinfo=timezone.utc)
     date = start_time.astimezone(timezone.utc).strftime("%Y%m%d")
     if not transaction.charger:
-        folder = store._session_folder(store.AGGREGATE_SLUG)
+        folder = store.session_folder(store.AGGREGATE_SLUG)
     else:
         key = store.identity_key(transaction.charger.charger_id, transaction.connector_id)
-        folder = store._session_folder(key)
+        folder = store.session_folder(key)
     return folder / f"{date}_{transaction.pk}.json"
 
 
