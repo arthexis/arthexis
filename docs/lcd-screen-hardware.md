@@ -5,6 +5,15 @@ PCF8574/PCF8574A backpacks and Waveshare modules based on the AiP31068L
 controller. The LCD service chooses the correct driver at startup, and you can
 force a specific driver or timing calibration when needed.
 
+All LCD utility commands now run through the unified entrypoint:
+
+```bash
+python manage.py lcd <action>
+```
+
+Supported actions include `debug`, `replay`, `write`, `animate`, `plan`, and
+`calibrate`.
+
 ## Supported controllers
 
 | Controller | Typical I²C address | Notes |
@@ -34,7 +43,7 @@ save timing overrides to `.locks/lcd-timings`. These values adjust the enable
 pulse and command delays for PCF8574-based controllers.
 
 ```bash
-python manage.py lcd_calibrate
+python manage.py lcd calibrate
 ```
 
 The resulting lock file is read on startup by the LCD driver so the service

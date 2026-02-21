@@ -1,17 +1,33 @@
-"""Manually run the peer node update task and report results."""
+"""Deprecated wrapper for ``python manage.py node peers``."""
 
-from __future__ import annotations
-
-from apps.nodes.tasks import poll_peers
-
-from .check_nodes import Command as CheckNodesCommand
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
 
 
-class Command(CheckNodesCommand):
-    """Run the update-peer-nodes workflow and display a status table."""
+class Command(BaseCommand):
+    """Redirect legacy peer refresh command."""
 
-    help = "Refresh peer node information using the scheduled update workflow."
+    help = (
+        "DEPRECATED: use `python manage.py node peers` instead of "
+        "`python manage.py update-peer-nodes`."
+    )
 
     def handle(self, *args, **options):
-        summary = poll_peers()
-        self._report_summary(summary)
+        """Emit deprecation notice and invoke the new action."""
+
+        self.stderr.write(
+            self.style.WARNING(
+                "`update-peer-nodes` is deprecated; use `python manage.py node peers`."
+            )
+        )
+        call_command(
+            "node",
+            "peers",
+            stdout=options.get("stdout", self.stdout),
+            stderr=options.get("stderr", self.stderr),
+            skip_checks=options.get("skip_checks", False),
+            force_color=options.get("force_color", False),
+            no_color=options.get("no_color", False),
+            verbosity=options.get("verbosity", 1),
+            traceback=options.get("traceback", False),
+        )
