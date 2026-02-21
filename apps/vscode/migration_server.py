@@ -8,14 +8,13 @@ import hashlib
 import json
 import multiprocessing
 import os
+import signal
 import subprocess
 import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterable
-
-import psutil
+from typing import Any, Dict, Iterable
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -28,6 +27,45 @@ def _windows_process_group_kwargs() -> dict[str, int]:
     if not creation_flag:
         return {}
     return {"creationflags": creation_flag}
+
+
+def _load_psutil() -> Any | None:
+    """Import and return :mod:`psutil` when available.
+
+    The VS Code test and migration servers are often started inside fresh
+    virtual environments where ``psutil`` can be temporarily unavailable or
+    still being installed. Delaying this import keeps module initialization
+    responsive and allows callers to use a best-effort fallback.
+    """
+
+    try:
+        import psutil  # type: ignore
+    except ImportError:
+        return None
+    return psutil
+
+
+def _terminate_process_without_psutil(pid: int) -> None:
+    """Best-effort process termination when :mod:`psutil` is unavailable."""
+
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                check=False,
+                capture_output=True,
+                **_windows_process_group_kwargs(),
+            )
+        except OSError:
+            return
+        return
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        return
 
 def resolve_base_dir(
     *, env: dict[str, str] | None = None, cwd: Path | None = None
@@ -290,6 +328,11 @@ def _run_django_server(
 
 def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> None:
     """Terminate a process and its children using :mod:`psutil`."""
+
+    psutil = _load_psutil()
+    if psutil is None:
+        _terminate_process_without_psutil(pid)
+        return
 
     try:
         parent = psutil.Process(pid)
