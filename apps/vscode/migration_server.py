@@ -29,6 +29,14 @@ def _windows_process_group_kwargs() -> dict[str, int]:
     return {"creationflags": creation_flag}
 
 
+def _posix_process_group_kwargs() -> dict[str, bool]:
+    """Return subprocess kwargs that isolate child processes on POSIX."""
+
+    if os.name != "posix":
+        return {}
+    return {"start_new_session": True}
+
+
 def _load_psutil() -> Any | None:
     """Import and return :mod:`psutil` when available.
 
@@ -61,7 +69,17 @@ def _terminate_process_without_psutil(pid: int) -> None:
         return
 
     try:
-        os.kill(pid, signal.SIGTERM)
+        process_group_id = os.getpgid(pid)
+        current_group_id = os.getpgrp()
+    except OSError:
+        process_group_id = None
+        current_group_id = None
+
+    try:
+        if process_group_id is not None and process_group_id != current_group_id:
+            os.killpg(process_group_id, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         return
     except PermissionError:
@@ -320,6 +338,7 @@ def _run_django_server(
             cwd=cwd,
             env=resolved_env,
             **_windows_process_group_kwargs(),
+            **_posix_process_group_kwargs(),
         )
         process.wait()
     except OSError as exc:
@@ -327,7 +346,7 @@ def _run_django_server(
 
 
 def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> None:
-    """Terminate a process and its children using :mod:`psutil`."""
+    """Terminate a process and its children, using :mod:`psutil` or a fallback."""
 
     psutil = _load_psutil()
     if psutil is None:
@@ -381,6 +400,7 @@ def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.P
             cwd=base_dir,
             env=env,
             **_windows_process_group_kwargs(),
+            **_posix_process_group_kwargs(),
         )
     except OSError as exc:
         print(f"[Migration Server] Failed to start Django server: {exc}")
