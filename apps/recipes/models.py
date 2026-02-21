@@ -294,15 +294,26 @@ class Recipe(Ownable):
             return False
 
         messages: list[str] = []
+        compact_messages: list[str] = []
         for stream in (exc.stdout, exc.stderr, str(exc)):
-            text = re.sub(r"\s+", " ", (stream or "").replace("\x00", " ")).strip()
+            raw_text = stream or ""
+            text = re.sub(r"\s+", " ", raw_text.replace("\x00", "")).strip()
             if text:
                 messages.append(text)
 
+            compact_text = re.sub(r"[\s\x00]+", "", raw_text).strip()
+            if compact_text:
+                compact_messages.append(compact_text)
+
         output = "\n".join(messages).lower()
+        compact_output = "\n".join(compact_messages).lower()
         return any(
-            signature in output
-            for signature in ("wsl/service", "wsl", "rpc call")
+            signature in output or compact_signature in compact_output
+            for signature, compact_signature in (
+                ("wsl/service", "wsl/service"),
+                ("wsl", "wsl"),
+                ("rpc call", "rpccall"),
+            )
         )
 
     @staticmethod
