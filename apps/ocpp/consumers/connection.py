@@ -84,7 +84,6 @@ class SubprotocolConnectionMixin:
     ) -> str | None:
         """Choose the negotiated OCPP subprotocol, honoring stored preference."""
 
-        available: list[str] = []
         canonical_offered: dict[str, str] = {}
         for proto in offered:
             if not proto:
@@ -98,7 +97,6 @@ class SubprotocolConnectionMixin:
                 proto_text = str(proto)
             proto_text = proto_text.strip()
             if proto_text:
-                available.append(proto_text)
                 canonical = self._canonicalize_ocpp_subprotocol(proto_text)
                 if canonical:
                     canonical_offered.setdefault(canonical, proto_text)
@@ -175,7 +173,7 @@ class SubprotocolConnectionMixin:
         subprotocol = self._select_subprotocol(offered, preferred_version)
         self.preferred_ocpp_version = preferred_version
         negotiated_version = self._canonicalize_ocpp_subprotocol(subprotocol)
-        if not negotiated_version and preferred_version in {
+        if not negotiated_version and preferred_canonical in {
             OCPP_VERSION_201,
             OCPP_VERSION_21,
         }:
