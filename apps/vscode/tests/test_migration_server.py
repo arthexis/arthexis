@@ -91,6 +91,54 @@ def test_windows_process_group_kwargs_is_empty_off_windows() -> None:
     with mock.patch.object(migration_server.os, "name", "posix"):
         assert migration_server._windows_process_group_kwargs() == {}
 
+
+def test_posix_process_group_kwargs_uses_new_session() -> None:
+    """Use a dedicated process group on POSIX for whole-tree termination."""
+
+    with mock.patch.object(migration_server.os, "name", "posix"):
+        assert migration_server._posix_process_group_kwargs() == {"start_new_session": True}
+
+
+def test_posix_process_group_kwargs_is_empty_off_posix() -> None:
+    """Return no special kwargs when not running on POSIX."""
+
+    with mock.patch.object(migration_server.os, "name", "nt"):
+        assert migration_server._posix_process_group_kwargs() == {}
+
+
+def test_terminate_process_without_psutil_prefers_killpg_for_isolated_group() -> None:
+    """Terminate the process group when the target has its own group."""
+
+    with mock.patch.object(migration_server.os, "name", "posix"), mock.patch.object(
+        migration_server.os, "getpgid", return_value=900
+    ) as mocked_getpgid, mock.patch.object(
+        migration_server.os, "getpgrp", return_value=100
+    ) as mocked_getpgrp, mock.patch.object(
+        migration_server.os, "killpg"
+    ) as mocked_killpg, mock.patch.object(
+        migration_server.os, "kill"
+    ) as mocked_kill:
+        migration_server._terminate_process_without_psutil(9876)
+
+    mocked_getpgid.assert_called_once_with(9876)
+    mocked_getpgrp.assert_called_once_with()
+    mocked_killpg.assert_called_once_with(900, migration_server.signal.SIGTERM)
+    mocked_kill.assert_not_called()
+
+
+def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches() -> None:
+    """Avoid killing our own group and terminate only the target process."""
+
+    with mock.patch.object(migration_server.os, "name", "posix"), mock.patch.object(
+        migration_server.os, "getpgid", return_value=100
+    ), mock.patch.object(migration_server.os, "getpgrp", return_value=100), mock.patch.object(
+        migration_server.os, "killpg"
+    ) as mocked_killpg, mock.patch.object(migration_server.os, "kill") as mocked_kill:
+        migration_server._terminate_process_without_psutil(9876)
+
+    mocked_killpg.assert_not_called()
+    mocked_kill.assert_called_once_with(9876, migration_server.signal.SIGTERM)
+
 def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     """Ensure migration-server refresh forces SQLite fallback for responsiveness."""
 
