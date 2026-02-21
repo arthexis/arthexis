@@ -283,6 +283,8 @@ class Recipe(Ownable):
     ) -> bool:
         """Return True when Windows bash launcher fails before script execution.
 
+        Launcher diagnostics can be emitted in NUL-delimited chunks, so output
+        is normalized before matching known bootstrap failure signatures.
         The caller treats this as a bootstrap problem (not a script failure) and
         continues to the next shell candidate if one exists.
         """
@@ -292,12 +294,13 @@ class Recipe(Ownable):
 
         messages: list[str] = []
         for stream in (exc.stdout, exc.stderr, str(exc)):
-            text = (stream or "").strip()
+            text = (stream or "").replace("\x00", " ")
+            text = re.sub(r"\s+", " ", text).strip()
             if text:
                 messages.append(text)
 
         output = "\n".join(messages).lower()
-        return "wsl" in output or "rpc call" in output
+        return any(keyword in output for keyword in ("wsl", "rpc call", "wsl/service"))
 
     @staticmethod
     def _is_shell_missing(exc: OSError, *, shell: str) -> bool:

@@ -180,6 +180,47 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
 
 
 
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_execute_supports_windows_bash_launcher_fallback_with_nul_delimiters(monkeypatch):
+    """Regression: NUL-delimited Windows launcher output is normalized before matching."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-fallback-nul-{uuid.uuid4()}",
+        display="Bash Fallback NUL",
+        body_type=Recipe.BodyType.BASH,
+        script='echo "$1-$RECIPE_KWARG_COLOR"',
+    )
+
+    bash_failure = subprocess.CalledProcessError(
+        1,
+        ["bash", "-c", recipe.script],
+        output="The\x00RPC\x00call\x00contains\x00a\x00handle\x00to\x00a\x00WSL/service.",
+        stderr="",
+    )
+
+    def fake_run(command, **_kwargs):
+        shell = command[0]
+        if shell == "bash":
+            raise bash_failure
+        if shell == "sh":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hello-green\n",
+                stderr="",
+            )
+        raise AssertionError(f"Unexpected shell call: {command}")
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello", color="green")
+
+    assert execution.result == "hello-green"
+
 
 @pytest.mark.django_db
 @pytest.mark.regression
