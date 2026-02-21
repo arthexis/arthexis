@@ -6,7 +6,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, Q
 
@@ -22,6 +21,8 @@ class Command(BaseCommand):
     help = "List video devices and optionally capture a short sample video."
 
     def add_arguments(self, parser) -> None:
+        """Register supported command-line arguments."""
+
         parser.add_argument(
             "--enable",
             action="store_true",
@@ -38,8 +39,18 @@ class Command(BaseCommand):
             help="Discover video devices before listing them.",
         )
         parser.add_argument(
+            "--refresh-devices",
+            action="store_true",
+            help="Alias for --discover.",
+        )
+        parser.add_argument(
             "--device",
             help="Video device ID, slug, or identifier to use for sampling.",
+        )
+        parser.add_argument(
+            "--snapshot",
+            action="store_true",
+            help="Capture a single still snapshot from a video device.",
         )
         parser.add_argument(
             "--samples",
@@ -58,18 +69,42 @@ class Command(BaseCommand):
             action="store_true",
             help="Run server-side video diagnostics.",
         )
+        parser.add_argument(
+            "--mjpeg",
+            action="store_true",
+            help="Capture a frame from MJPEG streams.",
+        )
+        parser.add_argument(
+            "--stream",
+            help="MJPEG stream slug or ID to capture.",
+        )
+        parser.add_argument(
+            "--include-inactive",
+            action="store_true",
+            help="Include inactive MJPEG streams.",
+        )
+        parser.add_argument(
+            "--auto-enable",
+            action="store_true",
+            help="Enable the Video Camera feature automatically for active actions.",
+        )
 
     def handle(self, *args, **options) -> None:
+        """Execute video camera management actions."""
+
         if options["doctor"]:
             self._run_doctor()
             return
+
+        options["discover"] = options["discover"] or options["refresh_devices"]
 
         if options["enable"] and options["disable"]:
             raise CommandError("Choose only one of --enable or --disable.")
 
         node = Node.get_local()
         needs_node = any(
-            options[key] for key in ("enable", "disable", "discover", "samples")
+            options[key]
+            for key in ("enable", "disable", "discover", "samples", "snapshot")
         )
         if needs_node and node is None:
             raise CommandError("No local node is registered for this command.")
@@ -112,6 +147,12 @@ class Command(BaseCommand):
                     )
                 )
 
+        auto_enable = options["auto_enable"] or any(
+            options[key] for key in ("discover", "samples", "snapshot")
+        )
+        if any(options[key] for key in ("discover", "samples", "snapshot")):
+            self._ensure_feature_enabled(node, feature, auto_enable=auto_enable)
+
         if options["discover"]:
             created, updated = VideoDevice.refresh_from_system(node=node)
             self.stdout.write(
@@ -123,6 +164,15 @@ class Command(BaseCommand):
         self._list_devices(node)
 
         samples = options.get("samples")
+        if options["snapshot"]:
+            self._capture_snapshot(node, options.get("device"))
+
+        if options["mjpeg"]:
+            self._capture_mjpeg(
+                stream_identifier=options.get("stream"),
+                include_inactive=options["include_inactive"],
+            )
+
         if samples is None:
             return
 
@@ -147,6 +197,117 @@ class Command(BaseCommand):
 
         output_path = self._capture_samples_video(device, samples)
         self.stdout.write(self.style.SUCCESS(f"Sample video saved to {output_path}"))
+
+    def _ensure_feature_enabled(
+        self, node: Node | None, feature: NodeFeature | None, *, auto_enable: bool
+    ) -> None:
+        """Ensure the local node has the camera feature enabled for active actions."""
+
+        if node is None or feature is None:
+            return
+
+        if feature.is_enabled:
+            return
+
+        if auto_enable:
+            if not has_rpi_camera_stack():
+                self.stdout.write(
+                    self.style.WARNING(
+                        "Raspberry Pi camera stack not detected; enabling anyway."
+                    )
+                )
+            NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
+            self.stdout.write(
+                self.style.SUCCESS("Enabled the Video Camera feature for the node.")
+            )
+            return
+
+        self.stdout.write(self.style.WARNING("Video Camera feature is currently disabled."))
+
+    def _capture_snapshot(self, node: Node | None, device_identifier: str | None) -> None:
+        """Capture a snapshot from the selected video device."""
+
+        device = self._resolve_video_device(node, device_identifier)
+        if device is None:
+            raise CommandError("No video device is available for snapshot capture.")
+
+        if not has_rpi_camera_stack():
+            self.stdout.write(
+                self.style.WARNING(
+                    "Raspberry Pi camera stack not detected; snapshot may fail."
+                )
+            )
+
+        try:
+            snapshot = device.capture_snapshot(link_duplicates=True)
+        except Exception as exc:  # pragma: no cover - hardware interaction
+            raise CommandError(str(exc)) from exc
+
+        if not snapshot:
+            self.stdout.write(self.style.WARNING("Duplicate snapshot; not saved."))
+            return
+
+        self.stdout.write(self.style.SUCCESS(f"Snapshot saved to {snapshot.sample.path}"))
+
+    def _capture_mjpeg(
+        self,
+        *,
+        stream_identifier: str | None,
+        include_inactive: bool,
+    ) -> None:
+        """Copy cached MJPEG frames into persistent snapshot records."""
+
+        streams = self._resolve_streams(stream_identifier, include_inactive)
+        if not streams:
+            if stream_identifier:
+                raise CommandError("No MJPEG stream matched the requested identifier.")
+            self.stdout.write(self.style.WARNING("No MJPEG streams found to capture."))
+            return
+
+        captured = 0
+        skipped = 0
+        failed = 0
+        for stream in streams:
+            cached = get_frame(stream)
+            if not cached:
+                skipped += 1
+                continue
+            try:
+                stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
+            except Exception:  # pragma: no cover - best-effort diagnostics
+                failed += 1
+                continue
+            captured += 1
+
+        if captured:
+            self.stdout.write(self.style.SUCCESS(f"Captured frames for {captured} stream(s)."))
+        if skipped:
+            self.stdout.write(
+                self.style.WARNING(f"Skipped {skipped} stream(s) without frames.")
+            )
+        if failed:
+            self.stdout.write(
+                self.style.WARNING(f"Failed to capture frames for {failed} stream(s).")
+            )
+
+    def _resolve_streams(
+        self, stream_identifier: str | None, include_inactive: bool
+    ) -> list[MjpegStream]:
+        """Resolve one or many MJPEG streams from the provided selector."""
+
+        queryset = MjpegStream.objects.all()
+        if not include_inactive:
+            queryset = queryset.filter(is_active=True)
+
+        if not stream_identifier:
+            return list(queryset.order_by("name"))
+
+        if stream_identifier.isdigit():
+            stream = queryset.filter(pk=int(stream_identifier)).first()
+            return [stream] if stream else []
+
+        stream = queryset.filter(slug=stream_identifier).first()
+        return [stream] if stream else []
 
     def _run_doctor(self) -> None:
         """Run server-side checks for video streaming diagnostics."""
