@@ -85,6 +85,7 @@ def test_parse_recipe_arguments_splits_kwargs():
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_execute_supports_bash_body_type():
     """Regression: bash recipes execute successfully on Windows and POSIX shells."""
 
@@ -120,7 +121,8 @@ def test_execute_raises_for_failing_bash_script():
 
 
 @pytest.mark.django_db
-def test_execute_supports_bash_safe_normalized_kwarg_names():
+@pytest.mark.regression
+def test_execute_supports_bash_safe_normalized_kwarg_names(monkeypatch):
     """Regression: normalized bash kwarg env vars resolve across shell backends."""
 
     user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
@@ -131,6 +133,26 @@ def test_execute_supports_bash_safe_normalized_kwarg_names():
         body_type=Recipe.BodyType.BASH,
         script='echo "$RECIPE_KWARG_MODE_FAST-$RECIPE_KWARG__7FLAG"',
     )
+
+    bash_failure = subprocess.CalledProcessError(
+        1,
+        ["bash", "-c", recipe.script],
+        output="\x00RPC call\x00contains a handle to a WSL service\x00",
+        stderr="",
+    )
+
+    def fake_run(command, **kwargs):
+        shell = command[0]
+        if shell == "bash":
+            raise bash_failure
+        if shell == "sh":
+            env = kwargs["env"]
+            normalized = f"{env['RECIPE_KWARG_MODE_FAST']}-{env['RECIPE_KWARG__7FLAG']}"
+            return subprocess.CompletedProcess(command, 0, stdout=f"{normalized}\n", stderr="")
+        raise AssertionError(f"Unexpected shell call: {command}")
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
 
     execution = recipe.execute(**{"mode-fast": "rapid", "7flag": "on"})
 
