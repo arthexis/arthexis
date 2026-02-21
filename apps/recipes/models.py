@@ -297,23 +297,24 @@ class Recipe(Ownable):
         compact_messages: list[str] = []
         for stream in (exc.stdout, exc.stderr, str(exc)):
             raw_text = stream or ""
-            text = re.sub(r"\s+", " ", raw_text.replace("\x00", "")).strip()
+            text = re.sub(r"\s+", " ", raw_text.replace("\x00", " ")).strip()
             if text:
                 messages.append(text)
 
-            compact_text = re.sub(r"[\s\x00]+", "", raw_text).strip()
+            compact_text = re.sub(r"[\s\x00]+", "", raw_text)
             if compact_text:
                 compact_messages.append(compact_text)
 
         output = "\n".join(messages).lower()
-        compact_output = "\n".join(compact_messages).lower()
+        compact_output = "".join(compact_messages).lower()
+        signatures = (
+            ("wsl/service", "wsl/service"),
+            ("wsl", "wsl"),
+            ("rpc call", "rpccall"),
+        )
         return any(
             signature in output or compact_signature in compact_output
-            for signature, compact_signature in (
-                ("wsl/service", "wsl/service"),
-                ("wsl", "wsl"),
-                ("rpc call", "rpccall"),
-            )
+            for signature, compact_signature in signatures
         )
 
     @staticmethod
