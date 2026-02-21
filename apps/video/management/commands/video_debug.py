@@ -32,6 +32,7 @@ class Command(BaseCommand):
             snapshot=options["snapshot"],
             device=options.get("device"),
             discover=options["refresh_devices"],
+            list_streams=options["list"],
             auto_enable=options["auto_enable"],
             mjpeg=options["mjpeg"],
             stream=options.get("stream"),

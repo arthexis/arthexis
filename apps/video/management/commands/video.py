@@ -88,6 +88,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Enable the Video Camera feature automatically for active actions.",
         )
+        parser.add_argument(
+            "--list-streams",
+            action="store_true",
+            help="List MJPEG streams in addition to video devices.",
+        )
 
     def handle(self, *args, **options) -> None:
         """Execute video camera management actions."""
@@ -147,9 +152,7 @@ class Command(BaseCommand):
                     )
                 )
 
-        auto_enable = options["auto_enable"] or any(
-            options[key] for key in ("discover", "samples", "snapshot")
-        )
+        auto_enable = options["auto_enable"]
         if any(options[key] for key in ("discover", "samples", "snapshot")):
             self._ensure_feature_enabled(node, feature, auto_enable=auto_enable)
 
@@ -162,6 +165,8 @@ class Command(BaseCommand):
             )
 
         self._list_devices(node)
+        if options["list_streams"]:
+            self._list_streams(include_inactive=options["include_inactive"])
 
         samples = options.get("samples")
         if options["snapshot"]:
@@ -223,6 +228,23 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(self.style.WARNING("Video Camera feature is currently disabled."))
+
+
+    def _list_streams(self, *, include_inactive: bool) -> None:
+        """List configured MJPEG streams."""
+
+        streams = MjpegStream.objects.all()
+        if not include_inactive:
+            streams = streams.filter(is_active=True)
+        streams = streams.select_related("video_device").order_by("name")
+
+        self.stdout.write(f"MJPEG streams: {streams.count()}")
+        for stream in streams:
+            status = "active" if stream.is_active else "inactive"
+            self.stdout.write(
+                f"- {stream.pk} {stream.name} slug={stream.slug} "
+                f"device={stream.video_device_id} {status}"
+            )
 
     def _capture_snapshot(self, node: Node | None, device_identifier: str | None) -> None:
         """Capture a snapshot from the selected video device."""
@@ -304,7 +326,8 @@ class Command(BaseCommand):
 
         if stream_identifier.isdigit():
             stream = queryset.filter(pk=int(stream_identifier)).first()
-            return [stream] if stream else []
+            if stream:
+                return [stream]
 
         stream = queryset.filter(slug=stream_identifier).first()
         return [stream] if stream else []

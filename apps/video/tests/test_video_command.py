@@ -185,7 +185,7 @@ def test_video_command_snapshot_auto_enables_feature(node_mock, feature_mock, de
     queryset.order_by.return_value.first.return_value = device
 
     with patch("apps.video.management.commands.video.NodeFeatureAssignment") as assignment_mock:
-        call_command("video", snapshot=True)
+        call_command("video", snapshot=True, auto_enable=True)
 
     assignment_mock.objects.update_or_create.assert_called_once_with(node=node, feature=feature)
 
@@ -206,3 +206,26 @@ def test_video_command_mjpeg_capture(node_mock, stream_mock, frame_mock, capsys)
 
     stream.store_frame_bytes.assert_called_once_with(b"frame", update_thumbnail=True)
     assert "Captured frames for 1 stream(s)." in capsys.readouterr().out
+
+
+@patch("apps.video.management.commands.video.get_frame", return_value=None)
+@patch("apps.video.management.commands.video.MjpegStream")
+@patch("apps.video.management.commands.video.VideoDevice")
+@patch("apps.video.management.commands.video.Node")
+def test_video_command_mjpeg_numeric_stream_slug_fallback(
+    node_mock, device_mock, stream_mock, frame_mock, capsys
+):
+    """Fallback to slug lookup when numeric stream id does not match a primary key."""
+
+    node_mock.get_local.return_value = None
+
+    device_mock.objects.all.return_value.filter.return_value.count.return_value = 0
+    device_mock.objects.all.return_value.filter.return_value.order_by.return_value = []
+
+    queryset = stream_mock.objects.all.return_value.filter.return_value
+    queryset.order_by.return_value = []
+    queryset.filter.return_value.first.side_effect = [None, SimpleNamespace(slug="123")]
+
+    call_command("video", mjpeg=True, stream="123")
+
+    assert "Skipped 1 stream(s) without frames." in capsys.readouterr().out
