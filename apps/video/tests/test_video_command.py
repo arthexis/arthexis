@@ -83,7 +83,7 @@ def test_video_command_sample_creates_video(capsys, tmp_path, monkeypatch):
     )
     feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
     NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
+    VideoDevice.objects.create(
         node=node,
         identifier="/dev/video0",
         description="Test camera",
@@ -167,3 +167,42 @@ def test_video_doctor_reports_frame_cache(
     assert "Video Doctor" in output
     assert "Frame cache: Redis reachable." in output
     assert "Latest cached frame" in output
+
+@patch("apps.video.management.commands.video.VideoDevice")
+@patch("apps.video.management.commands.video.NodeFeature")
+@patch("apps.video.management.commands.video.Node")
+def test_video_command_snapshot_auto_enables_feature(node_mock, feature_mock, device_mock):
+    """Auto-enable the camera feature when snapshot capture is requested."""
+
+    node = SimpleNamespace()
+    node_mock.get_local.return_value = node
+    feature = SimpleNamespace(is_enabled=False)
+    feature_mock.objects.get.return_value = feature
+
+    device = SimpleNamespace(capture_snapshot=Mock(return_value=None))
+    queryset = device_mock.objects.all.return_value.filter.return_value
+    queryset.exists.return_value = True
+    queryset.order_by.return_value.first.return_value = device
+
+    with patch("apps.video.management.commands.video.NodeFeatureAssignment") as assignment_mock:
+        call_command("video", snapshot=True)
+
+    assignment_mock.objects.update_or_create.assert_called_once_with(node=node, feature=feature)
+
+
+@patch("apps.video.management.commands.video.get_frame")
+@patch("apps.video.management.commands.video.MjpegStream")
+@patch("apps.video.management.commands.video.Node")
+@pytest.mark.django_db
+def test_video_command_mjpeg_capture(node_mock, stream_mock, frame_mock, capsys):
+    """Capture MJPEG cached frames through the unified command."""
+
+    node_mock.get_local.return_value = None
+    stream = SimpleNamespace(store_frame_bytes=Mock(), slug="stream-1")
+    stream_mock.objects.all.return_value.filter.return_value.order_by.return_value = [stream]
+    frame_mock.return_value = SimpleNamespace(frame_bytes=b"frame")
+
+    call_command("video", mjpeg=True)
+
+    stream.store_frame_bytes.assert_called_once_with(b"frame", update_thumbnail=True)
+    assert "Captured frames for 1 stream(s)." in capsys.readouterr().out
