@@ -78,6 +78,9 @@ FIELD_ENCRYPTION_KEY = os.environ.get(
 EVERGO_API_LOGIN_URL = os.environ.get(
     "EVERGO_API_LOGIN_URL", "https://portal-backend.evergo.com/api/mex/v1/login"
 )
+EVERGO_PORTAL_LOGIN_URL = os.environ.get(
+    "EVERGO_PORTAL_LOGIN_URL", "https://portal-mex.evergo.com/access/login"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
