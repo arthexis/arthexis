@@ -11,17 +11,18 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("value", help="RFID value to validate")
-        parser.add_argument("--kind", choices=[choice[0] for choice in RFID.KIND_CHOICES])
+        parser.add_argument("--kind", choices=[choice[0] for choice in RFID.KIND_CHOICES], help="Optional RFID kind to assign when registering a new tag")
         parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response")
 
     def handle(self, *args, **options):
         self.stderr.write(self.style.WARNING("check_rfid is deprecated; use `manage.py rfid check --uid ...` instead."))
+        call_args = ["rfid", "check", "--uid", options["value"]]
+        if options.get("kind"):
+            call_args.extend(["--kind", options["kind"]])
+        if options.get("pretty"):
+            call_args.append("--pretty")
         call_command(
-            "rfid",
-            "check",
-            uid=options["value"],
-            kind=options.get("kind"),
-            pretty=bool(options.get("pretty")),
+            *call_args,
             stdout=self.stdout,
             stderr=self.stderr,
         )

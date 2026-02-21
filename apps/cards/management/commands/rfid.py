@@ -167,6 +167,7 @@ class Command(BaseCommand):
                 return result
             if not interactive and time.monotonic() - start >= timeout:
                 return {"rfid": None, "label_id": None}
+        return {"rfid": None, "label_id": None}
 
     def _handle_watch(self, options):
         from apps.cards.always_on import is_running, start, stop
@@ -228,7 +229,10 @@ class Command(BaseCommand):
 
     def _resolve_service_name(self, lock_dir: Path) -> str | None:
         service_file = lock_dir / "service.lck"
-        return service_file.read_text(encoding="utf-8").strip() or None if service_file.is_file() else None
+        if not service_file.is_file():
+            return None
+        service_name = service_file.read_text(encoding="utf-8").strip()
+        return service_name or None
 
     def _systemd_is_active(self, unit_name: str) -> bool | None:
         try:
@@ -351,13 +355,13 @@ class Command(BaseCommand):
         color_filter = options["color"].upper()
         released_filter = options["released"]
         account_field = options["account_field"]
+        accounts_column = account_column_for_field(account_field)
         try:
             with open(path, newline="", encoding="utf-8") as fh:
                 reader = csv.DictReader(fh)
                 count = 0
                 for row in reader:
                     rfid_value = row.get("rfid", "").strip()
-                    accounts_column = account_column_for_field(account_field)
                     energy_accounts = row.get(accounts_column, "")
                     custom_label = row.get("custom_label", "").strip()
                     allowed = row.get("allowed", "True").strip().lower() != "false"
@@ -407,13 +411,18 @@ class Command(BaseCommand):
         accounts_column = account_column_for_field(account_field)
 
         rows = ((t.rfid, t.custom_label, serialize_accounts(t, account_field), str(t.allowed), t.color, str(t.released)) for t in qs)
+        exported_count = 0
         if path:
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
                 writer.writerow(["rfid", "custom_label", accounts_column, "allowed", "color", "released"])
-                writer.writerows(rows)
+                for row in rows:
+                    writer.writerow(row)
+                    exported_count += 1
         else:
             writer = csv.writer(self.stdout)
             writer.writerow(["rfid", "custom_label", accounts_column, "allowed", "color", "released"])
-            writer.writerows(rows)
-        self.stdout.write(self.style.SUCCESS(f"Exported {qs.count()} tags"))
+            for row in rows:
+                writer.writerow(row)
+                exported_count += 1
+        self.stdout.write(self.style.SUCCESS(f"Exported {exported_count} tags"))

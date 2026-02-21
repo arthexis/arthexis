@@ -8,11 +8,15 @@ class Command(BaseCommand):
     help = "[DEPRECATED] Use `manage.py rfid doctor` instead."
 
     def add_arguments(self, parser):
-        parser.add_argument("--timeout", type=float)
-        parser.add_argument("--scan", action="store_true")
-        parser.add_argument("--deep-read", action="store_true")
-        parser.add_argument("--no-input", action="store_true")
-        parser.add_argument("--show-raw", action="store_true")
+        parser.add_argument(
+            "--timeout",
+            type=float,
+            help="Scan timeout in seconds when running non-interactively",
+        )
+        parser.add_argument("--scan", action="store_true", help="Attempt a scan via the RFID service after checks.")
+        parser.add_argument("--deep-read", action="store_true", help="Toggle deep-read mode via the RFID service.")
+        parser.add_argument("--no-input", action="store_true", help="Skip interactive prompts.")
+        parser.add_argument("--show-raw", action="store_true", help="Show raw RFID values in output (default is masked).")
 
     def handle(self, *args, **options):
         self.stderr.write(self.style.WARNING("rfid_doctor is deprecated; use `manage.py rfid doctor` instead."))
