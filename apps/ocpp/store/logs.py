@@ -97,6 +97,18 @@ def _file_path(cid: str, log_type: str = "charger") -> Path:
     return LOG_DIR / f"{log_type}.{basename}.log"
 
 
+def charger_log_path(cid: str) -> Path:
+    """Return the charger log file path for the provided store identity key."""
+
+    return _file_path(cid, log_type="charger")
+
+
+def session_folder(cid: str) -> Path:
+    """Return the session folder path for the provided store identity key."""
+
+    return _session_folder(cid)
+
+
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     """Append a timestamped log entry for the given id and log type."""
 
@@ -669,6 +681,7 @@ __all__ = [
     "add_log",
     "add_session_message",
     "append_log_capture",
+    "charger_log_path",
     "clear_log",
     "end_session_log",
     "finalize_log_capture",
@@ -680,6 +693,7 @@ __all__ = [
     "logs",
     "register_log_name",
     "resolve_log_path",
+    "session_folder",
     "start_log_capture",
     "start_session_lock",
     "start_session_log",

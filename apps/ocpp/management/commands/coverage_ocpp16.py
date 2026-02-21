@@ -233,7 +233,7 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
 def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
     """Generate OCPP 1.6 coverage output and badge."""
     app_dir = Path(__file__).resolve().parents[2]
-    project_root = app_dir.parent
+    project_root = app_dir.parent.parent
     spec = _load_spec()
 
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
@@ -314,7 +314,8 @@ def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=
         stderr.write(
             f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations."
         )
-        stderr.write("Command completed without failure.")
+    if stdout:
+        stdout.write("Command completed without failure.")
 
 
 class Command(BaseCommand):
@@ -337,4 +338,12 @@ class Command(BaseCommand):
             for key, value in options.items()
             if key in {"badge_path", "json_path"} and value is not None
         }
-        call_command("ocpp", "coverage", "--version", "1.6", **command_options)
+        call_command(
+            "ocpp",
+            "coverage",
+            "--version",
+            "1.6",
+            stdout=self.stdout,
+            stderr=self.stderr,
+            **command_options,
+        )

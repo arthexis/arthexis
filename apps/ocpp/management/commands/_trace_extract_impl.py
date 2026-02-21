@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,8 @@ from django.utils import timezone as dj_timezone
 from apps.ocpp import store
 from apps.ocpp.management.commands._ocpp_command_helpers import add_trace_extract_arguments
 from apps.ocpp.models import Transaction, annotate_transaction_energy_bounds
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,7 +77,7 @@ class TraceExtractCommand(BaseCommand):
 
         header = "Recent transactions with energy transfer"
         if limit is not None:
-            header += f" (showing {len(transactions)} of {limit})"
+            header += f" (showing {len(transactions)} of up to {limit})"
         self.stdout.write(header)
         for tx in transactions:
             charger = tx.charger.charger_id if tx.charger else "unknown"
@@ -243,13 +246,15 @@ class TraceExtractCommand(BaseCommand):
         if not tx.charger:
             return None
         key = store.identity_key(tx.charger.charger_id, tx.connector_id)
-        return store._file_path(key, log_type="charger")
+        return store.charger_log_path(key)
 
     def _read_log_segment(self, log_file: Path, window: ExtractWindow) -> list[str]:
         lines: list[str] = []
+        skipped = 0
         with log_file.open("r", encoding="utf-8") as handle:
             for line in handle:
                 if len(line) < 24:
+                    skipped += 1
                     continue
                 timestamp_raw = line[:23]
                 try:
@@ -257,17 +262,33 @@ class TraceExtractCommand(BaseCommand):
                         timestamp_raw, "%Y-%m-%d %H:%M:%S.%f"
                     ).replace(tzinfo=timezone.utc)
                 except ValueError:
+                    skipped += 1
                     continue
                 if window.start <= timestamp <= window.end:
                     lines.append(line.rstrip("\n"))
+        if skipped:
+            logger.warning(
+                "Skipped %d lines with unrecognized timestamps in %s",
+                skipped,
+                log_file,
+            )
         return lines
 
     def _find_session_log_file(self, tx: Transaction) -> Path | None:
         if not tx.charger:
             return None
         key = store.identity_key(tx.charger.charger_id, tx.connector_id)
-        session_folder = store._session_folder(key)
+        session_folder = store.session_folder(key)
         matches = list(session_folder.glob(f"*_{tx.pk}.json"))
         if not matches:
             return None
         return sorted(matches, key=lambda item: item.stat().st_mtime)[-1]
+
+
+def run_trace_extract(*, stdout, stderr, style, **options) -> None:
+    """Run trace extraction with injected output streams and styling."""
+    command = TraceExtractCommand()
+    command.stdout = stdout
+    command.stderr = stderr
+    command.style = style
+    command.handle(**options)

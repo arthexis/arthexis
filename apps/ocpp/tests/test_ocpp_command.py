@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 from django.core.management import call_command
@@ -31,4 +31,11 @@ def test_legacy_coverage_command_routes_to_ocpp():
         with patch("django.core.management.call_command") as mocked:
             call_command("coverage_ocpp16")
 
-    mocked.assert_called_once_with("ocpp", "coverage", "--version", "1.6")
+    mocked.assert_called_once_with(
+        "ocpp",
+        "coverage",
+        "--version",
+        "1.6",
+        stdout=ANY,
+        stderr=ANY,
+    )

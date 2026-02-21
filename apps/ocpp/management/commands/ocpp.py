@@ -17,14 +17,14 @@ from apps.ocpp.management.commands.coverage_ocpp21 import run_coverage_ocpp21
 from apps.ocpp.management.commands.export_transactions import run_export_transactions
 from apps.ocpp.management.commands.import_transactions import run_import_transactions
 from apps.ocpp.management.commands.ocpp_replay import run_replay_extract
-from apps.ocpp.management.commands._trace_extract_impl import TraceExtractCommand
+from apps.ocpp.management.commands._trace_extract_impl import run_trace_extract
 
 
 class Command(BaseCommand):
     help = "Unified OCPP operational command surface."
 
     def add_arguments(self, parser) -> None:
-        subparsers = parser.add_subparsers(dest="group")
+        subparsers = parser.add_subparsers(dest="group", required=True)
 
         coverage_parser = subparsers.add_parser("coverage", help="Coverage reporting.")
         add_coverage_arguments(coverage_parser)
@@ -38,7 +38,7 @@ class Command(BaseCommand):
         transactions_parser = subparsers.add_parser(
             "transactions", help="Import/export transaction data."
         )
-        transactions_subparsers = transactions_parser.add_subparsers(dest="transactions_action")
+        transactions_subparsers = transactions_parser.add_subparsers(dest="transactions_action", required=True)
 
         transactions_import_parser = transactions_subparsers.add_parser("import", help="Import transactions.")
         add_transactions_import_arguments(transactions_import_parser)
@@ -47,7 +47,7 @@ class Command(BaseCommand):
         add_transactions_export_arguments(transactions_export_parser)
 
         trace_parser = subparsers.add_parser("trace", help="Trace extract/replay tools.")
-        trace_subparsers = trace_parser.add_subparsers(dest="trace_action")
+        trace_subparsers = trace_parser.add_subparsers(dest="trace_action", required=True)
 
         trace_extract_parser = trace_subparsers.add_parser("extract", help="Extract transaction trace.")
         add_trace_extract_arguments(trace_extract_parser)
@@ -105,11 +105,12 @@ class Command(BaseCommand):
     def _handle_trace(self, options: dict) -> None:
         action = options.get("trace_action")
         if action == "extract":
-            extract_runner = TraceExtractCommand()
-            extract_runner.stdout = self.stdout
-            extract_runner.stderr = self.stderr
-            extract_runner.style = self.style
-            extract_runner.handle(**{k: options.get(k) for k in ("all", "next", "txn", "out", "log")})
+            run_trace_extract(
+                stdout=self.stdout,
+                stderr=self.stderr,
+                style=self.style,
+                **{k: options.get(k) for k in ("all", "next", "txn", "out", "log")},
+            )
             return
         if action == "replay":
             result = run_replay_extract(extract=options["extract"])
