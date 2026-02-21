@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 from typing import Any
 
 import requests
@@ -89,19 +89,17 @@ class EvergoUser(Profile):
         if not self.evergo_email or not self.evergo_password:
             raise EvergoAPIError("Evergo credentials are incomplete.")
 
-        session = requests.Session()
         try:
-            xsrf_token = self._prime_session(session=session, timeout=timeout)
-            response = session.post(
-                self.API_LOGIN_URL,
-                json={"email": self.evergo_email, "password": self.evergo_password},
-                headers=self._build_login_headers(xsrf_token=xsrf_token),
-                timeout=timeout,
-            )
+            with requests.Session() as session:
+                xsrf_token = self._prime_session(session=session, timeout=timeout)
+                response = session.post(
+                    self.API_LOGIN_URL,
+                    json={"email": self.evergo_email, "password": self.evergo_password},
+                    headers=self._build_login_headers(xsrf_token=xsrf_token),
+                    timeout=timeout,
+                )
         except requests.RequestException as exc:
             raise EvergoAPIError(f"Unable to connect to Evergo API: {exc}") from exc
-        finally:
-            session.close()
 
         if response.status_code >= 400:
             if response.status_code == 419:
@@ -140,10 +138,12 @@ class EvergoUser(Profile):
 
     def _build_login_headers(self, *, xsrf_token: str) -> dict[str, str]:
         """Build headers expected by Evergo backend for authenticated login requests."""
+        parsed_portal_url = urlsplit(self.PORTAL_LOGIN_URL)
+        origin = f"{parsed_portal_url.scheme}://{parsed_portal_url.netloc}"
         return {
             "accept": "application/json",
             "content-type": "application/json",
-            "origin": "https://portal-mex.evergo.com",
+            "origin": origin,
             "referer": self.PORTAL_LOGIN_URL,
             "x-xsrf-token": xsrf_token,
         }
