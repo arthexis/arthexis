@@ -135,11 +135,12 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
     """Apply global collection-time marker behavior used across the test suite."""
     global REQUIRES_DB
     REQUIRES_DB = any(_requires_db(item) for item in items)
-    windows_nmcli_skip = pytest.mark.skip(reason="nmcli tests are not supported on Windows environments")
+    is_windows = os.name == "nt"
+    windows_nmcli_skip = pytest.mark.skip(reason="nmcli setup script tests are not supported on Windows environments")
     for item in items:
         if item.get_closest_marker("regression") and not item.get_closest_marker("critical"):
             item.add_marker("critical")
-        if os.name == "nt" and "nmcli" in item.nodeid.lower():
+        if is_windows and item.nodeid.startswith("scripts/tests/test_nmcli_setup_script.py"):
             item.add_marker(windows_nmcli_skip)
 
 
