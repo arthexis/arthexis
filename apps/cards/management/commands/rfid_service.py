@@ -8,10 +8,11 @@ class Command(BaseCommand):
     help = "[DEPRECATED] Use `manage.py rfid service` instead."
 
     def add_arguments(self, parser):
-        parser.add_argument("--host")
-        parser.add_argument("--port", type=int)
-        parser.add_argument("--debug", action="store_true")
-        parser.add_argument("--no-debug", action="store_true")
+        parser.add_argument("--host", help="Host interface to bind the RFID service")
+        parser.add_argument("--port", type=int, help="UDP port to bind the RFID service")
+        debug_group = parser.add_mutually_exclusive_group()
+        debug_group.add_argument("--debug", action="store_true", help="Enable debug logging")
+        debug_group.add_argument("--no-debug", action="store_true", help="Disable debug logging")
 
     def handle(self, *args, **options):
         self.stderr.write(self.style.WARNING("rfid_service is deprecated; use `manage.py rfid service` instead."))
@@ -22,6 +23,6 @@ class Command(BaseCommand):
             kwargs["port"] = options["port"]
         if options.get("debug"):
             kwargs["debug"] = True
-        if options.get("no_debug"):
+        elif options.get("no_debug"):
             kwargs["debug"] = False
         call_command("rfid", "service", **kwargs)

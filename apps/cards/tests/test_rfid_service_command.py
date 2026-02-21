@@ -1,5 +1,6 @@
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import call, patch
 
 import pytest
@@ -18,7 +19,7 @@ def _write_lock(path: Path, content: str = "") -> None:
 
 def subprocess_result(*, stdout: str, returncode: int):
     """Return a subprocess.CompletedProcess-like object."""
-    return type("Result", (), {"stdout": stdout, "stderr": "", "returncode": returncode})()
+    return SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
 @pytest.mark.django_db
