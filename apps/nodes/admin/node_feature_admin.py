@@ -110,11 +110,29 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         return format_html("<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items)))
 
     def _manual_enablement_data(self, feature, node):
+        """Return manual toggle metadata for a feature on the given node."""
+
         if node is None:
-            return {"status": "unavailable", "label": "Unavailable"}
+            return {
+                "status": "unavailable",
+                "label": "Unavailable",
+                "can_toggle": False,
+                "enabled": False,
+            }
         if feature.slug in Node.MANUAL_FEATURE_SLUGS:
-            return {"status": "manual", "label": "Manual"}
-        return {"status": "auto", "label": "Auto"}
+            enabled = node.features.filter(pk=feature.pk).exists()
+            return {
+                "status": "manual",
+                "label": "Manual",
+                "can_toggle": True,
+                "enabled": enabled,
+            }
+        return {
+            "status": "auto",
+            "label": "Auto",
+            "can_toggle": False,
+            "enabled": False,
+        }
 
     def get_urls(self):
         urls = super().get_urls()
@@ -128,6 +146,11 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 "discover/progress/",
                 self.admin_site.admin_view(self.discover_features_progress),
                 name="nodes_nodefeature_discover_progress",
+            ),
+            path(
+                "discover/manual-toggle/",
+                self.admin_site.admin_view(self.discover_manual_toggle),
+                name="nodes_nodefeature_discover_manual_toggle",
             ),
             path(
                 "take-screenshot/",
@@ -217,6 +240,8 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         )
 
     def discover_features_progress(self, request):
+        """Run discovery checks for a single feature row and return JSON progress."""
+
         if request.method != "POST":
             return JsonResponse({"detail": "POST required"}, status=405)
         if not self.has_change_permission(request):
@@ -241,7 +266,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             from ..feature_checks import feature_checks
 
             result = feature_checks.run(feature, node=node)
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception:  # pragma: no cover - defensive
             logging.exception("Error while running feature check for %s", feature.display)
             status = "error"
             message = (
@@ -327,6 +352,67 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 "eligible": eligible,
                 "manual_enablement": manual_enablement,
                 "enablement": enablement,
+            }
+        )
+
+    def discover_manual_toggle(self, request):
+        """Enable or disable a manual feature assignment for the local node."""
+
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        try:
+            feature_id = int(request.POST.get("feature_id", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "Invalid feature id"}, status=400)
+
+        enable_param = (request.POST.get("enabled") or "").strip().lower()
+        if enable_param not in {"true", "false"}:
+            return JsonResponse({"detail": "Invalid enabled value"}, status=400)
+        should_enable = enable_param == "true"
+
+        feature = self.get_queryset(request).filter(pk=feature_id).first()
+        if not feature:
+            return JsonResponse({"detail": "Feature not found"}, status=404)
+        if feature.slug not in Node.MANUAL_FEATURE_SLUGS:
+            return JsonResponse(
+                {"detail": "Feature is not manually controlled"},
+                status=400,
+            )
+
+        node = Node.get_local()
+        if not node:
+            return JsonResponse({"detail": "Local node not found"}, status=404)
+
+        if should_enable:
+            _, created = NodeFeatureAssignment.objects.update_or_create(
+                node=node,
+                feature=feature,
+            )
+            message = (
+                f"{feature.display} enabled."
+                if created
+                else f"{feature.display} already enabled."
+            )
+        else:
+            deleted_count, _ = NodeFeatureAssignment.objects.filter(
+                node=node,
+                feature=feature,
+            ).delete()
+            message = (
+                f"{feature.display} disabled."
+                if deleted_count
+                else f"{feature.display} already disabled."
+            )
+
+        return JsonResponse(
+            {
+                "feature": feature.display,
+                "enabled": should_enable,
+                "message": message,
+                "manual_enablement": self._manual_enablement_data(feature, node),
             }
         )
 
