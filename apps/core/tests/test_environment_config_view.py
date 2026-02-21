@@ -6,6 +6,7 @@ from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
+from apps.core import environment
 from apps.core.environment import _config_view, _group_django_settings
 
 
@@ -42,8 +43,17 @@ def test_group_django_settings_keeps_single_prefixes_in_other() -> None:
     ]
 
 
-def test_config_view_renders_grouped_sections(db) -> None:
-    """The config admin view should expose grouped sections to the template context."""
+def test_config_view_renders_grouped_sections(db, monkeypatch) -> None:
+    """The config admin view should expose grouped sections and section links."""
+    monkeypatch.setattr(
+        environment,
+        "_get_django_settings",
+        lambda: [
+            ("AWS_ACCESS_KEY_ID", "key"),
+            ("AWS_SECRET_ACCESS_KEY", "secret"),
+            ("DEBUG", True),
+        ],
+    )
     user = get_user_model().objects.create_superuser(
         username="admin",
         email="admin@example.com",
@@ -58,3 +68,5 @@ def test_config_view_renders_grouped_sections(db) -> None:
     assert response.status_code == 200
     assert "config_sections" in response.context_data
     assert response.context_data["site_title"] == site.site_title
+    assert 'href="#config-section-1">AWS<' in response.rendered_content
+    assert 'href="#config-section-2">Other<' in response.rendered_content

@@ -4,10 +4,23 @@
 {% block content %}
 <div id="content-main">
   <h2>{% trans "Django Config" %}</h2>
+
+  {% if config_sections %}
+    <ul>
+      {% for section in config_sections %}
+        <li><a href="#config-section-{{ forloop.counter }}">{{ section.name }}</a></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
   <input type="text" id="config-filter" placeholder="{% trans 'Filter' %}" />
 
   {% for section in config_sections %}
-    <section class="config-section" data-section-name="{{ section.name|lower }}">
+    <section
+      id="config-section-{{ forloop.counter }}"
+      class="config-section"
+      data-section-name="{{ section.name|lower }}"
+    >
       <h3>{{ section.name }}</h3>
       <table class="config-table">
         <thead>
