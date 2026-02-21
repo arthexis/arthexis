@@ -186,7 +186,7 @@ def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkey
     bash_failure = subprocess.CalledProcessError(
         1,
         ["bash", "-c", "echo ignored"],
-        output="The\x00RPC\x00call\x00contains\x00a\x00handle\x00to\x00a\x00WSL/service.",
+        output="The\x00 RPC\tcall\x00contains  a\nhandle to a\x00WSL/service.",
         stderr="",
     )
 

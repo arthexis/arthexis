@@ -300,10 +300,9 @@ class Recipe(Ownable):
                 messages.append(text)
 
         output = "\n".join(messages).lower()
-        return (
-            "wsl" in output
-            or "wsl/service" in output
-            or "rpc call" in output
+        return any(
+            signature in output
+            for signature in ("wsl/service", "wsl", "rpc call")
         )
 
     @staticmethod
