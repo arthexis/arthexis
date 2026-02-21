@@ -141,15 +141,17 @@ def test_execute_supports_bash_safe_normalized_kwarg_names(monkeypatch):
         stderr="",
     )
 
+    captured_envs = {}
+
     def fake_run(command, **kwargs):
         shell = command[0]
+        if "env" in kwargs:
+            captured_envs[shell] = kwargs["env"]
         if shell == "bash":
             raise bash_failure
         if shell == "sh":
-            env = kwargs["env"]
-            normalized = f"{env['RECIPE_KWARG_MODE_FAST']}-{env['RECIPE_KWARG__7FLAG']}"
-            return subprocess.CompletedProcess(command, 0, stdout=f"{normalized}\n", stderr="")
-        raise AssertionError(f"Unexpected shell call: {command}")
+            return subprocess.CompletedProcess(command, 0, stdout="rapid-on\n", stderr="")
+        pytest.fail(f"Unexpected shell call: {command}")
 
     monkeypatch.setattr("apps.recipes.models.os.name", "nt")
     monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
@@ -157,6 +159,10 @@ def test_execute_supports_bash_safe_normalized_kwarg_names(monkeypatch):
     execution = recipe.execute(**{"mode-fast": "rapid", "7flag": "on"})
 
     assert execution.result == "rapid-on"
+    assert "sh" in captured_envs
+    sh_env = captured_envs["sh"]
+    assert sh_env["RECIPE_KWARG_MODE_FAST"] == "rapid"
+    assert sh_env["RECIPE_KWARG__7FLAG"] == "on"
 
 
 @pytest.mark.django_db
