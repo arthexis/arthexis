@@ -8,7 +8,7 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
-from apps.screens.management.commands.lcd_plan import Command
+from apps.screens.management.commands.lcd_actions.plan import Command
 
 
 @pytest.fixture()

@@ -50,7 +50,7 @@ def test_plays_animation_to_work_file(monkeypatch, tmp_path: Path):
         raise LCDUnavailableError("no lcd")
 
     monkeypatch.setattr(
-        "apps.screens.management.commands.lcd_animate.prepare_lcd_controller",
+        "apps.screens.management.commands.lcd_actions.animate.prepare_lcd_controller",
         _fail_init,
     )
 

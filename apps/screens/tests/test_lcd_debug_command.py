@@ -32,7 +32,7 @@ def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):
         sleeps.append(seconds)
 
     monkeypatch.setattr(
-        "apps.screens.management.commands.lcd_debug.Command._sleep", _fake_sleep
+        "apps.screens.management.commands.lcd_actions.debug.Command._sleep", _fake_sleep
     )
 
     with override_settings(BASE_DIR=tmp_path):
