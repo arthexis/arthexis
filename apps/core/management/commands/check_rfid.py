@@ -1,13 +1,15 @@
-import json
+from __future__ import annotations
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
 
 from apps.cards.models import RFID
-from apps.cards.reader import validate_rfid_value
 
 
 class Command(BaseCommand):
-    help = "Validate a manually entered RFID value using the scanner logic."
+    """Deprecated wrapper for the unified health command."""
+
+    help = "[DEPRECATED] Use `manage.py health --target core.rfid`."
 
     def add_arguments(self, parser):
         parser.add_argument("value", help="RFID value to validate")
@@ -23,14 +25,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        value = options["value"]
-        kind = options.get("kind")
-        pretty = options["pretty"]
-
-        result = validate_rfid_value(value, kind=kind)
-        if "error" in result:
-            raise CommandError(result["error"])
-
-        dump_kwargs = {"indent": 2, "sort_keys": True} if pretty else {}
-        payload = json.dumps(result, **dump_kwargs)
-        self.stdout.write(payload)
+        self.stderr.write(
+            self.style.WARNING(
+                "check_rfid is deprecated; use `manage.py health --target core.rfid --rfid-value ...`."
+            )
+        )
+        call_command(
+            "health",
+            target=["core.rfid"],
+            rfid_value=options["value"],
+            rfid_kind=options.get("kind"),
+            rfid_pretty=bool(options.get("pretty")),
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )

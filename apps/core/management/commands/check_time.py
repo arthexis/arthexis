@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 
 class Command(BaseCommand):
-    """Print the current server time."""
+    """Deprecated wrapper for the unified health command."""
 
-    help = "Display the current server time."
+    help = "[DEPRECATED] Use `manage.py health --target core.time`."
 
     def handle(self, *args, **options):
-        current_time = timezone.localtime()
-        self.stdout.write(
-            self.style.SUCCESS(f"Current server time: {current_time.isoformat()}")
+        self.stderr.write(
+            self.style.WARNING(
+                "check_time is deprecated; use `manage.py health --target core.time`."
+            )
         )
+        call_command("health", target=["core.time"], stdout=self.stdout, stderr=self.stderr)
