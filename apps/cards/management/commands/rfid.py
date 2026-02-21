@@ -167,7 +167,6 @@ class Command(BaseCommand):
                 return result
             if not interactive and time.monotonic() - start >= timeout:
                 return {"rfid": None, "label_id": None}
-        return {"rfid": None, "label_id": None}
 
     def _handle_watch(self, options):
         from apps.cards.always_on import is_running, start, stop
