@@ -2,6 +2,15 @@
 
 The suite can expose selected Django management commands as MCP tools over stdio.
 
+## Command ownership and compatibility
+
+The canonical MCP CLI command implementations live in `apps/mcp/management/commands/`:
+
+- `mcp_server` → `apps.mcp.management.commands.mcp_server`
+- `create_mcp_api_key` → `apps.mcp.management.commands.create_mcp_api_key`
+
+Legacy compatibility shims still exist in `apps.core.management.commands` and emit deprecation warnings. Update any direct Python imports to use the `apps.mcp` paths as the source of truth.
+
 ## 1) Mark commands as remote
 
 Use `@remote_command` on a management command class:
