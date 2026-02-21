@@ -44,7 +44,7 @@ def test_test_login_populates_remote_fields(mock_session_cls):
             }
         ],
     }
-    mock_session = mock_session_cls.return_value
+    mock_session = mock_session_cls.return_value.__enter__.return_value
     mock_prime_response = Mock()
     mock_prime_response.raise_for_status.return_value = None
     mock_session.get.return_value = mock_prime_response
@@ -83,7 +83,7 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
         evergo_password="top-secret",  # noqa: S106
     )
 
-    mock_session = mock_session_cls.return_value
+    mock_session = mock_session_cls.return_value.__enter__.return_value
     mock_prime_response = Mock()
     mock_prime_response.raise_for_status.return_value = None
     mock_session.get.return_value = mock_prime_response
