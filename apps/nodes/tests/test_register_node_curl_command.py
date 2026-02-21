@@ -56,3 +56,27 @@ def test_node_register_curl_rejects_invalid_token():
             local_base="https://local:8888",
             token="bad token!",
         )
+
+
+def test_node_register_curl_rejects_base_url_with_path():
+    command = _load_node_command()
+
+    with pytest.raises(CommandError, match="Upstream base URL must not include a path"):
+        command.handle(
+            action="register_curl",
+            upstream="https://example.com/bad",
+            local_base="https://local:8888",
+            token="abc123",
+        )
+
+
+def test_node_register_curl_rejects_base_url_with_query():
+    command = _load_node_command()
+
+    with pytest.raises(CommandError, match="Local base URL must not include credentials, query params, or fragments"):
+        command.handle(
+            action="register_curl",
+            upstream="https://example.com",
+            local_base="https://local:8888?x=1",
+            token="abc123",
+        )
