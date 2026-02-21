@@ -10,9 +10,9 @@ pytestmark = pytest.mark.integration
 def test_snapshot_command_delegates_to_video(call_command_mock):
     """Ensure the legacy snapshot command delegates to ``video``."""
 
-    call_command_mock.return_value = "/tmp/snapshot.jpg"
-
     result = call_command("snapshot")
 
-    call_command_mock.assert_called_once_with("video", snapshot=True, auto_enable=True)
-    assert result == "/tmp/snapshot.jpg"
+    call_command_mock.assert_called_once_with(
+        "video", snapshot=True, auto_enable=True, discover=True
+    )
+    assert result is None

@@ -9,7 +9,7 @@ class Command(BaseCommand):
 
     help = "Capture a snapshot from the default camera and print the file path."
 
-    def handle(self, *args, **options) -> str:
+    def handle(self, *args, **options) -> None:
         """Delegate snapshot handling to the unified ``video`` command."""
 
-        return call_command("video", snapshot=True, auto_enable=True)
+        call_command("video", snapshot=True, auto_enable=True, discover=True)
