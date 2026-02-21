@@ -179,6 +179,22 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
     assert execution.result == "hello-green"
 
 
+@pytest.mark.regression
+def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkeypatch):
+    """Regression: NUL-delimited launcher diagnostics are normalized before matching."""
+
+    bash_failure = subprocess.CalledProcessError(
+        1,
+        ["bash", "-c", "echo ignored"],
+        output="The\x00RPC\x00call\x00contains\x00a\x00handle\x00to\x00a\x00WSL/service.",
+        stderr="",
+    )
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+
+    assert Recipe._is_windows_bash_launcher_failure(bash_failure, shell="bash")
+
+
 
 
 @pytest.mark.django_db
