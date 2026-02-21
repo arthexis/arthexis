@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from urllib.parse import unquote
 from typing import Any
 
 import requests
@@ -33,6 +34,11 @@ class EvergoUser(Profile):
         settings,
         "EVERGO_API_LOGIN_URL",
         "https://portal-backend.evergo.com/api/mex/v1/login",
+    )
+    PORTAL_LOGIN_URL = getattr(
+        settings,
+        "EVERGO_PORTAL_LOGIN_URL",
+        "https://portal-mex.evergo.com/access/login",
     )
 
     profile_fields = ("evergo_email", "evergo_password")
@@ -83,16 +89,25 @@ class EvergoUser(Profile):
         if not self.evergo_email or not self.evergo_password:
             raise EvergoAPIError("Evergo credentials are incomplete.")
 
+        session = requests.Session()
         try:
-            response = requests.post(
+            xsrf_token = self._prime_session(session=session, timeout=timeout)
+            response = session.post(
                 self.API_LOGIN_URL,
                 json={"email": self.evergo_email, "password": self.evergo_password},
+                headers=self._build_login_headers(xsrf_token=xsrf_token),
                 timeout=timeout,
             )
         except requests.RequestException as exc:
             raise EvergoAPIError(f"Unable to connect to Evergo API: {exc}") from exc
+        finally:
+            session.close()
 
         if response.status_code >= 400:
+            if response.status_code == 419:
+                raise EvergoAPIError(
+                    "Evergo login failed with status 419 (CSRF/session validation failed)."
+                )
             raise EvergoAPIError(
                 f"Evergo login failed with status {response.status_code}."
             )
@@ -109,6 +124,29 @@ class EvergoUser(Profile):
         self.last_login_test_at = timezone.now()
         self.save()
         return EvergoLoginResult(payload=payload, response_code=response.status_code)
+
+    def _prime_session(self, *, session: requests.Session, timeout: int) -> str:
+        """Load Evergo portal login page to establish cookies and recover the CSRF token."""
+        response = session.get(
+            self.PORTAL_LOGIN_URL,
+            headers={"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        xsrf_token = session.cookies.get("XSRF-TOKEN")
+        if not xsrf_token:
+            raise EvergoAPIError("Evergo login failed: missing XSRF-TOKEN cookie.")
+        return unquote(xsrf_token)
+
+    def _build_login_headers(self, *, xsrf_token: str) -> dict[str, str]:
+        """Build headers expected by Evergo backend for authenticated login requests."""
+        return {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "origin": "https://portal-mex.evergo.com",
+            "referer": self.PORTAL_LOGIN_URL,
+            "x-xsrf-token": xsrf_token,
+        }
 
     def apply_login_payload(self, payload: dict[str, Any]) -> None:
         """Map Evergo API user payload into local tracking fields."""

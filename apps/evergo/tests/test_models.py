@@ -7,12 +7,13 @@ from unittest.mock import Mock, patch
 import pytest
 from django.contrib.auth import get_user_model
 
+from apps.evergo.exceptions import EvergoAPIError
 from apps.evergo.models import EvergoUser
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.post")
-def test_test_login_populates_remote_fields(mock_post):
+@patch("apps.evergo.models.requests.Session")
+def test_test_login_populates_remote_fields(mock_session_cls):
     """Evergo login should persist the expected profile fields from the API payload."""
     User = get_user_model()
     suite_user = User.objects.create_user(username="suite", email="suite@example.com")
@@ -43,7 +44,12 @@ def test_test_login_populates_remote_fields(mock_post):
             }
         ],
     }
-    mock_post.return_value = mock_response
+    mock_session = mock_session_cls.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+    mock_session.post.return_value = mock_response
 
     result = profile.test_login()
     profile.refresh_from_db()
@@ -63,3 +69,29 @@ def test_test_login_populates_remote_fields(mock_post):
     assert profile.evergo_created_at is not None
     assert profile.evergo_updated_at is not None
     assert profile.last_login_test_at is not None
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.requests.Session")
+def test_test_login_raises_specific_error_for_419(mock_session_cls):
+    """Evergo login should surface a specific CSRF/session message when backend responds 419."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-419", email="suite-419@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="reginaldocts@evergo.com",
+        evergo_password="top-secret",  # noqa: S106
+    )
+
+    mock_session = mock_session_cls.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+
+    mock_response = Mock()
+    mock_response.status_code = 419
+    mock_session.post.return_value = mock_response
+
+    with pytest.raises(EvergoAPIError, match="status 419"):
+        profile.test_login()
