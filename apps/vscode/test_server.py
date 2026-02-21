@@ -303,6 +303,27 @@ def test_should_import_pytest_only_for_pytest_execution(monkeypatch):
     assert _should_import_pytest(argv=["python", "-m", "apps.vscode.test_server"]) is True
 
 
+def test_update_requirements_handles_keyboard_interrupt(monkeypatch, tmp_path: Path):
+    """Regression: cancelling requirement installs should not crash the test server."""
+
+    requirements_file = tmp_path / migration.REQUIREMENTS_FILE
+    hash_file = tmp_path / migration.REQUIREMENTS_HASH_FILE
+
+    requirements_file.parent.mkdir(parents=True, exist_ok=True)
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
+    requirements_file.write_text("pytest\n", encoding="utf-8")
+
+    monkeypatch.setattr(migration, "_hash_file", lambda _path: "hash")
+
+    def raise_interrupt(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(subprocess, "run", raise_interrupt)
+
+    assert update_requirements(tmp_path) is False
+    assert hash_file.exists() is False
+
+
 def update_requirements(base_dir: Path) -> bool:
     """Install Python requirements when the lockfile hash changes."""
 
@@ -343,11 +364,16 @@ def update_requirements(base_dir: Path) -> bool:
             str(req_file),
         ]
 
-    result = subprocess.run(
-        command,
-        cwd=base_dir,
-        **_windows_process_group_kwargs(),
-    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=base_dir,
+            **_windows_process_group_kwargs(),
+        )
+    except KeyboardInterrupt:
+        print(f"{PREFIX} Python requirements update cancelled.")
+        return False
+
     if result.returncode != 0:
         print(f"{PREFIX} Failed to install Python requirements.")
         NOTIFY(
