@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.test import override_settings
 
 from apps.screens.history import LCDHistoryRecorder
-from apps.screens.management.commands import lcd_replay
+from apps.screens.management.commands.lcd_actions import replay as lcd_replay
 
 
 class StubWriter:

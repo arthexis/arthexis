@@ -41,7 +41,7 @@ def test_calibrate_saves_lock_file(temp_base_dir: Path):
         override_settings(BASE_DIR=temp_base_dir),
         mock.patch("builtins.input", side_effect=inputs),
         mock.patch(
-            "apps.screens.management.commands.lcd_calibrate.prepare_lcd_controller",
+            "apps.screens.management.commands.lcd_actions.calibrate.prepare_lcd_controller",
             return_value=FakeLCD(),
         ),
         mock.patch.object(subprocess, "run") as mock_run,
@@ -63,7 +63,7 @@ def test_calibrate_can_skip_save(temp_base_dir: Path):
         override_settings(BASE_DIR=temp_base_dir),
         mock.patch("builtins.input", side_effect=inputs),
         mock.patch(
-            "apps.screens.management.commands.lcd_calibrate.prepare_lcd_controller",
+            "apps.screens.management.commands.lcd_actions.calibrate.prepare_lcd_controller",
             return_value=FakeLCD(),
         ),
     ):
@@ -79,7 +79,7 @@ def test_restart_requires_service_name(temp_base_dir: Path):
         override_settings(BASE_DIR=temp_base_dir),
         mock.patch("builtins.input", side_effect=inputs),
         mock.patch(
-            "apps.screens.management.commands.lcd_calibrate.prepare_lcd_controller",
+            "apps.screens.management.commands.lcd_actions.calibrate.prepare_lcd_controller",
             return_value=FakeLCD(),
         ),
         pytest.raises(CommandError, match="Service name is required"),
