@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -22,8 +23,11 @@ def test_stop_django_server_terminates_multiprocessing_process() -> None:
 
     wait_procs = mock.Mock(return_value=([], []))
 
-    with mock.patch.object(migration_server.psutil, "Process", return_value=parent), \
-        mock.patch.object(migration_server.psutil, "wait_procs", wait_procs):
+    fake_psutil = mock.Mock()
+    fake_psutil.Process.return_value = parent
+    fake_psutil.wait_procs = wait_procs
+
+    with mock.patch.object(migration_server, "_load_psutil", return_value=fake_psutil):
         migration_server.stop_django_server(process)
 
     parent.children.assert_called_once_with(recursive=True)
@@ -32,6 +36,22 @@ def test_stop_django_server_terminates_multiprocessing_process() -> None:
     wait_procs.assert_any_call([child, parent], timeout=5.0)
     process.join.assert_called_once_with(timeout=0.1)
 
+
+
+
+def test_stop_django_server_falls_back_without_psutil() -> None:
+    """Regression: stop_django_server should terminate without psutil installed."""
+
+    process = mock.Mock(spec=subprocess.Popen)
+    process.poll.return_value = None
+    process.pid = 9876
+
+    with mock.patch.object(migration_server, "_load_psutil", return_value=None), mock.patch.object(
+        migration_server, "_terminate_process_without_psutil"
+    ) as fallback:
+        migration_server.stop_django_server(process)
+
+    fallback.assert_called_once_with(9876)
 
 def test_resolve_base_dir_uses_script_location(tmp_path) -> None:
     """Resolve the base directory from the migration server location."""
