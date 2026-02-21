@@ -22,6 +22,7 @@ NGINX_IPV6_LISTEN_RE = re.compile(r"listen\s+\[::\][^;]*;", re.IGNORECASE)
 NGINX_SERVER_NAME_RE = re.compile(r"server_name\s+([^;]+);")
 NGINX_EXTERNAL_WEBSOCKETS_TOKEN = "proxy_set_header Connection $connection_upgrade;"
 DEFAULT_SITE_DESTINATION = "/etc/nginx/sites-enabled/arthexis-sites.conf"
+NGINX_PERMISSIONS_HELPER = "./scripts/nginx-perms.sh"
 
 
 def parse_subdomain_prefixes(raw: str, *, strict: bool = True) -> list[str]:
@@ -134,6 +135,18 @@ def _resolve_site_destination() -> str:
         if path.exists():
             return str(path)
     return DEFAULT_SITE_DESTINATION
+
+
+def _format_local_load_error(path: Path, exc: OSError) -> str:
+    """Return a user-facing local-load error message with remediation hints."""
+
+    message = f"{path}: {exc}"
+    if isinstance(exc, PermissionError):
+        return (
+            f"{message} Run {NGINX_PERMISSIONS_HELPER} to grant read access "
+            "to local nginx site files."
+        )
+    return message
 
 
 class SiteConfiguration(models.Model):
@@ -309,7 +322,7 @@ class SiteConfiguration(models.Model):
             try:
                 content = path.read_text(encoding="utf-8")
             except OSError as exc:
-                results["errors"].append(f"{path}: {exc}")
+                results["errors"].append(_format_local_load_error(path, exc))
                 continue
 
             name = _extract_server_name(content) or default_certificate_domain_from_settings(settings)
