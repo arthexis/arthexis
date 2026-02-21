@@ -451,12 +451,52 @@ def _run_command_with_output(
     )
     output_lines: list[str] = []
     assert process.stdout is not None
-    for line in process.stdout:
-        print(line, end="")
-        output_lines.append(line)
-    returncode = process.wait()
+    try:
+        for line in process.stdout:
+            print(line, end="")
+            output_lines.append(line)
+        returncode = process.wait()
+    except KeyboardInterrupt:
+        process.kill()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
     failed_count = _extract_failed_count(output_lines)
     return _TestRunResult(returncode=returncode, failed_count=failed_count)
+
+
+def test_run_command_with_output_kills_process_on_interrupt(monkeypatch):
+    """Regression: KeyboardInterrupt should terminate the active pytest subprocess."""
+
+    class InterruptingStdout:
+        def __iter__(self):
+            yield "collecting...\n"
+            raise KeyboardInterrupt
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = InterruptingStdout()
+            self.kill_called = False
+            self.wait_called = False
+
+        def wait(self, timeout: int | None = None):
+            del timeout
+            self.wait_called = True
+            return 0
+
+        def kill(self):
+            self.kill_called = True
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: fake_process)
+
+    with pytest.raises(KeyboardInterrupt):
+        _run_command_with_output(["pytest"], cwd=Path("."), env={})
+
+    assert fake_process.kill_called is True
+    assert fake_process.wait_called is True
 
 
 def _extract_failed_count(output_lines: Iterable[str]) -> int | None:
