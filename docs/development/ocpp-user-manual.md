@@ -5,13 +5,13 @@ This manual documents how the Arthexis control system implements each Open Charg
 ## Charge point → CSMS calls
 
 ### BootNotification
-When a charge point connects it immediately sends a `BootNotification` request. The CSMS replies with the current UTC timestamp, a 300 second heartbeat interval, and an `Accepted` status. No persistence is performed beyond registering the live connection for logging and monitoring purposes.
+When a charge point connects it immediately sends a `BootNotification` request. The CSMS replies with the current UTC timestamp, a 300-second heartbeat interval, and an `Accepted` status. No persistence is performed beyond registering the live connection for logging and monitoring purposes.
 
 ### Heartbeat
 Heartbeat requests reuse the same UTC timestamp response body. Each heartbeat records the reception time on the associated `Charger` row so the admin UI can surface the last communication time of the device.
 
 ### StatusNotification
-Status notifications update both the aggregate (connector-less) `Charger` row and any connector specific row. The handler stores the status, error code, vendor info, and timestamp, mirrors those values on the in-memory objects, and logs the processed payload. It also derives an availability state (`Operative` or `Inoperative`) from the status text and persists the effective availability timestamp for downstream dashboards.
+Status notifications update both the aggregate (connector-less) `Charger` row and any connector-specific row. The handler stores the status, error code, vendor info, and timestamp, mirrors those values on the in-memory objects, and logs the processed payload. It also derives an availability state (`Operative` or `Inoperative`) from the status text and persists the effective availability timestamp for downstream dashboards.
 
 ### Authorize
 Authorization requests are resolved against active `CustomerAccount` records that have an allowed RFID credential. When a charger enforces RFID checks we only accept the transaction if the associated account is authorised. Otherwise the charger responds with `Accepted` regardless of the RFID contents.
@@ -20,7 +20,7 @@ Authorization requests are resolved against active `CustomerAccount` records tha
 Meter value payloads are parsed into `MeterValue` rows tied to the active transaction. The handler maps common measurands (energy, voltage, current, temperature, state-of-charge) into dedicated fields, updates transaction start/stop readings when the context marks a begin or end event, infers the initial meter start when available, and records the charger temperature. Each reading is stored with its timestamp and connector so historical analysis retains the original sampling context.
 
 ### DiagnosticsStatusNotification
-Diagnostics updates synchronise the latest status, timestamp, and upload location across the active connector specific `Charger` record and its aggregate counterpart. A succinct log entry captures the status label and location for later review.
+Diagnostics updates synchronise the latest status, timestamp, and upload location across the active connector-specific `Charger` record and its aggregate counterpart. A succinct log entry captures the status label and location for later review.
 
 ### StartTransaction
 A `StartTransaction` call may arrive with an optional RFID. The CSMS looks up the corresponding account, automatically creates the RFID entry if it is new, and verifies authorisation when the charger requires RFID checks. Accepted transactions create a `Transaction` row, start a live session log, broadcast periodic consumption summaries via the NetMessage system, and return the transaction identifier with `idTagInfo.status` set to `Accepted`. Rejected transactions respond with `Invalid` authorisation status without altering persistence.

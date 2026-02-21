@@ -10,7 +10,7 @@ This manual explains how to deploy, operate, and retire an Arthexis node with th
 
 ### 1.1 Linux: `install.sh`
 
-`install.sh` prepares a virtual environment, configures Nginx, seeds lock files, and optionally provisions systemd units. Run it from the repository root on a Debian/Ubuntu compatible host. The script stores its log in `logs/install.log` and exits on any error to prevent partial installations.
+`install.sh` prepares a virtual environment, configures Nginx, seeds lock files, and optionally provisions systemd units. Run it from the repository root on a Debian/Ubuntu-compatible host. The script stores its log in `logs/install.log` and exits on any error to prevent partial installations.
 
 Single-instance deployments are now the standard: `install.sh` no longer manages
 sibling primary/secondary installs, and each node should run exactly one suite
