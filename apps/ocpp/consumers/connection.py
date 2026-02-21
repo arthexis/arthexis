@@ -65,12 +65,27 @@ class RateLimitedConnectionMixin:
 
 
 class SubprotocolConnectionMixin:
+    def _canonicalize_ocpp_subprotocol(self, value: str | None) -> str | None:
+        """Return the canonical OCPP version for a websocket subprotocol token."""
+
+        normalized = str(value or "").strip().lower()
+        if not normalized:
+            return None
+        if normalized in {OCPP_VERSION_16, "ocpp1.6j"}:
+            return OCPP_VERSION_16
+        if normalized == OCPP_VERSION_201:
+            return OCPP_VERSION_201
+        if normalized == OCPP_VERSION_21:
+            return OCPP_VERSION_21
+        return normalized
+
     def _select_subprotocol(
         self, offered: list[str] | tuple[str, ...], preferred: str | None
     ) -> str | None:
         """Choose the negotiated OCPP subprotocol, honoring stored preference."""
 
         available: list[str] = []
+        canonical_offered: dict[str, str] = {}
         for proto in offered:
             if not proto:
                 continue
@@ -84,21 +99,24 @@ class SubprotocolConnectionMixin:
             proto_text = proto_text.strip()
             if proto_text:
                 available.append(proto_text)
-        preferred_normalized = (preferred or "").strip()
-        if preferred_normalized and preferred_normalized in available:
-            return preferred_normalized
+                canonical = self._canonicalize_ocpp_subprotocol(proto_text)
+                if canonical:
+                    canonical_offered.setdefault(canonical, proto_text)
+        preferred_normalized = self._canonicalize_ocpp_subprotocol(preferred)
+        if preferred_normalized and preferred_normalized in canonical_offered:
+            return canonical_offered[preferred_normalized]
         # Prefer the latest supported OCPP 2.x protocol when the charger
         # requests it, otherwise fall back to older versions.
-        if OCPP_VERSION_21 in available:
-            return OCPP_VERSION_21
-        if OCPP_VERSION_201 in available:
-            return OCPP_VERSION_201
+        if OCPP_VERSION_21 in canonical_offered:
+            return canonical_offered[OCPP_VERSION_21]
+        if OCPP_VERSION_201 in canonical_offered:
+            return canonical_offered[OCPP_VERSION_201]
         # Operational safeguard: never reject a charger solely because it omits
         # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
         # charger offers it, but otherwise continue without a subprotocol so we
         # accept as many real-world stations as possible.
-        if OCPP_VERSION_16 in available:
-            return OCPP_VERSION_16
+        if OCPP_VERSION_16 in canonical_offered:
+            return canonical_offered[OCPP_VERSION_16]
         return None
 
     def _get_offered_subprotocols(self) -> list[str]:
@@ -152,15 +170,16 @@ class SubprotocolConnectionMixin:
             if existing_charger
             else ""
         )
+        preferred_canonical = self._canonicalize_ocpp_subprotocol(preferred_version)
         offered = self._get_offered_subprotocols()
         subprotocol = self._select_subprotocol(offered, preferred_version)
         self.preferred_ocpp_version = preferred_version
-        negotiated_version = subprotocol
+        negotiated_version = self._canonicalize_ocpp_subprotocol(subprotocol)
         if not negotiated_version and preferred_version in {
             OCPP_VERSION_201,
             OCPP_VERSION_21,
         }:
-            negotiated_version = preferred_version
+            negotiated_version = preferred_canonical
         self.ocpp_version = negotiated_version or OCPP_VERSION_16
         return subprotocol
 
