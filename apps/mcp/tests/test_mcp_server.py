@@ -30,6 +30,15 @@ def test_discover_remote_commands_includes_decorated_commands() -> None:
     assert "redis" not in commands
 
 
+def test_discover_remote_commands_includes_health_command() -> None:
+    """Remote command discovery should include the health command."""
+
+    commands = discover_remote_commands()
+
+    assert "health" in commands
+
+
+
 @pytest.mark.django_db
 def test_mcp_tools_list_returns_remote_tools() -> None:
     """The MCP tools/list method should expose decorated Django commands."""
