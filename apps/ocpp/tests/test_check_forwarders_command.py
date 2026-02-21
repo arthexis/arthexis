@@ -22,7 +22,7 @@ def test_check_forwarders_reports_external_websockets(monkeypatch):
 
     websocket_content = "\n".join(config_utils.websocket_directives())
     monkeypatch.setattr(
-        "apps.ocpp.management.commands.check_forwarders._build_nginx_report",
+        "apps.ocpp.services.health_checks._build_nginx_report",
         lambda: {
             "mode": "public",
             "port": 8888,
