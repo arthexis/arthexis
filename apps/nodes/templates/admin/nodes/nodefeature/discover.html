@@ -60,6 +60,7 @@
 <script>
 (function () {
     const progressUrl = "{{ progress_url }}";
+    const manualToggleUrl = "{% url 'admin:nodes_nodefeature_discover_manual_toggle' %}";
     const discoveryId = "{{ discovery_id }}";
     const form = document.getElementById("discover-features-form");
     const tokenInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
@@ -80,6 +81,68 @@
             return;
         }
         cell.textContent = text || '';
+    }
+
+    function renderManualToggleCell(cell, data, featureId, enablementCell) {
+        if (!cell) {
+            return;
+        }
+        cell.innerHTML = '';
+        if (!data) {
+            cell.textContent = '';
+            return;
+        }
+        if (!data.can_toggle) {
+            cell.textContent = data.label || '';
+            return;
+        }
+
+        const wrapper = document.createElement('label');
+        wrapper.style.display = 'inline-flex';
+        wrapper.style.gap = '0.35rem';
+        wrapper.style.alignItems = 'center';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!data.enabled;
+        checkbox.dataset.featureId = featureId;
+
+        const text = document.createElement('span');
+        text.textContent = data.label || 'Manual';
+
+        checkbox.addEventListener('change', function () {
+            const toggleBody = new FormData();
+            toggleBody.append('feature_id', featureId);
+            toggleBody.append('enabled', checkbox.checked ? 'true' : 'false');
+            checkbox.disabled = true;
+
+            fetch(manualToggleUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: toggleBody
+            }).then(function (response) {
+                if (!response.ok) {
+                    throw new Error(response.status + ' ' + response.statusText);
+                }
+                return response.json();
+            }).then(function (payload) {
+                checkbox.checked = !!(payload.manual_enablement && payload.manual_enablement.enabled);
+                setCellText(enablementCell, payload.message || '');
+            }).catch(function (error) {
+                checkbox.checked = !checkbox.checked;
+                setCellText(enablementCell, error.toString());
+                errors += 1;
+                updateReport();
+            }).finally(function () {
+                checkbox.disabled = false;
+            });
+        });
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(text);
+        cell.appendChild(wrapper);
     }
 
     function updateSummary() {
@@ -146,7 +209,7 @@
                 return;
             }
             setCellText(eligibilityCell, data.message || '');
-            setCellText(manualCell, data.manual_enablement ? data.manual_enablement.label : '');
+            renderManualToggleCell(manualCell, data.manual_enablement, featureId, enablementCell);
             if (data.eligible) {
                 eligible += 1;
             }
