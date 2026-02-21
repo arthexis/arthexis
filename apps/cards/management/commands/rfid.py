@@ -44,21 +44,19 @@ class Command(BaseCommand):
         if action == "check":
             run_check_command(self, options)
             return
-        if action == "watch":
-            self._run_impl(WatchImplCommand, options)
+
+        impl_map = {
+            "watch": WatchImplCommand,
+            "service": ServiceImplCommand,
+            "doctor": DoctorImplCommand,
+            "import": ImportImplCommand,
+            "export": ExportImplCommand,
+        }
+        impl_cls = impl_map.get(action)
+        if impl_cls:
+            self._run_impl(impl_cls, options)
             return
-        if action == "service":
-            self._run_impl(ServiceImplCommand, options)
-            return
-        if action == "doctor":
-            self._run_impl(DoctorImplCommand, options)
-            return
-        if action == "import":
-            self._run_impl(ImportImplCommand, options)
-            return
-        if action == "export":
-            self._run_impl(ExportImplCommand, options)
-            return
+
         raise CommandError("Missing or unknown action. Use one of: check, watch, service, doctor, import, export.")
 
     def _run_impl(self, impl_cls, options):

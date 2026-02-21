@@ -1,15 +1,14 @@
 import json
 import sys
-import time
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.cards import rfid_service
+from apps.cards.management.commands._rfid_check_impl import poll_service_attempt
 from apps.cards.background_reader import is_configured, lock_file_path
 from apps.cards.detect import detect_scanner
-from apps.cards.models import RFIDAttempt
-from apps.cards.utils import drain_stdin, user_requested_stop
+from apps.cards.utils import drain_stdin
 
 
 class Command(BaseCommand):
@@ -141,30 +140,10 @@ class Command(BaseCommand):
         self.stdout.flush()
         if interactive:
             drain_stdin()
-        start = time.monotonic()
-        latest_id = (
-            RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
-            .order_by("-pk")
-            .values_list("pk", flat=True)
-            .first()
-        )
-        attempt = None
-        while True:
-            if interactive and user_requested_stop():
-                self.stdout.write(self.style.WARNING("Scan cancelled by user."))
-                return
-            attempt = (
-                RFIDAttempt.objects.filter(
-                    source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0
-                )
-                .order_by("pk")
-                .first()
-            )
-            if attempt:
-                break
-            if not interactive and time.monotonic() - start >= timeout:
-                break
-            time.sleep(0.2)
+        attempt = poll_service_attempt(timeout, interactive=interactive)
+        if isinstance(attempt, dict):
+            self.stdout.write(self.style.WARNING("Scan cancelled by user."))
+            return
         if not attempt:
             self.stdout.write(
                 self.style.WARNING(

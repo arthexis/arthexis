@@ -40,3 +40,12 @@ def test_ocpp_rfid_check_uses_shared_implementation(capsys):
     output = capsys.readouterr()
     assert "deprecated" in output.err.lower()
     assert '"rfid": "ABCD"' in output.out
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(("legacy_name", "patch_target"), [("import_rfids", "apps.cards.management.commands.import_rfids.call_command"), ("export_rfids", "apps.cards.management.commands.export_rfids.call_command")])
+def test_legacy_import_export_pass_path_positionally(legacy_name, patch_target):
+    with patch(patch_target) as call_mock:
+        call_command(legacy_name, "/tmp/rfids.csv")
+
+    assert call_mock.call_args[0] == ("rfid", legacy_name.split("_")[0], "/tmp/rfids.csv")

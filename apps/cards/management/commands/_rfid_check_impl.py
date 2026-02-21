@@ -119,11 +119,12 @@ def _scan(options):
     return result
 
 
-def _scan_via_attempt(timeout: float) -> dict:
-    interactive = sys.stdin.isatty()
-    if interactive:
-        print("Press any key to stop scanning.")
-        drain_stdin()
+
+
+def poll_service_attempt(timeout: float, *, poll_interval: float = 0.2, interactive: bool | None = None):
+    """Poll RFID service attempts and return the next attempt row or ``None`` on timeout."""
+    if interactive is None:
+        interactive = sys.stdin.isatty()
     start = time.monotonic()
     latest_id = (
         RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
@@ -140,14 +141,27 @@ def _scan_via_attempt(timeout: float) -> dict:
             .first()
         )
         if attempt:
-            payload = dict(attempt.payload or {})
-            payload.setdefault("rfid", attempt.rfid)
-            if attempt.label_id:
-                payload.setdefault("label_id", attempt.label_id)
-            return payload
+            return attempt
         if not interactive and time.monotonic() - start >= timeout:
-            return {"rfid": None, "label_id": None}
-        time.sleep(0.2)
+            return None
+        time.sleep(poll_interval)
+
+def _scan_via_attempt(timeout: float) -> dict:
+    interactive = sys.stdin.isatty()
+    if interactive:
+        print("Press any key to stop scanning.")
+        drain_stdin()
+    attempt = poll_service_attempt(timeout, interactive=interactive)
+    if isinstance(attempt, dict):
+        return attempt
+    if not attempt:
+        return {"rfid": None, "label_id": None}
+
+    payload = dict(attempt.payload or {})
+    payload.setdefault("rfid", attempt.rfid)
+    if attempt.label_id:
+        payload.setdefault("label_id", attempt.label_id)
+    return payload
 
 
 def _scan_via_local(timeout: float) -> dict:

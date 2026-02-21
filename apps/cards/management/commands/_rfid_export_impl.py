@@ -60,22 +60,8 @@ class Command(BaseCommand):
             )
             for t in qs
         )
-        if path:
-            with open(path, "w", newline="", encoding="utf-8") as fh:
-                writer = csv.writer(fh)
-                writer.writerow(
-                    [
-                        "rfid",
-                        "custom_label",
-                        accounts_column,
-                        "allowed",
-                        "color",
-                        "released",
-                    ]
-                )
-                writer.writerows(rows)
-        else:
-            writer = csv.writer(self.stdout)
+        def write_csv(stream):
+            writer = csv.writer(stream)
             writer.writerow(
                 [
                     "rfid",
@@ -87,4 +73,10 @@ class Command(BaseCommand):
                 ]
             )
             writer.writerows(rows)
+
+        if path:
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                write_csv(fh)
+        else:
+            write_csv(self.stdout)
         self.stdout.write(self.style.SUCCESS("Exported {} tags".format(qs.count())))

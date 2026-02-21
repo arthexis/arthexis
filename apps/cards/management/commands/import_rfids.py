@@ -16,4 +16,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stderr.write(self.style.WARNING("`import_rfids` is deprecated. Use `python manage.py rfid import`."))
         kwargs = {k.replace('-', '_'): v for k, v in options.items() if v is not None}
-        call_command("rfid", "import", **kwargs)
+        path = kwargs.pop("path", None)
+        if path is None:
+            call_command("rfid", "import", **kwargs)
+            return
+        call_command("rfid", "import", path, **kwargs)
