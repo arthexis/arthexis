@@ -89,3 +89,23 @@ def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     env = kwargs["env"]
     assert env["DJANGO_SETTINGS_MODULE"] == "config.settings"
     assert env["ARTHEXIS_DB_BACKEND"] == "sqlite"
+
+
+def test_update_requirements_passes_windows_process_group_kwargs(tmp_path: Path) -> None:
+    """Ensure dependency installation uses Windows process-group kwargs."""
+
+    req_file = tmp_path / "requirements.txt"
+    req_file.write_text("django==5.0\n", encoding="utf-8")
+
+    hash_file = tmp_path / ".locks" / "requirements.sha256"
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
+    hash_file.write_text("different", encoding="utf-8")
+
+    completed = mock.Mock(returncode=0)
+    with mock.patch.object(migration_server.subprocess, "run", return_value=completed) as mocked_run, mock.patch.object(
+        migration_server, "_windows_process_group_kwargs", return_value={"creationflags": 512}
+    ):
+        assert migration_server.update_requirements(tmp_path) is True
+
+    _command, kwargs = mocked_run.call_args
+    assert kwargs["creationflags"] == 512
