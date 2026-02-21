@@ -36,6 +36,7 @@ SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
 SCREENSHOT_PORT = 8888
 MIGRATION_CHECK_TIMEOUT_SECONDS = 60
 MIGRATION_CHECK_INTERRUPT_RETRIES = 1
+MIGRATION_CHECK_TRANSIENT_INTERRUPT_WINDOW_SECONDS = 0.5
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -212,6 +213,24 @@ def test_migration_merge_required_handles_repeated_interrupt(monkeypatch):
     assert _migration_merge_required(Path(".")) is True
 
 
+def test_migration_merge_required_does_not_retry_user_interrupt(monkeypatch):
+    """Regression: user Ctrl+C should stop immediately without retrying."""
+
+    run_calls = {"count": 0}
+
+    def fake_run(*_args, **_kwargs):
+        run_calls["count"] += 1
+        raise KeyboardInterrupt
+
+    monotonic_values = iter([100.0, 101.0])
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(time, "monotonic", lambda: next(monotonic_values))
+
+    assert _migration_merge_required(Path(".")) is True
+    assert run_calls["count"] == 1
+
+
 def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
     """Regression: non-UTF-8 migration output should not crash decode."""
 
@@ -378,6 +397,7 @@ def _migration_merge_required(base_dir: Path) -> bool:
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Checking for merge migrations:", " ".join(command))
     for attempt in range(MIGRATION_CHECK_INTERRUPT_RETRIES + 1):
+        attempt_started_at = time.monotonic()
         try:
             result = subprocess.run(
                 command,
@@ -401,7 +421,11 @@ def _migration_merge_required(base_dir: Path) -> bool:
             )
             return True
         except KeyboardInterrupt:
-            if attempt < MIGRATION_CHECK_INTERRUPT_RETRIES:
+            interrupted_after_seconds = time.monotonic() - attempt_started_at
+            if (
+                attempt < MIGRATION_CHECK_INTERRUPT_RETRIES
+                and interrupted_after_seconds <= MIGRATION_CHECK_TRANSIENT_INTERRUPT_WINDOW_SECONDS
+            ):
                 print(
                     f"{PREFIX} Migration merge check interrupted while the "
                     "debug session was starting. Retrying once."
