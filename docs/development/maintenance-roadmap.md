@@ -12,7 +12,7 @@
 - **Proposed actions:**
   - Move formatting, release, and UI automation dependencies into optional extras such as `[project.optional-dependencies.dev]` and `[project.optional-dependencies.release]`.
   - Add documentation to `docs/development/` describing which extras to install for each workflow, and update CI to use the appropriate extra set.
-  - Introduce a `requirements.txt` shim or `pip install.[dev]` guidance for contributors to keep the installation footprint predictable.
+  - Introduce a `requirements.txt` shim or `pip install .[dev]` guidance for contributors to keep the installation footprint predictable.
 
 ## 3. Establish a Single Source of Truth for Node Roles
 - **Current state:** Node role names (Terminal, Control, Satellite, Watchtower) are duplicated across Python modules and shell scripts, making it easy for the definitions to drift. 
