@@ -98,6 +98,10 @@ class MaintenanceRequestForm(forms.ModelForm):
         self.fields["location"].required = True
         self.fields["location"].queryset = Location.objects.order_by("name")
         self.fields["category"].required = True
+        self.fields["category"].empty_label = None
+        self.fields["category"].queryset = TaskCategory.objects.exclude(name="").order_by(
+            "name"
+        )
         self.fields["description"].label = _("Requestor Comments")
         self.fields["scheduled_start"].widget.attrs.setdefault(
             "class", "form-control"
