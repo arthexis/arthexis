@@ -21,12 +21,18 @@ def _script_path_for_bash(script_path: Path) -> str:
     if os.name != "nt" or BASH is None:
         return raw_path
 
-    bash_name = Path(BASH).name.lower()
+    bash_path = Path(BASH)
+    bash_name = bash_path.name.lower()
     if bash_name != "bash.exe":
         return raw_path
 
+    # Only WSL interop bash (under System32/SysWOW64) uses /mnt/<drive>/...
+    # Git Bash (MSYS2) under Program Files\Git\bin expects /<drive>/... paths.
+    if bash_path.parent.name.lower() not in ("system32", "syswow64"):
+        return script_path.as_posix()
+
     drive = script_path.drive.rstrip(":")
-    if not drive:
+    if len(drive) != 1 or not drive.isalpha():
         return script_path.as_posix()
 
     relative = script_path.as_posix().split(":", maxsplit=1)[1].lstrip("/")
@@ -118,9 +124,12 @@ exit 0
     )
     nmcli_mock.chmod(0o755)
 
+    bash_parent = Path(BASH).parent
+    path_parts = (_script_path_for_bash(tmp_path), _script_path_for_bash(bash_parent))
+    path_sep = ":" if (os.name == "nt" and bash_parent.name.lower() in ("system32", "syswow64")) else os.pathsep
     env = {
-        "PATH": os.pathsep.join((str(tmp_path), str(Path(BASH).parent))),
-        "NMCLI_MOCK_LOG": str(log_path),
+        "PATH": path_sep.join(path_parts),
+        "NMCLI_MOCK_LOG": _script_path_for_bash(log_path),
     }
 
     script_path = _script_path_for_bash(SCRIPT_PATH)
