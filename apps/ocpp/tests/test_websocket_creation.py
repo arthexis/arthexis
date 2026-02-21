@@ -229,6 +229,7 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
             OCPP_VERSION_21,
         ),
         (([OCPP_VERSION_16], None), OCPP_VERSION_16),
+        ((["ocpp1.6J"], None), "ocpp1.6J"),
         ((["unexpected"], None), None),
     ]
 
@@ -268,6 +269,28 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_connect_maps_ocpp16j_subprotocol_to_ocpp16_version():
+    charger = Charger.objects.create(
+        charger_id="CP-OCPP16J",
+        connector_id=None,
+    )
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
+        communicator.scope["subprotocols"] = ["ocpp1.6J"]
+
+        connected, agreed = await communicator.connect(timeout=CONNECT_TIMEOUT)
+
+        assert connected is True
+        assert agreed == "ocpp1.6J"
+
+        consumer = store.connections[store.pending_key(charger.charger_id)]
+        assert consumer.ocpp_version == OCPP_VERSION_16
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
 def test_ocpp_websocket_rate_limit_enforced():
     async def run_scenario():
         serial = "CP-RATE-LIMIT"
