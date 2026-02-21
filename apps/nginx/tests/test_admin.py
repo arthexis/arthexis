@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from django.urls import reverse
 
@@ -347,3 +349,31 @@ def test_load_local_creates_site_configuration(admin_client, settings, tmp_path)
     assert config.protocol == "https"
     assert config.include_ipv6 is True
     assert config.external_websockets is True
+
+
+@pytest.mark.django_db
+def test_load_local_reports_permission_hint(monkeypatch, admin_client, settings, tmp_path):
+    """Regression: loading local configs suggests nginx-perms helper on permission errors."""
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    unreadable = tmp_path / "arthexis.conf"
+    unreadable.write_text("server {}", encoding="utf-8")
+
+    original_read_text = Path.read_text
+
+    def fake_read_text(self, *args, **kwargs):
+        if self == unreadable:
+            raise PermissionError(13, "Permission denied", str(self))
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+    settings.BASE_DIR = base_dir
+    settings.NGINX_SITE_PATH = str(unreadable)
+
+    url = reverse("admin:nginx_siteconfiguration_load_local")
+    response = admin_client.post(url, follow=True)
+
+    messages = [str(message) for message in response.context["messages"]]
+    assert any("No local site configurations were loaded." in message for message in messages)
+    assert any("scripts/nginx-perms.sh" in message for message in messages)
