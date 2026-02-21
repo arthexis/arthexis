@@ -38,6 +38,11 @@ MIGRATION_CHECK_TIMEOUT_SECONDS = 60
 MIGRATION_CHECK_INTERRUPT_RETRIES = 1
 
 
+class _MigrationCheckResult(NamedTuple):
+    returncode: int
+    stdout: bytes
+
+
 def _windows_process_group_kwargs() -> dict[str, int]:
     """Return subprocess kwargs that isolate child processes on Windows."""
 
@@ -175,7 +180,7 @@ def test_migration_merge_required_handles_timeout(monkeypatch):
     def fake_run(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(cmd=["manage.py"], timeout=1)
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys.modules[__name__], "_run_migration_check_command", fake_run)
 
     assert _migration_merge_required(Path(".")) is True
 
@@ -185,17 +190,13 @@ def test_migration_merge_required_handles_interrupt(monkeypatch):
 
     run_calls = {"count": 0}
 
-    class Completed:
-        returncode = 0
-        stdout = b""
-
     def fake_run(*_args, **_kwargs):
         run_calls["count"] += 1
         if run_calls["count"] == 1:
             raise KeyboardInterrupt
-        return Completed()
+        return _MigrationCheckResult(returncode=0, stdout=b"")
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys.modules[__name__], "_run_migration_check_command", fake_run)
 
     assert _migration_merge_required(Path(".")) is False
     assert run_calls["count"] == 2
@@ -207,7 +208,7 @@ def test_migration_merge_required_handles_repeated_interrupt(monkeypatch):
     def fake_run(*_args, **_kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys.modules[__name__], "_run_migration_check_command", fake_run)
 
     assert _migration_merge_required(Path(".")) is True
 
@@ -215,11 +216,11 @@ def test_migration_merge_required_handles_repeated_interrupt(monkeypatch):
 def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
     """Regression: non-UTF-8 migration output should not crash decode."""
 
-    class Completed:
-        returncode = 0
-        stdout = b"\x96 migration output"
-
-    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: Completed())
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_run_migration_check_command",
+        lambda *_args, **_kwargs: _MigrationCheckResult(returncode=0, stdout=b"\x96 migration output"),
+    )
 
     assert _migration_merge_required(Path(".")) is False
 
@@ -238,24 +239,52 @@ def test_windows_process_group_kwargs_delegates_to_migration(monkeypatch):
     assert _windows_process_group_kwargs() == {"creationflags": 512}
 
 
-def test_migration_merge_required_forwards_windows_process_kwargs(monkeypatch):
-    """Regression: migration merge check should pass Windows subprocess kwargs."""
+def test_run_migration_check_command_forwards_windows_process_kwargs(monkeypatch):
+    """Regression: migration merge subprocess should pass Windows process kwargs."""
 
     captured: dict[str, object] = {}
 
-    class Completed:
+    class FakeProcess:
         returncode = 0
-        stdout = b""
 
-    def fake_run(*_args, **kwargs):
-        captured.update(kwargs)
-        return Completed()
+        def __init__(self, *_args, **kwargs):
+            captured.update(kwargs)
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+        def communicate(self, timeout: int | None = None):
+            _ = timeout
+            return b"", None
+
+    monkeypatch.setattr(subprocess, "Popen", FakeProcess)
     monkeypatch.setattr(sys.modules[__name__], "_windows_process_group_kwargs", lambda: {"creationflags": 512})
 
-    assert _migration_merge_required(Path(".")) is False
+    result = _run_migration_check_command(["manage.py"], cwd=Path("."), env={})
+
+    assert result.returncode == 0
     assert captured["creationflags"] == 512
+
+
+def test_run_migration_check_command_terminates_process_on_interrupt(monkeypatch):
+    """Regression: interrupt should terminate active migration subprocess before retry."""
+
+    class FakeProcess:
+        pid = 123
+
+        def __init__(self, *_args, **_kwargs):
+            self.returncode = None
+
+        def communicate(self, timeout: int | None = None):
+            _ = timeout
+            raise KeyboardInterrupt
+
+    terminated = {"pid": None}
+
+    monkeypatch.setattr(subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(migration, "_terminate_process_tree", lambda pid: terminated.update(pid=pid))
+
+    with pytest.raises(KeyboardInterrupt):
+        _run_migration_check_command(["manage.py"], cwd=Path("."), env={})
+
+    assert terminated["pid"] == 123
 
 def test_should_import_pytest_only_for_pytest_execution(monkeypatch):
     """Regression: direct module execution should skip pytest imports."""
@@ -379,15 +408,10 @@ def _migration_merge_required(base_dir: Path) -> bool:
     print(f"{PREFIX} Checking for merge migrations:", " ".join(command))
     for attempt in range(MIGRATION_CHECK_INTERRUPT_RETRIES + 1):
         try:
-            result = subprocess.run(
+            result = _run_migration_check_command(
                 command,
                 cwd=base_dir,
                 env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                timeout=MIGRATION_CHECK_TIMEOUT_SECONDS,
-                check=False,
-                **_windows_process_group_kwargs(),
             )
             break
         except subprocess.TimeoutExpired:
@@ -422,6 +446,33 @@ def _migration_merge_required(base_dir: Path) -> bool:
         )
         return True
     return False
+
+
+def _run_migration_check_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+) -> _MigrationCheckResult:
+    """Run migration merge check and ensure subprocess cleanup on interrupts."""
+
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        **_windows_process_group_kwargs(),
+    )
+    try:
+        stdout, _ = process.communicate(timeout=MIGRATION_CHECK_TIMEOUT_SECONDS)
+        return _MigrationCheckResult(returncode=process.returncode, stdout=stdout or b"")
+    except subprocess.TimeoutExpired:
+        migration._terminate_process_tree(process.pid)
+        raise
+    except KeyboardInterrupt:
+        migration._terminate_process_tree(process.pid)
+        raise
 
 
 def _run_test_group(
