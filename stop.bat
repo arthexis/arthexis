@@ -83,7 +83,7 @@ if defined ALL (
     call :kill_by_commandline "manage.py runserver 0.0.0.0:%PORT%"
 )
 call :kill_by_commandline "celery -A config"
-call :kill_by_commandline "manage.py rfid_service"
+call :kill_by_commandline "manage.py rfid service"
 
 goto cleanup
 

@@ -386,7 +386,7 @@ fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true
 if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
-  pkill -f "manage.py rfid_service" || true
+  pkill -f "manage.py rfid service" || true
 fi
 if [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
   pkill -f "manage.py camera_service" || true

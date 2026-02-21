@@ -36,6 +36,6 @@ The RFID scanner service runs a lightweight background reader for local hardware
 ## Troubleshooting
 - Use the interactive RFID doctor command to verify the service, lock files, and database scan path:
   ```bash
-  python manage.py rfid_doctor --scan
+  python manage.py rfid doctor --scan
   ```
 - Add `--deep-read` to toggle deep read mode or `--no-input` to skip prompts.

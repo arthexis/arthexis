@@ -1,36 +1,23 @@
-import json
+"""Deprecated wrapper for ``rfid check`` with positional UID support."""
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
-from apps.cards.models import RFID
-from apps.cards.reader import validate_rfid_value
+from apps.cards.management.commands._rfid_check_impl import (
+    add_check_arguments,
+    run_check_command,
+)
 
 
 class Command(BaseCommand):
-    help = "Validate a manually entered RFID value using the scanner logic."
+    help = "Deprecated: use `python manage.py rfid check --uid <value>` instead."
 
     def add_arguments(self, parser):
-        parser.add_argument("value", help="RFID value to validate")
-        parser.add_argument(
-            "--kind",
-            choices=[choice[0] for choice in RFID.KIND_CHOICES],
-            help="Optional RFID kind to assign when registering a new tag",
-        )
-        parser.add_argument(
-            "--pretty",
-            action="store_true",
-            help="Pretty-print the JSON response",
-        )
+        add_check_arguments(parser, include_positional_value=True)
 
     def handle(self, *args, **options):
-        value = options["value"]
-        kind = options.get("kind")
-        pretty = options["pretty"]
-
-        result = validate_rfid_value(value, kind=kind)
-        if "error" in result:
-            raise CommandError(result["error"])
-
-        dump_kwargs = {"indent": 2, "sort_keys": True} if pretty else {}
-        payload = json.dumps(result, **dump_kwargs)
-        self.stdout.write(payload)
+        self.stderr.write(
+            self.style.WARNING(
+                "`check_rfid` is deprecated. Use `python manage.py rfid check --uid <value>`."
+            )
+        )
+        run_check_command(self, options, positional_value=options.get("value"))

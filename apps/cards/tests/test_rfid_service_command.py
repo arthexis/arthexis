@@ -22,18 +22,18 @@ def test_rfid_service_debug_stops_active_unit(tmp_path, capsys, monkeypatch):
 
     with (
         patch(
-            "apps.cards.management.commands.rfid_service.subprocess.run",
+            "apps.cards.management.commands._rfid_service_impl.subprocess.run",
             side_effect=[
                 subprocess_result(stdout="active\n", returncode=0),
                 subprocess_result(stdout="", returncode=0),
             ],
         ) as run_mock,
         patch(
-            "apps.cards.management.commands.rfid_service.run_service",
+            "apps.cards.management.commands._rfid_service_impl.run_service",
             return_value=None,
         ),
     ):
-        call_command("rfid_service", debug=True)
+        call_command("rfid", "service", debug=True)
 
     output = capsys.readouterr().out
     assert "Stopping rfid-demo.service" in output
@@ -62,15 +62,15 @@ def test_rfid_service_debug_warns_when_unit_inactive(tmp_path, capsys, monkeypat
 
     with (
         patch(
-            "apps.cards.management.commands.rfid_service.subprocess.run",
+            "apps.cards.management.commands._rfid_service_impl.subprocess.run",
             return_value=subprocess_result(stdout="inactive\n", returncode=3),
         ),
         patch(
-            "apps.cards.management.commands.rfid_service.run_service",
+            "apps.cards.management.commands._rfid_service_impl.run_service",
             return_value=None,
         ),
     ):
-        call_command("rfid_service", debug=True)
+        call_command("rfid", "service", debug=True)
 
     output = capsys.readouterr().out
     assert "rfid-demo.service is not active" in output

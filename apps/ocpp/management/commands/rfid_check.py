@@ -1,183 +1,21 @@
-import json
-import sys
-import time
+"""Deprecated wrapper for ``rfid check``."""
 
-from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Q
+from django.core.management.base import BaseCommand
 
-from apps.cards.background_reader import is_configured
-from apps.cards.models import RFID, RFIDAttempt
-from apps.cards.reader import validate_rfid_value
-from apps.cards.rfid_service import service_available
-from apps.cards.scanner import scan_sources
-from apps.cards.utils import drain_stdin, user_requested_stop
+from apps.cards.management.commands._rfid_check_impl import (
+    add_check_arguments,
+    run_check_command,
+)
 
 
 class Command(BaseCommand):
-    help = "Validate an RFID tag by label, UID, or an interactive scan."
+    help = "Deprecated: use `python manage.py rfid check` instead."
 
     def add_arguments(self, parser):
-        target = parser.add_mutually_exclusive_group(required=True)
-        target.add_argument(
-            "--label",
-            help="Validate an RFID associated with the given label id or custom label.",
-        )
-        target.add_argument(
-            "--uid",
-            help="Validate an RFID by providing the UID value directly.",
-        )
-        target.add_argument(
-            "--scan",
-            action="store_true",
-            help="Start the RFID scanner and return the first successfully read tag.",
-        )
-
-        parser.add_argument(
-            "--kind",
-            choices=[choice[0] for choice in RFID.KIND_CHOICES],
-            help="Optional RFID kind when validating a UID directly.",
-        )
-        parser.add_argument(
-            "--endianness",
-            choices=[choice[0] for choice in RFID.ENDIANNESS_CHOICES],
-            help="Optional endianness when validating a UID directly.",
-        )
-        parser.add_argument(
-            "--timeout",
-            type=float,
-            default=5.0,
-            help=(
-                "How long to wait for a scan before timing out when running "
-                "non-interactively (seconds)."
-            ),
-        )
-        parser.add_argument(
-            "--pretty",
-            action="store_true",
-            help="Pretty-print the JSON response.",
-        )
+        add_check_arguments(parser)
 
     def handle(self, *args, **options):
-        if options.get("scan"):
-            result = self._scan(options)
-        elif options.get("label"):
-            result = self._validate_label(options["label"])
-        else:
-            result = self._validate_uid(
-                options.get("uid"),
-                kind=options.get("kind"),
-                endianness=options.get("endianness"),
-            )
-
-        if "error" in result:
-            raise CommandError(result["error"])
-
-        pretty = options.get("pretty", False)
-        dump_kwargs = {"indent": 2, "sort_keys": True} if pretty else {}
-        payload = json.dumps(result, **dump_kwargs)
-        self.stdout.write(payload)
-
-    def _validate_uid(self, value: str | None, *, kind: str | None, endianness: str | None):
-        if not value:
-            raise CommandError("RFID UID value is required")
-
-        return validate_rfid_value(value, kind=kind, endianness=endianness)
-
-    def _validate_label(self, label_value: str):
-        if label_value is None:
-            raise CommandError("Label value is required")
-
-        cleaned = label_value.strip()
-        if not cleaned:
-            raise CommandError("Label value is required")
-
-        query: Q | None = None
-        try:
-            label_id = int(cleaned)
-        except ValueError:
-            label_id = None
-        else:
-            query = Q(label_id=label_id)
-
-        label_query = Q(custom_label__iexact=cleaned)
-        query = label_query if query is None else query | label_query
-
-        tag = RFID.objects.filter(query).order_by("label_id").first()
-        if tag is None:
-            raise CommandError(f"No RFID found for label '{cleaned}'")
-
-        return validate_rfid_value(tag.rfid, kind=tag.kind, endianness=tag.endianness)
-
-    def _scan(self, options):
-        timeout = options.get("timeout", 5.0)
-        if timeout is None or timeout <= 0:
-            raise CommandError("Timeout must be a positive number of seconds")
-
-        if service_available():
-            result = self._scan_via_attempt(timeout)
-        else:
-            result = self._scan_via_local(timeout)
-        if result.get("error"):
-            return result
-
-        if not result.get("rfid"):
-            if not is_configured() and not service_available():
-                return {"error": "RFID scanner not configured or detected"}
-            return {"error": "No RFID detected before timeout"}
-
-        return result
-
-    def _scan_via_attempt(self, timeout: float) -> dict:
-        interactive = sys.stdin.isatty()
-        if interactive:
-            self.stdout.write("Press any key to stop scanning.")
-        self.stdout.flush()
-        if interactive:
-            drain_stdin()
-        start = time.monotonic()
-        latest_id = (
-            RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
-            .order_by("-pk")
-            .values_list("pk", flat=True)
-            .first()
+        self.stderr.write(
+            self.style.WARNING("`rfid_check` is deprecated. Use `python manage.py rfid check`.")
         )
-        attempt = None
-        while True:
-            if interactive and user_requested_stop():
-                return {"error": "Scan cancelled by user"}
-            attempt = (
-                RFIDAttempt.objects.filter(
-                    source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0
-                )
-                .order_by("pk")
-                .first()
-            )
-            if attempt:
-                break
-            if not interactive and time.monotonic() - start >= timeout:
-                break
-            time.sleep(0.2)
-        if not attempt:
-            return {"rfid": None, "label_id": None}
-        payload = dict(attempt.payload or {})
-        payload.setdefault("rfid", attempt.rfid)
-        if attempt.label_id:
-            payload.setdefault("label_id", attempt.label_id)
-        return payload
-
-    def _scan_via_local(self, timeout: float) -> dict:
-        interactive = sys.stdin.isatty()
-        if interactive:
-            self.stdout.write("Press any key to stop scanning.")
-        self.stdout.flush()
-        if interactive:
-            drain_stdin()
-        start = time.monotonic()
-        while True:
-            if interactive and user_requested_stop():
-                return {"error": "Scan cancelled by user"}
-            result = scan_sources(timeout=0.2)
-            if result.get("rfid") or result.get("error"):
-                return result
-            if not interactive and time.monotonic() - start >= timeout:
-                return {"rfid": None, "label_id": None}
+        run_check_command(self, options)

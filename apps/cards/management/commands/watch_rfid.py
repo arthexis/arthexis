@@ -1,23 +1,15 @@
+"""Deprecated wrapper for ``rfid watch``."""
+
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = "Toggle the always-on RFID watcher"
+    help = "Deprecated: use `python manage.py rfid watch` instead."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--stop",
-            action="store_true",
-            help="Stop the always-on watcher instead of starting it",
-        )
+        parser.add_argument("--stop", action="store_true")
 
     def handle(self, *args, **options):
-        from apps.cards.always_on import is_running, start, stop
-
-        if options["stop"]:
-            stop()
-            self.stdout.write(self.style.SUCCESS("RFID watch disabled"))
-        else:
-            start()
-            state = "enabled" if is_running() else "disabled"
-            self.stdout.write(self.style.SUCCESS(f"RFID watch {state}"))
+        self.stderr.write(self.style.WARNING("`watch_rfid` is deprecated. Use `python manage.py rfid watch`."))
+        call_command("rfid", "watch", stop=options.get("stop", False))
