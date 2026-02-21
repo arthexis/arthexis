@@ -49,3 +49,28 @@ def test_evergo_admin_change_form_renders_readonly_synced_fields(admin_client):
     assert response.status_code == 200
     assert b"Evergo synced profile" in response.content
     assert b"Two-factor" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admin_client):
+    """Ensure changelist prioritizes Evergo email over internal identifier columns."""
+
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(
+        username="suite-admin-listing",
+        email="suite-admin-listing@example.com",
+    )
+    EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-listing@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    changelist_url = reverse("admin:evergo_evergouser_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    assert b"evergo email" in response.content.lower()
+    assert b"evergo user id" not in response.content.lower()
+    assert b"empresa id" not in response.content.lower()
+    assert b"subempresa id" not in response.content.lower()

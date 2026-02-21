@@ -15,11 +15,9 @@ class EvergoUserAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "owner_display",
+        "evergo_email",
         "name",
         "email",
-        "evergo_user_id",
-        "empresa_id",
-        "subempresa_id",
         "two_fa_enabled",
         "last_login_test_at",
     )
