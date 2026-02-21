@@ -37,6 +37,12 @@ SCREENSHOT_PORT = 8888
 MIGRATION_CHECK_TIMEOUT_SECONDS = 60
 
 
+def _windows_process_group_kwargs() -> dict[str, int]:
+    """Return subprocess kwargs that isolate child processes on Windows."""
+
+    return migration._windows_process_group_kwargs()
+
+
 def _should_import_pytest(*, argv: list[str] | None = None) -> bool:
     """Return ``True`` when this process is running under pytest.
 
@@ -196,6 +202,39 @@ def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
     assert _migration_merge_required(Path(".")) is False
 
 
+
+
+def test_windows_process_group_kwargs_delegates_to_migration(monkeypatch):
+    """Regression: test server should reuse migration Windows subprocess kwargs."""
+
+    monkeypatch.setattr(
+        migration,
+        "_windows_process_group_kwargs",
+        lambda: {"creationflags": 512},
+    )
+
+    assert _windows_process_group_kwargs() == {"creationflags": 512}
+
+
+def test_migration_merge_required_forwards_windows_process_kwargs(monkeypatch):
+    """Regression: migration merge check should pass Windows subprocess kwargs."""
+
+    captured: dict[str, object] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = b""
+
+    def fake_run(*_args, **kwargs):
+        captured.update(kwargs)
+        return Completed()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys.modules[__name__], "_windows_process_group_kwargs", lambda: {"creationflags": 512})
+
+    assert _migration_merge_required(Path(".")) is False
+    assert captured["creationflags"] == 512
+
 def test_should_import_pytest_only_for_pytest_execution(monkeypatch):
     """Regression: direct module execution should skip pytest imports."""
 
@@ -253,7 +292,11 @@ def update_requirements(base_dir: Path) -> bool:
             str(req_file),
         ]
 
-    result = subprocess.run(command, cwd=base_dir)
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        **_windows_process_group_kwargs(),
+    )
     if result.returncode != 0:
         print(f"{PREFIX} Failed to install Python requirements.")
         NOTIFY(
@@ -283,7 +326,12 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Running:", " ".join(command))
-    result = subprocess.run(command, cwd=base_dir, env=env)
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        env=env,
+        **_windows_process_group_kwargs(),
+    )
     if result.returncode != 0:
         NOTIFY(
             "Migration failure",
@@ -316,6 +364,7 @@ def _migration_merge_required(base_dir: Path) -> bool:
             stderr=subprocess.STDOUT,
             timeout=MIGRATION_CHECK_TIMEOUT_SECONDS,
             check=False,
+            **_windows_process_group_kwargs(),
         )
     except subprocess.TimeoutExpired:
         print(
@@ -398,6 +447,7 @@ def _run_command_with_output(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=1,
+        **_windows_process_group_kwargs(),
     )
     output_lines: list[str] = []
     assert process.stdout is not None
@@ -468,7 +518,12 @@ def _capture_ci_style_screenshots(base_dir: Path) -> bool:
         admin_password,
     ]
     print(f"{PREFIX} Ensuring docs admin user exists before screenshots.")
-    if subprocess.run(create_admin, cwd=base_dir, env=manage_env).returncode != 0:
+    if subprocess.run(
+        create_admin,
+        cwd=base_dir,
+        env=manage_env,
+        **_windows_process_group_kwargs(),
+    ).returncode != 0:
         print(f"{PREFIX} Skipping screenshot capture: unable to create docs admin user.")
         return False
 
@@ -490,6 +545,7 @@ def _capture_ci_style_screenshots(base_dir: Path) -> bool:
             stdout=handle,
             stderr=subprocess.STDOUT,
             text=True,
+            **_windows_process_group_kwargs(),
         )
     try:
         if not _wait_for_server(f"http://localhost:{SCREENSHOT_PORT}/admin/login/?next=/admin/"):
@@ -517,6 +573,7 @@ def _playwright_is_available(base_dir: Path) -> bool:
         cwd=base_dir,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        **_windows_process_group_kwargs(),
     )
     return result.returncode == 0
 
@@ -585,7 +642,12 @@ const publicUrl = process.env.PUBLIC_URL || 'http://localhost:8888/';
     env.setdefault("PUBLIC_URL", f"http://localhost:{SCREENSHOT_PORT}/")
 
     try:
-        result = subprocess.run(["node", str(script_path)], cwd=base_dir, env=env)
+        result = subprocess.run(
+            ["node", str(script_path)],
+            cwd=base_dir,
+            env=env,
+            **_windows_process_group_kwargs(),
+        )
         if result.returncode != 0:
             print(f"{PREFIX} Screenshot capture failed. See output above for details.")
             return False

@@ -17,6 +17,18 @@ from typing import Dict, Iterable
 
 import psutil
 
+
+def _windows_process_group_kwargs() -> dict[str, int]:
+    """Return subprocess kwargs that isolate child processes on Windows."""
+
+    if os.name != "nt":
+        return {}
+
+    creation_flag = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    if not creation_flag:
+        return {}
+    return {"creationflags": creation_flag}
+
 def resolve_base_dir(
     *, env: dict[str, str] | None = None, cwd: Path | None = None
 ) -> Path:
@@ -180,7 +192,12 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     # state, and SQLite is the expected local fallback backend.
     env.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
     print("[Migration Server] Running:", " ".join(command))
-    result = subprocess.run(command, cwd=base_dir, env=env)
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        env=env,
+        **_windows_process_group_kwargs(),
+    )
     if result.returncode != 0:
         notify_async(
             "Migration failure",
@@ -260,7 +277,12 @@ def _run_django_server(
     resolved_env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
     try:
-        process = subprocess.Popen(command, cwd=cwd, env=resolved_env)
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=resolved_env,
+            **_windows_process_group_kwargs(),
+        )
         process.wait()
     except OSError as exc:
         print(f"[Migration Server] Failed to run Django server: {exc}")
@@ -311,7 +333,12 @@ def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.P
     print("[Migration Server] Starting Django server:", " ".join(command))
 
     try:
-        return subprocess.Popen(command, cwd=base_dir, env=env)
+        return subprocess.Popen(
+            command,
+            cwd=base_dir,
+            env=env,
+            **_windows_process_group_kwargs(),
+        )
     except OSError as exc:
         print(f"[Migration Server] Failed to start Django server: {exc}")
         return None
@@ -389,7 +416,11 @@ def update_requirements(base_dir: Path) -> bool:
             str(req_file),
         ]
 
-    result = subprocess.run(command, cwd=base_dir)
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        **_windows_process_group_kwargs(),
+    )
     if result.returncode != 0:
         print("[Migration Server] Failed to install Python requirements.")
         notify_async(
