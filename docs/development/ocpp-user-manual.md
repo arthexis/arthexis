@@ -71,3 +71,19 @@ All active WebSocket connections, transactions, logs, and pending CSMS calls are
 
 ### Timeout and error handling
 Pending-call metadata is stored in-memory and mirrored to Redis so responses can be reconciled even after reconnects. Each outgoing call registers an event handle and an optional timeout timer; when a timeout fires, the scheduler adds a charger-log entry and marks the request as notified so duplicate alerts are suppressed.【F:apps/ocpp/store.py†L633-L717】 When the consumer records a result or error (including OCPP call errors), it clears timers, signals waiting threads, and persists the payload and error context, ensuring admin dashboards and logs accurately reflect both success and failure paths.【F:apps/ocpp/store.py†L620-L659】【F:apps/ocpp/call_result_handlers.py†L565-L628】【F:apps/ocpp/call_error_handlers.py†L343-L378】 The request/response lifecycle therefore surfaces clearly across the WebSocket logs, pending-call registries, and charger detail views.
+
+## Operational management commands
+Use the unified `ocpp` management command for operational workflows:
+
+- Coverage reports:
+  - `python manage.py ocpp coverage --version 1.6`
+  - `python manage.py ocpp coverage --version 2.0.1`
+  - `python manage.py ocpp coverage --version 2.1`
+- Transaction data:
+  - `python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]`
+  - `python manage.py ocpp transactions import <input.json>`
+- Trace tools:
+  - `python manage.py ocpp trace extract [--txn ... --out ... --log ...]`
+  - `python manage.py ocpp trace replay <extract.json>`
+
+Legacy single-purpose commands (`coverage_ocpp16`, `coverage_ocpp201`, `coverage_ocpp21`, `import_transactions`, `export_transactions`, `ocpp_extract`, and `ocpp_replay`) remain available as deprecated wrappers and now route through `ocpp`.
