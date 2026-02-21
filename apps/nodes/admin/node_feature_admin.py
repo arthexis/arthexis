@@ -294,7 +294,8 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
 
         enablement = {"status": "skipped", "message": "Not enabled."}
         assignment_created = False
-        if eligible and node:
+        is_manual_feature = feature.slug in Node.MANUAL_FEATURE_SLUGS
+        if eligible and node and not is_manual_feature:
             assignment, created = NodeFeatureAssignment.objects.update_or_create(
                 node=node, feature=feature
             )
@@ -309,6 +310,14 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                     "status": "already_enabled",
                     "message": f"{feature.display} already enabled.",
                 }
+        elif eligible and is_manual_feature:
+            enablement = {
+                "status": "manual",
+                "message": (
+                    f"{feature.display} is eligible and manually controlled; "
+                    "use the Manual toggle to enable it."
+                ),
+            }
         elif eligible and not node:
             enablement = {
                 "status": "skipped",
