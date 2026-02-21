@@ -1,5 +1,6 @@
 """Regression tests for the nmcli setup helper script."""
 
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,13 +12,35 @@ SCRIPT_PATH = Path(__file__).resolve().parent.parent / "nmcli-setup.sh"
 BASH = shutil.which("bash")
 
 
+pytestmark = pytest.mark.regression
+
+
+def _script_path_for_bash(script_path: Path) -> str:
+    """Return a script path string that the configured bash executable can read."""
+    raw_path = str(script_path)
+    if os.name != "nt" or BASH is None:
+        return raw_path
+
+    bash_name = Path(BASH).name.lower()
+    if bash_name != "bash.exe":
+        return raw_path
+
+    drive = script_path.drive.rstrip(":")
+    if not drive:
+        return script_path.as_posix()
+
+    relative = script_path.as_posix().split(":", maxsplit=1)[1].lstrip("/")
+    return f"/mnt/{drive.lower()}/{relative}"
+
+
 def test_nmcli_setup_script_has_valid_bash_syntax() -> None:
     """The setup script should parse successfully under bash."""
     if BASH is None:
         pytest.skip("bash not found in PATH")
 
+    script_path = _script_path_for_bash(SCRIPT_PATH)
     result = subprocess.run(
-        [BASH, "-n", str(SCRIPT_PATH)],
+        [BASH, "-n", script_path],
         check=False,
         capture_output=True,
         text=True,
@@ -96,12 +119,13 @@ exit 0
     nmcli_mock.chmod(0o755)
 
     env = {
-        "PATH": f"{tmp_path}:{Path(BASH).parent}",
+        "PATH": os.pathsep.join((str(tmp_path), str(Path(BASH).parent))),
         "NMCLI_MOCK_LOG": str(log_path),
     }
 
+    script_path = _script_path_for_bash(SCRIPT_PATH)
     result = subprocess.run(
-        [BASH, str(SCRIPT_PATH)],
+        [BASH, script_path],
         check=False,
         capture_output=True,
         text=True,
