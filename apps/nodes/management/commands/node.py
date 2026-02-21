@@ -7,6 +7,7 @@ import ipaddress
 import itertools
 import json
 import logging
+import socket
 import re
 import shutil
 import subprocess
@@ -20,7 +21,7 @@ import psutil
 import requests
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.test import Client, RequestFactory
+from django.test import RequestFactory
 from django.urls import reverse
 from requests import RequestException
 
@@ -134,8 +135,8 @@ class Command(BaseCommand):
 
     def _handle_register(self, **options):
         payload = self._decode_token(options["token"])
-        self._ensure_https_url(payload["info"], label="Host info")
-        self._ensure_https_url(payload["register"], label="Host registration")
+        self._ensure_public_https_url(payload["info"], label="Host info")
+        self._ensure_public_https_url(payload["register"], label="Host registration")
         session = requests.Session()
         session.auth = (payload["username"], payload["password"])
 
@@ -412,6 +413,58 @@ class Command(BaseCommand):
         if parsed.scheme != "https":
             raise CommandError(f"{label} URL must use https: {url}")
 
+    def _ensure_public_https_url(self, url: str, *, label: str) -> None:
+        self._ensure_https_url(url, label=label)
+        parsed = urlsplit(url)
+        hostname = (parsed.hostname or "").strip().lower()
+        if not hostname:
+            raise CommandError(f"{label} URL is missing a host: {url}")
+        if self._host_is_private_or_local(hostname):
+            raise CommandError(
+                f"{label} URL host must not resolve to local or private addresses: {url}"
+            )
+
+    def _host_is_private_or_local(self, hostname: str) -> bool:
+        if hostname in {"localhost", "localhost.localdomain"}:
+            return True
+
+        try:
+            host_ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            host_ip = None
+
+        if host_ip is not None:
+            return self._is_non_public_ip(host_ip)
+
+        try:
+            infos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+        except socket.gaierror:
+            return False
+
+        for info in infos:
+            resolved_host = info[4][0]
+            try:
+                resolved_ip = ipaddress.ip_address(resolved_host)
+            except ValueError:
+                continue
+            if self._is_non_public_ip(resolved_ip):
+                return True
+        return False
+
+    def _is_non_public_ip(
+        self, value: ipaddress.IPv4Address | ipaddress.IPv6Address
+    ) -> bool:
+        return any(
+            (
+                value.is_private,
+                value.is_loopback,
+                value.is_link_local,
+                value.is_multicast,
+                value.is_reserved,
+                value.is_unspecified,
+            )
+        )
+
     def _load_local_info(self) -> dict:
         factory = RequestFactory()
         request = factory.get("/nodes/info/")
@@ -496,6 +549,16 @@ class Command(BaseCommand):
             raise CommandError(f"{label} base URL is invalid: {raw}")
         if parsed.scheme != "https":
             raise CommandError(f"{label} base URL must use https: {raw}")
+        if re.search(r"[^A-Za-z0-9.\-:\[\]]", parsed.netloc):
+            raise CommandError(f"{label} base URL contains unsupported characters: {raw}")
+        if any((parsed.username, parsed.password, parsed.query, parsed.fragment)):
+            raise CommandError(
+                f"{label} base URL must not include credentials, query params, or fragments: {raw}"
+            )
+        if parsed.path and parsed.path not in ("", "/"):
+            raise CommandError(f"{label} base URL must not include a path: {raw}")
+        if not parsed.hostname:
+            raise CommandError(f"{label} base URL is invalid: {raw}")
         return urlunsplit((parsed.scheme, parsed.netloc, "", "", "")).rstrip("/")
 
     def _collect_local_ip_addresses(self) -> set[str]:
@@ -652,24 +715,37 @@ class Command(BaseCommand):
             ready = False
             self.stderr.write(self.style.ERROR("Public key is not stored in the database."))
 
-        client = Client()
+        session = requests.Session()
+        session.verify = False
         token = token_hex(16)
+        base_url = f"https://localhost:{node.port}"
+        info_url = f"{base_url}{reverse('node-info')}"
 
-        info_response = client.get(reverse("node-info"), {"token": token})
-        if info_response.status_code != 200:
+        try:
+            info_response = session.get(info_url, params={"token": token}, timeout=5)
+        except RequestException as exc:
             ready = False
-            self.stderr.write(
-                self.style.ERROR(f"/nodes/info/ returned status {info_response.status_code}.")
-            )
+            self.stderr.write(self.style.ERROR(f"/nodes/info/ request failed: {exc}"))
             info_data = {}
         else:
-            self.stdout.write(self.style.SUCCESS("Local /nodes/info/ endpoint responded successfully."))
-            try:
-                info_data = info_response.json()
-            except ValueError:
+            if info_response.status_code != 200:
                 ready = False
-                self.stderr.write(self.style.ERROR("/nodes/info/ did not return valid JSON data."))
+                self.stderr.write(
+                    self.style.ERROR(f"/nodes/info/ returned status {info_response.status_code}.")
+                )
                 info_data = {}
+            else:
+                self.stdout.write(
+                    self.style.SUCCESS("Local /nodes/info/ endpoint responded successfully.")
+                )
+                try:
+                    info_data = info_response.json()
+                except ValueError:
+                    ready = False
+                    self.stderr.write(
+                        self.style.ERROR("/nodes/info/ did not return valid JSON data.")
+                    )
+                    info_data = {}
 
         if info_data:
             if info_data.get("token_signature"):
@@ -682,16 +758,30 @@ class Command(BaseCommand):
                     )
                 )
 
-        register_url = reverse("register-node")
-        options_response = client.options(register_url, HTTP_ORIGIN="https://example.com")
-        if (
-            options_response.status_code == 200
-            and options_response.get("Access-Control-Allow-Origin") == "https://example.com"
-        ):
-            self.stdout.write(self.style.SUCCESS("CORS preflight for /nodes/register/ succeeded."))
-        else:
+        register_url = f"{base_url}{reverse('register-node')}"
+        try:
+            options_response = session.options(
+                register_url,
+                headers={"Origin": "https://example.com"},
+                timeout=5,
+            )
+        except RequestException as exc:
             ready = False
-            self.stderr.write(self.style.ERROR("CORS preflight for /nodes/register/ failed."))
+            self.stderr.write(
+                self.style.ERROR(f"CORS preflight for /nodes/register/ failed: {exc}")
+            )
+        else:
+            if (
+                options_response.status_code == 200
+                and options_response.headers.get("Access-Control-Allow-Origin")
+                == "https://example.com"
+            ):
+                self.stdout.write(
+                    self.style.SUCCESS("CORS preflight for /nodes/register/ succeeded.")
+                )
+            else:
+                ready = False
+                self.stderr.write(self.style.ERROR("CORS preflight for /nodes/register/ failed."))
 
         if info_data.get("token_signature"):
             payload = {
@@ -706,25 +796,34 @@ class Command(BaseCommand):
             if "features" in info_data:
                 payload["features"] = info_data["features"]
 
-            register_response = client.post(
-                register_url,
-                data=json.dumps(payload),
-                content_type="application/json",
-                HTTP_ORIGIN="https://example.com",
-            )
-            if register_response.status_code == 200:
-                self.stdout.write(
-                    self.style.SUCCESS("Signed registration request completed successfully.")
+            try:
+                register_response = session.post(
+                    register_url,
+                    json=payload,
+                    headers={"Origin": "https://example.com"},
+                    timeout=5,
                 )
-            else:
+            except RequestException as exc:
                 ready = False
                 self.stderr.write(
-                    self.style.ERROR(
-                        "Signed registration request failed with status "
-                        f"{register_response.status_code}: "
-                        f"{register_response.content.decode(errors='ignore')}"
-                    )
+                    self.style.ERROR(f"Signed registration request failed: {exc}")
                 )
+            else:
+                if register_response.status_code == 200:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "Signed registration request completed successfully."
+                        )
+                    )
+                else:
+                    ready = False
+                    self.stderr.write(
+                        self.style.ERROR(
+                            "Signed registration request failed with status "
+                            f"{register_response.status_code}: "
+                            f"{register_response.text}"
+                        )
+                    )
         else:
             ready = False
             self.stderr.write(

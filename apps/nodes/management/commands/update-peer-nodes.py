@@ -15,9 +15,19 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Emit deprecation notice and invoke the new action."""
 
-        self.stdout.write(
+        self.stderr.write(
             self.style.WARNING(
                 "`update-peer-nodes` is deprecated; use `python manage.py node peers`."
             )
         )
-        call_command("node", "peers")
+        call_command(
+            "node",
+            "peers",
+            stdout=options.get("stdout", self.stdout),
+            stderr=options.get("stderr", self.stderr),
+            skip_checks=options.get("skip_checks", False),
+            force_color=options.get("force_color", False),
+            no_color=options.get("no_color", False),
+            verbosity=options.get("verbosity", 1),
+            traceback=options.get("traceback", False),
+        )
