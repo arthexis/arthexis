@@ -13,6 +13,19 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
     feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "Eligible for manual enablement.",
+            messages.SUCCESS,
+        ),
+    )
+
     response = admin_client.post(
         reverse("admin:nodes_nodefeature_discover_progress"),
         {"feature_id": feature.pk},
@@ -65,3 +78,36 @@ def test_discover_manual_toggle_rejects_non_manual_feature(admin_client, monkeyp
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Feature is not manually controlled"
+
+
+@pytest.mark.django_db
+def test_discover_progress_does_not_auto_enable_manual_features(admin_client, monkeypatch):
+    """Manual features should remain unassigned after eligible discovery checks."""
+
+    node = Node.objects.create(hostname="manual-progress", public_endpoint="manual-progress")
+    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "Eligible for manual enablement.",
+            messages.SUCCESS,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["eligible"] is True
+    assert payload["enablement"]["status"] == "manual"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
