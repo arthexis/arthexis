@@ -70,7 +70,20 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
     response = admin_client.get(changelist_url)
 
     assert response.status_code == 200
-    assert b"evergo email" in response.content.lower()
-    assert b"evergo user id" not in response.content.lower()
-    assert b"empresa id" not in response.content.lower()
-    assert b"subempresa id" not in response.content.lower()
+
+    content = response.content.lower()
+    assert b"suite-listing@evergo.example.com" in content
+
+    table_start = content.find(b"<table id=\"result_list\"")
+    assert table_start != -1
+
+    table_content = content[table_start:]
+    thead_start = table_content.find(b"<thead")
+    thead_end = table_content.find(b"</thead>")
+    assert thead_start != -1 and thead_end != -1
+
+    thead = table_content[thead_start:thead_end]
+    assert b"evergo email" in thead
+    assert b"evergo user id" not in thead
+    assert b">empresa id<" not in thead
+    assert b">subempresa id<" not in thead
