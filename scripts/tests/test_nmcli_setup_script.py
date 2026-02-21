@@ -127,9 +127,15 @@ exit 0
     bash_parent = Path(BASH).parent
     path_parts = (_script_path_for_bash(tmp_path), _script_path_for_bash(bash_parent))
     path_sep = ":" if (os.name == "nt" and bash_parent.name.lower() in ("system32", "syswow64")) else os.pathsep
-    env = os.environ.copy()
-    env["PATH"] = path_sep.join(path_parts)
-    env["NMCLI_MOCK_LOG"] = _script_path_for_bash(log_path)
+    env = {
+        **os.environ,
+        "PATH": path_sep.join(path_parts),
+        "NMCLI_MOCK_LOG": _script_path_for_bash(log_path),
+    }
+    # Keep ambient env for Windows bash startup expectations, but clear shell hooks
+    # so the regression test remains hermetic in CI/dev environments.
+    env.pop("BASH_ENV", None)
+    env.pop("ENV", None)
 
     script_path = _script_path_for_bash(SCRIPT_PATH)
     result = subprocess.run(
