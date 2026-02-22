@@ -52,13 +52,15 @@ CACHE_KEY="${CACHE_KEY//-/_}"
 COMMAND_CACHE_FILE="$CACHE_DIR/command_list_${CACHE_KEY}.txt"
 DEPRECATED_CACHE_FILE="$CACHE_DIR/deprecated_absorbed_commands.txt"
 DEPRECATED_COMMAND_DISCOVERY_SCRIPT='
-from django.core.management import get_commands, load_command_class
+from django.core.management import get_commands
+from importlib import import_module
 for command_name, app_name in sorted(get_commands().items()):
     try:
-        command = load_command_class(app_name, command_name)
+        module = import_module(f"{app_name}.management.commands.{command_name}")
+        cls = module.Command
     except Exception:
         continue
-    if getattr(command.__class__, "arthexis_absorbed_command", False):
+    if getattr(cls, "arthexis_absorbed_command", False):
         print(command_name)
 '
 
@@ -115,7 +117,7 @@ load_command_list() {
   # Load and cache Django command names from manage.py help output.
 
   cached_command_output "$COMMAND_CACHE_FILE" \
-    bash -lc "python manage.py help --commands '$celery_flag' \
+    bash -c "set -o pipefail; python manage.py help --commands '$celery_flag' \
       | tr '\t' ' ' \
       | tr ' ' '\n' \
       | sed '/^$/d' \
@@ -133,22 +135,18 @@ load_deprecated_absorbed_commands() {
 if ! COMMAND_LIST="$(load_command_list)"; then
   exit 1
 fi
+if [ -z "$COMMAND_LIST" ]; then
+  echo "Command discovery returned no results. Check Django configuration." >&2
+  exit 1
+fi
 
 if [ "$show_deprecated" != "true" ]; then
   if ! DEPRECATED_COMMANDS="$(load_deprecated_absorbed_commands)"; then
     exit 1
   fi
-  COMMAND_LIST="$({ printf '%s\n' "$COMMAND_LIST"; } | awk -v deprecated="$DEPRECATED_COMMANDS" '
-    BEGIN {
-      split(deprecated, values, "\n")
-      for (i in values) {
-        if (values[i] != "") {
-          blocked[values[i]] = 1
-        }
-      }
-    }
-    !blocked[$0]
-  ')"
+  COMMAND_LIST="$(awk 'NR==FNR { if ($0 != "") blocked[$0] = 1; next } !blocked[$0]' \
+    <(printf '%s\n' "$DEPRECATED_COMMANDS") \
+    <(printf '%s\n' "$COMMAND_LIST"))"
 fi
 
 if [ $# -eq 0 ]; then
