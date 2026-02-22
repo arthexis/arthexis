@@ -68,10 +68,15 @@ def _terminate_process_without_psutil(pid: int) -> None:
             return
         return
 
+    getpgid = getattr(os, "getpgid", None)
+    getpgrp = getattr(os, "getpgrp", None)
+
     try:
-        process_group_id = os.getpgid(pid)
-        current_group_id = os.getpgrp()
-    except OSError:
+        if getpgid is None or getpgrp is None:
+            raise AttributeError
+        process_group_id = getpgid(pid)
+        current_group_id = getpgrp()
+    except (AttributeError, OSError):
         process_group_id = None
         current_group_id = None
 
@@ -96,7 +101,7 @@ def resolve_base_dir(
 BASE_DIR = resolve_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
-REQUIREMENTS_HASH_FILE = LOCK_DIR / "requirements.sha256"
+REQUIREMENTS_HASH_FILE = Path(".locks") / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 
 def notify_async(subject: str, body: str = "") -> None:
