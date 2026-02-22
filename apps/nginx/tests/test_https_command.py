@@ -9,6 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.certs.models import CertbotCertificate
+from apps.certs.services import CertbotChallengeError
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
@@ -513,3 +514,43 @@ def test_https_warn_days_must_be_non_negative():
 
     with pytest.raises(CommandError, match="positive integer"):
         call_command("https", "--enable", "--certbot", "example.com", "--warn-days", "-1")
+
+
+@pytest.mark.django_db
+def test_https_enable_surfaces_certbot_challenge_as_command_error(monkeypatch):
+    """Regression: certbot challenge failures should be shown as user-facing command output."""
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        raise CertbotChallengeError("Some challenges have failed.")
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    with pytest.raises(CommandError, match="HTTPS enable did not complete"):
+        call_command("https", "--enable", "--certbot", "example.com", "--no-sudo")
+
+
+@pytest.mark.django_db
+def test_https_enable_http01_bootstraps_http_site_before_certbot(monkeypatch):
+    """HTTP-01 certbot runs should bootstrap nginx HTTP config before certificate issuance."""
+
+    apply_protocols: list[str] = []
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        apply_protocols.append(self.protocol)
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--certbot", "example.com", "--no-sudo")
+
+    assert apply_protocols == ["http", "https"]
