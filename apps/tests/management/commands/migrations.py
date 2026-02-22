@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
-
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
@@ -17,7 +15,7 @@ class Command(BaseCommand):
         """Configure CLI options and migration subcommands."""
 
         subparsers = parser.add_subparsers(dest="action")
-        parser.set_defaults(action="run")
+        parser.set_defaults(action="run", database="default", app_label=None, migration_name=None)
 
         run_parser = subparsers.add_parser("run", help="Run Django migrations.")
         run_parser.add_argument("app_label", nargs="?")
@@ -85,7 +83,8 @@ class Command(BaseCommand):
             call_args.append(app_label)
             if isinstance(migration_name, str) and migration_name:
                 call_args.append(migration_name)
-        call_command("migrate", *call_args, database=options["database"])
+        database = options.get("database", "default")
+        call_command("migrate", *call_args, database=database)
 
     def _run_makemigrations(self, options: dict[str, object]) -> None:
         """Run Django ``makemigrations`` with optional app labels."""

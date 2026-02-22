@@ -20,7 +20,7 @@ class Command(BaseCommand):
         """Register command arguments and subcommands."""
 
         subparsers = parser.add_subparsers(dest="action")
-        parser.set_defaults(action="run")
+        parser.set_defaults(action="run", pytest_args=[])
 
         run_parser = subparsers.add_parser("run", help="Run pytest.")
         run_parser.add_argument(
@@ -54,7 +54,7 @@ class Command(BaseCommand):
 
         action = options["action"]
         if action == "run":
-            self._run_pytest(options["pytest_args"])
+            self._run_pytest(options.get("pytest_args", []))
             return
         if action == "server":
             self._run_test_server(
@@ -91,4 +91,9 @@ class Command(BaseCommand):
     def _base_dir() -> Path:
         """Return the repository root directory."""
 
-        return Path(__file__).resolve().parents[4]
+        path = Path(__file__).resolve().parent
+        while path != path.parent:
+            if (path / "manage.py").is_file() or (path / "pyproject.toml").is_file():
+                return path
+            path = path.parent
+        raise FileNotFoundError("Repository root not found from command module path.")
