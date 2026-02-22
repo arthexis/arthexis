@@ -351,6 +351,41 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
     assert "/var/log/letsencrypt/letsencrypt.log" in message
 
 
+def test_request_certbot_certificate_http01_challenge_failure_includes_dns_resolution_hint_regression(
+    monkeypatch, tmp_path
+):
+    """Regression: HTTP-01 failures should include current DNS resolution details for the domain."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
+        raise RuntimeError("Some challenges have failed.")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+    monkeypatch.setattr(
+        services.socket,
+        "getaddrinfo",
+        lambda domain, port, proto=0: [  # noqa: ARG005
+            (services.socket.AF_INET, services.socket.SOCK_STREAM, proto, "", ("198.51.100.10", port)),
+            (services.socket.AF_INET6, services.socket.SOCK_STREAM, proto, "", ("2001:db8::7", port)),
+        ],
+    )
+
+    with pytest.raises(services.CertbotChallengeError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="nginx",
+            sudo="",
+        )
+
+    message = str(exc_info.value)
+    assert "DNS lookup for example.com resolved to:" in message
+    assert "198.51.100.10" in message
+    assert "2001:db8::7" in message
+
+
 def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint(
     monkeypatch, tmp_path
 ):
