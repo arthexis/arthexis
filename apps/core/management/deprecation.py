@@ -9,6 +9,23 @@ from django.core.management.base import BaseCommand
 CommandType = TypeVar("CommandType", bound=BaseCommand)
 
 
+def absorbed_into_command(replacement_command: str):
+    """Mark a deprecated management command as absorbed into a canonical command.
+
+    Args:
+        replacement_command: Canonical command string users should run instead.
+    """
+
+    def decorator(command_cls: type[CommandType]) -> type[CommandType]:
+        """Attach machine-readable metadata to the decorated command class."""
+
+        command_cls.arthexis_absorbed_command = True
+        command_cls.arthexis_replacement_command = replacement_command
+        return command_cls
+
+    return decorator
+
+
 def create_deprecated_command_shim(
     *,
     canonical_command: type[CommandType],
@@ -40,4 +57,4 @@ def create_deprecated_command_shim(
     return Command
 
 
-__all__ = ["create_deprecated_command_shim"]
+__all__ = ["absorbed_into_command", "create_deprecated_command_shim"]

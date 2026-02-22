@@ -1,7 +1,9 @@
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("rfid doctor")
 class Command(BaseCommand):
     """Deprecated wrapper for `rfid doctor`."""
 

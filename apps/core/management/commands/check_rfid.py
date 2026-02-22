@@ -2,8 +2,10 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from apps.cards.models import RFID
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("rfid check --uid ...")
 class Command(BaseCommand):
     """Deprecated wrapper for `rfid check`."""
 
