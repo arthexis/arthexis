@@ -14,8 +14,12 @@ from apps.evergo.models import EvergoUser
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.post")
-def test_evergo_command_saves_credentials_and_tests_login(mock_post):
+@pytest.mark.regression
+@patch("apps.evergo.models.EvergoUser._prime_session", return_value="xsrf-token")
+@patch("apps.evergo.models.requests.Session")
+def test_evergo_command_saves_credentials_and_tests_login(
+    mock_session_cls, _mock_prime_session
+):
     """Command should save credentials, test login, and sync API fields."""
     User = get_user_model()
     suite_user = User.objects.create_user(
@@ -34,7 +38,11 @@ def test_evergo_command_saves_credentials_and_tests_login(mock_post):
         "updated_at": "2025-01-02T00:00:00.000000Z",
         "subempresas": [{"id": 5, "idInstalaEmpresa": 2, "nombre": "Ops"}],
     }
-    mock_post.return_value = mock_response
+    mock_session = Mock()
+    mock_session.__enter__ = Mock(return_value=mock_session)
+    mock_session.__exit__ = Mock(return_value=False)
+    mock_session.post.return_value = mock_response
+    mock_session_cls.return_value = mock_session
 
     stdout = io.StringIO()
     call_command(
