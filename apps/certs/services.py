@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -209,8 +210,23 @@ def _build_http01_domain_resolution_hints(domain: str) -> list[str]:
     """Return DNS-resolution hints that help triage HTTP-01 challenge failures."""
 
     try:
-        address_info = socket.getaddrinfo(domain, 80, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as exc:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            address_info = executor.submit(
+                socket.getaddrinfo,
+                domain,
+                80,
+                0,
+                0,
+                socket.IPPROTO_TCP,
+            ).result(timeout=3)
+    except TimeoutError:
+        return [
+            (
+                "DNS lookup timed out for the challenge domain. "
+                f"{domain} did not return records before the resolver timeout."
+            )
+        ]
+    except OSError as exc:
         return [
             (
                 "DNS lookup failed for the challenge domain. "
@@ -227,12 +243,18 @@ def _build_http01_domain_resolution_hints(domain: str) -> list[str]:
             )
         ]
 
-    return [
-        (
-            f"DNS lookup for {domain} resolved to: {', '.join(addresses)}. "
-            "Ensure these addresses route to this server."
+    hint = (
+        f"DNS lookup for {domain} resolved to: {', '.join(addresses)}. "
+        "Ensure these addresses route to this server."
+    )
+
+    if all(ipaddress.ip_address(address).is_private for address in addresses):
+        hint += (
+            " The resolved addresses are private; HTTP-01 validation requires "
+            "publicly reachable A/AAAA records."
         )
-    ]
+
+    return [hint]
 
 
 def _build_http01_certbot_command(

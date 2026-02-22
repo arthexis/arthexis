@@ -325,14 +325,21 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
 ):
     """ACME challenge failures should raise CertbotChallengeError with remediation hints."""
 
-    def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
-        raise RuntimeError(
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError(  # noqa: TRY003
             "Saving debug log to /var/log/letsencrypt/letsencrypt.log\n"
             "Some challenges have failed."
         )
 
     monkeypatch.setattr(services, "_run_command", fake_run)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+    monkeypatch.setattr(
+        services.socket,
+        "getaddrinfo",
+        lambda domain, port, *_args, **_kwargs: [
+            (services.socket.AF_INET, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("192.0.2.1", port)),
+        ],
+    )
 
     with pytest.raises(services.CertbotChallengeError) as exc_info:
         services.request_certbot_certificate(
@@ -356,17 +363,17 @@ def test_request_certbot_certificate_http01_challenge_failure_includes_dns_resol
 ):
     """Regression: HTTP-01 failures should include current DNS resolution details for the domain."""
 
-    def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
-        raise RuntimeError("Some challenges have failed.")
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("Some challenges have failed.")  # noqa: TRY003
 
     monkeypatch.setattr(services, "_run_command", fake_run)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
     monkeypatch.setattr(
         services.socket,
         "getaddrinfo",
-        lambda domain, port, proto=0: [  # noqa: ARG005
-            (services.socket.AF_INET, services.socket.SOCK_STREAM, proto, "", ("198.51.100.10", port)),
-            (services.socket.AF_INET6, services.socket.SOCK_STREAM, proto, "", ("2001:db8::7", port)),
+        lambda domain, port, *_args, **_kwargs: [
+            (services.socket.AF_INET, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("198.51.100.10", port)),
+            (services.socket.AF_INET6, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("2001:db8::7", port)),
         ],
     )
 
@@ -386,6 +393,59 @@ def test_request_certbot_certificate_http01_challenge_failure_includes_dns_resol
     assert "2001:db8::7" in message
 
 
+def test_request_certbot_certificate_http01_challenge_failure_includes_dns_lookup_failed_hint(
+    monkeypatch, tmp_path
+):
+    """HTTP-01 failures should mention DNS lookup failures when resolution errors occur."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("Some challenges have failed.")  # noqa: TRY003
+
+    def fake_getaddrinfo(domain, port, *_args, **_kwargs):  # noqa: ARG001
+        raise services.socket.gaierror("Name or service not known")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+    monkeypatch.setattr(services.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(services.CertbotChallengeError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="nginx",
+            sudo="",
+        )
+
+    assert "DNS lookup failed for the challenge domain." in str(exc_info.value)
+
+
+def test_request_certbot_certificate_http01_challenge_failure_includes_dns_lookup_no_addresses_hint(
+    monkeypatch, tmp_path
+):
+    """HTTP-01 failures should mention when DNS lookup returns no addresses."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("Some challenges have failed.")  # noqa: TRY003
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+    monkeypatch.setattr(services.socket, "getaddrinfo", lambda *args, **kwargs: [])
+
+    with pytest.raises(services.CertbotChallengeError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="nginx",
+            sudo="",
+        )
+
+    assert "DNS lookup returned no addresses for the challenge domain." in str(exc_info.value)
+
+
 def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint(
     monkeypatch, tmp_path
 ):
@@ -403,8 +463,8 @@ def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint
     ):
         return ["certbot"], {}
 
-    def fake_run(command: list[str], *, env=None):  # noqa: ARG001, TRY003
-        raise RuntimeError("Some challenges have failed.")
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("Some challenges have failed.")  # noqa: TRY003
 
     monkeypatch.setattr(services, "_build_godaddy_certbot_command", fake_build)
     monkeypatch.setattr(services, "_run_command", fake_run)
