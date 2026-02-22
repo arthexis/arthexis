@@ -209,6 +209,12 @@ class Reference(Entity):
         db_table = "core_reference"
         verbose_name = _("Reference")
         verbose_name_plural = _("References")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["alt_text", "value"],
+                name="links_reference_alt_text_value_uniq",
+            )
+        ]
 
     @property
     def image_file(self):
