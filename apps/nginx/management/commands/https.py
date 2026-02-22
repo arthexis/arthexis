@@ -18,7 +18,7 @@ from config.settings_helpers import normalize_site_host
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.dns.models import DNSProviderCredential
-from apps.certs.services import CertificateVerificationResult
+from apps.certs.services import CertificateVerificationResult, CertbotChallengeError
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.services import NginxUnavailableError, ValidationError
@@ -32,6 +32,14 @@ FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING = (
 FORCE_RENEWAL_STILL_EXPIRED_ERROR = (
     "--force-renewal completed but the certificate is still expired. "
     "Inspect certbot logs and DNS challenge status, then retry."
+)
+CERTBOT_HTTP01_BOOTSTRAP_MESSAGE = (
+    "The HTTP-01 challenge requires an active nginx site entry for this domain. "
+    "Arthexis attempted to stage and apply an HTTP site configuration automatically before requesting the certificate."
+)
+NGINX_CONFIGURE_REMEDIATION_TEMPLATE = (
+    "If nginx is not managed on this node yet, run '{command} nginx-configure' to bootstrap it, "
+    "then re-run this https command."
 )
 
 
@@ -132,6 +140,8 @@ class Command(BaseCommand):
             raise CommandError("--local cannot be combined with --site. Use --certbot/--godaddy or omit --local.")
 
         certbot_domain = certbot_domain or (parsed_site if parsed_site and not godaddy_domain else None)
+        certbot_domain = self._parse_site_domain(certbot_domain) if certbot_domain else None
+        godaddy_domain = self._parse_site_domain(godaddy_domain) if godaddy_domain else None
         use_local = options["local"] or not (certbot_domain or godaddy_domain)
         use_godaddy = bool(godaddy_domain)
         sandbox_override = self._parse_sandbox_override(options)
@@ -213,16 +223,31 @@ class Command(BaseCommand):
                 subject_alt_names=["localhost", "127.0.0.1", "::1"],
             )
         else:
-            if use_godaddy:
-                self._validate_godaddy_setup(certificate)
+            http01_bootstrapped = False
             if force_renewal:
                 previous_certificate_path = certificate.certificate_path
                 previous_certificate_key_path = certificate.certificate_key_path
-            certificate.provision(
-                sudo=sudo,
-                dns_use_sandbox=sandbox_override,
-                force_renewal=force_renewal,
-            )
+            try:
+                if not use_godaddy:
+                    self._prepare_http01_challenge_site(domain, reload=reload)
+                    http01_bootstrapped = True
+                if use_godaddy:
+                    self._validate_godaddy_setup(certificate)
+                certificate.provision(
+                    sudo=sudo,
+                    dns_use_sandbox=sandbox_override,
+                    force_renewal=force_renewal,
+                )
+            except CertbotChallengeError as exc:
+                if http01_bootstrapped:
+                    self._restore_https_config_after_http01_bootstrap(config, reload=reload)
+                raise CommandError(
+                    self._build_certbot_challenge_command_error(
+                        domain=domain,
+                        challenge_type=certificate.challenge_type,
+                        reason=str(exc),
+                    )
+                ) from exc
             if force_renewal:
                 self._warn_if_certificate_paths_changed(
                     certificate,
@@ -232,9 +257,52 @@ class Command(BaseCommand):
                 self._validate_force_renewal_result(certificate)
 
         self._warn_if_certificate_expiring_soon(certificate, warn_days=warn_days)
+        SiteConfiguration.objects.filter(pk=config.pk).update(protocol="https", enabled=True)
+        config.refresh_from_db(fields=["protocol", "enabled"])
         self._ensure_managed_site(domain, require_https=True)
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _prepare_http01_challenge_site(self, domain: str, *, reload: bool) -> None:
+        """Ensure nginx can answer HTTP-01 challenges before certbot provisioning."""
+
+        self._ensure_managed_site(domain, require_https=False)
+        bootstrap_config = self._get_or_create_config(domain, protocol="http")
+        self._apply_config(bootstrap_config, reload=reload)
+
+    def _restore_https_config_after_http01_bootstrap(
+        self,
+        config: SiteConfiguration,
+        *,
+        reload: bool,
+    ) -> None:
+        """Restore the persisted/runtime site protocol to HTTPS after HTTP-01 bootstrap."""
+
+        SiteConfiguration.objects.filter(pk=config.pk).update(protocol="https", enabled=True)
+        config.refresh_from_db(fields=["protocol", "enabled"])
+        self._apply_config(config, reload=reload)
+
+    def _build_certbot_challenge_command_error(
+        self,
+        *,
+        domain: str,
+        challenge_type: str,
+        reason: str,
+    ) -> str:
+        """Return actionable command output for certbot ACME challenge failures."""
+
+        hints = [
+            f"HTTPS enable did not complete for {domain}.",
+            reason,
+        ]
+        if challenge_type == CertbotCertificate.ChallengeType.NGINX:
+            hints.extend(
+                [
+                    CERTBOT_HTTP01_BOOTSTRAP_MESSAGE,
+                    NGINX_CONFIGURE_REMEDIATION_TEMPLATE.format(command=sys.argv[0]),
+                ]
+            )
+        return "\n".join(hints)
 
     def _validate_force_renewal_result(self, certificate) -> None:
         """Raise when force-renewal returns but the certificate is still expired."""
@@ -315,6 +383,9 @@ class Command(BaseCommand):
 
         if normalized == "localhost":
             raise CommandError("--site requires a public host. Use --local for local development.")
+
+        if normalized.startswith("-"):
+            raise CommandError("--site must include a valid hostname or URL.")
 
         try:
             parsed_ip = ipaddress.ip_address(normalized)
@@ -552,7 +623,10 @@ class Command(BaseCommand):
         try:
             result = config.apply(reload=reload)
         except (NginxUnavailableError, ValidationError) as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(
+                f"{exc}\n" +
+                NGINX_CONFIGURE_REMEDIATION_TEMPLATE.format(command=sys.argv[0])
+            ) from exc
 
         self.stdout.write(self.style.SUCCESS(result.message))
         if not result.validated:

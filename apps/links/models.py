@@ -41,8 +41,19 @@ def _is_valid_redirect_target(value: str) -> bool:
 
 
 class ReferenceManager(EntityManager):
-    def get_by_natural_key(self, alt_text: str):
-        return self.get(alt_text=alt_text)
+    def get_by_natural_key(self, alt_text: str, value: str | None = None):
+        """Resolve a reference natural key for fixture deserialization.
+
+        Historically references were keyed only by ``alt_text``, but that value
+        is not guaranteed to be unique in live databases. Accepting ``value`` as
+        a second key keeps fixture loading deterministic when duplicate titles
+        exist.
+        """
+
+        filters = {"alt_text": alt_text}
+        if value is not None:
+            filters["value"] = value
+        return self.get(**filters)
 
 
 class Reference(Entity):
@@ -185,7 +196,7 @@ class Reference(Entity):
         return self.alt_text
 
     def natural_key(self):  # pragma: no cover - simple representation
-        return (self.alt_text,)
+        return (self.alt_text, self.value)
 
     def is_link_valid(self) -> bool:
         """Return ``True`` when the reference URL is valid."""
@@ -198,6 +209,12 @@ class Reference(Entity):
         db_table = "core_reference"
         verbose_name = _("Reference")
         verbose_name_plural = _("References")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["alt_text", "value"],
+                name="links_reference_alt_text_value_uniq",
+            )
+        ]
 
     @property
     def image_file(self):
