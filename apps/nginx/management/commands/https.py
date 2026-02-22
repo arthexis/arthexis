@@ -17,7 +17,7 @@ from config.settings_helpers import normalize_site_host
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.dns.models import DNSProviderCredential
-from apps.certs.services import CertificateVerificationResult
+from apps.certs.services import CertificateVerificationResult, CertbotChallengeError
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.services import NginxUnavailableError, ValidationError
@@ -31,6 +31,10 @@ FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING = (
 FORCE_RENEWAL_STILL_EXPIRED_ERROR = (
     "--force-renewal completed but the certificate is still expired. "
     "Inspect certbot logs and DNS challenge status, then retry."
+)
+CERTBOT_HTTP01_BOOTSTRAP_MESSAGE = (
+    "The HTTP-01 challenge requires an active nginx site entry for this domain. "
+    "Arthexis attempted to stage and apply an HTTP site configuration automatically before requesting the certificate."
 )
 
 
@@ -210,16 +214,27 @@ class Command(BaseCommand):
                 subject_alt_names=["localhost", "127.0.0.1", "::1"],
             )
         else:
+            if not use_godaddy:
+                self._prepare_http01_challenge_site(domain, reload=reload)
             if use_godaddy:
                 self._validate_godaddy_setup(certificate)
             if force_renewal:
                 previous_certificate_path = certificate.certificate_path
                 previous_certificate_key_path = certificate.certificate_key_path
-            certificate.provision(
-                sudo=sudo,
-                dns_use_sandbox=sandbox_override,
-                force_renewal=force_renewal,
-            )
+            try:
+                certificate.provision(
+                    sudo=sudo,
+                    dns_use_sandbox=sandbox_override,
+                    force_renewal=force_renewal,
+                )
+            except CertbotChallengeError as exc:
+                raise CommandError(
+                    self._build_certbot_challenge_command_error(
+                        domain=domain,
+                        challenge_type=certificate.challenge_type,
+                        reason=str(exc),
+                    )
+                ) from exc
             if force_renewal:
                 self._warn_if_certificate_paths_changed(
                     certificate,
@@ -232,6 +247,35 @@ class Command(BaseCommand):
         self._ensure_managed_site(domain, require_https=True)
         self._apply_config(config, reload=reload)
         return certificate
+
+    def _prepare_http01_challenge_site(self, domain: str, *, reload: bool) -> None:
+        """Ensure nginx can answer HTTP-01 challenges before certbot provisioning."""
+
+        self._ensure_managed_site(domain, require_https=False)
+        bootstrap_config = self._get_or_create_config(domain, protocol="http")
+        self._apply_config(bootstrap_config, reload=reload)
+
+    def _build_certbot_challenge_command_error(
+        self,
+        *,
+        domain: str,
+        challenge_type: str,
+        reason: str,
+    ) -> str:
+        """Return actionable command output for certbot ACME challenge failures."""
+
+        hints = [
+            f"HTTPS enable did not complete for {domain}.",
+            reason,
+        ]
+        if challenge_type == CertbotCertificate.ChallengeType.NGINX:
+            hints.extend(
+                [
+                    CERTBOT_HTTP01_BOOTSTRAP_MESSAGE,
+                    "If this node is missing managed nginx setup, run './command.sh nginx-configure' and retry HTTPS enable.",
+                ]
+            )
+        return "\n".join(hints)
 
     def _validate_force_renewal_result(self, certificate) -> None:
         """Raise when force-renewal returns but the certificate is still expired."""
@@ -517,7 +561,11 @@ class Command(BaseCommand):
         try:
             result = config.apply(reload=reload)
         except (NginxUnavailableError, ValidationError) as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(
+                f"{exc}\n"
+                "If nginx is not managed on this node yet, run './command.sh nginx-configure' to bootstrap it, "
+                "then re-run this https command."
+            ) from exc
 
         self.stdout.write(self.style.SUCCESS(result.message))
         if not result.validated:
