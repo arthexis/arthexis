@@ -10,6 +10,7 @@ from apps.locals.models import Favorite
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
     user_model = get_user_model()
     user = user_model.objects.create_user(
@@ -47,6 +48,7 @@ def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 def test_user_data_applied_after_seed_fixture(tmp_path):
     user_model = get_user_model()
     user = user_model.objects.create_user(

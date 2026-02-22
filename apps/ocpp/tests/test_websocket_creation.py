@@ -529,6 +529,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         self._reset_store()
         super().tearDown()
 
+    @pytest.mark.slow
     def test_cp_simulator_connects_with_default_fixture(self):
         call_command(
             "loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json"
