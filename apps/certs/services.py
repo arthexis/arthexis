@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -196,11 +197,42 @@ def _build_challenge_failure_guidance(
             "Using DNS-01: verify GoDaddy API credentials, propagation delay, and matching authoritative DNS zone."
         )
     else:
+        hints.extend(_build_http01_domain_resolution_hints(domain))
         hints.append(
             f"Using HTTP-01 webroot: ensure port 80 is open and serving /.well-known/acme-challenge/ from {HTTP01_WEBROOT_PATH}."
         )
     hints.append("Re-run with certbot -v and inspect /var/log/letsencrypt/letsencrypt.log for challenge-specific details.")
     return "\n".join(hints)
+
+
+def _build_http01_domain_resolution_hints(domain: str) -> list[str]:
+    """Return DNS-resolution hints that help triage HTTP-01 challenge failures."""
+
+    try:
+        address_info = socket.getaddrinfo(domain, 80, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        return [
+            (
+                "DNS lookup failed for the challenge domain. "
+                f"{domain} could not be resolved ({exc})."
+            )
+        ]
+
+    addresses = sorted({item[4][0] for item in address_info if item[4]})
+    if not addresses:
+        return [
+            (
+                "DNS lookup returned no addresses for the challenge domain. "
+                f"Verify A/AAAA records for {domain}."
+            )
+        ]
+
+    return [
+        (
+            f"DNS lookup for {domain} resolved to: {', '.join(addresses)}. "
+            "Ensure these addresses route to this server."
+        )
+    ]
 
 
 def _build_http01_certbot_command(
