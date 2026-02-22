@@ -1,0 +1,54 @@
+"""Tests for the consolidated ``migrations`` management command."""
+
+from __future__ import annotations
+
+import pytest
+from django.core.management import CommandError, call_command
+
+
+pytestmark = pytest.mark.regression
+
+
+def test_migrations_run_delegates_to_migrate(monkeypatch) -> None:
+    """Regression: ``migrations run`` should invoke ``migrate`` with target."""
+
+    captured: dict[str, object] = {}
+
+    def fake_call_command(name, *args, **kwargs):
+        captured["name"] = name
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr("apps.tests.management.commands.migrations.call_command", fake_call_command)
+
+    call_command("migrations", "run", "users", "0001_initial", "--database", "default")
+
+    assert captured["name"] == "migrate"
+    assert captured["args"] == ("users", "0001_initial")
+
+
+def test_migrations_check_delegates_to_makemigrations(monkeypatch) -> None:
+    """Regression: ``migrations check`` should enforce dry-run checks."""
+
+    captured: dict[str, object] = {}
+
+    def fake_call_command(name, *args, **kwargs):
+        captured["name"] = name
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr("apps.tests.management.commands.migrations.call_command", fake_call_command)
+
+    call_command("migrations", "check")
+
+    assert captured["name"] == "makemigrations"
+    assert captured["kwargs"]["check"] is True
+    assert captured["kwargs"]["dry_run"] is True
+
+
+def test_migrations_command_rejects_unknown_action() -> None:
+    """Regression: unsupported migration actions should raise command errors."""
+
+    with pytest.raises(CommandError, match="Unsupported action"):
+        command = __import__("apps.tests.management.commands.migrations", fromlist=["Command"]).Command()
+        command.handle(action="invalid")
