@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from apps.evergo.models import EvergoUser
+from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @pytest.mark.django_db
@@ -87,3 +89,52 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
     assert b"evergo user id" not in thead
     assert b">empresa id<" not in thead
     assert b">subempresa id<" not in thead
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.EvergoUser.load_orders", return_value=(2, 3))
+def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, admin_client):
+    """Ensure the changelist tool-style action can run without selected rows."""
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(
+        username="suite-admin-tool",
+        email="suite-admin-tool@example.com",
+    )
+    EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-tool@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    changelist_url = reverse("admin:evergo_evergouser_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {"action": "load_orders", "index": 0, "select_across": 0},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    mock_load_orders.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_evergo_order_and_field_value_admin_changelists_render(admin_client):
+    """Ensure new order and field-value models are available in admin."""
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(
+        username="suite-admin-order",
+        email="suite-admin-order@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-order@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(user=profile, remote_id=1, order_number="GLY0001")
+    EvergoOrderFieldValue.objects.create(field_name="estatus", remote_id=1, remote_name="Nueva")
+
+    order_changelist = admin_client.get(reverse("admin:evergo_evergoorder_changelist"))
+    field_value_changelist = admin_client.get(reverse("admin:evergo_evergoorderfieldvalue_changelist"))
+
+    assert order_changelist.status_code == 200
+    assert field_value_changelist.status_code == 200

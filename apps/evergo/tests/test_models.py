@@ -8,7 +8,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from apps.evergo.exceptions import EvergoAPIError
-from apps.evergo.models import EvergoUser
+from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @pytest.mark.django_db
@@ -95,3 +95,116 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
 
     with pytest.raises(EvergoAPIError, match="status 419"):
         profile.test_login()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.requests.Session")
+def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_cls):
+    """Load orders should upsert assigned orders and refresh learned dropdown field values."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-orders", email="suite-orders@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="reginaldocts@evergo.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+
+    mock_session = mock_session_cls.return_value.__enter__.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+
+    def _response(payload):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = payload
+        return response
+
+    def request_side_effect(*, method, url, **kwargs):
+        if url.endswith("/login"):
+            return _response(
+                {
+                    "id": 58642,
+                    "name": "Reginaldo Gutiérrez",
+                    "email": "reginaldocts@evergo.com",
+                    "subempresas": [],
+                }
+            )
+        if "catalogs/sitios/all" in url:
+            return _response([{"id": 36, "nombre": "Geely"}])
+        if "search-ingenieros" in url:
+            return _response(
+                [
+                    {
+                        "id": 58642,
+                        "name": "Reginaldo Gutiérrez",
+                        "user_info": "Reginaldo Gutiérrez - reginaldocts@evergo.com",
+                    }
+                ]
+            )
+        if "catalogs/orden-estatus" in url:
+            return _response([{"id": 8, "nombre": "Orden concluida"}])
+        if "ordenes/instalador-coordinador" in url:
+            return _response(
+                {
+                    "current_page": 1,
+                    "last_page": 1,
+                    "data": [
+                        {
+                            "id": 29759,
+                            "numero_orden": "GLY01026",
+                            "idSitio": 36,
+                            "idCliente": 64473,
+                            "prefijo": "GLY",
+                            "uuid": 1026,
+                            "has_vehicle": 1,
+                            "has_charger": 1,
+                            "idOrdenEstatus": 8,
+                            "paymentBy": "Brand",
+                            "user_tecnico_id": 58642,
+                            "created_at": "2026-01-16T22:38:58.000000Z",
+                            "updated_at": "2026-02-21T18:30:58.000000Z",
+                            "sitio": {"id": 36, "nombre": "Geely"},
+                            "estatus": {"id": 8, "nombre": "Orden concluida"},
+                            "preorden_tipo": {"id": 107, "nombre": "Geely - Instalación"},
+                            "cliente": {"id": 64473, "name": "ALMA ROSA AGUIRRE"},
+                            "orden_instalador": {
+                                "idIngeniero": 58642,
+                                "idCoordinador": 58642,
+                                "ingeniero": {"id": 58642, "name": "Reginaldo Gutiérrez"},
+                                "coordinador": {"id": 58642, "name": "Reginaldo Gutiérrez"},
+                            },
+                            "cargadores": [{"id": 3553}],
+                        },
+                        {
+                            "id": 39759,
+                            "numero_orden": "GLY02001",
+                            "user_tecnico_id": 99999,
+                            "orden_instalador": {
+                                "idIngeniero": 99999,
+                                "idCoordinador": 99999,
+                            },
+                        },
+                    ],
+                }
+            )
+        raise AssertionError(f"Unexpected URL {url}")
+
+    mock_session.request.side_effect = request_side_effect
+
+    created, updated = profile.load_orders()
+
+    assert created == 1
+    assert updated == 0
+    order = EvergoOrder.objects.get(remote_id=29759)
+    assert order.order_number == "GLY01026"
+    assert order.assigned_engineer_id == 58642
+    assert order.charger_count == 1
+
+    assert not EvergoOrder.objects.filter(remote_id=39759).exists()
+    assert EvergoOrderFieldValue.objects.filter(field_name="sitio", remote_id=36).exists()
+    assert EvergoOrderFieldValue.objects.filter(field_name="estatus", remote_id=8).exists()
+    assert EvergoOrderFieldValue.objects.filter(field_name="preorden_tipo", remote_id=107).exists()
+    assert EvergoOrderFieldValue.objects.filter(field_name="payment_by", remote_name="Brand").exists()
