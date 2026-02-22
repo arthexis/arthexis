@@ -74,3 +74,24 @@ async def test_wrapped_high_risk_handlers_delegate_to_legacy_methods():
     consumer._handle_meter_values_legacy.assert_awaited_once()
     consumer._handle_publish_firmware_status_notification_action_legacy.assert_awaited_once()
     consumer._handle_log_status_notification_action_legacy.assert_awaited_once()
+
+
+def _protocol_actions(consumer, handler_name: str) -> set[str]:
+    """Return registered protocol action names for the named handler."""
+
+    calls = getattr(getattr(consumer, handler_name), "__protocol_calls__", set())
+    return {call[2] for call in calls}
+
+
+def test_moved_wrapper_handlers_keep_protocol_decorator_bindings():
+    """Moved wrappers still expose protocol bindings used by router dispatch."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+
+    assert _protocol_actions(consumer, "_handle_transaction_event_action") == {"TransactionEvent"}
+    assert _protocol_actions(consumer, "_handle_meter_values_action") == {"MeterValues"}
+    assert _protocol_actions(consumer, "_handle_start_transaction_action") == {"StartTransaction"}
+    assert _protocol_actions(consumer, "_handle_stop_transaction_action") == {"StopTransaction"}
+    assert _protocol_actions(consumer, "_handle_publish_firmware_status_notification_action") == {
+        "PublishFirmwareStatusNotification"
+    }

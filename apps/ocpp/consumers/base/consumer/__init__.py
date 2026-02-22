@@ -86,16 +86,18 @@ from ..identity import (
 )
 from ....utils import _parse_ocpp_timestamp
 from .connection import ConnectionHandler
+from .connection_flow import ConnectionFlowMixin
 from .forwarding import ForwardingHandler
 from .metering import MeteringHandler
+from .actions_metering import MeteringActionsMixin
+from .actions_notifications import NotificationActionsMixin
+from .actions_transactions import TransactionActionsMixin
 from .notifications import NotificationHandler
 from .transactions import TransactionHandler
+from .legacy_transactions import LegacyTransactionsMixin
+from .rfid import RfidMixin
 
 logger = logging.getLogger(__name__)
-
-CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
-CHARGE_POINT_FEATURE_SLUG = "charge-points"
-
 
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
@@ -128,6 +130,12 @@ class SinkConsumer(AsyncWebsocketConsumer):
 
 
 class CSMSConsumer(
+    ConnectionFlowMixin,
+    RfidMixin,
+    MeteringActionsMixin,
+    TransactionActionsMixin,
+    NotificationActionsMixin,
+    LegacyTransactionsMixin,
     IdentityMixin,
     CertificatesMixin,
     DispatchMixin,
@@ -175,14 +183,6 @@ class CSMSConsumer(
 
         return NotificationHandler(self)
 
-    async def _allow_charge_point_connection(
-        self, existing_charger: Charger | None
-    ) -> bool:
-        """Wrapper that delegates charge-point admission checks to connection helper."""
-
-        return await self._connection_handler().allow_charge_point_connection(
-            existing_charger
-        )
 
     async def _forward_charge_point_message(self, action: str, raw: str) -> None:
         """Wrapper that delegates message forwarding behavior."""
@@ -194,79 +194,14 @@ class CSMSConsumer(
 
         await self._forwarding_handler().forward_reply(message_id, raw)
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
-    async def _handle_meter_values_action(self, payload, msg_id, raw, text_data):
-        """Route OCPP meter values through the metering handler."""
 
-        return await self._metering_handler().handle_meter_values(
-            payload, msg_id, raw, text_data
-        )
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    async def _handle_transaction_event_action(self, payload, msg_id, raw, text_data):
-        """Route TransactionEvent through the transaction handler."""
 
-        return await self._transaction_handler().handle_transaction_event(
-            payload, msg_id, raw, text_data
-        )
 
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
-    async def _handle_start_transaction_action(self, payload, msg_id, raw, text_data):
-        """Route StartTransaction through the transaction handler."""
 
-        return await self._transaction_handler().handle_start_transaction(
-            payload, msg_id, raw, text_data
-        )
 
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
-    async def _handle_stop_transaction_action(self, payload, msg_id, raw, text_data):
-        """Route StopTransaction through the transaction handler."""
 
-        return await self._transaction_handler().handle_stop_transaction(
-            payload, msg_id, raw, text_data
-        )
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "PublishFirmwareStatusNotification")
-    async def _handle_publish_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
-        """Route firmware publish notifications through notification handler."""
-
-        return await self._notification_handler().handle_publish_firmware_status(
-            payload, msg_id, raw, text_data
-        )
-
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "DiagnosticsStatusNotification")
-    async def _handle_diagnostics_status_notification_action(self, payload, msg_id, raw, text_data):
-        """Route diagnostics notifications through notification handler."""
-
-        return await self._notification_handler().handle_diagnostics_status(
-            payload, msg_id, raw, text_data
-        )
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
-    async def _handle_log_status_notification_action(self, payload, msg_id, raw, text_data):
-        """Route log notifications through notification handler."""
-
-        return await self._notification_handler().handle_log_status(
-            payload, msg_id, raw, text_data
-        )
-
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "FirmwareStatusNotification")
-    async def _handle_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
-        """Route firmware status notifications through notification handler."""
-
-        return await self._notification_handler().handle_firmware_status(
-            payload, msg_id, raw, text_data
-        )
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
-    async def _handle_security_event_notification_action(self, payload, msg_id, raw, text_data):
-        """Route security event notifications through notification handler."""
-
-        return await self._notification_handler().handle_security_event(
-            payload, msg_id, raw, text_data
-        )
 
     async def _ensure_charger_record(
         self, existing_charger: Charger | None
@@ -298,157 +233,9 @@ class CSMSConsumer(
         friendly_name = location_name or self.charger_id
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
-    async def _allow_charge_point_connection_legacy(
-        self, existing_charger: Charger | None
-    ) -> bool:
-        """Return whether the charge point connection should be accepted."""
 
-        def _resolve_feature_state() -> tuple[bool, str | None]:
-            node = Node.get_local()
-            if not node:
-                logger.warning(
-                    "Charge point connection allowed because no local node is registered."
-                )
-                return True, "node-missing"
 
-            feature = (
-                Feature.objects.select_related("node_feature")
-                .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
-                .first()
-            )
-            if not feature:
-                logger.warning(
-                    "Charge point creation feature %s missing; treating as enabled.",
-                    CHARGER_CREATION_FEATURE_SLUG,
-                )
-            node_feature = feature.node_feature if feature else None
-            if not node_feature:
-                node_feature = NodeFeature.objects.filter(
-                    slug=CHARGE_POINT_FEATURE_SLUG
-                ).first()
 
-            if not node_feature:
-                logger.warning(
-                    "Charge point node feature %s missing; treating as enabled.",
-                    CHARGE_POINT_FEATURE_SLUG,
-                )
-            elif not node_feature.is_enabled:
-                logger.info(
-                    "Charge point connection blocked: node feature %s disabled.",
-                    node_feature.slug,
-                )
-                return False, "node-feature-disabled"
-
-            if feature and not feature.is_enabled:
-                if existing_charger:
-                    logger.info(
-                        "Charge point creation disabled; allowing known charger %s.",
-                        existing_charger.charger_id,
-                    )
-                    return True, "creation-disabled-known"
-                logger.info(
-                    "Charge point creation disabled; blocking unknown charger %s.",
-                    getattr(self, "charger_id", "unknown"),
-                )
-                return False, "creation-disabled-unknown"
-
-            return True, None
-
-        allowed, _reason = await database_sync_to_async(_resolve_feature_state)()
-        return allowed
-
-    @requires_network
-    async def connect(self):
-        raw_serial = self._extract_serial_identifier()
-        if not await self._validate_serial_or_reject(raw_serial):
-            return
-        self.connector_value: int | None = None
-        self.store_key = store.pending_key(self.charger_id)
-        self.aggregate_charger: Charger | None = None
-        self._consumption_task: asyncio.Task | None = None
-        self._consumption_message_uuid: str | None = None
-        self.client_ip = _resolve_client_ip(self.scope)
-        self._header_reference_created = False
-        existing_charger = await database_sync_to_async(
-            lambda: Charger.objects.select_related(
-                "ws_auth_user", "ws_auth_group", "station_model"
-            )
-            .filter(charger_id=self.charger_id, connector_id=None)
-            .first(),
-            thread_sensitive=False,
-        )()
-        subprotocol = self._negotiate_ocpp_version(existing_charger)
-        if not await self._enforce_ws_auth(existing_charger):
-            return
-        if not await self._allow_charge_point_connection(existing_charger):
-            await self.close()
-            return
-        if not await self._accept_connection(subprotocol):
-            return
-        created = await self._ensure_charger_record(existing_charger)
-        await self._register_charger_logs()
-
-        restored_calls = store.restore_pending_calls(self.charger_id)
-        if restored_calls:
-            store.add_log(
-                self.store_key,
-                f"Restored {len(restored_calls)} pending call(s) after reconnect",
-                log_type="charger",
-            )
-
-        if not created:
-            await database_sync_to_async(
-                forwarder.sync_forwarded_charge_points
-            )(refresh_forwarders=False)
-        forwarder.ensure_keepalive_task(
-            idle_seconds=int(
-                getattr(settings, "OCPP_FORWARDER_PING_INTERVAL", 60)
-            )
-        )
-
-    async def _get_account(self, id_tag: str) -> CustomerAccount | None:
-        """Return the customer account for the provided RFID if valid."""
-        if not id_tag:
-            return None
-
-        def _resolve() -> CustomerAccount | None:
-            matches = CoreRFID.matching_queryset(id_tag).filter(allowed=True)
-            if not matches.exists():
-                return None
-            return (
-                CustomerAccount.objects.filter(rfids__in=matches)
-                .distinct()
-                .first()
-            )
-
-        return await database_sync_to_async(_resolve)()
-
-    async def _ensure_rfid_seen(self, id_tag: str) -> CoreRFID | None:
-        """Ensure an RFID record exists and update its last seen timestamp."""
-
-        if not id_tag:
-            return None
-
-        normalized = id_tag.upper()
-
-        def _ensure() -> CoreRFID:
-            now = timezone.now()
-            tag, _created = CoreRFID.register_scan(normalized)
-            updates = []
-            if not tag.allowed:
-                tag.allowed = True
-                updates.append("allowed")
-            if not tag.released:
-                tag.released = True
-                updates.append("released")
-            if tag.last_seen_on != now:
-                tag.last_seen_on = now
-                updates.append("last_seen_on")
-            if updates:
-                tag.save(update_fields=sorted(set(updates)))
-            return tag
-
-        return await database_sync_to_async(_ensure)()
 
     async def _clear_cached_status_fields(self) -> None:
         """Clear stale status fields for this charger across all connectors."""
@@ -467,46 +254,7 @@ class CSMSConsumer(
             for field, value in STATUS_RESET_UPDATES.items():
                 setattr(target, field, value)
 
-    def _log_unlinked_rfid(self, rfid: str) -> None:
-        """Record a warning when an RFID is authorized without an account."""
 
-        message = (
-            f"Authorized RFID {rfid} on charger {self.charger_id} without linked customer account"
-        )
-        logger.warning(message)
-        store.add_log(
-            store.pending_key(self.charger_id),
-            message,
-            log_type="charger",
-        )
-
-    async def _record_rfid_attempt(
-        self,
-        *,
-        rfid: str,
-        status: RFIDAttempt.Status,
-        account: CustomerAccount | None,
-        transaction: Transaction | None = None,
-    ) -> None:
-        """Persist RFID session attempt metadata for reporting."""
-
-        normalized = (rfid or "").strip().upper()
-        if not normalized:
-            return
-
-        charger = self.charger
-
-        def _create_attempt() -> None:
-            RFIDAttempt.record_attempt(
-                payload={"rfid": normalized},
-                source=RFIDAttempt.Source.OCPP,
-                status=status,
-                charger_id=charger.pk,
-                account_id=account.pk if account else None,
-                transaction_id=transaction.pk if transaction else None,
-            )
-
-        await database_sync_to_async(_create_attempt)()
 
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
@@ -1653,22 +1401,6 @@ class CSMSConsumer(
 
         await database_sync_to_async(_apply)()
 
-    async def disconnect(self, close_code):
-        store.release_ip_connection(getattr(self, "client_ip", None), self)
-        tx_obj = None
-        if self.charger_id:
-            tx_obj = store.get_transaction(self.charger_id, self.connector_value)
-        if tx_obj:
-            await self._update_consumption_message(tx_obj.pk)
-        await self._cancel_consumption_message()
-        store.connections.pop(self.store_key, None)
-        pending_key = store.pending_key(self.charger_id)
-        if self.store_key != pending_key:
-            store.connections.pop(pending_key, None)
-        store.end_session_log(self.store_key)
-        store.stop_session_lock()
-        store.clear_pending_calls(self.charger_id)
-        store.add_log(self.store_key, f"Closed (code={close_code})", log_type="charger")
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
@@ -3532,319 +3264,8 @@ class CSMSConsumer(
             store.finalize_log_capture(session_capture)
         return {}
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    async def _handle_transaction_event_legacy(
-        self, payload, msg_id, raw, text_data
-    ):
-        event_type = str(payload.get("eventType") or "").strip().lower()
-        transaction_info = payload.get("transactionInfo") or {}
-        ocpp_tx_id = str(transaction_info.get("transactionId") or "").strip()
-        evse_info = payload.get("evse") or {}
-        connector_hint = evse_info.get("connectorId", evse_info.get("id"))
-        await self._assign_connector(connector_hint)
-        connector_value = self.connector_value
-        timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
-        if timestamp_value is None:
-            timestamp_value = timezone.now()
 
-        def _record_transaction_event(
-            tx_obj: Transaction | None, extra: dict[str, object] | None = None
-        ) -> None:
-            notification: dict[str, object] = {
-                "charger_id": getattr(self, "charger_id", None) or self.store_key,
-                "connector_id": store.connector_slug(connector_value),
-                "event_type": event_type,
-                "timestamp": timestamp_value,
-                "transaction_pk": getattr(tx_obj, "pk", None),
-                "ocpp_transaction_id": ocpp_tx_id
-                or getattr(tx_obj, "ocpp_transaction_id", None),
-            }
-            if transaction_info:
-                if "meterStart" in transaction_info:
-                    notification["meter_start"] = transaction_info.get("meterStart")
-                if "meterStop" in transaction_info:
-                    notification["meter_stop"] = transaction_info.get("meterStop")
-            if extra:
-                notification.update(extra)
-            store.record_transaction_event(notification)
 
-        id_token = payload.get("idToken") or {}
-        id_tag = ""
-        if isinstance(id_token, dict):
-            id_tag = str(id_token.get("idToken") or "").strip()
-
-        if event_type == "started":
-            requests_to_start = store.find_transaction_requests(
-                charger_id=self.charger_id,
-                connector_id=connector_value,
-                action="RequestStartTransaction",
-                statuses={"accepted", "requested"},
-            )
-            tag = None
-            tag_created = False
-            if id_tag:
-                tag, tag_created = await database_sync_to_async(
-                    CoreRFID.register_scan
-                )(id_tag)
-            account = await self._get_account(id_tag)
-            if id_tag and not self.charger.require_rfid:
-                seen_tag = await self._ensure_rfid_seen(id_tag)
-                if seen_tag:
-                    tag = seen_tag
-            authorized = True
-            authorized_via_tag = False
-            if self.charger.require_rfid:
-                if account is not None:
-                    authorized = await database_sync_to_async(account.can_authorize)()
-                elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
-                    authorized = True
-                    authorized_via_tag = True
-                else:
-                    authorized = False
-            if authorized:
-                update_kwargs: dict[str, str] = {"status": "started"}
-                if ocpp_tx_id:
-                    update_kwargs["transaction_id"] = ocpp_tx_id
-                for request_message_id, _ in requests_to_start:
-                    store.update_transaction_request(
-                        request_message_id,
-                        **update_kwargs,
-                    )
-                if authorized_via_tag and tag:
-                    self._log_unlinked_rfid(tag.rfid)
-                vid_value, vin_value = _extract_vehicle_identifier(payload)
-                tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    charger=self.charger,
-                    account=account,
-                    rfid=(id_tag or ""),
-                    vid=vid_value,
-                    vin=vin_value,
-                    connector_id=connector_value,
-                    meter_start=transaction_info.get("meterStart"),
-                    start_time=timestamp_value,
-                    received_start_time=timezone.now(),
-                    ocpp_transaction_id=ocpp_tx_id,
-                )
-                await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
-                store.transactions[self.store_key] = tx_obj
-                store.start_session_log(self.store_key, tx_obj.pk)
-                store.start_session_lock()
-                store.add_session_message(self.store_key, text_data)
-                await self._start_consumption_updates(tx_obj)
-                await self._process_meter_value_entries(
-                    payload.get("meterValue"), connector_value, tx_obj
-                )
-                _record_transaction_event(tx_obj)
-                await self._record_rfid_attempt(
-                    rfid=id_tag or "",
-                    status=RFIDAttempt.Status.ACCEPTED,
-                    account=account,
-                    transaction=tx_obj,
-                )
-                return {"idTokenInfo": {"status": "Accepted"}}
-
-            await self._record_rfid_attempt(
-                rfid=id_tag or "",
-                status=RFIDAttempt.Status.REJECTED,
-                account=account,
-            )
-            return {"idTokenInfo": {"status": "Invalid"}}
-
-        if event_type == "ended":
-            tx_obj = store.transactions.pop(self.store_key, None)
-            if not tx_obj and ocpp_tx_id:
-                tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
-            if not tx_obj and ocpp_tx_id.isdigit():
-                tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(
-                        pk=int(ocpp_tx_id), charger=self.charger
-                    ).first
-                )()
-            if tx_obj is None:
-                tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    charger=self.charger,
-                    connector_id=connector_value,
-                    start_time=timestamp_value,
-                    received_start_time=timestamp_value,
-                    ocpp_transaction_id=ocpp_tx_id,
-                )
-            await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
-            tx_obj.stop_time = timestamp_value
-            tx_obj.received_stop_time = timezone.now()
-            meter_stop_value = transaction_info.get("meterStop")
-            if meter_stop_value is not None:
-                tx_obj.meter_stop = meter_stop_value
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
-            if vid_value:
-                tx_obj.vid = vid_value
-            if vin_value:
-                tx_obj.vin = vin_value
-            await database_sync_to_async(tx_obj.save)()
-            await self._process_meter_value_entries(
-                payload.get("meterValue"), connector_value, tx_obj
-            )
-            _record_transaction_event(tx_obj)
-            await self._update_consumption_message(tx_obj.pk)
-            await self._cancel_consumption_message()
-            transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
-            store.mark_transaction_requests(
-                charger_id=self.charger_id,
-                connector_id=connector_value,
-                transaction_id=transaction_reference,
-                actions={"RequestStartTransaction"},
-                statuses={"started", "accepted", "requested"},
-                status="completed",
-            )
-            store.mark_transaction_requests(
-                charger_id=self.charger_id,
-                connector_id=connector_value,
-                transaction_id=transaction_reference,
-                actions={"RequestStopTransaction"},
-                statuses={"accepted", "requested"},
-                status="completed",
-            )
-            store.end_session_log(self.store_key)
-            store.stop_session_lock()
-            return {}
-
-        if event_type == "updated":
-            tx_obj = store.transactions.get(self.store_key)
-            if not tx_obj and ocpp_tx_id:
-                tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
-            if not tx_obj and ocpp_tx_id.isdigit():
-                tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(
-                        pk=int(ocpp_tx_id), charger=self.charger
-                    ).first
-                )()
-            if tx_obj is None:
-                tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    charger=self.charger,
-                    connector_id=connector_value,
-                    start_time=timestamp_value,
-                    received_start_time=timezone.now(),
-                    ocpp_transaction_id=ocpp_tx_id,
-                )
-                store.start_session_log(self.store_key, tx_obj.pk)
-                store.add_session_message(self.store_key, text_data)
-                store.transactions[self.store_key] = tx_obj
-            await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
-            await self._process_meter_value_entries(
-                payload.get("meterValue"), connector_value, tx_obj
-            )
-            _record_transaction_event(tx_obj)
-            return {}
-
-        return {}
-
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
-    async def _handle_start_transaction_legacy(
-        self, payload, msg_id, raw, text_data
-    ):
-        id_tag = payload.get("idTag")
-        tag = None
-        tag_created = False
-        if id_tag:
-            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
-                id_tag
-            )
-        account = await self._get_account(id_tag)
-        if id_tag and not self.charger.require_rfid:
-            seen_tag = await self._ensure_rfid_seen(id_tag)
-            if seen_tag:
-                tag = seen_tag
-        await self._assign_connector(payload.get("connectorId"))
-        authorized = True
-        authorized_via_tag = False
-        if self.charger.require_rfid:
-            if account is not None:
-                authorized = await database_sync_to_async(account.can_authorize)()
-            elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
-                authorized = True
-                authorized_via_tag = True
-            else:
-                authorized = False
-        if authorized:
-            if authorized_via_tag and tag:
-                self._log_unlinked_rfid(tag.rfid)
-            start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
-            received_start = timezone.now()
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
-            tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                charger=self.charger,
-                account=account,
-                rfid=(id_tag or ""),
-                vid=vid_value,
-                vin=vin_value,
-                connector_id=payload.get("connectorId"),
-                meter_start=payload.get("meterStart"),
-                start_time=start_timestamp or received_start,
-                received_start_time=received_start,
-            )
-            await self._ensure_ocpp_transaction_identifier(tx_obj)
-            store.transactions[self.store_key] = tx_obj
-            store.start_session_log(self.store_key, tx_obj.pk)
-            store.start_session_lock()
-            store.add_session_message(self.store_key, text_data)
-            await self._start_consumption_updates(tx_obj)
-            await self._record_rfid_attempt(
-                rfid=id_tag or "",
-                    status=RFIDAttempt.Status.ACCEPTED,
-                account=account,
-                transaction=tx_obj,
-            )
-            return {
-                "transactionId": tx_obj.pk,
-                "idTagInfo": {"status": "Accepted"},
-            }
-        await self._record_rfid_attempt(
-            rfid=id_tag or "",
-            status=RFIDAttempt.Status.REJECTED,
-            account=account,
-        )
-        return {"idTagInfo": {"status": "Invalid"}}
-
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
-    async def _handle_stop_transaction_legacy(
-        self, payload, msg_id, raw, text_data
-    ):
-        tx_id = payload.get("transactionId")
-        tx_obj = store.transactions.pop(self.store_key, None)
-        if not tx_obj and tx_id is not None:
-            tx_obj = await database_sync_to_async(
-                Transaction.objects.filter(pk=tx_id, charger=self.charger).first
-            )()
-        if not tx_obj and tx_id is not None:
-            received_start = timezone.now()
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
-            tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                pk=tx_id,
-                charger=self.charger,
-                start_time=received_start,
-                received_start_time=received_start,
-                meter_start=payload.get("meterStart") or payload.get("meterStop"),
-                vid=vid_value,
-                vin=vin_value,
-            )
-        if tx_obj:
-            await self._ensure_ocpp_transaction_identifier(tx_obj, str(tx_id))
-            stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
-            received_stop = timezone.now()
-            tx_obj.meter_stop = payload.get("meterStop")
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
-            if vid_value:
-                tx_obj.vid = vid_value
-            if vin_value:
-                tx_obj.vin = vin_value
-            tx_obj.stop_time = stop_timestamp or received_stop
-            tx_obj.received_stop_time = received_stop
-            await database_sync_to_async(tx_obj.save)()
-            await self._update_consumption_message(tx_obj.pk)
-        await self._cancel_consumption_message()
-        store.end_session_log(self.store_key)
-        store.stop_session_lock()
-        return {"idTagInfo": {"status": "Accepted"}}
 
     @protocol_call(
         "ocpp201",
