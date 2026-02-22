@@ -54,6 +54,10 @@ python manage.py runserver 0.0.0.0:8888
   4. Note any data migrations or backfills in your PR description.
 
 ### Formatting and style
+- Run **Ruff** checks before opening a PR (required):
+  ```bash
+  python -m ruff check .
+  ```
 - Use **Black** for Python formatting:
   ```bash
   python -m black .
