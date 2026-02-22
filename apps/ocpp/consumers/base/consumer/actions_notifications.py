@@ -39,6 +39,8 @@ class NotificationActionsMixin:
         )
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "FirmwareStatusNotification")
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "FirmwareStatusNotification")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "FirmwareStatusNotification")
     async def _handle_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
         """Route firmware status notifications through notification handler."""
         return await self._notification_handler().handle_firmware_status(
