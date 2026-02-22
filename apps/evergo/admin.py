@@ -140,6 +140,7 @@ class EvergoUserAdmin(OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin):
 
         total_created = 0
         total_updated = 0
+        any_succeeded = False
         for profile in queryset:
             try:
                 created, updated = profile.load_orders()
@@ -153,13 +154,21 @@ class EvergoUserAdmin(OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin):
             else:
                 total_created += created
                 total_updated += updated
+                any_succeeded = True
 
-        self.message_user(
-            request,
-            _("Evergo orders sync completed. Created: %(created)s Updated: %(updated)s")
-            % {"created": total_created, "updated": total_updated},
-            level=messages.SUCCESS,
-        )
+        if any_succeeded:
+            self.message_user(
+                request,
+                _("Evergo orders sync completed. Created: %(created)s Updated: %(updated)s")
+                % {"created": total_created, "updated": total_updated},
+                level=messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("Evergo orders sync failed for all selected profiles."),
+                level=messages.WARNING,
+            )
         return HttpResponseRedirect(reverse("admin:evergo_evergouser_changelist"))
 
     load_orders.label = _("Load Orders")

@@ -11,7 +11,7 @@ from typing import Any
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
@@ -200,24 +200,18 @@ class EvergoUser(Profile):
         updated = 0
         with requests.Session() as session:
             self._login_session(session=session, timeout=timeout)
-            self._sync_catalog(
-                session=session,
-                timeout=timeout,
-                field_name=EvergoOrderFieldValue.FIELD_SITIO,
-                url=self.API_SITIOS_URL,
+            catalogs_to_sync = (
+                (EvergoOrderFieldValue.FIELD_SITIO, self.API_SITIOS_URL),
+                (EvergoOrderFieldValue.FIELD_INGENIERO, self.API_INGENIEROS_URL),
+                (EvergoOrderFieldValue.FIELD_ESTATUS, self.API_ORDEN_ESTATUS_URL),
             )
-            self._sync_catalog(
-                session=session,
-                timeout=timeout,
-                field_name=EvergoOrderFieldValue.FIELD_INGENIERO,
-                url=self.API_INGENIEROS_URL,
-            )
-            self._sync_catalog(
-                session=session,
-                timeout=timeout,
-                field_name=EvergoOrderFieldValue.FIELD_ESTATUS,
-                url=self.API_ORDEN_ESTATUS_URL,
-            )
+            for field_name, url in catalogs_to_sync:
+                self._sync_catalog(
+                    session=session,
+                    timeout=timeout,
+                    field_name=field_name,
+                    url=url,
+                )
 
             page = 1
             while True:
@@ -259,7 +253,10 @@ class EvergoUser(Profile):
 
     def _login_session(self, *, session: requests.Session, timeout: int) -> None:
         """Authenticate a requests session against Evergo."""
-        xsrf_token = self._prime_session(session=session, timeout=timeout)
+        try:
+            xsrf_token = self._prime_session(session=session, timeout=timeout)
+        except requests.RequestException as exc:
+            raise EvergoAPIError(f"Unable to initialize Evergo session: {exc}") from exc
         payload = self._request_json(
             session=session,
             timeout=timeout,
@@ -268,10 +265,14 @@ class EvergoUser(Profile):
             json={"email": self.evergo_email, "password": self.evergo_password},
             headers=self._build_login_headers(xsrf_token=xsrf_token),
         )
-        if isinstance(payload, dict):
-            self.apply_login_payload(payload)
-            self.last_login_test_at = timezone.now()
-            self.save()
+        if not isinstance(payload, dict):
+            raise EvergoAPIError(
+                "Evergo login returned unexpected payload type for "
+                f"{self.evergo_email!r} at {self.API_LOGIN_URL}: {payload!r}"
+            )
+        self.apply_login_payload(payload)
+        self.last_login_test_at = timezone.now()
+        self.save()
 
     def _request_json(
         self,
@@ -343,14 +344,14 @@ class EvergoUser(Profile):
                 defaults={
                     "remote_name": remote_name,
                     "raw_payload": item,
-                    "last_seen_at": timezone.now(),
                 },
             )
 
     def _is_assigned_to_user(self, payload: dict[str, Any]) -> bool:
         """Check whether the upstream order is assigned to the current Evergo user."""
         if not self.evergo_user_id:
-            return True
+            # We require a synced remote profile id before applying assignment filters.
+            raise EvergoAPIError("Evergo profile is missing evergo_user_id after login.")
         direct_technician = _to_int(payload.get("user_tecnico_id"))
         if direct_technician == self.evergo_user_id:
             return True
@@ -396,11 +397,13 @@ class EvergoUser(Profile):
         if isinstance(charge_points, list):
             defaults["charger_count"] = len(charge_points)
 
-        order, created = EvergoOrder.objects.update_or_create(
-            remote_id=remote_id,
-            defaults=defaults,
-        )
-        order.sync_dynamic_field_values(payload)
+        with transaction.atomic():
+            order, created = EvergoOrder.objects.update_or_create(
+                user=self,
+                remote_id=remote_id,
+                defaults=defaults,
+            )
+            order.sync_dynamic_field_values(payload)
         return created
 
 
@@ -414,7 +417,7 @@ class EvergoOrderFieldValue(models.Model):
     FIELD_PAYMENT_BY = "payment_by"
 
     field_name = models.CharField(max_length=64)
-    remote_id = models.PositiveIntegerField(null=True, blank=True)
+    remote_id = models.PositiveIntegerField(default=0)
     remote_name = models.CharField(max_length=255)
     local_label = models.CharField(max_length=255, blank=True)
     raw_payload = models.JSONField(default=dict, blank=True)
@@ -424,7 +427,7 @@ class EvergoOrderFieldValue(models.Model):
     class Meta:
         verbose_name = "Evergo Order Field Value"
         verbose_name_plural = "Evergo Order Field Values"
-        unique_together = ("field_name", "remote_id")
+        unique_together = ("field_name", "remote_id", "remote_name")
 
     def __str__(self) -> str:
         """Return a concise human-readable representation."""
@@ -435,7 +438,7 @@ class EvergoOrder(models.Model):
     """Local cache of Evergo installer/coordinator orders for the authenticated user."""
 
     user = models.ForeignKey(EvergoUser, on_delete=models.CASCADE, related_name="orders")
-    remote_id = models.PositiveIntegerField(unique=True, db_index=True)
+    remote_id = models.PositiveIntegerField()
     order_number = models.CharField(max_length=64, blank=True)
     prefix = models.CharField(max_length=32, blank=True)
     suffix = models.CharField(max_length=32, blank=True)
@@ -468,6 +471,7 @@ class EvergoOrder(models.Model):
         verbose_name = "Evergo Order"
         verbose_name_plural = "Evergo Orders"
         ordering = ("-source_updated_at", "-remote_id")
+        unique_together = ("user", "remote_id")
 
     def __str__(self) -> str:
         """Return an informative order identifier for admin and logs."""
@@ -495,7 +499,6 @@ class EvergoOrder(models.Model):
                 defaults={
                     "remote_name": remote_name,
                     "raw_payload": source,
-                    "last_seen_at": timezone.now(),
                 },
             )
 
@@ -503,9 +506,9 @@ class EvergoOrder(models.Model):
         if payment_by:
             EvergoOrderFieldValue.objects.update_or_create(
                 field_name=EvergoOrderFieldValue.FIELD_PAYMENT_BY,
-                remote_id=None,
+                remote_id=0,
                 remote_name=payment_by,
-                defaults={"raw_payload": {"value": payment_by}, "last_seen_at": timezone.now()},
+                defaults={"raw_payload": {"value": payment_by}},
             )
 
         amount = payload.get("monto")

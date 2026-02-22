@@ -208,3 +208,55 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
     assert EvergoOrderFieldValue.objects.filter(field_name="estatus", remote_id=8).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="preorden_tipo", remote_id=107).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="payment_by", remote_name="Brand").exists()
+
+
+@pytest.mark.django_db
+def test_upsert_order_is_user_scoped():
+    """Orders with same remote_id should be stored per Evergo profile."""
+    User = get_user_model()
+    user_a = User.objects.create_user(username="user-a", email="a@example.com")
+    user_b = User.objects.create_user(username="user-b", email="b@example.com")
+    profile_a = EvergoUser.objects.create(user=user_a, evergo_email="a@evergo.com", evergo_password="x")
+    profile_b = EvergoUser.objects.create(user=user_b, evergo_email="b@evergo.com", evergo_password="x")
+
+    payload = {
+        "id": 123,
+        "numero_orden": "ORD-123",
+        "estatus": {"id": 8, "nombre": "Done"},
+        "sitio": {"id": 36, "nombre": "Geely"},
+        "orden_instalador": {"idIngeniero": 1, "idCoordinador": 2},
+    }
+
+    assert profile_a._upsert_order(payload) is True
+    assert profile_b._upsert_order(payload) is True
+
+    assert EvergoOrder.objects.filter(remote_id=123).count() == 2
+    assert EvergoOrder.objects.filter(remote_id=123, user=profile_a).exists()
+    assert EvergoOrder.objects.filter(remote_id=123, user=profile_b).exists()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.requests.Session")
+def test_load_orders_raises_when_login_payload_is_not_object(mock_session_cls):
+    """Non-dict login payloads should fail fast with EvergoAPIError."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-login-payload", email="suite-login-payload@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-login-payload@evergo.com",
+        evergo_password="top-secret",  # noqa: S106
+    )
+
+    mock_session = mock_session_cls.return_value.__enter__.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+
+    response = Mock()
+    response.status_code = 200
+    response.json.return_value = []
+    mock_session.request.return_value = response
+
+    with pytest.raises(EvergoAPIError, match="unexpected payload type"):
+        profile.load_orders()

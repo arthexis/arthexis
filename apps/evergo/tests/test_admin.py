@@ -5,7 +5,10 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory
 from django.urls import reverse
 
 from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
@@ -92,28 +95,26 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.load_orders", return_value=(2, 3))
+@patch("apps.evergo.admin.EvergoUser.load_orders", return_value=(2, 3))
 def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, admin_client):
     """Ensure the changelist tool-style action can run without selected rows."""
     user_model = get_user_model()
-    suite_user = user_model.objects.create_user(
-        username="suite-admin-tool",
-        email="suite-admin-tool@example.com",
-    )
+    admin_user = user_model.objects.get(username="admin")
     EvergoUser.objects.create(
-        user=suite_user,
+        user=admin_user,
         evergo_email="suite-tool@evergo.example.com",
         evergo_password="secret",  # noqa: S106
     )
 
-    changelist_url = reverse("admin:evergo_evergouser_changelist")
-    response = admin_client.post(
-        changelist_url,
-        {"action": "load_orders", "index": 0, "select_across": 0},
-        follow=True,
-    )
+    request = RequestFactory().post(reverse("admin:evergo_evergouser_changelist"))
+    request.user = admin_user
+    request.session = {}
+    setattr(request, "_messages", FallbackStorage(request))
 
-    assert response.status_code == 200
+    model_admin = admin.site._registry[EvergoUser]
+    response = model_admin.load_orders(request, queryset=None)
+
+    assert response.status_code == 302
     mock_load_orders.assert_called_once()
 
 

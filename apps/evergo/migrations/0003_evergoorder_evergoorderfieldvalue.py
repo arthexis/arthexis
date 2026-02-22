@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("remote_id", models.PositiveIntegerField(db_index=True, unique=True)),
+                ("remote_id", models.PositiveIntegerField()),
                 ("order_number", models.CharField(blank=True, max_length=64)),
                 ("prefix", models.CharField(blank=True, max_length=32)),
                 ("suffix", models.CharField(blank=True, max_length=32)),
@@ -78,6 +78,7 @@ class Migration(migrations.Migration):
                 "verbose_name": "Evergo Order",
                 "verbose_name_plural": "Evergo Orders",
                 "ordering": ("-source_updated_at", "-remote_id"),
+                "unique_together": {("user", "remote_id")},
             },
         ),
         migrations.CreateModel(
@@ -93,7 +94,7 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("field_name", models.CharField(max_length=64)),
-                ("remote_id", models.PositiveIntegerField(blank=True, null=True)),
+                ("remote_id", models.PositiveIntegerField(default=0)),
                 ("remote_name", models.CharField(max_length=255)),
                 ("local_label", models.CharField(blank=True, max_length=255)),
                 ("raw_payload", models.JSONField(blank=True, default=dict)),
@@ -103,7 +104,7 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Evergo Order Field Value",
                 "verbose_name_plural": "Evergo Order Field Values",
-                "unique_together": {("field_name", "remote_id")},
+                "unique_together": {("field_name", "remote_id", "remote_name")},
             },
         ),
     ]
