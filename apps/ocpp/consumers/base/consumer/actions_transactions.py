@@ -11,7 +11,11 @@ class TransactionActionsMixin:
 
     def _transaction_handler(self) -> TransactionHandler:
         """Return transaction helper for OCPP 1.6/2.x transaction flows."""
-        return TransactionHandler(self)
+        handler = getattr(self, "_cached_transaction_handler", None)
+        if handler is None:
+            handler = TransactionHandler(self)
+            self._cached_transaction_handler = handler
+        return handler
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")

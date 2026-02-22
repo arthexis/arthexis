@@ -23,6 +23,7 @@ class LegacyTransactionHandlersMixin:
         event_type = str(payload.get("eventType") or "").strip().lower()
         transaction_info = payload.get("transactionInfo") or {}
         ocpp_tx_id = str(transaction_info.get("transactionId") or "").strip()
+        vid_value, vin_value = _extract_vehicle_identifier(payload)
         evse_info = payload.get("evse") or {}
         connector_hint = evse_info.get("connectorId", evse_info.get("id"))
         await self._assign_connector(connector_hint)
@@ -88,7 +89,6 @@ class LegacyTransactionHandlersMixin:
                     store.update_transaction_request(request_message_id, **update_kwargs)
                 if authorized_via_tag and tag:
                     self._log_unlinked_rfid(tag.rfid)
-                vid_value, vin_value = _extract_vehicle_identifier(payload)
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
                     charger=self.charger,
                     account=account,
@@ -144,7 +144,6 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = transaction_info.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
             if vid_value:
                 tx_obj.vid = vid_value
             if vin_value:
@@ -266,6 +265,7 @@ class LegacyTransactionHandlersMixin:
     async def _handle_stop_transaction_legacy(self, payload, msg_id, raw, text_data):
         """Persist OCPP 1.6 StopTransaction using legacy storage flow."""
         tx_id = payload.get("transactionId")
+        vid_value, vin_value = _extract_vehicle_identifier(payload)
         tx_obj = store.transactions.pop(self.store_key, None)
         if not tx_obj and tx_id is not None:
             tx_obj = await database_sync_to_async(
@@ -273,7 +273,6 @@ class LegacyTransactionHandlersMixin:
             )()
         if not tx_obj and tx_id is not None:
             received_start = timezone.now()
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
             tx_obj = await database_sync_to_async(Transaction.objects.create)(
                 pk=tx_id,
                 charger=self.charger,
@@ -288,7 +287,6 @@ class LegacyTransactionHandlersMixin:
             stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
             received_stop = timezone.now()
             tx_obj.meter_stop = payload.get("meterStop")
-            vid_value, vin_value = _extract_vehicle_identifier(payload)
             if vid_value:
                 tx_obj.vid = vid_value
             if vin_value:

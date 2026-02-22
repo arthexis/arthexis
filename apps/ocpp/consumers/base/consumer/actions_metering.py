@@ -11,7 +11,11 @@ class MeteringActionsMixin:
 
     def _metering_handler(self) -> MeteringHandler:
         """Return metering helper for OCPP meter sample persistence."""
-        return MeteringHandler(self)
+        handler = getattr(self, "_cached_metering_handler", None)
+        if handler is None:
+            handler = MeteringHandler(self)
+            self._cached_metering_handler = handler
+        return handler
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")

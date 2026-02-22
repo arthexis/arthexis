@@ -111,6 +111,12 @@ class ConnectionFlowMixin:
         allowed, _reason = await database_sync_to_async(_resolve_feature_state)()
         return allowed
 
+    async def _allow_charge_point_connection(
+        self, existing_charger: Charger | None
+    ) -> bool:
+        """Compatibility adapter to preserve admission entrypoint."""
+        return await self._allow_charge_point_connection_legacy(existing_charger)
+
     @requires_network
     async def connect(self):
         """Accept and initialize a charge point websocket connection."""

@@ -11,7 +11,11 @@ class NotificationActionsMixin:
 
     def _notification_handler(self) -> NotificationHandler:
         """Return notification helper for firmware/log/security event actions."""
-        return NotificationHandler(self)
+        handler = getattr(self, "_cached_notification_handler", None)
+        if handler is None:
+            handler = NotificationHandler(self)
+            self._cached_notification_handler = handler
+        return handler
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "PublishFirmwareStatusNotification")
     async def _handle_publish_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
