@@ -108,7 +108,8 @@ class ConnectionFlowMixin:
 
             return True, None
 
-        allowed, _reason = await database_sync_to_async(_resolve_feature_state)()
+        allowed, reason = await database_sync_to_async(_resolve_feature_state)()
+        self._charge_point_connection_reason = reason
         return allowed
 
     async def _allow_charge_point_connection(

@@ -31,7 +31,7 @@ class RfidMixin:
         return await database_sync_to_async(_resolve)()
 
     async def _ensure_rfid_seen(self, id_tag: str) -> CoreRFID | None:
-        """Ensure an RFID record exists and update its last seen timestamp."""
+        """Ensure an RFID record exists, auto-approve/release it, and update last seen."""
         if not id_tag:
             return None
 
@@ -58,8 +58,9 @@ class RfidMixin:
 
     def _log_unlinked_rfid(self, rfid: str) -> None:
         """Record a warning when an RFID is authorized without an account."""
+        masked_rfid = rfid[-4:].rjust(len(rfid), "*") if len(rfid) > 4 else "****"
         message = (
-            f"Authorized RFID {rfid} on charger {self.charger_id} without linked customer account"
+            f"Authorized RFID {masked_rfid} on charger {self.charger_id} without linked customer account"
         )
         logger.warning(message)
         store.add_log(store.pending_key(self.charger_id), message, log_type="charger")

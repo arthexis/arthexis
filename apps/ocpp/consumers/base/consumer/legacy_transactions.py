@@ -1,5 +1,7 @@
 """Legacy transaction handlers split from the CSMS consumer class."""
 
+import logging
+
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
@@ -11,6 +13,8 @@ from .... import store
 from ....models import Transaction
 from ....utils import _parse_ocpp_timestamp
 from ..identity import _extract_vehicle_identifier
+
+logger = logging.getLogger(__name__)
 
 
 class LegacyTransactionHandlersMixin:
@@ -198,6 +202,13 @@ class LegacyTransactionHandlersMixin:
             _record_transaction_event(tx_obj)
             return {}
 
+        logger.warning(
+            "Unhandled TransactionEvent eventType=%r for charger=%s connector=%s payload=%s",
+            event_type,
+            getattr(self, "charger_id", "unknown"),
+            connector_value,
+            payload,
+        )
         return {}
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
