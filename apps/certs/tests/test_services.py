@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import TimeoutError
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -336,7 +337,7 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
     monkeypatch.setattr(
         services.socket,
         "getaddrinfo",
-        lambda domain, port, *_args, **_kwargs: [
+        lambda _domain, port, *_args, **_kwargs: [
             (services.socket.AF_INET, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("192.0.2.1", port)),
         ],
     )
@@ -371,7 +372,7 @@ def test_request_certbot_certificate_http01_challenge_failure_includes_dns_resol
     monkeypatch.setattr(
         services.socket,
         "getaddrinfo",
-        lambda domain, port, *_args, **_kwargs: [
+        lambda _domain, port, *_args, **_kwargs: [
             (services.socket.AF_INET, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("198.51.100.10", port)),
             (services.socket.AF_INET6, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("2001:db8::7", port)),
         ],
@@ -402,7 +403,7 @@ def test_request_certbot_certificate_http01_challenge_failure_includes_dns_looku
         raise RuntimeError("Some challenges have failed.")  # noqa: TRY003
 
     def fake_getaddrinfo(domain, port, *_args, **_kwargs):  # noqa: ARG001
-        raise services.socket.gaierror("Name or service not known")
+        raise services.socket.gaierror("Name or service not known")  # noqa: TRY003
 
     monkeypatch.setattr(services, "_run_command", fake_run)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
@@ -431,7 +432,7 @@ def test_request_certbot_certificate_http01_challenge_failure_includes_dns_looku
 
     monkeypatch.setattr(services, "_run_command", fake_run)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
-    monkeypatch.setattr(services.socket, "getaddrinfo", lambda *args, **kwargs: [])
+    monkeypatch.setattr(services.socket, "getaddrinfo", lambda *_args, **_kwargs: [])
 
     with pytest.raises(services.CertbotChallengeError) as exc_info:
         services.request_certbot_certificate(
@@ -444,6 +445,34 @@ def test_request_certbot_certificate_http01_challenge_failure_includes_dns_looku
         )
 
     assert "DNS lookup returned no addresses for the challenge domain." in str(exc_info.value)
+
+
+def test_request_certbot_certificate_http01_challenge_failure_includes_dns_lookup_timeout_hint(
+    monkeypatch, tmp_path
+):
+    """HTTP-01 failures should mention DNS lookup timeouts when resolution stalls."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("Some challenges have failed.")  # noqa: TRY003
+
+    def fake_getaddrinfo(_domain, _port, *_args, **_kwargs):
+        raise TimeoutError
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+    monkeypatch.setattr(services.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(services.CertbotChallengeError) as exc_info:
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="nginx",
+            sudo="",
+        )
+
+    assert "DNS lookup timed out for the challenge domain." in str(exc_info.value)
 
 
 def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint(
