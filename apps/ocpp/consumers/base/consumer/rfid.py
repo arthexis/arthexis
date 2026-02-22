@@ -24,14 +24,12 @@ class RfidMixin:
 
         def _resolve() -> CustomerAccount | None:
             matches = CoreRFID.matching_queryset(id_tag).filter(allowed=True)
-            if not matches.exists():
-                return None
             return CustomerAccount.objects.filter(rfids__in=matches).distinct().first()
 
         return await database_sync_to_async(_resolve)()
 
-    async def _ensure_rfid_seen(self, id_tag: str) -> CoreRFID | None:
-        """Ensure an RFID record exists, auto-approve/release it, and update last seen."""
+    async def _ensure_rfid_seen(self, id_tag: str, tag: CoreRFID | None = None) -> CoreRFID | None:
+        """Ensure an RFID exists, auto-approve/release it, and refresh its `last_seen_on` timestamp."""
         if not id_tag:
             return None
 
@@ -39,20 +37,21 @@ class RfidMixin:
 
         def _ensure() -> CoreRFID:
             now = timezone.now()
-            tag, _created = CoreRFID.register_scan(normalized)
+            current_tag = tag
+            if current_tag is None:
+                current_tag, _created = CoreRFID.register_scan(normalized)
             updates = []
-            if not tag.allowed:
-                tag.allowed = True
+            if not current_tag.allowed:
+                current_tag.allowed = True
                 updates.append("allowed")
-            if not tag.released:
-                tag.released = True
+            if not current_tag.released:
+                current_tag.released = True
                 updates.append("released")
-            if tag.last_seen_on != now:
-                tag.last_seen_on = now
-                updates.append("last_seen_on")
+            current_tag.last_seen_on = now
+            updates.append("last_seen_on")
             if updates:
-                tag.save(update_fields=sorted(set(updates)))
-            return tag
+                current_tag.save(update_fields=sorted(set(updates)))
+            return current_tag
 
         return await database_sync_to_async(_ensure)()
 
