@@ -24,7 +24,7 @@ def test_godaddy_defaults_to_list_output_when_empty():
 def test_godaddy_add_and_list():
     """Add should create a credential and list should show it."""
 
-    user = get_user_model().objects.create(username="dns-admin")
+    user = get_user_model().objects.create_user(username="dns-admin")
 
     add_stdout = StringIO()
     call_command(
@@ -59,7 +59,7 @@ def test_godaddy_add_and_list():
 def test_godaddy_remove_deletes_existing_credential():
     """Remove should delete an existing GoDaddy credential."""
 
-    user = get_user_model().objects.create(username="dns-owner")
+    user = get_user_model().objects.create_user(username="dns-owner")
     credential = DNSProviderCredential.objects.create(
         user=user,
         api_key="k",
@@ -85,3 +85,19 @@ def test_godaddy_add_requires_known_user():
             api_key="api-key",
             api_secret="api-secret",
         )
+
+
+@pytest.mark.django_db
+def test_godaddy_remove_requires_credential_id():
+    """Remove should fail when no credential id is provided."""
+
+    with pytest.raises(CommandError, match="remove requires credential_id"):
+        call_command("godaddy", "remove")
+
+
+@pytest.mark.django_db
+def test_godaddy_remove_errors_when_credential_not_found():
+    """Remove should fail when the credential id does not exist."""
+
+    with pytest.raises(CommandError, match="GoDaddy credential #9999"):
+        call_command("godaddy", "remove", "9999")
