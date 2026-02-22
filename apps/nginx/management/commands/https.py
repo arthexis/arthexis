@@ -4,6 +4,7 @@ from getpass import getpass
 import sys
 from pathlib import Path
 import ipaddress
+import re
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -124,6 +125,8 @@ class Command(BaseCommand):
         godaddy_domain = options["godaddy"]
         explicit_site = options["site"]
         parsed_site = self._parse_site_domain(explicit_site) if explicit_site else None
+        certbot_domain = self._parse_site_domain(certbot_domain) if certbot_domain else None
+        godaddy_domain = self._parse_site_domain(godaddy_domain) if godaddy_domain else None
 
         if parsed_site and options["local"]:
             raise CommandError("--local cannot be combined with --site. Use --certbot/--godaddy or omit --local.")
@@ -283,6 +286,7 @@ class Command(BaseCommand):
         now = timezone.now()
         threshold = now + timedelta(days=warn_days)
         if expiration <= threshold:
+            recommended_domain = self._safe_domain_for_recommendation(certificate)
             if expiration <= now:
                 self.stdout.write(
                     self.style.WARNING(
@@ -290,7 +294,7 @@ class Command(BaseCommand):
                         "Run './command.sh https --renew' to renew due certificates. "
                         "If you need to force a fresh issuance for this domain, run "
                         "'./command.sh https --enable --force-renewal "
-                        f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}')."
+                        f"--certbot {recommended_domain}' (or '--godaddy {recommended_domain}')."
                     )
                 )
             else:
@@ -298,7 +302,7 @@ class Command(BaseCommand):
                     self.style.WARNING(
                         f"Certificate for {certificate.domain} expires soon at {expiration.isoformat()}. "
                         "Run './command.sh https --enable --force-renewal "
-                        f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
+                        f"--certbot {recommended_domain}' (or '--godaddy {recommended_domain}') to reissue immediately."
                     )
                 )
 
@@ -320,7 +324,32 @@ class Command(BaseCommand):
         if parsed_ip is not None and parsed_ip.is_loopback:
             raise CommandError("--site requires a public host. Use --local for local development.")
 
+        if not self._is_safe_domain(normalized):
+            raise CommandError("--site must include a valid hostname using only letters, numbers, dots, and hyphens.")
+
         return normalized
+
+    def _safe_domain_for_recommendation(self, certificate) -> str:
+        """Return a domain safe for embedding in shell command recommendations."""
+
+        domain = getattr(certificate, "domain", None)
+        if not domain:
+            return "example.com"
+
+        try:
+            return self._parse_site_domain(domain) or "example.com"
+        except CommandError:
+            return "example.com"
+
+    def _is_safe_domain(self, domain: str) -> bool:
+        """Return whether *domain* is a syntactically safe hostname."""
+
+        if len(domain) > 253 or "." not in domain:
+            return False
+
+        labels = domain.split(".")
+        pattern = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+        return all(pattern.fullmatch(label) for label in labels)
 
     def _ensure_managed_site(self, domain: str, *, require_https: bool) -> None:
         """Persist the target domain as a managed Site and refresh staged nginx hosts."""

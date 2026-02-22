@@ -514,3 +514,19 @@ def test_https_warn_days_must_be_non_negative():
 
     with pytest.raises(CommandError, match="positive integer"):
         call_command("https", "--enable", "--certbot", "example.com", "--warn-days", "-1")
+
+
+@pytest.mark.django_db
+def test_https_rejects_unsafe_certbot_domain():
+    """`--certbot` should reject unsafe shell-like domain input."""
+
+    with pytest.raises(CommandError, match="valid hostname"):
+        call_command("https", "--enable", "--certbot", "example.com;whoami")
+
+
+@pytest.mark.django_db
+def test_https_rejects_unsafe_godaddy_domain():
+    """`--godaddy` should reject unsafe shell-like domain input."""
+
+    with pytest.raises(CommandError, match="valid hostname"):
+        call_command("https", "--enable", "--godaddy", "example.com;cat /etc/passwd")
