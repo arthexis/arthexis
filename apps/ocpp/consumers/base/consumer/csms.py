@@ -410,6 +410,15 @@ class CSMSConsumer(
         session.forwarder_id = forwarder_pk
         return session, refreshed
 
+    async def _clear_cached_status_fields(self) -> None:
+        """Reset cached status fields for the current charger identity."""
+        await database_sync_to_async(clear_cached_statuses)([self.charger_id])
+        for charger in (self.charger, self.aggregate_charger):
+            if charger is None:
+                continue
+            for field, value in STATUS_RESET_UPDATES.items():
+                setattr(charger, field, value)
+
     async def _forward_charge_point_message_legacy(self, action: str, raw: str) -> None:
         """Forward an OCPP message to the configured remote node when permitted."""
 
@@ -493,6 +502,10 @@ class CSMSConsumer(
         current = self.charger
         if current and current.pk == charger.pk and current is not aggregate:
             current.forwarding_watermark = timestamp
+
+    async def _forward_charge_point_message(self, action: str, raw: str) -> None:
+        """Compatibility adapter to preserve charge-point forwarding entrypoint."""
+        await self._forward_charge_point_message_legacy(action, raw)
 
     async def _forward_charge_point_reply_legacy(self, message_id: str, raw: str) -> None:
         """Forward a call result or error back to the remote node when needed."""
@@ -1313,8 +1326,6 @@ class CSMSConsumer(
                         setattr(self.aggregate_charger, field, value)
 
         await database_sync_to_async(_apply)()
-
-        store.add_log(store_key, f"Closed (code={close_code})", log_type="charger")
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
