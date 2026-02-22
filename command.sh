@@ -51,105 +51,7 @@ CACHE_KEY="${celery_flag#--}"
 CACHE_KEY="${CACHE_KEY//-/_}"
 COMMAND_CACHE_FILE="$CACHE_DIR/command_list_${CACHE_KEY}.txt"
 DEPRECATED_CACHE_FILE="$CACHE_DIR/deprecated_absorbed_commands.txt"
-
-load_command_list() {
-  # Load and cache Django command names from manage.py help output.
-
-  local use_cache=false
-  if [ -f "$COMMAND_CACHE_FILE" ]; then
-    local now
-    local cache_mtime
-    local cache_age
-    now="$(date +%s)"
-    cache_mtime="$(stat -c %Y "$COMMAND_CACHE_FILE" 2>/dev/null || echo 0)"
-    cache_age="$((now - cache_mtime))"
-    if [ "$cache_age" -lt "$CACHE_TTL_SECONDS" ]; then
-      use_cache=true
-    fi
-  fi
-
-  if [ "$use_cache" = "true" ]; then
-    cat "$COMMAND_CACHE_FILE"
-    return 0
-  fi
-
-  mkdir -p "$CACHE_DIR" 2>/dev/null || true
-  local cache_tmp
-  if cache_tmp="$(mktemp "${COMMAND_CACHE_FILE}.XXXXXX" 2>/dev/null)"; then
-    if python manage.py help --commands "$celery_flag" \
-      | tr '\t' ' ' \
-      | tr ' ' '\n' \
-      | sed '/^$/d' \
-      | grep -v '^\[.*]' \
-      > "$cache_tmp"; then
-      if mv "$cache_tmp" "$COMMAND_CACHE_FILE" 2>/dev/null; then
-        cat "$COMMAND_CACHE_FILE"
-      else
-        cat "$cache_tmp"
-        rm -f "$cache_tmp"
-      fi
-      return 0
-    fi
-
-    rm -f "$cache_tmp"
-    return 1
-  fi
-
-  python manage.py help --commands "$celery_flag" \
-    | tr '\t' ' ' \
-    | tr ' ' '\n' \
-    | sed '/^$/d' \
-    | grep -v '^\[.*]'
-}
-
-load_deprecated_absorbed_commands() {
-  # Load absorbed/deprecated command names from command class decorators.
-
-  local use_cache=false
-  if [ -f "$DEPRECATED_CACHE_FILE" ]; then
-    local now
-    local cache_mtime
-    local cache_age
-    now="$(date +%s)"
-    cache_mtime="$(stat -c %Y "$DEPRECATED_CACHE_FILE" 2>/dev/null || echo 0)"
-    cache_age="$((now - cache_mtime))"
-    if [ "$cache_age" -lt "$CACHE_TTL_SECONDS" ]; then
-      use_cache=true
-    fi
-  fi
-
-  if [ "$use_cache" = "true" ]; then
-    cat "$DEPRECATED_CACHE_FILE"
-    return 0
-  fi
-
-  mkdir -p "$CACHE_DIR" 2>/dev/null || true
-  local cache_tmp
-  if cache_tmp="$(mktemp "${DEPRECATED_CACHE_FILE}.XXXXXX" 2>/dev/null)"; then
-    if python manage.py shell -c '
-from django.core.management import get_commands, load_command_class
-for command_name, app_name in sorted(get_commands().items()):
-    try:
-        command = load_command_class(app_name, command_name)
-    except Exception:
-        continue
-    if getattr(command.__class__, "arthexis_absorbed_command", False):
-        print(command_name)
-' > "$cache_tmp"; then
-      if mv "$cache_tmp" "$DEPRECATED_CACHE_FILE" 2>/dev/null; then
-        cat "$DEPRECATED_CACHE_FILE"
-      else
-        cat "$cache_tmp"
-        rm -f "$cache_tmp"
-      fi
-      return 0
-    fi
-
-    rm -f "$cache_tmp"
-    return 1
-  fi
-
-  python manage.py shell -c '
+DEPRECATED_COMMAND_DISCOVERY_SCRIPT='
 from django.core.management import get_commands, load_command_class
 for command_name, app_name in sorted(get_commands().items()):
     try:
@@ -159,6 +61,73 @@ for command_name, app_name in sorted(get_commands().items()):
     if getattr(command.__class__, "arthexis_absorbed_command", False):
         print(command_name)
 '
+
+cache_mtime_seconds() {
+  # Return cache file mtime in epoch seconds across GNU/BSD stat variants.
+  local cache_file="$1"
+  stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0
+}
+
+cached_command_output() {
+  # Usage: cached_command_output <cache_file> <command...>
+  local cache_file="$1"
+  shift
+
+  local use_cache=false
+  if [ -f "$cache_file" ]; then
+    local now
+    local cache_mtime
+    local cache_age
+    now="$(date +%s)"
+    cache_mtime="$(cache_mtime_seconds "$cache_file")"
+    cache_age="$((now - cache_mtime))"
+    if [ "$cache_age" -lt "$CACHE_TTL_SECONDS" ]; then
+      use_cache=true
+    fi
+  fi
+
+  if [ "$use_cache" = "true" ]; then
+    cat "$cache_file"
+    return 0
+  fi
+
+  mkdir -p "$CACHE_DIR" 2>/dev/null || true
+  local cache_tmp
+  if cache_tmp="$(mktemp "${cache_file}.XXXXXX" 2>/dev/null)"; then
+    if "$@" > "$cache_tmp"; then
+      if mv "$cache_tmp" "$cache_file" 2>/dev/null; then
+        cat "$cache_file"
+      else
+        cat "$cache_tmp"
+        rm -f "$cache_tmp"
+      fi
+      return 0
+    fi
+
+    rm -f "$cache_tmp"
+    return 1
+  fi
+
+  "$@"
+}
+
+load_command_list() {
+  # Load and cache Django command names from manage.py help output.
+
+  cached_command_output "$COMMAND_CACHE_FILE" \
+    bash -lc "python manage.py help --commands '$celery_flag' \
+      | tr '\t' ' ' \
+      | tr ' ' '\n' \
+      | sed '/^$/d' \
+      | grep -v '^\\[.*]' \
+      | awk '/^[a-z0-9][a-z0-9_-]*$/'"
+}
+
+load_deprecated_absorbed_commands() {
+  # Load absorbed/deprecated command names from command class decorators.
+
+  cached_command_output "$DEPRECATED_CACHE_FILE" \
+    python manage.py shell -c "$DEPRECATED_COMMAND_DISCOVERY_SCRIPT"
 }
 
 if ! COMMAND_LIST="$(load_command_list)"; then

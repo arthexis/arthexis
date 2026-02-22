@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Any, Callable, TypeVar
 
 from django.core.management.base import BaseCommand
 
 CommandType = TypeVar("CommandType", bound=BaseCommand)
 
 
-def absorbed_into_command(replacement_command: str):
+def absorbed_into_command(replacement_command: str) -> Callable[[type[CommandType]], type[CommandType]]:
     """Mark a deprecated management command as absorbed into a canonical command.
 
     Args:
