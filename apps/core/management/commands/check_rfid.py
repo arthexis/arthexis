@@ -5,7 +5,7 @@ from apps.cards.models import RFID
 from apps.core.management.deprecation import absorbed_into_command
 
 
-@absorbed_into_command("rfid check --uid ...")
+@absorbed_into_command("rfid check --uid <UID>")
 class Command(BaseCommand):
     """Deprecated wrapper for `rfid check`."""
 
@@ -17,7 +17,7 @@ class Command(BaseCommand):
         parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response")
 
     def handle(self, *args, **options):
-        self.stderr.write(self.style.WARNING("check_rfid is deprecated; use `manage.py rfid check --uid ...` instead."))
+        self.stderr.write(self.style.WARNING("check_rfid is deprecated; use `manage.py rfid check --uid <UID>` instead."))
         call_args = ["rfid", "check", "--uid", options["value"]]
         if options.get("kind"):
             call_args.extend(["--kind", options["kind"]])
