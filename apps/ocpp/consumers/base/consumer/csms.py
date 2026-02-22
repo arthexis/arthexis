@@ -775,10 +775,7 @@ class CSMSConsumer(
         self._consumption_task = None
         if task:
             task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            await asyncio.gather(task, return_exceptions=True)
         if message_uuid:
             def _expire() -> None:
                 msg = NetMessage.objects.filter(uuid=message_uuid).first()
@@ -906,7 +903,7 @@ class CSMSConsumer(
                 if not updated:
                     break
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception as exc:  # pragma: no cover - unexpected errors
             store.add_log(
                 self.store_key,
