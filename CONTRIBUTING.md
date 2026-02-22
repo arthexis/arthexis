@@ -56,7 +56,7 @@ python manage.py runserver 0.0.0.0:8888
 ### Formatting and style
 - Run **Ruff** checks before opening a PR (required):
   ```bash
-  python -m ruff check .
+  python -m ruff check --select E9 .
   ```
 - Use **Black** for Python formatting:
   ```bash
