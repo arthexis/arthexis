@@ -284,17 +284,23 @@ class Command(BaseCommand):
         threshold = now + timedelta(days=warn_days)
         if expiration <= threshold:
             if expiration <= now:
-                status = "has expired"
-            else:
-                status = "expires soon"
-
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Certificate for {certificate.domain} {status} at {expiration.isoformat()}. "
-                    "Run './command.sh https --enable --force-renewal "
-                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Certificate for {certificate.domain} has expired at {expiration.isoformat()}. "
+                        "Run './command.sh https --renew' to renew due certificates. "
+                        "If you need to force a fresh issuance for this domain, run "
+                        "'./command.sh https --enable --force-renewal "
+                        f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}')."
+                    )
                 )
-            )
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Certificate for {certificate.domain} expires soon at {expiration.isoformat()}. "
+                        "Run './command.sh https --enable --force-renewal "
+                        f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
+                    )
+                )
 
     def _parse_site_domain(self, candidate: str | None) -> str | None:
         """Return a normalized host parsed from ``--site`` input."""

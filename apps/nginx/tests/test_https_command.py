@@ -504,6 +504,7 @@ def test_https_enable_warns_when_certificate_is_expired(monkeypatch):
 
     rendered = out.getvalue()
     assert "has expired" in rendered
+    assert "--renew" in rendered
     assert "--force-renewal" in rendered
 
 
