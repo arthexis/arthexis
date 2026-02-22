@@ -22,7 +22,7 @@ class LegacyTransactionHandlersMixin:
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    async def _handle_transaction_event_legacy(self, payload, msg_id, raw, text_data):
+    async def _handle_transaction_event_legacy(self, payload, _msg_id, _raw, text_data):
         """Persist OCPP 2.x transaction events using legacy transaction storage flow."""
         event_type = str(payload.get("eventType") or "").strip().lower()
         transaction_info = payload.get("transactionInfo") or {}
@@ -72,7 +72,7 @@ class LegacyTransactionHandlersMixin:
                 tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
             account = await self._get_account(id_tag)
             if id_tag and not self.charger.require_rfid:
-                seen_tag = await self._ensure_rfid_seen(id_tag)
+                seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
                 if seen_tag:
                     tag = seen_tag
             authorized = True
@@ -202,17 +202,18 @@ class LegacyTransactionHandlersMixin:
             _record_transaction_event(tx_obj)
             return {}
 
+        safe_payload = {k: v for k, v in payload.items() if k not in ("idToken", "idTag")}
         logger.warning(
             "Unhandled TransactionEvent eventType=%r for charger=%s connector=%s payload=%s",
             event_type,
             getattr(self, "charger_id", "unknown"),
             connector_value,
-            payload,
+            safe_payload,
         )
         return {}
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
-    async def _handle_start_transaction_legacy(self, payload, msg_id, raw, text_data):
+    async def _handle_start_transaction_legacy(self, payload, _msg_id, _raw, text_data):
         """Persist OCPP 1.6 StartTransaction using legacy storage flow."""
         id_tag = payload.get("idTag")
         tag = None
@@ -221,7 +222,7 @@ class LegacyTransactionHandlersMixin:
             tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
         account = await self._get_account(id_tag)
         if id_tag and not self.charger.require_rfid:
-            seen_tag = await self._ensure_rfid_seen(id_tag)
+            seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
             if seen_tag:
                 tag = seen_tag
         await self._assign_connector(payload.get("connectorId"))
@@ -273,7 +274,7 @@ class LegacyTransactionHandlersMixin:
         return {"idTagInfo": {"status": "Invalid"}}
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
-    async def _handle_stop_transaction_legacy(self, payload, msg_id, raw, text_data):
+    async def _handle_stop_transaction_legacy(self, payload, _msg_id, _raw, text_data):
         """Persist OCPP 1.6 StopTransaction using legacy storage flow."""
         tx_id = payload.get("transactionId")
         vid_value, vin_value = _extract_vehicle_identifier(payload)
@@ -297,7 +298,9 @@ class LegacyTransactionHandlersMixin:
             await self._ensure_ocpp_transaction_identifier(tx_obj, str(tx_id))
             stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
             received_stop = timezone.now()
-            tx_obj.meter_stop = payload.get("meterStop")
+            meter_stop_value = payload.get("meterStop")
+            if meter_stop_value is not None:
+                tx_obj.meter_stop = meter_stop_value
             if vid_value:
                 tx_obj.vid = vid_value
             if vin_value:
@@ -307,6 +310,8 @@ class LegacyTransactionHandlersMixin:
             await database_sync_to_async(tx_obj.save)()
             await self._update_consumption_message(tx_obj.pk)
         await self._cancel_consumption_message()
+        if text_data:
+            store.add_session_message(self.store_key, text_data)
         store.end_session_log(self.store_key)
         store.stop_session_lock()
         return {"idTagInfo": {"status": "Accepted"}}
