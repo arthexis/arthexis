@@ -209,17 +209,19 @@ def _build_challenge_failure_guidance(
 def _build_http01_domain_resolution_hints(domain: str) -> list[str]:
     """Return DNS-resolution hints that help triage HTTP-01 challenge failures."""
 
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(
+        socket.getaddrinfo,
+        domain,
+        80,
+        0,
+        0,
+        socket.IPPROTO_TCP,
+    )
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            address_info = executor.submit(
-                socket.getaddrinfo,
-                domain,
-                80,
-                0,
-                0,
-                socket.IPPROTO_TCP,
-            ).result(timeout=3)
+        address_info = future.result(timeout=3)
     except TimeoutError:
+        executor.shutdown(wait=False)
         return [
             (
                 "DNS lookup timed out for the challenge domain. "
@@ -227,12 +229,14 @@ def _build_http01_domain_resolution_hints(domain: str) -> list[str]:
             )
         ]
     except OSError as exc:
+        executor.shutdown(wait=False)
         return [
             (
                 "DNS lookup failed for the challenge domain. "
                 f"{domain} could not be resolved ({exc})."
             )
         ]
+    executor.shutdown(wait=True)
 
     addresses = sorted({item[4][0] for item in address_info if item[4]})
     if not addresses:
