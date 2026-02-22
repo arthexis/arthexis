@@ -535,6 +535,31 @@ def test_https_enable_surfaces_certbot_challenge_as_command_error(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_enable_restores_https_when_http01_challenge_fails(monkeypatch):
+    """HTTP-01 failures should re-apply HTTPS after temporary bootstrap downgrade."""
+
+    apply_protocols: list[str] = []
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        raise CertbotChallengeError("Some challenges have failed.")
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        apply_protocols.append(self.protocol)
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    with pytest.raises(CommandError, match="HTTPS enable did not complete"):
+        call_command("https", "--enable", "--certbot", "example.com", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="example.com")
+    assert config.protocol == "https"
+    assert apply_protocols == ["http", "https"]
+
+
+@pytest.mark.django_db
 def test_https_enable_http01_bootstraps_http_site_before_certbot(monkeypatch):
     """HTTP-01 certbot runs should bootstrap nginx HTTP config before certificate issuance."""
 
@@ -553,4 +578,22 @@ def test_https_enable_http01_bootstraps_http_site_before_certbot(monkeypatch):
 
     call_command("https", "--enable", "--certbot", "example.com", "--no-sudo")
 
+    config = SiteConfiguration.objects.get(name="example.com")
+    assert config.protocol == "https"
     assert apply_protocols == ["http", "https"]
+
+
+@pytest.mark.django_db
+def test_https_enable_rejects_option_like_domain_for_certbot():
+    """`--certbot` should validate domain and reject values that parse as CLI flags."""
+
+    with pytest.raises(CommandError, match="valid hostname"):
+        call_command("https", "--enable", "--certbot=--help")
+
+
+@pytest.mark.django_db
+def test_https_enable_rejects_option_like_domain_for_godaddy():
+    """`--godaddy` should validate domain and reject values that parse as CLI flags."""
+
+    with pytest.raises(CommandError, match="valid hostname"):
+        call_command("https", "--enable", "--godaddy=--help")
