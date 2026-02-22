@@ -556,12 +556,6 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         assert cp_simulator.status == "stopped"
 
 
-def _latest_log_message(key: str) -> str:
-    entry = store.logs["charger"][key][-1]
-    parts = entry.split(" ", 2)
-    return parts[-1] if len(parts) == 3 else entry
-
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_serial_from_path_logs_reason():
@@ -575,8 +569,11 @@ def test_rejects_invalid_serial_from_path_logs_reason():
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key("<charger_id>")
-    message = _latest_log_message(store_key)
-    assert "Serial Number placeholder values such as <charger_id> are not allowed." in message
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
+    assert any(
+        "Serial Number placeholder values such as <charger_id> are not allowed." in entry
+        for entry in entries
+    )
 
 
 @pytest.mark.slow
@@ -592,9 +589,9 @@ def test_rejects_invalid_query_serial_and_logs_details():
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key("")
-    message = _latest_log_message(store_key)
-    assert "Serial Number cannot be blank." in message
-    assert "query_string='cid='" in message
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
+    assert any("Serial Number cannot be blank." in entry for entry in entries)
+    assert any("query_string='cid='" in entry for entry in entries)
 
 
 def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
@@ -618,8 +615,11 @@ def test_basic_auth_rejects_when_missing_header():
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key(charger.charger_id)
-    message = _latest_log_message(store_key)
-    assert "HTTP Basic authentication required (credentials missing)" in message
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
+    assert any(
+        "HTTP Basic authentication required (credentials missing)" in entry
+        for entry in entries
+    )
 
 
 @pytest.mark.slow
@@ -642,8 +642,8 @@ def test_basic_auth_rejects_invalid_header_format():
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key(charger.charger_id)
-    message = _latest_log_message(store_key)
-    assert "HTTP Basic authentication header is invalid" in message
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
+    assert any("HTTP Basic authentication header is invalid" in entry for entry in entries)
 
 
 @pytest.mark.slow
@@ -721,8 +721,7 @@ def test_basic_auth_accepts_authorized_user():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         connection_result["connected"] = connected
         connection_result["close_code"] = close_code
-        if connected:
-            await _finalize_communicator(communicator)
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 

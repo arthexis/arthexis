@@ -1663,7 +1663,7 @@ class CSMSConsumer(
         tx_obj = None
         if charger_id:
             tx_obj = store.get_transaction(charger_id, connector_value)
-        if tx_obj:
+        if tx_obj and hasattr(self, "_consumption_task"):
             await self._update_consumption_message(tx_obj.pk)
         if hasattr(self, "_consumption_task"):
             await self._cancel_consumption_message()
