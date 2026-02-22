@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
+import sys
+from getpass import getpass
+
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.dns.models import DNSProviderCredential
@@ -30,6 +35,10 @@ class Command(BaseCommand):
         parser.add_argument("--user", help="Username that owns the credential.")
         parser.add_argument("--api-key", help="GoDaddy API key.")
         parser.add_argument("--api-secret", help="GoDaddy API secret.")
+        parser.add_argument(
+            "--api-secret-file",
+            help="Path to a file containing the GoDaddy API secret.",
+        )
         parser.add_argument("--customer-id", default="", help="Optional GoDaddy customer ID.")
         parser.add_argument(
             "--default-domain",
@@ -63,8 +72,7 @@ class Command(BaseCommand):
         """Create a new GoDaddy DNS credential."""
 
         username = str(options.get("user") or "").strip()
-        api_key = str(options.get("api_key") or "").strip()
-        api_secret = str(options.get("api_secret") or "").strip()
+        api_key, api_secret = self._resolve_api_credentials(options)
 
         missing: list[str] = []
         if not username:
@@ -99,9 +107,58 @@ class Command(BaseCommand):
 
         user_model = get_user_model()
         try:
-            return user_model._default_manager.get(username=username)
+            return user_model.objects.get(username=username)
         except user_model.DoesNotExist as exc:
             raise CommandError(f"User '{username}' does not exist.") from exc
+
+    def _resolve_api_credentials(self, options: dict[str, object]) -> tuple[str, str]:
+        """Resolve GoDaddy API credentials using safe precedence rules."""
+
+        sandbox_mode = bool(options.get("sandbox"))
+        allow_cli_secret_flags = sandbox_mode or bool(getattr(settings, "DEBUG", False)) or (
+            os.getenv("GODADDY_ALLOW_CLI_SECRETS", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+
+        api_key_flag = str(options.get("api_key") or "").strip()
+        api_secret_flag = str(options.get("api_secret") or "").strip()
+        api_secret_file = str(options.get("api_secret_file") or "").strip()
+
+        if (api_key_flag or api_secret_flag) and not allow_cli_secret_flags:
+            raise CommandError(
+                "Passing --api-key/--api-secret is disabled for production safety. "
+                "Use GODADDY_API_KEY/GODADDY_API_SECRET (or --api-secret-file), "
+                "or set --sandbox/GODADDY_ALLOW_CLI_SECRETS=1 for non-production usage."
+            )
+
+        api_key = os.getenv("GODADDY_API_KEY", "").strip()
+        if not api_key and api_key_flag and allow_cli_secret_flags:
+            api_key = api_key_flag
+        if not api_key and sys.stdin.isatty():
+            api_key = input("GoDaddy API key: ").strip()
+
+        api_secret = os.getenv("GODADDY_API_SECRET", "").strip()
+        if not api_secret and api_secret_file:
+            try:
+                with open(api_secret_file, encoding="utf-8") as secret_file:
+                    api_secret = secret_file.read().strip()
+            except OSError as exc:
+                raise CommandError(f"Unable to read --api-secret-file '{api_secret_file}': {exc}") from exc
+        if not api_secret and api_secret_flag and allow_cli_secret_flags:
+            api_secret = api_secret_flag
+        if not api_secret and sys.stdin.isatty():
+            api_secret = getpass("GoDaddy API secret: ").strip()
+
+        missing: list[str] = []
+        if not api_key:
+            missing.append("API key (set GODADDY_API_KEY or use --api-key in sandbox)")
+        if not api_secret:
+            missing.append(
+                "API secret (set GODADDY_API_SECRET, use --api-secret-file, or use --api-secret in sandbox)"
+            )
+        if missing:
+            raise CommandError(f"Missing required arguments for add: {', '.join(missing)}")
+
+        return api_key, api_secret
 
     def _handle_remove(self, options: dict[str, object]) -> None:
         """Delete a GoDaddy DNS credential by ID."""
@@ -122,10 +179,10 @@ class Command(BaseCommand):
     def _handle_list(self) -> None:
         """Print GoDaddy DNS credentials."""
 
-        credentials = DNSProviderCredential.objects.filter(
+        credentials = list(DNSProviderCredential.objects.filter(
             provider=DNSProviderCredential.Provider.GODADDY,
-        ).order_by("pk")
-        if not credentials.exists():
+        ).order_by("pk"))
+        if not credentials:
             self.stdout.write("No GoDaddy credentials configured.")
             return
 
