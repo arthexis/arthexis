@@ -34,6 +34,7 @@ def anyio_backend():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_configuration_domain_tracks_status_and_resilience():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.charger_id = "CFG-1"
@@ -88,6 +89,7 @@ async def test_firmware_domain_updates_deployment():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_transactions_domain_updates_reservation_and_status_mapping():
     location = await database_sync_to_async(Location.objects.create)(name="Depot")
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="TRX-1", connector_id=1, location=location)
@@ -116,6 +118,7 @@ async def test_transactions_domain_updates_reservation_and_status_mapping():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_authorization_domain_handles_unknown_payloads():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.charger_id = "AUTH-1"
@@ -136,6 +139,7 @@ async def test_authorization_domain_handles_unknown_payloads():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_profiles_domain_updates_profile_and_ignores_malformed_variable_payload():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="PROF-1")
     profile_obj = await database_sync_to_async(ChargingProfile.objects.create)(
@@ -196,6 +200,7 @@ async def test_certificates_domain_updates_operation_status():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_diagnostics_domain_updates_log_request_and_diagnostics_metadata():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DIA-1")
     request = await database_sync_to_async(ChargerLogRequest.objects.create)(

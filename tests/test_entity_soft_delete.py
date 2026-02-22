@@ -41,6 +41,7 @@ def test_seed_soft_delete_skipped_for_constrained_model(caplog):
                 schema_editor.delete_model(ConstrainedEntity)
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 def test_seed_soft_delete_applies_without_constraint():
     with isolate_apps("tests"):
 

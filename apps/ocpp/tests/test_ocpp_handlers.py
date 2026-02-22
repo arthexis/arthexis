@@ -643,6 +643,7 @@ async def test_notify_report_requires_mandatory_fields():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_cost_updated_persists_and_forwards():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="COST-1"
@@ -683,6 +684,7 @@ async def test_cost_updated_persists_and_forwards():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_cost_updated_rejects_invalid_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="COST-2"
@@ -783,6 +785,7 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
     hash_data = {"hashAlgorithm": "SHA256", "issuerNameHash": "abc"}
@@ -1090,6 +1093,7 @@ async def test_notify_customer_information_rejects_non_dict_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_notify_display_messages_persists_messages():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-1")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1135,6 +1139,7 @@ async def test_notify_display_messages_persists_messages():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
 async def test_notify_display_messages_updates_compliance_report():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-2")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1834,6 +1839,7 @@ async def test_notify_event_requires_event_data(monkeypatch):
     "status,confirmed",
     [("Accepted", True), ("Cancelled", False), ("Expired", False)],
 )
+@pytest.mark.slow
 async def test_reservation_status_update_persists_and_notifies(status, confirmed):
     from apps.ocpp.models import Charger as ChargerModel
 
