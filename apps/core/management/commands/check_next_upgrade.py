@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("health --target core.next_upgrade")
 class Command(BaseCommand):
     """Deprecated wrapper for the unified health command."""
 
