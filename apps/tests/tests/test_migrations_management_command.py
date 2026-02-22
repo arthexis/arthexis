@@ -52,3 +52,21 @@ def test_migrations_command_rejects_unknown_action() -> None:
     with pytest.raises(CommandError, match="Unsupported action"):
         command = __import__("apps.tests.management.commands.migrations", fromlist=["Command"]).Command()
         command.handle(action="invalid")
+
+
+def test_migration_server_subcommand_does_not_require_vscode_cli(monkeypatch) -> None:
+    """Regression: ``migrations server`` should execute via Python module imports only."""
+
+    from apps.tests.management.commands.migrations import Command
+
+    called: dict[str, list[str]] = {}
+
+    def fake_main(argv: list[str]) -> int:
+        called["argv"] = argv
+        return 0
+
+    monkeypatch.setattr("apps.vscode.migration_server.main", fake_main)
+
+    Command()._run_migration_server({"interval": 2.0, "latest": False})
+
+    assert called["argv"] == ["--interval", "2.0", "--no-latest"]
