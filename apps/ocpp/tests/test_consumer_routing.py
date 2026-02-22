@@ -95,3 +95,15 @@ def test_moved_wrapper_handlers_keep_protocol_decorator_bindings():
     assert _protocol_actions(consumer, "_handle_publish_firmware_status_notification_action") == {
         "PublishFirmwareStatusNotification"
     }
+    assert _protocol_actions(consumer, "_handle_diagnostics_status_notification_action") == {
+        "DiagnosticsStatusNotification"
+    }
+    assert _protocol_actions(consumer, "_handle_log_status_notification_action") == {
+        "LogStatusNotification"
+    }
+    assert _protocol_actions(consumer, "_handle_firmware_status_notification_action") == {
+        "FirmwareStatusNotification"
+    }
+    assert _protocol_actions(consumer, "_handle_security_event_notification_action") == {
+        "SecurityEventNotification"
+    }

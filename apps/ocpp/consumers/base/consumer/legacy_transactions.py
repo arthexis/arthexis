@@ -4,8 +4,6 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
-from apps.protocols.decorators import protocol_call
-from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from .... import store
 from ....models import Transaction
@@ -16,8 +14,6 @@ from ..identity import _extract_vehicle_identifier
 class LegacyTransactionsMixin:
     """Provide legacy OCPP 1.6/2.x transaction persistence handlers."""
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "TransactionEvent")
     async def _handle_transaction_event_legacy(
         self, payload, msg_id, raw, text_data
     ):
@@ -222,7 +218,6 @@ class LegacyTransactionsMixin:
 
         return {}
 
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
     async def _handle_start_transaction_legacy(
         self, payload, msg_id, raw, text_data
     ):
@@ -274,7 +269,7 @@ class LegacyTransactionsMixin:
             await self._start_consumption_updates(tx_obj)
             await self._record_rfid_attempt(
                 rfid=id_tag or "",
-                    status=RFIDAttempt.Status.ACCEPTED,
+                status=RFIDAttempt.Status.ACCEPTED,
                 account=account,
                 transaction=tx_obj,
             )
@@ -289,7 +284,6 @@ class LegacyTransactionsMixin:
         )
         return {"idTagInfo": {"status": "Invalid"}}
 
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
     async def _handle_stop_transaction_legacy(
         self, payload, msg_id, raw, text_data
     ):

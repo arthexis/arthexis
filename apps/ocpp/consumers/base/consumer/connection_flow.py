@@ -143,17 +143,24 @@ class ConnectionFlowMixin:
 
     async def disconnect(self, close_code):
         store.release_ip_connection(getattr(self, "client_ip", None), self)
+        charger_id = getattr(self, "charger_id", None)
+        connector_value = getattr(self, "connector_value", None)
+        store_key = getattr(self, "store_key", None)
+
+        if not charger_id or not store_key:
+            return
+
         tx_obj = None
-        if self.charger_id:
-            tx_obj = store.get_transaction(self.charger_id, self.connector_value)
+        if charger_id:
+            tx_obj = store.get_transaction(charger_id, connector_value)
         if tx_obj:
             await self._update_consumption_message(tx_obj.pk)
         await self._cancel_consumption_message()
-        store.connections.pop(self.store_key, None)
-        pending_key = store.pending_key(self.charger_id)
-        if self.store_key != pending_key:
+        store.connections.pop(store_key, None)
+        pending_key = store.pending_key(charger_id)
+        if store_key != pending_key:
             store.connections.pop(pending_key, None)
-        store.end_session_log(self.store_key)
+        store.end_session_log(store_key)
         store.stop_session_lock()
-        store.clear_pending_calls(self.charger_id)
-        store.add_log(self.store_key, f"Closed (code={close_code})", log_type="charger")
+        store.clear_pending_calls(charger_id)
+        store.add_log(store_key, f"Closed (code={close_code})", log_type="charger")
