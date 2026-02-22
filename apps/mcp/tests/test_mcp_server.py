@@ -27,16 +27,8 @@ def test_discover_remote_commands_includes_decorated_commands() -> None:
     commands = discover_remote_commands()
 
     assert "uptime" in commands
-    assert "redis" not in commands
-
-
-def test_discover_remote_commands_includes_health_command() -> None:
-    """Remote command discovery should include the health command."""
-
-    commands = discover_remote_commands()
-
     assert "health" in commands
-
+    assert "redis" not in commands
 
 
 @pytest.mark.django_db

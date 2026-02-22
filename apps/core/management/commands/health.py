@@ -84,7 +84,10 @@ HEALTH_CHECKS = {
 }
 
 
-@remote_command(description="Run configured application health checks.")
+@remote_command(
+    description="Run configured application health checks.",
+    security_groups=["Site Operator"],
+)
 class Command(BaseCommand):
     """Run one or more application health checks from a unified interface."""
 
