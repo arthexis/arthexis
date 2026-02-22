@@ -33,6 +33,16 @@ pytestmark = pytest.mark.django_db(transaction=True)
 CONNECT_TIMEOUT = 5
 
 
+async def _finalize_communicator(communicator: WebsocketCommunicator) -> None:
+    """Wait for communicator shutdown so teardown does not stall on pending tasks."""
+
+    if communicator.future.done():
+        await communicator.wait()
+        return
+    await communicator.disconnect()
+    await communicator.wait()
+
+
 @pytest.fixture(autouse=True)
 def clear_store_state():
     cache.clear()
@@ -131,7 +141,7 @@ def test_charge_point_created_for_new_websocket_path():
         assert charger is not None, "Expected a charger to be created after websocket connect"
         assert charger.last_path == path
 
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -147,7 +157,7 @@ def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
         communicator = WebsocketCommunicator(application, "/CP-NODE-FEATURE-OFF")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -170,7 +180,7 @@ def test_new_charge_point_blocked_when_creation_feature_disabled(
         )
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -192,7 +202,7 @@ def test_known_charge_point_allowed_when_creation_feature_disabled(
         communicator = WebsocketCommunicator(application, "/CP-KNOWN")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -262,7 +272,7 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
         consumer = store.connections[store.pending_key(charger.charger_id)]
         assert consumer.ocpp_version == preferred
 
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -287,7 +297,7 @@ def test_connect_maps_ocpp16j_subprotocol_to_ocpp16_version():
         consumer = store.connections[store.pending_key(charger.charger_id)]
         assert consumer.ocpp_version == OCPP_VERSION_16
 
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -450,7 +460,7 @@ def test_assign_connector_rebinds_store_preserves_state():
         await asyncio.sleep(0.05)
         assert communicator.future.done() is False
 
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -482,7 +492,7 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
         communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -560,6 +570,7 @@ def test_rejects_invalid_serial_from_path_logs_reason():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -576,6 +587,7 @@ def test_rejects_invalid_query_serial_and_logs_details():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -601,6 +613,7 @@ def test_basic_auth_rejects_when_missing_header():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -624,6 +637,7 @@ def test_basic_auth_rejects_invalid_header_format():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -647,12 +661,13 @@ def test_basic_auth_rejects_invalid_credentials():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key(charger.charger_id)
-    message = _latest_log_message(store_key)
-    assert "HTTP Basic authentication failed" in message
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
+    assert any("HTTP Basic authentication failed" in entry for entry in entries)
 
 
 @pytest.mark.slow
@@ -673,13 +688,15 @@ def test_basic_auth_rejects_unauthorized_user():
         connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key(charger.charger_id)
-    message = _latest_log_message(store_key)
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
     assert any(
-        expected in message
+        expected in entry
+        for entry in entries
         for expected in [
             "HTTP Basic authentication rejected for unauthorized user",
             "HTTP Basic authentication failed",
@@ -705,7 +722,7 @@ def test_basic_auth_accepts_authorized_user():
         connection_result["connected"] = connected
         connection_result["close_code"] = close_code
         if connected:
-            await communicator.disconnect()
+            await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
@@ -740,7 +757,7 @@ def test_unknown_extension_action_replies_with_empty_call_result():
         follow_up_response = await communicator.receive_json_from()
         assert follow_up_response == [3, follow_up_id, {}]
 
-        await communicator.disconnect()
+        await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
 
