@@ -8,6 +8,21 @@ from django.db.migrations.executor import MigrationExecutor
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.regression]
 
 
+def _create_term_linked_to_reference(project_apps, reference):
+    """Create a historical ``Term`` row linked to ``reference`` when available."""
+
+    try:
+        Term = project_apps.get_model("terms", "Term")
+    except LookupError:
+        return None
+
+    return Term.objects.create(
+        title="SQLite Terms",
+        slug="sqlite-terms",
+        reference=reference,
+    )
+
+
 def test_reference_constraint_migration_deduplicates_existing_rows() -> None:
     """Migration 0017 should remove duplicate pairs before adding the constraint."""
 
@@ -19,8 +34,9 @@ def test_reference_constraint_migration_deduplicates_existing_rows() -> None:
     apps = executor.loader.project_state(from_state).apps
     Reference = apps.get_model("links", "Reference")
 
-    Reference.objects.create(alt_text="SQLite", value="https://www.sqlite.org/")
-    Reference.objects.create(alt_text="SQLite", value="https://www.sqlite.org/")
+    keep = Reference.objects.create(alt_text="SQLite", value="https://www.sqlite.org/")
+    duplicate = Reference.objects.create(alt_text="SQLite", value="https://www.sqlite.org/")
+    created_term = _create_term_linked_to_reference(apps, duplicate)
 
     executor = MigrationExecutor(connection)
     executor.migrate(to_state)
@@ -33,3 +49,8 @@ def test_reference_constraint_migration_deduplicates_existing_rows() -> None:
         ).count()
         == 1
     )
+
+    if created_term is not None:
+        MigratedTerm = migrated_apps.get_model("terms", "Term")
+        migrated_term = MigratedTerm.objects.get(pk=created_term.pk)
+        assert migrated_term.reference_id == keep.id

@@ -12,13 +12,12 @@ def remove_duplicate_references(apps, schema_editor):
     constraint migration. Keep the oldest row for each pair and delete the rest.
     """
 
-    del schema_editor  # Migration API argument is unused.
     Reference = apps.get_model("links", "Reference")
 
     duplicates = (
         Reference.objects.values("alt_text", "value")
         .order_by()
-        .annotate(total=models.Count("id"))
+        .annotate(min_id=models.Min("id"), total=models.Count("id"))
         .filter(total__gt=1)
     )
 
@@ -27,10 +26,42 @@ def remove_duplicate_references(apps, schema_editor):
             alt_text=duplicate["alt_text"],
             value=duplicate["value"],
         ).order_by("id")
-        keep = refs.first()
-        if keep is None:
+
+        keep_id = duplicate["min_id"]
+        duplicate_ids = list(refs.exclude(id=keep_id).values_list("id", flat=True))
+        if not duplicate_ids:
             continue
-        refs.exclude(id=keep.id).delete()
+
+        reassign_reference_dependents(apps, schema_editor, keep_id, duplicate_ids)
+        Reference.objects.filter(id__in=duplicate_ids).delete()
+
+
+def reassign_reference_dependents(apps, schema_editor, keep_id, duplicate_ids):
+    """Repoint dependent rows to ``keep_id`` before deleting duplicate references."""
+
+    table_names = set(schema_editor.connection.introspection.table_names())
+    dependent_models = (
+        ("cards", "RFID", "reference"),
+        ("terms", "Term", "reference"),
+        ("ocpp", "Charger", "reference"),
+    )
+
+    for app_label, model_name, field_name in dependent_models:
+        try:
+            model = apps.get_model(app_label, model_name)
+        except LookupError:
+            continue
+
+        if model._meta.db_table not in table_names:
+            continue
+
+        duplicates_qs = model.objects.filter(**{f"{field_name}_id__in": duplicate_ids})
+
+        if model._meta.get_field(field_name).one_to_one:
+            if model.objects.filter(**{f"{field_name}_id": keep_id}).exists():
+                continue
+
+        duplicates_qs.update(**{f"{field_name}_id": keep_id})
 
 
 def restore_duplicate_references(apps, schema_editor):
