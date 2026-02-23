@@ -1,7 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
-{% block content %}
+{% block extrastyle %}
+  {{ block.super }}
   <style>
     .nginx-preview-actions .form-row {
       margin-bottom: 1rem;
@@ -30,6 +31,9 @@
       max-width: 100%;
     }
   </style>
+{% endblock %}
+
+{% block content %}
 
   <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
