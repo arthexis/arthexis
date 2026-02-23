@@ -432,6 +432,7 @@ LOCAL_APPS = [
     "apps.base",
     "apps.blog",
     "apps.credentials",
+    "apps.actions",
     "apps.celery",
     "apps.nodes",
     "apps.discovery",
