@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 from pathlib import Path
 import hashlib
@@ -73,35 +74,34 @@ def save_content_sample(
     return sample
 
 
-def _format_firefox_driver_help() -> str:
-    """Return OS-aware instructions for installing geckodriver."""
+def _format_playwright_help() -> str:
+    """Return OS-aware instructions for installing Playwright browsers."""
 
     os_name = platform.system() or "Unknown"
     instructions: list[str] = [
-        "Firefox WebDriver is unavailable.",
+        "Playwright Firefox runtime is unavailable.",
         f"Detected OS: {os_name}.",
     ]
 
     if os_name == "Linux":
         instructions.append(
-            "Download geckodriver for Linux and place the executable in /usr/local/bin or /usr/bin, "
-            "or set the GECKODRIVER environment variable to its full path. Ensure the file is executable (chmod +x)."
+            "Install Playwright browsers with `python -m playwright install firefox` and ensure required Linux dependencies are available."
         )
     elif os_name == "Windows":
         instructions.append(
-            "Download geckodriver.exe and add its folder (for example C:\\tools\\geckodriver) to the PATH or set the GECKODRIVER environment variable to the full executable path."
+            "Install Playwright browsers with `python -m playwright install firefox` in the same Python environment as the app."
         )
     elif os_name == "Darwin":
         instructions.append(
-            "Download the macOS geckodriver and place it in /usr/local/bin or another directory on PATH, or set GECKODRIVER to the executable path."
+            "Install Playwright browsers with `python -m playwright install firefox` and ensure Xcode command line tools are present."
         )
     else:
         instructions.append(
-            "Download the appropriate geckodriver for your platform and add it to PATH or set GECKODRIVER to the executable path."
+            "Install the Firefox Playwright browser bundle for your platform with `python -m playwright install firefox`."
         )
 
     instructions.append(
-        "The suite runs headless Firefox; ensure Firefox itself is installed and available to the same user running the tests."
+        "The suite runs headless Firefox through Playwright; ensure browser binaries are installed for the same user running the app."
     )
 
     return " ".join(instructions)
@@ -116,55 +116,49 @@ def capture_screenshot(
 ) -> Path:
     """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`.
 
-    ``cookies`` can be an iterable of Selenium cookie mappings which will be
+    ``cookies`` can be an iterable of browser cookie mappings which will be
     applied after the initial navigation and before the screenshot is taken.
     """
 
-    from selenium import webdriver
-    from selenium.common.exceptions import WebDriverException
-    from selenium.webdriver.firefox.options import Options
+    from playwright.sync_api import Error as PlaywrightError
 
-    from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
+    from apps.selenium.models import PlaywrightDriver, SeleniumBrowser
 
-    firefox_binary = find_firefox_binary()
-    if not firefox_binary:
-        raise RuntimeError(
-            "Screenshot capture failed: Firefox is not installed. Install Firefox to enable screenshot capture."
-        )
-
-    options = Options()
-    options.binary_location = firefox_binary
-    options.add_argument("-headless")
-    ensure_geckodriver()
     resolution = (
         width or DEFAULT_SCREENSHOT_RESOLUTION[0],
         height or DEFAULT_SCREENSHOT_RESOLUTION[1],
     )
 
     try:
-        with webdriver.Firefox(options=options) as browser:
+        browser = SeleniumBrowser(
+            name="Screenshot Browser",
+            engine=SeleniumBrowser.Engine.FIREFOX,
+            mode=SeleniumBrowser.Mode.HEADLESS,
+        )
+        with contextlib.closing(browser.create_driver()) as browser_driver:
+            browser: PlaywrightDriver = browser_driver
             browser.set_window_size(*resolution)
             SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
             filename = SCREENSHOT_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.png"
             try:
                 browser.get(url)
-            except WebDriverException as exc:
+            except PlaywrightError as exc:
                 logger.error("Failed to load %s: %s", url, exc)
             if cookies:
                 for cookie in cookies:
                     try:
                         browser.add_cookie(cookie)
-                    except WebDriverException as exc:
+                    except (PlaywrightError, ValueError) as exc:
                         logger.error("Failed to apply cookie for %s: %s", url, exc)
                 browser.get(url)
             if not browser.save_screenshot(str(filename)):
                 raise RuntimeError("Screenshot capture failed")
             return filename
-    except WebDriverException as exc:
+    except PlaywrightError as exc:
         logger.error("Failed to capture screenshot from %s: %s", url, exc)
         message = str(exc)
-        if "Unable to obtain driver for firefox" in message:
-            message = _format_firefox_driver_help()
+        if "Executable doesn't exist" in message or "browserType.launch" in message:
+            message = _format_playwright_help()
         raise RuntimeError(f"Screenshot capture failed: {message}") from exc
 
 

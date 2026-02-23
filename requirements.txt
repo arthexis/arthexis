@@ -42,7 +42,6 @@ dnspython==2.7.0
 docutils==0.22.4
 filelock==3.24.2
 graphviz==0.21
-geckodriver-autoinstaller==0.1.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
@@ -79,7 +78,7 @@ qrcode==8.2
 redis==7.2.0
 reportlab==4.4.10
 requests==2.32.5
-selenium==4.34.2
+playwright==1.55.0
 service-identity==24.2.0
 setuptools==82.0.0
 six==1.17.0

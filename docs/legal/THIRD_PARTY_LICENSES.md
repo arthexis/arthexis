@@ -124,7 +124,7 @@ python scripts/generate_third_party_licenses.py
 | `RPi.GPIO` | `RPi.GPIO==0.7.1` | MIT | [link](https://sourceforge.net/projects/raspberry-gpio-python/) |
 | `s3transfer` | `s3transfer==0.11.1` | Apache License 2.0 | [link](https://github.com/boto/s3transfer) |
 | `SecretStorage` | `SecretStorage==3.5.0` | Unknown | [link](https://github.com/mitya57/secretstorage) |
-| `selenium` | `selenium==4.34.2` | Apache-2.0 | [link](https://www.selenium.dev) |
+| `playwright` | `playwright==1.55.0` | Apache-2.0 | [link](https://playwright.dev/python/) |
 | `service-identity` | `service-identity==24.2.0` | MIT License | [link](https://pypi.org/project/service-identity/) |
 | `setuptools` | `setuptools==80.9.0` | Unknown | [link](https://pypi.org/project/setuptools/) |
 | `six` | `six==1.17.0` | MIT | [link](https://github.com/benjaminp/six) |

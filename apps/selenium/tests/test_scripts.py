@@ -61,6 +61,6 @@ def test_firefox_options_force_headless_without_display(monkeypatch):
     monkeypatch.delenv("DISPLAY", raising=False)
     browser = SeleniumBrowser(name="Example")
 
-    options = browser._build_firefox_options()
+    launch_kwargs = browser._build_launch_kwargs()
 
-    assert "-headless" in options.arguments
+    assert launch_kwargs["headless"] is True

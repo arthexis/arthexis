@@ -3,16 +3,16 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+from collections.abc import Callable
 
 from django.db import models
 from django.db.models import Q
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
 from apps.core.entity import Entity, EntityManager
-from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
+from apps.selenium.utils.firefox import find_firefox_binary
 from apps.sigils.sigil_resolver import resolve_sigils
 
 logger = logging.getLogger(__name__)
@@ -71,26 +71,108 @@ class SeleniumBrowser(Entity):
     def default(cls) -> "SeleniumBrowser | None":
         return cls.objects.default()
 
-    def _build_firefox_options(self) -> FirefoxOptions:
-        options = FirefoxOptions()
-        binary = find_firefox_binary(self.binary_path)
-        if binary:
-            options.binary_location = binary
+    def _headless_mode(self) -> bool:
+        """Return whether the browser should run in headless mode."""
+
         mode = self.mode
         if mode == self.Mode.HEADED and not os.environ.get("DISPLAY"):
             logger.warning("DISPLAY not set; forcing headless mode for %s", self)
-            mode = self.Mode.HEADLESS
-        if mode == self.Mode.HEADLESS:
-            options.add_argument("-headless")
-        return options
+            return True
+        return mode == self.Mode.HEADLESS
+
+    def _build_launch_kwargs(self) -> dict[str, object]:
+        """Build Playwright launch keyword arguments for this browser."""
+
+        launch_kwargs: dict[str, object] = {"headless": self._headless_mode()}
+        binary = find_firefox_binary(self.binary_path)
+        if binary:
+            launch_kwargs["executable_path"] = binary
+        return launch_kwargs
 
     def create_driver(self):
         if self.engine != self.Engine.FIREFOX:
             raise RuntimeError(f"Unsupported browser engine: {self.engine}")
 
-        ensure_geckodriver()
-        options = self._build_firefox_options()
-        return webdriver.Firefox(options=options)
+        launch_kwargs = self._build_launch_kwargs()
+        return PlaywrightDriver.launch(
+            browser_factory=lambda p: p.firefox.launch(**launch_kwargs)
+        )
+
+
+class PlaywrightDriver:
+    """Small Selenium-compatible adapter over Playwright page actions."""
+
+    def __init__(
+        self,
+        *,
+        playwright: Playwright,
+        browser: Browser,
+        context: BrowserContext,
+        page: Page,
+    ) -> None:
+        self._playwright = playwright
+        self._browser = browser
+        self._context = context
+        self.page = page
+
+    @classmethod
+    def launch(cls, *, browser_factory: Callable[[Playwright], Browser]) -> "PlaywrightDriver":
+        """Launch a Playwright browser and return a driver adapter."""
+
+        playwright = sync_playwright().start()
+        try:
+            browser = browser_factory(playwright)
+            context = browser.new_context(viewport={"width": 1280, "height": 720})
+            page = context.new_page()
+            return cls(
+                playwright=playwright,
+                browser=browser,
+                context=context,
+                page=page,
+            )
+        except Exception:
+            with contextlib.suppress(Exception):
+                playwright.stop()
+            raise
+
+    def set_window_size(self, width: int, height: int) -> None:
+        """Set the viewport size for the active Playwright page."""
+
+        self.page.set_viewport_size({"width": width, "height": height})
+
+    def get(self, url: str) -> None:
+        """Navigate the current page to ``url``."""
+
+        self.page.goto(url, wait_until="domcontentloaded")
+
+    def add_cookie(self, cookie: dict) -> None:
+        """Add a cookie dictionary using Playwright's context API."""
+
+        normalized = dict(cookie)
+        if "sameSite" not in normalized and normalized.get("sameSite") is None:
+            normalized.pop("sameSite", None)
+        if "url" not in normalized and "domain" not in normalized:
+            current_url = self.page.url
+            if not current_url:
+                raise ValueError("Cookie requires either a domain or an active page URL.")
+            normalized["url"] = current_url
+        self._context.add_cookies([normalized])
+
+    def save_screenshot(self, path: str) -> bool:
+        """Save the current page screenshot and return success state."""
+
+        self.page.screenshot(path=path, full_page=True)
+        return True
+
+    def quit(self) -> None:
+        """Close all Playwright resources owned by this adapter."""
+
+        with contextlib.suppress(Exception):
+            self._context.close()
+        with contextlib.suppress(Exception):
+            self._browser.close()
+        with contextlib.suppress(Exception):
+            self._playwright.stop()
 
 
 class SeleniumScript(Entity):
@@ -168,7 +250,12 @@ class SeleniumScript(Entity):
                 return
 
             if body:
-                exec_globals = {"browser": driver, "driver": driver, "script": self}
+                exec_globals = {
+                    "browser": driver,
+                    "driver": driver,
+                    "page": getattr(driver, "page", None),
+                    "script": self,
+                }
                 compiled = compile(body, f"<SeleniumScript {self.name}>", "exec")
                 exec(compiled, exec_globals, exec_globals)
         finally:

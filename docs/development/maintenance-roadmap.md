@@ -8,7 +8,7 @@
   - Document the split of responsibilities between `config/settings_helpers.py` and `config/settings.py` (monkeypatch, hostname expansion, CSRF origin handling) so future refactors extend the helper module instead of reintroducing inline duplicates. 
 
 ## 2. Separate Runtime and Tooling Dependencies
-- **Current state:** `pyproject.toml` lists developer tooling (e.g. `black`, `twine`, `selenium`) alongside runtime dependencies, so production installs pull in packages that are only needed for development or publishing. 
+- **Current state:** `pyproject.toml` lists developer tooling (e.g. `black`, `twine`, `playwright`) alongside runtime dependencies, so production installs pull in packages that are only needed for development or publishing. 
 - **Proposed actions:**
   - Move formatting, release, and UI automation dependencies into optional extras such as `[project.optional-dependencies.dev]` and `[project.optional-dependencies.release]`.
   - Add documentation to `docs/development/` describing which extras to install for each workflow, and update CI to use the appropriate extra set.
