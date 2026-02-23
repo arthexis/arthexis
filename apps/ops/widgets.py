@@ -25,5 +25,6 @@ def _can_view_pending_ops(*, request, **_kwargs) -> bool:
 def pending_operations_widget(*, request, **_kwargs):
     """Render the pending operations widget context."""
 
-    pending = pending_operations_for_user(request.user)
+    current_node = getattr(request, "node", None)
+    pending = pending_operations_for_user(request.user, node=current_node)
     return {"pending_operations": pending[:3], "pending_count": len(pending)}

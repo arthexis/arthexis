@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, models
+from django.db import DatabaseError, connection, models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+
+
+logger = logging.getLogger(__name__)
+
+
+READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 
 class OperationScreen(Entity):
@@ -65,6 +74,9 @@ class OperationScreen(Entity):
         super().clean()
         if self.recurrence_days is not None and self.recurrence_days < 1:
             raise ValidationError({"recurrence_days": _("Recurrence must be at least one day.")})
+        scheme = urlparse(self.start_url).scheme
+        if scheme and scheme not in {"http", "https"}:
+            raise ValidationError({"start_url": _("Start URL must be HTTP(S) or a relative path.")})
 
     def run_validation_sql(self) -> tuple[bool | None, str]:
         """Execute optional SQL validation and return pass flag with output."""
@@ -72,12 +84,17 @@ class OperationScreen(Entity):
         sql = (self.validation_sql or "").strip()
         if not sql:
             return None, ""
+        if not READ_ONLY_SQL_PATTERN.match(sql):
+            return False, _("Validation SQL must be a read-only SELECT query.")
 
         try:
-            with connection.cursor() as cursor:
-                cursor.execute(sql)
-                row = cursor.fetchone()
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(sql)
+                    row = cursor.fetchone()
+                transaction.set_rollback(True)
         except DatabaseError as exc:
+            logger.exception("Validation SQL failed for operation %s", self.pk)
             return False, str(exc)
 
         if not row:
@@ -139,10 +156,17 @@ class OperationExecution(Entity):
         ordering = ("-performed_at",)
         verbose_name = _("Operation Execution")
         verbose_name_plural = _("Operation Executions")
+        indexes = [models.Index(fields=["operation", "user", "-performed_at"], name="ops_exec_op_user_date")]
 
     def save(self, *args, **kwargs):
         """Run optional operation SQL validation when logging execution."""
 
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and not {"validation_passed", "validation_output"}.intersection(
+            set(update_fields)
+        ):
+            super().save(*args, **kwargs)
+            return
         if self.validation_passed is None:
             passed, output = self.operation.run_validation_sql()
             self.validation_passed = passed
