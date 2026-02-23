@@ -2,9 +2,6 @@
   {
     "model": "features.feature",
     "fields": {
-      "slug": "standard-charge-point",
-      "display": "Standard Charge Point",
-      "summary": "Allow the CSMS to auto-create and register new charge points on first websocket connect. When disabled, only known chargers can connect.",
       "is_enabled": true,
       "main_app": [
         "ocpp"
@@ -14,7 +11,7 @@
       ],
       "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
       "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
-      "service_requirements": "Create charger records on first connect, register charge points to the local node, and allow OCPP traffic for known chargers when creation is disabled.",
+      "service_requirements": "Create charger records for supported OCPP 1.6 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
       "admin_views": [
         "admin:ocpp_charger_changelist",
         "admin:ocpp_simulator_changelist"
@@ -38,6 +35,13 @@
         "apps/ocpp/coverage201.json",
         "apps/ocpp/coverage21.json"
       ],
+      "created_at": "2026-02-04T18:00:00Z",
+      "updated_at": "2026-02-04T18:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "ocpp-16-charge-point",
+      "display": "OCPP 1.6 Charge Point",
+      "summary": "Support OCPP 1.6 charge point onboarding and call handling.",
       "protocol_coverage": {
         "ocpp16": {
           "cp_to_csms": [
@@ -73,7 +77,82 @@
             "UnlockConnector",
             "UpdateFirmware"
           ]
-        },
+        }
+      }
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-16-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_websocket_creation.py::test_charge_point_created_for_new_websocket_path",
+      "name": "Creates charger on first websocket connection",
+      "is_regression_guard": true,
+      "notes": "Validates websocket handshake and charger provisioning.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-16-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp16_command.py::test_ocpp16_coverage_matches_fixture",
+      "name": "OCPP 1.6 coverage report matches fixture",
+      "is_regression_guard": true,
+      "notes": "Guards protocol coverage command output against committed fixture.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.feature",
+    "fields": {
+      "is_enabled": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "node_feature": [
+        "charge-points"
+      ],
+      "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
+      "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
+      "service_requirements": "Create charger records for supported OCPP 2.0.1 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
+      "admin_views": [
+        "admin:ocpp_charger_changelist",
+        "admin:ocpp_simulator_changelist"
+      ],
+      "public_views": [
+        "ocpp:ocpp-dashboard",
+        "ocpp:charger-page",
+        "ocpp:charger-status"
+      ],
+      "service_views": [
+        "WebSocket: /<charge_point_id>/",
+        "WebSocket: /ws/<charge_point_id>/",
+        "Service: apps.ocpp.consumers.CSMSConsumer"
+      ],
+      "code_locations": [
+        "apps/ocpp/consumers.py",
+        "apps/ocpp/views/actions",
+        "apps/ocpp/views/common.py",
+        "apps/ocpp/store.py",
+        "apps/ocpp/coverage.json",
+        "apps/ocpp/coverage201.json",
+        "apps/ocpp/coverage21.json"
+      ],
+      "created_at": "2026-02-04T18:00:00Z",
+      "updated_at": "2026-02-04T18:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "ocpp-201-charge-point",
+      "display": "OCPP 2.0.1 Charge Point",
+      "summary": "Support OCPP 2.0.1 charge point onboarding and call handling.",
+      "protocol_coverage": {
         "ocpp201": {
           "cp_to_csms": [
             "Authorize",
@@ -144,7 +223,138 @@
             "UnpublishFirmware",
             "UpdateFirmware"
           ]
-        },
+        }
+      }
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-201-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_websocket_creation.py::test_connect_prefers_stored_ocpp2_without_offered_subprotocol",
+      "name": "Prefers stored OCPP version during websocket negotiation",
+      "is_regression_guard": true,
+      "notes": "Ensures protocol preference behavior for OCPP 2.x connections.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-201-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_ocpp_handlers.py::test_transaction_event_registered_for_ocpp201_and_ocpp21",
+      "name": "Registers transaction events for OCPP 2.0.1/2.1",
+      "is_regression_guard": true,
+      "notes": "Confirms CSMS handler coverage for OCPP 2.x transaction events.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-201-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_ocpp_handlers.py::test_notify_event_registered_for_ocpp201_and_ocpp21",
+      "name": "Registers notify event for OCPP 2.0.1/2.1",
+      "is_regression_guard": true,
+      "notes": "Guards OCPP 2.x event notifications on the CSMS side.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-201-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_ocpp201_actions.py::test_firmware_actions_register_ocpp201_and_ocpp21",
+      "name": "Firmware actions cover OCPP 2.0.1/2.1",
+      "is_regression_guard": true,
+      "notes": "Ensures firmware call registration for OCPP 2.x.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-201-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_notify_display_messages_in_cp_to_csms_coverage",
+      "name": "OCPP 2.x coverage includes NotifyDisplayMessages",
+      "is_regression_guard": true,
+      "notes": "Guards cp-to-csms action coverage extraction for NotifyDisplayMessages.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-201-charge-point"
+      ],
+      "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_ocpp201_coverage_matches_fixture",
+      "name": "OCPP 2.0.1 coverage report matches fixture",
+      "is_regression_guard": true,
+      "notes": "Guards OCPP 2.0.1 coverage command output against committed fixture.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "features.feature",
+    "fields": {
+      "is_enabled": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "node_feature": [
+        "charge-points"
+      ],
+      "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
+      "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
+      "service_requirements": "Create charger records for supported OCPP 2.1 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
+      "admin_views": [
+        "admin:ocpp_charger_changelist",
+        "admin:ocpp_simulator_changelist"
+      ],
+      "public_views": [
+        "ocpp:ocpp-dashboard",
+        "ocpp:charger-page",
+        "ocpp:charger-status"
+      ],
+      "service_views": [
+        "WebSocket: /<charge_point_id>/",
+        "WebSocket: /ws/<charge_point_id>/",
+        "Service: apps.ocpp.consumers.CSMSConsumer"
+      ],
+      "code_locations": [
+        "apps/ocpp/consumers.py",
+        "apps/ocpp/views/actions",
+        "apps/ocpp/views/common.py",
+        "apps/ocpp/store.py",
+        "apps/ocpp/coverage.json",
+        "apps/ocpp/coverage201.json",
+        "apps/ocpp/coverage21.json"
+      ],
+      "created_at": "2026-02-04T18:00:00Z",
+      "updated_at": "2026-02-04T18:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "ocpp-21-charge-point",
+      "display": "OCPP 2.1 Charge Point",
+      "summary": "Support OCPP 2.1 charge point onboarding and call handling.",
+      "protocol_coverage": {
         "ocpp21": {
           "cp_to_csms": [
             "Authorize",
@@ -216,32 +426,14 @@
             "UpdateFirmware"
           ]
         }
-      },
-      "created_at": "2026-02-04T18:00:00Z",
-      "updated_at": "2026-02-04T18:00:00Z",
-      "is_seed_data": true,
-      "is_deleted": false
+      }
     }
   },
   {
     "model": "features.featuretest",
     "fields": {
       "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/ocpp/tests/test_websocket_creation.py::test_charge_point_created_for_new_websocket_path",
-      "name": "Creates charger on first websocket connection",
-      "is_regression_guard": true,
-      "notes": "Validates websocket handshake and charger provisioning.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
+        "ocpp-21-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_websocket_creation.py::test_connect_prefers_stored_ocpp2_without_offered_subprotocol",
       "name": "Prefers stored OCPP version during websocket negotiation",
@@ -255,7 +447,7 @@
     "model": "features.featuretest",
     "fields": {
       "feature": [
-        "standard-charge-point"
+        "ocpp-21-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_ocpp_handlers.py::test_transaction_event_registered_for_ocpp201_and_ocpp21",
       "name": "Registers transaction events for OCPP 2.0.1/2.1",
@@ -269,7 +461,7 @@
     "model": "features.featuretest",
     "fields": {
       "feature": [
-        "standard-charge-point"
+        "ocpp-21-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_ocpp_handlers.py::test_notify_event_registered_for_ocpp201_and_ocpp21",
       "name": "Registers notify event for OCPP 2.0.1/2.1",
@@ -283,7 +475,7 @@
     "model": "features.featuretest",
     "fields": {
       "feature": [
-        "standard-charge-point"
+        "ocpp-21-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_ocpp201_actions.py::test_firmware_actions_register_ocpp201_and_ocpp21",
       "name": "Firmware actions cover OCPP 2.0.1/2.1",
@@ -297,91 +489,7 @@
     "model": "features.featuretest",
     "fields": {
       "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/nginx/tests/test_admin.py::test_generate_certificates_view_creates_certbot_certificate_when_selected",
-      "name": "Certbot certificate generation is provisioned from admin",
-      "is_regression_guard": true,
-      "notes": "Guards HTTPS admin certificate provisioning for certbot.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/nginx/tests/test_admin.py::test_generate_certificates_view_creates_godaddy_certificate_when_selected",
-      "name": "GoDaddy DNS certificate generation is provisioned from admin",
-      "is_regression_guard": true,
-      "notes": "Guards HTTPS admin certificate provisioning for DNS challenge flow.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/recipes/tests/test_recipes.py::test_execute_supports_bash_body_type",
-      "name": "Bash recipe execution returns stdout",
-      "is_regression_guard": true,
-      "notes": "Protects bash runtime support for recipes.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/recipes/tests/test_recipes.py::test_execute_supports_bash_safe_normalized_kwarg_names",
-      "name": "Bash recipe kwargs normalize to safe env names",
-      "is_regression_guard": true,
-      "notes": "Protects normalized kwargs behavior in bash recipe execution.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/nodes/tests/test_registration_helpers.py::test_get_host_port_infers_from_proxy_headers[headers2-443]",
-      "name": "Host port inference honors HTTPS forwarded proto",
-      "is_regression_guard": true,
-      "notes": "Guards proxy header inference for HTTPS visitor registration.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/ocpp/tests/test_coverage_ocpp16_command.py::test_ocpp16_coverage_matches_fixture",
-      "name": "OCPP 1.6 coverage report matches fixture",
-      "is_regression_guard": true,
-      "notes": "Guards protocol coverage command output against committed fixture.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
+        "ocpp-21-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_notify_display_messages_in_cp_to_csms_coverage",
       "name": "OCPP 2.x coverage includes NotifyDisplayMessages",
@@ -395,26 +503,12 @@
     "model": "features.featuretest",
     "fields": {
       "feature": [
-        "standard-charge-point"
+        "ocpp-21-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_ocpp21_coverage_matches_fixture",
       "name": "OCPP 2.1 coverage report matches fixture",
       "is_regression_guard": true,
       "notes": "Guards OCPP 2.1 coverage command output against committed fixture.",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "features.featuretest",
-    "fields": {
-      "feature": [
-        "standard-charge-point"
-      ],
-      "node_id": "apps/ocpp/tests/test_coverage_ocpp201_command.py::test_ocpp201_coverage_matches_fixture",
-      "name": "OCPP 2.0.1 coverage report matches fixture",
-      "is_regression_guard": true,
-      "notes": "Guards OCPP 2.0.1 coverage command output against committed fixture.",
       "is_seed_data": true,
       "is_deleted": false
     }
