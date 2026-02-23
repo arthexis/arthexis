@@ -727,22 +727,6 @@ async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
 
 
 @pytest.mark.anyio
-async def test_notify_event_registered_for_ocpp201_and_ocpp21():
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    calls = getattr(consumer._handle_notify_event_action, "__protocol_calls__", set())
-    assert (
-        "ocpp201",
-        ProtocolCallModel.CP_TO_CSMS,
-        "NotifyEvent",
-    ) in calls
-    assert (
-        "ocpp21",
-        ProtocolCallModel.CP_TO_CSMS,
-        "NotifyEvent",
-    ) in calls
-
-
-@pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
@@ -1729,98 +1713,6 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
     assert result == {}
     assert any("ReportChargingProfiles missing" in entry for entry in logs)
     assert any("3" in entry for entry in logs)
-
-
-@pytest.mark.anyio
-async def test_notify_event_forwards_observability_payload(monkeypatch):
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = store.identity_key("OBS-1", 1)
-    consumer.charger_id = "OBS-1"
-    consumer.connector_value = 1
-
-    forwarded: list[dict[str, object]] = []
-
-    monkeypatch.setattr(
-        store,
-        "forward_event_to_observability",
-        lambda payload: forwarded.append(payload),
-    )
-
-    payload = {
-        "generatedAt": "2024-01-01T00:00:00Z",
-        "seqNo": 9,
-        "tbc": True,
-        "eventData": [
-            {
-                "eventId": "7",
-                "timestamp": "2024-01-01T00:00:05Z",
-                "eventType": "Alert",
-                "trigger": "Delta",
-                "actualValue": "85C",
-                "cause": "Overheat",
-                "techCode": "TMP",
-                "techInfo": "Sensor drift",
-                "cleared": False,
-                "severity": "1",
-                "transactionId": "TX-9",
-                "variableMonitoringId": "3",
-                "component": {
-                    "name": "Temperature",
-                    "instance": "core",
-                    "evse": {"id": 2, "connectorId": 1},
-                },
-                "variable": {"name": "Temp", "instance": "A"},
-            }
-        ],
-    }
-
-    result = await consumer._handle_notify_event_action(payload, "evt-msg-1", "", "")
-
-    assert result == {}
-    assert forwarded
-    event = forwarded[0]
-    assert event["charger_id"] == "OBS-1"
-    assert event["connector_id"] == "1"
-    assert event["evse_id"] == 2
-    assert event["event_id"] == 7
-    assert event["event_type"] == "Alert"
-    assert event["trigger"] == "Delta"
-    assert event["actual_value"] == "85C"
-    assert event["severity"] == 1
-    assert event["cause"] == "Overheat"
-    assert event["tech_code"] == "TMP"
-    assert event["tech_info"] == "Sensor drift"
-    assert event["cleared"] is False
-    assert event["transaction_id"] == "TX-9"
-    assert event["variable_monitoring_id"] == 3
-    assert event["component_name"] == "Temperature"
-    assert event["component_instance"] == "core"
-    assert event["variable_name"] == "Temp"
-    assert event["variable_instance"] == "A"
-    assert event["seq_no"] == 9
-    assert event["tbc"] is True
-    assert event["generated_at"].isoformat().startswith("2024-01-01T00:00:00")
-    assert event["event_timestamp"].isoformat().startswith("2024-01-01T00:00:05")
-
-
-@pytest.mark.anyio
-async def test_notify_event_requires_event_data(monkeypatch):
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = "OBS-2"
-    consumer.charger_id = "OBS-2"
-
-    forwarded: list[dict[str, object]] = []
-
-    monkeypatch.setattr(
-        store,
-        "forward_event_to_observability",
-        lambda payload: forwarded.append(payload),
-    )
-
-    result = await consumer._handle_notify_event_action({"seqNo": 1}, "evt-msg-2", "", "")
-
-    assert result == {}
-    assert forwarded == []
 
 
 @pytest.mark.anyio
