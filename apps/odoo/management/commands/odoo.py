@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Max
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from apps.odoo.models import OdooDeployment, OdooEmployee, OdooQuery
@@ -56,14 +56,24 @@ class Command(BaseCommand):
     def _handle_status_mode(self) -> None:
         """Print a compact overview of Odoo integration resources."""
 
-        total_profiles = OdooEmployee.objects.count()
-        verified_profiles = OdooEmployee.objects.filter(verified_on__isnull=False).count()
+        profile_stats = OdooEmployee.objects.aggregate(
+            total=Count("pk"),
+            verified=Count("pk", filter=Q(verified_on__isnull=False)),
+        )
+        total_profiles = profile_stats["total"]
+        verified_profiles = profile_stats["verified"]
+
         deployment_count = OdooDeployment.objects.count()
         latest_discovered = OdooDeployment.objects.aggregate(
             latest=Max("last_discovered")
         )["latest"]
-        query_count = OdooQuery.objects.count()
-        public_query_count = OdooQuery.objects.filter(enable_public_view=True).count()
+
+        query_stats = OdooQuery.objects.aggregate(
+            total=Count("pk"),
+            public=Count("pk", filter=Q(enable_public_view=True)),
+        )
+        query_count = query_stats["total"]
+        public_query_count = query_stats["public"]
 
         last_seen = "never"
         if latest_discovered is not None:
