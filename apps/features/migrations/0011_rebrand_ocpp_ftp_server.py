@@ -1,14 +1,10 @@
 from __future__ import annotations
 
+import warnings
+
 from django.db import migrations
+from django.utils import timezone
 
-
-OLD_VALUES = {
-    "display": "OCPP FTP Report Uploads",
-    "summary": "Provide FTP endpoints for charge points to upload diagnostics and report archives.",
-    "admin_requirements": "Offer a quick action to configure and link a local FTP server for charge points configured to upload diagnostics.",
-    "service_requirements": "Expose an embedded FTP server for OCPP report uploads and keep charge points linked to the local FTP configuration.",
-}
 
 NEW_VALUES = {
     "display": "OCPP-aware FTP Server",
@@ -17,24 +13,36 @@ NEW_VALUES = {
     "service_requirements": "Expose an embedded OCPP-aware FTP server for report uploads and keep charge points linked to local FTP configuration.",
 }
 
+# NOTE:
+# Migration 0007 seeds this feature from the fixture at runtime, and the fixture now
+# contains the OCPP-aware wording. Reversing 0011 therefore needs to preserve that
+# post-0010 baseline to keep rollback behavior path-independent.
+BASELINE_VALUES = NEW_VALUES
+
 
 def _update_ocpp_ftp_feature(apps, values: dict[str, str]) -> None:
     """Update the seeded OCPP FTP feature fields using the provided values."""
     Feature = apps.get_model("features", "Feature")
     manager = getattr(Feature, "all_objects", Feature._base_manager)
-    manager.filter(slug="ocpp-ftp-reports").update(**values)
+    updated = manager.filter(slug="ocpp-ftp-reports").update(
+        updated_at=timezone.localtime(), **values
+    )
+    if updated == 0:
+        warnings.warn(
+            "0011_rebrand_ocpp_ftp_server: no Feature row with slug='ocpp-ftp-reports' "
+            "was found; migration applied with no effect.",
+            stacklevel=2,
+        )
 
 
-def apply_rebrand(apps, schema_editor) -> None:
+def apply_rebrand(apps, _) -> None:
     """Apply the OCPP-aware FTP Server rebrand for the seeded suite feature."""
-    del schema_editor
     _update_ocpp_ftp_feature(apps, NEW_VALUES)
 
 
-def reverse_rebrand(apps, schema_editor) -> None:
-    """Revert the OCPP-aware FTP Server rebrand for the seeded suite feature."""
-    del schema_editor
-    _update_ocpp_ftp_feature(apps, OLD_VALUES)
+def reverse_rebrand(apps, _) -> None:
+    """Revert to the post-0010 seeded wording for the suite feature."""
+    _update_ocpp_ftp_feature(apps, BASELINE_VALUES)
 
 
 class Migration(migrations.Migration):
