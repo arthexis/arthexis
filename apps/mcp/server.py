@@ -1,27 +1,18 @@
 from __future__ import annotations
 
-"""Minimal MCP-compatible JSON-RPC server for selected Django commands."""
+"""Minimal MCP-compatible JSON-RPC server for Arthexis operational tools."""
 
 import json
 import logging
 import os
 from dataclasses import dataclass
 from functools import cached_property
-from io import StringIO
 from typing import Any
 
 from django.contrib.auth.models import AbstractBaseUser
-from django.core.management import call_command
-from django.core.management.base import CommandError
 
 from apps.mcp.models import McpApiKey
-
-from .remote_commands import (
-    RemoteCommandError,
-    RemoteCommandMetadata,
-    discover_remote_commands,
-)
-
+from apps.mcp.tools import McpToolDefinition, McpToolError, list_tools, serialize_tool_result
 
 logger = logging.getLogger(__name__)
 
@@ -35,55 +26,27 @@ class McpAuthenticationError(PermissionError):
 
 
 class McpAuthorizationError(PermissionError):
-    """Raised when an authenticated key lacks command group permissions."""
+    """Raised when an authenticated key lacks tool group permissions."""
 
 
 @dataclass(frozen=True)
 class AuthenticatedMcpKey:
-    """Authenticated key payload used during command authorization."""
+    """Authenticated key payload used during tool authorization."""
 
     key: McpApiKey
     user: AbstractBaseUser
 
 
-class DjangoCommandMCPServer:
-    """Expose selected Django management commands as MCP tools over JSON-RPC."""
+class ArthexisMCPServer:
+    """Expose Arthexis operations as MCP tools over JSON-RPC."""
 
-    def __init__(
-        self, *, allow: set[str] | None = None, deny: set[str] | None = None
-    ) -> None:
+    def __init__(self, *, allow: set[str] | None = None, deny: set[str] | None = None) -> None:
         self._allow = allow or set()
         self._deny = deny or set()
 
     @cached_property
-    def _tools(self) -> dict[str, dict[str, Any]]:
-        discovered = discover_remote_commands(allow=self._allow, deny=self._deny)
-        tools: dict[str, dict[str, Any]] = {}
-        for name, metadata in discovered.items():
-            tool_name = f"django.command.{name}"
-            tools[tool_name] = {
-                "_metadata": metadata,
-                "name": tool_name,
-                "description": metadata.description,
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "args": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Positional CLI arguments for the Django command.",
-                            "default": [],
-                        },
-                        "api_key": {
-                            "type": "string",
-                            "description": "MCP API key generated via manage.py create_mcp_api_key.",
-                        },
-                    },
-                    "required": ["api_key"],
-                    "additionalProperties": False,
-                },
-            }
-        return tools
+    def _tools(self) -> dict[str, McpToolDefinition]:
+        return list_tools(allow=self._allow, deny=self._deny)
 
     @staticmethod
     def _extract_api_key(arguments: dict[str, Any]) -> str:
@@ -105,80 +68,42 @@ class DjangoCommandMCPServer:
         return AuthenticatedMcpKey(key=key_obj, user=key_obj.user)
 
     @staticmethod
-    def _assert_command_group_access(
-        *, metadata: RemoteCommandMetadata, authenticated_key: AuthenticatedMcpKey
+    def _assert_tool_group_access(
+        *, tool: McpToolDefinition, authenticated_key: AuthenticatedMcpKey
     ) -> None:
-        """Validate group access rules for a remote command."""
+        """Validate group access rules for a tool definition."""
 
-        if not metadata.security_groups:
+        if not tool.security_groups:
             return
 
-        user_group_names = set(
-            authenticated_key.user.groups.values_list("name", flat=True)
-        )
-        if metadata.security_groups.isdisjoint(user_group_names):
-            required = ", ".join(sorted(metadata.security_groups))
+        user_group_names = set(authenticated_key.user.groups.values_list("name", flat=True))
+        if tool.security_groups.isdisjoint(user_group_names):
+            required = ", ".join(sorted(tool.security_groups))
             raise McpAuthorizationError(
-                f"Command requires one of these security groups: {required}"
+                f"Tool requires one of these security groups: {required}"
             )
 
-    @staticmethod
-    def _result_text(stdout: str, stderr: str) -> str:
-        chunks = []
-        if stdout.strip():
-            chunks.append(f"stdout:\n{stdout.rstrip()}")
-        if stderr.strip():
-            chunks.append(f"stderr:\n{stderr.rstrip()}")
-        return "\n\n".join(chunks) or "Command completed without output."
+    def _call_tool(self, *, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Execute a registered tool and return MCP content payload."""
 
-    def _call_tool(
-        self, *, tool_name: str, args: list[str], api_key: str
-    ) -> dict[str, Any]:
-        tools = self._tools
-        tool = tools.get(tool_name)
+        tool = self._tools.get(tool_name)
         if tool is None:
-            raise RemoteCommandError(f"Tool '{tool_name}' is not available.")
+            raise McpToolError(f"Tool '{tool_name}' is not available.")
 
-        metadata = tool.get("_metadata")
-        if not isinstance(metadata, RemoteCommandMetadata):
-            raise RemoteCommandError(f"Tool '{tool_name}' metadata is unavailable.")
-
+        api_key = self._extract_api_key(arguments)
         authenticated_key = self._authenticate(api_key)
-        self._assert_command_group_access(
-            metadata=metadata, authenticated_key=authenticated_key
-        )
-
-        command_name = tool_name.removeprefix("django.command.")
-        stdout = StringIO()
-        stderr = StringIO()
+        self._assert_tool_group_access(tool=tool, authenticated_key=authenticated_key)
 
         try:
-            call_command(command_name, *args, stdout=stdout, stderr=stderr)
-        except CommandError as exc:
-            return {
-                "content": [{"type": "text", "text": f"CommandError: {exc}"}],
-                "isError": True,
-            }
+            tool_result = tool.handler(arguments=arguments, user=authenticated_key.user)
         except (TypeError, ValueError) as exc:
             return {
-                "content": [
-                    {"type": "text", "text": f"Invalid command arguments: {exc}"}
-                ],
-                "isError": True,
-            }
-        except SystemExit as exc:
-            return {
-                "content": [{"type": "text", "text": f"Command exited: {exc}"}],
+                "content": [{"type": "text", "text": f"Invalid tool arguments: {exc}"}],
                 "isError": True,
             }
 
         return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": self._result_text(stdout.getvalue(), stderr.getvalue()),
-                }
-            ]
+            "content": [{"type": "text", "text": serialize_tool_result(tool_result)}],
         }
 
     def handle_request(self, payload: Any) -> dict[str, Any] | None:
@@ -186,7 +111,6 @@ class DjangoCommandMCPServer:
 
         if not isinstance(payload, dict):
             raise McpProtocolError("JSON-RPC payload must be an object.")
-
         if payload.get("jsonrpc") != "2.0":
             raise McpProtocolError("Only JSON-RPC 2.0 payloads are supported.")
 
@@ -203,7 +127,7 @@ class DjangoCommandMCPServer:
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {
-                        "name": "arthexis-django-commands",
+                        "name": "arthexis-ops-tools",
                         "version": os.getenv("ARTHEXIS_VERSION", "dev"),
                     },
                     "capabilities": {"tools": {}},
@@ -214,10 +138,14 @@ class DjangoCommandMCPServer:
             return None
 
         if method == "tools/list":
-            tools = []
-            for tool in self._tools.values():
-                tool_payload = {k: v for k, v in tool.items() if k != "_metadata"}
-                tools.append(tool_payload)
+            tools = [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "inputSchema": tool.input_schema,
+                }
+                for tool in self._tools.values()
+            ]
             return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools}}
 
         if method == "tools/call":
@@ -227,13 +155,7 @@ class DjangoCommandMCPServer:
                 raise McpProtocolError("tools/call requires a non-empty string 'name'.")
             if not isinstance(arguments, dict):
                 raise McpProtocolError("tools/call arguments must be an object.")
-
-            args = arguments.get("args", [])
-            if not isinstance(args, list) or not all(isinstance(v, str) for v in args):
-                raise McpProtocolError("'args' must be an array of strings.")
-
-            api_key = self._extract_api_key(arguments)
-            result = self._call_tool(tool_name=name, args=args, api_key=api_key)
+            result = self._call_tool(tool_name=name, arguments=arguments)
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
         return {
@@ -243,22 +165,25 @@ class DjangoCommandMCPServer:
         }
 
 
-def run_stdio_server(
-    *, allow: set[str] | None = None, deny: set[str] | None = None
-) -> None:
+# Backward compatible alias for import stability.
+DjangoCommandMCPServer = ArthexisMCPServer
+
+
+def run_stdio_server(*, allow: set[str] | None = None, deny: set[str] | None = None) -> None:
     """Run the MCP server on stdio until EOF."""
 
-    server = DjangoCommandMCPServer(allow=allow, deny=deny)
+    server = ArthexisMCPServer(allow=allow, deny=deny)
 
-    # input() raises EOFError when stdin closes; that is expected shutdown behavior.
     while True:
         payload: Any = None
         try:
             raw = input()
         except EOFError:
             break
+
         if not raw:
             continue
+
         try:
             payload = json.loads(raw)
             response = server.handle_request(payload)
@@ -277,8 +202,8 @@ def run_stdio_server(
                 "id": request_id,
                 "error": {"code": -32600, "message": str(exc)},
             }
-        except (RemoteCommandError, McpAuthenticationError) as exc:
-            logger.exception("MCP request failed during command discovery/authentication.")
+        except McpAuthenticationError as exc:
+            logger.exception("MCP request failed during API-key authentication.")
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
@@ -292,6 +217,14 @@ def run_stdio_server(
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "error": {"code": -32001, "message": str(exc)},
+            }
+        except McpToolError as exc:
+            logger.exception("MCP request failed due to tool registration/execution error.")
+            request_id = payload.get("id") if isinstance(payload, dict) else None
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {"code": -32002, "message": str(exc)},
             }
 
         print(json.dumps(response), flush=True)
