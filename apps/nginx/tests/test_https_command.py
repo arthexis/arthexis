@@ -421,6 +421,46 @@ def test_https_enable_force_renewal_warns_when_paths_change(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_enable_force_renewal_preserves_existing_lineage_paths(monkeypatch):
+    """Regression: command must not reset lineage paths before force-renewal validation."""
+
+    from apps.dns.models import DNSProviderCredential
+
+    DNSProviderCredential.objects.create(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        api_key="api-key",
+        api_secret="api-secret",
+        is_enabled=True,
+    )
+
+    cert_name = "example.dev-example-dev-certbot"
+    CertbotCertificate.objects.create(
+        name=cert_name,
+        domain="example.dev",
+        certificate_path="/etc/letsencrypt/live/example.dev-0001/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/example.dev-0001/privkey.pem",
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+
+    observed_paths: dict[str, str] = {}
+
+    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        observed_paths["before"] = self.certificate_path
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal")
+
+    assert observed_paths["before"] == "/etc/letsencrypt/live/example.dev-0001/fullchain.pem"
+
+
+@pytest.mark.django_db
 def test_https_enable_force_renewal_raises_if_certificate_stays_expired(monkeypatch):
     """Regression: --force-renewal must fail when certbot leaves an expired cert in place."""
 

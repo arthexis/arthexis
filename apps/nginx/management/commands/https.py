@@ -483,20 +483,42 @@ class Command(BaseCommand):
                 defaults=defaults,
             )
         else:
-            defaults = {
-                "domain": domain,
-                "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
-                "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-                "challenge_type": (
-                    CertbotCertificate.ChallengeType.GODADDY
-                    if use_godaddy
-                    else CertbotCertificate.ChallengeType.NGINX
-                ),
-            }
-            certificate, _ = CertbotCertificate.objects.update_or_create(
-                name=f"{config.name or 'nginx-site'}-{slug}-certbot",
-                defaults=defaults,
+            challenge_type = (
+                CertbotCertificate.ChallengeType.GODADDY
+                if use_godaddy
+                else CertbotCertificate.ChallengeType.NGINX
             )
+            certificate, created = CertbotCertificate.objects.get_or_create(
+                name=f"{config.name or 'nginx-site'}-{slug}-certbot",
+                defaults={
+                    "domain": domain,
+                    "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
+                    "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+                    "challenge_type": challenge_type,
+                },
+            )
+
+            if not created:
+                updated_fields: list[str] = []
+                if certificate.domain != domain:
+                    certificate.domain = domain
+                    updated_fields.append("domain")
+                if certificate.challenge_type != challenge_type:
+                    certificate.challenge_type = challenge_type
+                    updated_fields.append("challenge_type")
+                # Preserve existing certbot lineage paths when present.
+                if not certificate.certificate_path:
+                    certificate.certificate_path = (
+                        f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+                    )
+                    updated_fields.append("certificate_path")
+                if not certificate.certificate_key_path:
+                    certificate.certificate_key_path = (
+                        f"/etc/letsencrypt/live/{domain}/privkey.pem"
+                    )
+                    updated_fields.append("certificate_key_path")
+                if updated_fields:
+                    certificate.save(update_fields=[*updated_fields, "updated_at"])
 
         return certificate
 
