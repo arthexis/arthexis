@@ -59,7 +59,7 @@ def test_test_browsers_reports_errors(monkeypatch):
     monkeypatch.setattr(SeleniumBrowser, "create_driver", failing_driver)
     monkeypatch.delenv("DISPLAY", raising=False)
 
-    browser = make_browser(binary_path="/missing/firefox")
+    browser = make_browser(binary_path="/missing/browser")
 
     admin_instance.test_browsers(None, [browser])
 

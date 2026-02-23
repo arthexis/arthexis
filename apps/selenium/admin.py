@@ -36,7 +36,7 @@ class SeleniumBrowserAdmin(admin.ModelAdmin):
             advice = self._connection_advice(browser)
             try:
                 driver = browser.create_driver()
-            except Exception as exc:  # pragma: no cover - Selenium may not be available
+            except Exception as exc:  # pragma: no cover - Playwright may not be available
                 logger.exception("Unable to start browser %s", browser)
                 message = _("Failed to start %(browser)s: %(error)s") % {
                     "browser": browser,
@@ -81,7 +81,7 @@ class SeleniumScriptAdmin(admin.ModelAdmin):
         for script in queryset:
             try:
                 script.execute(browser=browser)
-            except Exception as exc:  # pragma: no cover - execution depends on Selenium
+            except Exception as exc:  # pragma: no cover - execution depends on Playwright
                 logger.exception("Failed to execute script %s", script)
                 self.message_user(
                     request,
