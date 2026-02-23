@@ -55,7 +55,7 @@ kill_from_pid_file() {
 # one-time credential prompt so upgrade flows can continue.
 SUDO="sudo -n"
 if ! $SUDO true 2>/dev/null; then
-  if arthexis_prime_sudo_credentials >/dev/null 2>&1; then
+  if arthexis_prime_sudo_credentials; then
     SUDO="sudo -n"
   else
     SUDO=""
