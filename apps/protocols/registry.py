@@ -55,8 +55,9 @@ def rehydrate_from_module(module: ModuleType) -> None:
     for attr in module.__dict__.values():
         _rehydrate(attr)
         if isinstance(attr, type):
-            for member in attr.__dict__.values():
-                _rehydrate(member)
+            for klass in attr.__mro__:
+                for member in klass.__dict__.values():
+                    _rehydrate(member)
 
 
 __all__ = [

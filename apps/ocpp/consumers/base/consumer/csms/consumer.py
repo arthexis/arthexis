@@ -960,7 +960,15 @@ class CSMSConsumer(
         now = timezone.now()
 
         def _apply():
-            filters: dict[str, object] = {"charger_id": self.charger_id}
+            charger_identifier = getattr(self, "charger_id", "")
+            if not charger_identifier and getattr(self, "charger", None):
+                charger_identifier = str(self.charger.charger_id)
+            if not charger_identifier and getattr(self, "aggregate_charger", None):
+                charger_identifier = str(self.aggregate_charger.charger_id)
+            if not charger_identifier:
+                return
+
+            filters: dict[str, object] = {"charger_id": charger_identifier}
             if connector_value is None:
                 filters["connector_id__isnull"] = True
             else:
@@ -1066,6 +1074,7 @@ class CSMSConsumer(
 
         return await database_sync_to_async(_apply)()
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         return {
@@ -1079,6 +1088,7 @@ class CSMSConsumer(
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
         return await self._handle_data_transfer(msg_id, payload)
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
         id_tag = payload.get("idTag")
         account = await self._get_account(id_tag)

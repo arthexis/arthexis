@@ -72,6 +72,7 @@ class Command(BaseCommand):
         """Create a new GoDaddy DNS credential."""
 
         username = str(options.get("user") or "").strip()
+        user = self._resolve_user(username) if username else None
         api_key, api_secret = self._resolve_api_credentials(options)
 
         missing: list[str] = []
@@ -84,7 +85,8 @@ class Command(BaseCommand):
         if missing:
             raise CommandError(f"Missing required arguments for add: {', '.join(missing)}")
 
-        user = self._resolve_user(username)
+        if user is None:
+            user = self._resolve_user(username)
 
         credential = DNSProviderCredential.objects.create(
             user=user,

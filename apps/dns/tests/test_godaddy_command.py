@@ -75,7 +75,7 @@ def test_godaddy_remove_deletes_existing_credential():
 
 @pytest.mark.django_db
 def test_godaddy_add_requires_known_user():
-    """Add should fail with a specific error when the user does not exist."""
+    """Regression: add should fail with a specific error when the user does not exist."""
 
     with pytest.raises(CommandError, match="User 'missing-user' does not exist"):
         call_command(

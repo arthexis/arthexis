@@ -30,6 +30,7 @@ class Ocpp16CoverageTests(TestCase):
             rehydrate_from_module(module)
 
     def test_all_ocpp16_calls_have_registered_paths(self):
+        """Regression: ensure OCPP 1.6 protocol calls stay registered."""
         protocol = Protocol.objects.get(slug="ocpp16")
         missing: list[str] = []
         for call in protocol.calls.order_by("direction", "name"):
