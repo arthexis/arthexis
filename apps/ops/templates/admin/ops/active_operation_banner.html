@@ -1,0 +1,9 @@
+{% load i18n %}
+{% if request.ops_active_operation %}
+<div class="ops-active-banner" style="padding:8px 12px;margin:8px 0;border:1px solid #335;background:#112;color:#fff;border-radius:6px;">
+  <strong>🧭 {{ request.ops_active_operation.title }}</strong>
+  <span style="margin-left:8px;opacity:.9;">{{ request.ops_active_operation.description|truncatechars:180 }}</span>
+  <a href="{{ request.ops_active_operation.start_url }}" style="margin-left:10px;" title="{% trans 'Back to start' %}">⤴</a>
+  <a href="{% url 'ops:clear-active' %}?next={{ request.path|urlencode }}" style="margin-left:8px;">{% trans "Clear" %}</a>
+</div>
+{% endif %}

@@ -259,6 +259,17 @@ def evaluate_cp_simulator_default_rules() -> dict[str, object] | None:
     return rule_failure(_("No default CP simulator."))
 
 
+
+def evaluate_required_operations_rules() -> dict[str, object] | None:
+    """Evaluate required operation completion status for dashboard health."""
+
+    try:
+        from apps.ops.dashboard_rules import evaluate_required_operations_rule
+    except ImportError:
+        return rule_success()
+
+    return evaluate_required_operations_rule()
+
 def load_callable(handler_name: str) -> Callable[[], dict[str, object]] | None:
     if not handler_name:
         return None
