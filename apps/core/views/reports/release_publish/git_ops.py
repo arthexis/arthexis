@@ -46,7 +46,7 @@ class SubprocessGitAdapter:
         if cmd_timeout is None:
             try:
                 cmd_timeout = float(os.environ.get("GIT_CMD_TIMEOUT", "120"))
-            except (TypeError, ValueError):
+            except ValueError:
                 cmd_timeout = 120.0
         return subprocess.run(
             args,
@@ -87,8 +87,12 @@ def working_tree_dirty(adapter: GitProcessAdapter) -> bool:
     """Return ``True`` when ``git status --porcelain`` has output."""
 
     try:
-        proc = adapter.run(["git", "status", "--porcelain"], check=True)
+        proc = adapter.run(["git", "status", "--porcelain"], check=False)
+    except subprocess.TimeoutExpired:
+        raise
     except subprocess.SubprocessError:
+        return False
+    if proc.returncode != 0:
         return False
     return bool((proc.stdout or "").strip())
 

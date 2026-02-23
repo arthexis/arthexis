@@ -566,7 +566,7 @@ def _broadcast_release_message(release: PackageRelease) -> None:
 
 
 def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
-    dirty_action = request.GET.get("dirty_action")
+    dirty_action = request.POST.get("dirty_action") if request.method == "POST" else ""
     if dirty_action and ctx.get("dirty_files"):
         if dirty_action == "discard":
             _clean_repo()
@@ -580,7 +580,7 @@ def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
                 ctx.pop("dirty_log_message", None)
                 _append_log(log_path, "Discarded local changes before publish")
         elif dirty_action == "commit":
-            message = request.GET.get("dirty_message", "").strip()
+            message = request.POST.get("dirty_message", "").strip()
             if not message:
                 message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
             ctx["dirty_commit_message"] = message
@@ -632,7 +632,7 @@ def _handle_manual_git_push_action(
     if not pending_push:
         ctx.pop("pending_git_push_error", None)
         return ctx
-    action = request.GET.get("manual_push_action")
+    action = request.POST.get("manual_push_action") if request.method == "POST" else ""
     if not action:
         return ctx
     ctx.pop("pending_git_push_error", None)
@@ -700,9 +700,9 @@ def _sync_with_origin_main(log_path: Path) -> None:
         return
 
     try:
-        subprocess.run(["git", "fetch", "origin", "main"], check=True)
+        GIT_ADAPTER.run(["git", "fetch", "origin", "main"], check=True)
         _append_log(log_path, "Fetched latest changes from origin/main")
-        subprocess.run(["git", "rebase", "origin/main"], check=True)
+        GIT_ADAPTER.run(["git", "rebase", "origin/main"], check=True)
         _append_log(log_path, "Rebased current branch onto origin/main")
     except subprocess.CalledProcessError as exc:
         subprocess.run(["git", "rebase", "--abort"], check=False)
@@ -789,7 +789,7 @@ def _has_remote(remote: str) -> bool:
             capture_output=True,
             text=True,
         )
-    except subprocess.SubprocessError:
+    except (subprocess.SubprocessError, OSError):
         return False
     remotes = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
     return remote in remotes
