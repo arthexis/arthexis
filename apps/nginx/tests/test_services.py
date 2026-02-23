@@ -60,3 +60,42 @@ def test_ensure_site_enabled_skips_non_sites_available(monkeypatch, tmp_path: Pa
     services._ensure_site_enabled(source, sudo="sudo")
 
     assert calls == []
+
+
+def test_apply_nginx_configuration_removes_default_sites_entries(monkeypatch, tmp_path: Path):
+    """Regression: applying config should remove default site links that break nginx -t."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=False):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
+    monkeypatch.setattr(services, "ensure_nginx_in_path", lambda: True)
+    monkeypatch.setattr(services.shutil, "which", lambda _: "/usr/sbin/nginx")
+    monkeypatch.setattr(services, "_remove_nginx_configs", lambda **_: None)
+    monkeypatch.setattr(services, "generate_primary_config", lambda *_, **__: "server {}")
+    monkeypatch.setattr(services, "_write_config_with_sudo", lambda *_, **__: None)
+    monkeypatch.setattr(services, "_ensure_site_enabled", lambda *_, **__: None)
+    monkeypatch.setattr(services, "_ensure_maintenance_assets", lambda **_: None)
+    monkeypatch.setattr(services, "record_lock_state", lambda *_, **__: None)
+    monkeypatch.setattr(services.subprocess, "run", fake_run)
+
+    result = services.apply_nginx_configuration(
+        mode="proxy",
+        port=8000,
+        role="web",
+        https_enabled=False,
+        include_ipv6=True,
+        destination=tmp_path / "arthexis.conf",
+        reload=False,
+    )
+
+    assert result.changed is True
+    assert ["sudo", "rm", "-f", "/etc/nginx/sites-available/default"] in calls
+    assert ["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"] in calls
