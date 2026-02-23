@@ -521,6 +521,8 @@ def charger_status(request, cid, connector=None):
 
     tx_rfid_details = _transaction_rfid_details(tx_obj, cache=rfid_cache)
 
+    graphql_chart_url = reverse("graphql:endpoint")
+
     return render(
         request,
         "ocpp/charger_status.html",
@@ -558,6 +560,10 @@ def charger_status(request, cid, connector=None):
             "session_query": session_query,
             "chart_should_animate": chart_should_animate,
             "status_should_poll": status_should_poll,
+            "graphql_chart_url": graphql_chart_url,
+            "graphql_chart_cid": cid,
+            "graphql_chart_connector": connector_slug,
+            "graphql_chart_session": session_id,
             "usage_timeline": usage_timeline,
             "usage_timeline_window": usage_timeline_window,
             "charger_error_code": _visible_error_code(charger.last_error_code),
