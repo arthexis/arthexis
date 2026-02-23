@@ -52,7 +52,7 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
     def my_openapi_spec_view(self, request):
         """Render a YAML OpenAPI spec for actions available to the current user."""
 
-        spec = build_openapi_spec(user=request.user)
+        spec = build_openapi_spec(user=request.user, request=request)
         payload = yaml.safe_dump(spec, sort_keys=False)
         return HttpResponse(payload, content_type="application/yaml")
 
@@ -63,7 +63,7 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
         if not queryset.exists():
             self.message_user(request, _("No actions were selected."), level=messages.WARNING)
             return
-        spec = build_openapi_spec(actions=list(queryset), user=request.user)
+        spec = build_openapi_spec(actions=queryset, user=request.user, request=request)
         payload = yaml.safe_dump(spec, sort_keys=False)
         return HttpResponse(payload, content_type="application/yaml")
 
@@ -84,4 +84,23 @@ class RemoteActionTokenAdmin(EntityModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("user__username", "label", "key_prefix")
     readonly_fields = ("key_prefix", "key_hash", "last_used_at", "created_at")
+
+    def save_model(self, request, obj, form, change):
+        """Ensure tokens created in admin always get a valid hashed bearer value."""
+
+        if change:
+            super().save_model(request, obj, form, change)
+            return
+
+        token, _ = RemoteActionToken.issue_for_user(
+            obj.user,
+            label=obj.label,
+            expires_at=obj.expires_at,
+        )
+        obj.pk = token.pk
+        obj.key_prefix = token.key_prefix
+        obj.key_hash = token.key_hash
+        obj.last_used_at = token.last_used_at
+        obj.created_at = token.created_at
+
 

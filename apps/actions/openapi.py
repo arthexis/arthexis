@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from django.core.exceptions import DisallowedHost
+from django.http import HttpRequest
+from django.utils.html import strip_tags
+
 from apps.actions.models import RemoteAction
 
 
@@ -16,7 +20,23 @@ def _queryset_for_user(user):
     )
 
 
-def build_openapi_spec(*, user, actions: Iterable[RemoteAction] | None = None) -> dict:
+def _server_url_for_request(request: HttpRequest | None) -> str:
+    """Return an absolute server URL for OpenAPI consumers."""
+
+    if request is None:
+        return "http://localhost:8000"
+    try:
+        return request.build_absolute_uri("/").rstrip("/")
+    except DisallowedHost:
+        return "http://localhost:8000"
+
+
+def build_openapi_spec(
+    *,
+    user,
+    actions: Iterable[RemoteAction] | None = None,
+    request: HttpRequest | None = None,
+) -> dict:
     """Build an OpenAPI 3.1 specification for remote actions."""
 
     if actions is None:
@@ -33,8 +53,9 @@ def build_openapi_spec(*, user, actions: Iterable[RemoteAction] | None = None) -
         paths[path_key] = {
             "post": {
                 "operationId": action.operation_id,
-                "summary": action.display,
-                "description": action.description or f"Invoke the `{action.display}` remote action.",
+                "summary": strip_tags(action.display),
+                "description": strip_tags(action.description)
+                or f"Invoke the `{strip_tags(action.display)}` remote action.",
                 "security": [{"bearerAuth": []}],
                 "requestBody": {
                     "required": False,
@@ -107,7 +128,7 @@ def build_openapi_spec(*, user, actions: Iterable[RemoteAction] | None = None) -
             "description": "User-scoped API spec for invoking remote recipe-backed actions.",
             "version": "1.0.0",
         },
-        "servers": [{"url": "http://localhost:8000", "description": "Local server"}],
+        "servers": [{"url": _server_url_for_request(request), "description": "Current server"}],
         "paths": paths,
         "components": {
             "securitySchemes": {
