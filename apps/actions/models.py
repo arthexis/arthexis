@@ -129,6 +129,8 @@ class RemoteActionToken(models.Model):
         if token.is_expired:
             raise ValueError("Token has expired.")
 
-        token.last_used_at = timezone.now()
-        token.save(update_fields=["last_used_at"])
+        now = timezone.localtime()
+        if token.last_used_at is None or (now - token.last_used_at) > timezone.timedelta(minutes=1):
+            token.last_used_at = now
+            token.save(update_fields=["last_used_at"])
         return token
