@@ -207,6 +207,9 @@ class EvergoUserAdmin(
                         % {"profile": str(profile), "error": exc},
                         level=messages.ERROR,
                     )
+                    return HttpResponseRedirect(
+                        reverse("admin:evergo_evergouser_load_customers")
+                    )
                 else:
                     self.message_user(
                         request,

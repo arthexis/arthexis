@@ -130,13 +130,31 @@ def _seed_fixture_has_unapplied_entries(entries: list[dict]) -> bool:
         pk = obj.get("pk")
         if not label:
             continue
-        if pk is None:
-            return True
         try:
             model = apps.get_model(label)
         except LookupError:
             continue
-        pks_by_model.setdefault(model, []).append(pk)
+
+        if pk is not None:
+            pks_by_model.setdefault(model, []).append(pk)
+            continue
+
+        fields = obj.get("fields") if isinstance(obj.get("fields"), dict) else {}
+        manager = getattr(model, "all_objects", model._default_manager)
+        unique_field_names = [
+            field.name
+            for field in model._meta.concrete_fields
+            if getattr(field, "unique", False) and not getattr(field, "primary_key", False)
+        ]
+        for field_name in unique_field_names:
+            field_value = fields.get(field_name)
+            if field_value in (None, ""):
+                continue
+            if not manager.filter(**{field_name: field_value}).exists():
+                return True
+            break
+        else:
+            return True
 
     for model, pks in pks_by_model.items():
         try:
