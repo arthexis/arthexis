@@ -14,7 +14,9 @@ class FakeGitAdapter(GitProcessAdapter):
     def __init__(self, responses):
         self.responses = responses
 
-    def run(self, args: Sequence[str], *, check: bool = True):
+    def run(
+        self, args: Sequence[str], *, check: bool = True, timeout: float | None = None
+    ):
         key = tuple(args)
         proc = self.responses[key]
         if check and proc.returncode:
@@ -65,7 +67,9 @@ def test_collect_dirty_files_uses_new_path_for_renames():
 
 def test_working_tree_dirty_subprocess_error_returns_false():
     class RaisingAdapter(GitProcessAdapter):
-        def run(self, args: Sequence[str], *, check: bool = True):
+        def run(
+            self, args: Sequence[str], *, check: bool = True, timeout: float | None = None
+        ):
             raise subprocess.SubprocessError("git unavailable")
 
     assert working_tree_dirty(RaisingAdapter()) is False
