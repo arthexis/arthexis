@@ -26,10 +26,10 @@ from config.offline import requires_network
 
 from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
-from .... import store
-from ....forwarder import forwarder
-from ....status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
-from ....models import (
+from apps.ocpp import store
+from apps.ocpp.forwarder import forwarder
+from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
+from apps.ocpp.models import (
     Transaction,
     Charger,
     ChargerConfiguration,
@@ -57,42 +57,46 @@ from ....models import (
 )
 from apps.links.reference_utils import host_is_local_loopback
 from apps.screens.startup_notifications import format_lcd_lines
-from ....evcs_discovery import (
+from apps.ocpp.evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
     HTTPS_PORTS,
     build_console_url,
     prioritise_ports,
     scan_open_ports,
 )
-from ...connection import (
+from ....connection import (
     RateLimitedConnectionMixin,
     SubprotocolConnectionMixin,
     WebsocketAuthMixin,
 )
-from ...constants import (
+from ....constants import (
     OCPP_CONNECT_RATE_LIMIT_FALLBACK,
     OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS,
     OCPP_VERSION_16,
     OCPP_VERSION_201,
     OCPP_VERSION_21,
 )
-from ..certificates import CertificatesMixin
-from ..dispatch import DispatchMixin
-from ..identity import (
+from ...certificates import CertificatesMixin
+from ...dispatch import DispatchMixin
+from ...identity import (
     IdentityMixin,
     _extract_vehicle_identifier,
     _register_log_names_for_identity,
     _resolve_client_ip,
 )
-from ....utils import _parse_ocpp_timestamp
-from .actions_metering import MeteringActionsMixin
-from .actions_notifications import NotificationActionsMixin
-from .actions_transactions import TransactionActionsMixin
-from .connection_flow import ConnectionFlowMixin
-from .legacy_transactions import LegacyTransactionHandlersMixin
-from .rfid import RfidMixin
-from .connection import ConnectionHandler
-from .forwarding import ForwardingHandler
+from apps.ocpp.utils import _parse_ocpp_timestamp
+from ..actions_metering import MeteringActionsMixin
+from ..actions_notifications import NotificationActionsMixin
+from ..actions_transactions import TransactionActionsMixin
+from ..connection_flow import ConnectionFlowMixin
+from ..legacy_transactions import LegacyTransactionHandlersMixin
+from ..rfid import RfidMixin
+from ..connection import ConnectionHandler
+from ..forwarding import ForwardingHandler
+from .handlers.metering import MeteringHandlersMixin
+from .handlers.notifications import NotificationHandlersMixin as CsmsNotificationHandlersMixin
+from .handlers.status import StatusHandlersMixin
+from .transport import CSMSTransportMixin
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +135,10 @@ class SinkConsumer(AsyncWebsocketConsumer):
 
 
 class CSMSConsumer(
+    CSMSTransportMixin,
+    StatusHandlersMixin,
+    MeteringHandlersMixin,
+    CsmsNotificationHandlersMixin,
     ConnectionFlowMixin,
     RfidMixin,
     MeteringActionsMixin,
@@ -316,100 +324,6 @@ class CSMSConsumer(
             update_fields=["ocpp_transaction_id"]
         )
 
-    async def _ensure_forwarding_context(
-        self, charger,
-    ) -> tuple[tuple[str, ...], int | None] | None:
-        """Return forwarding configuration for ``charger`` when available."""
-
-        if not charger or not getattr(charger, "forwarded_to_id", None):
-            return None
-
-        def _resolve():
-            from apps.ocpp.models import CPForwarder
-
-            target_id = getattr(charger, "forwarded_to_id", None)
-            if not target_id:
-                return None
-            qs = CPForwarder.objects.filter(target_node_id=target_id, enabled=True)
-            source_id = getattr(charger, "node_origin_id", None)
-            forwarder = None
-            if source_id:
-                forwarder = qs.filter(source_node_id=source_id).first()
-            if forwarder is None:
-                forwarder = qs.filter(source_node__isnull=True).first()
-            if forwarder is None:
-                forwarder = qs.first()
-            if forwarder is None:
-                return None
-            messages = tuple(forwarder.get_forwarded_messages())
-            return messages, forwarder.pk
-
-        return await database_sync_to_async(_resolve)()
-
-    async def _record_forwarding_activity(
-        self,
-        *,
-        charger_pk: int | None,
-        forwarder_pk: int | None,
-        timestamp: datetime,
-    ) -> None:
-        """Persist forwarding activity metadata for the provided charger."""
-
-        if charger_pk is None and forwarder_pk is None:
-            return
-
-        def _update():
-            if charger_pk:
-                Charger.objects.filter(pk=charger_pk).update(
-                    forwarding_watermark=timestamp
-                )
-            if forwarder_pk:
-                from apps.ocpp.models import CPForwarder
-
-                CPForwarder.objects.filter(pk=forwarder_pk).update(
-                    last_forwarded_at=timestamp,
-                    is_running=True,
-                )
-
-        await database_sync_to_async(_update)()
-
-    async def _reconnect_forwarding_session(
-        self,
-        charger,
-        *,
-        allowed_messages: tuple[str, ...] | None,
-        forwarder_pk: int | None,
-    ):
-        """Attempt to re-establish a forwarding session for ``charger``."""
-
-        if charger is None or not getattr(charger, "pk", None):
-            return None, None
-
-        def _refresh():
-            return (
-                Charger.objects.select_related("forwarded_to")
-                .filter(pk=charger.pk)
-                .first()
-            )
-
-        refreshed = await database_sync_to_async(_refresh)()
-        if refreshed is None:
-            return None, None
-
-        target = getattr(refreshed, "forwarded_to", None)
-        if target is None:
-            return None, refreshed
-
-        session = await sync_to_async(forwarder.connect_forwarding_session)(
-            refreshed,
-            target,
-        )
-        if session is None:
-            return None, refreshed
-        session.forwarded_messages = allowed_messages
-        session.forwarder_id = forwarder_pk
-        return session, refreshed
-
     async def _clear_cached_status_fields(self) -> None:
         """Reset cached status fields for the current charger identity."""
         await database_sync_to_async(clear_cached_statuses)([self.charger_id])
@@ -418,144 +332,6 @@ class CSMSConsumer(
                 continue
             for field, value in STATUS_RESET_UPDATES.items():
                 setattr(charger, field, value)
-
-    async def _forward_charge_point_message_legacy(self, action: str, raw: str) -> None:
-        """Forward an OCPP message to the configured remote node when permitted."""
-
-        if not action or not raw:
-            return
-
-        charger = self.aggregate_charger or self.charger
-        if charger is None or not getattr(charger, "pk", None):
-            return
-        session = forwarder.get_session(charger.pk)
-        if session is None or not session.is_connected:
-            return
-
-        allowed = getattr(session, "forwarded_messages", None)
-        forwarder_pk = getattr(session, "forwarder_id", None)
-        if allowed is None or (forwarder_pk is None and charger.forwarded_to_id):
-            context = await self._ensure_forwarding_context(charger)
-            if context is None:
-                return
-            allowed, forwarder_pk = context
-            session.forwarded_messages = allowed
-            session.forwarder_id = forwarder_pk
-
-        if allowed is not None and action not in allowed:
-            return
-
-        try:
-            await sync_to_async(session.connection.send)(
-                self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
-            )
-        except Exception as exc:  # pragma: no cover - network errors
-            logger.warning(
-                "Failed to forward %s from charger %s via %s: %s",
-                action,
-                getattr(charger, "charger_id", charger.pk),
-                getattr(session, "url", "unknown"),
-                exc,
-            )
-            forwarder.remove_session(charger.pk)
-            session, refreshed = await self._reconnect_forwarding_session(
-                charger,
-                allowed_messages=allowed,
-                forwarder_pk=forwarder_pk,
-            )
-            if session is None:
-                return
-            context = await self._ensure_forwarding_context(refreshed)
-            if context is None:
-                forwarder.remove_session(charger.pk)
-                return
-            allowed, forwarder_pk = context
-            session.forwarded_messages = allowed
-            session.forwarder_id = forwarder_pk
-            if allowed is not None and action not in allowed:
-                return
-            try:
-                await sync_to_async(session.connection.send)(
-                    self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
-                )
-            except Exception as retry_exc:
-                logger.warning(
-                    "Failed to forward %s from charger %s after reconnect: %s",
-                    action,
-                    getattr(charger, "charger_id", charger.pk),
-                    retry_exc,
-                )
-                forwarder.remove_session(charger.pk)
-                return
-
-        timestamp = timezone.now()
-        session.last_activity = timestamp
-        await self._record_forwarding_activity(
-            charger_pk=charger.pk,
-            forwarder_pk=forwarder_pk,
-            timestamp=timestamp,
-        )
-        charger.forwarding_watermark = timestamp
-        aggregate = self.aggregate_charger
-        if aggregate and aggregate.pk == charger.pk:
-            aggregate.forwarding_watermark = timestamp
-        current = self.charger
-        if current and current.pk == charger.pk and current is not aggregate:
-            current.forwarding_watermark = timestamp
-
-    async def _forward_charge_point_message(self, action: str, raw: str) -> None:
-        """Compatibility adapter to preserve charge-point forwarding entrypoint."""
-        await self._forward_charge_point_message_legacy(action, raw)
-
-    async def _forward_charge_point_reply_legacy(self, message_id: str, raw: str) -> None:
-        """Forward a call result or error back to the remote node when needed."""
-
-        if not message_id or not raw:
-            return
-        charger = self.aggregate_charger or self.charger
-        if charger is None or not getattr(charger, "pk", None):
-            return
-        session = forwarder.get_session(charger.pk)
-        if session is None or not session.is_connected:
-            return
-        with session._pending_lock:
-            if message_id not in session.pending_call_ids:
-                return
-            session.pending_call_ids.discard(message_id)
-        try:
-            await sync_to_async(session.connection.send)(
-                self._wrap_forwarding_payload(
-                    charger,
-                    raw,
-                    direction="cp_to_csms_reply",
-                )
-            )
-        except Exception as exc:  # pragma: no cover - network errors
-            logger.warning(
-                "Failed to forward reply %s for charger %s via %s: %s",
-                message_id,
-                getattr(charger, "charger_id", charger.pk),
-                getattr(session, "url", "unknown"),
-                exc,
-            )
-            forwarder.remove_session(charger.pk)
-
-    def _wrap_forwarding_payload(self, charger, raw: str, *, direction: str) -> str:
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            return raw
-        if not isinstance(payload, list):
-            return raw
-        local_node = Node.get_local()
-        meta: dict[str, object] = {
-            "charger_id": getattr(charger, "charger_id", None),
-            "connector_id": getattr(charger, "connector_id", None),
-            "direction": direction,
-        }
-        if local_node and getattr(local_node, "uuid", None):
-            meta["route"] = [str(local_node.uuid)]
-        return json.dumps({"ocpp": payload, "meta": meta})
 
     def _ensure_console_reference(self) -> None:
         """Create or update a header reference for the connected charger."""
@@ -1290,42 +1066,6 @@ class CSMSConsumer(
 
         return await database_sync_to_async(_apply)()
 
-    async def _update_availability_state(
-        self,
-        state: str,
-        timestamp: datetime,
-        connector_value: int | None,
-    ) -> None:
-        def _apply():
-            filters: dict[str, object] = {"charger_id": self.charger_id}
-            if connector_value is None:
-                filters["connector_id__isnull"] = True
-            else:
-                filters["connector_id"] = connector_value
-            updates = {
-                "availability_state": state,
-                "availability_state_updated_at": timestamp,
-            }
-            targets = list(Charger.objects.filter(**filters))
-            if not targets:
-                return
-            Charger.objects.filter(pk__in=[target.pk for target in targets]).update(
-                **updates
-            )
-            for target in targets:
-                for field, value in updates.items():
-                    setattr(target, field, value)
-                if self.charger and self.charger.pk == target.pk:
-                    for field, value in updates.items():
-                        setattr(self.charger, field, value)
-                if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
-                    for field, value in updates.items():
-                        setattr(self.aggregate_charger, field, value)
-
-        await database_sync_to_async(_apply)()
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         return {
@@ -1339,103 +1079,6 @@ class CSMSConsumer(
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
         return await self._handle_data_transfer(msg_id, payload)
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
-    async def _handle_heartbeat_action(self, payload, msg_id, raw, text_data):
-        current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
-        reply_payload = {"currentTime": current_time}
-        now = timezone.now()
-        self.charger.last_heartbeat = now
-        if self.aggregate_charger and self.aggregate_charger is not self.charger:
-            self.aggregate_charger.last_heartbeat = now
-        await database_sync_to_async(
-            Charger.objects.filter(charger_id=self.charger_id).update
-        )(last_heartbeat=now)
-        return reply_payload
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
-    async def _handle_status_notification_action(
-        self, payload, msg_id, raw, text_data
-    ):
-        await self._assign_connector(payload.get("connectorId"))
-        status = (payload.get("status") or "").strip()
-        error_code = (payload.get("errorCode") or "").strip()
-        vendor_info = {
-            key: value
-            for key, value in (
-                ("info", payload.get("info")),
-                ("vendorId", payload.get("vendorId")),
-            )
-            if value
-        }
-        vendor_value = vendor_info or None
-        timestamp_raw = payload.get("timestamp")
-        status_timestamp = parse_datetime(timestamp_raw) if timestamp_raw else None
-        if status_timestamp is None:
-            status_timestamp = timezone.now()
-        elif timezone.is_naive(status_timestamp):
-            status_timestamp = timezone.make_aware(status_timestamp)
-        update_kwargs = {
-            "last_status": status,
-            "last_error_code": error_code,
-            "last_status_vendor_info": vendor_value,
-            "last_status_timestamp": status_timestamp,
-        }
-        connector_value = payload.get("connectorId")
-
-        def _update_status():
-            target = None
-            if self.aggregate_charger:
-                target = self.aggregate_charger
-            if connector_value is not None:
-                target = Charger.objects.filter(
-                    charger_id=self.charger_id,
-                    connector_id=connector_value,
-                ).first()
-            if not target and not self.charger.connector_id:
-                target = self.charger
-            if target:
-                for field, value in update_kwargs.items():
-                    setattr(target, field, value)
-                if target.pk:
-                    Charger.objects.filter(pk=target.pk).update(**update_kwargs)
-            connector = (
-                Charger.objects.filter(
-                    charger_id=self.charger_id,
-                    connector_id=payload.get("connectorId"),
-                )
-                .exclude(pk=self.charger.pk)
-                .first()
-            )
-            if connector:
-                connector.last_status = status
-                connector.last_error_code = error_code
-                connector.last_status_vendor_info = vendor_value
-                connector.last_status_timestamp = status_timestamp
-                connector.save(update_fields=update_kwargs.keys())
-
-        await database_sync_to_async(_update_status)()
-        if connector_value is not None and status.lower() == "available":
-            tx_obj = store.transactions.pop(self.store_key, None)
-            if tx_obj:
-                await self._cancel_consumption_message()
-                store.end_session_log(self.store_key)
-                store.stop_session_lock()
-        store.add_log(
-            self.store_key,
-            f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
-            log_type="charger",
-        )
-        availability_state = Charger.availability_state_from_status(status)
-        if availability_state:
-            await self._update_availability_state(
-                availability_state, status_timestamp, self.connector_value
-            )
-        return {}
-
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
         id_tag = payload.get("idTag")
         account = await self._get_account(id_tag)
@@ -1458,26 +1101,6 @@ class CSMSConsumer(
             status = "Accepted"
         return {"idTagInfo": {"status": status}}
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
-    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
-    async def _handle_meter_values_legacy(self, payload, _msg_id, _raw, text_data):
-        await self._store_meter_values(payload, text_data)
-        self.charger.last_meter_values = payload
-        await database_sync_to_async(
-            Charger.objects.filter(pk=self.charger.pk).update
-        )(last_meter_values=payload)
-        return {}
-
-    @protocol_call(
-        "ocpp201",
-        ProtocolCallModel.CP_TO_CSMS,
-        "ClearedChargingLimit",
-    )
-    @protocol_call(
-        "ocpp21",
-        ProtocolCallModel.CP_TO_CSMS,
-        "ClearedChargingLimit",
-    )
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2330,95 +1953,6 @@ class CSMSConsumer(
         store.forward_ev_charging_schedule(record)
         return {}
 
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
-    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
-    async def _handle_notify_event_action(self, payload, msg_id, raw, text_data):
-        payload_data = payload if isinstance(payload, dict) else {}
-        event_entries = payload_data.get("eventData")
-
-        generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
-        received_at = timezone.now()
-
-        try:
-            seq_no = int(payload_data.get("seqNo")) if "seqNo" in payload_data else None
-        except (TypeError, ValueError):
-            seq_no = None
-        tbc = bool(payload_data.get("tbc")) if "tbc" in payload_data else False
-
-        def _parse_int(value: object | None) -> int | None:
-            try:
-                return int(value) if value is not None else None
-            except (TypeError, ValueError):
-                return None
-
-        def _clean_text(value: object | None) -> str | None:
-            text = str(value or "").strip()
-            return text or None
-
-        if not isinstance(event_entries, (list, tuple)):
-            store.add_log(self.store_key, "NotifyEvent: missing eventData", log_type="charger")
-            return {}
-
-        forwarded = 0
-        for entry in event_entries:
-            if not isinstance(entry, dict):
-                continue
-
-            component = entry.get("component") if isinstance(entry.get("component"), dict) else {}
-            variable = entry.get("variable") if isinstance(entry.get("variable"), dict) else {}
-            evse = component.get("evse") if isinstance(component.get("evse"), dict) else {}
-
-            event_timestamp = _parse_ocpp_timestamp(entry.get("timestamp"))
-            if event_timestamp is None:
-                event_timestamp = generated_at or received_at
-
-            connector_value = evse.get("connectorId") if isinstance(evse, dict) else None
-            normalized_event = {
-                "charger_id": getattr(self, "charger_id", None) or self.store_key,
-                "connector_id": store.connector_slug(
-                    connector_value if connector_value is not None else getattr(self, "connector_value", None)
-                ),
-                "evse_id": _parse_int(evse.get("id")),
-                "event_id": _parse_int(entry.get("eventId")),
-                "event_type": _clean_text(entry.get("eventType")),
-                "trigger": _clean_text(entry.get("trigger")),
-                "severity": _parse_int(entry.get("severity")),
-                "actual_value": _clean_text(entry.get("actualValue")),
-                "cause": _clean_text(entry.get("cause")),
-                "tech_code": _clean_text(entry.get("techCode")),
-                "tech_info": _clean_text(entry.get("techInfo")),
-                "cleared": bool(entry.get("cleared")) if "cleared" in entry else False,
-                "transaction_id": _clean_text(entry.get("transactionId")),
-                "variable_monitoring_id": _parse_int(entry.get("variableMonitoringId")),
-                "component_name": _clean_text(component.get("name") if component else None),
-                "component_instance": _clean_text(component.get("instance") if component else None),
-                "variable_name": _clean_text(variable.get("name") if variable else None),
-                "variable_instance": _clean_text(variable.get("instance") if variable else None),
-                "generated_at": generated_at or received_at,
-                "event_timestamp": event_timestamp,
-                "seq_no": seq_no,
-                "tbc": tbc,
-                "received_at": received_at,
-            }
-
-            store.forward_event_to_observability(normalized_event)
-            forwarded += 1
-
-        details: list[str] = []
-        if seq_no is not None:
-            details.append(f"seqNo={seq_no}")
-        details.append(f"events={forwarded}")
-        if generated_at is not None:
-            details.append(f"generatedAt={generated_at.isoformat()}")
-
-        store.add_log(
-            self.store_key,
-            "NotifyEvent" + (": " + ", ".join(details) if details else ""),
-            log_type="charger",
-        )
-        return {}
-
-    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport")
     async def _handle_notify_monitoring_report_action(
         self, payload, msg_id, raw, text_data
     ):
