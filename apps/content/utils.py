@@ -73,37 +73,15 @@ def save_content_sample(
     return sample
 
 
-def _format_firefox_driver_help() -> str:
-    """Return OS-aware instructions for installing geckodriver."""
+def _format_playwright_help() -> str:
+    """Return OS-aware instructions for installing Playwright browser binaries."""
 
     os_name = platform.system() or "Unknown"
     instructions: list[str] = [
-        "Firefox WebDriver is unavailable.",
+        "Playwright browser runtime is unavailable.",
         f"Detected OS: {os_name}.",
+        "Install Playwright browsers with `python -m playwright install chromium` and ensure the command runs for the same user executing the app.",
     ]
-
-    if os_name == "Linux":
-        instructions.append(
-            "Download geckodriver for Linux and place the executable in /usr/local/bin or /usr/bin, "
-            "or set the GECKODRIVER environment variable to its full path. Ensure the file is executable (chmod +x)."
-        )
-    elif os_name == "Windows":
-        instructions.append(
-            "Download geckodriver.exe and add its folder (for example C:\\tools\\geckodriver) to the PATH or set the GECKODRIVER environment variable to the full executable path."
-        )
-    elif os_name == "Darwin":
-        instructions.append(
-            "Download the macOS geckodriver and place it in /usr/local/bin or another directory on PATH, or set GECKODRIVER to the executable path."
-        )
-    else:
-        instructions.append(
-            "Download the appropriate geckodriver for your platform and add it to PATH or set GECKODRIVER to the executable path."
-        )
-
-    instructions.append(
-        "The suite runs headless Firefox; ensure Firefox itself is installed and available to the same user running the tests."
-    )
-
     return " ".join(instructions)
 
 
@@ -116,55 +94,52 @@ def capture_screenshot(
 ) -> Path:
     """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`.
 
-    ``cookies`` can be an iterable of Selenium cookie mappings which will be
-    applied after the initial navigation and before the screenshot is taken.
+    ``cookies`` can be an iterable of cookie mappings compatible with Playwright
+    ``BrowserContext.add_cookies``.
     """
 
-    from selenium import webdriver
-    from selenium.common.exceptions import WebDriverException
-    from selenium.webdriver.firefox.options import Options
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import sync_playwright
 
-    from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
-
-    firefox_binary = find_firefox_binary()
-    if not firefox_binary:
-        raise RuntimeError(
-            "Screenshot capture failed: Firefox is not installed. Install Firefox to enable screenshot capture."
-        )
-
-    options = Options()
-    options.binary_location = firefox_binary
-    options.add_argument("-headless")
-    ensure_geckodriver()
     resolution = (
         width or DEFAULT_SCREENSHOT_RESOLUTION[0],
         height or DEFAULT_SCREENSHOT_RESOLUTION[1],
     )
 
     try:
-        with webdriver.Firefox(options=options) as browser:
-            browser.set_window_size(*resolution)
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport={"width": resolution[0], "height": resolution[1]}
+            )
+            page = context.new_page()
             SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
             filename = SCREENSHOT_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.png"
             try:
-                browser.get(url)
-            except WebDriverException as exc:
+                page.goto(url, wait_until="networkidle")
+            except PlaywrightError as exc:
                 logger.error("Failed to load %s: %s", url, exc)
             if cookies:
+                normalized = []
                 for cookie in cookies:
-                    try:
-                        browser.add_cookie(cookie)
-                    except WebDriverException as exc:
-                        logger.error("Failed to apply cookie for %s: %s", url, exc)
-                browser.get(url)
-            if not browser.save_screenshot(str(filename)):
-                raise RuntimeError("Screenshot capture failed")
+                    payload = dict(cookie)
+                    if "url" not in payload:
+                        domain = payload.get("domain", "localhost")
+                        scheme = "https" if payload.get("secure") else "http"
+                        payload["url"] = f"{scheme}://{domain.lstrip('.')}"
+                    normalized.append(payload)
+                if normalized:
+                    context.add_cookies(normalized)
+                    page.goto(url, wait_until="networkidle")
+            page.screenshot(path=str(filename), full_page=True)
+            context.close()
+            browser.close()
             return filename
-    except WebDriverException as exc:
+    except PlaywrightError as exc:
         logger.error("Failed to capture screenshot from %s: %s", url, exc)
         message = str(exc)
-        if "Unable to obtain driver for firefox" in message:
-            message = _format_firefox_driver_help()
+        if "Executable doesn't exist" in message:
+            message = _format_playwright_help()
         raise RuntimeError(f"Screenshot capture failed: {message}") from exc
 
 

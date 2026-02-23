@@ -3,19 +3,69 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+from dataclasses import dataclass
 
 from django.db import models
 from django.db.models import Q
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from playwright.sync_api import Browser as PlaywrightBrowserInstance
+from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
 from apps.core.entity import Entity, EntityManager
-from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
 from apps.sigils.sigil_resolver import resolve_sigils
 
 logger = logging.getLogger(__name__)
+
+
+class UnsupportedBrowserEngineError(ValueError):
+    """Raised when a browser engine cannot be launched via Playwright."""
+
+
+@dataclass
+class PlaywrightDriver:
+    """Small compatibility wrapper around a Playwright page/context/browser lifecycle."""
+
+    playwright: Playwright
+    browser: PlaywrightBrowserInstance
+    context: BrowserContext
+    page: Page
+
+    def get(self, url: str) -> None:
+        """Navigate to ``url`` and wait for network idle."""
+
+        self.page.goto(url, wait_until="networkidle")
+
+    def set_window_size(self, width: int, height: int) -> None:
+        """Resize the viewport for screenshot workflows."""
+
+        self.page.set_viewport_size({"width": width, "height": height})
+
+    def add_cookie(self, cookie: dict) -> None:
+        """Add one cookie mapping in the format expected by Selenium-like callers."""
+
+        payload = dict(cookie)
+        if "url" not in payload:
+            domain = payload.get("domain", "localhost")
+            scheme = "https" if payload.get("secure") else "http"
+            payload["url"] = f"{scheme}://{domain.lstrip('.')}"
+        self.context.add_cookies([payload])
+
+    def save_screenshot(self, path: str) -> bool:
+        """Capture a page screenshot to ``path`` and return ``True`` when saved."""
+
+        self.page.screenshot(path=path, full_page=True)
+        return True
+
+    def quit(self) -> None:
+        """Close Playwright resources in the correct order."""
+
+        with contextlib.suppress(Exception):
+            self.context.close()
+        with contextlib.suppress(Exception):
+            self.browser.close()
+        with contextlib.suppress(Exception):
+            self.playwright.stop()
 
 
 class SeleniumBrowserManager(EntityManager):
@@ -28,7 +78,9 @@ class SeleniumBrowserManager(EntityManager):
 
 class SeleniumBrowser(Entity):
     class Engine(models.TextChoices):
+        CHROMIUM = "chromium", _("Chromium")
         FIREFOX = "firefox", _("Firefox")
+        WEBKIT = "webkit", _("WebKit")
 
     class Mode(models.TextChoices):
         HEADED = "headed", _("Headed")
@@ -36,7 +88,7 @@ class SeleniumBrowser(Entity):
 
     name = models.CharField(max_length=100, unique=True)
     engine = models.CharField(
-        max_length=20, choices=Engine.choices, default=Engine.FIREFOX
+        max_length=20, choices=Engine.choices, default=Engine.CHROMIUM
     )
     mode = models.CharField(
         max_length=20, choices=Mode.choices, default=Mode.HEADED
@@ -71,26 +123,46 @@ class SeleniumBrowser(Entity):
     def default(cls) -> "SeleniumBrowser | None":
         return cls.objects.default()
 
-    def _build_firefox_options(self) -> FirefoxOptions:
-        options = FirefoxOptions()
-        binary = find_firefox_binary(self.binary_path)
-        if binary:
-            options.binary_location = binary
-        mode = self.mode
-        if mode == self.Mode.HEADED and not os.environ.get("DISPLAY"):
+    def _headless_mode(self) -> bool:
+        """Return whether the browser should run headless in the current environment."""
+
+        if self.mode == self.Mode.HEADLESS:
+            return True
+        if not os.environ.get("DISPLAY"):
             logger.warning("DISPLAY not set; forcing headless mode for %s", self)
-            mode = self.Mode.HEADLESS
-        if mode == self.Mode.HEADLESS:
-            options.add_argument("-headless")
-        return options
+            return True
+        return False
 
-    def create_driver(self):
-        if self.engine != self.Engine.FIREFOX:
-            raise RuntimeError(f"Unsupported browser engine: {self.engine}")
+    def create_driver(self) -> PlaywrightDriver:
+        """Launch a Playwright browser and return a Selenium-like wrapper driver."""
 
-        ensure_geckodriver()
-        options = self._build_firefox_options()
-        return webdriver.Firefox(options=options)
+        playwright = sync_playwright().start()
+
+        launchers = {
+            self.Engine.CHROMIUM: playwright.chromium,
+            self.Engine.FIREFOX: playwright.firefox,
+            self.Engine.WEBKIT: playwright.webkit,
+        }
+        launcher = launchers.get(self.engine)
+        if launcher is None:
+            playwright.stop()
+            raise UnsupportedBrowserEngineError(
+                f"Unsupported browser engine: {self.engine}"
+            )
+
+        launch_kwargs = {"headless": self._headless_mode()}
+        if self.binary_path:
+            launch_kwargs["executable_path"] = self.binary_path
+
+        browser = launcher.launch(**launch_kwargs)
+        context = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = context.new_page()
+        return PlaywrightDriver(
+            playwright=playwright,
+            browser=browser,
+            context=context,
+            page=page,
+        )
 
 
 class SeleniumScript(Entity):
@@ -147,7 +219,7 @@ class SeleniumScript(Entity):
             return None
         try:
             return import_string(python_path)
-        except Exception:
+        except ImportError:
             logger.exception("Unable to import callable %s", python_path)
             raise
 
@@ -172,5 +244,4 @@ class SeleniumScript(Entity):
                 compiled = compile(body, f"<SeleniumScript {self.name}>", "exec")
                 exec(compiled, exec_globals, exec_globals)
         finally:
-            with contextlib.suppress(Exception):
-                driver.quit()
+            driver.quit()

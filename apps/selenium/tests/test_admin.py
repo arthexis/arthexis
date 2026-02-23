@@ -12,7 +12,7 @@ def make_browser(**kwargs):
     defaults = {
         "name": "Test Browser",
         "mode": SeleniumBrowser.Mode.HEADED,
-        "engine": SeleniumBrowser.Engine.FIREFOX,
+        "engine": SeleniumBrowser.Engine.CHROMIUM,
     }
     defaults.update(kwargs)
     return SeleniumBrowser(**defaults)
