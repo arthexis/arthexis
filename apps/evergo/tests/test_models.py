@@ -278,6 +278,7 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
     assert summary["orders_created"] >= 1
     assert summary["placeholders_created"] == 1
     assert "BAD999" in summary["unresolved"]
+    assert "irma ravize" in summary["unresolved"]
 
     customer = profile.customers.get(remote_id=67883)
     assert customer.latest_so == "J00830"

@@ -297,14 +297,10 @@ class EvergoUser(Profile):
                     unresolved.append(so_number)
                     continue
 
-                for payload in order_payloads:
-                    was_created = self._upsert_order(payload)
-                    customer_created = self._upsert_customer_from_order(payload)
-                    customers_loaded += int(customer_created)
-                    if was_created:
-                        orders_created += 1
-                    else:
-                        orders_updated += 1
+                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_loaded += customers_inc
+                orders_created += created_inc
+                orders_updated += updated_inc
 
             for customer_name in customer_names:
                 order_payloads = self._fetch_orders_for_lookup(
@@ -316,14 +312,10 @@ class EvergoUser(Profile):
                     unresolved.append(customer_name)
                     continue
 
-                for payload in order_payloads:
-                    was_created = self._upsert_order(payload)
-                    customer_created = self._upsert_customer_from_order(payload)
-                    customers_loaded += int(customer_created)
-                    if was_created:
-                        orders_created += 1
-                    else:
-                        orders_updated += 1
+                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_loaded += customers_inc
+                orders_created += created_inc
+                orders_updated += updated_inc
 
         return {
             "sales_orders": sales_orders,
@@ -407,6 +399,23 @@ class EvergoUser(Profile):
                 break
             page += 1
         return rows
+
+    def _process_order_payloads(self, order_payloads: list[dict[str, Any]]) -> tuple[int, int, int]:
+        """Upsert orders/customers and return created/updated/customer counters."""
+        customers_loaded = 0
+        orders_created = 0
+        orders_updated = 0
+
+        for payload in order_payloads:
+            was_created = self._upsert_order(payload)
+            customer_created = self._upsert_customer_from_order(payload)
+            customers_loaded += int(customer_created)
+            if was_created:
+                orders_created += 1
+            else:
+                orders_updated += 1
+
+        return customers_loaded, orders_created, orders_updated
 
     def _ensure_placeholder_order(self, *, so_number: str) -> EvergoOrder:
         """Create/update a provisional local order row when SO is not found upstream."""
@@ -495,13 +504,19 @@ class EvergoUser(Profile):
         if not customer_name:
             return False
 
-        _, created = EvergoCustomer.objects.update_or_create(
-            user=self,
-            remote_id=None,
-            name=customer_name,
-            defaults=defaults,
+        existing_customer = (
+            EvergoCustomer.objects.filter(user=self, remote_id__isnull=True, name=customer_name)
+            .order_by("id")
+            .first()
         )
-        return created
+        if existing_customer is not None:
+            for field_name, value in defaults.items():
+                setattr(existing_customer, field_name, value)
+            existing_customer.save(update_fields=list(defaults.keys()))
+            return False
+
+        EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
+        return True
 
     def _login_session(self, *, session: requests.Session, timeout: int) -> None:
         """Authenticate a requests session against Evergo."""
@@ -646,6 +661,18 @@ class EvergoUser(Profile):
             remote_id=remote_id,
             defaults=defaults,
         )
+
+        order_number = defaults["order_number"].strip().upper()
+        if order_number:
+            placeholder_remote_id = _placeholder_remote_id(order_number=order_number)
+            (
+                EvergoOrder.objects.filter(remote_id=placeholder_remote_id)
+                .exclude(pk=order.pk)
+                .delete()
+            )
+
+        order.validation_state = EvergoOrder.VALIDATION_STATE_VALIDATED
+        order.save(update_fields=["validation_state"])
         order.sync_dynamic_field_values(payload)
         return created
 
@@ -870,9 +897,3 @@ def _nested_name(value: Any) -> str:
     if not isinstance(value, dict):
         return ""
     return str(value.get("nombre") or value.get("name") or "")
-    VALIDATION_STATE_VALIDATED = "validated"
-    VALIDATION_STATE_PLACEHOLDER = "placeholder"
-    VALIDATION_STATE_CHOICES = (
-        (VALIDATION_STATE_VALIDATED, "Validated in Evergo"),
-        (VALIDATION_STATE_PLACEHOLDER, "Temporary placeholder"),
-    )

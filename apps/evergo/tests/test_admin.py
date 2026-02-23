@@ -160,6 +160,31 @@ def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_cre
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.models.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_customers, admin_client):
+    """Security regression: wizard should not allow selecting someone else's profile."""
+    user_model = get_user_model()
+    other_user = user_model.objects.create_user(
+        username="other-evergo-owner",
+        email="other-evergo-owner@example.com",
+    )
+    other_profile = EvergoUser.objects.create(
+        user=other_user,
+        evergo_email="other-profile@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {"profile": other_profile.pk, "raw_queries": "J00830"},
+    )
+
+    assert response.status_code == 200
+    assert b"Select a valid choice" in response.content
+    mock_load_customers.assert_not_called()
+
+@pytest.mark.django_db
 @patch("apps.evergo.models.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Regression: change-form action should run login sync without requiring changelist selection."""
