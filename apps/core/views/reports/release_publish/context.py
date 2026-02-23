@@ -49,9 +49,11 @@ class ReleaseContextState:
             "paused": self.paused,
             "dry_run": self.dry_run,
         }
-        if self.error:
+        if self.error is not None:
             data["error"] = self.error
-        data.update(self.extras)
+        for key, value in self.extras.items():
+            if key not in data:
+                data[key] = value
         return data
 
 
@@ -68,16 +70,25 @@ def store_release_context(request, session_key: str, ctx: dict) -> None:
 
 
 def persist_release_context(request, session_key: str, ctx: dict, lock_path: Path) -> None:
-    """Persist context to session and lockfile."""
+    """Persist context to session and lockfile.
+
+    The on-disk lockfile intentionally excludes sensitive values such as
+    ``github_token``. Resume flows may require re-entering credentials.
+    """
 
     store_release_context(request, session_key, ctx)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+    lock_ctx = sanitize_release_context(ctx)
+    lock_path.write_text(json.dumps(lock_ctx), encoding="utf-8")
     lock_path.chmod(0o600)
 
 
 def load_release_context(session_ctx: dict | None, lock_path: Path) -> dict:
-    """Load release context from session and lockfile with token recovery."""
+    """Load release context from session and lockfile.
+
+    Sensitive fields are excluded from lockfiles to reduce credential exposure
+    on disk, so resume operations rely on session state for those values.
+    """
 
     context = dict(session_ctx) if session_ctx else {}
     if lock_path.exists():
@@ -86,9 +97,7 @@ def load_release_context(session_ctx: dict | None, lock_path: Path) -> dict:
         except Exception:
             return context
         if isinstance(payload, dict):
-            for key in SENSITIVE_CONTEXT_KEYS:
-                if key in payload and key not in context:
-                    context[key] = payload[key]
-            if not context:
-                return payload
+            for key, value in payload.items():
+                if key not in context:
+                    context[key] = value
     return context

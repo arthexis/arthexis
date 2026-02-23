@@ -16,7 +16,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import NoReturn, Optional, Sequence
 from urllib.parse import urlencode, urlparse
 
 import requests
@@ -27,7 +27,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.template.loader import get_template
-from django.test import signals
+import django.test.signals as test_signals
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -73,7 +73,7 @@ from .git_ops import (
     has_upstream as git_has_upstream,
     working_tree_dirty as git_working_tree_dirty,
     format_subprocess_error as git_format_subprocess_error,
-    git_authentication_missing as git_authentication_missing,
+    git_authentication_missing,
 )
 from .github_ops import (
     ensure_github_release as gh_ensure_github_release,
@@ -364,7 +364,7 @@ def _load_release_context(
     loaded_ctx = load_release_context(session_ctx, lock_path)
     state = ReleaseContextState.from_dict(loaded_ctx)
     ctx = state.to_dict()
-    if not ctx:
+    if not loaded_ctx:
         ctx = {"step": 0}
         if restart_path.exists():
             restart_path.unlink()
@@ -528,7 +528,7 @@ def _build_artifacts_stale(
     ctx: dict, step_count: int, steps: Sequence[tuple[str, object]]
 ) -> bool:
     build_step_index = next(
-        (index for index, (name, _) in enumerate(steps) if name == "Build release artifacts"),
+        (index for index, (name, _) in enumerate(steps) if name == BUILD_RELEASE_ARTIFACTS_STEP_NAME),
         None,
     )
     if build_step_index is None:
@@ -586,8 +586,8 @@ def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
                 message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
             ctx["dirty_commit_message"] = message
             try:
-                subprocess.run(["git", "add", "--all"], check=True)
-                subprocess.run(["git", "commit", "-m", message], check=True)
+                GIT_ADAPTER.run(["git", "add", "--all"], check=True)
+                GIT_ADAPTER.run(["git", "commit", "-m", message], check=True)
             except subprocess.CalledProcessError as exc:
                 ctx["dirty_commit_error"] = _format_subprocess_error(exc)
             else:
@@ -783,12 +783,15 @@ def _working_tree_dirty() -> bool:
 
 
 def _has_remote(remote: str) -> bool:
-    proc = subprocess.run(
-        ["git", "remote"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["git", "remote"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.SubprocessError:
+        return False
     remotes = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
     return remote in remotes
 
@@ -962,7 +965,7 @@ def _pause_for_publish_pending(
     token: str | None,
     message: str,
     run_url: str | None = None,
-) -> None:
+) -> NoReturn:
     ctx["paused"] = True
     ctx["publish_pending"] = True
     publish_url = ""
@@ -1011,7 +1014,7 @@ def _record_release_fixture_updates(
         check=True,
     )
     if status.stdout.strip():
-        subprocess.run(["git", "add", *fixture_paths], check=True)
+        GIT_ADAPTER.run(["git", "add", *fixture_paths], check=True)
         _append_log(log_path, staged_message)
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
         _append_log(log_path, committed_message)
@@ -1154,9 +1157,7 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
         origin_main = _git_stdout(["git", "rev-parse", "origin/main"])
         merge_base = _git_stdout(["git", "merge-base", "HEAD", "origin/main"])
     except subprocess.CalledProcessError as exc:
-        details = (
-            getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)
-        ).strip()
+        details = _format_subprocess_error(exc)
         if details:
             _append_log(log_path, f"Failed to verify origin/main status: {details}")
         else:  # pragma: no cover - defensive fallback
@@ -1274,7 +1275,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
                 log_path,
                 f"Committing release prep changes: {details}",
             )
-            subprocess.run(["git", "add", *commit_paths], check=True)
+            GIT_ADAPTER.run(["git", "add", *commit_paths], check=True)
 
             if version_dirty and fixture_files:
                 commit_message = "chore: update version and fixtures"
@@ -1283,7 +1284,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
             else:
                 commit_message = "chore: update fixtures"
 
-            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            GIT_ADAPTER.run(["git", "commit", "-m", commit_message], check=True)
             _append_log(
                 log_path,
                 f"Release prep changes committed ({commit_message})",
@@ -1436,7 +1437,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     if previous_version_text != release.version:
         version_path.write_text(f"{release.version}\n", encoding="utf-8")
         _append_log(log_path, f"Updated VERSION file to {release.version}")
-        subprocess.run(["git", "add", "VERSION"], check=True)
+        GIT_ADAPTER.run(["git", "add", "VERSION"], check=True)
         _append_log(log_path, "Staged VERSION for commit")
     else:
         _append_log(
@@ -1483,7 +1484,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     if ctx.get("build_promoted"):
         _append_log(log_path, "Retrying push of release changes to origin")
         _push_release_changes(
-            log_path, ctx, step_name="Build release artifacts"
+            log_path, ctx, step_name=BUILD_RELEASE_ARTIFACTS_STEP_NAME
         )
         ctx.pop("build_promoted", None)
         PackageRelease.dump_fixture()
@@ -1513,16 +1514,17 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
             log_path,
             f"Generated release artifacts for v{release.version}",
         )
-        from glob import glob
-
-        paths = ["VERSION", *glob("apps/core/fixtures/releases__*.json")]
+        fixture_paths = [
+            str(path) for path in Path("apps/core/fixtures").glob("releases__*.json")
+        ]
+        paths = ["VERSION", *fixture_paths]
         diff = subprocess.run(
             ["git", "status", "--porcelain", *paths],
             capture_output=True,
             text=True,
         )
         if diff.stdout.strip():
-            subprocess.run(["git", "add", *paths], check=True)
+            GIT_ADAPTER.run(["git", "add", *paths], check=True)
             _append_log(log_path, "Staged release metadata updates")
             subprocess.run(
                 [
@@ -1539,7 +1541,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
             )
         ctx["build_promoted"] = True
         _push_release_changes(
-            log_path, ctx, step_name="Build release artifacts"
+            log_path, ctx, step_name=BUILD_RELEASE_ARTIFACTS_STEP_NAME
         )
         ctx.pop("build_promoted", None)
         PackageRelease.dump_fixture()
@@ -1868,6 +1870,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Publish logs already recorded")
 
 
+BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
 FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
 
 
@@ -1875,7 +1878,7 @@ PUBLISH_STEPS = [
     ("Check version number availability", _step_check_version),
     (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
     ("Execute pre-release actions", _step_pre_release_actions),
-    ("Build release artifacts", _step_promote_build),
+    (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
     ("Verify release environment", _step_verify_release_environment),
     (
@@ -1914,8 +1917,6 @@ def release_progress(request, pk: int, action: str):
     repo_version_before_sync = ""
     if version_path.exists():
         repo_version_before_sync = version_path.read_text(encoding="utf-8").strip()
-    setattr(release, "_repo_version_before_sync", repo_version_before_sync)
-
     sync_response = _handle_release_sync(
         request,
         release,
@@ -2200,12 +2201,13 @@ def release_progress(request, pk: int, action: str):
         "core/release_progress.html",
     )
     content = template.render(context, request)
-    signals.template_rendered.send(
-        sender=template.__class__,
-        template=template,
-        context=context,
-        using=getattr(getattr(template, "engine", None), "name", None),
-    )
+    if test_signals.template_rendered.receivers:
+        test_signals.template_rendered.send(
+            sender=template.__class__,
+            template=template,
+            context=context,
+            using=getattr(getattr(template, "engine", None), "name", None),
+        )
     response = HttpResponse(content)
     response.context = context
     response.templates = [template]
