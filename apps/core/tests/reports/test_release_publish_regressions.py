@@ -28,7 +28,11 @@ def test_manual_push_flow_registers_pending_on_auth_error(monkeypatch, tmp_path:
     monkeypatch.setattr(pipeline.subprocess, "run", _run)
 
     with pytest.raises(PublishPending):
-        pipeline._push_release_changes(log_path, ctx, step_name="Build release artifacts")
+        pipeline._push_release_changes(
+            log_path,
+            ctx,
+            step_name=pipeline.BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+        )
 
     pending = ctx.get("pending_git_push")
     assert isinstance(pending, dict)
@@ -38,7 +42,7 @@ def test_manual_push_flow_registers_pending_on_auth_error(monkeypatch, tmp_path:
 
 def test_dirty_repo_gating_detects_stale_build(monkeypatch):
     ctx = {"build_revision": "old", "error": "boom"}
-    steps = [("Build release artifacts", object()), ("Later", object())]
+    steps = [(pipeline.BUILD_RELEASE_ARTIFACTS_STEP_NAME, object()), ("Later", object())]
     monkeypatch.setattr(pipeline, "_current_git_revision", lambda: "new")
     monkeypatch.setattr(pipeline, "_working_tree_dirty", lambda: False)
 
@@ -78,4 +82,5 @@ def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monke
     monkeypatch.chdir(tmp_path)
     artifacts = pipeline._collect_release_artifacts()
 
-    assert [path.name for path in artifacts] == [wheel.name, sdist.name]
+    assert {path.name for path in artifacts} == {wheel.name, sdist.name}
+    assert len(artifacts) == 2

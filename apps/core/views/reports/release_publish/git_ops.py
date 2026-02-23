@@ -12,6 +12,7 @@ Allowed dependencies:
 from __future__ import annotations
 
 import subprocess
+import os
 from dataclasses import dataclass
 from typing import Protocol, Sequence
 
@@ -21,15 +22,36 @@ from ..common import DIRTY_STATUS_LABELS
 class GitProcessAdapter(Protocol):
     """Minimal git command adapter to allow deterministic tests."""
 
-    def run(self, args: Sequence[str], *, check: bool = True) -> subprocess.CompletedProcess: ...
+    def run(
+        self,
+        args: Sequence[str],
+        *,
+        check: bool = True,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess: ...
 
 
 @dataclass
 class SubprocessGitAdapter:
     """Production adapter executing git commands through ``subprocess.run``."""
 
-    def run(self, args: Sequence[str], *, check: bool = True) -> subprocess.CompletedProcess:
-        return subprocess.run(args, check=check, capture_output=True, text=True)
+    def run(
+        self,
+        args: Sequence[str],
+        *,
+        check: bool = True,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess:
+        cmd_timeout = timeout
+        if cmd_timeout is None:
+            cmd_timeout = float(os.environ.get("GIT_CMD_TIMEOUT", "120"))
+        return subprocess.run(
+            args,
+            check=check,
+            capture_output=True,
+            text=True,
+            timeout=cmd_timeout,
+        )
 
 
 def format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
@@ -46,7 +68,7 @@ def git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
         "could not read username",
         "authentication failed",
         "terminal prompts disabled",
-        "permission denied",
+        "permission denied (publickey)",
     )
     return any(marker in message for marker in markers)
 
