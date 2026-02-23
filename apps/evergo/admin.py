@@ -51,7 +51,7 @@ class EvergoUserAdmin(
         "created_at",
         "updated_at",
     )
-    actions = ("test_login_and_sync", "load_orders")
+    actions = ("_test_login_and_sync_bulk_action", "load_orders")
     changelist_actions = ("load_orders",)
     change_actions = ("test_login_and_sync_action",)
     fieldsets = (
@@ -125,23 +125,10 @@ class EvergoUserAdmin(
         )
         return True
 
-    @admin.action(description="Test Evergo login and sync profile fields")
-    def test_login_and_sync(self, request, queryset):
-        """Call the Evergo API for selected records and persist returned metadata."""
-        succeeded = sum(1 for profile in queryset if self._test_login_and_sync(request, profile))
-        if succeeded > 1:
-            self.message_user(
-                request,
-                f"Evergo login succeeded for {succeeded} profile(s).",
-                level=messages.SUCCESS,
-            )
-
     def load_orders(self, request, queryset=None):
         """Load orders from Evergo for selected users or for current profile from changelist tool."""
         if queryset is None or not queryset.exists():
             fallback_queryset = self.get_queryset(request).filter(user=request.user)
-            if not fallback_queryset.exists() and request.user.is_superuser:
-                fallback_queryset = self.get_queryset(request)[:1]
             queryset = fallback_queryset
 
         if not queryset.exists():
