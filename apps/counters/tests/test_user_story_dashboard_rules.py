@@ -19,6 +19,21 @@ class UserStoryDashboardRuleTests(TestCase):
 
         self.assertTrue(result["success"])
 
+
+    def test_closed_user_story_does_not_count_as_unassigned_regression(self):
+        """Regression: closed feedback should not trigger pending assignment warnings."""
+
+        UserStory.objects.create(
+            path="/",
+            rating=3,
+            comments="Already handled feedback",
+            status=UserStory.Status.CLOSED,
+        )
+
+        result = evaluate_user_story_assignment_rules()
+
+        self.assertTrue(result["success"])
+
     def test_dashboard_rule_cache_invalidates_on_soft_delete(self):
         story = UserStory.objects.create(
             path="/",

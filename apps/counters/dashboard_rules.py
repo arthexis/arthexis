@@ -234,10 +234,13 @@ def evaluate_nginx_site_configuration_rules() -> dict[str, object] | None:
 
 
 def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
+    """Return failure only when open user stories still need assignment."""
+
     unassigned = UserStory.objects.filter(
+        status=UserStory.Status.OPEN,
         assign_to__isnull=True,
         owner__isnull=True,
-    ).exclude(status=UserStory.Status.SPAM)
+    )
     count = unassigned.count()
     if count:
         message = ngettext(
