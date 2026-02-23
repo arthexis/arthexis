@@ -6,15 +6,20 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
-from apps.core.admin import OwnableAdminMixin
+from apps.core.admin import OwnableAdminMixin, SaveBeforeChangeAction
+from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
 from .models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @admin.register(EvergoUser)
-class EvergoUserAdmin(OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin):
+class EvergoUserAdmin(
+    SaveBeforeChangeAction, OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin
+):
     """Manage Evergo users and allow login verification from admin actions."""
+
+    change_form_template = "django_object_actions/change_form.html"
 
     list_display = (
         "id",
@@ -46,8 +51,9 @@ class EvergoUserAdmin(OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-    actions = ("test_login_and_sync", "load_orders")
+    actions = ("_test_login_and_sync_bulk_action", "load_orders")
     changelist_actions = ("load_orders",)
+    change_actions = ("test_login_and_sync_action",)
     fieldsets = (
         (
             "Ownership",
@@ -101,32 +107,29 @@ class EvergoUserAdmin(OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin):
         ),
     )
 
-    @admin.action(description="Test Evergo login and sync profile fields")
-    def test_login_and_sync(self, request, queryset):
-        """Call the Evergo API for selected records and persist returned metadata."""
-        succeeded = 0
-        for profile in queryset:
-            try:
-                profile.test_login()
-            except EvergoAPIError as exc:
-                self.message_user(
-                    request,
-                    f"Evergo login failed for {profile}: {exc}",
-                    level=messages.ERROR,
-                )
-            else:
-                succeeded += 1
-        if succeeded:
+    def _test_login_and_sync(self, request, profile):
+        """Call the Evergo API and persist synchronized user metadata."""
+        try:
+            profile.test_login()
+        except EvergoAPIError as exc:
             self.message_user(
                 request,
-                f"Evergo login succeeded for {succeeded} profile(s).",
-                level=messages.SUCCESS,
+                f"Evergo login failed for {profile}: {exc}",
+                level=messages.ERROR,
             )
+            return False
+        self.message_user(
+            request,
+            f"Evergo login succeeded for {profile}.",
+            level=messages.SUCCESS,
+        )
+        return True
 
     def load_orders(self, request, queryset=None):
         """Load orders from Evergo for selected users or for current profile from changelist tool."""
-        if queryset is None:
-            queryset = self.get_queryset(request).filter(user=request.user)
+        if queryset is None or not queryset.exists():
+            fallback_queryset = self.get_queryset(request).filter(user=request.user)
+            queryset = fallback_queryset
 
         if not queryset.exists():
             self.message_user(
@@ -165,6 +168,15 @@ class EvergoUserAdmin(OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin):
     load_orders.label = _("Load Orders")
     load_orders.short_description = _("Load Orders")
     load_orders.requires_queryset = False
+
+    (
+        _test_login_and_sync_bulk_action,
+        test_login_and_sync_action,
+    ) = _build_credentials_actions(
+        "_test_login_and_sync_bulk_action",
+        "_test_login_and_sync",
+        _("Test Evergo login and sync profile fields"),
+    )
 
 
 @admin.register(EvergoOrder)

@@ -197,7 +197,8 @@ def apply_nginx_configuration(
 
     subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
     _remove_nginx_configs(keep=keep_paths, sudo=sudo)
-    subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-available/default"], check=False)
+    subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-available/default"], check=False)
+    subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-enabled/default"], check=False)
     config_content = generate_primary_config(
         mode,
         port,

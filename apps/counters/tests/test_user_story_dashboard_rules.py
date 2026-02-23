@@ -7,17 +7,25 @@ from apps.sites.models import UserStory
 
 
 class UserStoryDashboardRuleTests(TestCase):
-    def test_spam_user_story_does_not_break_assignment_rule(self):
-        UserStory.objects.create(
-            path="/",
-            rating=3,
-            comments="Spam feedback",
-            status=UserStory.Status.SPAM,
-        )
+    def test_non_open_user_stories_do_not_count_as_unassigned(self):
+        """Non-open user stories should not trigger pending assignment warnings."""
 
-        result = evaluate_user_story_assignment_rules()
+        for status_name, status_code in [
+            ("spam", UserStory.Status.SPAM),
+            ("closed", UserStory.Status.CLOSED),
+        ]:
+            with self.subTest(status=status_name):
+                UserStory.objects.all().delete()
+                UserStory.objects.create(
+                    path="/",
+                    rating=3,
+                    comments=f"A {status_name} story",
+                    status=status_code,
+                )
 
-        self.assertTrue(result["success"])
+                result = evaluate_user_story_assignment_rules()
+
+                self.assertTrue(result["success"])
 
     def test_dashboard_rule_cache_invalidates_on_soft_delete(self):
         story = UserStory.objects.create(
