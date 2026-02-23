@@ -353,14 +353,23 @@ class Command(BaseCommand):
         if expiration <= threshold:
             if expiration <= now:
                 status = "has expired"
+                remediation = (
+                    "Run './command.sh https --renew' to reissue due certificates. "
+                    "Use './command.sh https --enable --force-renewal "
+                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') "
+                    "only when you need to force immediate reissuance."
+                )
             else:
                 status = "expires soon"
+                remediation = (
+                    "Run './command.sh https --enable --force-renewal "
+                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
+                )
 
             self.stdout.write(
                 self.style.WARNING(
                     f"Certificate for {certificate.domain} {status} at {expiration.isoformat()}. "
-                    "Run './command.sh https --enable --force-renewal "
-                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
+                    f"{remediation}"
                 )
             )
 
