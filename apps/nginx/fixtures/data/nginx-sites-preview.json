@@ -1,0 +1,6 @@
+[
+  {
+    "domain": "example.arthexis.local",
+    "require_https": false
+  }
+]
