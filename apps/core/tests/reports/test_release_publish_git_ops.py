@@ -1,7 +1,7 @@
 import subprocess
 from collections.abc import Sequence
 
-from apps.core.views.reports.release_publish.services.git_ops import (
+from apps.core.views.reports.release_publish.git_ops import (
     GitProcessAdapter,
     collect_dirty_files,
     has_upstream,

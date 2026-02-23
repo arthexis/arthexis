@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from apps.core.views.reports.release_publish.state.context import load_release_context
+from apps.core.views.reports.release_publish.context import load_release_context
 
 
 def test_load_release_context_merges_sensitive_keys_from_lockfile(tmp_path: Path):

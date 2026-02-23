@@ -1,4 +1,4 @@
-from apps.core.views.reports.release_publish.integrations.github import (
+from apps.core.views.reports.release_publish.github_ops import (
     fetch_publish_workflow_run,
     poll_workflow_completion,
 )
