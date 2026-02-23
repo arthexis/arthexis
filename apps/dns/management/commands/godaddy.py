@@ -85,9 +85,6 @@ class Command(BaseCommand):
         if missing:
             raise CommandError(f"Missing required arguments for add: {', '.join(missing)}")
 
-        if user is None:
-            user = self._resolve_user(username)
-
         credential = DNSProviderCredential.objects.create(
             user=user,
             provider=DNSProviderCredential.Provider.GODADDY,
