@@ -79,7 +79,7 @@ class ConnectionFlowMixin:
                 .filter(slug=requested_feature_slug)
                 .first()
             )
-            if not feature:
+            if not feature and requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
                 feature = (
                     Feature.objects.select_related("node_feature")
                     .filter(slug=CHARGER_CREATION_FEATURE_SLUG)

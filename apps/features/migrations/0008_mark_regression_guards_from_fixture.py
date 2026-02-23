@@ -12,7 +12,7 @@ FEATURE_SLUG = "standard-charge-point"
 FIXTURE_PATH = (
     Path(__file__).resolve().parent.parent
     / "fixtures"
-    / "features__standard_charge_point.json"
+    / "features__ocpp_charge_point.json"
 )
 REGRESSION_NODE_IDS: tuple[str, ...] = (
     "apps/nginx/tests/test_admin.py::test_generate_certificates_view_creates_certbot_certificate_when_selected",

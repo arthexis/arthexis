@@ -8,7 +8,7 @@ from pathlib import Path
 from django.db import migrations
 
 
-FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "features__standard_charge_point.json"
+FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "features__ocpp_charge_point.json"
 
 
 def _load_fixture():
