@@ -229,3 +229,115 @@ def test_video_command_mjpeg_numeric_stream_slug_fallback(
     call_command("video", mjpeg=True, stream="123")
 
     assert "Skipped 1 stream(s) without frames." in capsys.readouterr().out
+
+
+@pytest.mark.django_db
+def test_video_command_sample_prefers_camera_service_frames(capsys, tmp_path, monkeypatch):
+    """Use Redis camera-service frames when the service is active for the device."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+    stream = device.mjpeg_streams.create(name="Lobby", slug="lobby", is_active=True)
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.frame_cache_url",
+        lambda: "redis://localhost:6379/0",
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.get_status",
+        lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
+    )
+
+    calls = {"count": 0}
+
+    def fake_get_frame(_stream):
+        calls["count"] += 1
+        return SimpleNamespace(frame_bytes=f"frame-{calls['count']}".encode("utf-8"))
+
+    monkeypatch.setattr("apps.video.management.commands.video.get_frame", fake_get_frame)
+
+    def fail_direct_capture(self):
+        raise AssertionError("direct camera capture should not be used")
+
+    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", fail_direct_capture, raising=False)
+
+    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
+        output_path.write_text("video")
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.Command._encode_video", fake_encode
+    )
+
+    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
+        call_command("video", samples=2)
+
+    output = capsys.readouterr().out
+    assert "Captured 2 sample frame(s) from camera service stream 'lobby'." in output
+    assert "Sample video saved" in output
+
+
+@pytest.mark.django_db
+def test_video_command_sample_falls_back_when_camera_service_inactive(tmp_path, monkeypatch):
+    """Fall back to direct capture when camera service has no active status or frames."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+    device.mjpeg_streams.create(name="Lobby", slug="lobby-fallback", is_active=True)
+
+    snapshot_path = tmp_path / "shot.jpg"
+    snapshot_path.write_text("frame")
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.frame_cache_url",
+        lambda: "redis://localhost:6379/0",
+    )
+    monkeypatch.setattr("apps.video.management.commands.video.get_status", lambda _stream: None)
+    monkeypatch.setattr("apps.video.management.commands.video.get_frame", lambda _stream: None)
+
+    direct_calls = {"count": 0}
+
+    def direct_capture(self):
+        direct_calls["count"] += 1
+        return snapshot_path
+
+    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", direct_capture, raising=False)
+
+    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
+        output_path.write_text("video")
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.Command._encode_video", fake_encode
+    )
+
+    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
+        call_command("video", samples=1)
+
+    assert direct_calls["count"] == 1
