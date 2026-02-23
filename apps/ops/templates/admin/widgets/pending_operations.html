@@ -1,0 +1,15 @@
+<div class="module" id="ops-pending-widget">
+  <h2>Pending Operations</h2>
+  {% if pending_operations %}
+    <ul style="margin:0; padding-left: 1rem;">
+      {% for operation in pending_operations %}
+        <li style="margin:0.25rem 0;">
+          <a href="{% url 'admin:ops_operationscreen_start' operation.pk %}">{{ operation.title }}</a>
+          <small>(P{{ operation.priority }})</small>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="quiet">No pending operations.</p>
+  {% endif %}
+</div>

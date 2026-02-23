@@ -250,6 +250,27 @@ def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
     return rule_success()
 
 
+
+
+def evaluate_required_operations_rules() -> dict[str, object] | None:
+    """Warn staff when required operations still have pending completions."""
+
+    try:
+        from apps.ops.services import count_required_pending_operations
+    except ImportError:
+        return rule_success()
+
+    count = count_required_pending_operations()
+    if count:
+        message = ngettext(
+            "Pending required operation: %(count)s.",
+            "Pending required operations: %(count)s.",
+            count,
+        ) % {"count": count}
+        return rule_failure(message)
+
+    return rule_success()
+
 def evaluate_cp_simulator_default_rules() -> dict[str, object] | None:
     """Warn when no CP simulator is marked as default."""
 

@@ -1,0 +1,16 @@
+{% if active_operation and request.path|slice:':7' == '/admin/' %}
+<div class="messagelist">
+  <div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+    <div>
+      <strong>Operation:</strong> {{ active_operation.title }} — {{ active_operation.description|truncatechars:160 }}
+      {% if active_operation.reference_url %}
+        <a href="{{ active_operation.reference_url }}" target="_blank" rel="noopener">Reference ↗</a>
+      {% endif %}
+    </div>
+    <div style="white-space:nowrap;">
+      <a class="button" href="{% url 'admin:ops_operationscreen_start' active_operation.pk %}">↺ Start</a>
+      <a class="button" href="?ops_clear=1">✕</a>
+    </div>
+  </div>
+</div>
+{% endif %}

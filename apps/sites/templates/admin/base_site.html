@@ -1418,6 +1418,7 @@ body.user-story-open {
   </nav>
 {% endblock %}
 {% block messages %}
+  {% include "admin/ops/active_operation_banner.html" %}
   {% include "admin/includes/messages.html" %}
 {% endblock %}
 {% block footer %}
