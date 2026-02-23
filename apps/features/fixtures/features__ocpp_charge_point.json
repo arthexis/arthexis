@@ -353,7 +353,7 @@
       "is_deleted": false,
       "slug": "ocpp-21-charge-point",
       "display": "OCPP 2.1 Charge Point",
-      "summary": "Support OCPP 2.1 charge point onboarding and call handling.",
+      "summary": "Support OCPP 2.1 charge point onboarding and call handling. Protocol coverage currently mirrors OCPP 2.0.1 until 2.1-specific calls are implemented.",
       "protocol_coverage": {
         "ocpp21": {
           "cp_to_csms": [

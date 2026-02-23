@@ -11,7 +11,7 @@ from django.db import migrations
 FIXTURE_PATH = (
     Path(__file__).resolve().parent.parent
     / "fixtures"
-    / "features__standard_charge_point.json"
+    / "features__ocpp_charge_point.json"
 )
 SUPPORTED_FEATURE_SLUGS = {
     "ocpp-16-charge-point",
@@ -59,7 +59,9 @@ def _resolve_node_feature(node_feature_manager, node_feature_field):
     return node_feature_manager.filter(slug=node_slug).first()
 
 
-def _seed_features_and_tests(apps, *, entries: list[dict]) -> None:
+def _seed_features_and_tests(
+    apps, *, entries: list[dict], seeded_is_enabled: bool | None = None
+) -> None:
     """Create or update supported OCPP version features and tests."""
 
     Feature = apps.get_model("features", "Feature")
@@ -91,7 +93,11 @@ def _seed_features_and_tests(apps, *, entries: list[dict]) -> None:
             defaults={
                 "display": fields.get("display", ""),
                 "summary": fields.get("summary", ""),
-                "is_enabled": bool(fields.get("is_enabled", True)),
+                "is_enabled": (
+                    bool(fields.get("is_enabled", True))
+                    if seeded_is_enabled is None
+                    else seeded_is_enabled
+                ),
                 "main_app": app_obj,
                 "node_feature": node_obj,
                 "admin_requirements": fields.get("admin_requirements", ""),
@@ -146,15 +152,17 @@ def forwards(apps, schema_editor):
 
     del schema_editor
 
-    entries = _load_fixture_entries()
-    _seed_features_and_tests(apps, entries=entries)
-
     Feature = apps.get_model("features", "Feature")
     FeatureTest = apps.get_model("features", "FeatureTest")
     feature_manager = getattr(Feature, "all_objects", Feature._base_manager)
     feature_test_manager = getattr(FeatureTest, "all_objects", FeatureTest._base_manager)
 
     legacy_feature = feature_manager.filter(slug=LEGACY_FEATURE_SLUG).first()
+    legacy_is_enabled = legacy_feature.is_enabled if legacy_feature is not None else None
+
+    entries = _load_fixture_entries()
+    _seed_features_and_tests(apps, entries=entries, seeded_is_enabled=legacy_is_enabled)
+
     if legacy_feature is not None:
         feature_test_manager.filter(feature=legacy_feature).delete()
         legacy_feature.delete()
@@ -181,7 +189,7 @@ def backwards(apps, schema_editor):
 
     app_obj, _ = application_manager.get_or_create(name="ocpp", defaults={"description": ""})
     node_feature = node_feature_manager.filter(slug="charge-points").first()
-    feature_manager.update_or_create(
+    legacy_feature, _ = feature_manager.update_or_create(
         slug=LEGACY_FEATURE_SLUG,
         defaults={
             "display": "Standard Charge Point",
@@ -213,6 +221,37 @@ def backwards(apps, schema_editor):
             "is_deleted": False,
         },
     )
+
+    entries = _load_fixture_entries()
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("model") != "features.featuretest":
+            continue
+        fields = entry.get("fields")
+        if not isinstance(fields, dict):
+            continue
+        feature_field = fields.get("feature")
+        if not isinstance(feature_field, (list, tuple)) or not feature_field:
+            continue
+
+        feature_slug = str(feature_field[0]).strip()
+        if feature_slug not in SUPPORTED_FEATURE_SLUGS:
+            continue
+
+        node_id = str(fields.get("node_id", "")).strip()
+        if not node_id:
+            continue
+
+        feature_test_manager.update_or_create(
+            feature=legacy_feature,
+            node_id=node_id,
+            defaults={
+                "name": fields.get("name", node_id),
+                "is_regression_guard": bool(fields.get("is_regression_guard", True)),
+                "notes": fields.get("notes", ""),
+                "is_seed_data": bool(fields.get("is_seed_data", True)),
+                "is_deleted": bool(fields.get("is_deleted", False)),
+            },
+        )
 
 
 class Migration(migrations.Migration):
