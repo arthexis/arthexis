@@ -4,6 +4,44 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def remove_duplicate_references(apps, schema_editor):
+    """Remove duplicate ``Reference`` rows before adding the unique constraint.
+
+    Older installations may already contain duplicate ``(alt_text, value)`` pairs,
+    which causes SQLite to fail while rebuilding ``core_reference`` during the
+    constraint migration. Keep the oldest row for each pair and delete the rest.
+    """
+
+    del schema_editor  # Migration API argument is unused.
+    Reference = apps.get_model("links", "Reference")
+
+    duplicates = (
+        Reference.objects.values("alt_text", "value")
+        .order_by()
+        .annotate(total=models.Count("id"))
+        .filter(total__gt=1)
+    )
+
+    for duplicate in duplicates:
+        refs = Reference.objects.filter(
+            alt_text=duplicate["alt_text"],
+            value=duplicate["value"],
+        ).order_by("id")
+        keep = refs.first()
+        if keep is None:
+            continue
+        refs.exclude(id=keep.id).delete()
+
+
+def restore_duplicate_references(apps, schema_editor):
+    """No-op reverse migration for duplicate removal.
+
+    Deleted duplicate rows cannot be reconstructed deterministically.
+    """
+
+    del apps, schema_editor
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -17,6 +55,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(
+            remove_duplicate_references,
+            reverse_code=restore_duplicate_references,
+        ),
         migrations.AddConstraint(
             model_name="reference",
             constraint=models.UniqueConstraint(
