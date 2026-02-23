@@ -31,3 +31,9 @@ def test_local_apps_define_importable_admin_modules():
     assert not import_errors, \
         "Admin modules raised errors: " + \
         "; ".join(f"{name}: {exc}" for name, exc in import_errors)
+
+
+def test_ocpp_charger_admin_package_importable():
+    module = importlib.import_module("apps.ocpp.admin.charger")
+
+    assert hasattr(module, "ChargerAdmin")
