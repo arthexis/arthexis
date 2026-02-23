@@ -106,15 +106,37 @@ def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, 
         evergo_password="secret",  # noqa: S106
     )
 
-    changelist_url = reverse("admin:evergo_evergouser_changelist")
-    response = admin_client.post(
-        changelist_url,
-        {"action": "load_orders", "index": 0, "select_across": 0},
-        follow=True,
-    )
+    tool_url = reverse("admin:evergo_evergouser_actions", args=["load_orders"])
+    response = admin_client.post(tool_url, follow=True)
 
     assert response.status_code == 200
     mock_load_orders.assert_called_once()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.EvergoUser.test_login")
+def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
+    """Regression: change-form action should run login sync without requiring changelist selection."""
+
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(
+        username="suite-admin-change-action",
+        email="suite-admin-change-action@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-change-action@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    action_url = reverse(
+        "admin:evergo_evergouser_actions",
+        args=[profile.pk, "test_login_and_sync_action"],
+    )
+    response = admin_client.post(action_url, follow=True)
+
+    assert response.status_code == 200
+    mock_test_login.assert_called_once_with()
 
 
 @pytest.mark.django_db
