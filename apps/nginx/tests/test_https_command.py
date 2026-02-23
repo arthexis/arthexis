@@ -549,6 +549,62 @@ def test_https_enable_warns_when_certificate_is_expired(monkeypatch):
     assert "only when you need to force immediate reissuance" in rendered
     assert "--force-renewal" in rendered
 
+@pytest.mark.django_db
+def test_https_enable_warns_when_self_signed_certificate_is_expired(monkeypatch):
+    """Expired self-signed cert guidance should not suggest certbot-specific force renewal."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    from apps.certs.models import SelfSignedCertificate
+
+    def fake_provision(self, *, sudo: str = "sudo", subject_alt_names=None):
+        self.expiration_date = timezone.now() - timedelta(days=1)
+        return "generated"
+
+    monkeypatch.setattr(SelfSignedCertificate, "generate", fake_provision)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command("https", "--enable", "--local", "--no-sudo", stdout=out)
+
+    rendered = out.getvalue()
+    assert "has expired" in rendered
+    assert "./command.sh https --renew" in rendered
+    assert "--force-renewal" not in rendered
+
+
+@pytest.mark.django_db
+def test_https_enable_escapes_domain_in_force_renewal_guidance(monkeypatch):
+    """Remediation command hints should shell-escape domains used in suggested commands."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    malicious_domain = "example.com;echo pwned"
+
+    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+        self.expiration_date = timezone.now() + timedelta(days=1)
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command("https", "--enable", "--certbot", malicious_domain, "--no-sudo", stdout=out)
+
+    rendered = out.getvalue()
+    assert "--certbot 'example.com;echo pwned'" in rendered
+    assert "--godaddy 'example.com;echo pwned'" in rendered
+
 
 @pytest.mark.django_db
 def test_https_warn_days_must_be_non_negative():

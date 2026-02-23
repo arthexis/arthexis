@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from getpass import getpass
-import sys
-from pathlib import Path
 import ipaddress
+from pathlib import Path
+import shlex
+import sys
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -351,20 +352,28 @@ class Command(BaseCommand):
         now = timezone.now()
         threshold = now + timedelta(days=warn_days)
         if expiration <= threshold:
+            is_certbot = isinstance(certificate, CertbotCertificate)
+            quoted_domain = shlex.quote(certificate.domain)
+
             if expiration <= now:
                 status = "has expired"
-                remediation = (
-                    "Run './command.sh https --renew' to reissue due certificates. "
-                    "Use './command.sh https --enable --force-renewal "
-                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') "
-                    "only when you need to force immediate reissuance."
-                )
+                remediation = "Run './command.sh https --renew' to reissue due certificates."
+
+                if is_certbot:
+                    remediation += (
+                        " Use './command.sh https --enable --force-renewal "
+                        f"--certbot {quoted_domain}' (or '--godaddy {quoted_domain}') "
+                        "only when you need to force immediate reissuance."
+                    )
             else:
                 status = "expires soon"
-                remediation = (
-                    "Run './command.sh https --enable --force-renewal "
-                    f"--certbot {certificate.domain}' (or '--godaddy {certificate.domain}') to reissue immediately."
-                )
+                if is_certbot:
+                    remediation = (
+                        "Run './command.sh https --enable --force-renewal "
+                        f"--certbot {quoted_domain}' (or '--godaddy {quoted_domain}') to reissue immediately."
+                    )
+                else:
+                    remediation = "Run './command.sh https --enable --local' to reissue immediately."
 
             self.stdout.write(
                 self.style.WARNING(
