@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.graphql.services import build_charger_chart_payload
@@ -12,7 +13,6 @@ from apps.ocpp.models import Charger, MeterValue, Transaction
 
 
 @pytest.mark.django_db
-
 def test_build_charger_chart_payload_returns_single_connector_dataset():
     """Service should return chart labels and values for a connector session."""
 
@@ -51,7 +51,6 @@ def test_build_charger_chart_payload_returns_single_connector_dataset():
 
 
 @pytest.mark.django_db
-
 def test_graphql_endpoint_returns_chart_data(client):
     """GraphQL endpoint should expose charger chart data for authenticated users."""
 
@@ -71,7 +70,7 @@ def test_graphql_endpoint_returns_chart_data(client):
     assert client.login(username="gql-client", password="secret")
 
     response = client.post(
-        "/graphql/",
+        reverse("graphql:endpoint"),
         data={
             "query": "query { chargerChart(cid: \"GQL-CP-2\", connector: \"1\") { labels datasets { label connectorId values } } }"
         },

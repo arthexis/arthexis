@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import graphene
+from django.core.exceptions import ObjectDoesNotExist
 from graphql import GraphQLError
 
 from .services import ChargerAccessDeniedError, build_charger_chart_payload
@@ -48,6 +49,8 @@ class Query(graphene.ObjectType):
                 session_id=session_id,
             )
         except ChargerAccessDeniedError as exc:
+            raise GraphQLError(str(exc)) from exc
+        except ObjectDoesNotExist as exc:
             raise GraphQLError(str(exc)) from exc
         return ChargerChartType(
             labels=payload["labels"],

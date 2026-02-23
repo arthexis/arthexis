@@ -539,21 +539,26 @@
     }
     const connector = root.getAttribute('data-graphql-chart-connector');
     const session = root.getAttribute('data-graphql-chart-session');
-    const args = [`cid: "${cid.replace(/"/g, '\\"')}"`];
-    if (connector) {
-      args.push(`connector: "${connector.replace(/"/g, '\\"')}"`);
-    }
-    if (session) {
-      args.push(`sessionId: "${session.replace(/"/g, '\\"')}"`);
-    }
-    const query = `query { chargerChart(${args.join(', ')}) { labels datasets { label connectorId values } } }`;
+    const query = `query ChargerChart($cid: String!, $connector: String, $sessionId: String) {
+      chargerChart(cid: $cid, connector: $connector, sessionId: $sessionId) {
+        labels
+        datasets { label connectorId values }
+      }
+    }`;
     return fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
       },
-      body: JSON.stringify({ query })
+      body: JSON.stringify({
+        query,
+        variables: {
+          cid,
+          connector: connector || null,
+          sessionId: session || null
+        }
+      })
     })
       .then((resp) => {
         if (!resp.ok) {
@@ -743,13 +748,19 @@
               placeholder.replaceWith(oldCanvas);
             }
           }
-          fetchGraphqlChartPayload(current).then((graphqlPayload) => {
-            const payload = graphqlPayload || htmlPayload;
+          const applyAndRender = (payload) => {
             const chartChanged = applyChartPayload(payload);
             if (kwChart || (payload && chartData.datasets.length)) {
               renderChart(chartChanged);
             }
-          });
+          };
+          if (htmlPayload && Array.isArray(htmlPayload.datasets) && htmlPayload.datasets.length) {
+            applyAndRender(htmlPayload);
+          } else {
+            fetchGraphqlChartPayload(current).then((graphqlPayload) => {
+              applyAndRender(graphqlPayload || htmlPayload);
+            });
+          }
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
             if (el) {
@@ -767,11 +778,16 @@
       chartShouldAnimate = animateAttr === 'true';
     }
     const htmlPayload = parseChartPayload(document);
-    fetchGraphqlChartPayload(statusRoot).then((graphqlPayload) => {
-      const payload = graphqlPayload || htmlPayload;
-      const chartChanged = applyChartPayload(payload);
+    if (htmlPayload && Array.isArray(htmlPayload.datasets) && htmlPayload.datasets.length) {
+      const chartChanged = applyChartPayload(htmlPayload);
       renderChart(chartChanged);
-    });
+    } else {
+      fetchGraphqlChartPayload(statusRoot).then((graphqlPayload) => {
+        const payload = graphqlPayload || htmlPayload;
+        const chartChanged = applyChartPayload(payload);
+        renderChart(chartChanged);
+      });
+    }
     if (STATUS_SHOULD_POLL) {
       syncStatusPolling();
     }
