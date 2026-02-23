@@ -23,6 +23,39 @@ normalize_path() {
   printf '%s' "$raw"
 }
 
+arthexis_is_wsl() {
+  if [ -n "${WSL_DISTRO_NAME:-}" ] || [ -n "${WSL_INTEROP:-}" ]; then
+    return 0
+  fi
+
+  if [ -r /proc/version ] && grep -qi "microsoft" /proc/version; then
+    return 0
+  fi
+
+  return 1
+}
+
+arthexis_prime_sudo_credentials() {
+  if ! command -v sudo >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if sudo -n true >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! arthexis_is_wsl; then
+    return 1
+  fi
+
+  if [ ! -t 0 ]; then
+    return 1
+  fi
+
+  echo "WSL detected and sudo access is required. Please enter your password to continue."
+  sudo -v
+}
+
 arthexis_python_bin() {
   local path_entry
   local candidate

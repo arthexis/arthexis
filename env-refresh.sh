@@ -274,8 +274,14 @@ install_watch_upgrade_helper() {
 
   local needs_sudo=0
   if [ ! -w "$target_dir" ] || { [ -f "$target_path" ] && [ ! -w "$target_path" ]; }; then
-    if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-      needs_sudo=1
+    if command -v sudo >/dev/null 2>&1; then
+      if sudo -n true >/dev/null 2>&1 || arthexis_prime_sudo_credentials >/dev/null 2>&1; then
+        needs_sudo=1
+      else
+        echo "Skipping watch-upgrade helper installation: insufficient permissions for $target_dir." >&2
+        echo "Re-run env-refresh.sh with elevated privileges to install /usr/local/bin/watch-upgrade." >&2
+        return 0
+      fi
     else
       echo "Skipping watch-upgrade helper installation: insufficient permissions for $target_dir." >&2
       echo "Re-run env-refresh.sh with elevated privileges to install /usr/local/bin/watch-upgrade." >&2
