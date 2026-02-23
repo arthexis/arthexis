@@ -496,8 +496,19 @@ class Command(BaseCommand):
         return queryset.filter(identifier=device_identifier).first()
 
     def _capture_samples_video(self, device: VideoDevice, samples: int) -> Path:
+        """Capture sample frames and assemble them into a short video file.
+
+        Prefer cached MJPEG frames from Redis when the camera service is active for the
+        selected device. Fall back to direct device snapshots only when the camera
+        service is not active.
+        """
+
         frames_dir, output_path = self._get_video_paths()
         frames_dir.mkdir(parents=True, exist_ok=True)
+
+        if self._capture_samples_from_camera_service(device, samples, frames_dir):
+            self._encode_video(frames_dir, output_path)
+            return output_path
 
         for index in range(1, samples + 1):
             snapshot_path = device.capture_snapshot_path()
@@ -506,6 +517,59 @@ class Command(BaseCommand):
 
         self._encode_video(frames_dir, output_path)
         return output_path
+
+    def _capture_samples_from_camera_service(
+        self,
+        device: VideoDevice,
+        samples: int,
+        frames_dir: Path,
+    ) -> bool:
+        """Capture sample frames from the Redis-backed camera service when active.
+
+        Returns ``True`` when frames were captured from Redis. Returns ``False`` when the
+        camera service is not configured or not active for ``device``.
+        """
+
+        if not frame_cache_url():
+            return False
+
+        stream = (
+            MjpegStream.objects.filter(video_device=device, is_active=True)
+            .order_by("pk")
+            .first()
+        )
+        if stream is None:
+            return False
+
+        status_payload = get_status(stream) or {}
+        cached_frame = get_frame(stream)
+        service_is_active = bool(status_payload) or cached_frame is not None
+        if not service_is_active:
+            return False
+
+        if cached_frame is None:
+            raise CommandError(
+                f"Camera service is active for stream '{stream.slug}' but no cached frame is available."
+            )
+
+        first_path = frames_dir / "frame-001.jpg"
+        first_path.write_bytes(cached_frame.frame_bytes)
+
+        for index in range(2, samples + 1):
+            next_frame = get_frame(stream)
+            if next_frame is None:
+                raise CommandError(
+                    f"Camera service became unavailable while collecting samples for stream '{stream.slug}'."
+                )
+            target_path = frames_dir / f"frame-{index:03d}.jpg"
+            target_path.write_bytes(next_frame.frame_bytes)
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Captured {samples} sample frame(s) from camera service stream '{stream.slug}'."
+            )
+        )
+        return True
 
     def _get_video_paths(self) -> tuple[Path, Path]:
         timestamp = datetime.now(timezone.utc)
