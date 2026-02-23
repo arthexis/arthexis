@@ -224,6 +224,7 @@ class ChargerAdmin(
         "set_availability_state_inoperative",
         "clear_authorization_cache",
         "clear_charging_profiles",
+        "unlock_connector",
         "remote_stop_transaction",
         "reset_chargers",
         "create_simulator_for_cp",

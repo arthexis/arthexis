@@ -98,6 +98,8 @@ def test_monitoring_admin_views_accessible(client):
 
 
 def test_charger_admin_actions_remain_discoverable():
+    """Regression: keep key charger admin actions discoverable in dropdowns."""
+
     admin = ChargerAdmin(Charger, AdminSite())
 
     expected_actions = {

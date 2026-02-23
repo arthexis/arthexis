@@ -97,6 +97,8 @@ async def test_dispatch_firmware_domain_regression() -> None:
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_dispatch_configuration_domain_regression() -> None:
+    """Regression: UnlockConnector call errors should update availability state."""
+
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-CFG-1", connector_id=1)
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.charger = charger
