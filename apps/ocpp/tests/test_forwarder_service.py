@@ -79,8 +79,10 @@ def test_connect_forwarding_session_skips_tls_verification_for_trusted_node(
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
     assert session is not None
-    assert create_kwargs["sslopt"]["cert_reqs"] == ssl.CERT_NONE
-    assert create_kwargs["sslopt"]["check_hostname"] is False
+    assert create_kwargs["sslopt"] == {
+        "cert_reqs": ssl.CERT_NONE,
+        "check_hostname": False,
+    }
 
 
 def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
@@ -105,7 +107,7 @@ def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
     assert session is not None
-    assert "sslopt" not in create_kwargs
+    assert not create_kwargs
 
 
 def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_instance):

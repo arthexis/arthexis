@@ -96,16 +96,14 @@ class Forwarder:
         private PKI or self-signed deployments.
         """
 
-        if not url.startswith("wss://"):
-            return {}
-        if not getattr(node, "trusted", False):
-            return {}
-        return {
-            "sslopt": {
-                "cert_reqs": ssl.CERT_NONE,
-                "check_hostname": False,
+        if url.startswith("wss://") and getattr(node, "trusted", False):
+            return {
+                "sslopt": {
+                    "cert_reqs": ssl.CERT_NONE,
+                    "check_hostname": False,
+                }
             }
-        }
+        return {}
 
     @staticmethod
     def _close_forwarding_session(session: ForwardingSession) -> None:
