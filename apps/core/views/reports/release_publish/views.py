@@ -47,44 +47,36 @@ from ..report_rendering import (
 )
 
 from .exceptions import DirtyRepository, PublishPending
-from .services.pipeline import StepDefinition, run_release_step
-from .state.context import (
+from .steps import StepDefinition, run_release_step
+from .context import (
     load_release_context,
     persist_release_context as _persist_release_context,
     store_release_context as _store_release_context,
 )
-from .services.git_ops import (
+from .git_ops import (
     SubprocessGitAdapter,
     collect_dirty_files as git_collect_dirty_files,
+    current_branch as git_current_branch,
     git_stdout as git_adapter_stdout,
     has_upstream as git_has_upstream,
     working_tree_dirty as git_working_tree_dirty,
 )
-from .integrations.github import (
+from .github_ops import (
+    ensure_github_release as gh_ensure_github_release,
     fetch_publish_workflow_run as gh_fetch_publish_workflow_run,
     parse_github_repository as gh_parse_github_repository,
+    resolve_github_token as gh_resolve_github_token,
+    upload_release_assets as gh_upload_release_assets,
 )
 
 logger = logging.getLogger(__name__)
 GIT_ADAPTER = SubprocessGitAdapter()
 
 
-def _get_user_github_token(user) -> GitHubToken | None:
-    if not user or not getattr(user, "is_authenticated", False):
-        return None
-    return GitHubToken.objects.filter(user=user).first()
-
-
 def _resolve_github_token(
     release: PackageRelease, ctx: dict, *, user=None
 ) -> str | None:
-    token = (ctx.get("github_token") or "").strip()
-    if token:
-        return token
-    stored = _get_user_github_token(user)
-    if stored:
-        return (stored.token or "").strip() or None
-    return release.get_github_token()
+    return gh_resolve_github_token(release, ctx, user=user)
 
 
 def _require_github_token(
@@ -781,10 +773,7 @@ def _has_remote(remote: str) -> bool:
 
 
 def _current_branch() -> str | None:
-    branch = _git_stdout(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    if branch == "HEAD":
-        return None
-    return branch
+    return git_current_branch(GIT_ADAPTER)
 
 
 def _has_upstream(branch: str) -> bool:
@@ -862,31 +851,13 @@ def _ensure_github_release(
     tag_name: str,
     token: str | None,
 ) -> dict[str, object]:
-    release_url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag_name}"
-    response = _github_request(
-        "get",
-        release_url,
+    return gh_ensure_github_release(
+        request=_github_request,
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
         token=token,
-        expected_status={200, 404},
     )
-    if response.status_code == 404:
-        create_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
-        response = _github_request(
-            "post",
-            create_url,
-            token=token,
-            expected_status={201},
-            json={"tag_name": tag_name, "name": tag_name},
-        )
-    elif response.status_code != 200:
-        detail = response.text.strip()
-        raise Exception(
-            f"GitHub release lookup failed ({response.status_code}): {detail}"
-        )
-    data = response.json()
-    if not isinstance(data, dict):
-        raise Exception("GitHub release response was not a JSON object")
-    return data
 
 
 def _upload_release_assets(
@@ -898,52 +869,16 @@ def _upload_release_assets(
     artifacts: Sequence[Path],
     log_path: Path,
 ) -> None:
-    assets = release_data.get("assets") or []
-    existing_assets: dict[str, int] = {}
-    if isinstance(assets, list):
-        for asset in assets:
-            if not isinstance(asset, dict):
-                continue
-            name = asset.get("name")
-            asset_id = asset.get("id")
-            if isinstance(name, str) and isinstance(asset_id, int):
-                existing_assets[name] = asset_id
-
-    release_id = release_data.get("id")
-    if not isinstance(release_id, int):
-        raise Exception("GitHub release ID missing")
-
-    for artifact in artifacts:
-        name = artifact.name
-        existing_id = existing_assets.get(name)
-        if existing_id:
-            delete_url = (
-                "https://api.github.com/repos/"
-                f"{owner}/{repo}/releases/assets/{existing_id}"
-            )
-            _github_request(
-                "delete",
-                delete_url,
-                token=token,
-                expected_status={204},
-            )
-            _append_log(log_path, f"Removed existing GitHub asset {name}")
-
-        upload_url = (
-            "https://uploads.github.com/repos/"
-            f"{owner}/{repo}/releases/{release_id}/assets"
-            f"?name={name}"
-        )
-        with artifact.open("rb") as handle:
-            _github_request(
-                "post",
-                upload_url,
-                token=token,
-                expected_status={201},
-                headers={"Content-Type": "application/octet-stream"},
-                data=handle,
-            )
-        _append_log(log_path, f"Uploaded GitHub release asset {name}")
+    gh_upload_release_assets(
+        request=_github_request,
+        owner=owner,
+        repo=repo,
+        release_data=release_data,
+        token=token,
+        artifacts=artifacts,
+        append_log=_append_log,
+        log_path=log_path,
+    )
 
 
 def _fetch_publish_workflow_run(

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from apps.core.views.reports.release_publish.exceptions import PublishPending
-from apps.core.views.reports.release_publish.services.pipeline import (
+from apps.core.views.reports.release_publish.steps import (
     StepDefinition,
     run_release_step,
 )
