@@ -95,3 +95,46 @@ def test_monitoring_admin_views_accessible(client):
     assert client.get(reverse("admin:ocpp_variable_changelist")).status_code == 200
     assert client.get(reverse("admin:ocpp_monitoringrule_changelist")).status_code == 200
     assert client.get(reverse("admin:ocpp_monitoringreport_changelist")).status_code == 200
+
+
+def test_charger_admin_actions_remain_discoverable():
+    admin = ChargerAdmin(Charger, AdminSite())
+
+    expected_actions = {
+        "purge_data",
+        "fetch_cp_configuration",
+        "toggle_rfid_authentication",
+        "send_rfid_list_to_evcs",
+        "update_rfids_from_evcs",
+        "recheck_charger_status",
+        "setup_cp_diagnostics",
+        "request_cp_diagnostics",
+        "get_diagnostics",
+        "change_availability_operative",
+        "change_availability_inoperative",
+        "set_availability_state_operative",
+        "set_availability_state_inoperative",
+        "clear_authorization_cache",
+        "clear_charging_profiles",
+        "remote_stop_transaction",
+        "reset_chargers",
+        "create_simulator_for_cp",
+        "view_charge_point_dashboard",
+        "delete_selected",
+    }
+
+    assert expected_actions.issubset(set(admin.actions))
+
+
+def test_charger_admin_view_in_site_url_resolves(client):
+    User = get_user_model()
+    user = User.objects.create_superuser(
+        username="admin-url", password="pass", email="admin-url@example.com"
+    )
+    client.force_login(user)
+
+    url = reverse("admin:ocpp_charger_view_charge_point_dashboard")
+    response = client.get(url)
+
+    assert response.status_code == 302
+    assert response.url == reverse("ocpp:ocpp-dashboard")
