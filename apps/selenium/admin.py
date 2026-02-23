@@ -20,15 +20,14 @@ class SeleniumBrowserAdmin(admin.ModelAdmin):
 
     def _connection_advice(self, browser: SeleniumBrowser) -> list[str]:
         advice: list[str] = []
-        if browser.engine == SeleniumBrowser.Engine.FIREFOX:
-            if browser.mode == SeleniumBrowser.Mode.HEADED and not os.environ.get(
-                "DISPLAY"
-            ):
-                advice.append(
-                    _("Set DISPLAY or switch the browser to headless mode for remote use.")
-                )
-            if browser.binary_path and not shutil.which(browser.binary_path):
-                advice.append(_("Verify the Firefox binary path or install the browser."))
+        if browser.mode == SeleniumBrowser.Mode.HEADED and not os.environ.get("DISPLAY"):
+            advice.append(
+                _("Set DISPLAY or switch the browser to headless mode for remote use.")
+            )
+        if browser.binary_path and not shutil.which(browser.binary_path):
+            advice.append(
+                _("Verify the configured browser binary path or install the browser.")
+            )
         return advice
 
     @admin.action(description=_("Test selected browser"))

@@ -56,7 +56,6 @@ python scripts/generate_third_party_licenses.py
 | `django-timezone-field` | `django-timezone-field==7.2.1` | BSD-2-Clause | [link](https://github.com/mfogel/django-timezone-field/) |
 | `dnspython` | `dnspython==2.7.0` | ISC | [link](https://pypi.org/project/dnspython/) |
 | `docutils` | `docutils==0.22.4` | BSD License; GNU General Public License (GPL); Public Domain | [link](https://docutils.sourceforge.io) |
-| `geckodriver-autoinstaller` | `geckodriver-autoinstaller==0.1.0` | MIT | [link](https://github.com/yeongbin-jo/python-geckodriver-autoinstaller) |
 | `ghp-import` | `ghp-import==2.1.0` | Apache Software License | [link](https://github.com/c-w/ghp-import) |
 | `gpiozero` | `gpiozero==2.0.1` | BSD-3-Clause | [link](https://gpiozero.readthedocs.io/) |
 | `graphviz` | `graphviz==0.21` | Unknown | [link](https://github.com/xflr6/graphviz) |
@@ -93,6 +92,7 @@ python scripts/generate_third_party_licenses.py
 | `packaging` | `packaging==25.0` | Apache Software License; BSD License | [link](https://pypi.org/project/packaging/) |
 | `pathspec` | `pathspec==0.12.1` | Mozilla Public License 2.0 (MPL 2.0) | [link](https://pypi.org/project/pathspec/) |
 | `pillow` | `pillow==12.0.0` | Unknown | [link](https://python-pillow.github.io) |
+| `playwright` | `playwright==1.55.0` | Apache-2.0 | [link](https://playwright.dev/python/) |
 | `platformdirs` | `platformdirs==4.5.1` | MIT License | [link](https://github.com/tox-dev/platformdirs) |
 | `pluggy` | `pluggy==1.6.0` | MIT | [link](https://pypi.org/project/pluggy/) |
 | `prompt_toolkit` | `prompt_toolkit==3.0.52` | BSD License | [link](https://github.com/prompt-toolkit/python-prompt-toolkit) |
@@ -124,7 +124,6 @@ python scripts/generate_third_party_licenses.py
 | `RPi.GPIO` | `RPi.GPIO==0.7.1` | MIT | [link](https://sourceforge.net/projects/raspberry-gpio-python/) |
 | `s3transfer` | `s3transfer==0.11.1` | Apache License 2.0 | [link](https://github.com/boto/s3transfer) |
 | `SecretStorage` | `SecretStorage==3.5.0` | Unknown | [link](https://github.com/mitya57/secretstorage) |
-| `selenium` | `selenium==4.34.2` | Apache-2.0 | [link](https://www.selenium.dev) |
 | `service-identity` | `service-identity==24.2.0` | MIT License | [link](https://pypi.org/project/service-identity/) |
 | `setuptools` | `setuptools==80.9.0` | Unknown | [link](https://pypi.org/project/setuptools/) |
 | `six` | `six==1.17.0` | MIT | [link](https://github.com/benjaminp/six) |
