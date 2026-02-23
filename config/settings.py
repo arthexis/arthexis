@@ -452,6 +452,7 @@ LOCAL_APPS = [
     "apps.release",
     "apps.emails",
     "apps.extensions",
+    "apps.desktop",
     "apps.payments",
     "apps.sponsors",
     "apps.links",
