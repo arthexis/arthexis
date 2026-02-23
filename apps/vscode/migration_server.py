@@ -14,7 +14,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Mapping
+from typing import Any, Callable, Dict, Iterable
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -611,7 +611,7 @@ def request_runserver_restart(lock_dir: Path) -> None:
     print("[Migration Server] Signalled VS Code run/debug tasks to restart.")
 
 
-def _is_debugger_session(env: Mapping[str, str] | None = None) -> bool:
+def _is_debugger_session(env: dict[str, str] | None = None) -> bool:
     """Return ``True`` when the process appears to run under a debugger."""
 
     resolved_env = os.environ if env is None else env
@@ -662,11 +662,14 @@ def main(argv: list[str] | None = None) -> int:
         DEBUGGER_INTERRUPT_RETRY_LIMIT if _is_debugger_session() else 0
     )
     with migration_server_state(LOCK_DIR):
-        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-        snapshot = collect_source_mtimes(BASE_DIR)
-
+        is_first_run = True
         while True:
             try:
+                if is_first_run:
+                    run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                    snapshot = collect_source_mtimes(BASE_DIR)
+                    is_first_run = False
+
                 updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
                 if args.debounce > 0:
                     time.sleep(args.debounce)
