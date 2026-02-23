@@ -512,7 +512,7 @@ class EvergoUser(Profile):
         if existing_customer is not None:
             for field_name, value in defaults.items():
                 setattr(existing_customer, field_name, value)
-            existing_customer.save(update_fields=list(defaults.keys()))
+            existing_customer.save(update_fields=[*defaults.keys(), "refreshed_at"])
             return False
 
         EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
@@ -652,6 +652,7 @@ class EvergoUser(Profile):
             "raw_payload": payload,
             "source_created_at": _parse_dt(payload.get("created_at")),
             "source_updated_at": _parse_dt(payload.get("updated_at")),
+            "validation_state": EvergoOrder.VALIDATION_STATE_VALIDATED,
         }
         charge_points = payload.get("cargadores")
         if isinstance(charge_points, list):
@@ -671,8 +672,6 @@ class EvergoUser(Profile):
                 .delete()
             )
 
-        order.validation_state = EvergoOrder.VALIDATION_STATE_VALIDATED
-        order.save(update_fields=["validation_state"])
         order.sync_dynamic_field_values(payload)
         return created
 
@@ -848,6 +847,8 @@ def _to_int(value: Any) -> int | None:
 
 def _placeholder_remote_id(*, order_number: str) -> int:
     """Build a deterministic positive integer to persist a provisional SO row."""
+    # Reserve [1_500_000_000, 2_000_000_000) for placeholders to avoid collisions
+    # with current real Evergo IDs while keeping deterministic order-number mapping.
     digest = hashlib.sha256(order_number.strip().upper().encode("utf-8")).hexdigest()[:12]
     return 1_500_000_000 + (int(digest, 16) % 500_000_000)
 
