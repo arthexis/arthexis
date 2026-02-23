@@ -194,7 +194,7 @@ class EvergoUserAdmin(
     def load_customers_view(self, request):
         """Render/handle the SO-customer import wizard."""
         if request.method == "POST":
-            form = EvergoLoadCustomersForm(request.POST)
+            form = EvergoLoadCustomersForm(request.POST, request_user=request.user)
             if form.is_valid():
                 profile = form.cleaned_data["profile"]
                 raw_queries = form.cleaned_data["raw_queries"]
@@ -232,13 +232,14 @@ class EvergoUserAdmin(
                         )
                     return HttpResponseRedirect(reverse("admin:evergo_evergouser_changelist"))
         else:
-            form = EvergoLoadCustomersForm()
+            form = EvergoLoadCustomersForm(request_user=request.user)
 
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
             "title": _("Load Evergo Customers"),
             "form": form,
+            "add_profile_url": reverse("admin:evergo_evergouser_add"),
         }
         return render(request, "admin/evergo/load_customers.html", context)
 

@@ -140,6 +140,26 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
 
 
 @pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_create(admin_client):
+    """Regression: wizard should prefill the current user's profile and include profile-create link."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="owned-profile@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f'value="{profile.pk}" selected' in content
+    assert reverse("admin:evergo_evergouser_add") in content
+    assert 'class="button">Cancel</a>' in content
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.models.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Regression: change-form action should run login sync without requiring changelist selection."""
