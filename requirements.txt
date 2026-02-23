@@ -62,7 +62,7 @@ packaging==26.0
 pillow==12.1.1
 playwright==1.55.0
 opencv-python==4.13.0.92
-pyxel==2.6.5
+pyxel==2.6.9
 prompt_toolkit==3.0.52
 psutil==7.2.2
 psycopg==3.3.2
