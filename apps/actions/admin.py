@@ -92,15 +92,25 @@ class RemoteActionTokenAdmin(EntityModelAdmin):
             super().save_model(request, obj, form, change)
             return
 
-        token, _ = RemoteActionToken.issue_for_user(
+        token, raw_key = RemoteActionToken.issue_for_user(
             obj.user,
             label=obj.label,
             expires_at=obj.expires_at,
         )
+        if token.is_active != obj.is_active:
+            token.is_active = obj.is_active
+            token.save(update_fields=["is_active"])
+
+        messages.success(
+            request,
+            _("Bearer token created. Copy it now — it will not be shown again: %(token)s")
+            % {"token": raw_key},
+        )
+
         obj.pk = token.pk
         obj.key_prefix = token.key_prefix
         obj.key_hash = token.key_hash
+        obj.is_active = token.is_active
         obj.last_used_at = token.last_used_at
         obj.created_at = token.created_at
-
 

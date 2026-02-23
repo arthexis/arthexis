@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
 
@@ -40,6 +41,16 @@ class RemoteAction(Ownable):
         ordering = ("display",)
         verbose_name = _("Remote Action")
         verbose_name_plural = _("Remote Actions")
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(user__isnull=True, group__isnull=True)
+                    | models.Q(user__isnull=False, group__isnull=True)
+                    | models.Q(user__isnull=True, group__isnull=False)
+                ),
+                name="actions_remoteaction_owner_exclusive",
+            )
+        ]
 
     def __str__(self) -> str:
         """Return the human-readable action name."""
@@ -78,9 +89,10 @@ class RemoteActionToken(models.Model):
 
     @classmethod
     def _build_hash(cls, raw_key: str) -> str:
-        """Return a deterministic SHA-256 hash for a raw token key."""
+        """Return a deterministic HMAC-SHA256 hash for a raw token key."""
 
-        return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        secret = settings.SECRET_KEY.encode("utf-8") if isinstance(settings.SECRET_KEY, str) else settings.SECRET_KEY
+        return hmac.new(secret, raw_key.encode("utf-8"), hashlib.sha256).hexdigest()
 
     @classmethod
     def issue_for_user(
@@ -129,7 +141,7 @@ class RemoteActionToken(models.Model):
         if token.is_expired:
             raise ValueError("Token has expired.")
 
-        now = timezone.localtime()
+        now = timezone.now()
         if token.last_used_at is None or (now - token.last_used_at) > timezone.timedelta(minutes=1):
             token.last_used_at = now
             token.save(update_fields=["last_used_at"])

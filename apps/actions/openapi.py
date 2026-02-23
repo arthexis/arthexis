@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import re
 
 from django.core.exceptions import DisallowedHost
 from django.http import HttpRequest
@@ -18,6 +19,14 @@ def _queryset_for_user(user):
     return RemoteAction.objects.filter(is_active=True).filter(user=user) | RemoteAction.objects.filter(
         is_active=True, group_id__in=group_ids
     )
+
+
+def _safe_operation_id(raw_value: str) -> str:
+    """Return a safe OpenAPI operationId containing only allowed characters."""
+
+    cleaned = strip_tags(raw_value or "")
+    normalized = re.sub(r"[^a-zA-Z0-9._-]", "_", cleaned).strip("_")
+    return normalized or "invokeRemoteAction"
 
 
 def _server_url_for_request(request: HttpRequest | None) -> str:
@@ -52,7 +61,7 @@ def build_openapi_spec(
         path_key = f"/actions/api/v1/remote/{action.slug}/"
         paths[path_key] = {
             "post": {
-                "operationId": action.operation_id,
+                "operationId": _safe_operation_id(action.operation_id),
                 "summary": strip_tags(action.display),
                 "description": strip_tags(action.description)
                 or f"Invoke the `{strip_tags(action.display)}` remote action.",

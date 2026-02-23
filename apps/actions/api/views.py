@@ -38,7 +38,6 @@ def _resolve_bearer_token(request: HttpRequest):
     return token, None
 
 
-@csrf_exempt
 @require_GET
 def security_groups(request: HttpRequest) -> JsonResponse:
     """List security groups for the authenticated token user."""
@@ -84,7 +83,7 @@ def invoke_action(request: HttpRequest, slug: str) -> JsonResponse:
 
     try:
         execution = action.recipe.execute(*args, **kwargs)
-    except RuntimeError as exc:
+    except Exception as exc:
         return JsonResponse({"detail": str(exc)}, status=400)
 
     return JsonResponse({"action": action.slug, "result": execution.result})
