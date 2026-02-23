@@ -9,9 +9,17 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, Q
+from django.utils import timezone as django_timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.video.frame_cache import frame_cache_url, get_frame, get_frame_cache, get_status
+from apps.video.frame_cache import (
+    CachedFrame,
+    frame_cache_url,
+    get_frame,
+    get_frame_cache,
+    get_status,
+)
 from apps.video.models import MjpegStream, VideoDevice
 from apps.video.utils import WORK_DIR, has_rpi_camera_stack
 
@@ -22,6 +30,7 @@ class Command(BaseCommand):
     help = "List video devices and optionally capture a short sample video."
     _CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS = 3.0
     _CAMERA_SERVICE_FRAME_POLL_SECONDS = 0.05
+    _CAMERA_SERVICE_STATUS_STALE_SECONDS = 5.0
 
     def add_arguments(self, parser) -> None:
         """Register supported command-line arguments."""
@@ -545,15 +554,14 @@ class Command(BaseCommand):
             return False
 
         status_payload = get_status(stream) or {}
+        status_is_fresh = self._camera_service_status_is_fresh(status_payload)
         cached_frame = get_frame(stream)
-        service_is_active = bool(status_payload) or cached_frame is not None
+        service_is_active = status_is_fresh or cached_frame is not None
         if not service_is_active:
             return False
 
         if cached_frame is None:
-            raise CommandError(
-                f"Camera service is active for stream '{stream.slug}' but no cached frame is available."
-            )
+            return False
 
         first_path = frames_dir / "frame-001.jpg"
         first_path.write_bytes(cached_frame.frame_bytes)
@@ -563,12 +571,14 @@ class Command(BaseCommand):
             next_frame = self._wait_for_next_camera_service_frame(
                 stream=stream,
                 last_frame_id=last_frame_id,
+                last_frame_bytes=cached_frame.frame_bytes,
             )
             if next_frame is None:
                 raise CommandError(
                     f"Timed out waiting for a new cached frame while collecting samples for stream '{stream.slug}'."
                 )
             last_frame_id = next_frame.frame_id
+            cached_frame = next_frame
             target_path = frames_dir / f"frame-{index:03d}.jpg"
             target_path.write_bytes(next_frame.frame_bytes)
 
@@ -579,22 +589,48 @@ class Command(BaseCommand):
         )
         return True
 
-    def _wait_for_next_camera_service_frame(self, *, stream: MjpegStream, last_frame_id: int | None):
+    def _wait_for_next_camera_service_frame(
+        self,
+        *,
+        stream: MjpegStream,
+        last_frame_id: int | None,
+        last_frame_bytes: bytes | None,
+    ) -> CachedFrame | None:
         """Poll Redis until a newer cached frame arrives for ``stream``.
 
-        When ``last_frame_id`` is unknown, the first non-empty frame is accepted.
+        When ``last_frame_id`` is unknown, compare frame bytes to avoid duplicates.
         """
 
         deadline = time.monotonic() + self._CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             cached = get_frame(stream)
             if cached and cached.frame_bytes:
-                if last_frame_id is None or cached.frame_id is None:
-                    return cached
-                if cached.frame_id != last_frame_id:
+                if cached.frame_id is not None and last_frame_id is not None:
+                    if cached.frame_id != last_frame_id:
+                        return cached
+                elif cached.frame_bytes != last_frame_bytes:
                     return cached
             time.sleep(self._CAMERA_SERVICE_FRAME_POLL_SECONDS)
         return None
+
+    def _camera_service_status_is_fresh(self, status_payload: dict[str, object]) -> bool:
+        """Return ``True`` when status metadata suggests the service is currently active."""
+
+        if not status_payload:
+            return False
+
+        updated_at_raw = status_payload.get("updated_at")
+        if not isinstance(updated_at_raw, str):
+            return False
+
+        updated_at = parse_datetime(updated_at_raw)
+        if updated_at is None:
+            return False
+        if django_timezone.is_naive(updated_at):
+            updated_at = django_timezone.make_aware(updated_at, timezone=timezone.utc)
+
+        age_seconds = (django_timezone.now() - updated_at).total_seconds()
+        return age_seconds <= self._CAMERA_SERVICE_STATUS_STALE_SECONDS
 
     def _get_video_paths(self) -> tuple[Path, Path]:
         timestamp = datetime.now(timezone.utc)

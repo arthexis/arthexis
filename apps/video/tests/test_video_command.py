@@ -394,3 +394,122 @@ def test_video_command_sample_errors_when_no_new_cached_frame(tmp_path, monkeypa
     with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
         with pytest.raises(CommandError, match="Timed out waiting for a new cached frame"):
             call_command("video", samples=2)
+
+
+@pytest.mark.django_db
+def test_video_command_sample_falls_back_when_status_is_stale(tmp_path, monkeypatch):
+    """Fall back to direct capture when camera-service status is stale and no frame exists."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+    device.mjpeg_streams.create(name="Lobby", slug="lobby-stale", is_active=True)
+
+    snapshot_path = tmp_path / "shot.jpg"
+    snapshot_path.write_text("frame")
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.frame_cache_url",
+        lambda: "redis://localhost:6379/0",
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.get_status",
+        lambda _stream: {"updated_at": "2000-01-01T00:00:00+00:00"},
+    )
+    monkeypatch.setattr("apps.video.management.commands.video.get_frame", lambda _stream: None)
+
+    direct_calls = {"count": 0}
+
+    def direct_capture(self):
+        direct_calls["count"] += 1
+        return snapshot_path
+
+    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", direct_capture, raising=False)
+
+    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
+        output_path.write_text("video")
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.Command._encode_video", fake_encode
+    )
+
+    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
+        call_command("video", samples=1)
+
+    assert direct_calls["count"] == 1
+
+
+@pytest.mark.django_db
+def test_video_command_sample_waits_for_new_bytes_when_frame_id_missing(tmp_path, monkeypatch):
+    """Wait for changed frame bytes when frame IDs are unavailable."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+    device.mjpeg_streams.create(name="Lobby", slug="lobby-no-id", is_active=True)
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.frame_cache_url",
+        lambda: "redis://localhost:6379/0",
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.get_status",
+        lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
+    )
+
+    frame_responses = iter(
+        [
+            SimpleNamespace(frame_bytes=b"frame-1", frame_id=None),
+            SimpleNamespace(frame_bytes=b"frame-1", frame_id=None),
+            SimpleNamespace(frame_bytes=b"frame-2", frame_id=None),
+        ]
+    )
+
+    def fake_get_frame(_stream):
+        return next(
+            frame_responses,
+            SimpleNamespace(frame_bytes=b"frame-2", frame_id=None),
+        )
+
+    monkeypatch.setattr("apps.video.management.commands.video.get_frame", fake_get_frame)
+
+    def fail_direct_capture(self):
+        raise AssertionError("direct camera capture should not be used")
+
+    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", fail_direct_capture, raising=False)
+
+    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
+        output_path.write_text("video")
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.Command._encode_video", fake_encode
+    )
+
+    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
+        call_command("video", samples=2)
