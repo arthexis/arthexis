@@ -51,3 +51,21 @@ def test_push_needed_compares_remote_head():
         ("git", "ls-remote", "--heads", "origin", "main"): _proc("def999\trefs/heads/main\n"),
     })
     assert push_needed(adapter, "origin", "main") is True
+
+
+def test_collect_dirty_files_uses_new_path_for_renames():
+    adapter = FakeGitAdapter({
+        ("git", "status", "--porcelain"): _proc("R  old_name.txt -> new_name.txt\n"),
+    })
+
+    dirty = collect_dirty_files(adapter)
+
+    assert dirty[0]["path"] == "new_name.txt"
+
+
+def test_working_tree_dirty_subprocess_error_returns_false():
+    class RaisingAdapter(GitProcessAdapter):
+        def run(self, args: Sequence[str], *, check: bool = True):
+            raise subprocess.SubprocessError("git unavailable")
+
+    assert working_tree_dirty(RaisingAdapter()) is False

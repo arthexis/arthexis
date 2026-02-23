@@ -64,6 +64,7 @@ from .git_ops import (
 from .github_ops import (
     ensure_github_release as gh_ensure_github_release,
     fetch_publish_workflow_run as gh_fetch_publish_workflow_run,
+    get_user_github_token as gh_get_user_github_token,
     parse_github_repository as gh_parse_github_repository,
     resolve_github_token as gh_resolve_github_token,
     upload_release_assets as gh_upload_release_assets,
@@ -77,6 +78,10 @@ def _resolve_github_token(
     release: PackageRelease, ctx: dict, *, user=None
 ) -> str | None:
     return gh_resolve_github_token(release, ctx, user=user)
+
+
+def _get_user_github_token(user) -> GitHubToken | None:
+    return gh_get_user_github_token(user)
 
 
 def _require_github_token(
