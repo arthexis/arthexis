@@ -86,6 +86,16 @@ class Migration(migrations.Migration):
                 "verbose_name": "Remote Action",
                 "verbose_name_plural": "Remote Actions",
                 "ordering": ("display",),
+                "constraints": [
+                    models.CheckConstraint(
+                        condition=(
+                            models.Q(user__isnull=True, group__isnull=True)
+                            | models.Q(user__isnull=False, group__isnull=True)
+                            | models.Q(user__isnull=True, group__isnull=False)
+                        ),
+                        name="actions_remoteaction_owner_exclusive",
+                    )
+                ],
             },
         ),
         migrations.CreateModel(
