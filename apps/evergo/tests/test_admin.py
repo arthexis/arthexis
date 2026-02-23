@@ -95,13 +95,9 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
 @patch("apps.evergo.models.EvergoUser.load_orders", return_value=(2, 3))
 def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, admin_client):
     """Ensure the changelist tool-style action can run without selected rows."""
-    user_model = get_user_model()
-    suite_user = user_model.objects.create_user(
-        username="suite-admin-tool",
-        email="suite-admin-tool@example.com",
-    )
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     EvergoUser.objects.create(
-        user=suite_user,
+        user=admin_user,
         evergo_email="suite-tool@evergo.example.com",
         evergo_password="secret",  # noqa: S106
     )
