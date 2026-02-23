@@ -558,6 +558,15 @@ def _announce_peer_startup(
 UserModel = get_user_model()
 
 
+# Backwards-compatibility access for legacy imports from this module path.
+def __getattr__(name: str):
+    if name in {"NetMessage", "PendingNetMessage"}:
+        from . import net_message
+
+        return getattr(net_message, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 class User(UserModel):
     class Meta:
         proxy = True
