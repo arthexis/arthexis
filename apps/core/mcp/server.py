@@ -7,6 +7,7 @@ Use ``apps.mcp.server`` instead.
 
 from apps.mcp.server import (
     AuthenticatedMcpKey,
+    ArthexisMCPServer,
     DjangoCommandMCPServer,
     McpAuthenticationError,
     McpAuthorizationError,
@@ -16,6 +17,7 @@ from apps.mcp.server import (
 
 __all__ = [
     "AuthenticatedMcpKey",
+    "ArthexisMCPServer",
     "DjangoCommandMCPServer",
     "McpAuthenticationError",
     "McpAuthorizationError",

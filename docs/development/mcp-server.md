@@ -1,6 +1,6 @@
-# MCP server for remote Django commands
+# MCP server for Arthexis operational tools
 
-The suite can expose selected Django management commands as MCP tools over stdio.
+The suite exposes selected in-process operations as MCP tools over stdio.
 
 ## Command ownership and compatibility
 
@@ -11,24 +11,7 @@ The canonical MCP CLI command implementations live in `apps/mcp/management/comma
 
 Legacy compatibility shims still exist in `apps.core.management.commands` and emit deprecation warnings. Update any direct Python imports to use the `apps.mcp` paths as the source of truth.
 
-## 1) Mark commands as remote
-
-Use `@remote_command` on a management command class:
-
-```python
-from apps.mcp.remote_commands import remote_command
-
-@remote_command(
-    description="Display suite uptime and lock status.",
-    security_groups=["ops"],  # Optional: omit to allow any valid key
-)
-class Command(BaseCommand):
-    ...
-```
-
-Only decorated commands are discoverable by the MCP server.
-
-## 2) Start the server
+## 1) Start the server
 
 ```bash
 python manage.py mcp_server
@@ -36,24 +19,31 @@ python manage.py mcp_server
 
 The command runs a JSON-RPC MCP loop on stdio.
 
-## 3) Configure exposed commands
+## 2) Configure exposed tools
 
 You can configure an allow/deny list from CLI flags:
 
 ```bash
-# Allow specific commands
-python manage.py mcp_server --allow uptime
+# Allow specific MCP tools
+python manage.py mcp_server --allow arthexis.graphql.query
 
-# Or deny specific commands from the full set
-python manage.py mcp_server --deny some-dangerous-command
+# Or deny specific tools from the full set
+python manage.py mcp_server --deny arthexis.auth.whoami
 ```
 
 Or from environment variables:
 
-- `ARTHEXIS_MCP_REMOTE_ALLOW`
-- `ARTHEXIS_MCP_REMOTE_DENY`
+- `ARTHEXIS_MCP_TOOLS_ALLOW`
+- `ARTHEXIS_MCP_TOOLS_DENY`
 
-Values are comma-separated Django command names.
+Values are comma-separated tool names.
+
+## 3) Available built-in tools
+
+- `arthexis.graphql.query`:
+  Executes GraphQL operations inside Django with the authenticated user as the GraphQL context.
+- `arthexis.auth.whoami`:
+  Returns identity and group details for the authenticated MCP API key owner.
 
 ## 4) External agent configuration
 
@@ -64,20 +54,13 @@ Register the process in your MCP client/agent host so it launches:
   "mcpServers": {
     "arthexis": {
       "command": "python",
-      "args": ["manage.py", "mcp_server", "--allow", "uptime"]
+      "args": ["manage.py", "mcp_server", "--allow", "arthexis.graphql.query"]
     }
   }
 }
 ```
 
-The server exposes tools named:
-
-- `django.command.uptime`
-
-(and any other decorated command).
-
-
-## 5) API keys and command security groups
+## 5) API keys and security groups
 
 Every `tools/call` request must include an `api_key` argument. Generate per-user keys with:
 
@@ -85,9 +68,7 @@ Every `tools/call` request must include an `api_key` argument. Generate per-user
 python manage.py create_mcp_api_key --username <username> --label "agent"
 ```
 
-Default behavior: decorated commands are callable by any user who presents a valid, non-expired key.
-
-To restrict a command to specific security groups, pass `security_groups` to `@remote_command`. A user only needs membership in one listed group.
+Tool access requires a valid, non-expired key. Some tools may also require membership in one of the tool's configured security groups.
 
 Key defaults:
 
