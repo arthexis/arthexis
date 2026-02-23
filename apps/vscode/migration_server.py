@@ -14,7 +14,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable, Mapping
 
 
 def _windows_process_group_kwargs() -> dict[str, int]:
@@ -103,6 +103,7 @@ LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
 REQUIREMENTS_HASH_FILE = Path(".locks") / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
+DEBUGGER_INTERRUPT_RETRY_LIMIT = 1
 
 def notify_async(subject: str, body: str = "") -> None:
     """No-op notifier for optional VS Code migration-server notifications."""
@@ -610,6 +611,16 @@ def request_runserver_restart(lock_dir: Path) -> None:
     print("[Migration Server] Signalled VS Code run/debug tasks to restart.")
 
 
+def _is_debugger_session(env: Mapping[str, str] | None = None) -> bool:
+    """Return ``True`` when the process appears to run under a debugger."""
+
+    resolved_env = os.environ if env is None else env
+    return bool(
+        resolved_env.get("DEBUGPY_LAUNCHER_PORT")
+        or resolved_env.get("PYDEVD_LOAD_VALUES_ASYNC")
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the migration server event loop."""
 
@@ -647,12 +658,15 @@ def main(argv: list[str] | None = None) -> int:
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
+    remaining_interrupt_retries = (
+        DEBUGGER_INTERRUPT_RETRY_LIMIT if _is_debugger_session() else 0
+    )
     with migration_server_state(LOCK_DIR):
-        try:
-            run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-            snapshot = collect_source_mtimes(BASE_DIR)
+        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+        snapshot = collect_source_mtimes(BASE_DIR)
 
-            while True:
+        while True:
+            try:
                 updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
                 if args.debounce > 0:
                     time.sleep(args.debounce)
@@ -677,13 +691,21 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"[Migration Server] Changes detected: {display}")
                 run_env_refresh_with_report(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
-        except KeyboardInterrupt:
-            print(
-                "[Migration Server] Stopped after receiving an interrupt signal. "
-                "If you did not press Ctrl+C, this likely came from your IDE/debugger "
-                "stopping or restarting the session."
-            )
-            return 0
+            except KeyboardInterrupt:
+                if remaining_interrupt_retries > 0:
+                    remaining_interrupt_retries -= 1
+                    print(
+                        "[Migration Server] Ignoring one transient interrupt from "
+                        "the IDE/debugger auto-restart handshake."
+                    )
+                    snapshot = collect_source_mtimes(BASE_DIR)
+                    continue
+                print(
+                    "[Migration Server] Stopped after receiving an interrupt signal. "
+                    "If you did not press Ctrl+C, this likely came from your IDE/debugger "
+                    "stopping or restarting the session."
+                )
+                return 0
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
