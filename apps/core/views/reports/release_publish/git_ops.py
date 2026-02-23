@@ -35,7 +35,7 @@ def working_tree_dirty(adapter: GitProcessAdapter) -> bool:
 
     try:
         proc = adapter.run(["git", "status", "--porcelain"], check=True)
-    except Exception:
+    except subprocess.SubprocessError:
         return False
     return bool((proc.stdout or "").strip())
 
@@ -70,6 +70,8 @@ def collect_dirty_files(adapter: GitProcessAdapter) -> list[dict[str, str]]:
         status_code = line[:2]
         status = status_code.strip() or status_code
         path = line[3:]
+        if "R" in status and " -> " in path:
+            path = path.split(" -> ", 1)[1]
         dirty.append(
             {
                 "path": path,
