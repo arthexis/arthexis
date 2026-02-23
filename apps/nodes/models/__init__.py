@@ -7,7 +7,8 @@ from .features import (
     NodeFeatureManager,
     NodeFeatureMixin,
 )
-from .core.node import NetMessage, Node, PendingNetMessage, User, node_information_updated
+from .core.net_message import NetMessage, PendingNetMessage
+from .core.node import Node, User, node_information_updated
 from .core.platform import Platform
 from .core.role import NodeRole, NodeRoleManager, get_terminal_role
 from .core.utils import ROLE_RENAMES, _format_upgrade_body, _upgrade_in_progress
