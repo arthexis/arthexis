@@ -44,7 +44,10 @@ class SubprocessGitAdapter:
     ) -> subprocess.CompletedProcess:
         cmd_timeout = timeout
         if cmd_timeout is None:
-            cmd_timeout = float(os.environ.get("GIT_CMD_TIMEOUT", "120"))
+            try:
+                cmd_timeout = float(os.environ.get("GIT_CMD_TIMEOUT", "120"))
+            except (TypeError, ValueError):
+                cmd_timeout = 120.0
         return subprocess.run(
             args,
             check=check,
