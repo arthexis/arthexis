@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Callable
 
+from graphql import parse
+from graphql.language import FragmentSpreadNode, InlineFragmentNode, OperationDefinitionNode
+
 from apps.graphql.schema import schema
 
 
@@ -23,6 +26,58 @@ class McpToolDefinition:
     input_schema: dict[str, Any]
     handler: Callable[..., dict[str, Any]]
     security_groups: frozenset[str] = frozenset()
+
+
+MAX_GRAPHQL_QUERY_LENGTH = 20_000
+MAX_GRAPHQL_DEPTH = 12
+
+
+def _max_selection_depth(selection_set, fragment_depths: dict[str, int]) -> int:
+    if selection_set is None:
+        return 0
+
+    max_depth = 0
+    for selection in selection_set.selections:
+        nested_depth = 0
+
+        if isinstance(selection, FragmentSpreadNode):
+            nested_depth = fragment_depths.get(selection.name.value, 0)
+        elif isinstance(selection, InlineFragmentNode):
+            nested_depth = _max_selection_depth(selection.selection_set, fragment_depths)
+        elif getattr(selection, "selection_set", None) is not None:
+            nested_depth = _max_selection_depth(selection.selection_set, fragment_depths)
+
+        max_depth = max(max_depth, 1 + nested_depth)
+
+    return max_depth
+
+
+def _max_graphql_depth(query: str) -> int:
+    document = parse(query)
+
+    fragment_definitions = {
+        definition.name.value: definition
+        for definition in document.definitions
+        if definition.kind == "fragment_definition"
+    }
+
+    fragment_depths = {name: 0 for name in fragment_definitions}
+    for _ in range(len(fragment_definitions)):
+        changed = False
+        for name, definition in fragment_definitions.items():
+            depth = _max_selection_depth(definition.selection_set, fragment_depths)
+            if depth != fragment_depths[name]:
+                fragment_depths[name] = depth
+                changed = True
+        if not changed:
+            break
+
+    operation_depths = [
+        _max_selection_depth(definition.selection_set, fragment_depths)
+        for definition in document.definitions
+        if isinstance(definition, OperationDefinitionNode)
+    ]
+    return max(operation_depths, default=0)
 
 
 def _execute_graphql_query(
@@ -49,7 +104,21 @@ def graphql_query_tool(*, arguments: dict[str, Any], user) -> dict[str, Any]:
 
     query = arguments.get("query")
     if not isinstance(query, str) or not query.strip():
-        raise McpToolError("The 'query' field must be a non-empty string.")
+        raise McpToolError("The 'query' field must be a non-empty string when provided.")
+
+    query = query.strip()
+    if len(query) > MAX_GRAPHQL_QUERY_LENGTH:
+        raise McpToolError("The GraphQL query exceeds the maximum allowed length.")
+
+    try:
+        query_depth = _max_graphql_depth(query)
+    except Exception as exc:  # GraphQL parser exceptions are surfaced as tool input errors.
+        raise McpToolError(f"Invalid GraphQL query: {exc}") from exc
+
+    if query_depth > MAX_GRAPHQL_DEPTH:
+        raise McpToolError(
+            f"The GraphQL query depth exceeds the limit of {MAX_GRAPHQL_DEPTH}."
+        )
 
     variables = arguments.get("variables", {})
     if variables is None:
@@ -62,7 +131,7 @@ def graphql_query_tool(*, arguments: dict[str, Any], user) -> dict[str, Any]:
         raise McpToolError("The 'operation_name' field must be a string when provided.")
 
     return _execute_graphql_query(
-        query=query.strip(),
+        query=query,
         variables=variables,
         operation_name=operation_name,
         user=user,

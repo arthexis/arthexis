@@ -11,7 +11,7 @@ from apps.mcp.server import run_stdio_server
 
 
 def _parse_csv_names(raw_value: str | None) -> set[str]:
-    """Parse a comma-separated list into normalized non-empty names."""
+    """Parse a comma-separated list into normalized non-empty tool names."""
 
     if not raw_value:
         return set()

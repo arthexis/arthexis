@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any
@@ -93,10 +94,11 @@ class ArthexisMCPServer:
         api_key = self._extract_api_key(arguments)
         authenticated_key = self._authenticate(api_key)
         self._assert_tool_group_access(tool=tool, authenticated_key=authenticated_key)
+        handler_arguments = {key: value for key, value in arguments.items() if key != "api_key"}
 
         try:
-            tool_result = tool.handler(arguments=arguments, user=authenticated_key.user)
-        except (TypeError, ValueError) as exc:
+            tool_result = tool.handler(arguments=handler_arguments, user=authenticated_key.user)
+        except (TypeError, ValueError, McpToolError) as exc:
             return {
                 "content": [{"type": "text", "text": f"Invalid tool arguments: {exc}"}],
                 "isError": True,
@@ -168,6 +170,8 @@ class ArthexisMCPServer:
 # Backward compatible alias for import stability.
 DjangoCommandMCPServer = ArthexisMCPServer
 
+MAX_STDIN_LINE_BYTES = 1024 * 1024
+
 
 def run_stdio_server(*, allow: set[str] | None = None, deny: set[str] | None = None) -> None:
     """Run the MCP server on stdio until EOF."""
@@ -176,10 +180,20 @@ def run_stdio_server(*, allow: set[str] | None = None, deny: set[str] | None = N
 
     while True:
         payload: Any = None
-        try:
-            raw = input()
-        except EOFError:
+        raw_bytes = sys.stdin.buffer.readline(MAX_STDIN_LINE_BYTES + 1)
+        if raw_bytes == b"":
             break
+
+        if len(raw_bytes) > MAX_STDIN_LINE_BYTES and not raw_bytes.endswith(b"\n"):
+            response = {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32700, "message": "Parse error"},
+            }
+            print(json.dumps(response), flush=True)
+            continue
+
+        raw = raw_bytes.decode("utf-8", errors="replace").strip()
 
         if not raw:
             continue
@@ -203,7 +217,7 @@ def run_stdio_server(*, allow: set[str] | None = None, deny: set[str] | None = N
                 "error": {"code": -32600, "message": str(exc)},
             }
         except McpAuthenticationError as exc:
-            logger.exception("MCP request failed during API-key authentication.")
+            logger.warning("MCP authentication failed: %s", exc)
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
@@ -211,7 +225,7 @@ def run_stdio_server(*, allow: set[str] | None = None, deny: set[str] | None = N
                 "error": {"code": -32000, "message": str(exc)},
             }
         except McpAuthorizationError as exc:
-            logger.exception("MCP request failed due to authorization error.")
+            logger.warning("MCP authorization denied: %s", exc)
             request_id = payload.get("id") if isinstance(payload, dict) else None
             response = {
                 "jsonrpc": "2.0",
@@ -225,6 +239,14 @@ def run_stdio_server(*, allow: set[str] | None = None, deny: set[str] | None = N
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "error": {"code": -32002, "message": str(exc)},
+            }
+        except Exception:
+            logger.exception("MCP request failed due to unexpected error.")
+            request_id = payload.get("id") if isinstance(payload, dict) else None
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {"code": -32603, "message": "Internal error"},
             }
 
         print(json.dumps(response), flush=True)
