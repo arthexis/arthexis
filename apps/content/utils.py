@@ -13,6 +13,7 @@ from django.conf import settings
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .models import ContentSample
+from apps.selenium.playwright import normalize_playwright_cookies
 
 logger = logging.getLogger(__name__)
 
@@ -115,22 +116,15 @@ def capture_screenshot(
             page = context.new_page()
             SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
             filename = SCREENSHOT_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.png"
+            if cookies:
+                normalized = normalize_playwright_cookies(cookies)
+                if normalized:
+                    context.add_cookies(normalized)
             try:
                 page.goto(url, wait_until="networkidle")
             except PlaywrightError as exc:
                 logger.error("Failed to load %s: %s", url, exc)
-            if cookies:
-                normalized = []
-                for cookie in cookies:
-                    payload = dict(cookie)
-                    if "url" not in payload:
-                        domain = payload.get("domain", "localhost")
-                        scheme = "https" if payload.get("secure") else "http"
-                        payload["url"] = f"{scheme}://{domain.lstrip('.')}"
-                    normalized.append(payload)
-                if normalized:
-                    context.add_cookies(normalized)
-                    page.goto(url, wait_until="networkidle")
+                raise
             page.screenshot(path=str(filename), full_page=True)
             context.close()
             browser.close()

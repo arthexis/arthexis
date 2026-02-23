@@ -85,10 +85,10 @@ def _admin_site_script() -> str:
         browser.set_window_size(1280, 720)
         browser.get(admin_url)
 
-        browser.page.fill("input[name='username']", "admin")
-        browser.page.fill("input[name='password']", "admin")
-        browser.page.locator("form input[type='submit']").click()
-        browser.page.wait_for_load_state("networkidle")
+        browser.fill("input[name='username']", resolve("[NODE.admin_user]", default="admin"))
+        browser.fill("input[name='password']", resolve("[NODE.admin_pass]", default="admin"))
+        browser.click("form input[type='submit']")
+        browser.wait_for_load_state("networkidle")
 
         timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
         filename = (
@@ -117,8 +117,13 @@ def forwards(apps, schema_editor):
 
     SeleniumBrowser.objects.filter(engine="firefox").update(engine="chromium")
     for browser in SeleniumBrowser.objects.filter(name__icontains="Firefox"):
-        browser.name = browser.name.replace("Firefox", "Chromium")
-        browser.save(update_fields=["name"])
+        renamed = browser.name.replace("Firefox", "Chromium")
+        if (
+            renamed != browser.name
+            and not SeleniumBrowser.objects.filter(name=renamed).exclude(pk=browser.pk).exists()
+        ):
+            browser.name = renamed
+            browser.save(update_fields=["name"])
 
     SeleniumScript.objects.update_or_create(
         name="Public Site Test",
@@ -138,11 +143,90 @@ def forwards(apps, schema_editor):
 
 def backwards(apps, schema_editor):
     SeleniumBrowser = apps.get_model("selenium", "SeleniumBrowser")
+    SeleniumScript = apps.get_model("selenium", "SeleniumScript")
 
     SeleniumBrowser.objects.filter(engine="chromium").update(engine="firefox")
     for browser in SeleniumBrowser.objects.filter(name__icontains="Chromium"):
-        browser.name = browser.name.replace("Chromium", "Firefox")
-        browser.save(update_fields=["name"])
+        renamed = browser.name.replace("Chromium", "Firefox")
+        if (
+            renamed != browser.name
+            and not SeleniumBrowser.objects.filter(name=renamed).exclude(pk=browser.pk).exists()
+        ):
+            browser.name = renamed
+            browser.save(update_fields=["name"])
+
+    SeleniumScript.objects.filter(name="Public Site Test").update(
+        description="Capture a screenshot of the node's public site and store it as content.",
+        script=_public_site_script().replace("PLAYWRIGHT:", "SELENIUM:"),
+    )
+    SeleniumScript.objects.filter(name="Admin Site Test").update(
+        description="Login to the admin with default credentials and store a screenshot.",
+        script=textwrap.dedent(
+            """
+            from apps.sigils import resolve
+
+            host = resolve("[NODE.get_primary_contact]", default="localhost")
+            port = resolve("[NODE.port]", default="8888")
+
+            def build_base_url(host: str, port: str) -> str:
+                if host.startswith(("http://", "https://")):
+                    return host
+                if port:
+                    return f"http://{host}:{port}"
+                return f"http://{host}"
+
+            base_url = build_base_url(host, port).rstrip("/")
+            admin_url = f"{base_url}/admin/"
+
+            from pathlib import Path
+            from uuid import uuid4
+
+            from django.conf import settings
+            from django.utils import timezone
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.support.ui import WebDriverWait
+
+            from apps.nodes.models import Node
+            from apps.content.utils import save_screenshot
+
+            browser.set_window_size(1280, 720)
+            browser.get(admin_url)
+
+            wait = WebDriverWait(browser, 10)
+            username_input = wait.until(EC.presence_of_element_located((By.NAME, "username")))
+            password_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+
+            username_input.clear()
+            username_input.send_keys(resolve("[NODE.admin_user]", default="admin"))
+            password_input.clear()
+            password_input.send_keys(resolve("[NODE.admin_pass]", default="admin"))
+
+            submit = browser.find_element(By.CSS_SELECTOR, "form input[type='submit']")
+            submit.click()
+
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+            timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+            filename = (
+                Path(settings.LOG_DIR)
+                / "screenshots"
+                / f"admin-site-{timestamp}-{uuid4().hex}.png"
+            )
+            filename.parent.mkdir(parents=True, exist_ok=True)
+
+            browser.save_screenshot(str(filename))
+
+            node = Node.objects.filter(pk="[NODE.pk]").first()
+            save_screenshot(
+                filename,
+                node=node,
+                method="SELENIUM:Admin Site Test",
+                link_duplicates=True,
+            )
+            """
+        ).strip(),
+    )
 
 
 class Migration(migrations.Migration):

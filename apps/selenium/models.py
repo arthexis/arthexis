@@ -14,6 +14,7 @@ from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwrigh
 
 from apps.core.entity import Entity, EntityManager
 from apps.sigils.sigil_resolver import resolve_sigils
+from apps.selenium.playwright import normalize_playwright_cookie
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +45,22 @@ class PlaywrightDriver:
     def add_cookie(self, cookie: dict) -> None:
         """Add one cookie mapping in the format expected by Selenium-like callers."""
 
-        payload = dict(cookie)
-        if "url" not in payload:
-            domain = payload.get("domain", "localhost")
-            scheme = "https" if payload.get("secure") else "http"
-            payload["url"] = f"{scheme}://{domain.lstrip('.')}"
-        self.context.add_cookies([payload])
+        self.context.add_cookies([normalize_playwright_cookie(cookie)])
+
+    def fill(self, selector: str, value: str) -> None:
+        """Fill ``selector`` with ``value`` on the active page."""
+
+        self.page.fill(selector, value)
+
+    def click(self, selector: str) -> None:
+        """Click ``selector`` on the active page."""
+
+        self.page.locator(selector).click()
+
+    def wait_for_load_state(self, state: str = "load") -> None:
+        """Wait for the active page to reach the target load ``state``."""
+
+        self.page.wait_for_load_state(state)
 
     def save_screenshot(self, path: str) -> bool:
         """Capture a page screenshot to ``path`` and return ``True`` when saved."""
@@ -154,9 +165,23 @@ class SeleniumBrowser(Entity):
         if self.binary_path:
             launch_kwargs["executable_path"] = self.binary_path
 
-        browser = launcher.launch(**launch_kwargs)
-        context = browser.new_context(viewport={"width": 1280, "height": 720})
-        page = context.new_page()
+        browser = None
+        context = None
+        try:
+            browser = launcher.launch(**launch_kwargs)
+            context = browser.new_context(viewport={"width": 1280, "height": 720})
+            page = context.new_page()
+        except Exception:
+            if context is not None:
+                with contextlib.suppress(Exception):
+                    context.close()
+            if browser is not None:
+                with contextlib.suppress(Exception):
+                    browser.close()
+            with contextlib.suppress(Exception):
+                playwright.stop()
+            raise
+
         return PlaywrightDriver(
             playwright=playwright,
             browser=browser,
