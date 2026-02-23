@@ -29,13 +29,15 @@ class EvergoLoadCustomersForm(forms.Form):
     def __init__(self, *args, request_user=None, **kwargs):
         """Optionally preselect an Evergo profile owned by the current request user."""
         super().__init__(*args, **kwargs)
-        if self.is_bound or request_user is None or not request_user.is_authenticated:
+        if request_user is None or not request_user.is_authenticated:
             return
 
-        owned_profile = (
-            EvergoUser.objects.filter(user=request_user)
-            .order_by("evergo_email", "id")
-            .first()
-        )
+        owned_profiles = EvergoUser.objects.filter(user=request_user).order_by("evergo_email", "id")
+        self.fields["profile"].queryset = owned_profiles
+
+        if self.is_bound:
+            return
+
+        owned_profile = owned_profiles.first()
         if owned_profile:
             self.fields["profile"].initial = owned_profile.pk
