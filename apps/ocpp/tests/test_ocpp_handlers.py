@@ -44,11 +44,6 @@ from apps.maps.models import Location
 from django.utils.dateparse import parse_datetime
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
 @pytest.fixture(autouse=True)
 def reset_store(monkeypatch, tmp_path):
     store.logs["charger"].clear()
@@ -90,11 +85,6 @@ def reset_store(monkeypatch, tmp_path):
     store.transaction_events.clear()
     store.monitoring_reports.clear()
     store.charging_profile_reports.clear()
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
 
 
 def _reset_pending_calls() -> None:

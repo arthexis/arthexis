@@ -160,6 +160,15 @@ def pop_pending_call(message_id: str) -> dict[str, object] | None:
     return metadata
 
 
+
+def has_pending_result(message_id: str) -> bool:
+    """Return whether a pending call result exists for ``message_id``."""
+
+    with _pending_call_lock:
+        if message_id in _pending_call_results:
+            return True
+    return _load_pending_result_redis(message_id) is not None
+
 def record_pending_call_result(
     message_id: str,
     *,
@@ -420,6 +429,7 @@ __all__ = [
     "pop_monitoring_report_request",
     "pop_pending_call",
     "record_pending_call_result",
+    "has_pending_result",
     "register_monitoring_report_request",
     "register_pending_call",
     "register_triggered_followup",

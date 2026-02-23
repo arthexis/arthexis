@@ -27,11 +27,6 @@ from apps.ocpp.models import (
 )
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.slow

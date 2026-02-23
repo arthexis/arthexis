@@ -51,10 +51,12 @@ async def handle_clear_charging_profile_error(
 ) -> bool:
     """Handle ClearChargingProfile errors and persist profile status."""
     parts: list[str] = []
-    if error_code:
-        parts.append(f"code={error_code}")
-    if description:
-        parts.append(f"description={description}")
+    code_text = (error_code or "").strip()
+    description_text = (description or "").strip()
+    if code_text:
+        parts.append(f"code={code_text}")
+    if description_text:
+        parts.append(f"description={description_text}")
     message = "ClearChargingProfile error"
     if parts:
         message += ": " + ", ".join(parts)

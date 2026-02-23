@@ -11,7 +11,8 @@ from .common import _json_details
 from .types import CallErrorContext
 
 
-async def handle_reserve_now_error(
+async def _handle_reservation_error(
+    label: str,
     consumer: CallErrorContext,
     message_id: str,
     metadata: dict,
@@ -20,18 +21,17 @@ async def handle_reserve_now_error(
     details: dict | None,
     log_key: str,
 ) -> bool:
-    """Handle ReserveNow call errors."""
     parts: list[str] = []
-    code_text = (error_code or "").strip() if error_code else ""
+    code_text = (error_code or "").strip()
     if code_text:
         parts.append(f"code={code_text}")
-    description_text = (description or "").strip() if description else ""
+    description_text = (description or "").strip()
     if description_text:
         parts.append(f"description={description_text}")
     details_text = _json_details(details)
     if details_text:
         parts.append(f"details={details_text}")
-    message = "ReserveNow error"
+    message = f"{label} error"
     if parts:
         message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
@@ -69,6 +69,28 @@ async def handle_reserve_now_error(
         error_details=details,
     )
     return True
+
+
+async def handle_reserve_now_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    """Handle ReserveNow call errors."""
+    return await _handle_reservation_error(
+        "ReserveNow",
+        consumer,
+        message_id,
+        metadata,
+        error_code,
+        description,
+        details,
+        log_key,
+    )
 
 
 async def handle_cancel_reservation_error(
@@ -81,51 +103,13 @@ async def handle_cancel_reservation_error(
     log_key: str,
 ) -> bool:
     """Handle CancelReservation call errors."""
-    parts: list[str] = []
-    code_text = (error_code or "").strip() if error_code else ""
-    if code_text:
-        parts.append(f"code={code_text}")
-    description_text = (description or "").strip() if description else ""
-    if description_text:
-        parts.append(f"description={description_text}")
-    details_text = _json_details(details)
-    if details_text:
-        parts.append(f"details={details_text}")
-    message = "CancelReservation error"
-    if parts:
-        message += ": " + ", ".join(parts)
-    store.add_log(log_key, message, log_type="charger")
-
-    reservation_pk = metadata.get("reservation_pk")
-
-    def _apply() -> None:
-        if not reservation_pk:
-            return
-        reservation = CPReservation.objects.filter(pk=reservation_pk).first()
-        if not reservation:
-            return
-        summary_parts = [p for p in (code_text, description_text, details_text) if p]
-        reservation.evcs_status = ""
-        reservation.evcs_error = "; ".join(summary_parts)
-        reservation.evcs_confirmed = False
-        reservation.evcs_confirmed_at = None
-        reservation.save(
-            update_fields=[
-                "evcs_status",
-                "evcs_error",
-                "evcs_confirmed",
-                "evcs_confirmed_at",
-                "updated_on",
-            ]
-        )
-
-    await database_sync_to_async(_apply)()
-    store.record_pending_call_result(
+    return await _handle_reservation_error(
+        "CancelReservation",
+        consumer,
         message_id,
-        metadata=metadata,
-        success=False,
-        error_code=error_code,
-        error_description=description,
-        error_details=details,
+        metadata,
+        error_code,
+        description,
+        details,
+        log_key,
     )
-    return True
