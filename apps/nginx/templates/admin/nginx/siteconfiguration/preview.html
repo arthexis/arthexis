@@ -2,6 +2,35 @@
 {% load i18n %}
 
 {% block content %}
+  <style>
+    .nginx-preview-actions .form-row {
+      margin-bottom: 1rem;
+    }
+
+    .nginx-preview-actions .form-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .nginx-preview-actions label {
+      display: inline-block;
+      min-width: 12rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+      vertical-align: top;
+    }
+
+    .nginx-preview-actions .help {
+      margin: 0.5rem 0 0;
+    }
+
+    .nginx-preview-actions select,
+    .nginx-preview-actions textarea,
+    .nginx-preview-actions input[type="text"] {
+      min-width: 20rem;
+      max-width: 100%;
+    }
+  </style>
+
   <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
     &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
@@ -25,17 +54,17 @@
     {% endif %}
 
     {% if can_apply %}
-      <form method="post" class="submit-row">
+      <form method="post" class="submit-row nginx-preview-actions">
         {% csrf_token %}
         <input type="hidden" name="ids" value="{{ ids_param }}" />
         <input type="submit" value="{% trans 'Apply configurations' %}" class="default" />
         <p class="help">{% trans 'Apply the selected configurations and reload nginx.' %}</p>
       </form>
 
-      <form method="post" class="submit-row">
+      <form method="post" class="submit-row nginx-preview-actions">
         {% csrf_token %}
         <input type="hidden" name="ids" value="{{ ids_param }}" />
-        <div class="field-box">
+        <div class="form-row">
           {{ subdomain_form.managed_subdomains.label_tag }}
           {{ subdomain_form.managed_subdomains }}
           {% if subdomain_form.managed_subdomains.errors %}
@@ -49,15 +78,17 @@
         <p class="help">{{ subdomain_form.managed_subdomains.help_text }}</p>
       </form>
 
-      <form method="post" class="submit-row" action="{{ generate_certificates_url }}">
+      <form method="post" class="submit-row nginx-preview-actions" action="{{ generate_certificates_url }}">
         {% csrf_token %}
         <input type="hidden" name="ids" value="{{ ids_param }}" />
-        <label for="certificate_type">{% trans "Certificate type" %}</label>
-        <select name="certificate_type" id="certificate_type">
-          {% for value, label in certificate_type_choices %}
-            <option value="{{ value }}"{% if value == default_certificate_type %} selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
+        <div class="form-row">
+          <label for="certificate_type">{% trans "Certificate type" %}</label>
+          <select name="certificate_type" id="certificate_type">
+            {% for value, label in certificate_type_choices %}
+              <option value="{{ value }}"{% if value == default_certificate_type %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <input type="submit" value="{% trans 'Generate certificates' %}" />
         <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS (Self-signed, Certbot HTTP-01, or GoDaddy DNS-01).' %}</p>
       </form>
