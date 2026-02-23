@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import ssl
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -87,6 +88,26 @@ class Forwarder:
         return iter(urls)
 
     @staticmethod
+    def _connection_options(node, url: str) -> dict[str, object]:
+        """Return websocket-client connection options for ``url`` and ``node``.
+
+        Trusted nodes are already authenticated in the Arthexis node graph, so
+        forwarding sessions to them may skip certificate verification to support
+        private PKI or self-signed deployments.
+        """
+
+        if not url.startswith("wss://"):
+            return {}
+        if not getattr(node, "trusted", False):
+            return {}
+        return {
+            "sslopt": {
+                "cert_reqs": ssl.CERT_NONE,
+                "check_hostname": False,
+            }
+        }
+
+    @staticmethod
     def _close_forwarding_session(session: ForwardingSession) -> None:
         """Close the websocket connection associated with ``session`` if open."""
 
@@ -160,6 +181,7 @@ class Forwarder:
                     url,
                     timeout=timeout,
                     subprotocols=["ocpp1.6"],
+                    **self._connection_options(target_node, url),
                 )
             except (WebSocketException, OSError, ValueError) as exc:
                 logger.warning(
