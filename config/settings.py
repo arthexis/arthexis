@@ -443,6 +443,7 @@ LOCAL_APPS = [
     "apps.energy",
     "apps.groups",
     "apps.core",
+    "apps.graphql",
     "apps.mcp",
     "apps.users",
     "apps.leads",

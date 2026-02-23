@@ -5,7 +5,7 @@
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
-<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}">
+<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}" data-graphql-chart-url="{{ graphql_chart_url }}" data-graphql-chart-cid="{{ graphql_chart_cid }}"{% if graphql_chart_connector %} data-graphql-chart-connector="{{ graphql_chart_connector }}"{% endif %}{% if graphql_chart_session %} data-graphql-chart-session="{{ graphql_chart_session }}"{% endif %}>
   {% if show_connector_tabs and connector_links %}
   <div class="mb-3">
     <div class="nav nav-pills flex-wrap gap-2">
@@ -528,6 +528,58 @@
     }
   }
 
+  function fetchGraphqlChartPayload(root) {
+    if (!root) {
+      return Promise.resolve(null);
+    }
+    const endpoint = root.getAttribute('data-graphql-chart-url');
+    const cid = root.getAttribute('data-graphql-chart-cid');
+    if (!endpoint || !cid) {
+      return Promise.resolve(null);
+    }
+    const connector = root.getAttribute('data-graphql-chart-connector');
+    const session = root.getAttribute('data-graphql-chart-session');
+    const args = [`cid: "${cid.replace(/"/g, '\\"')}"`];
+    if (connector) {
+      args.push(`connector: "${connector.replace(/"/g, '\\"')}"`);
+    }
+    if (session) {
+      args.push(`sessionId: "${session.replace(/"/g, '\\"')}"`);
+    }
+    const query = `query { chargerChart(${args.join(', ')}) { labels datasets { label connectorId values } } }`;
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({ query })
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          return null;
+        }
+        return resp.json();
+      })
+      .then((payload) => {
+        if (!payload || payload.errors || !payload.data || !payload.data.chargerChart) {
+          return null;
+        }
+        const chart = payload.data.chargerChart;
+        return {
+          labels: Array.isArray(chart.labels) ? chart.labels : [],
+          datasets: Array.isArray(chart.datasets)
+            ? chart.datasets.map((dataset) => ({
+                label: dataset.label,
+                connector_id: dataset.connectorId,
+                values: dataset.values
+              }))
+            : []
+        };
+      })
+      .catch(() => null);
+  }
+
   function applyChartPayload(payload) {
     if (!payload) {
       return false;
@@ -663,7 +715,7 @@
               changedIds.push(el.id);
             }
           });
-          const payload = parseChartPayload(newContent);
+          const htmlPayload = parseChartPayload(newContent);
           const newAnimateAttr = newContent.getAttribute('data-chart-animate');
           if (newAnimateAttr === null) {
             current.removeAttribute('data-chart-animate');
@@ -691,10 +743,13 @@
               placeholder.replaceWith(oldCanvas);
             }
           }
-          const chartChanged = applyChartPayload(payload);
-          if (kwChart || (payload && chartData.datasets.length)) {
-            renderChart(chartChanged);
-          }
+          fetchGraphqlChartPayload(current).then((graphqlPayload) => {
+            const payload = graphqlPayload || htmlPayload;
+            const chartChanged = applyChartPayload(payload);
+            if (kwChart || (payload && chartData.datasets.length)) {
+              renderChart(chartChanged);
+            }
+          });
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
             if (el) {
@@ -711,9 +766,12 @@
       const animateAttr = statusRoot.getAttribute('data-chart-animate');
       chartShouldAnimate = animateAttr === 'true';
     }
-    const payload = parseChartPayload(document);
-    const chartChanged = applyChartPayload(payload);
-    renderChart(chartChanged);
+    const htmlPayload = parseChartPayload(document);
+    fetchGraphqlChartPayload(statusRoot).then((graphqlPayload) => {
+      const payload = graphqlPayload || htmlPayload;
+      const chartChanged = applyChartPayload(payload);
+      renderChart(chartChanged);
+    });
     if (STATUS_SHOULD_POLL) {
       syncStatusPolling();
     }
