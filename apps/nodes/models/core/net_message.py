@@ -373,10 +373,7 @@ class NetMessage(Entity):
                 "stale_at": expires_at,
             },
         )
-        if created:
-            entry.queued_at = now
-            entry.save(update_fields=["queued_at"])
-        else:
+        if not created:
             entry.seen = normalized_seen
             entry.stale_at = expires_at
             entry.queued_at = now
@@ -388,8 +385,15 @@ class NetMessage(Entity):
         PendingNetMessage.objects.filter(node=node, message=self).delete()
 
     def _trim_queue(self, node: "Node") -> None:
-        """Trim the queued messages for a node to its configured limit."""
-        limit = max(int(node.message_queue_length or 0), 0)
+        """Trim the queued messages for a node.
+
+        ``message_queue_length == 0`` means queuing is disabled (delete all).
+        ``message_queue_length is None`` means leave existing messages unchanged.
+        """
+        raw_limit = node.message_queue_length
+        if raw_limit is None:
+            return
+        limit = max(int(raw_limit), 0)
         if limit == 0:
             PendingNetMessage.objects.filter(node=node).delete()
             return

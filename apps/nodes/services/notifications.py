@@ -7,9 +7,8 @@ import logging
 from secrets import token_hex
 from urllib.parse import urlparse, urlunsplit
 
-from cryptography.hazmat.primitives import serialization
-
 from apps.nodes.models.core.utils import _format_upgrade_body
+from apps.nodes.services.crypto import get_private_key, sign_payload
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +20,13 @@ def notify_peers_of_update(node) -> None:
     except Exception:  # pragma: no cover
         return
 
-    security_dir = node.get_base_path() / "security"
-    priv_path = security_dir / f"{node.public_endpoint}"
-    if not priv_path.exists():
-        logger.debug("Private key for %s not found; skipping peer update", node)
-        return
-    try:
-        private_key = serialization.load_pem_private_key(priv_path.read_bytes(), password=None)
-    except Exception as exc:
-        logger.warning("Failed to load private key for %s: %s", node, exc)
+    private_key = get_private_key(node)
+    if not private_key:
+        logger.debug("Private key for %s unavailable; skipping peer update", node)
         return
 
     token = token_hex(16)
-    signature, error = node.__class__.sign_payload(token, private_key)
+    signature, error = sign_payload(token, private_key)
     if not signature:
         logger.warning("Failed to sign peer update for %s: %s", node, error)
         return
@@ -69,6 +62,7 @@ def notify_peers_of_update(node) -> None:
             if not host:
                 continue
             if host.startswith("http://") or host.startswith("https://"):
+                # Pre-signed URL candidates should keep their parsed scheme preference.
                 parsed = urlparse(host)
                 netloc = parsed.netloc or parsed.path
                 base_path = (parsed.path or "").rstrip("/")

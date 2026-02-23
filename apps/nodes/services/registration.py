@@ -9,6 +9,8 @@ import socket
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils.text import slugify
 
 from apps.nodes.logging import get_register_local_node_logger
@@ -47,10 +49,10 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
             (ipv4_candidates if version == 4 else ipv6_candidates).append(override)
 
     resolve_hosts: list[str] = []
-    for value in (network_hostname, hostname_override, hostname):
-        value = (value or "").strip()
-        if value and value not in resolve_hosts:
-            resolve_hosts.append(value)
+    for host in (network_hostname, hostname_override, hostname):
+        host = (host or "").strip()
+        if host and host not in resolve_hosts:
+            resolve_hosts.append(host)
 
     resolved_ipv4, resolved_ipv6 = node_model._resolve_ip_addresses(*resolve_hosts)
     ipv4_candidates.extend(ip for ip in resolved_ipv4 if ip not in ipv4_candidates)
@@ -88,8 +90,6 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
 
     endpoint_override = os.environ.get("NODE_PUBLIC_ENDPOINT", "").strip()
     slug = slugify(endpoint_override or hostname) or node_model._generate_unique_public_endpoint(hostname or mac)
-    node = node_model.objects.filter(mac_address=mac).first() or node_model.objects.filter(public_endpoint=slug).first()
-
     defaults = {
         "hostname": hostname,
         "network_hostname": network_hostname,
@@ -113,33 +113,68 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
     role_name = ROLE_RENAMES.get(role_name, role_name)
     desired_role = NodeRole.objects.filter(name=role_name).first()
 
-    if node:
-        update_fields: list[str] = []
-        for field, value in defaults.items():
-            current = getattr(node, field)
-            if isinstance(value, str):
-                value = value or ""
-                current = current or ""
-            if current != value:
-                setattr(node, field, value)
-                update_fields.append(field)
-        if desired_role and node.role_id != desired_role.id:
-            node.role = desired_role
-            update_fields.append("role")
-        if update_fields:
-            node.save(update_fields=update_fields)
-            local_registration_logger.info("Local node registration updated node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+    with transaction.atomic():
+        node = (
+            node_model.objects.select_for_update()
+            .filter(Q(mac_address=mac) | Q(public_endpoint=slug))
+            .order_by("id")
+            .first()
+        )
+
+        if node:
+            update_fields: list[str] = []
+            for field, value in defaults.items():
+                current = getattr(node, field)
+                if isinstance(value, str):
+                    value = value or ""
+                    current = current or ""
+                if current != value:
+                    setattr(node, field, value)
+                    update_fields.append(field)
+            if desired_role and node.role_id != desired_role.id:
+                node.role = desired_role
+                update_fields.append("role")
+            if update_fields:
+                node.save(update_fields=update_fields)
+                local_registration_logger.info("Local node registration updated node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+            else:
+                node.refresh_features()
+                local_registration_logger.info("Local node registration refreshed node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+            created = False
         else:
-            node.refresh_features()
-            local_registration_logger.info("Local node registration refreshed node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
-        created = False
-    else:
-        node = node_model.objects.create(**defaults)
-        created = True
-        if desired_role:
-            node.role = desired_role
-            node.save(update_fields=["role"])
-        local_registration_logger.info("Local node registration created node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+            try:
+                node = node_model.objects.create(**defaults)
+                created = True
+            except IntegrityError:
+                node = (
+                    node_model.objects.select_for_update()
+                    .filter(Q(mac_address=mac) | Q(public_endpoint=slug))
+                    .order_by("id")
+                    .first()
+                )
+                created = False
+
+            if created and desired_role:
+                node.role = desired_role
+                node.save(update_fields=["role"])
+            elif not created and node:
+                update_fields: list[str] = []
+                for field, value in defaults.items():
+                    current = getattr(node, field)
+                    if isinstance(value, str):
+                        value = value or ""
+                        current = current or ""
+                    if current != value:
+                        setattr(node, field, value)
+                        update_fields.append(field)
+                if desired_role and node.role_id != desired_role.id:
+                    node.role = desired_role
+                    update_fields.append("role")
+                if update_fields:
+                    node.save(update_fields=update_fields)
+
+            if created:
+                local_registration_logger.info("Local node registration created node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
 
     if created and node.role is None:
         terminal = NodeRole.objects.filter(name="Terminal").first()

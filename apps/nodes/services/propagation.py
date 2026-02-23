@@ -6,6 +6,7 @@ from datetime import timedelta
 import logging
 import random
 
+import requests
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -73,10 +74,9 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
     )
     if not created:
         update_fields: list[str] = []
-        for field, value in {
+        fields_to_update = {
             "subject": subject,
             "body": body,
-            "reach": reach_role,
             "expires_at": expires_at,
             "filter_node": filter_node,
             "filter_node_feature": filter_feature,
@@ -84,7 +84,10 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
             "filter_current_relation": filter_relation,
             "filter_installed_version": filter_installed_version,
             "filter_installed_revision": filter_installed_revision,
-        }.items():
+        }
+        if reach_name:
+            fields_to_update["reach"] = reach_role
+        for field, value in fields_to_update.items():
             if getattr(msg, field) != value:
                 setattr(msg, field, value)
                 update_fields.append(field)
@@ -110,7 +113,6 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
 def propagate(message, seen: list[str] | None = None) -> None:
     """Propagate ``message`` to eligible peers."""
     from apps.core.notifications import notify
-    import requests
     from apps.nodes.models.core.net_message import PendingNetMessage
 
     if message.is_expired:
@@ -148,10 +150,11 @@ def propagate(message, seen: list[str] | None = None) -> None:
         if local_id not in seen:
             seen.append(local_id)
         private_key = local.get_private_key()
-    for node_id in seen:
-        node = Node.objects.filter(uuid=node_id).first()
-        if node and (not local or node.pk != local.pk):
-            message.propagated_to.add(node)
+    if seen:
+        seen_nodes = Node.objects.filter(uuid__in=seen)
+        if local:
+            seen_nodes = seen_nodes.exclude(pk=local.pk)
+        message.propagated_to.add(*seen_nodes)
 
     if getattr(settings, "NET_MESSAGE_DISABLE_PROPAGATION", False):
         if not message.complete:
@@ -175,10 +178,11 @@ def propagate(message, seen: list[str] | None = None) -> None:
         filtered_nodes = filtered_nodes.filter(installed_revision=message.filter_installed_revision)
     filtered_nodes = filtered_nodes.distinct()
 
+    qs = filtered_nodes.exclude(pk__in=message.propagated_to.values_list("pk", flat=True))
     if local:
-        filtered_nodes = filtered_nodes.exclude(pk=local.pk)
-    total_known = filtered_nodes.count()
-    remaining = list(filtered_nodes.exclude(pk__in=message.propagated_to.values_list("pk", flat=True)))
+        qs = qs.exclude(pk=local.pk)
+    remaining = list(qs)
+    total_known = len(remaining)
     if not remaining:
         message.complete = True
         message.save(update_fields=["complete"])
@@ -187,6 +191,7 @@ def propagate(message, seen: list[str] | None = None) -> None:
     target_limit = min(message.target_limit or 6, len(remaining))
     reach_source = message.filter_node_role or message.reach
     reach_name = reach_source.name if reach_source else None
+    # TODO: Keep this role hierarchy in sync with role definitions/config.
     role_map = {
         "Terminal": ["Terminal"],
         "Control": ["Control", "Terminal"],
@@ -222,6 +227,7 @@ def propagate(message, seen: list[str] | None = None) -> None:
         return
 
     payload_seen = seen.copy() + [str(n.uuid) for n in selected]
+    propagated_nodes: list[Node] = []
     for node in selected:
         payload = message._build_payload(sender_id=local_id, origin_uuid=origin_uuid, reach_name=reach_name, seen=payload_seen)
         payload_json = message._serialize_payload(payload)
@@ -234,8 +240,14 @@ def propagate(message, seen: list[str] | None = None) -> None:
             try:
                 response = requests.post(url, data=payload_json, headers=headers, timeout=1)
                 success = bool(response.ok)
-            except Exception:
-                logger.exception("Failed to propagate NetMessage %s to node %s via %s", message.pk, node.pk, url)
+            except requests.exceptions.RequestException as exc:
+                logger.debug(
+                    "Failed to propagate NetMessage %s to node %s via %s: %s",
+                    message.pk,
+                    node.pk,
+                    url,
+                    exc,
+                )
                 continue
             if success:
                 break
@@ -243,7 +255,10 @@ def propagate(message, seen: list[str] | None = None) -> None:
             message.clear_queue_for_node(node)
         else:
             message.queue_for_node(node, payload_seen)
-        message.propagated_to.add(node)
+        propagated_nodes.append(node)
+
+    if propagated_nodes:
+        message.propagated_to.add(*propagated_nodes)
 
     if total_known and message.propagated_to.count() >= total_known:
         message.complete = True

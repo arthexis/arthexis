@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from django.conf import settings
 from django.utils import timezone
 
@@ -64,18 +65,20 @@ def ensure_keys(node: "Node") -> None:
         node.save(update_fields=["public_key"])
 
 
-def get_private_key(node: "Node"):
+def get_private_key(node: "Node") -> RSAPrivateKey | None:
     """Return the loaded private key object for ``node`` when available."""
     if not node.public_endpoint:
         return None
     try:
         ensure_keys(node)
     except Exception:
+        logger.debug("ensure_keys failed for %s", node.public_endpoint, exc_info=True)
         return None
     priv_path = node.get_base_path() / "security" / f"{node.public_endpoint}"
     try:
         return serialization.load_pem_private_key(priv_path.read_bytes(), password=None)
     except Exception:
+        logger.debug("Failed to load private key for %s from %s", node.public_endpoint, priv_path, exc_info=True)
         return None
 
 
