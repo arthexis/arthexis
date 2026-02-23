@@ -52,7 +52,7 @@ arthexis_prime_sudo_credentials() {
     return 1
   fi
 
-  echo "WSL detected and sudo access is required. Please enter your password to continue."
+  printf '%s\n' "WSL detected and sudo access is required. Please enter your password to continue." > /dev/tty
   sudo -v
 }
 
