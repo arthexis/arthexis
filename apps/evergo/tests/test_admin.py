@@ -110,6 +110,36 @@ def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, 
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.models.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
+    """Regression: customer load wizard should call profile sync method and redirect."""
+    mock_load_customers.return_value = {
+        "customers_loaded": 1,
+        "orders_created": 1,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="suite-tool@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    get_response = admin_client.get(wizard_url)
+    assert get_response.status_code == 200
+
+    post_response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": "J00830, Customer Name"},
+    )
+    assert post_response.status_code == 302
+    mock_load_customers.assert_called_once_with(raw_queries="J00830, Customer Name")
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.models.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Regression: change-form action should run login sync without requiring changelist selection."""
@@ -153,6 +183,8 @@ def test_evergo_order_and_field_value_admin_changelists_render(admin_client):
 
     order_changelist = admin_client.get(reverse("admin:evergo_evergoorder_changelist"))
     field_value_changelist = admin_client.get(reverse("admin:evergo_evergoorderfieldvalue_changelist"))
+    customer_changelist = admin_client.get(reverse("admin:evergo_evergocustomer_changelist"))
 
     assert order_changelist.status_code == 200
     assert field_value_changelist.status_code == 200
+    assert customer_changelist.status_code == 200
