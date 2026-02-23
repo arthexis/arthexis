@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.http import HttpResponse
+from django.http import Http404
 
 from apps.ocpp.models import Transaction
-from apps.ocpp.views.common import _connector_set, _ensure_charger_access, _get_charger, _live_sessions
+from apps.ocpp.services import connector_set, ensure_charger_access, get_charger_for_read, live_sessions
 
 
 class ChargerAccessDeniedError(PermissionError):
@@ -44,13 +44,14 @@ def build_charger_chart_payload(
     charger status template JavaScript.
     """
 
-    charger, _connector_slug = _get_charger(cid, connector)
-    access_response = _ensure_charger_access(user, charger, request=None)
-    if isinstance(access_response, HttpResponse):
-        raise ChargerAccessDeniedError("User cannot access this charger")
+    try:
+        charger, _connector_slug = get_charger_for_read(cid, connector)
+        ensure_charger_access(user, charger)
+    except Http404 as exc:
+        raise ChargerAccessDeniedError("User cannot access this charger") from exc
 
-    connectors = _connector_set(charger)
-    sessions = _live_sessions(charger, connectors=connectors)
+    connectors = [item for item in connector_set(charger) if item.is_visible_to(user)]
+    sessions = live_sessions(charger, connectors=connectors)
     tx_obj = None
     past_session = False
 
@@ -59,6 +60,8 @@ def build_charger_chart_payload(
             tx_obj = Transaction.objects.filter(pk=session_id, charger__charger_id=cid).first()
             if tx_obj is None:
                 raise Transaction.DoesNotExist("Requested session was not found for charger")
+            if tx_obj.charger and not tx_obj.charger.is_visible_to(user):
+                raise ChargerAccessDeniedError("User cannot access this charger")
             past_session = True
         else:
             tx_obj = Transaction.objects.filter(pk=session_id, charger=charger).first()
@@ -77,20 +80,12 @@ def build_charger_chart_payload(
         series_points = _series_from_transaction(tx_obj)
         if series_points:
             chart_data["labels"] = [ts for ts, _ in series_points]
-            connector_id = (
-                tx_obj.charger.connector_id
-                if tx_obj.charger and tx_obj.charger.connector_id is not None
-                else charger.connector_id
-            )
+            charger_ref = tx_obj.charger if tx_obj.charger and tx_obj.charger.connector_id is not None else charger
             chart_data["datasets"].append(
                 {
-                    "label": str(
-                        tx_obj.charger.connector_label
-                        if tx_obj.charger and tx_obj.charger.connector_id is not None
-                        else charger.connector_label
-                    ),
+                    "label": str(charger_ref.connector_label),
                     "values": [value for _, value in series_points],
-                    "connector_id": connector_id,
+                    "connector_id": charger_ref.connector_id,
                 }
             )
     elif charger.connector_id is None:

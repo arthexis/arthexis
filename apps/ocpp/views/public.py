@@ -521,7 +521,10 @@ def charger_status(request, cid, connector=None):
 
     tx_rfid_details = _transaction_rfid_details(tx_obj, cache=rfid_cache)
 
-    graphql_chart_url = reverse("graphql:endpoint")
+    try:
+        graphql_chart_url = reverse("graphql:endpoint")
+    except NoReverseMatch:
+        graphql_chart_url = None
 
     return render(
         request,
