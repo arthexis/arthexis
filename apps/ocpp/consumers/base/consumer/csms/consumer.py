@@ -960,13 +960,14 @@ class CSMSConsumer(
         now = timezone.now()
 
         def _apply():
-            charger_identifier = getattr(self, "charger_id", "")
+            charger_identifier = getattr(self, "charger_id", None) or ""
             if not charger_identifier and getattr(self, "charger", None):
-                charger_identifier = str(self.charger.charger_id)
+                charger_identifier = getattr(self.charger, "charger_id", None) or ""
             if not charger_identifier and getattr(self, "aggregate_charger", None):
-                charger_identifier = str(self.aggregate_charger.charger_id)
+                charger_identifier = getattr(self.aggregate_charger, "charger_id", None) or ""
             if not charger_identifier:
                 return
+            charger_identifier = str(charger_identifier)
 
             filters: dict[str, object] = {"charger_id": charger_identifier}
             if connector_value is None:
