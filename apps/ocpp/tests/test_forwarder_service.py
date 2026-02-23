@@ -1,3 +1,4 @@
+import ssl
 import sys
 from datetime import timedelta
 
@@ -54,6 +55,59 @@ def test_candidate_forwarding_urls_skips_tls_ip_targets(forwarder_instance):
         "ws://192.0.2.10/base/CP%2F42",
         "ws://192.0.2.10/base/ws/CP%2F42",
     ]
+
+
+def test_connect_forwarding_session_skips_tls_verification_for_trusted_node(
+    monkeypatch, forwarder_instance
+):
+    """Trusted nodes should disable TLS certificate checks for WSS forwarding."""
+
+    charger = SimpleNamespace(pk=1, charger_id="CP-1")
+    node = SimpleNamespace(
+        trusted=True,
+        iter_remote_urls=lambda path: ["https://trusted.example.com/"],
+    )
+
+    create_kwargs = {}
+
+    def fake_connect(url, timeout, subprotocols, **kwargs):
+        create_kwargs.update(kwargs)
+        return SimpleNamespace(connected=True, close=Mock())
+
+    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+
+    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
+
+    assert session is not None
+    assert create_kwargs["sslopt"] == {
+        "cert_reqs": ssl.CERT_NONE,
+        "check_hostname": False,
+    }
+
+
+def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
+    monkeypatch, forwarder_instance
+):
+    """Untrusted nodes must retain default TLS certificate verification."""
+
+    charger = SimpleNamespace(pk=1, charger_id="CP-1")
+    node = SimpleNamespace(
+        trusted=False,
+        iter_remote_urls=lambda path: ["https://untrusted.example.com/"],
+    )
+
+    create_kwargs = {}
+
+    def fake_connect(url, timeout, subprotocols, **kwargs):
+        create_kwargs.update(kwargs)
+        return SimpleNamespace(connected=True, close=Mock())
+
+    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+
+    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
+
+    assert session is not None
+    assert not create_kwargs
 
 
 def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_instance):
