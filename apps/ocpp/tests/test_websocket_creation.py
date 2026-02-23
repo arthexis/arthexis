@@ -92,8 +92,8 @@ def charge_point_features(local_node):
         defaults={"display": "Charge Points"},
     )
     suite_feature, _ = Feature.objects.get_or_create(
-        slug="standard-charge-point",
-        defaults={"display": "Standard Charge Point"},
+        slug="ocpp-16-charge-point",
+        defaults={"display": "OCPP 1.6 Charge Point"},
     )
     suite_feature.node_feature = node_feature
     suite_feature.is_enabled = True

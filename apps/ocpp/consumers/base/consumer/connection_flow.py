@@ -20,6 +20,11 @@ from config.offline import requires_network
 logger = logging.getLogger(__name__)
 
 CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
+OCPP_VERSION_FEATURE_SLUGS = {
+    "ocpp1.6": "ocpp-16-charge-point",
+    "ocpp2.0.1": "ocpp-201-charge-point",
+    "ocpp2.1": "ocpp-21-charge-point",
+}
 CHARGE_POINT_FEATURE_SLUG = "charge-points"
 
 
@@ -65,15 +70,25 @@ class ConnectionFlowMixin:
                 )
                 return True, "node-missing"
 
+            requested_feature_slug = OCPP_VERSION_FEATURE_SLUGS.get(
+                getattr(self, "ocpp_version", ""),
+                CHARGER_CREATION_FEATURE_SLUG,
+            )
             feature = (
                 Feature.objects.select_related("node_feature")
-                .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
+                .filter(slug=requested_feature_slug)
                 .first()
             )
             if not feature:
+                feature = (
+                    Feature.objects.select_related("node_feature")
+                    .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
+                    .first()
+                )
+            if not feature:
                 logger.warning(
                     "Charge point creation feature %s missing; treating as enabled.",
-                    CHARGER_CREATION_FEATURE_SLUG,
+                    requested_feature_slug,
                 )
             node_feature = feature.node_feature if feature else None
             if not node_feature:
