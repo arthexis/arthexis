@@ -1362,47 +1362,49 @@ body.user-story-open {
 </style>
 {% endblock %}
 {% block branding %}
-<h1 id="site-name">
-  <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
-</h1>
-<div id="site-badges">
-  <span class="badge {% if not badge_site %}badge-unknown{% endif %}" {% if badge_site %}style="background-color: {{ badge_site_color }};"{% endif %}>
-    <a class="badge-link" href="{% url 'admin:pages_siteproxy_changelist' %}">SITE:</a>
-    {% if badge_site %}
-      <a class="badge-link badge-link-value" href="{% url 'admin:pages_siteproxy_change' badge_site.pk %}">{{ badge_admin_site_name }}</a>
-    {% else %}
-      <span class="badge-link badge-link-value">Unknown</span>
-    {% endif %}
-    <span style="display:none">SITE: {% if badge_site %}{{ badge_admin_site_name }}{% else %}Unknown{% endif %}</span>
-  </span>
-  <span class="badge {% if not badge_node %}badge-unknown{% endif %}" {% if badge_node %}style="background-color: {{ badge_node_color }};"{% endif %}>
-    <a class="badge-link" href="{% url 'admin:nodes_node_changelist' %}">NODE:</a>
-    {% if badge_node %}
-      <a class="badge-link badge-link-value" href="{% url 'admin:nodes_node_change' badge_node.pk %}">{{ badge_node.hostname }}</a>
-    {% else %}
-      <span class="badge-link badge-link-value">Unknown</span>
-    {% endif %}
-    <span style="display:none">NODE: {% if badge_node %}{{ badge_node.hostname }}{% else %}Unknown{% endif %}</span>
-  </span>
-  {% if badge_node and badge_role %}
-    <span class="badge" style="background-color: {{ badge_role_color }};">
-      <a class="badge-link" href="{% url 'admin:nodes_noderole_changelist' %}">ROLE:</a>
-      <a class="badge-link badge-link-value" href="{% url 'admin:nodes_noderole_change' badge_role.pk %}">{{ badge_role.name }}</a>
-      <span style="display:none">ROLE: {{ badge_role.name }}</span>
-    </span>
-  {% endif %}
-  <span class="badge {% if not badge_video_device %}badge-unknown{% endif %}" {% if badge_video_device %}style="background-color: {{ badge_video_device_color }};"{% endif %}>
-    <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
-    {% with device_display_text=badge_video_device.display_name|default:"N/A" %}
-      {% if badge_video_device %}
-        <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ device_display_text }}</a>
+{% if not request.resolver_match or request.resolver_match.url_name != "login" %}
+  <h1 id="site-name">
+    <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
+  </h1>
+  <div id="site-badges">
+    <span class="badge {% if not badge_site %}badge-unknown{% endif %}" {% if badge_site %}style="background-color: {{ badge_site_color }};"{% endif %}>
+      <a class="badge-link" href="{% url 'admin:pages_siteproxy_changelist' %}">SITE:</a>
+      {% if badge_site %}
+        <a class="badge-link badge-link-value" href="{% url 'admin:pages_siteproxy_change' badge_site.pk %}">{{ badge_admin_site_name }}</a>
       {% else %}
-        <span class="badge-link badge-link-value">{{ device_display_text }}</span>
+        <span class="badge-link badge-link-value">Unknown</span>
       {% endif %}
-      <span style="display:none">CAM: {{ device_display_text }}</span>
-    {% endwith %}
-  </span>
-</div>
+      <span style="display:none">SITE: {% if badge_site %}{{ badge_admin_site_name }}{% else %}Unknown{% endif %}</span>
+    </span>
+    <span class="badge {% if not badge_node %}badge-unknown{% endif %}" {% if badge_node %}style="background-color: {{ badge_node_color }};"{% endif %}>
+      <a class="badge-link" href="{% url 'admin:nodes_node_changelist' %}">NODE:</a>
+      {% if badge_node %}
+        <a class="badge-link badge-link-value" href="{% url 'admin:nodes_node_change' badge_node.pk %}">{{ badge_node.hostname }}</a>
+      {% else %}
+        <span class="badge-link badge-link-value">Unknown</span>
+      {% endif %}
+      <span style="display:none">NODE: {% if badge_node %}{{ badge_node.hostname }}{% else %}Unknown{% endif %}</span>
+    </span>
+    {% if badge_node and badge_role %}
+      <span class="badge" style="background-color: {{ badge_role_color }};">
+        <a class="badge-link" href="{% url 'admin:nodes_noderole_changelist' %}">ROLE:</a>
+        <a class="badge-link badge-link-value" href="{% url 'admin:nodes_noderole_change' badge_role.pk %}">{{ badge_role.name }}</a>
+        <span style="display:none">ROLE: {{ badge_role.name }}</span>
+      </span>
+    {% endif %}
+    <span class="badge {% if not badge_video_device %}badge-unknown{% endif %}" {% if badge_video_device %}style="background-color: {{ badge_video_device_color }};"{% endif %}>
+      <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
+      {% with device_display_text=badge_video_device.display_name|default:"N/A" %}
+        {% if badge_video_device %}
+          <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ device_display_text }}</a>
+        {% else %}
+          <span class="badge-link badge-link-value">{{ device_display_text }}</span>
+        {% endif %}
+        <span style="display:none">CAM: {{ device_display_text }}</span>
+      {% endwith %}
+    </span>
+  </div>
+{% endif %}
 {% endblock %}
 {% block userlinks %}
   {% include "admin/includes/user_tools.html" %}
@@ -1513,5 +1515,7 @@ body.user-story-open {
     <script src="{% static 'pages/js/chat.js' %}" defer></script>
   {% endif %}
   {% include "admin/ops/active_operation_banner.html" %}
-  {% include "admin/includes/user_story_feedback.html" %}
+  {% if not request.resolver_match or request.resolver_match.url_name != "login" %}
+    {% include "admin/includes/user_story_feedback.html" %}
+  {% endif %}
 {% endblock %}
