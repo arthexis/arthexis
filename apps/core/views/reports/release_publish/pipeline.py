@@ -27,7 +27,6 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.template.loader import get_template
-import django.test.signals as test_signals
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -1329,7 +1328,14 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
         current = version_path.read_text(encoding="utf-8").strip()
         if current:
             current_clean = PackageRelease.strip_dev_suffix(current) or "0.0.0"
-            if Version(release.version) < Version(current_clean):
+            try:
+                left = Version(release.version)
+                right = Version(current_clean)
+            except InvalidVersion as exc:
+                raise Exception(
+                    f"Invalid release.version '{release.version}': {exc}"
+                ) from exc
+            if left < right:
                 raise Exception(
                     f"Version {release.version} is older than existing {current}"
                 )
@@ -1669,37 +1675,42 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
 def _pypi_release_available(release) -> bool:
     if not release_utils.network_available():
         return False
+    resp = None
     try:
         resp = requests.get(
             f"https://pypi.org/pypi/{release.package.name}/json",
             timeout=PYPI_REQUEST_TIMEOUT,
         )
+        if not resp.ok:
+            return False
+        data = resp.json()
+        releases = data.get("releases", {})
+        try:
+            target_version = Version(release.version)
+        except InvalidVersion:
+            target_version = None
+        for candidate, files in releases.items():
+            same_version = candidate == release.version
+            if target_version is not None and not same_version:
+                try:
+                    same_version = Version(candidate) == target_version
+                except InvalidVersion:
+                    same_version = False
+            if not same_version:
+                continue
+            if any(
+                isinstance(file_data, dict)
+                and not file_data.get("yanked", False)
+                for file_data in files or []
+            ):
+                return True
+        return False
     except requests.exceptions.RequestException:
         return False
-    if not resp.ok:
-        return False
-    data = resp.json()
-    releases = data.get("releases", {})
-    try:
-        target_version = Version(release.version)
-    except InvalidVersion:
-        target_version = None
-    for candidate, files in releases.items():
-        same_version = candidate == release.version
-        if target_version is not None and not same_version:
-            try:
-                same_version = Version(candidate) == target_version
-            except InvalidVersion:
-                same_version = False
-        if not same_version:
-            continue
-        if any(
-            isinstance(file_data, dict)
-            and not file_data.get("yanked", False)
-            for file_data in files or []
-        ):
-            return True
-    return False
+    finally:
+        if resp is not None:
+            with contextlib.suppress(Exception):
+                resp.close()
 
 
 def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) -> None:
@@ -1895,21 +1906,10 @@ def release_progress(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
     if error_response:
         return error_response
-    try:
-        safe_pk = int(pk)
-    except (TypeError, ValueError):
-        return _render_release_progress_error(
-            request,
-            None,
-            action,
-            _("Invalid release ID provided."),
-            status=400,
-            debug_info={"pk": pk},
-        )
-    session_key = f"release_publish_{safe_pk}"
+    session_key = f"release_publish_{pk}"
     lock_dir = Path(settings.BASE_DIR) / ".locks"
-    lock_path = lock_dir / f"release_publish_{safe_pk}.json"
-    restart_path = lock_dir / f"release_publish_{safe_pk}.restarts"
+    lock_path = lock_dir / f"release_publish_{pk}.json"
+    restart_path = lock_dir / f"release_publish_{pk}.restarts"
     log_dir, log_dir_warning = _resolve_release_log_dir(Path(settings.LOG_DIR))
     log_dir_warning_message = log_dir_warning
 
@@ -2201,6 +2201,8 @@ def release_progress(request, pk: int, action: str):
         "core/release_progress.html",
     )
     content = template.render(context, request)
+    import django.test.signals as test_signals
+
     if test_signals.template_rendered.receivers:
         test_signals.template_rendered.send(
             sender=template.__class__,
@@ -2209,6 +2211,7 @@ def release_progress(request, pk: int, action: str):
             using=getattr(getattr(template, "engine", None), "name", None),
         )
     response = HttpResponse(content)
+    # Intentionally mimic Django test Client response attributes for introspection.
     response.context = context
     response.templates = [template]
     return response
