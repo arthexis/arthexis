@@ -5,6 +5,7 @@ from typing import Dict
 
 DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "app": "Application registry and metadata.",
+    "actions": "Remote actions API, bearer token management, and OpenAPI export.",
     "audio": "Audio playback, capture, and signal processing helpers.",
     "aws": "AWS service integrations and infrastructure helpers.",
     "base": "Core configurations and shared utilities.",
