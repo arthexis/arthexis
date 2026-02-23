@@ -1,4 +1,13 @@
-"""Git subprocess adapter and helper operations for release publishing."""
+"""Git subprocess adapter and helper operations for release publishing.
+
+Responsibilities:
+- Provide a narrow command wrapper around git subprocess calls.
+- Normalize subprocess/authentication errors for caller-facing messaging.
+
+Allowed dependencies:
+- Stdlib subprocess/path utilities and shared constants.
+- Must not import Django HTTP view code.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +32,25 @@ class SubprocessGitAdapter:
         return subprocess.run(args, check=check, capture_output=True, text=True)
 
 
+def format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
+    """Return best-effort stderr/stdout detail for a failed git command."""
+
+    return (getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)).strip()
+
+
+def git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
+    """Identify common git authentication failure signatures."""
+
+    message = format_subprocess_error(exc).lower()
+    markers = (
+        "could not read username",
+        "authentication failed",
+        "terminal prompts disabled",
+        "permission denied",
+    )
+    return any(marker in message for marker in markers)
+
+
 def git_stdout(adapter: GitProcessAdapter, args: Sequence[str]) -> str:
     """Run a git command and return stripped stdout."""
 
@@ -44,18 +72,13 @@ def current_branch(adapter: GitProcessAdapter) -> str | None:
     """Return current branch name or ``None`` when detached."""
 
     branch = git_stdout(adapter, ["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    if branch == "HEAD":
-        return None
-    return branch
+    return None if branch == "HEAD" else branch
 
 
 def has_upstream(adapter: GitProcessAdapter, branch: str) -> bool:
     """Return whether the branch has an upstream tracking reference."""
 
-    proc = adapter.run(
-        ["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"],
-        check=False,
-    )
+    proc = adapter.run(["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"], check=False)
     return proc.returncode == 0
 
 
@@ -72,13 +95,7 @@ def collect_dirty_files(adapter: GitProcessAdapter) -> list[dict[str, str]]:
         path = line[3:]
         if "R" in status and " -> " in path:
             path = path.split(" -> ", 1)[1]
-        dirty.append(
-            {
-                "path": path,
-                "status": status,
-                "status_label": DIRTY_STATUS_LABELS.get(status, status),
-            }
-        )
+        dirty.append({"path": path, "status": status, "status_label": DIRTY_STATUS_LABELS.get(status, status)})
     return dirty
 
 

@@ -1,11 +1,58 @@
-"""Session-backed context helpers for release publish state."""
+"""Session-backed state utilities for release publish workflows.
+
+Responsibilities:
+- Persistence and recovery of publish context from session/lockfile.
+- Typed dataclass wrappers used by HTTP/pipeline modules.
+
+Allowed dependencies:
+- May use stdlib serialization helpers and shared constants.
+- Must not call network APIs or execute subprocess commands.
+"""
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from ..common import SENSITIVE_CONTEXT_KEYS
+
+
+@dataclass(slots=True)
+class ReleaseContextState:
+    """Typed wrapper around mutable release publish context."""
+
+    step: int = 0
+    started: bool = False
+    paused: bool = False
+    dry_run: bool = False
+    error: str | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "ReleaseContextState":
+        payload = dict(payload or {})
+        return cls(
+            step=int(payload.pop("step", 0) or 0),
+            started=bool(payload.pop("started", False)),
+            paused=bool(payload.pop("paused", False)),
+            dry_run=bool(payload.pop("dry_run", False)),
+            error=payload.pop("error", None),
+            extras=payload,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "step": self.step,
+            "started": self.started,
+            "paused": self.paused,
+            "dry_run": self.dry_run,
+        }
+        if self.error:
+            data["error"] = self.error
+        data.update(self.extras)
+        return data
 
 
 def sanitize_release_context(ctx: dict) -> dict:
