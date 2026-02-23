@@ -262,11 +262,16 @@ def test_video_command_sample_prefers_camera_service_frames(capsys, tmp_path, mo
         lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
     )
 
-    calls = {"count": 0}
+    frame_responses = iter(
+        [
+            SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
+            SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
+            SimpleNamespace(frame_bytes=b"frame-2", frame_id=2),
+        ]
+    )
 
     def fake_get_frame(_stream):
-        calls["count"] += 1
-        return SimpleNamespace(frame_bytes=f"frame-{calls['count']}".encode("utf-8"))
+        return next(frame_responses, SimpleNamespace(frame_bytes=b"frame-2", frame_id=2))
 
     monkeypatch.setattr("apps.video.management.commands.video.get_frame", fake_get_frame)
 
@@ -341,3 +346,51 @@ def test_video_command_sample_falls_back_when_camera_service_inactive(tmp_path, 
         call_command("video", samples=1)
 
     assert direct_calls["count"] == 1
+
+
+@pytest.mark.django_db
+def test_video_command_sample_errors_when_no_new_cached_frame(tmp_path, monkeypatch):
+    """Raise an error if camera service stays active but never advances frames."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+    device.mjpeg_streams.create(name="Lobby", slug="lobby-timeout", is_active=True)
+
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.frame_cache_url",
+        lambda: "redis://localhost:6379/0",
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.get_status",
+        lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.get_frame",
+        lambda _stream: SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.Command._CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS",
+        0.01,
+    )
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.Command._CAMERA_SERVICE_FRAME_POLL_SECONDS",
+        0.001,
+    )
+
+    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
+        with pytest.raises(CommandError, match="Timed out waiting for a new cached frame"):
+            call_command("video", samples=2)

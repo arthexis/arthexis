@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,8 @@ class Command(BaseCommand):
     """List video devices and capture sample videos."""
 
     help = "List video devices and optionally capture a short sample video."
+    _CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS = 3.0
+    _CAMERA_SERVICE_FRAME_POLL_SECONDS = 0.05
 
     def add_arguments(self, parser) -> None:
         """Register supported command-line arguments."""
@@ -554,13 +557,18 @@ class Command(BaseCommand):
 
         first_path = frames_dir / "frame-001.jpg"
         first_path.write_bytes(cached_frame.frame_bytes)
+        last_frame_id = cached_frame.frame_id
 
         for index in range(2, samples + 1):
-            next_frame = get_frame(stream)
+            next_frame = self._wait_for_next_camera_service_frame(
+                stream=stream,
+                last_frame_id=last_frame_id,
+            )
             if next_frame is None:
                 raise CommandError(
-                    f"Camera service became unavailable while collecting samples for stream '{stream.slug}'."
+                    f"Timed out waiting for a new cached frame while collecting samples for stream '{stream.slug}'."
                 )
+            last_frame_id = next_frame.frame_id
             target_path = frames_dir / f"frame-{index:03d}.jpg"
             target_path.write_bytes(next_frame.frame_bytes)
 
@@ -570,6 +578,23 @@ class Command(BaseCommand):
             )
         )
         return True
+
+    def _wait_for_next_camera_service_frame(self, *, stream: MjpegStream, last_frame_id: int | None):
+        """Poll Redis until a newer cached frame arrives for ``stream``.
+
+        When ``last_frame_id`` is unknown, the first non-empty frame is accepted.
+        """
+
+        deadline = time.monotonic() + self._CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            cached = get_frame(stream)
+            if cached and cached.frame_bytes:
+                if last_frame_id is None or cached.frame_id is None:
+                    return cached
+                if cached.frame_id != last_frame_id:
+                    return cached
+            time.sleep(self._CAMERA_SERVICE_FRAME_POLL_SECONDS)
+        return None
 
     def _get_video_paths(self) -> tuple[Path, Path]:
         timestamp = datetime.now(timezone.utc)
