@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 
 from channels.db import database_sync_to_async
 from django.utils import timezone
@@ -91,11 +90,14 @@ async def handle_trigger_message_error(consumer: CallErrorContext, message_id: s
 
 async def handle_remote_start_transaction_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle RemoteStartTransaction errors."""
+    parts: list[str] = []
+    if error_code and (code_text := str(error_code).strip()):
+        parts.append(f"code={code_text}")
+    if description and (description_text := str(description).strip()):
+        parts.append(f"description={description_text}")
     message = "RemoteStartTransaction error"
-    if error_code:
-        message += f": code={str(error_code).strip()}"
-    if description and (suffix := str(description).strip()):
-        message += f", description={suffix}"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
     return True
@@ -103,11 +105,14 @@ async def handle_remote_start_transaction_error(consumer: CallErrorContext, mess
 
 async def handle_remote_stop_transaction_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle RemoteStopTransaction errors."""
+    parts: list[str] = []
+    if error_code and (code_text := str(error_code).strip()):
+        parts.append(f"code={code_text}")
+    if description and (description_text := str(description).strip()):
+        parts.append(f"description={description_text}")
     message = "RemoteStopTransaction error"
-    if error_code:
-        message += f": code={str(error_code).strip()}"
-    if description and (suffix := str(description).strip()):
-        message += f", description={suffix}"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
     return True
@@ -115,11 +120,14 @@ async def handle_remote_stop_transaction_error(consumer: CallErrorContext, messa
 
 async def handle_request_start_transaction_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle RequestStartTransaction errors."""
+    parts: list[str] = []
+    if error_code and (code_text := str(error_code).strip()):
+        parts.append(f"code={code_text}")
+    if description and (description_text := str(description).strip()):
+        parts.append(f"description={description_text}")
     message = "RequestStartTransaction error"
-    if error_code:
-        message += f": code={str(error_code).strip()}"
-    if description and (suffix := str(description).strip()):
-        message += f", description={suffix}"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.update_transaction_request(message_id, status="rejected")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
@@ -128,11 +136,14 @@ async def handle_request_start_transaction_error(consumer: CallErrorContext, mes
 
 async def handle_request_stop_transaction_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle RequestStopTransaction errors."""
+    parts: list[str] = []
+    if error_code and (code_text := str(error_code).strip()):
+        parts.append(f"code={code_text}")
+    if description and (description_text := str(description).strip()):
+        parts.append(f"description={description_text}")
     message = "RequestStopTransaction error"
-    if error_code:
-        message += f": code={str(error_code).strip()}"
-    if description and (suffix := str(description).strip()):
-        message += f", description={suffix}"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.update_transaction_request(message_id, status="rejected")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
@@ -141,11 +152,14 @@ async def handle_request_stop_transaction_error(consumer: CallErrorContext, mess
 
 async def handle_get_transaction_status_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle GetTransactionStatus errors."""
+    parts: list[str] = []
+    if error_code and (code_text := str(error_code).strip()):
+        parts.append(f"code={code_text}")
+    if description and (description_text := str(description).strip()):
+        parts.append(f"description={description_text}")
     message = "GetTransactionStatus error"
-    if error_code:
-        message += f": code={str(error_code).strip()}"
-    if description and (suffix := str(description).strip()):
-        message += f", description={suffix}"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
     return True
@@ -153,11 +167,14 @@ async def handle_get_transaction_status_error(consumer: CallErrorContext, messag
 
 async def handle_reset_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle Reset errors."""
+    parts: list[str] = []
+    if error_code and (code_text := str(error_code).strip()):
+        parts.append(f"code={code_text}")
+    if description and (description_text := str(description).strip()):
+        parts.append(f"description={description_text}")
     message = "Reset error"
-    if error_code:
-        message += f": code={str(error_code).strip()}"
-    if description and (suffix := str(description).strip()):
-        message += f", description={suffix}"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
     return True
@@ -201,7 +218,9 @@ async def handle_unlock_connector_error(consumer: CallErrorContext, message_id: 
 
 async def handle_clear_display_message_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle ClearDisplayMessage errors."""
-    parts = [f"code={str(error_code).strip()}" for _ in [0] if error_code]
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
     if description:
         parts.append(f"description={str(description).strip()}")
     if (details_text := _json_details(details)):
@@ -214,7 +233,9 @@ async def handle_clear_display_message_error(consumer: CallErrorContext, message
 
 async def handle_customer_information_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle CustomerInformation errors."""
-    parts = [f"code={str(error_code).strip()}" for _ in [0] if error_code]
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
     if description:
         parts.append(f"description={str(description).strip()}")
     if (details_text := _json_details(details)):
@@ -227,7 +248,9 @@ async def handle_customer_information_error(consumer: CallErrorContext, message_
 
 async def handle_get_base_report_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle GetBaseReport errors."""
-    parts = [f"code={str(error_code).strip()}" for _ in [0] if error_code]
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
     if description:
         parts.append(f"description={str(description).strip()}")
     if (details_text := _json_details(details)):
@@ -240,7 +263,9 @@ async def handle_get_base_report_error(consumer: CallErrorContext, message_id: s
 
 async def handle_get_display_messages_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle GetDisplayMessages errors."""
-    parts = [f"code={str(error_code).strip()}" for _ in [0] if error_code]
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
     if description:
         parts.append(f"description={str(description).strip()}")
     if (details_text := _json_details(details)):
@@ -253,7 +278,9 @@ async def handle_get_display_messages_error(consumer: CallErrorContext, message_
 
 async def handle_get_report_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle GetReport errors."""
-    parts = [f"code={str(error_code).strip()}" for _ in [0] if error_code]
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
     if description:
         parts.append(f"description={str(description).strip()}")
     if (details_text := _json_details(details)):
@@ -308,7 +335,9 @@ async def handle_set_monitoring_level_error(consumer: CallErrorContext, message_
 
 async def handle_set_display_message_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle SetDisplayMessage errors."""
-    parts = [f"code={str(error_code).strip()}" for _ in [0] if error_code]
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
     if description:
         parts.append(f"description={str(description).strip()}")
     if (details_text := _json_details(details)):
@@ -328,11 +357,8 @@ async def handle_set_network_profile_error(consumer: CallErrorContext, message_i
         if not deployment:
             return
         detail_text = (description or "").strip()
-        if not detail_text and details:
-            try:
-                detail_text = json.dumps(details, sort_keys=True)
-            except TypeError:
-                detail_text = str(details)
+        if not detail_text:
+            detail_text = _json_details(details)
         if not detail_text:
             detail_text = (error_code or "").strip() or "Error"
         deployment.mark_status("Error", detail_text, response=details)

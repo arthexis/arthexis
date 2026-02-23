@@ -22,13 +22,7 @@ from apps.ocpp.models import (
 )
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.mark.anyio
-async def test_dispatch_registry_preserves_action_mapping() -> None:
+def test_dispatch_registry_preserves_action_mapping() -> None:
     expected = {
         "GetCompositeSchedule": firmware.handle_get_composite_schedule_error,
         "ChangeConfiguration": configuration.handle_change_configuration_error,
@@ -97,7 +91,7 @@ async def test_dispatch_firmware_domain_regression() -> None:
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(pk=deployment.pk)
     assert result is True
     assert deployment.status == "Error"
-    assert "m-fw" in store._pending_call_results
+    assert store.has_pending_result("m-fw")
 
 
 @pytest.mark.anyio
@@ -120,7 +114,7 @@ async def test_dispatch_configuration_domain_regression() -> None:
     refreshed = await database_sync_to_async(Charger.objects.get)(pk=charger.pk)
     assert result is True
     assert refreshed.availability_request_status == "Rejected"
-    assert "m-cfg" in store._pending_call_results
+    assert store.has_pending_result("m-cfg")
 
 
 @pytest.mark.anyio
@@ -149,7 +143,7 @@ async def test_dispatch_reservation_domain_regression() -> None:
     assert result is True
     assert item.evcs_confirmed is False
     assert item.evcs_error
-    assert "m-res" in store._pending_call_results
+    assert store.has_pending_result("m-res")
 
 
 @pytest.mark.anyio
@@ -177,7 +171,7 @@ async def test_dispatch_certificates_domain_regression() -> None:
     assert result is True
     assert op.status == CertificateOperation.STATUS_ERROR
     assert cert.status == InstalledCertificate.STATUS_ERROR
-    assert "m-cert" in store._pending_call_results
+    assert store.has_pending_result("m-cert")
 
 
 @pytest.mark.anyio
@@ -206,7 +200,7 @@ async def test_dispatch_profiles_domain_regression() -> None:
     profile = await database_sync_to_async(ChargingProfile.objects.get)(charger=charger, charging_profile_id=44)
     assert result is True
     assert profile.last_status == "InternalError"
-    assert "m-prof" in store._pending_call_results
+    assert store.has_pending_result("m-prof")
 
 
 @pytest.mark.anyio
@@ -232,4 +226,4 @@ async def test_dispatch_data_transfer_domain_regression() -> None:
     message = await database_sync_to_async(DataTransferMessage.objects.get)(pk=message.pk)
     assert result is True
     assert message.status == "InternalError"
-    assert "m-data" in store._pending_call_results
+    assert store.has_pending_result("m-data")

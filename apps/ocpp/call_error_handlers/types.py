@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Awaitable, Callable, Protocol
 
 
@@ -19,7 +20,7 @@ class CallErrorContext(Protocol):
         connector_value: int | None,
         requested_type: str | None,
         status: str,
-        requested_at,
+        requested_at: datetime | str | None,
         *,
         details: str = "",
     ) -> None:

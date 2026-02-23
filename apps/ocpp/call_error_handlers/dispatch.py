@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from types import MappingProxyType
+
 from .certificates import (
     handle_certificate_signed_error,
     handle_delete_certificate_error,
@@ -49,7 +52,7 @@ from .reservation import handle_cancel_reservation_error, handle_reserve_now_err
 from .types import CallErrorContext, CallErrorHandler
 
 
-CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
+CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = MappingProxyType({
     "GetCompositeSchedule": handle_get_composite_schedule_error,
     "ChangeConfiguration": handle_change_configuration_error,
     "GetLog": handle_get_log_error,
@@ -87,7 +90,10 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "DeleteCertificate": handle_delete_certificate_error,
     "CertificateSigned": handle_certificate_signed_error,
     "GetInstalledCertificateIds": handle_get_installed_certificate_ids_error,
-}
+})
+
+
+logger = logging.getLogger(__name__)
 
 
 async def dispatch_call_error(
@@ -106,4 +112,8 @@ async def dispatch_call_error(
     handler = CALL_ERROR_HANDLERS.get(action)
     if not handler:
         return False
-    return await handler(consumer, message_id, metadata, error_code, description, details, log_key)
+    try:
+        return await handler(consumer, message_id, metadata, error_code, description, details, log_key)
+    except Exception:
+        logger.exception("Call error handler failed for action %s", action)
+        return False

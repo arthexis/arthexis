@@ -213,3 +213,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         from django.db import connections
 
         connections.close_all()
+
+
+@pytest.fixture
+def anyio_backend():
+    """Use asyncio backend for AnyIO tests."""
+    return "asyncio"
