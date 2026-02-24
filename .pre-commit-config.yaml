@@ -10,7 +10,7 @@ repos:
         always_run: true
       - id: ruff
         name: ruff
-        entry: ruff check --select E9
+        entry: ruff check --select E9,F823
         language: system
         types: [python]
       - id: black
