@@ -1,12 +1,13 @@
 from django.contrib import admin
 
+from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
 from .models import GoogleAccount, GoogleSheet, GoogleSheetColumn
 
 
 @admin.register(GoogleAccount)
-class GoogleAccountAdmin(EntityModelAdmin):
+class GoogleAccountAdmin(OwnableAdminMixin, EntityModelAdmin):
     """Admin UI for Google OAuth account records."""
 
     list_display = ("email", "user", "group", "is_enabled")
@@ -15,7 +16,7 @@ class GoogleAccountAdmin(EntityModelAdmin):
 
 
 @admin.register(GoogleSheet)
-class GoogleSheetAdmin(EntityModelAdmin):
+class GoogleSheetAdmin(OwnableAdminMixin, EntityModelAdmin):
     """Admin UI for tracked Google Sheets."""
 
     list_display = ("name", "spreadsheet_id", "account", "default_worksheet", "is_enabled")
@@ -25,7 +26,7 @@ class GoogleSheetAdmin(EntityModelAdmin):
 
 
 @admin.register(GoogleSheetColumn)
-class GoogleSheetColumnAdmin(EntityModelAdmin):
+class GoogleSheetColumnAdmin(OwnableAdminMixin, EntityModelAdmin):
     """Admin UI for introspected sheet columns."""
 
     list_display = ("sheet", "worksheet", "name", "position", "detected_type")
