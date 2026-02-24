@@ -20,6 +20,8 @@ fi
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/git_remote.sh
 . "$BASE_DIR/scripts/helpers/git_remote.sh"
+# shellcheck source=scripts/helpers/common.sh
+. "$BASE_DIR/scripts/helpers/common.sh"
 # Record upgrade lifecycle in the startup report for visibility in admin reports.
 UPGRADE_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
@@ -1116,6 +1118,12 @@ run_detached_upgrade() {
 
 if (( DETACHED )); then
   run_detached_upgrade
+fi
+
+# Prime sudo credentials on interactive WSL sessions only when upgrade actions
+# may require privileged systemd operations (skip read-only --check mode).
+if [[ $CHECK_ONLY -ne 1 ]]; then
+  arthexis_prime_sudo_credentials >/dev/null 2>&1 || true
 fi
 
 mkdir -p "$LOCK_DIR"

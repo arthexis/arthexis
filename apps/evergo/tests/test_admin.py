@@ -92,7 +92,7 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.load_orders", return_value=(2, 3))
+@patch("apps.evergo.models.user.EvergoUser.load_orders", return_value=(2, 3))
 def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, admin_client):
     """Ensure the changelist tool-style action can run without selected rows."""
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
@@ -110,7 +110,82 @@ def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, 
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.test_login")
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
+    """Regression: customer load wizard should call profile sync method and redirect."""
+    mock_load_customers.return_value = {
+        "customers_loaded": 1,
+        "orders_created": 1,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="suite-tool@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    get_response = admin_client.get(wizard_url)
+    assert get_response.status_code == 200
+
+    post_response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": "J00830, Customer Name"},
+    )
+    assert post_response.status_code == 302
+    mock_load_customers.assert_called_once_with(raw_queries="J00830, Customer Name")
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_create(admin_client):
+    """Regression: wizard should prefill the current user's profile and include profile-create link."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="owned-profile@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f'value="{profile.pk}" selected' in content
+    assert reverse("admin:evergo_evergouser_add") in content
+    assert 'class="button">Cancel</a>' in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_customers, admin_client):
+    """Security regression: wizard should not allow selecting someone else's profile."""
+    user_model = get_user_model()
+    other_user = user_model.objects.create_user(
+        username="other-evergo-owner",
+        email="other-evergo-owner@example.com",
+    )
+    other_profile = EvergoUser.objects.create(
+        user=other_user,
+        evergo_email="other-profile@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {"profile": other_profile.pk, "raw_queries": "J00830"},
+    )
+
+    assert response.status_code == 200
+    assert b"Select a valid choice" in response.content
+    mock_load_customers.assert_not_called()
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Regression: change-form action should run login sync without requiring changelist selection."""
 
@@ -153,6 +228,8 @@ def test_evergo_order_and_field_value_admin_changelists_render(admin_client):
 
     order_changelist = admin_client.get(reverse("admin:evergo_evergoorder_changelist"))
     field_value_changelist = admin_client.get(reverse("admin:evergo_evergoorderfieldvalue_changelist"))
+    customer_changelist = admin_client.get(reverse("admin:evergo_evergocustomer_changelist"))
 
     assert order_changelist.status_code == 200
     assert field_value_changelist.status_code == 200
+    assert customer_changelist.status_code == 200

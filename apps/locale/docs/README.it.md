@@ -1,7 +1,7 @@
 # Constellation
 
 [![Copertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.0.1](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.1](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Licenza: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Licenza: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
 
 
 ## Scopo
@@ -54,11 +54,9 @@ Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare 
   | `UnlockConnector` | ✅ | ✅ | ✅ | Sblocchiamo i connettori bloccati senza intervento in loco. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP.** Esplora il lavoro pianificato per i cataloghi OCPP 1.6, 2.0.1 e 2.1 nel [cookbook della roadmap OCPP](apps/docs/cookbooks/ocpp-roadmap.md).
-
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
-- Scopri il [cookbook di integrazione API con Odoo](apps/docs/cookbooks/odoo-integrations.md) per i dettagli sulle sincronizzazioni delle credenziali dei dipendenti tramite `res.users` e sulle ricerche del catalogo prodotti tramite `product.product`.
-- Funziona su Windows 11 e Ubuntu 22.04 LTS.
+- Scopri il [cookbook di integrazione API con Odoo](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/odoo-integrations.md) per i dettagli sulle sincronizzazioni delle credenziali dei dipendenti tramite `res.users` e sulle ricerche del catalogo prodotti tramite `product.product`.
+- Funziona su Windows 11 e Ubuntu 24.
 - Testato per il Raspberry Pi 4 Modello B.
 
 Progetto in sviluppo aperto e molto attivo.
@@ -109,35 +107,39 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Premi il pulsante verde di avvio. Arresta il server con il quadrato rosso (`Shift+F5`).
 
 - **Shell**
-   - Linux: esegui [`./start.sh`](start.sh) e arresta con [`./stop.sh`](stop.sh).
-   - Windows: esegui [`start.bat`](start.bat) e interrompi con `Ctrl+C`.
-
-Lo script di configurazione dei ruoli si trova ora nella directory principale come [`./configure.sh`](configure.sh). Gli helper di ciclo di vita per servizi e aggiornamenti vivono in [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` e `scripts/delegated-upgrade.sh`. Gli helper di manutenzione legacy (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` e `ws.sh`) sono stati rimossi.
+   - Linux: esegui [`./start.sh`](https://github.com/arthexis/arthexis/blob/main/start.sh) e arresta con [`./stop.sh`](https://github.com/arthexis/arthexis/blob/main/stop.sh).
+   - Windows: esegui [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) e interrompi con `Ctrl+C`.
 
 ### 3. Installare e aggiornare
 - **Linux:**
-   - Esegui [`./install.sh`](install.sh) con un flag per il ruolo del nodo; consulta la tabella sull'architettura dei ruoli qui sopra per le opzioni e i valori predefiniti di ciascun ruolo.
+   - Esegui [`./install.sh`](https://github.com/arthexis/arthexis/blob/main/install.sh) con un flag per il ruolo del nodo; consulta la tabella sull'architettura dei ruoli qui sopra per le opzioni e i valori predefiniti di ciascun ruolo.
    - Usa `./install.sh --help` per elencare tutte le opzioni disponibili se hai bisogno di personalizzare il nodo oltre le impostazioni del ruolo.
-   - Aggiorna con [`./upgrade.sh`](upgrade.sh).
-   - Consulta il [Manuale degli script di installazione e ciclo di vita](docs/development/install-lifecycle-scripts-manual.md) per l'elenco completo dei flag e le note operative.
-   - Consulta il [Flusso di auto-aggiornamento](docs/auto-upgrade.md) per capire come vengono eseguiti gli upgrade delegati e come monitorarli.
+   - Aggiorna con [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh).
+   - Consulta il [Manuale degli script di installazione e ciclo di vita](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) per l'elenco completo dei flag e le note operative.
+   - Consulta il [Flusso di auto-aggiornamento](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md) per capire come vengono eseguiti gli upgrade delegati e come monitorarli.
 
 - **Windows:**
-   - Esegui [`install.bat`](install.bat) per installare (ruolo Terminal) e [`upgrade.bat`](upgrade.bat) per aggiornare.
+   - Esegui [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) per installare (ruolo Terminal) e [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat) per aggiornare.
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
 - Accedi al Django admin su `localhost:8888/admin/` per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
 - Consulta gli admindocs su `localhost:8888/admindocs/` per leggere la documentazione API generata automaticamente dai tuoi modelli.
-- Canali di aggiornamento: le nuove installazioni usano `--fixed` per impostazione predefinita e lasciano l'aggiornamento automatico disattivato. Attiva gli aggiornamenti automatici sul canale stabile con `--stable` (controlli settimanali il giovedì mattina, prima delle 5:00, allineati alle release), segui rapidamente le revisioni del branch principale con `--unstable` (controlli ogni 15 minuti) oppure usa il canale latest con `--latest` (controlli giornalieri alla stessa ora).
-- Segui la [Guida all'installazione e all'amministrazione](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
-- Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
-- Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](apps/docs/cookbooks/payment-processors.md).
-- Fai riferimento al [Cookbook dei sigilli](apps/docs/cookbooks/sigils.md) quando configuri impostazioni basate su token tra gli ambienti.
-- Gestisci esportazioni, importazioni e tracciamenti con il [Cookbook sui dati utente](apps/docs/cookbooks/user-data.md).
-- Pianifica le strategie di rilascio delle funzionalità con il [Cookbook sulle funzionalità dei nodi](apps/docs/cookbooks/node-features.md).
-- Cura scorciatoie per gli utenti esperti tramite il [Cookbook dei preferiti](apps/docs/cookbooks/favorites.md).
-- Collega i workspace Slack con il [Cookbook di onboarding dello Slack Bot](apps/docs/cookbooks/slack-bot-onboarding.md).
+- Schema dei canali di aggiornamento:
+
+| Canale | Cadenza di controllo | Scopo | Flag di attivazione |
+| --- | --- | --- | --- |
+| Stable | Settimanale (giovedì prima delle 5:00) | Segue le revisioni di rilascio con controlli automatici settimanali. | `--stable` |
+| Latest | Ogni 15 minuti | Alias di `--unstable`; segue le revisioni più recenti con controlli frequenti. | `--latest` / `-l` o `--unstable` |
+| Manual | Nessuna (solo aggiornamenti manuali) | Disattiva il ciclo di aggiornamento automatico per il pieno controllo operativo. Questo è il comportamento predefinito se non specifichi un canale. | _Esegui gli upgrade su richiesta senza specificare un canale._ |
+- Segui la [Guida all'installazione e all'amministrazione](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
+- Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md).
+- Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
+- Fai riferimento al [Cookbook dei sigilli](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md) quando configuri impostazioni basate su token tra gli ambienti.
+- Gestisci esportazioni, importazioni e tracciamenti con il [Cookbook sui dati utente](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
+- Pianifica le strategie di rilascio delle funzionalità con il [Cookbook sulle funzionalità dei nodi](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
+- Cura scorciatoie per gli utenti esperti tramite il [Cookbook dei preferiti](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
+- Collega i workspace Slack con il [Cookbook di onboarding dello Slack Bot](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Supporto
 

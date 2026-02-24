@@ -9,7 +9,6 @@ from apps.nginx.config_utils import (
     https_proxy_server,
     slugify,
     websocket_map,
-    write_if_changed,
 )
 
 HTTP_IPV4_LISTENS = (
@@ -142,8 +141,9 @@ def generate_site_entries_content(
     https_enabled: bool = False,
     external_websockets: bool = True,
     proxy_target: str | None = None,
-    subdomain_prefixes: list[str] | None = None,
-) -> str:
+    subdomain_prefixes: list[str] | None = None) -> str:
+    """Render managed site server blocks from staged site definitions."""
+
     try:
         raw = config_path.read_text(encoding="utf-8")
         sites = json.loads(raw)
@@ -206,25 +206,39 @@ def generate_site_entries_content(
     return content
 
 
-def apply_site_entries(
-    config_path: Path,
+def generate_unified_config(
     mode: str,
     port: int,
-    dest_path: Path,
     *,
+    certificate=None,
     https_enabled: bool = False,
+    include_ipv6: bool = False,
     external_websockets: bool = True,
-    proxy_target: str | None = None,
+    site_config_path: Path | None = None,
     subdomain_prefixes: list[str] | None = None,
-    sudo: str | None = None,
-) -> bool:
-    content = generate_site_entries_content(
-        config_path,
+) -> str:
+    """Return the single nginx configuration that combines primary and managed sites."""
+
+    primary_content = generate_primary_config(
         mode,
         port,
+        certificate=certificate,
         https_enabled=https_enabled,
+        include_ipv6=include_ipv6,
         external_websockets=external_websockets,
-        proxy_target=proxy_target,
-        subdomain_prefixes=subdomain_prefixes,
-    )
-    return write_if_changed(dest_path, content, sudo=sudo)
+    ).rstrip()
+
+    parts = [primary_content]
+
+    if site_config_path is not None:
+        managed_content = generate_site_entries_content(
+            site_config_path,
+            mode,
+            port,
+            https_enabled=https_enabled,
+            external_websockets=external_websockets,
+            subdomain_prefixes=subdomain_prefixes,
+        ).rstrip()
+        parts.append(managed_content)
+
+    return "\n\n".join(parts) + "\n"

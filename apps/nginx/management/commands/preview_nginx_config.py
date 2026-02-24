@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.nginx.management.commands._config_selection import get_configurations
 from apps.nginx.models import SiteConfiguration
-from apps.nginx.renderers import generate_primary_config, generate_site_entries_content
+from apps.nginx.renderers import generate_unified_config
 
 
 class Command(BaseCommand):
@@ -38,52 +38,34 @@ class Command(BaseCommand):
             self.stdout.write("")
 
     def _build_file_previews(self, config: SiteConfiguration) -> list[dict]:
-        files: list[dict] = []
-
-        primary_content = generate_primary_config(
-            config.mode,
-            config.port,
-            certificate=config.certificate,
-            https_enabled=config.protocol == "https",
-            include_ipv6=config.include_ipv6,
-            external_websockets=config.external_websockets,
-        )
-        files.append(
-            self._build_file_preview(
-                label="Primary configuration",
-                path=config.expected_destination,
-                content=primary_content,
-            )
-        )
-
         try:
-            site_content = generate_site_entries_content(
-                config.staged_site_config,
+            unified_content = generate_unified_config(
                 config.mode,
                 config.port,
+                certificate=config.certificate,
                 https_enabled=config.protocol == "https",
+                include_ipv6=config.include_ipv6,
                 external_websockets=config.external_websockets,
+                site_config_path=config.staged_site_config,
                 subdomain_prefixes=config.get_subdomain_prefixes(),
             )
         except ValueError as exc:
-            files.append(
+            return [
                 {
-                    "label": "Managed site server blocks",
-                    "path": config.site_destination_path,
+                    "label": "Unified configuration",
+                    "path": config.expected_destination,
                     "content": "",
                     "status": str(exc),
                 }
-            )
-        else:
-            files.append(
-                self._build_file_preview(
-                    label="Managed site server blocks",
-                    path=config.site_destination_path,
-                    content=site_content,
-                )
-            )
+            ]
 
-        return files
+        return [
+            self._build_file_preview(
+                label="Unified configuration",
+                path=config.expected_destination,
+                content=unified_content,
+            )
+        ]
 
     def _build_file_preview(self, *, label: str, path: Path, content: str) -> dict:
         status = self._get_file_status(path, content)

@@ -1,7 +1,7 @@
 # Constellation
 
 [![OCPP 1.6-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Lizenz: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Lizenz: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
 
 
 ## Zweck
@@ -54,11 +54,9 @@ Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene 
   | `UnlockConnector` | ✅ | ✅ | ✅ | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6-, 2.0.1- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](apps/docs/cookbooks/ocpp-roadmap.md).
-
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
-- Details findest du im [Odoo-API-Integrations-Cookbook](apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
-- Läuft auf Windows 11 und Ubuntu 22.04 LTS.
+- Details findest du im [Odoo-API-Integrations-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
+- Läuft auf Windows 11 und Ubuntu 24.
 - Getestet für den Raspberry Pi 4 Model B.
 
 Projekt in offener, sehr aktiver Entwicklung.
@@ -109,35 +107,39 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
    - Auf den grünen Startknopf klicken. Den Server mit dem roten Quadrat (`Shift+F5`) anhalten.
 
 - **Shell**
-   - Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
-   - Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
-
-Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure.sh`](configure.sh). Weitere Lebenszyklus-Helferskripte für Dienste und Upgrades befinden sich im Ordner [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` und `scripts/delegated-upgrade.sh`. Veraltete Wartungsskripte (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` und `ws.sh`) wurden entfernt.
+   - Linux: [`./start.sh`](https://github.com/arthexis/arthexis/blob/main/start.sh) ausführen und mit [`./stop.sh`](https://github.com/arthexis/arthexis/blob/main/stop.sh) anhalten.
+   - Windows: [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) ausführen und mit `Ctrl+C` beenden.
 
 ### 3. Installieren und Aktualisieren
 - **Linux:**
-   - [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen; siehe die obige Tabelle zur Rollenarchitektur für die rollenspezifischen Optionen und Standardwerte.
+   - [`./install.sh`](https://github.com/arthexis/arthexis/blob/main/install.sh) mit einem Flag für die Node-Rolle ausführen; siehe die obige Tabelle zur Rollenarchitektur für die rollenspezifischen Optionen und Standardwerte.
    - `./install.sh --help` zeigt alle verfügbaren Optionen, falls du die Konfiguration über die Rollenvorgaben hinaus anpassen möchtest.
-   - Aktualisieren mit [`./upgrade.sh`](upgrade.sh).
-   - Lies das [Manual zu Installations- & Lifecycle-Skripten](docs/development/install-lifecycle-scripts-manual.md) für vollständige Flag-Beschreibungen und Betriebsdetails.
-   - Sieh dir den [Auto-Upgrade-Flow](docs/auto-upgrade.md) an, um zu verstehen, wie delegierte Upgrades laufen und wie du sie überwachst.
+   - Aktualisieren mit [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh).
+   - Lies das [Manual zu Installations- & Lifecycle-Skripten](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) für vollständige Flag-Beschreibungen und Betriebsdetails.
+   - Sieh dir den [Auto-Upgrade-Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md) an, um zu verstehen, wie delegierte Upgrades laufen und wie du sie überwachst.
 
 - **Windows:**
-   - [`install.bat`](install.bat) zur Installation (Terminal-Rolle) und [`upgrade.bat`](upgrade.bat) zum Aktualisieren ausführen.
+   - [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) zur Installation (Terminal-Rolle) und [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat) zum Aktualisieren ausführen.
    - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
 - Greife über `localhost:8888/admin/` auf den Django-Admin zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
 - Durchstöbere die admindocs unter `localhost:8888/admindocs/`, um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
-- Upgrade-Kanäle: Neue Installationen setzen standardmäßig `--fixed` und lassen Auto-Upgrade deaktiviert. Aktiviere automatische Updates auf dem stabilen Kanal mit `--stable` (wöchentliche Prüfungen am Donnerstagmorgen vor 5:00 gemäß den Releases), verfolge Hauptzweig-Revisionen schnell mit `--unstable` (Prüfungen alle 15 Minuten) oder nutze den Latest-Kanal mit `--latest` (tägliche Prüfungen zur gleichen Uhrzeit).
-- Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
-- Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
-- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
-- Nutze das [Sigil-Cookbook](apps/docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
-- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](apps/docs/cookbooks/user-data.md).
-- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](apps/docs/cookbooks/node-features.md).
-- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](apps/docs/cookbooks/favorites.md).
-- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](apps/docs/cookbooks/slack-bot-onboarding.md).
+- Upgrade-Kanal-Schema:
+
+| Kanal | Prüfintervall | Zweck | Aktivierungsflag |
+| --- | --- | --- | --- |
+| Stable | Wöchentlich (Donnerstag vor 5:00 Uhr) | Folgt Release-Revisionen mit automatischen Wochenprüfungen. | `--stable` |
+| Latest | Alle 15 Minuten | Alias von `--unstable`; folgt neueren Revisionen mit häufigen Prüfungen. | `--latest` / `-l` oder `--unstable` |
+| Manual | Keine (nur manuelle Upgrades) | Deaktiviert die automatische Upgrade-Schleife für volle Betreiberkontrolle. Dieses Verhalten ist der Standard, wenn kein Kanal angegeben wird. | _Upgrades bei Bedarf ohne Kanal-Flag ausführen._ |
+- Folge dem [Installations- und Administrationshandbuch](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
+- Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
+- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
+- Nutze das [Sigil-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
+- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
+- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
+- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
+- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 

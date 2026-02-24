@@ -51,10 +51,15 @@ kill_from_pid_file() {
   rm -f "$pid_file"
 }
 
-# Use non-interactive sudo if available
+# Use non-interactive sudo by default, but on WSL with a TTY allow a
+# one-time credential prompt so upgrade flows can continue.
 SUDO="sudo -n"
 if ! $SUDO true 2>/dev/null; then
-  SUDO=""
+  if arthexis_prime_sudo_credentials; then
+    SUDO="sudo -n"
+  else
+    SUDO=""
+  fi
 fi
 
 ALL=false

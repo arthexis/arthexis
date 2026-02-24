@@ -1,4 +1,13 @@
-"""GitHub token and API integration helpers for release publishing."""
+"""GitHub integration helpers for release publishing.
+
+Responsibilities:
+- Parse repository identity and resolve publish credentials.
+- Interact with GitHub release/workflow APIs through injected request adapters.
+
+Allowed dependencies:
+- May use typed adapters and stdlib URL/time helpers.
+- Must not import Django HTTP view modules or execute git subprocess commands.
+"""
 
 from __future__ import annotations
 
@@ -210,6 +219,8 @@ def poll_workflow_completion(
 
     if interval_seconds <= 0:
         raise ValueError("interval_seconds must be > 0")
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be > 0")
 
     deadline = monotonic() + timeout_seconds
     while monotonic() <= deadline:

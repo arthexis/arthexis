@@ -4,10 +4,10 @@ import pytest
 
 from apps.docs import rendering
 
-pytestmark = pytest.mark.critical
-
-
+@pytest.mark.critical
 def test_render_plain_text_document_escapes_html():
+    """Plain-text rendering must escape HTML to prevent script injection."""
+
     html, toc = rendering.render_plain_text_document("<script>alert('xss')</script>")
 
     assert toc == ""

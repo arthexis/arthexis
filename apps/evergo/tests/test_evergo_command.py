@@ -15,8 +15,8 @@ from apps.evergo.models import EvergoUser
 
 @pytest.mark.django_db
 @pytest.mark.regression
-@patch("apps.evergo.models.EvergoUser._prime_session", return_value="xsrf-token")
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.EvergoUser._prime_session", return_value="xsrf-token")
+@patch("apps.evergo.models.user.requests.Session")
 def test_evergo_command_saves_credentials_and_tests_login(
     mock_session_cls, _mock_prime_session
 ):

@@ -1,152 +1,32 @@
+"""Site configuration model for managed nginx setup."""
+
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from django.conf import settings
 from django.core import validators
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.nginx import services
 from apps.nginx.config_utils import default_certificate_domain_from_settings
-
-
-SUBDOMAIN_PREFIX_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
-NGINX_PROXY_PASS_RE = re.compile(r"proxy_pass\s+https?://[^:]+:(\d+)")
-NGINX_SSL_LISTEN_RE = re.compile(r"listen\s+[^;]*\b443\b[^;]*ssl", re.IGNORECASE)
-NGINX_SSL_CERTIFICATE_RE = re.compile(r"ssl_certificate\s+[^;]+;", re.IGNORECASE)
-NGINX_IPV6_LISTEN_RE = re.compile(r"listen\s+\[::\][^;]*;", re.IGNORECASE)
-NGINX_SERVER_NAME_RE = re.compile(r"server_name\s+([^;]+);")
-NGINX_EXTERNAL_WEBSOCKETS_TOKEN = "proxy_set_header Connection $connection_upgrade;"
-DEFAULT_SITE_DESTINATION = "/etc/nginx/sites-enabled/arthexis-sites.conf"
-NGINX_PERMISSIONS_HELPER = "./scripts/nginx-perms.sh"
-
-
-def parse_subdomain_prefixes(raw: str, *, strict: bool = True) -> list[str]:
-    prefixes: list[str] = []
-    seen: set[str] = set()
-    invalid: list[str] = []
-    for token in re.split(r"[,\s]+", raw or ""):
-        candidate = token.strip().lower()
-        if not candidate:
-            continue
-        if "." in candidate or not SUBDOMAIN_PREFIX_RE.match(candidate):
-            invalid.append(candidate)
-            continue
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        prefixes.append(candidate)
-    if invalid and strict:
-        raise ValidationError(
-            _("Invalid subdomain prefixes: %(invalid)s"),
-            params={"invalid": ", ".join(sorted(invalid))},
-        )
-    return prefixes
-
-
-def _read_lock(lock_dir: Path, name: str, fallback: str) -> str:
-    try:
-        value = (lock_dir / name).read_text(encoding="utf-8").strip()
-    except OSError:
-        return fallback
-    return value or fallback
-
-
-def _read_int_lock(lock_dir: Path, name: str, fallback: int) -> int:
-    value = _read_lock(lock_dir, name, str(fallback))
-    try:
-        parsed = int(value)
-    except ValueError:
-        return fallback
-    if parsed < 1 or parsed > 65535:
-        return fallback
-    return parsed
-
-
-def _extract_proxy_port(content: str) -> int | None:
-    for match in NGINX_PROXY_PASS_RE.findall(content):
-        try:
-            port = int(match)
-        except ValueError:
-            continue
-        if 1 <= port <= 65535:
-            return port
-    return None
-
-
-def _extract_server_name(content: str) -> str:
-    for match in NGINX_SERVER_NAME_RE.findall(content):
-        for token in match.split():
-            token = token.strip()
-            if not token or token == "_" or "*" in token or token.startswith("."):
-                continue
-            return token
-    return ""
-
-
-def _detect_https_enabled(content: str) -> bool:
-    if NGINX_SSL_LISTEN_RE.search(content):
-        return True
-    return bool(NGINX_SSL_CERTIFICATE_RE.search(content))
-
-
-def _detect_ipv6_enabled(content: str) -> bool:
-    return bool(NGINX_IPV6_LISTEN_RE.search(content))
-
-
-def _detect_external_websockets(content: str) -> bool:
-    return NGINX_EXTERNAL_WEBSOCKETS_TOKEN in content
-
-
-def _discover_site_config_paths(site_path: Path | None) -> list[Path]:
-    candidates: set[Path] = set()
-    if site_path and site_path.exists():
-        if site_path.is_dir():
-            candidates.update(site_path.glob("arthexis*.conf"))
-        else:
-            candidates.add(site_path)
-
-    enabled_candidates = [
-        path
-        for path in services.SITES_ENABLED_DIR.glob("arthexis*.conf")
-        if not path.name.endswith("-sites.conf")
-    ]
-    candidates.update(enabled_candidates)
-    if not enabled_candidates:
-        available_candidates = [
-            path
-            for path in services.SITES_AVAILABLE_DIR.glob("arthexis*.conf")
-            if not path.name.endswith("-sites.conf")
-        ]
-        candidates.update(available_candidates)
-    return sorted(candidates)
-
-
-def _resolve_site_destination() -> str:
-    candidates = [
-        services.SITES_ENABLED_DIR / "arthexis-sites.conf",
-        services.SITES_AVAILABLE_DIR / "arthexis-sites.conf",
-    ]
-    for path in candidates:
-        if path.exists():
-            return str(path)
-    return DEFAULT_SITE_DESTINATION
-
-
-def _format_local_load_error(path: Path, exc: OSError) -> str:
-    """Return a user-facing local-load error message with remediation hints."""
-
-    message = f"{path}: {exc}"
-    if isinstance(exc, PermissionError):
-        return (
-            f"{message} Run {NGINX_PERMISSIONS_HELPER} to grant read access "
-            "to local nginx site files."
-        )
-    return message
+from apps.nginx.discovery import (
+    _discover_site_config_paths,
+    _format_local_load_error,
+    _read_int_lock,
+    _read_lock,
+    _resolve_site_destination,
+)
+from apps.nginx.parsers import (
+    _detect_external_websockets,
+    _detect_https_enabled,
+    _detect_ipv6_enabled,
+    _extract_proxy_port,
+    _extract_server_name,
+    parse_subdomain_prefixes,
+)
 
 
 class SiteConfiguration(models.Model):
@@ -269,6 +149,8 @@ class SiteConfiguration(models.Model):
         return result
 
     def validate_only(self) -> services.ApplyResult:
+        """Validate current nginx configuration without full render/apply."""
+
         result = services.restart_nginx()
         self.last_validated_at = timezone.now()
         self.last_message = result.message
@@ -277,9 +159,15 @@ class SiteConfiguration(models.Model):
 
     @classmethod
     def get_default(cls) -> "SiteConfiguration":
+        """Get or create the default configuration using lock-file discovery defaults."""
+
         lock_dir = Path(settings.BASE_DIR) / ".locks"
+        mode = _read_lock(lock_dir, "nginx_mode.lck", "internal").lower()
+        if mode not in {"internal", "public"}:
+            mode = "internal"
+
         defaults = {
-            "mode": _read_lock(lock_dir, "nginx_mode.lck", "internal").lower(),
+            "mode": mode,
             "role": _read_lock(lock_dir, "role.lck", "Terminal"),
             "port": _read_int_lock(lock_dir, "backend_port.lck", 8888),
         }
@@ -298,6 +186,8 @@ class SiteConfiguration(models.Model):
         base_dir: Path | None = None,
         site_path: Path | None = None,
     ) -> dict[str, object]:
+        """Load nginx configuration files from disk into persisted SiteConfiguration rows."""
+
         resolved_base = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
         lock_dir = resolved_base / ".locks"
         mode = _read_lock(lock_dir, "nginx_mode.lck", "internal").lower()
@@ -354,7 +244,7 @@ class SiteConfiguration(models.Model):
                 "site_destination": _resolve_site_destination(),
             }
 
-            obj, created = cls.objects.update_or_create(name=name, defaults=defaults)
+            _obj, created = cls.objects.update_or_create(name=name, defaults=defaults)
             if created:
                 results["created"] += 1
             else:

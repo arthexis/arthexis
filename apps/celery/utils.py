@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Mapping, MutableMapping, Set
 
+from kombu.exceptions import OperationalError
 from django.conf import settings
 from django.db import transaction
 from django.db.utils import IntegrityError
@@ -90,6 +91,13 @@ def enqueue_task(task, *args, require_enabled: bool = True, **kwargs) -> bool:
 
     try:
         task.delay(*args, **kwargs)
+    except OperationalError as exc:
+        logger.warning(
+            "Celery broker unavailable; skipped enqueue for task %s: %s",
+            _task_label(task),
+            exc,
+        )
+        return False
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Failed to enqueue task %s", _task_label(task))
         return False
@@ -111,6 +119,13 @@ def schedule_task(
 
     try:
         task.apply_async(args=args or (), kwargs=kwargs or {}, **options)
+    except OperationalError as exc:
+        logger.warning(
+            "Celery broker unavailable; skipped schedule for task %s: %s",
+            _task_label(task),
+            exc,
+        )
+        return False
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Failed to enqueue task %s", _task_label(task))
         return False

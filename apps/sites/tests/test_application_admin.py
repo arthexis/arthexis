@@ -4,7 +4,7 @@ import pytest
 from django.urls import reverse
 
 from apps.app.models import Application
-from apps.links.models import Reference
+from apps.links.models.reference import Reference
 
 
 @pytest.mark.django_db
