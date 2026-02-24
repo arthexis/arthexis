@@ -35,6 +35,27 @@ from .utils import _safe_next_url
 class UserDatumAdminMixin(admin.ModelAdmin):
     """Mixin adding a *User Datum* checkbox to change forms."""
 
+    def get_action_choices(self, request, default_choices=admin.helpers.ACTION_CHECKBOX_NAME):
+        """Return de-duplicated admin action choices keyed by action name.
+
+        Some admin class combinations can register the same action more than once.
+        This safeguard keeps the changelist action dropdown stable by ensuring each
+        action value appears once.
+        """
+
+        choices = super().get_action_choices(request, default_choices)
+        unique_choices = []
+        seen_values = set()
+        for value, label in choices:
+            if not value:
+                unique_choices.append((value, label))
+                continue
+            if value in seen_values:
+                continue
+            seen_values.add(value)
+            unique_choices.append((value, label))
+        return unique_choices
+
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):

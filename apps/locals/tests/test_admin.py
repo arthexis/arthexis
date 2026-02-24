@@ -143,3 +143,33 @@ class RecoverSelectedActionTests(TestCase):
         self.assertFalse(second.is_deleted)
         messages = [str(message) for message in request._messages]
         self.assertIn("Recovered 2 deleted Favorites.", messages)
+
+
+class UserDatumActionChoicesTests(TestCase):
+    """Regression tests for user-data action choice rendering."""
+
+    def test_get_action_choices_deduplicates_duplicate_values(self):
+        """Regression: duplicated action values should appear only once in choices."""
+
+        model_admin = EntityModelAdmin(Favorite, admin.site)
+        request = RequestFactory().get("/admin/locals/favorite/")
+        request.user = get_user_model()(is_staff=True, is_superuser=True, is_active=True)
+
+        with mock.patch.object(
+            admin.ModelAdmin,
+            "get_action_choices",
+            return_value=[
+                ("", "---------"),
+                ("toggle_selected_user_data", "Toggle selected User Data"),
+                ("toggle_selected_user_data", "Toggle selected User Data"),
+            ],
+        ):
+            choices = model_admin.get_action_choices(request)
+
+        self.assertEqual(
+            choices,
+            [
+                ("", "---------"),
+                ("toggle_selected_user_data", "Toggle selected User Data"),
+            ],
+        )
