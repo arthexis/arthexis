@@ -111,12 +111,13 @@ class MjpegStream(VideoStream):
         file_path = self._resolve_sample_path(sample)
         if not file_path.exists():
             return None
+        raw = file_path.read_bytes()
         try:
-            with Image.open(file_path) as image:
+            with Image.open(io.BytesIO(raw)) as image:
                 mime = (image.format or "jpeg").lower()
         except Exception:  # pragma: no cover
             mime = "jpeg"
-        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        data = base64.b64encode(raw).decode("ascii")
         return f"data:image/{mime};base64,{data}"
 
     def get_last_frame_data_uri(self) -> str | None:
@@ -199,6 +200,20 @@ class MjpegStream(VideoStream):
             for field, value in updates.items():
                 setattr(self, field, value)
             self.save(update_fields=list(updates.keys()))
+
+    def _load_cv2(self):
+        """Compatibility wrapper for camera_service; delegates to service layer."""
+
+        from apps.video.services.mjpeg import load_cv2
+
+        return load_cv2()
+
+    def _rotate_frame(self, frame, cv2):
+        """Compatibility wrapper for camera_service frame auto-rotation."""
+
+        from apps.video.services.capture import rotate_cv2_frame
+
+        return rotate_cv2_frame(frame, angle=int(self.video_device.auto_rotate or 0), cv2=cv2)
 
     def iter_frame_bytes(self):
         """Yield encoded JPEG frames from the configured capture device."""

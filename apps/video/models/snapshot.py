@@ -17,6 +17,8 @@ from apps.content.models import ContentSample
 
 logger = logging.getLogger(__name__)
 
+MAX_DATA_URI_SIZE_BYTES = 10 * 1024 * 1024
+
 
 class VideoSnapshot(Entity):
     """Snapshot image metadata captured from a :class:`VideoDevice`."""
@@ -75,8 +77,17 @@ class VideoSnapshot(Entity):
         return ""
 
     def get_data_uri(self) -> str | None:
+        """Return a base64 data URI for the snapshot image when reasonably sized."""
+
         file_path = self._resolve_path(self.sample)
         if not file_path.exists():
+            return None
+        if file_path.stat().st_size > MAX_DATA_URI_SIZE_BYTES:
+            logger.warning(
+                "Skipping snapshot data URI for %s because size exceeds %s bytes",
+                file_path,
+                MAX_DATA_URI_SIZE_BYTES,
+            )
             return None
         data = base64.b64encode(file_path.read_bytes()).decode("ascii")
         mime = (self.image_format or "jpeg").lower()

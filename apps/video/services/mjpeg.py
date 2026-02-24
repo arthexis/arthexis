@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from django.utils.translation import gettext_lazy as _
 
@@ -29,10 +30,10 @@ def load_cv2():
     return cv2
 
 
-def iter_device_frame_bytes(*, device_identifier: str, auto_rotate: int):
-    """Yield JPEG-encoded bytes from a camera capture device."""
+@contextmanager
+def _open_capture(*, cv2, device_identifier: str):
+    """Create and yield an opened ``cv2.VideoCapture`` instance."""
 
-    cv2 = load_cv2()
     capture = cv2.VideoCapture(device_identifier)
     if not capture.isOpened():
         capture.release()
@@ -40,8 +41,17 @@ def iter_device_frame_bytes(*, device_identifier: str, auto_rotate: int):
             _("Unable to open video device %(device)s")
             % {"device": device_identifier}
         )
-
     try:
+        yield capture
+    finally:  # pragma: no cover
+        capture.release()
+
+
+def iter_device_frame_bytes(*, device_identifier: str, auto_rotate: int):
+    """Yield JPEG-encoded bytes from a camera capture device."""
+
+    cv2 = load_cv2()
+    with _open_capture(cv2=cv2, device_identifier=device_identifier) as capture:
         while True:
             success, frame = capture.read()
             if not success:
@@ -50,23 +60,13 @@ def iter_device_frame_bytes(*, device_identifier: str, auto_rotate: int):
             success, buffer = cv2.imencode(".jpg", frame)
             if success:
                 yield buffer.tobytes()
-    finally:  # pragma: no cover
-        capture.release()
 
 
 def capture_device_frame_bytes(*, device_identifier: str, auto_rotate: int) -> bytes | None:
     """Capture one frame from a camera capture device and return JPEG bytes."""
 
     cv2 = load_cv2()
-    capture = cv2.VideoCapture(device_identifier)
-    if not capture.isOpened():
-        capture.release()
-        raise MjpegDeviceUnavailableError(
-            _("Unable to open video device %(device)s")
-            % {"device": device_identifier}
-        )
-
-    try:
+    with _open_capture(cv2=cv2, device_identifier=device_identifier) as capture:
         success, frame = capture.read()
         if not success:
             return None
@@ -75,8 +75,6 @@ def capture_device_frame_bytes(*, device_identifier: str, auto_rotate: int) -> b
         if not success:
             return None
         return buffer.tobytes()
-    finally:  # pragma: no cover
-        capture.release()
 
 
 def encode_mjpeg_chunk(frame_bytes: bytes) -> bytes:
