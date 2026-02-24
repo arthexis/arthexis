@@ -129,9 +129,9 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 
 | Canale | Cadenza di controllo | Scopo | Flag di attivazione |
 | --- | --- | --- | --- |
-| Stable | Settimanale (giovedì prima delle 5:00) | Segue le revisioni di rilascio con controlli automatici settimanali. | `--stable` (predefinito) |
-| Latest | Giornaliera (stessa ora) | Segue le revisioni più recenti della mainline con controlli giornalieri. | `--latest` / `-l` o `--unstable` |
-| Manual | Nessuna (solo aggiornamenti manuali) | Disattiva il ciclo di aggiornamento automatico per il pieno controllo operativo. | _Esegui gli upgrade su richiesta senza specificare un canale._ |
+| Stable | Settimanale (giovedì prima delle 5:00) | Segue le revisioni di rilascio con controlli automatici settimanali. | `--stable` |
+| Latest | Ogni 15 minuti | Alias di `--unstable`; segue le revisioni più recenti con controlli frequenti. | `--latest` / `-l` o `--unstable` |
+| Manual | Nessuna (solo aggiornamenti manuali) | Disattiva il ciclo di aggiornamento automatico per il pieno controllo operativo. Questo è il comportamento predefinito se non specifichi un canale. | _Esegui gli upgrade su richiesta senza specificare un canale._ |
 - Segui la [Guida all'installazione e all'amministrazione](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](apps/docs/cookbooks/payment-processors.md).

@@ -129,9 +129,9 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 
 | Canal | Cadencia de revisión | Propósito | Flag de activación |
 | --- | --- | --- | --- |
-| Estable | Semanal (jueves antes de las 5:00 AM) | Sigue revisiones de lanzamientos con verificaciones automáticas semanales. | `--stable` (predeterminado) |
-| Latest | Diaria (misma hora) | Sigue las revisiones más recientes de la rama principal con verificaciones diarias. | `--latest` / `-l` o `--unstable` |
-| Manual | Ninguna (solo actualizaciones manuales) | Desactiva el bucle de actualización automática para control total del operador. | _Ejecuta upgrades bajo demanda sin indicar un canal._ |
+| Estable | Semanal (jueves antes de las 5:00 AM) | Sigue revisiones de lanzamientos con verificaciones automáticas semanales. | `--stable` |
+| Latest | Cada 15 minutos | Alias de `--unstable`; sigue revisiones recientes con verificaciones frecuentes. | `--latest` / `-l` o `--unstable` |
+| Manual | Ninguna (solo actualizaciones manuales) | Desactiva el bucle de actualización automática para control total del operador. Este es el comportamiento predeterminado si no se indica canal. | _Ejecuta upgrades bajo demanda sin indicar un canal._ |
 - Sigue la [Guía de instalación y administración](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
 - Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura pasarelas de pago con el [Cookbook de procesadores de pago](apps/docs/cookbooks/payment-processors.md).
