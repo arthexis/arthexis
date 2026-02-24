@@ -8,7 +8,7 @@ from typing import Any
 from django.db import models
 from django.utils import timezone
 
-from .parsing import _nested_name, _to_int
+from .parsing import nested_name, to_int
 
 
 class EvergoOrderFieldValue(models.Model):
@@ -104,8 +104,8 @@ class EvergoOrder(models.Model):
         for field_name, source in mapping:
             if not isinstance(source, dict):
                 continue
-            remote_id = _to_int(source.get("id"))
-            remote_name = _nested_name(source)
+            remote_id = to_int(source.get("id"))
+            remote_name = nested_name(source)
             if remote_id is None or not remote_name:
                 continue
             EvergoOrderFieldValue.objects.update_or_create(

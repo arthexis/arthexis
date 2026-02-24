@@ -20,13 +20,13 @@ from apps.evergo.exceptions import EvergoAPIError
 from .customer import EvergoCustomer
 from .order import EvergoOrder, EvergoOrderFieldValue
 from .parsing import (
-    _first_dict,
-    _nested_dict,
-    _nested_int,
-    _nested_name,
-    _parse_dt,
-    _placeholder_remote_id,
-    _to_int,
+    first_dict,
+    nested_dict,
+    nested_int,
+    nested_name,
+    parse_dt,
+    placeholder_remote_id,
+    to_int,
 )
 
 
@@ -183,25 +183,25 @@ class EvergoUser(Profile):
 
     def apply_login_payload(self, payload: dict[str, Any]) -> None:
         """Map Evergo API user payload into local tracking fields."""
-        self.evergo_user_id = _to_int(payload.get("id"))
+        self.evergo_user_id = to_int(payload.get("id"))
         self.name = str(payload.get("name") or "")
         self.email = str(payload.get("email") or "")
-        self.two_fa_enabled = bool(_to_int(payload.get("two_fa_enabled")))
-        self.two_fa_authenticated = bool(_to_int(payload.get("two_fa_authenticated")))
+        self.two_fa_enabled = bool(to_int(payload.get("two_fa_enabled")))
+        self.two_fa_authenticated = bool(to_int(payload.get("two_fa_authenticated")))
         self.two_factor_secret = str(payload.get("two_factor_secret") or "")
         self.two_factor_recovery_codes = str(
             payload.get("two_factor_recovery_codes") or ""
         )
-        self.two_factor_confirmed_at = _parse_dt(payload.get("two_factor_confirmed_at"))
+        self.two_factor_confirmed_at = parse_dt(payload.get("two_factor_confirmed_at"))
 
-        subempresa = _first_dict(payload.get("subempresas"))
-        self.subempresa_id = _to_int(subempresa.get("id"))
+        subempresa = first_dict(payload.get("subempresas"))
+        self.subempresa_id = to_int(subempresa.get("id"))
         self.subempresa_name = str(subempresa.get("nombre") or "")
-        self.empresa_id = _to_int(subempresa.get("idInstalaEmpresa"))
+        self.empresa_id = to_int(subempresa.get("idInstalaEmpresa"))
         self.empresa_name = str(subempresa.get("empresa") or "")
 
-        self.evergo_created_at = _parse_dt(payload.get("created_at"))
-        self.evergo_updated_at = _parse_dt(payload.get("updated_at"))
+        self.evergo_created_at = parse_dt(payload.get("created_at"))
+        self.evergo_updated_at = parse_dt(payload.get("updated_at"))
 
     def load_orders(self, *, timeout: int = 20) -> tuple[int, int]:
         """Fetch and upsert Evergo orders assigned to this user into local models."""
@@ -262,8 +262,8 @@ class EvergoUser(Profile):
                     else:
                         updated += 1
 
-                last_page = _to_int(payload.get("last_page")) if isinstance(payload, dict) else None
-                current_page = _to_int(payload.get("current_page")) if isinstance(payload, dict) else page
+                last_page = to_int(payload.get("last_page")) if isinstance(payload, dict) else None
+                current_page = to_int(payload.get("current_page")) if isinstance(payload, dict) else page
                 if last_page and current_page and current_page >= last_page:
                     break
                 page += 1
@@ -401,8 +401,8 @@ class EvergoUser(Profile):
                 if isinstance(item, dict) and self._is_assigned_to_user(item):
                     rows.append(item)
 
-            last_page = _to_int(payload.get("last_page")) if isinstance(payload, dict) else None
-            current_page = _to_int(payload.get("current_page")) if isinstance(payload, dict) else page
+            last_page = to_int(payload.get("last_page")) if isinstance(payload, dict) else None
+            current_page = to_int(payload.get("current_page")) if isinstance(payload, dict) else page
             if last_page and current_page and current_page >= last_page:
                 break
             page += 1
@@ -427,7 +427,7 @@ class EvergoUser(Profile):
 
     def _ensure_placeholder_order(self, *, so_number: str) -> EvergoOrder:
         """Create/update a provisional local order row when SO is not found upstream."""
-        remote_id = _placeholder_remote_id(order_number=so_number)
+        remote_id = placeholder_remote_id(order_number=so_number)
         order, _ = EvergoOrder.objects.update_or_create(
             remote_id=remote_id,
             defaults={
@@ -446,10 +446,10 @@ class EvergoUser(Profile):
         if not isinstance(customer_payload, dict) and not isinstance(install_payload, dict):
             return False
 
-        customer_id = _to_int(customer_payload.get("id")) if isinstance(customer_payload, dict) else None
+        customer_id = to_int(customer_payload.get("id")) if isinstance(customer_payload, dict) else None
         customer_name = ""
         if isinstance(customer_payload, dict):
-            customer_name = _nested_name(customer_payload)
+            customer_name = nested_name(customer_payload)
         if not customer_name and isinstance(install_payload, dict):
             customer_name = str(install_payload.get("nombre_completo") or "").strip()
 
@@ -483,7 +483,7 @@ class EvergoUser(Profile):
             ).strip()
 
         order = None
-        remote_order_id = _to_int(payload.get("id"))
+        remote_order_id = to_int(payload.get("id"))
         if remote_order_id is not None:
             order = EvergoOrder.objects.filter(remote_id=remote_order_id).first()
 
@@ -494,7 +494,7 @@ class EvergoUser(Profile):
             "address": address,
             "latest_so": latest_so,
             "latest_order": order,
-            "latest_order_updated_at": _parse_dt(payload.get("updated_at")),
+            "latest_order_updated_at": parse_dt(payload.get("updated_at")),
             "raw_payload": {
                 "cliente": customer_payload if isinstance(customer_payload, dict) else {},
                 "orden_instalacion": install_payload if isinstance(install_payload, dict) else {},
@@ -597,7 +597,7 @@ class EvergoUser(Profile):
         for item in payload:
             if not isinstance(item, dict):
                 continue
-            remote_id = _to_int(item.get("id"))
+            remote_id = to_int(item.get("id"))
             remote_name = str(
                 item.get("nombre")
                 or item.get("name")
@@ -620,20 +620,20 @@ class EvergoUser(Profile):
         """Check whether the upstream order is assigned to the current Evergo user."""
         if not self.evergo_user_id:
             return True
-        direct_technician = _to_int(payload.get("user_tecnico_id"))
+        direct_technician = to_int(payload.get("user_tecnico_id"))
         if direct_technician == self.evergo_user_id:
             return True
 
         installer = payload.get("orden_instalador")
         if not isinstance(installer, dict):
             return False
-        engineer_id = _to_int(installer.get("idIngeniero"))
-        coordinator_id = _to_int(installer.get("idCoordinador"))
+        engineer_id = to_int(installer.get("idIngeniero"))
+        coordinator_id = to_int(installer.get("idCoordinador"))
         return self.evergo_user_id in {engineer_id, coordinator_id}
 
     def _upsert_order(self, payload: dict[str, Any]) -> bool:
         """Create or update an `EvergoOrder` from raw Evergo API data."""
-        remote_id = _to_int(payload.get("id"))
+        remote_id = to_int(payload.get("id"))
         if remote_id is None:
             raise EvergoAPIError("Evergo order payload is missing a valid 'id'.")
 
@@ -642,24 +642,24 @@ class EvergoUser(Profile):
             "order_number": str(payload.get("numero_orden") or ""),
             "prefix": str(payload.get("prefijo") or ""),
             "suffix": str(payload.get("sufijo") or ""),
-            "uuid": _to_int(payload.get("uuid")),
-            "scheduled_for": _parse_dt(payload.get("fecha_programada_timestamp"))
-            or _parse_dt(payload.get("fecha_programada")),
-            "status_id": _to_int(payload.get("idOrdenEstatus")),
-            "status_name": _nested_name(payload.get("estatus")),
-            "site_id": _to_int(payload.get("idSitio")),
-            "site_name": _nested_name(payload.get("sitio")),
-            "client_id": _to_int(payload.get("idCliente")),
-            "client_name": _nested_name(payload.get("cliente")),
-            "assigned_engineer_id": _nested_int(payload.get("orden_instalador"), "idIngeniero"),
-            "assigned_engineer_name": _nested_name(_nested_dict(payload.get("orden_instalador"), "ingeniero")),
-            "assigned_coordinator_id": _nested_int(payload.get("orden_instalador"), "idCoordinador"),
-            "assigned_coordinator_name": _nested_name(_nested_dict(payload.get("orden_instalador"), "coordinador")),
-            "has_charger": bool(_to_int(payload.get("has_charger"))),
-            "has_vehicle": bool(_to_int(payload.get("has_vehicle"))),
+            "uuid": to_int(payload.get("uuid")),
+            "scheduled_for": parse_dt(payload.get("fecha_programada_timestamp"))
+            or parse_dt(payload.get("fecha_programada")),
+            "status_id": to_int(payload.get("idOrdenEstatus")),
+            "status_name": nested_name(payload.get("estatus")),
+            "site_id": to_int(payload.get("idSitio")),
+            "site_name": nested_name(payload.get("sitio")),
+            "client_id": to_int(payload.get("idCliente")),
+            "client_name": nested_name(payload.get("cliente")),
+            "assigned_engineer_id": nested_int(payload.get("orden_instalador"), "idIngeniero"),
+            "assigned_engineer_name": nested_name(nested_dict(payload.get("orden_instalador"), "ingeniero")),
+            "assigned_coordinator_id": nested_int(payload.get("orden_instalador"), "idCoordinador"),
+            "assigned_coordinator_name": nested_name(nested_dict(payload.get("orden_instalador"), "coordinador")),
+            "has_charger": bool(to_int(payload.get("has_charger"))),
+            "has_vehicle": bool(to_int(payload.get("has_vehicle"))),
             "raw_payload": payload,
-            "source_created_at": _parse_dt(payload.get("created_at")),
-            "source_updated_at": _parse_dt(payload.get("updated_at")),
+            "source_created_at": parse_dt(payload.get("created_at")),
+            "source_updated_at": parse_dt(payload.get("updated_at")),
             "validation_state": EvergoOrder.VALIDATION_STATE_VALIDATED,
         }
         charge_points = payload.get("cargadores")
@@ -673,7 +673,7 @@ class EvergoUser(Profile):
 
         order_number = defaults["order_number"].strip().upper()
         if order_number:
-            placeholder_remote_id = _placeholder_remote_id(order_number=order_number)
+            placeholder_remote_id = placeholder_remote_id(order_number=order_number)
             (
                 EvergoOrder.objects.filter(remote_id=placeholder_remote_id)
                 .exclude(pk=order.pk)
