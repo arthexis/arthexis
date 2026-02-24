@@ -99,3 +99,32 @@ def test_resolve_blog_article_sigils_resolves_nested_shortcuts(admin_user):
     BlogSigilShortcut.objects.create(article=article, token="BLOG.B", expansion_template="Done")
 
     assert resolve_blog_article_sigils("Start [BLOG.A]", article=article) == "Start Done"
+
+
+@pytest.mark.django_db
+def test_blog_code_reference_validates_line_range_on_save(admin_user):
+    article = BlogArticle.objects.create(title="Code citing", body="x", author=admin_user)
+
+    with pytest.raises(ValidationError):
+        BlogCodeReference.objects.create(
+            article=article,
+            label="Invalid range",
+            repository_path="apps/features/models.py",
+            start_line=20,
+            end_line=10,
+        )
+
+
+@pytest.mark.django_db
+def test_resolve_blog_article_sigils_caps_growth(admin_user):
+    article = BlogArticle.objects.create(title="Recursive sigil", body="x", author=admin_user)
+    BlogSigilShortcut.objects.create(
+        article=article,
+        token="BLOG.LOOP",
+        expansion_template="[BLOG.LOOP] and more",
+    )
+
+    resolved = resolve_blog_article_sigils("Start [BLOG.LOOP]", article=article)
+
+    assert len(resolved) < 100_000
+    assert resolved.count("and more") == 10

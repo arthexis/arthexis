@@ -274,6 +274,19 @@ class BlogCodeReference(models.Model):
     class Meta:
         ordering = ("repository_path", "start_line")
 
+    def clean(self) -> None:
+        """Validate citation line ranges."""
+
+        super().clean()
+        if self.end_line < self.start_line:
+            raise ValidationError({"end_line": _("End line must be greater than or equal to start line.")})
+
+    def save(self, *args, **kwargs):
+        """Validate ranges before persisting."""
+
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     @property
     def sigil(self) -> str:
         """Return the authoring sigil token for this code reference."""
