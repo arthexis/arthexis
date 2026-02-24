@@ -127,11 +127,28 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             for decorator in node.decorator_list:
                 if not isinstance(decorator, ast.Call):
                     continue
-                if not isinstance(decorator.func, ast.Name):
-                    continue
-                if decorator.func.id != "protocol_call":
+                func = decorator.func
+                is_protocol_call = (
+                    isinstance(func, ast.Name)
+                    and func.id == "protocol_call"
+                ) or (
+                    isinstance(func, ast.Attribute)
+                    and func.attr == "protocol_call"
+                )
+                if not is_protocol_call:
                     continue
                 if len(decorator.args) < 3:
+                    continue
+                version_arg, direction_arg = decorator.args[0], decorator.args[1]
+                if not (
+                    isinstance(version_arg, ast.Constant)
+                    and version_arg.value == "ocpp16"
+                ):
+                    continue
+                if not (
+                    isinstance(direction_arg, ast.Attribute)
+                    and direction_arg.attr == "CP_TO_CSMS"
+                ):
                     continue
                 action_arg = decorator.args[2]
                 if isinstance(action_arg, ast.Constant) and isinstance(
