@@ -21,15 +21,36 @@ os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 
+def _sqlite_path_is_writable(path_value: str) -> bool:
+    """Return True when the SQLite path parent directory accepts writes."""
+
+    candidate = Path(path_value).expanduser()
+    parent = candidate.parent
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return False
+    return os.access(parent, os.W_OK)
+
+
+def _set_writable_sqlite_env(var_name: str, fallback: Path) -> None:
+    """Set SQLite env vars to writable paths while preserving valid caller overrides."""
+
+    configured = os.environ.get(var_name)
+    if configured and _sqlite_path_is_writable(configured):
+        return
+    os.environ[var_name] = str(fallback)
+
+
 def _configure_ephemeral_sqlite_paths() -> None:
-    """Route SQLite DBs to an isolated temp directory unless already configured."""
+    """Route SQLite DBs to writable temporary paths for stable pytest setup."""
 
     global _PYTEST_SQLITE_TMP_DIR
     _PYTEST_SQLITE_TMP_DIR = tempfile.TemporaryDirectory(prefix=f"arthexis-pytest-{os.getpid()}-")
     atexit.register(_PYTEST_SQLITE_TMP_DIR.cleanup)
     db_root = Path(_PYTEST_SQLITE_TMP_DIR.name)
-    os.environ.setdefault("ARTHEXIS_SQLITE_PATH", str(db_root / "default.sqlite3"))
-    os.environ.setdefault("ARTHEXIS_SQLITE_TEST_PATH", str(db_root / "test.sqlite3"))
+    _set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", db_root / "default.sqlite3")
+    _set_writable_sqlite_env("ARTHEXIS_SQLITE_TEST_PATH", db_root / "test.sqlite3")
 
 
 _configure_ephemeral_sqlite_paths()
