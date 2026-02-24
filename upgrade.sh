@@ -20,6 +20,8 @@ fi
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/git_remote.sh
 . "$BASE_DIR/scripts/helpers/git_remote.sh"
+# shellcheck source=scripts/helpers/common.sh
+. "$BASE_DIR/scripts/helpers/common.sh"
 # Record upgrade lifecycle in the startup report for visibility in admin reports.
 UPGRADE_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
@@ -116,6 +118,10 @@ _discard_local_git_changes() {
 }
 
 mkdir -p "$LOCK_DIR"
+
+# Prime sudo credentials on interactive WSL sessions so later systemd calls can
+# prompt once instead of failing under non-interactive sudo invocations.
+arthexis_prime_sudo_credentials >/dev/null 2>&1 || true
 
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
