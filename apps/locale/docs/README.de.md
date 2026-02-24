@@ -129,9 +129,9 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 
 | Kanal | Prüfintervall | Zweck | Aktivierungsflag |
 | --- | --- | --- | --- |
-| Stable | Wöchentlich (Donnerstag vor 5:00 Uhr) | Folgt Release-Revisionen mit automatischen Wochenprüfungen. | `--stable` (Standard) |
-| Latest | Täglich (gleiche Uhrzeit) | Folgt den neuesten Mainline-Revisionen mit täglichen Prüfungen. | `--latest` / `-l` oder `--unstable` |
-| Manual | Keine (nur manuelle Upgrades) | Deaktiviert die automatische Upgrade-Schleife für volle Betreiberkontrolle. | _Upgrades bei Bedarf ohne Kanal-Flag ausführen._ |
+| Stable | Wöchentlich (Donnerstag vor 5:00 Uhr) | Folgt Release-Revisionen mit automatischen Wochenprüfungen. | `--stable` |
+| Latest | Alle 15 Minuten | Alias von `--unstable`; folgt neueren Revisionen mit häufigen Prüfungen. | `--latest` / `-l` oder `--unstable` |
+| Manual | Keine (nur manuelle Upgrades) | Deaktiviert die automatische Upgrade-Schleife für volle Betreiberkontrolle. Dieses Verhalten ist der Standard, wenn kein Kanal angegeben wird. | _Upgrades bei Bedarf ohne Kanal-Flag ausführen._ |
 - Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
 - Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
