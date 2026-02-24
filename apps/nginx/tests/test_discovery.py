@@ -6,7 +6,6 @@ from apps.nginx import services
 from apps.nginx.discovery import _discover_site_config_paths, _read_int_lock, _resolve_site_destination
 
 
-@pytest.mark.critical
 def test_read_int_lock_uses_fallback_for_invalid_values(tmp_path: Path):
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir()
@@ -15,7 +14,6 @@ def test_read_int_lock_uses_fallback_for_invalid_values(tmp_path: Path):
     assert _read_int_lock(lock_dir, "backend_port.lck", 8888) == 8888
 
 
-@pytest.mark.critical
 def test_discover_site_config_paths_prefers_enabled_then_available(monkeypatch, tmp_path: Path):
     enabled_dir = tmp_path / "enabled"
     available_dir = tmp_path / "available"
@@ -39,7 +37,6 @@ def test_discover_site_config_paths_prefers_enabled_then_available(monkeypatch, 
     assert _discover_site_config_paths(None) == [from_available]
 
 
-@pytest.mark.critical
 def test_resolve_site_destination_prefers_enabled_path(monkeypatch, tmp_path: Path):
     enabled_dir = tmp_path / "enabled"
     available_dir = tmp_path / "available"
