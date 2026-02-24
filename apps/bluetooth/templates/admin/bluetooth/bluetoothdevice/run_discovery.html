@@ -14,4 +14,7 @@
   {% if result %}
     <p>{% blocktrans with count=result.count created=result.created updated=result.updated %}Discovered {{ count }} devices; created {{ created }}, updated {{ updated }}.{% endblocktrans %}</p>
   {% endif %}
+  {% if error %}
+    <p class="errornote">{% blocktrans with message=error %}Discovery failed: {{ message }}{% endblocktrans %}</p>
+  {% endif %}
 {% endblock %}
