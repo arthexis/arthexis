@@ -53,7 +53,7 @@ class EvergoUserAdmin(
         "created_at",
         "updated_at",
     )
-    actions = ("_test_login_and_sync_bulk_action", "load_orders")
+    actions = ("_test_login_and_sync_bulk_action",)
     changelist_actions = ("load_customers_wizard",)
     change_actions = ("test_login_and_sync_action",)
     fieldsets = (
@@ -138,50 +138,6 @@ class EvergoUserAdmin(
             )
         ]
         return custom_urls + urls
-
-    def load_orders(self, request, queryset=None):
-        """Load orders from Evergo for selected users or for current profile from changelist tool."""
-        if queryset is None or not queryset.exists():
-            fallback_queryset = self.get_queryset(request).filter(user=request.user)
-            queryset = fallback_queryset
-
-        if not queryset.exists():
-            self.message_user(
-                request,
-                _("No Evergo profiles selected to load orders."),
-                level=messages.WARNING,
-            )
-            return HttpResponseRedirect(
-                reverse("admin:evergo_evergouser_changelist")
-            )
-
-        total_created = 0
-        total_updated = 0
-        for profile in queryset:
-            try:
-                created, updated = profile.load_orders()
-            except EvergoAPIError as exc:
-                self.message_user(
-                    request,
-                    _("Failed loading orders for %(profile)s: %(error)s")
-                    % {"profile": str(profile), "error": exc},
-                    level=messages.ERROR,
-                )
-            else:
-                total_created += created
-                total_updated += updated
-
-        self.message_user(
-            request,
-            _("Evergo orders sync completed. Created: %(created)s Updated: %(updated)s")
-            % {"created": total_created, "updated": total_updated},
-            level=messages.SUCCESS,
-        )
-        return HttpResponseRedirect(reverse("admin:evergo_evergouser_changelist"))
-
-    load_orders.label = _("Load Orders")
-    load_orders.short_description = _("Load Orders")
-    load_orders.requires_queryset = False
 
     def load_customers_wizard(self, request, queryset=None):
         """Redirect changelist action to the customer-loading wizard."""
