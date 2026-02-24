@@ -96,3 +96,35 @@ def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
     assert env_refresh_module._fixture_hashes_by_app(fixtures) == {
         label: digest.hexdigest() for label, digest in expected.items()
     }
+
+
+@pytest.mark.django_db
+def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
+    from apps.nginx.models import SiteConfiguration
+
+    SiteConfiguration.objects.create(name="preview-example", enabled=False)
+
+    updated = env_refresh_module._upsert_site_configuration(
+        {
+            "name": "preview-example",
+            "enabled": True,
+            "mode": "public",
+            "protocol": "http",
+            "role": "Terminal",
+            "port": 8888,
+            "certificate": None,
+            "external_websockets": True,
+            "managed_subdomains": "admin,api,status",
+            "include_ipv6": False,
+            "expected_path": "/etc/nginx/sites-enabled/arthexis-preview-example.conf",
+            "site_entries_path": "apps/nginx/fixtures/data/nginx-sites-preview.json",
+            "site_destination": "/etc/nginx/sites-enabled/arthexis-sites.conf",
+            "last_applied_at": None,
+            "last_validated_at": None,
+            "last_message": "",
+        }
+    )
+
+    assert updated is True
+    assert SiteConfiguration.objects.filter(name="preview-example").count() == 1
+    assert SiteConfiguration.objects.get(name="preview-example").enabled is True

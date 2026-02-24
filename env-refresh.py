@@ -48,6 +48,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
 from apps.release.models import PackageRelease
+from apps.nginx.models import SiteConfiguration
 from apps.sigils.sigil_builder import generate_model_sigils
 from apps.locals.user_data import (
     load_local_seed_zips,
@@ -64,6 +65,21 @@ if TYPE_CHECKING:  # pragma: no cover - typing support
     from django.db.models import Model
 
 _MODEL_SEED_FIELD_CACHE = WeakKeyDictionary()
+
+
+def _upsert_site_configuration(fields: dict[str, Any]) -> bool:
+    """Persist a ``SiteConfiguration`` fixture row by unique ``name``.
+
+    Returns ``True`` when the payload contained a usable name and the row was
+    applied with ``update_or_create``.
+    """
+
+    name = fields.get("name")
+    if not name:
+        return False
+    defaults = dict(fields)
+    SiteConfiguration.objects.update_or_create(name=name, defaults=defaults)
+    return True
 
 
 def _schema_needs_migration() -> bool:
@@ -763,6 +779,11 @@ def run_database_tasks(
                                 defaults=defaults,
                             )
                             site_fixture_defaults[domain] = defaults
+                            model_counts[model._meta.label] += 1
+                        modified = True
+                        continue
+                    if model is SiteConfiguration:
+                        if _upsert_site_configuration(fields):
                             model_counts[model._meta.label] += 1
                         modified = True
                         continue
