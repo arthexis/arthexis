@@ -28,7 +28,7 @@ class Feature(Ownable):
     class Source(models.TextChoices):
         """Origin of a suite feature definition."""
 
-        MAINSTREAM = "mainstream", _("Mainstream")
+        MAINSTREAM = "mainstream", _("Main")
         CUSTOM = "custom", _("Custom")
 
     owner_required = False
@@ -41,7 +41,7 @@ class Feature(Ownable):
         default=Source.CUSTOM,
         editable=False,
         help_text=_(
-            "Feature origin. Mainstream features come from development fixtures; custom features are local."
+            "Feature origin. Main features come from development fixtures; custom features are local."
         ),
     )
     summary = models.TextField(blank=True)
