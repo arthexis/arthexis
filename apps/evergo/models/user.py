@@ -673,9 +673,9 @@ class EvergoUser(Profile):
 
         order_number = defaults["order_number"].strip().upper()
         if order_number:
-            placeholder_remote_id = placeholder_remote_id(order_number=order_number)
+            placeholder_id = placeholder_remote_id(order_number=order_number)
             (
-                EvergoOrder.objects.filter(remote_id=placeholder_remote_id)
+                EvergoOrder.objects.filter(remote_id=placeholder_id)
                 .exclude(pk=order.pk)
                 .delete()
             )
