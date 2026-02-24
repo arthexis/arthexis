@@ -19,36 +19,20 @@ def _login_user(client):
     return user
 
 
-def test_charger_status_hides_default_footer(client):
-    """The charger status page should not render the default footer placeholder."""
+@pytest.mark.parametrize(
+    ("url_name", "charger_id_suffix"),
+    [
+        ("ocpp:charger-status", "1"),
+        ("ocpp:charger-session-search", "2"),
+        ("ocpp:charger-log", "3"),
+    ],
+)
+def test_public_charger_pages_hide_default_footer(client, url_name, charger_id_suffix):
+    """Public charger pages should not render the default footer placeholder."""
     _login_user(client)
-    charger = Charger.objects.create(charger_id="FOOTER-CP-1")
+    charger = Charger.objects.create(charger_id=f"FOOTER-CP-{charger_id_suffix}")
 
-    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
-
-    assert response.status_code == 200
-    assert b"footer-placeholder" not in response.content
-
-
-def test_charger_session_search_hides_default_footer(client):
-    """The session search page should not render the default footer placeholder."""
-    _login_user(client)
-    charger = Charger.objects.create(charger_id="FOOTER-CP-2")
-
-    response = client.get(
-        reverse("ocpp:charger-session-search", args=[charger.charger_id])
-    )
-
-    assert response.status_code == 200
-    assert b"footer-placeholder" not in response.content
-
-
-def test_charger_log_page_hides_default_footer(client):
-    """The charger log page should not render the default footer placeholder."""
-    _login_user(client)
-    charger = Charger.objects.create(charger_id="FOOTER-CP-3")
-
-    response = client.get(reverse("ocpp:charger-log", args=[charger.charger_id]))
+    response = client.get(reverse(url_name, args=[charger.charger_id]))
 
     assert response.status_code == 200
     assert b"footer-placeholder" not in response.content
