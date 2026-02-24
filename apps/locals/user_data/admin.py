@@ -8,6 +8,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.serializers import deserialize, serialize
 from django.core.serializers.base import DeserializationError
 from django.db import IntegrityError, transaction
+from django.db import models
 from django.db.models.deletion import ProtectedError
 from django.http import (
     Http404,
@@ -35,7 +36,7 @@ from .utils import _safe_next_url
 class UserDatumAdminMixin(admin.ModelAdmin):
     """Mixin adding a *User Datum* checkbox to change forms."""
 
-    def get_action_choices(self, request, default_choices=admin.helpers.ACTION_CHECKBOX_NAME):
+    def get_action_choices(self, request, default_choices=models.BLANK_CHOICE_DASH):
         """Return de-duplicated admin action choices keyed by action name.
 
         Some admin class combinations can register the same action more than once.
@@ -47,9 +48,6 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         unique_choices = []
         seen_values = set()
         for value, label in choices:
-            if not value:
-                unique_choices.append((value, label))
-                continue
             if value in seen_values:
                 continue
             seen_values.add(value)

@@ -160,6 +160,7 @@ class UserDatumActionChoicesTests(TestCase):
             "get_action_choices",
             return_value=[
                 ("", "---------"),
+                ("", "---------"),
                 ("toggle_selected_user_data", "Toggle selected User Data"),
                 ("toggle_selected_user_data", "Toggle selected User Data"),
             ],
