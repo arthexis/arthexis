@@ -9,7 +9,6 @@ from apps.nginx.config_utils import (
     https_proxy_server,
     slugify,
     websocket_map,
-    write_if_changed,
 )
 
 HTTP_IPV4_LISTENS = (
@@ -229,42 +228,17 @@ def generate_unified_config(
         external_websockets=external_websockets,
     ).rstrip()
 
-    if site_config_path is None:
-        return primary_content + "\n"
+    parts = [primary_content]
 
-    managed_content = generate_site_entries_content(
-        site_config_path,
-        mode,
-        port,
-        https_enabled=https_enabled,
-        external_websockets=external_websockets,
-        subdomain_prefixes=subdomain_prefixes,
-    ).rstrip()
+    if site_config_path is not None:
+        managed_content = generate_site_entries_content(
+            site_config_path,
+            mode,
+            port,
+            https_enabled=https_enabled,
+            external_websockets=external_websockets,
+            subdomain_prefixes=subdomain_prefixes,
+        ).rstrip()
+        parts.append(managed_content)
 
-    return f"{primary_content}\n\n{managed_content}\n"
-
-
-def apply_site_entries(
-    config_path: Path,
-    mode: str,
-    port: int,
-    dest_path: Path,
-    *,
-    https_enabled: bool = False,
-    external_websockets: bool = True,
-    proxy_target: str | None = None,
-    subdomain_prefixes: list[str] | None = None,
-    sudo: str | None = None,
-) -> bool:
-    """Write managed site entries to disk and return whether destination changed."""
-
-    content = generate_site_entries_content(
-        config_path,
-        mode,
-        port,
-        https_enabled=https_enabled,
-        external_websockets=external_websockets,
-        proxy_target=proxy_target,
-        subdomain_prefixes=subdomain_prefixes
-    )
-    return write_if_changed(dest_path, content, sudo=sudo)
+    return "\n\n".join(parts) + "\n"

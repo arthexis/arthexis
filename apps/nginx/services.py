@@ -191,11 +191,6 @@ def apply_nginx_configuration(
 
     primary_dest = destination or Path("/etc/nginx/sites-enabled/arthexis.conf")
     keep_paths = {primary_dest}
-
-    subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
-    _remove_nginx_configs(keep=keep_paths, sudo=sudo)
-    subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-available/default"], check=False)
-    subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-enabled/default"], check=False)
     try:
         config_content = generate_unified_config(
             mode,
@@ -209,6 +204,13 @@ def apply_nginx_configuration(
         )
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
+
+    subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
+    _remove_nginx_configs(keep=keep_paths, sudo=sudo)
+    subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-available/default"], check=False)
+    subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-enabled/default"], check=False)
+    if site_destination and site_destination != primary_dest:
+        subprocess.run([sudo, "rm", "-f", str(site_destination)], check=False)
 
     _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
     _ensure_site_enabled(primary_dest, sudo=sudo)
