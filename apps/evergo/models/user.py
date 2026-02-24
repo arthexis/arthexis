@@ -637,6 +637,18 @@ class EvergoUser(Profile):
         if remote_id is None:
             raise EvergoAPIError("Evergo order payload is missing a valid 'id'.")
 
+        installation_data = payload.get("orden_instalacion")
+        if not isinstance(installation_data, dict):
+            installation_data = {}
+
+        state_payload = payload.get("estado")
+        last_contact = (
+            parse_dt(payload.get("last_contact_at"))
+            or parse_dt(payload.get("last_comment_at"))
+            or parse_dt(payload.get("fecha_ultimo_contacto"))
+            or parse_dt(payload.get("fecha_ultimo_comentario"))
+        )
+
         defaults = {
             "user": self,
             "order_number": str(payload.get("numero_orden") or ""),
@@ -651,6 +663,26 @@ class EvergoUser(Profile):
             "site_name": nested_name(payload.get("sitio")),
             "client_id": to_int(payload.get("idCliente")),
             "client_name": nested_name(payload.get("cliente")),
+            "phone_primary": str(
+                installation_data.get("telefono_celular")
+                or installation_data.get("telefono_fijo1")
+                or ""
+            ).strip(),
+            "phone_secondary": str(
+                installation_data.get("telefono_fijo1")
+                or installation_data.get("telefono_fijo2")
+                or ""
+            ).strip(),
+            "address_street": str(installation_data.get("calle") or "").strip(),
+            "address_num_ext": str(installation_data.get("num_ext") or "").strip(),
+            "address_num_int": str(installation_data.get("num_int") or "").strip(),
+            "address_between_streets": str(installation_data.get("entre_calles") or "").strip(),
+            "address_neighborhood": str(installation_data.get("colonia") or "").strip(),
+            "address_municipality": str(installation_data.get("municipio") or "").strip(),
+            "address_city": str(installation_data.get("ciudad") or "").strip(),
+            "address_state": nested_name(state_payload)
+            or str(installation_data.get("estado") or "").strip(),
+            "address_postal_code": str(installation_data.get("codigo_postal") or "").strip(),
             "assigned_engineer_id": nested_int(payload.get("orden_instalador"), "idIngeniero"),
             "assigned_engineer_name": nested_name(nested_dict(payload.get("orden_instalador"), "ingeniero")),
             "assigned_coordinator_id": nested_int(payload.get("orden_instalador"), "idCoordinador"),
@@ -660,6 +692,7 @@ class EvergoUser(Profile):
             "raw_payload": payload,
             "source_created_at": parse_dt(payload.get("created_at")),
             "source_updated_at": parse_dt(payload.get("updated_at")),
+            "source_last_contact_at": last_contact,
             "validation_state": EvergoOrder.VALIDATION_STATE_VALIDATED,
         }
         charge_points = payload.get("cargadores")
