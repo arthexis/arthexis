@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from django.conf import settings
 from django.core.cache import cache
-from django.utils.cache import patch_vary_headers
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.http import FileResponse, Http404, HttpResponse
 from django.urls import reverse
 from django.shortcuts import render
