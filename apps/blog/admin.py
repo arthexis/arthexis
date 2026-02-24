@@ -26,6 +26,10 @@ class BlogRevisionInline(admin.TabularInline):
     readonly_fields = ("title", "body", "change_note", "created_by", "created_at")
     can_delete = False
 
+    def has_add_permission(self, request, obj=None):
+        del request, obj
+        return False
+
 
 @admin.register(BlogArticle)
 class BlogArticleAdmin(admin.ModelAdmin):
