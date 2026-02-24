@@ -28,18 +28,21 @@ def test_evergo_admin_app_and_changelist_are_accessible(admin_client):
 
 
 @pytest.mark.django_db
-def test_evergo_admin_app_list_points_load_orders_and_load_customers_to_shared_wizard(admin_client):
-    """Regression: dashboard tools for orders and customers should target the same load wizard URL."""
+def test_evergo_admin_load_orders_and_load_customers_actions_redirect_to_shared_wizard(admin_client):
+    """Regression: both admin actions should redirect to the same shared wizard URL."""
 
-    app_url = reverse("admin:app_list", kwargs={"app_label": "evergo"})
     wizard_url = reverse("admin:evergo_evergouser_load_customers")
 
-    response = admin_client.get(app_url)
+    load_orders_action_url = reverse("admin:evergo_evergoorder_actions", args=["load_orders_wizard"])
+    load_customers_action_url = reverse("admin:evergo_evergouser_actions", args=["load_customers_wizard"])
 
-    assert response.status_code == 200
-    content = response.content.decode("utf-8")
-    assert f'href="{wizard_url}">Load Orders<' in content
-    assert f'href="{wizard_url}">Load Customers<' in content
+    load_orders_response = admin_client.get(load_orders_action_url)
+    load_customers_response = admin_client.get(load_customers_action_url)
+
+    assert load_orders_response.status_code == 302
+    assert load_orders_response["Location"] == wizard_url
+    assert load_customers_response.status_code == 302
+    assert load_customers_response["Location"] == wizard_url
 
 @pytest.mark.django_db
 def test_evergo_admin_change_form_renders_readonly_synced_fields(admin_client):
@@ -106,23 +109,6 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
     assert b">empresa id<" not in thead
     assert b">subempresa id<" not in thead
 
-
-@pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_orders", return_value=(2, 3))
-def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, admin_client):
-    """Ensure the changelist tool-style action can run without selected rows."""
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="suite-tool@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    tool_url = reverse("admin:evergo_evergouser_actions", args=["load_orders"])
-    response = admin_client.post(tool_url, follow=True)
-
-    assert response.status_code == 200
-    mock_load_orders.assert_called_once()
 
 
 @pytest.mark.django_db
