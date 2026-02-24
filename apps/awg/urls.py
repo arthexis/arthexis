@@ -9,4 +9,5 @@ urlpatterns = [
     path("", requests.calculator, name="calculator"),
     path("zapped/", requests.zapped_result, name="zapped"),
     path("energy-tariff/", reports.energy_tariff_calculator, name="energy_tariff"),
+    path("electrical-power/", reports.electrical_power_calculator, name="electrical_power"),
 ]
