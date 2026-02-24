@@ -25,10 +25,25 @@ class Feature(Ownable):
     other business rules and define interfaces we want to remember as contracts.
     """
 
+    class Source(models.TextChoices):
+        """Origin of a suite feature definition."""
+
+        MAINSTREAM = "mainstream", _("Mainstream")
+        CUSTOM = "custom", _("Custom")
+
     owner_required = False
 
     slug = models.SlugField(max_length=120, unique=True)
     display = models.CharField(max_length=120)
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.CUSTOM,
+        editable=False,
+        help_text=_(
+            "Feature origin. Mainstream features come from development fixtures; custom features are local."
+        ),
+    )
     summary = models.TextField(blank=True)
     is_enabled = models.BooleanField(
         default=True,

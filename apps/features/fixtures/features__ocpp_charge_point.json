@@ -78,7 +78,8 @@
             "UpdateFirmware"
           ]
         }
-      }
+      },
+      "source": "mainstream"
     }
   },
   {
@@ -224,7 +225,8 @@
             "UpdateFirmware"
           ]
         }
-      }
+      },
+      "source": "mainstream"
     }
   },
   {
@@ -426,7 +428,8 @@
             "UpdateFirmware"
           ]
         }
-      }
+      },
+      "source": "mainstream"
     }
   },
   {
