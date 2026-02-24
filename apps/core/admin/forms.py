@@ -12,7 +12,9 @@ from apps.cards.models import RFID
 from apps.emails.models import EmailInbox, EmailOutbox
 from apps.energy.models import CustomerAccount
 from apps.odoo.models import OdooEmployee, OdooProduct
-from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
+from apps.payments.models.openpay import OpenPayProcessor
+from apps.payments.models.paypal import PayPalProcessor
+from apps.payments.models.stripe import StripeProcessor
 from apps.users.models import User
 from apps.core.widgets import OdooProductWidget
 

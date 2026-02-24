@@ -15,7 +15,9 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 from apps.groups.models import SecurityGroup
-from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
+from apps.payments.models.openpay import OpenPayProcessor
+from apps.payments.models.paypal import PayPalProcessor
+from apps.payments.models.stripe import StripeProcessor
 
 
 PAYMENT_PROCESSOR_MODELS: tuple[type[models.Model], ...] = (
