@@ -3,7 +3,7 @@
 import pytest
 from django.core.exceptions import MultipleObjectsReturned
 
-from apps.links.models import Reference
+from apps.links.models.reference import Reference
 
 
 @pytest.mark.django_db
