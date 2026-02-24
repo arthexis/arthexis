@@ -635,3 +635,20 @@ def admin_show_filters(cl) -> bool:
     app_label = getattr(opts, "app_label", "") if opts else ""
     model_name = getattr(opts, "model_name", "") if opts else ""
     return not (app_label == "ocpp" and model_name == "charger")
+
+
+@register.simple_tag(takes_context=True)
+def hidden_dashboard_app_labels(context) -> set[str]:
+    """Return app labels hidden for the authenticated dashboard user."""
+
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return set()
+
+    try:
+        hidden_model = apps.get_model("locals", "HiddenAdminApp")
+    except LookupError:
+        return set()
+
+    return set(hidden_model.objects.filter(user=user).values_list("app_label", flat=True))

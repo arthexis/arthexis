@@ -2,6 +2,7 @@
 
 {% if app_list %}
   {% favorite_map as favorites_map %}
+  {% hidden_dashboard_app_labels as hidden_app_labels %}
   {% dashboard_model_status_map app_list as model_statuses %}
   {% if show_favorites is not False %}
     {% with show_model_badges=False %}
@@ -24,6 +25,17 @@
             >
               {{ app.name }}
             </a>
+            <form method="post" action="{% url 'admin:hidden_dashboard_app_toggle' app.app_label %}" class="dashboard-app-visibility-form">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              {% if app.app_label in hidden_app_labels %}
+                <input type="hidden" name="action" value="unhide">
+                <button type="submit" class="button-link dashboard-app-visibility-toggle">{% translate 'Unhide' %}</button>
+              {% else %}
+                <input type="hidden" name="action" value="hide">
+                <button type="submit" class="button-link dashboard-app-visibility-toggle">{% translate 'Hide' %}</button>
+              {% endif %}
+            </form>
           </div>
         </caption>
         <thead class="visually-hidden">
@@ -48,6 +60,11 @@
     </div>
     {% endif %}
   {% endfor %}
+  {% if request.GET.show_hidden %}
+    <p class="dashboard-hidden-apps-toggle"><a href="{% url 'admin:index' %}">{% translate "Hide Hidden Apps" %}</a></p>
+  {% else %}
+    <p class="dashboard-hidden-apps-toggle"><a href="{% url 'admin:index' %}?show_hidden=1">{% translate "Show Hidden Apps" %}</a></p>
+  {% endif %}
   {% endwith %}
 {% else %}
   <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>

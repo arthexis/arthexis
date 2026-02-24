@@ -27,6 +27,24 @@ class Favorite(Entity):
         verbose_name_plural = _("Favorites")
 
 
+class HiddenAdminApp(Entity):
+    """Persist per-user hidden admin dashboard apps."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hidden_admin_apps",
+    )
+    app_label = models.CharField(max_length=100)
+
+    class Meta:
+        db_table = "locals_hidden_admin_app"
+        unique_together = ("user", "app_label")
+        ordering = ["app_label", "pk"]
+        verbose_name = _("Hidden admin app")
+        verbose_name_plural = _("Hidden admin apps")
+
+
 def ensure_admin_favorites(user) -> None:
     """Ensure the default admin account has standard favorites configured."""
     if not user:

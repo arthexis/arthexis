@@ -8,8 +8,9 @@ from django.urls import reverse
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from unittest import mock
+import re
 
-from apps.locals.models import Favorite
+from apps.locals.models import Favorite, HiddenAdminApp
 from apps.locals.user_data import EntityModelAdmin
 
 
@@ -143,3 +144,47 @@ class RecoverSelectedActionTests(TestCase):
         self.assertFalse(second.is_deleted)
         messages = [str(message) for message in request._messages]
         self.assertIn("Recovered 2 deleted Favorites.", messages)
+
+
+class HiddenDashboardAppsTests(TestCase):
+    """Regression tests for per-user hidden admin dashboard apps."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="hiddenapps",
+            email="hiddenapps@example.com",
+            password="password",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client.force_login(self.user)
+
+    def test_hide_toggle_creates_hidden_app_record(self):
+        url = reverse("admin:hidden_dashboard_app_toggle", args=["auth"])
+
+        response = self.client.post(url, {"action": "hide", "next": "/admin/"})
+
+        self.assertRedirects(response, "/admin/")
+        self.assertTrue(
+            HiddenAdminApp.objects.filter(user=self.user, app_label="auth").exists()
+        )
+
+    def test_dashboard_omits_hidden_apps_until_show_hidden_requested(self):
+        baseline = self.client.get(reverse("admin:index"))
+        self.assertEqual(baseline.status_code, 200)
+        match = re.search(r'data-app-label="([^"]+)"', baseline.content.decode())
+        self.assertIsNotNone(match)
+        app_label = match.group(1)
+        HiddenAdminApp.objects.create(user=self.user, app_label=app_label)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, f'data-app-label="{app_label}"')
+        self.assertContains(response, "Show Hidden Apps")
+
+        revealed = self.client.get(reverse("admin:index"), {"show_hidden": 1})
+
+        self.assertEqual(revealed.status_code, 200)
+        self.assertContains(revealed, f'data-app-label="{app_label}"')
+        self.assertContains(revealed, "Unhide")

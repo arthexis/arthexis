@@ -4,13 +4,14 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from config.request_utils import is_https_request
 from .favorites_cache import clear_user_favorites_cache
-from .models import Favorite
+from .models import Favorite, HiddenAdminApp
 
 
 def _get_safe_next_url(request):
@@ -37,6 +38,26 @@ def _get_safe_next_url(request):
     ):
         return candidate
     return None
+
+
+
+
+def hidden_apps_toggle(request, app_label):
+    """Toggle hidden state for an admin dashboard app for the current user."""
+
+    if not app_label:
+        raise Http404("Missing app label")
+
+    next_url = _get_safe_next_url(request)
+    action = (request.POST.get("action") or request.GET.get("action") or "").strip()
+    if request.method != "POST":
+        return redirect(next_url or "admin:index")
+
+    if action == "hide":
+        HiddenAdminApp.objects.get_or_create(user=request.user, app_label=app_label)
+    elif action == "unhide":
+        HiddenAdminApp.objects.filter(user=request.user, app_label=app_label).delete()
+    return redirect(next_url or "admin:index")
 
 
 def favorite_toggle(request, ct_id):
@@ -188,6 +209,11 @@ def patch_admin_favorites() -> None:
                 "favorites/clear/",
                 admin.site.admin_view(favorite_clear),
                 name="favorite_clear",
+            ),
+            path(
+                "dashboard-apps/<str:app_label>/",
+                admin.site.admin_view(hidden_apps_toggle),
+                name="hidden_dashboard_app_toggle",
             ),
         ]
         return my_urls + urls

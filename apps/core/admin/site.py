@@ -4,6 +4,7 @@ from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
+
 admin.site.unregister(Group)
 
 
@@ -111,29 +112,42 @@ _original_admin_get_app_list = admin.AdminSite.get_app_list
 
 
 def get_app_list_with_protocol_forwarder(self, request, app_label=None):
+    """Return app list with formatted names and optional hidden app filtering."""
+
     try:
         Application = django_apps.get_model("app", "Application")
     except LookupError:
         return _original_admin_get_app_list(self, request, app_label=app_label)
 
     full_list = list(_original_admin_get_app_list(self, request, app_label=None))
-    result = full_list
+    show_hidden = bool(getattr(request, "GET", {}).get("show_hidden"))
 
-    if app_label:
-        result = [entry for entry in result if entry.get("app_label") == app_label]
+    hidden_labels = set()
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated and not show_hidden and app_label is None:
+        try:
+            HiddenAdminApp = django_apps.get_model("locals", "HiddenAdminApp")
+        except LookupError:
+            HiddenAdminApp = None
+        if HiddenAdminApp is not None:
+            hidden_labels = set(
+                HiddenAdminApp.objects.filter(user=user).values_list("app_label", flat=True)
+            )
 
-    ordered_result = []
-
-    for entry in result:
-        app_label = entry.get("app_label")
-        entry_name = str(app_label or entry.get("name"))
-
+    result = []
+    for entry in full_list:
+        current_app_label = entry.get("app_label")
+        if app_label and current_app_label != app_label:
+            continue
+        if hidden_labels and current_app_label in hidden_labels:
+            continue
         ordered_entry = entry.copy()
+        entry_name = str(current_app_label or entry.get("name"))
         ordered_entry["name"] = Application.format_display_name(entry_name)
-        ordered_result.append(ordered_entry)
+        result.append(ordered_entry)
 
-    ordered_result.sort(key=lambda entry: (entry.get("name"), entry.get("app_label")))
-    return ordered_result
+    result.sort(key=lambda entry: (entry.get("name"), entry.get("app_label")))
+    return result
 
 
 admin.AdminSite.get_app_list = get_app_list_with_protocol_forwarder
