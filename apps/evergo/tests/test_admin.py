@@ -92,7 +92,7 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.load_orders", return_value=(2, 3))
+@patch("apps.evergo.models.user.EvergoUser.load_orders", return_value=(2, 3))
 def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, admin_client):
     """Ensure the changelist tool-style action can run without selected rows."""
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
@@ -110,7 +110,7 @@ def test_evergo_admin_load_orders_tool_works_without_queryset(mock_load_orders, 
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.load_customers_from_queries")
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
     """Regression: customer load wizard should call profile sync method and redirect."""
     mock_load_customers.return_value = {
@@ -160,7 +160,7 @@ def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_cre
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.load_customers_from_queries")
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_customers, admin_client):
     """Security regression: wizard should not allow selecting someone else's profile."""
     user_model = get_user_model()
@@ -185,7 +185,7 @@ def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_cu
     mock_load_customers.assert_not_called()
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.EvergoUser.test_login")
+@patch("apps.evergo.models.user.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Regression: change-form action should run login sync without requiring changelist selection."""
 

@@ -1,25 +1,33 @@
-"""Models for Evergo credential, profile, and order synchronization."""
+"""Evergo user model and synchronization operations."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
-import hashlib
 import re
-from urllib.parse import unquote, urlsplit
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
+
 from apps.users.models import Profile
 
-from .exceptions import EvergoAPIError
+from apps.evergo.exceptions import EvergoAPIError
+from .customer import EvergoCustomer
+from .order import EvergoOrder, EvergoOrderFieldValue
+from .parsing import (
+    _first_dict,
+    _nested_dict,
+    _nested_int,
+    _nested_name,
+    _parse_dt,
+    _placeholder_remote_id,
+    _to_int,
+)
 
 
 @dataclass(slots=True)
@@ -674,227 +682,3 @@ class EvergoUser(Profile):
 
         order.sync_dynamic_field_values(payload)
         return created
-
-
-class EvergoOrderFieldValue(models.Model):
-    """Known dropdown-like values observed from Evergo catalogs and order payloads."""
-
-    FIELD_SITIO = "sitio"
-    FIELD_ESTATUS = "estatus"
-    FIELD_INGENIERO = "ingeniero"
-    FIELD_PREORDEN_TIPO = "preorden_tipo"
-    FIELD_PAYMENT_BY = "payment_by"
-
-    field_name = models.CharField(max_length=64)
-    remote_id = models.PositiveIntegerField(null=True, blank=True)
-    remote_name = models.CharField(max_length=255)
-    local_label = models.CharField(max_length=255, blank=True)
-    raw_payload = models.JSONField(default=dict, blank=True)
-    last_seen_at = models.DateTimeField(auto_now=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "Evergo Order Field Value"
-        verbose_name_plural = "Evergo Order Field Values"
-        unique_together = ("field_name", "remote_id")
-
-    def __str__(self) -> str:
-        """Return a concise human-readable representation."""
-        return f"{self.field_name}: {self.remote_name}"
-
-
-class EvergoOrder(models.Model):
-    """Local cache of Evergo installer/coordinator orders for the authenticated user."""
-
-    VALIDATION_STATE_VALIDATED = "validated"
-    VALIDATION_STATE_PLACEHOLDER = "placeholder"
-    VALIDATION_STATE_CHOICES = (
-        (VALIDATION_STATE_VALIDATED, "Validated in Evergo"),
-        (VALIDATION_STATE_PLACEHOLDER, "Temporary placeholder"),
-    )
-
-    user = models.ForeignKey(EvergoUser, on_delete=models.CASCADE, related_name="orders")
-    remote_id = models.PositiveIntegerField(unique=True, db_index=True)
-    order_number = models.CharField(max_length=64, blank=True)
-    prefix = models.CharField(max_length=32, blank=True)
-    suffix = models.CharField(max_length=32, blank=True)
-    uuid = models.PositiveIntegerField(null=True, blank=True)
-
-    status_id = models.PositiveIntegerField(null=True, blank=True)
-    status_name = models.CharField(max_length=255, blank=True)
-    site_id = models.PositiveIntegerField(null=True, blank=True)
-    site_name = models.CharField(max_length=255, blank=True)
-    client_id = models.PositiveIntegerField(null=True, blank=True)
-    client_name = models.CharField(max_length=255, blank=True)
-
-    assigned_engineer_id = models.PositiveIntegerField(null=True, blank=True)
-    assigned_engineer_name = models.CharField(max_length=255, blank=True)
-    assigned_coordinator_id = models.PositiveIntegerField(null=True, blank=True)
-    assigned_coordinator_name = models.CharField(max_length=255, blank=True)
-
-    has_charger = models.BooleanField(default=False)
-    has_vehicle = models.BooleanField(default=False)
-    charger_count = models.PositiveIntegerField(default=0)
-    estimated_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    scheduled_for = models.DateTimeField(null=True, blank=True)
-    source_created_at = models.DateTimeField(null=True, blank=True)
-    source_updated_at = models.DateTimeField(null=True, blank=True)
-    raw_payload = models.JSONField(default=dict, blank=True)
-    validation_state = models.CharField(
-        max_length=20,
-        choices=VALIDATION_STATE_CHOICES,
-        default=VALIDATION_STATE_VALIDATED,
-    )
-    refreshed_at = models.DateTimeField(auto_now=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "Evergo Order"
-        verbose_name_plural = "Evergo Orders"
-        ordering = ("-source_updated_at", "-remote_id")
-
-    def __str__(self) -> str:
-        """Return an informative order identifier for admin and logs."""
-        if self.order_number:
-            return self.order_number
-        return f"EvergoOrder#{self.remote_id}"
-
-    def sync_dynamic_field_values(self, payload: dict[str, Any]) -> None:
-        """Track dropdown-like field values as they appear in incoming order payloads."""
-        mapping = (
-            (EvergoOrderFieldValue.FIELD_SITIO, payload.get("sitio")),
-            (EvergoOrderFieldValue.FIELD_ESTATUS, payload.get("estatus")),
-            (EvergoOrderFieldValue.FIELD_PREORDEN_TIPO, payload.get("preorden_tipo")),
-        )
-        for field_name, source in mapping:
-            if not isinstance(source, dict):
-                continue
-            remote_id = _to_int(source.get("id"))
-            remote_name = _nested_name(source)
-            if remote_id is None or not remote_name:
-                continue
-            EvergoOrderFieldValue.objects.update_or_create(
-                field_name=field_name,
-                remote_id=remote_id,
-                defaults={
-                    "remote_name": remote_name,
-                    "raw_payload": source,
-                    "last_seen_at": timezone.now(),
-                },
-            )
-
-        payment_by = str(payload.get("paymentBy") or "").strip()
-        if payment_by:
-            EvergoOrderFieldValue.objects.update_or_create(
-                field_name=EvergoOrderFieldValue.FIELD_PAYMENT_BY,
-                remote_id=None,
-                remote_name=payment_by,
-                defaults={"raw_payload": {"value": payment_by}, "last_seen_at": timezone.now()},
-            )
-
-        amount = payload.get("monto")
-        try:
-            self.estimated_amount = Decimal(str(amount)) if amount not in (None, "") else None
-        except (InvalidOperation, ValueError):
-            self.estimated_amount = None
-        self.save(update_fields=["estimated_amount", "refreshed_at"])
-
-
-class EvergoCustomer(models.Model):
-    """Local cache of customer info sourced from Evergo sales-order payloads."""
-
-    user = models.ForeignKey(EvergoUser, on_delete=models.CASCADE, related_name="customers")
-    remote_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
-    name = models.CharField(max_length=255)
-    email = models.EmailField(blank=True)
-    phone_number = models.CharField(max_length=64, blank=True)
-    address = models.CharField(max_length=512, blank=True)
-    latest_so = models.CharField(max_length=64, blank=True)
-    latest_order = models.ForeignKey(
-        EvergoOrder,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="customers",
-    )
-    latest_order_updated_at = models.DateTimeField(null=True, blank=True)
-    raw_payload = models.JSONField(default=dict, blank=True)
-    refreshed_at = models.DateTimeField(auto_now=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "Evergo Customer"
-        verbose_name_plural = "Evergo Customers"
-        unique_together = (("user", "remote_id"),)
-        ordering = ("-latest_order_updated_at", "name")
-
-    def __str__(self) -> str:
-        """Return a concise customer label."""
-        if self.latest_so:
-            return f"{self.name} ({self.latest_so})"
-        return self.name
-
-
-def _to_int(value: Any) -> int | None:
-    """Convert loosely typed API integers into local integer fields."""
-    if value in (None, ""):
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _placeholder_remote_id(*, order_number: str) -> int:
-    """Build a deterministic positive integer to persist a provisional SO row."""
-    # Reserve [1_500_000_000, 2_000_000_000) for placeholders to avoid collisions
-    # with current real Evergo IDs while keeping deterministic order-number mapping.
-    digest = hashlib.sha256(order_number.strip().upper().encode("utf-8")).hexdigest()[:12]
-    return 1_500_000_000 + (int(digest, 16) % 500_000_000)
-
-
-def _first_dict(value: Any) -> dict[str, Any]:
-    """Return the first dictionary in a list-like payload field."""
-    if isinstance(value, list) and value and isinstance(value[0], dict):
-        return value[0]
-    return {}
-
-
-def _parse_dt(value: Any) -> datetime | None:
-    """Parse ISO datetimes produced by the Evergo API."""
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value
-    if not isinstance(value, str):
-        return None
-    dt = parse_datetime(value)
-    if dt is None:
-        return None
-    if timezone.is_naive(dt):
-        return timezone.make_aware(dt)
-    return dt
-
-
-def _nested_dict(value: Any, key: str) -> dict[str, Any]:
-    """Safely return a dictionary from a nested object lookup."""
-    if not isinstance(value, dict):
-        return {}
-    nested = value.get(key)
-    if not isinstance(nested, dict):
-        return {}
-    return nested
-
-
-def _nested_int(value: Any, key: str) -> int | None:
-    """Safely coerce a nested dictionary integer field."""
-    if not isinstance(value, dict):
-        return None
-    return _to_int(value.get(key))
-
-
-def _nested_name(value: Any) -> str:
-    """Extract a user-facing name from dictionary payloads."""
-    if not isinstance(value, dict):
-        return ""
-    return str(value.get("nombre") or value.get("name") or "")
