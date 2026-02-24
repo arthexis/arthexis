@@ -9,8 +9,6 @@ from django.test import RequestFactory
 from apps.docs import views
 
 
-pytestmark = pytest.mark.critical
-
 
 def test_missing_docs_path_renders_library_fallback(monkeypatch):
     """Regression: missing docs routes should show the library fallback instead of a blank page."""
