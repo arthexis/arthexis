@@ -3,6 +3,7 @@
 import base64
 import json
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 import requests
@@ -22,6 +23,28 @@ from ....models import Charger
 
 class ActionServiceMixin:
     """Shared helpers for local/remote charger admin action dispatch."""
+
+    _REMOTE_DATETIME_FIELDS = {
+        "availability_requested_at",
+        "availability_request_status_at",
+        "availability_state_updated_at",
+        "diagnostics_requested_at",
+        "diagnostics_last_downloaded_at",
+    }
+    _REMOTE_UPDATABLE_FIELDS = {
+        "require_rfid",
+        "local_auth_list_version",
+        "availability_requested_state",
+        "availability_requested_at",
+        "availability_request_status",
+        "availability_request_status_at",
+        "availability_request_details",
+        "availability_state",
+        "availability_state_updated_at",
+        "diagnostics_location",
+        "diagnostics_requested_at",
+        "diagnostics_last_downloaded_at",
+    }
 
     def _send_local_ocpp_call(
         self,
@@ -75,6 +98,26 @@ class ActionServiceMixin:
             return None, None
         return local, private_key
 
+    def _iter_chargers(self, request, queryset) -> Iterator[tuple[Charger, bool, Node | None, Any]]:
+        """Yield chargers with resolved local/remote dispatch context."""
+        local_node = private_key = None
+        remote_unavailable = False
+        for charger in queryset:
+            if charger.is_local:
+                yield charger, True, None, None
+                continue
+            if not charger.allow_remote:
+                self.message_user(request, f"{charger}: remote administration is disabled.", level=messages.ERROR)
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            yield charger, False, local_node, private_key
+
     def _call_remote_action(self, request, local_node: Node, private_key, charger: Charger, action: str, extra: dict[str, Any] | None = None) -> tuple[bool, dict[str, Any]]:
         """Invoke a remote action on the charger's managing node."""
         if not charger.node_origin:
@@ -126,11 +169,14 @@ class ActionServiceMixin:
         except ValueError:
             self.message_user(request, f"{charger}: invalid response from remote node.", level=messages.ERROR)
             return False, {}
+        if not isinstance(data, dict):
+            self.message_user(request, f"{charger}: {response.text or 'Remote node rejected the request.'}", level=messages.ERROR)
+            return False, {}
         if response.status_code != 200 or data.get("status") != "ok":
-            detail = data.get("detail") if isinstance(data, dict) else None
+            detail = data.get("detail")
             self.message_user(request, f"{charger}: {detail or response.text or 'Remote node rejected the request.'}", level=messages.ERROR)
             return False, {}
-        updates = data.get("updates", {}) if isinstance(data, dict) else {}
+        updates = data.get("updates", {})
         return True, updates if isinstance(updates, dict) else {}
 
     def _apply_remote_updates(self, charger: Charger, updates: dict[str, Any]) -> None:
@@ -139,6 +185,8 @@ class ActionServiceMixin:
             return
         applied: dict[str, Any] = {}
         for field, value in updates.items():
+            if field not in self._REMOTE_UPDATABLE_FIELDS:
+                continue
             if field in self._REMOTE_DATETIME_FIELDS and isinstance(value, str):
                 parsed = parse_datetime(value)
                 if parsed and timezone.is_naive(parsed):
@@ -146,6 +194,8 @@ class ActionServiceMixin:
                 applied[field] = parsed
             else:
                 applied[field] = value
+        if not applied:
+            return
         Charger.objects.filter(pk=charger.pk).update(**applied)
         for field, value in applied.items():
             setattr(charger, field, value)

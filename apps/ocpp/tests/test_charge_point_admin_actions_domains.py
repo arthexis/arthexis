@@ -97,3 +97,97 @@ def test_simulator_action_creates_and_redirects():
     assert response.status_code == 302
     assert str(simulator.pk) in response.url
     assert any("Created 1 simulator" in message for message in _messages(request))
+
+
+
+def test_apply_remote_updates_uses_allow_list_only():
+    """Remote updates should ignore non-allowlisted charger fields."""
+    admin = ChargerAdmin(Charger, AdminSite())
+    charger = Charger.objects.create(charger_id="CP-REMOTE-UPDATES", allow_remote=True, require_rfid=False)
+
+    admin._apply_remote_updates(charger, {"allow_remote": False, "require_rfid": True})
+
+    charger.refresh_from_db()
+    assert charger.allow_remote is True
+    assert charger.require_rfid is True
+
+
+def test_remote_toggle_counts_use_requested_value():
+    """Remote toggle summary should use intended toggle value when updates are empty."""
+    admin = ChargerAdmin(Charger, AdminSite())
+    request = _admin_request()
+    charger = Charger.objects.create(charger_id="CP-REMOTE-RFID", require_rfid=False, allow_remote=True)
+
+    with (
+        patch.object(admin, "_iter_chargers", return_value=iter([(charger, False, object(), object())])),
+        patch.object(admin, "_call_remote_action", return_value=(True, {})),
+        patch.object(admin, "_apply_remote_updates"),
+    ):
+        admin.toggle_rfid_authentication(request, Charger.objects.filter(pk=charger.pk))
+
+    assert any("enabled for 1 charger(s)" in message for message in _messages(request))
+
+
+def test_non_dict_remote_response_is_rejected():
+    """Remote responses must be dict-like JSON payloads."""
+    admin = ChargerAdmin(Charger, AdminSite())
+    request = _admin_request()
+    charger = Charger.objects.create(charger_id="CP-REMOTE-JSON", allow_remote=True)
+
+    class _Origin:
+        port = 443
+
+        @staticmethod
+        def get_remote_host_candidates():
+            return ["example.com"]
+
+        @staticmethod
+        def iter_remote_urls(_path):
+            yield "https://example.com/nodes/network/chargers/action/"
+
+    class _LocalNode:
+        uuid = "11111111-1111-1111-1111-111111111111"
+        mac_address = "00:11:22:33:44:55"
+        public_key = "pk"
+
+    class _PrivateKey:
+        @staticmethod
+        def sign(*_args, **_kwargs):
+            return b"sig"
+
+    class _Response:
+        status_code = 200
+        text = "[]"
+
+        @staticmethod
+        def json():
+            return []
+
+    with (
+        patch.object(Charger, "node_origin", new_callable=PropertyMock, return_value=_Origin()),
+        patch("apps.ocpp.admin.charge_point.actions.services.requests.post", return_value=_Response()),
+    ):
+        ok, updates = admin._call_remote_action(request, _LocalNode(), _PrivateKey(), charger, "get-configuration")
+
+    assert ok is False
+    assert updates == {}
+    assert any("[]" in message or "Remote node rejected" in message for message in _messages(request))
+
+
+def test_purge_data_reports_partial_failures():
+    """Purge should continue after per-charger failures and report the result."""
+    admin = ChargerAdmin(Charger, AdminSite())
+    request = _admin_request()
+    charger_a = Charger.objects.create(charger_id="CP-PURGE-OK")
+    charger_b = Charger.objects.create(charger_id="CP-PURGE-FAIL")
+
+    def _fake_purge(self):
+        if self.pk == charger_b.pk:
+            raise RuntimeError("boom")
+
+    with patch.object(Charger, "purge", _fake_purge):
+        admin.purge_data(request, Charger.objects.filter(pk__in=[charger_a.pk, charger_b.pk]).order_by("pk"))
+
+    msgs = _messages(request)
+    assert any("Purged selected charge point data" in message for message in msgs)
+    assert any("Failed to purge 1 charger" in message for message in msgs)

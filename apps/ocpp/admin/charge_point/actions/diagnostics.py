@@ -1,6 +1,8 @@
 """Diagnostics-related charger admin actions."""
 
 import contextlib
+import ipaddress
+import socket
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -72,10 +74,27 @@ class DiagnosticsActionsMixin(ActionServiceMixin):
             counter += 1
         return candidate
 
+
+    def _is_safe_diagnostics_host(self, hostname: str) -> bool:
+        """Return whether hostname resolves only to public, non-local addresses."""
+        try:
+            infos = socket.getaddrinfo(hostname, None)
+        except socket.gaierror:
+            return False
+        for info in infos:
+            address = info[4][0]
+            ip_obj = ipaddress.ip_address(address)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_multicast or ip_obj.is_unspecified:
+                return False
+        return True
+
     def _download_diagnostics(self, request, charger: Charger, location: str, diagnostics_dir: Path, user_dir: Path) -> tuple[Path, str]:
-        scheme = (urlparse(location).scheme or "").lower()
+        parsed_url = urlparse(location)
+        scheme = (parsed_url.scheme or "").lower()
         if scheme not in {"http", "https"}:
             raise self.DiagnosticsDownloadError(_("Diagnostics location must use HTTP or HTTPS."))
+        if not parsed_url.hostname or not self._is_safe_diagnostics_host(parsed_url.hostname):
+            raise self.DiagnosticsDownloadError(_("Diagnostics host is not allowed."))
         try:
             response = requests.get(location, stream=True, timeout=15)
         except RequestException as exc:
