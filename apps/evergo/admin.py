@@ -54,7 +54,7 @@ class EvergoUserAdmin(
         "updated_at",
     )
     actions = ("_test_login_and_sync_bulk_action", "load_orders")
-    changelist_actions = ("load_orders", "load_customers_wizard")
+    changelist_actions = ("load_customers_wizard",)
     change_actions = ("test_login_and_sync_action",)
     fieldsets = (
         (
@@ -257,8 +257,10 @@ class EvergoUserAdmin(
 
 
 @admin.register(EvergoOrder)
-class EvergoOrderAdmin(admin.ModelAdmin):
+class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect synchronized Evergo order snapshots."""
+
+    changelist_actions = ("load_orders_wizard",)
 
     list_display = (
         "remote_id",
@@ -285,6 +287,14 @@ class EvergoOrderAdmin(admin.ModelAdmin):
         "assigned_coordinator_name",
     )
     readonly_fields = ("raw_payload", "validation_state", "refreshed_at", "created_at")
+
+    def load_orders_wizard(self, request, queryset=None):
+        """Redirect the order dashboard tool to the shared load wizard view."""
+        return HttpResponseRedirect(reverse("admin:evergo_evergouser_load_customers"))
+
+    load_orders_wizard.label = _("Load Orders")
+    load_orders_wizard.short_description = _("Load Orders")
+    load_orders_wizard.requires_queryset = False
 
 
 @admin.register(EvergoOrderFieldValue)
