@@ -6,7 +6,7 @@ import uuid
 import pytest
 from django.urls import reverse
 
-from apps.links.models import Reference
+from apps.links.models.reference import Reference
 
 
 @pytest.mark.django_db

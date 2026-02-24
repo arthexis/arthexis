@@ -9,7 +9,7 @@ fixtures.
 
 import pytest
 
-from apps.links.models import Reference
+from apps.links.models.reference import Reference
 from apps.links.reference_utils import filter_visible_references
 
 pytestmark = pytest.mark.critical

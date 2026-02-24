@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory
 
-from apps.links.models import Reference
+from apps.links.models.reference import Reference
 from apps.links.templatetags.ref_tags import _get_current_module, build_footer_context
 from apps.modules.models import Module
 

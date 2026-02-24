@@ -1,54 +1,28 @@
-"""Models for storing shared external links and references."""
+"""Reference models and managers."""
 
 from __future__ import annotations
 
 import hashlib
-import secrets
 import uuid
 from io import BytesIO
-from urllib.parse import urlparse
 
 import qrcode
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-from django.db import IntegrityError, models, transaction
-from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
+from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager
-from apps.leads.models import Lead
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file, ensure_media_bucket
 
 
-def _generate_qr_slug() -> str:
-    return secrets.token_urlsafe(6).rstrip("=")
-
-
-def _generate_short_slug() -> str:
-    return secrets.token_urlsafe(5).rstrip("=")
-
-
-def _is_valid_redirect_target(value: str) -> bool:
-    parsed = urlparse(value)
-    if parsed.scheme in {"http", "https"} and parsed.netloc:
-        return url_has_allowed_host_and_scheme(value, allowed_hosts={parsed.netloc})
-    if not parsed.scheme and not parsed.netloc and value.startswith("/"):
-        return True
-    return False
-
-
 class ReferenceManager(EntityManager):
-    def get_by_natural_key(self, alt_text: str, value: str | None = None):
-        """Resolve a reference natural key for fixture deserialization.
+    """Manager for reference natural key lookups."""
 
-        Historically references were keyed only by ``alt_text``, but that value
-        is not guaranteed to be unique in live databases. Accepting ``value`` as
-        a second key keeps fixture loading deterministic when duplicate titles
-        exist.
-        """
+    def get_by_natural_key(self, alt_text: str, value: str | None = None):
+        """Resolve a natural key for fixture deserialization."""
 
         filters = {"alt_text": alt_text}
         if value is not None:
@@ -171,6 +145,8 @@ class Reference(Entity):
     objects = ReferenceManager()
 
     def save(self, *args, **kwargs):
+        """Save and auto-generate a QR image if needed."""
+
         if self.pk:
             original = type(self).all_objects.get(pk=self.pk)
             if original.transaction_uuid != self.transaction_uuid:
@@ -192,10 +168,10 @@ class Reference(Entity):
             )
         super().save(*args, **kwargs)
 
-    def __str__(self) -> str:  # pragma: no cover - simple representation
+    def __str__(self) -> str:
         return self.alt_text
 
-    def natural_key(self):  # pragma: no cover - simple representation
+    def natural_key(self):
         return (self.alt_text, self.value)
 
     def is_link_valid(self) -> bool:
@@ -262,6 +238,8 @@ REFERENCE_QR_ALLOWED_PATTERNS = "\n".join(["*.png"])
 
 
 def get_reference_file_bucket():
+    """Return the media bucket used for reference file attachments."""
+
     return ensure_media_bucket(
         slug=REFERENCE_FILE_BUCKET_SLUG,
         name=_("Reference Files"),
@@ -272,6 +250,8 @@ def get_reference_file_bucket():
 
 
 def get_reference_qr_bucket():
+    """Return the media bucket used for generated reference QR images."""
+
     return ensure_media_bucket(
         slug=REFERENCE_QR_BUCKET_SLUG,
         name=_("Reference QR Images"),
@@ -282,169 +262,9 @@ def get_reference_qr_bucket():
 
 
 class ExperienceReference(Reference):
+    """Proxy model for organizing reference admin behavior."""
+
     class Meta:
         proxy = True
         verbose_name = _("Reference")
         verbose_name_plural = _("References")
-
-class QRRedirect(Entity):
-    """Short-slug QR redirect that can be updated without changing the slug."""
-
-    slug = models.SlugField(
-        max_length=32,
-        unique=True,
-        blank=True,
-        help_text=_("Short, persistent slug used for QR links."),
-    )
-    target_url = models.CharField(
-        max_length=500,
-        help_text=_("Destination URL or absolute path."),
-    )
-    title = models.CharField(
-        max_length=200,
-        blank=True,
-        help_text=_("Optional display title for the public view."),
-    )
-    text_above = models.TextField(
-        blank=True,
-        help_text=_("Optional text to show above the embedded content."),
-    )
-    text_below = models.TextField(
-        blank=True,
-        help_text=_("Optional text to show below the embedded content."),
-    )
-    is_public = models.BooleanField(
-        default=False,
-        help_text=_("Controls visibility in the public QR listing."),
-    )
-    created_on = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = _("QR Redirect")
-        verbose_name_plural = _("QR Redirects")
-        ordering = ("slug",)
-
-    def __str__(self) -> str:  # pragma: no cover - representation
-        return self.title or self.slug
-
-    def clean(self):
-        super().clean()
-        if self.target_url and not _is_valid_redirect_target(self.target_url.strip()):
-            raise ValidationError(
-                {"target_url": _("Enter a valid http(s) URL or absolute path.")}
-            )
-
-    def save(self, *args, **kwargs):
-        self.target_url = (self.target_url or "").strip()
-        if self.slug or self.pk is not None:
-            super().save(*args, **kwargs)
-            return
-        for _ in range(5):
-            self.slug = _generate_qr_slug()
-            try:
-                with transaction.atomic():
-                    super().save(*args, **kwargs)
-                    return
-            except IntegrityError:
-                self.pk = None
-        raise IntegrityError("Failed to generate a unique slug after multiple attempts.")
-
-    def redirect_path(self) -> str:
-        return reverse("links:qr-redirect", args=[self.slug])
-
-    def public_path(self) -> str:
-        return reverse("links:qr-redirect-public", args=[self.slug])
-
-
-class ShortURL(Entity):
-    """Short URL slug that can redirect to an updated target over time."""
-
-    slug = models.SlugField(
-        max_length=32,
-        unique=True,
-        blank=True,
-        help_text=_("Short, persistent slug used for shared links."),
-    )
-    original_url = models.CharField(
-        max_length=500,
-        db_index=True,
-        help_text=_("Original URL used when the short link was created."),
-    )
-    target_url = models.CharField(
-        max_length=500,
-        db_index=True,
-        help_text=_("Destination URL or absolute path."),
-    )
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = _("Short URL")
-        verbose_name_plural = _("Short URLs")
-        ordering = ("slug",)
-
-    def __str__(self) -> str:  # pragma: no cover - representation
-        return self.slug
-
-    def clean(self):
-        super().clean()
-        if self.target_url and not _is_valid_redirect_target(self.target_url.strip()):
-            raise ValidationError(
-                {"target_url": _("Enter a valid http(s) URL or absolute path.")}
-            )
-
-    def save(self, *args, **kwargs):
-        self.target_url = (self.target_url or "").strip()
-        self.original_url = (self.original_url or "").strip()
-        if self.slug or self.pk is not None:
-            super().save(*args, **kwargs)
-            return
-        for _ in range(5):
-            self.slug = _generate_short_slug()
-            try:
-                with transaction.atomic():
-                    super().save(*args, **kwargs)
-                    return
-            except IntegrityError:
-                self.pk = None
-        raise IntegrityError("Failed to generate a unique slug after multiple attempts.")
-
-    def redirect_path(self) -> str:
-        return reverse("links:short-url", args=[self.slug])
-
-
-def get_or_create_short_url(target_url: str) -> ShortURL | None:
-    target_url = (target_url or "").strip()
-    if not target_url:
-        return None
-    existing = ShortURL.objects.filter(target_url=target_url).order_by("pk").first()
-    if existing:
-        return existing
-    existing = ShortURL.objects.filter(original_url=target_url).order_by("pk").first()
-    if existing:
-        return existing
-    return ShortURL.objects.create(original_url=target_url, target_url=target_url)
-
-
-class QRRedirectLead(Lead):
-    qr_redirect = models.ForeignKey(
-        QRRedirect,
-        on_delete=models.CASCADE,
-        related_name="leads",
-    )
-    target_url = models.TextField(blank=True)
-
-    class Meta:
-        verbose_name = _("QR Redirect Lead")
-        verbose_name_plural = _("QR Redirect Leads")
-
-
-__all__ = [
-    "ExperienceReference",
-    "get_or_create_short_url",
-    "QRRedirect",
-    "QRRedirectLead",
-    "Reference",
-    "ReferenceManager",
-    "ShortURL",
-]
