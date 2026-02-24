@@ -42,7 +42,7 @@ class BluetoothDevice(models.Model):
     rssi = models.IntegerField(null=True, blank=True)
     uuids = models.JSONField(default=list, blank=True)
     first_seen_at = models.DateTimeField(default=timezone.now)
-    last_seen_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     is_registered = models.BooleanField(default=False)
     registered_at = models.DateTimeField(null=True, blank=True)
     registered_by = models.ForeignKey(

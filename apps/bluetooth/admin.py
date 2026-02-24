@@ -2,18 +2,31 @@ from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from .models import BluetoothAdapter, BluetoothDevice
-from .services import BluetoothCommandError, discover_and_sync_devices
+from .services import (
+    BluetoothCommandError,
+    BluetoothParseError,
+    discover_and_sync_devices,
+)
 
 
 @admin.register(BluetoothAdapter)
 class BluetoothAdapterAdmin(admin.ModelAdmin):
     """Admin configuration for Bluetooth adapters."""
 
-    list_display = ("name", "address", "alias", "powered", "discoverable", "pairable", "last_checked_at")
+    list_display = (
+        "name",
+        "address",
+        "alias",
+        "powered",
+        "discoverable",
+        "pairable",
+        "last_checked_at",
+    )
     search_fields = ("name", "address", "alias")
     readonly_fields = ("last_checked_at",)
 
@@ -41,14 +54,26 @@ class BluetoothDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
     def mark_registered(self, request, queryset):
         """Bulk mark selected devices as registered."""
 
-        updated = queryset.update(is_registered=True)
-        self.message_user(request, _("Marked %(count)d device(s) as registered.") % {"count": updated}, messages.SUCCESS)
+        updated = queryset.update(
+            is_registered=True, registered_at=timezone.now(), registered_by=request.user
+        )
+        self.message_user(
+            request,
+            _("Marked %(count)d device(s) as registered.") % {"count": updated},
+            messages.SUCCESS,
+        )
 
     def mark_unregistered(self, request, queryset):
         """Bulk mark selected devices as unregistered."""
 
-        updated = queryset.update(is_registered=False, registered_at=None, registered_by=None)
-        self.message_user(request, _("Marked %(count)d device(s) as unregistered.") % {"count": updated}, messages.SUCCESS)
+        updated = queryset.update(
+            is_registered=False, registered_at=None, registered_by=None
+        )
+        self.message_user(
+            request,
+            _("Marked %(count)d device(s) as unregistered.") % {"count": updated},
+            messages.SUCCESS,
+        )
 
     @admin.action(description=_("Discover"))
     def run_discovery(self, request, queryset=None):
@@ -88,15 +113,21 @@ class BluetoothDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         if request.method == "POST":
             try:
                 timeout_s = int(request.POST.get("timeout_s", "4"))
-                result = discover_and_sync_devices(timeout_s=max(timeout_s, 0))
-            except (ValueError, BluetoothCommandError) as exc:
+                timeout_s = max(0, min(timeout_s, 60))
+                result = discover_and_sync_devices(timeout_s=timeout_s)
+            except (ValueError, BluetoothCommandError, BluetoothParseError) as exc:
+                context["error"] = str(exc)
                 self.message_user(request, str(exc), messages.ERROR)
             else:
                 context["result"] = result
                 self.message_user(
                     request,
-                    _("Bluetooth discovery completed. %(created)d created, %(updated)d updated.")
+                    _(
+                        "Bluetooth discovery completed. %(created)d created, %(updated)d updated."
+                    )
                     % {"created": result["created"], "updated": result["updated"]},
                     messages.SUCCESS,
                 )
-        return TemplateResponse(request, "admin/bluetooth/bluetoothdevice/run_discovery.html", context)
+        return TemplateResponse(
+            request, "admin/bluetooth/bluetoothdevice/run_discovery.html", context
+        )

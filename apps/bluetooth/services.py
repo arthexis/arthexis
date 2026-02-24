@@ -20,6 +20,8 @@ class BluetoothParseError(RuntimeError):
 
 
 TRUTHY = {"yes", "true", "on"}
+_BLUETOOTHCTL_TIMEOUT_S = 15
+_REGISTRATION_UPDATE_FIELDS = ["is_registered", "registered_at", "registered_by"]
 
 
 def _run_bluetoothctl(args: Iterable[str]) -> str:
@@ -34,9 +36,14 @@ def _run_bluetoothctl(args: Iterable[str]) -> str:
             check=True,
             capture_output=True,
             text=True,
+            timeout=_BLUETOOTHCTL_TIMEOUT_S,
         )
     except FileNotFoundError as exc:  # pragma: no cover
         raise BluetoothCommandError("bluetoothctl is not installed.") from exc
+    except subprocess.TimeoutExpired as exc:  # pragma: no cover
+        raise BluetoothCommandError(
+            f"bluetoothctl timed out after {_BLUETOOTHCTL_TIMEOUT_S}s."
+        ) from exc
     except subprocess.CalledProcessError as exc:  # pragma: no cover
         stderr = (exc.stderr or "").strip()
         stdout = (exc.stdout or "").strip()
@@ -58,6 +65,11 @@ def get_adapter_state(adapter_name: str = "hci0") -> dict[str, str | bool]:
     state: dict[str, str | bool] = {"name": adapter_name}
     for line in output.splitlines():
         stripped = line.strip()
+        if stripped.startswith("Controller "):
+            parts = stripped.split()
+            if len(parts) >= 2:
+                state["address"] = parts[1]
+            continue
         if not stripped or ":" not in stripped:
             continue
         key, value = stripped.split(":", 1)
@@ -73,16 +85,16 @@ def get_adapter_state(adapter_name: str = "hci0") -> dict[str, str | bool]:
             state["alias"] = value
         elif normalized == "alias":
             state["alias"] = value
-        elif normalized == "controller":
-            parts = value.split(" ")
-            if parts:
-                state["address"] = parts[0]
     if "powered" not in state:
-        raise BluetoothParseError("Could not parse adapter state from bluetoothctl show.")
+        raise BluetoothParseError(
+            "Could not parse adapter state from bluetoothctl show."
+        )
     return state
 
 
-def set_adapter_power(powered: bool, adapter_name: str = "hci0") -> dict[str, str | bool]:
+def set_adapter_power(
+    powered: bool, adapter_name: str = "hci0"
+) -> dict[str, str | bool]:
     """Enable or disable Bluetooth adapter power and persist state."""
 
     cmd = "on" if powered else "off"
@@ -157,7 +169,9 @@ def _parse_device_info(output: str) -> dict[str, str | bool | int | list[str]]:
     return details
 
 
-def discover_and_sync_devices(adapter_name: str = "hci0", timeout_s: int = 4) -> dict[str, int]:
+def discover_and_sync_devices(
+    adapter_name: str = "hci0", timeout_s: int = 4
+) -> dict[str, int]:
     """Run a brief discovery scan and synchronize local Bluetooth inventory."""
 
     set_adapter_power(powered=True, adapter_name=adapter_name)
@@ -193,23 +207,30 @@ def discover_and_sync_devices(adapter_name: str = "hci0", timeout_s: int = 4) ->
                 "trusted": bool(details.get("trusted", False)),
                 "blocked": bool(details.get("blocked", False)),
                 "connected": bool(details.get("connected", False)),
-                "rssi": details.get("rssi") if isinstance(details.get("rssi"), int) else None,
-                "uuids": details.get("uuids") if isinstance(details.get("uuids"), list) else [],
+                "rssi": (
+                    details.get("rssi")
+                    if isinstance(details.get("rssi"), int)
+                    else None
+                ),
+                "uuids": (
+                    details.get("uuids")
+                    if isinstance(details.get("uuids"), list)
+                    else []
+                ),
                 "last_seen_at": now,
             },
         )
         if created_flag:
             created += 1
-        else:
-            updated += 1
-        if obj.first_seen_at is None:
             obj.first_seen_at = now
             obj.save(update_fields=["first_seen_at"])
+        else:
+            updated += 1
 
     return {"created": created, "updated": updated, "count": len(devices)}
 
 
-def register_device(address: str, user=None) -> BluetoothDevice:
+def register_device(address: str, user: object | None = None) -> BluetoothDevice:
     """Mark a known Bluetooth device as registered."""
 
     device = BluetoothDevice.objects.get(address=address)
@@ -217,5 +238,16 @@ def register_device(address: str, user=None) -> BluetoothDevice:
     device.registered_at = timezone.now()
     if user is not None:
         device.registered_by = user
-    device.save(update_fields=["is_registered", "registered_at", "registered_by"])
+    device.save(update_fields=_REGISTRATION_UPDATE_FIELDS)
+    return device
+
+
+def unregister_device(address: str) -> BluetoothDevice:
+    """Mark a known Bluetooth device as unregistered."""
+
+    device = BluetoothDevice.objects.get(address=address)
+    device.is_registered = False
+    device.registered_at = None
+    device.registered_by = None
+    device.save(update_fields=_REGISTRATION_UPDATE_FIELDS)
     return device
