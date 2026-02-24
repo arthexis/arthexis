@@ -68,7 +68,7 @@ Expected:
 Use a disposable account and small dictionaries first.
 
 ```bash
-hydra -l admin -P ./wordlists/top-100.txt https-post-form \
+hydra -l admin -P ./wordlists/top-100.txt WATCHTOWER_HOST https-post-form \
   "/admin/login/:username=^USER^&password=^PASS^:F=Please enter the correct"
 ```
 
@@ -104,7 +104,7 @@ Expected:
 ### 5) Malformed and oversized payloads
 
 ```bash
-curl -k -X POST https://WATCHTOWER_HOST/api/endpoint \
+curl -X POST https://WATCHTOWER_HOST/api/endpoint \
   -H 'Content-Type: application/json' \
   --data-binary @malformed.json
 ```
@@ -158,4 +158,4 @@ A Watchtower node is "basic-attack resilient" only if all four categories pass f
 
 ## Codex automation
 
-For an agent-driven implementation of this playbook, see the companion skill proposal in `docs/development/watchtower-codex-skill-proposal.md`.
+For an agent-driven implementation of this playbook, see the companion skill proposal in [`watchtower-codex-skill-proposal.md`](./watchtower-codex-skill-proposal.md).
