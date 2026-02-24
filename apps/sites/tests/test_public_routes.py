@@ -155,44 +155,34 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize(
-    "method, expected_status",
-    [
-        ("get", 405),
-        ("post", 201),
-    ],
-)
-def test_whatsapp_webhook_method_and_payload_validation(
-    client, settings, method, expected_status
-):
-    """Webhook should only allow POST and validate payload format/content."""
+def test_whatsapp_webhook_get_not_allowed(client, settings):
+    """Webhook should reject GET requests."""
 
     settings.PAGES_WHATSAPP_ENABLED = True
     url = reverse("pages:whatsapp-webhook")
 
-    if method == "get":
-        response = client.get(url)
-        assert response.status_code == expected_status
-        return
+    response = client.get(url)
+    assert response.status_code == 405
 
-    valid_response = client.post(
-        url,
-        data=json.dumps({"from": "+15551234", "message": "Hello"}),
-        content_type="application/json",
-    )
-    assert valid_response.status_code == expected_status
-    assert valid_response.json()["status"] == "ok"
 
-    malformed_response = client.post(
-        url,
-        data="{not-json}",
-        content_type="application/json",
-    )
-    assert malformed_response.status_code == 400
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "payload, expected_status",
+    [
+        (json.dumps({"from": "+15551234", "message": "Hello"}), 201),
+        ("{not-json}", 400),
+        (json.dumps({"from": "", "message": ""}), 400),
+    ],
+)
+def test_whatsapp_webhook_post_payload_validation(
+    client, settings, payload, expected_status
+):
+    """Webhook should validate POST payload format and content."""
 
-    missing_fields_response = client.post(
-        url,
-        data=json.dumps({"from": "", "message": ""}),
-        content_type="application/json",
-    )
-    assert missing_fields_response.status_code == 400
+    settings.PAGES_WHATSAPP_ENABLED = True
+    url = reverse("pages:whatsapp-webhook")
+
+    response = client.post(url, data=payload, content_type="application/json")
+    assert response.status_code == expected_status
+    if expected_status == 201:
+        assert response.json()["status"] == "ok"
