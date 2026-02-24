@@ -1,5 +1,6 @@
 """Tests for the electrical power calculator view."""
 
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -57,8 +58,26 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         result = response.context_data["result"]
-        self.assertEqual(str(result["kw"]), "6.48")
-        self.assertEqual(str(result["recommended_breaker"]), "37.50")
+        self.assertEqual(result["kw"], Decimal("6.48"))
+        self.assertEqual(result["recommended_breaker"], Decimal("37.50"))
+
+    def test_post_rejects_oversized_numeric_inputs(self):
+        """Huge numeric values should return a validation error instead of crashing."""
+
+        response = self._post(
+            {
+                "voltage": "1000000001",
+                "current": "20",
+                "power_factor": "0.95",
+                "phases": "3",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context_data["error"],
+            "Voltage and current are too large to calculate safely.",
+        )
 
     def test_post_rejects_invalid_power_factor(self):
         """Power factor values outside 0-1 should return a user-facing error."""

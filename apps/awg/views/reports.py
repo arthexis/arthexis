@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import MutableMapping
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from math import sqrt
 from typing import Optional
 
 from django.contrib.auth.decorators import login_required
@@ -154,14 +153,14 @@ def _calculate_power_totals(
 ) -> dict[str, Decimal]:
     """Return key power-triangle values for electrician sizing checks."""
 
-    phase_multiplier = Decimal(str(sqrt(3))) if phases == "3" else Decimal("1")
+    phase_multiplier = Decimal("3").sqrt() if phases == "3" else Decimal("1")
     kva = (voltage * current * phase_multiplier / Decimal("1000")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
     kw = (kva * power_factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    kvar = (
-        Decimal(str(sqrt(max(Decimal("0"), (kva * kva) - (kw * kw)))))
-    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    kvar = max(Decimal("0"), (kva * kva) - (kw * kw)).sqrt().quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
     recommended_breaker = (current * Decimal("1.25")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
@@ -250,6 +249,7 @@ def electrical_power_calculator(request):
     form_data = request.POST or request.GET
     form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
     form.setdefault("phases", "1")
+    max_input_value = Decimal("1000000000")
     context: dict[str, object] = {"form": form}
 
     if request.method == "POST":
@@ -278,26 +278,36 @@ def electrical_power_calculator(request):
                 error = _("Voltage, current, and power factor must be numbers.")
 
         if not error:
-            if values["voltage"] <= 0 or values["current"] <= 0:
+            if not all(value.is_finite() for value in values.values()):
+                error = _("Voltage, current, and power factor must be finite numbers.")
+            elif values["voltage"] <= 0 or values["current"] <= 0:
                 error = _("Voltage and current must be greater than zero.")
             elif values["power_factor"] <= 0 or values["power_factor"] > 1:
                 error = _("Power factor must be between 0 and 1.")
+            elif values["voltage"] > max_input_value or values["current"] > max_input_value:
+                error = _("Voltage and current are too large to calculate safely.")
             elif fields["phases"] not in {"1", "3"}:
                 error = _("Phases must be either 1 or 3.")
 
         if error:
             context["error"] = error
         else:
-            totals = _calculate_power_totals(
-                voltage=values["voltage"],
-                current=values["current"],
-                power_factor=values["power_factor"],
-                phases=fields["phases"],
-            )
-            context["result"] = totals
-            form["voltage"] = str(values["voltage"])
-            form["current"] = str(values["current"])
-            form["power_factor"] = str(values["power_factor"])
+            try:
+                totals = _calculate_power_totals(
+                    voltage=values["voltage"],
+                    current=values["current"],
+                    power_factor=values["power_factor"],
+                    phases=fields["phases"],
+                )
+            except InvalidOperation:
+                context["error"] = _(
+                    "Unable to calculate power totals for the provided values."
+                )
+            else:
+                context["result"] = totals
+                form["voltage"] = str(values["voltage"])
+                form["current"] = str(values["current"])
+                form["power_factor"] = str(values["power_factor"])
 
     response = TemplateResponse(request, "awg/electrical_power_calculator.html", context)
 
