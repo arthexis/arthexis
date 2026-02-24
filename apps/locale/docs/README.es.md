@@ -54,11 +54,9 @@ Visita el [Informe de cambios](https://arthexis.com/changelog/) para explorar la
   | `UnlockConnector` | ✅ | ✅ | ✅ | Liberamos conectores bloqueados sin intervención en sitio. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Entregamos paquetes de firmware a los cargadores con tokens de descarga seguros y seguimos las respuestas de instalación. |
 
-  **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](apps/docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6, 2.0.1 y 2.1.
-
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
 - Consulta el [cookbook de integración de API con Odoo](apps/docs/cookbooks/odoo-integrations.md) para ver cómo sincronizamos credenciales de empleados mediante `res.users` y consultas al catálogo de productos mediante `product.product`.
-- Funciona en Windows 11 y Ubuntu 22.04 LTS.
+- Funciona en Windows 11 y Ubuntu 24.
 - Probado para la Raspberry Pi 4 Modelo B.
 
 Proyecto en desarrollo abierto y muy activo.
@@ -112,8 +110,6 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
    - Linux: ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh).
    - Windows: ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
-El script de configuración de roles ahora se encuentra en la raíz como [`./configure.sh`](configure.sh). Los scripts de ciclo de vida para servicios y actualizaciones viven en [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` y `scripts/delegated-upgrade.sh`. Se retiraron los ayudantes de mantenimiento heredados (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` y `ws.sh`).
-
 ### 3. Instalar y actualizar
 - **Linux:**
    - Ejecuta [`./install.sh`](install.sh) con un flag de rol de nodo; consulta la tabla de Arquitectura de roles anterior para ver las opciones y predeterminados de cada rol.
@@ -129,7 +125,13 @@ El script de configuración de roles ahora se encuentra en la raíz como [`./con
 ### 4. Administración
 - Accede al Django admin en `localhost:8888/admin/` para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 - Consulta la documentación de administración en `localhost:8888/admindocs/` para leer la API generada automáticamente a partir de tus modelos.
-- Canales de actualización: las instalaciones nuevas usan `--fixed` por defecto para mantener desactivada la actualización automática. Activa las actualizaciones en el canal estable con `--stable` (revisiones semanales los jueves por la mañana, antes de las 5:00, alineadas con las versiones), sigue la rama principal rápidamente con `--unstable` (revisiones cada 15 minutos) o usa el canal latest con `--latest` (revisiones diarias a la misma hora).
+- Esquema de canales de actualización:
+
+| Canal | Cadencia de revisión | Propósito | Flag de activación |
+| --- | --- | --- | --- |
+| Estable | Semanal (jueves antes de las 5:00 AM) | Sigue revisiones de lanzamientos con verificaciones automáticas semanales. | `--stable` (predeterminado) |
+| Latest | Diaria (misma hora) | Sigue las revisiones más recientes de la rama principal con verificaciones diarias. | `--latest` / `-l` o `--unstable` |
+| Manual | Ninguna (solo actualizaciones manuales) | Desactiva el bucle de actualización automática para control total del operador. | _Ejecuta upgrades bajo demanda sin indicar un canal._ |
 - Sigue la [Guía de instalación y administración](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
 - Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura pasarelas de pago con el [Cookbook de procesadores de pago](apps/docs/cookbooks/payment-processors.md).
