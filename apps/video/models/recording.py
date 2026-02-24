@@ -48,10 +48,12 @@ class VideoRecording(Entity):
         if node is None:
             raise RuntimeError("No local node is registered to store the recording.")
 
+        recorded_at = timezone.now()
         video_path = record_rpi_video(duration_seconds=duration_seconds, timeout=timeout)
         return cls.objects.create(
             node=node,
             path=str(video_path),
+            recorded_at=recorded_at,
             duration_seconds=max(duration_seconds, 0),
             method=cls.METHOD_RPI_CAMERA,
         )

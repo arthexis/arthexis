@@ -189,11 +189,11 @@ class VideoDevice(Ownable):
             defaults=metadata,
         )
         if not created:
-            updates: dict[str, object] = {}
+            update_fields: list[str] = []
             for field, value in metadata.items():
                 if getattr(snapshot, field) != value:
                     setattr(snapshot, field, value)
-                    updates[field] = value
-            if updates:
-                snapshot.save(update_fields=list(updates.keys()))
+                    update_fields.append(field)
+            if update_fields:
+                snapshot.save(update_fields=update_fields)
         return snapshot
