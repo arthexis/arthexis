@@ -142,8 +142,9 @@ def generate_site_entries_content(
     https_enabled: bool = False,
     external_websockets: bool = True,
     proxy_target: str | None = None,
-    subdomain_prefixes: list[str] | None = None,
-) -> str:
+    subdomain_prefixes: list[str] | None = None) -> str:
+    """Render managed site server blocks from staged site definitions."""
+
     try:
         raw = config_path.read_text(encoding="utf-8")
         sites = json.loads(raw)
@@ -206,6 +207,43 @@ def generate_site_entries_content(
     return content
 
 
+def generate_unified_config(
+    mode: str,
+    port: int,
+    *,
+    certificate=None,
+    https_enabled: bool = False,
+    include_ipv6: bool = False,
+    external_websockets: bool = True,
+    site_config_path: Path | None = None,
+    subdomain_prefixes: list[str] | None = None,
+) -> str:
+    """Return the single nginx configuration that combines primary and managed sites."""
+
+    primary_content = generate_primary_config(
+        mode,
+        port,
+        certificate=certificate,
+        https_enabled=https_enabled,
+        include_ipv6=include_ipv6,
+        external_websockets=external_websockets,
+    ).rstrip()
+
+    if site_config_path is None:
+        return primary_content + "\n"
+
+    managed_content = generate_site_entries_content(
+        site_config_path,
+        mode,
+        port,
+        https_enabled=https_enabled,
+        external_websockets=external_websockets,
+        subdomain_prefixes=subdomain_prefixes,
+    ).rstrip()
+
+    return f"{primary_content}\n\n{managed_content}\n"
+
+
 def apply_site_entries(
     config_path: Path,
     mode: str,
@@ -218,6 +256,8 @@ def apply_site_entries(
     subdomain_prefixes: list[str] | None = None,
     sudo: str | None = None,
 ) -> bool:
+    """Write managed site entries to disk and return whether destination changed."""
+
     content = generate_site_entries_content(
         config_path,
         mode,
@@ -225,6 +265,6 @@ def apply_site_entries(
         https_enabled=https_enabled,
         external_websockets=external_websockets,
         proxy_target=proxy_target,
-        subdomain_prefixes=subdomain_prefixes,
+        subdomain_prefixes=subdomain_prefixes
     )
     return write_if_changed(dest_path, content, sudo=sudo)

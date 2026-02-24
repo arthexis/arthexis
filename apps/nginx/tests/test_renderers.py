@@ -7,6 +7,7 @@ from apps.nginx.renderers import (
     apply_site_entries,
     generate_primary_config,
     generate_site_entries_content,
+    generate_unified_config,
 )
 
 pytestmark = pytest.mark.critical
@@ -132,3 +133,21 @@ def test_ssl_directives_use_bundled_fallback(monkeypatch, tmp_path: Path):
 
     assert f"include {bundled_options}" in config
     assert f"ssl_dhparam {bundled_dhparam}" in config
+
+
+
+def test_generate_unified_config_includes_managed_sites(tmp_path: Path):
+    """Unified nginx config should include primary and managed site blocks in one file."""
+
+    staging = tmp_path / "sites.json"
+    staging.write_text('[{"domain": "tenant.example.com", "require_https": true}]', encoding="utf-8")
+
+    content = generate_unified_config(
+        "public",
+        8080,
+        https_enabled=True,
+        site_config_path=staging,
+    )
+
+    assert "server_name arthexis.com *.arthexis.com;" in content
+    assert "Managed site for tenant.example.com" in content
