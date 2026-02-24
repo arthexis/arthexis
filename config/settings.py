@@ -498,6 +498,7 @@ LOCAL_APPS = [
     "apps.certs",
     "apps.nginx",
     "apps.cards",
+    "apps.nfts",
     "apps.tasks",
     "apps.recipes",
     "apps.tests",
