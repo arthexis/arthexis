@@ -29,7 +29,7 @@ diff_snapshots = migration.diff_snapshots
 wait_for_changes = migration.wait_for_changes
 
 PREFIX = "[Test Server]"
-PYTEST_DURATIONS_COUNT = 5
+PYTEST_DURATIONS_COUNT = 10
 PYTEST_DURATIONS_MIN_SECONDS = 0.0
 SUMMARY_LINE_RE = re.compile(r"=+ (.+?) =+")
 SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
