@@ -1112,6 +1112,8 @@ class CSMSConsumer(
             status = "Accepted"
         return {"idTagInfo": {"status": status}}
 
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
