@@ -457,6 +457,7 @@ LOCAL_APPS = [
     "apps.sponsors",
     "apps.links",
     "apps.docs",
+    "apps.gdrive",
     "apps.maps",
     "apps.locals",
     "apps.locale",
