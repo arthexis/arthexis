@@ -25,6 +25,22 @@ def test_evergo_admin_app_and_changelist_are_accessible(admin_client):
     assert changelist_response.status_code == 200
 
 
+
+
+@pytest.mark.django_db
+def test_evergo_admin_app_list_points_load_orders_and_load_customers_to_shared_wizard(admin_client):
+    """Regression: dashboard tools for orders and customers should target the same load wizard URL."""
+
+    app_url = reverse("admin:app_list", kwargs={"app_label": "evergo"})
+    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+
+    response = admin_client.get(app_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f'href="{wizard_url}">Load Orders<' in content
+    assert f'href="{wizard_url}">Load Customers<' in content
+
 @pytest.mark.django_db
 def test_evergo_admin_change_form_renders_readonly_synced_fields(admin_client):
     """Ensure synced Evergo fields render in change form for profile inspection."""
