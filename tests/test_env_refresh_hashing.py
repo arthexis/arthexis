@@ -1,10 +1,12 @@
 import hashlib
 import importlib.util
 from pathlib import Path
+from datetime import timedelta
 
 import pytest
 
 from django.conf import settings
+from django.utils import timezone
 
 pytestmark = pytest.mark.critical
 
@@ -102,7 +104,15 @@ def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
 def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
     from apps.nginx.models import SiteConfiguration
 
-    SiteConfiguration.objects.create(name="preview-example", enabled=False)
+    applied_at = timezone.now() - timedelta(hours=2)
+    validated_at = timezone.now() - timedelta(hours=1)
+    SiteConfiguration.objects.create(
+        name="preview-example",
+        enabled=False,
+        last_applied_at=applied_at,
+        last_validated_at=validated_at,
+        last_message="runtime state",
+    )
 
     updated = env_refresh_module._upsert_site_configuration(
         {
@@ -127,4 +137,14 @@ def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
 
     assert updated is True
     assert SiteConfiguration.objects.filter(name="preview-example").count() == 1
-    assert SiteConfiguration.objects.get(name="preview-example").enabled is True
+    config = SiteConfiguration.objects.get(name="preview-example")
+    assert config.enabled is True
+    assert config.last_applied_at == applied_at
+    assert config.last_validated_at == validated_at
+    assert config.last_message == "runtime state"
+
+
+@pytest.mark.django_db
+def test_upsert_site_configuration_returns_false_when_name_missing(env_refresh_module):
+    result = env_refresh_module._upsert_site_configuration({"enabled": True})
+    assert result is False
