@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import transaction
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
@@ -104,6 +105,8 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
 
         if request.method != "POST":
             return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
 
         fixture_paths = self._mainstream_fixture_paths()
         if not fixture_paths:
@@ -112,21 +115,18 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
 
         feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
         deleted_count = feature_manager.filter(is_deleted=False).count()
-        feature_manager.update(is_seed_data=False)
-        feature_manager.all().delete()
-
-        loaded = 0
-        for fixture_path in fixture_paths:
-            try:
-                call_command("load_user_data", str(fixture_path), verbosity=0)
-            except CommandError as exc:
-                self.message_user(
-                    request,
-                    _("%(fixture)s: %(error)s") % {"fixture": fixture_path.name, "error": exc},
-                    level=messages.ERROR,
-                )
-            else:
-                loaded += 1
+        try:
+            with transaction.atomic():
+                feature_manager.update(is_seed_data=False)
+                feature_manager.all().delete()
+                call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
+        except CommandError as exc:
+            self.message_user(
+                request,
+                _("Failed to reload fixtures: %(error)s") % {"error": exc},
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
         self.message_user(
             request,
@@ -138,23 +138,24 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             % {"count": deleted_count},
             level=messages.SUCCESS,
         )
-        if loaded:
-            self.message_user(
-                request,
-                ngettext(
-                    "Reloaded %(count)d mainstream fixture.",
-                    "Reloaded %(count)d mainstream fixtures.",
-                    loaded,
-                )
-                % {"count": loaded},
-                level=messages.SUCCESS,
+        self.message_user(
+            request,
+            ngettext(
+                "Reloaded %(count)d mainstream fixture.",
+                "Reloaded %(count)d mainstream fixtures.",
+                len(fixture_paths),
             )
+            % {"count": len(fixture_paths)},
+            level=messages.SUCCESS,
+        )
 
         return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
     reload_base.label = _("Reload Base")
     reload_base.short_description = _("Reload Base")
     reload_base.requires_queryset = False
+    reload_base.methods = ("POST",)
+    reload_base.button_type = "form"
 
     def get_urls(self):
         urls = super().get_urls()

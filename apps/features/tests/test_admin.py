@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from apps.features.models import Feature
@@ -48,4 +49,28 @@ def test_feature_admin_reload_base_tool_drops_all_and_loads_fixtures(admin_clien
 
     assert response.status_code == 200
     assert Feature.objects.count() == 0
-    assert mock_call_command.call_count == len(fixture_paths)
+    mock_call_command.assert_called_once_with(
+        "load_user_data", *(str(path) for path in fixture_paths), verbosity=0
+    )
+
+
+@pytest.mark.django_db
+def test_feature_admin_reload_base_requires_delete_permission(admin_client, django_user_model):
+    """Regression: reload-base must enforce model delete permission."""
+
+    user = django_user_model.objects.create_user(
+        username="limited-admin",
+        email="limited@example.com",
+        password="pass",
+        is_staff=True,
+    )
+    perms = Permission.objects.filter(
+        codename__in=["view_feature", "change_feature"], content_type__app_label="features"
+    )
+    user.user_permissions.set(perms)
+    admin_client.force_login(user)
+
+    action_url = reverse("admin:features_feature_actions", args=["reload_base"])
+    response = admin_client.post(action_url)
+
+    assert response.status_code == 403
