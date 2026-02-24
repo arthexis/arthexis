@@ -462,6 +462,7 @@ LOCAL_APPS = [
     "apps.content",
     "apps.clocks",
     "apps.audio",
+    "apps.bluetooth",
     "apps.video",
     "apps.media",
     "apps.mermaid",
