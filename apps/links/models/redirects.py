@@ -69,9 +69,9 @@ class QRRedirect(Entity):
         if self.slug or self.pk is not None:
             super().save(*args, **kwargs)
             return
-        for _ in range(5):
-            from apps.links import models as links_models
+        from apps.links import models as links_models
 
+        for _ in range(5):
             self.slug = links_models._generate_qr_slug()
             try:
                 with transaction.atomic():
