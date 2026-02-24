@@ -55,7 +55,7 @@ Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene 
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
-- Details findest du im [Odoo-API-Integrations-Cookbook](apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
+- Details findest du im [Odoo-API-Integrations-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
 - Läuft auf Windows 11 und Ubuntu 24.
 - Getestet für den Raspberry Pi 4 Model B.
 
@@ -107,19 +107,19 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
    - Auf den grünen Startknopf klicken. Den Server mit dem roten Quadrat (`Shift+F5`) anhalten.
 
 - **Shell**
-   - Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
-   - Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
+   - Linux: [`./start.sh`](https://github.com/arthexis/arthexis/blob/main/start.sh) ausführen und mit [`./stop.sh`](https://github.com/arthexis/arthexis/blob/main/stop.sh) anhalten.
+   - Windows: [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) ausführen und mit `Ctrl+C` beenden.
 
 ### 3. Installieren und Aktualisieren
 - **Linux:**
-   - [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen; siehe die obige Tabelle zur Rollenarchitektur für die rollenspezifischen Optionen und Standardwerte.
+   - [`./install.sh`](https://github.com/arthexis/arthexis/blob/main/install.sh) mit einem Flag für die Node-Rolle ausführen; siehe die obige Tabelle zur Rollenarchitektur für die rollenspezifischen Optionen und Standardwerte.
    - `./install.sh --help` zeigt alle verfügbaren Optionen, falls du die Konfiguration über die Rollenvorgaben hinaus anpassen möchtest.
-   - Aktualisieren mit [`./upgrade.sh`](upgrade.sh).
-   - Lies das [Manual zu Installations- & Lifecycle-Skripten](docs/development/install-lifecycle-scripts-manual.md) für vollständige Flag-Beschreibungen und Betriebsdetails.
-   - Sieh dir den [Auto-Upgrade-Flow](docs/auto-upgrade.md) an, um zu verstehen, wie delegierte Upgrades laufen und wie du sie überwachst.
+   - Aktualisieren mit [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh).
+   - Lies das [Manual zu Installations- & Lifecycle-Skripten](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) für vollständige Flag-Beschreibungen und Betriebsdetails.
+   - Sieh dir den [Auto-Upgrade-Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md) an, um zu verstehen, wie delegierte Upgrades laufen und wie du sie überwachst.
 
 - **Windows:**
-   - [`install.bat`](install.bat) zur Installation (Terminal-Rolle) und [`upgrade.bat`](upgrade.bat) zum Aktualisieren ausführen.
+   - [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) zur Installation (Terminal-Rolle) und [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat) zum Aktualisieren ausführen.
    - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
@@ -132,14 +132,14 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 | Stable | Wöchentlich (Donnerstag vor 5:00 Uhr) | Folgt Release-Revisionen mit automatischen Wochenprüfungen. | `--stable` |
 | Latest | Alle 15 Minuten | Alias von `--unstable`; folgt neueren Revisionen mit häufigen Prüfungen. | `--latest` / `-l` oder `--unstable` |
 | Manual | Keine (nur manuelle Upgrades) | Deaktiviert die automatische Upgrade-Schleife für volle Betreiberkontrolle. Dieses Verhalten ist der Standard, wenn kein Kanal angegeben wird. | _Upgrades bei Bedarf ohne Kanal-Flag ausführen._ |
-- Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
-- Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
-- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
-- Nutze das [Sigil-Cookbook](apps/docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
-- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](apps/docs/cookbooks/user-data.md).
-- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](apps/docs/cookbooks/node-features.md).
-- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](apps/docs/cookbooks/favorites.md).
-- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](apps/docs/cookbooks/slack-bot-onboarding.md).
+- Folge dem [Installations- und Administrationshandbuch](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
+- Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
+- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
+- Nutze das [Sigil-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
+- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
+- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
+- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
+- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 
