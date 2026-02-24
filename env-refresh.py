@@ -77,7 +77,12 @@ def _upsert_site_configuration(fields: dict[str, Any]) -> bool:
     name = fields.get("name")
     if not name:
         return False
-    defaults = dict(fields)
+    defaults = {
+        key: value
+        for key, value in fields.items()
+        if key
+        not in {"name", "last_applied_at", "last_validated_at", "last_message"}
+    }
     SiteConfiguration.objects.update_or_create(name=name, defaults=defaults)
     return True
 
@@ -785,8 +790,8 @@ def run_database_tasks(
                     if model is SiteConfiguration:
                         if _upsert_site_configuration(fields):
                             model_counts[model._meta.label] += 1
-                        modified = True
-                        continue
+                            modified = True
+                            continue
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
                         if (
