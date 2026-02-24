@@ -58,6 +58,8 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             app_dir / "consumers" / "base" / "consumer.py",
             app_dir / "consumers" / "base.py",
             app_dir / "consumers" / "base" / "consumer" / "routing.py",
+            app_dir / "consumers" / "base" / "consumer" / "csms" / "consumer.py",
+            app_dir / "consumers" / "base" / "consumer" / "csms" / "dispatch.py",
         )
         if candidate.exists()
     ]
@@ -74,11 +76,7 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
         def visit_ClassDef(self, node: ast.ClassDef) -> None:
             if node.name in {"CSMSConsumer", "DispatchMixin", "ActionRouter"}:
                 for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name in {
-                        "receive",
-                        "_handle_call_message",
-                        "_build_registry",
-                    }:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         self.visit(item)
                 return
             self.generic_visit(node)
@@ -104,7 +102,8 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             self.generic_visit(node)
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            if node.name in {"_handle_call_message", "_build_registry"}:
+            self._collect_actions_from_protocol_decorators(node)
+            if node.name in {"_handle_call_message", "_build_registry", "build_action_registry"}:
                 previous_state = self._in_call_handler
                 self._in_call_handler = True
                 self.generic_visit(node)
@@ -113,13 +112,49 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             self.generic_visit(node)
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-            if node.name in {"_handle_call_message", "_build_registry"}:
+            self._collect_actions_from_protocol_decorators(node)
+            if node.name in {"_handle_call_message", "_build_registry", "build_action_registry"}:
                 previous_state = self._in_call_handler
                 self._in_call_handler = True
                 self.generic_visit(node)
                 self._in_call_handler = previous_state
                 return
             self.generic_visit(node)
+
+        def _collect_actions_from_protocol_decorators(
+            self, node: ast.FunctionDef | ast.AsyncFunctionDef
+        ) -> None:
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call):
+                    continue
+                func = decorator.func
+                is_protocol_call = (
+                    isinstance(func, ast.Name)
+                    and func.id == "protocol_call"
+                ) or (
+                    isinstance(func, ast.Attribute)
+                    and func.attr == "protocol_call"
+                )
+                if not is_protocol_call:
+                    continue
+                if len(decorator.args) < 3:
+                    continue
+                version_arg, direction_arg = decorator.args[0], decorator.args[1]
+                if not (
+                    isinstance(version_arg, ast.Constant)
+                    and version_arg.value == "ocpp16"
+                ):
+                    continue
+                if not (
+                    isinstance(direction_arg, ast.Attribute)
+                    and direction_arg.attr == "CP_TO_CSMS"
+                ):
+                    continue
+                action_arg = decorator.args[2]
+                if isinstance(action_arg, ast.Constant) and isinstance(
+                    action_arg.value, str
+                ):
+                    self.actions.add(action_arg.value)
 
     actions: set[str] = set()
     for source_path in source_paths:

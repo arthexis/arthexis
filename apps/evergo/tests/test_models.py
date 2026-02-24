@@ -208,3 +208,81 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
     assert EvergoOrderFieldValue.objects.filter(field_name="estatus", remote_id=8).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="preorden_tipo", remote_id=107).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="payment_by", remote_name="Brand").exists()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.requests.Session")
+def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock_session_cls):
+    """Regression: customer wizard should create customer rows and provisional SO placeholders."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-customer", email="suite-customer@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="reginaldocts@evergo.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+
+    mock_session = mock_session_cls.return_value.__enter__.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+
+    def _response(payload):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = payload
+        return response
+
+    def request_side_effect(*, method, url, params=None, **kwargs):
+        if url.endswith("/login"):
+            return _response({"id": 58642, "name": "Reginaldo", "email": "reginaldocts@evergo.com"})
+        if "ordenes/instalador-coordinador" in url:
+            if params and params.get("numero") == "J00830":
+                return _response(
+                    {
+                        "current_page": 1,
+                        "last_page": 1,
+                        "data": [
+                            {
+                                "id": 30161,
+                                "numero_orden": "J00830",
+                                "idCliente": 67883,
+                                "user_tecnico_id": 58642,
+                                "updated_at": "2026-02-23T20:00:33.000000Z",
+                                "cliente": {
+                                    "id": 67883,
+                                    "name": "irma ravize",
+                                    "email": "irma@notaria55mty.com",
+                                },
+                                "orden_instalacion": {
+                                    "telefono_celular": "+528115889790",
+                                    "direccion": "capellania 107 San Pedro Garza García",
+                                    "nombre_completo": "irma ravize",
+                                },
+                            }
+                        ],
+                    }
+                )
+            if params and params.get("numero") == "BAD999":
+                return _response({"current_page": 1, "last_page": 1, "data": []})
+            if params and params.get("cliente") == "irma ravize":
+                return _response({"current_page": 1, "last_page": 1, "data": []})
+        raise AssertionError(f"Unexpected URL {url} params={params}")
+
+    mock_session.request.side_effect = request_side_effect
+
+    summary = profile.load_customers_from_queries(raw_queries="J00830; BAD999; irma ravize")
+
+    assert summary["orders_created"] >= 1
+    assert summary["placeholders_created"] == 1
+    assert "BAD999" in summary["unresolved"]
+    assert "irma ravize" in summary["unresolved"]
+
+    customer = profile.customers.get(remote_id=67883)
+    assert customer.latest_so == "J00830"
+    assert customer.phone_number == "+528115889790"
+
+    placeholder = EvergoOrder.objects.get(order_number="BAD999")
+    assert placeholder.validation_state == EvergoOrder.VALIDATION_STATE_PLACEHOLDER

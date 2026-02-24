@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import hashlib
+import re
 from urllib.parse import unquote, urlsplit
 from typing import Any
 
@@ -61,6 +63,8 @@ class EvergoUser(Profile):
         "EVERGO_API_ORDERS_URL",
         "https://portal-backend.evergo.com/api/mex/v1/ordenes/instalador-coordinador",
     )
+    CUSTOMER_QUERY_DELIMITERS = re.compile(r"[,;\|\n\r\t]+")
+    SALES_ORDER_PATTERN = re.compile(r"\b[A-Za-z]{1,4}\d{3,8}\b")
 
     profile_fields = ("evergo_email", "evergo_password")
 
@@ -244,6 +248,7 @@ class EvergoUser(Profile):
                     if not isinstance(item, dict) or not self._is_assigned_to_user(item):
                         continue
                     was_created = self._upsert_order(item)
+                    self._upsert_customer_from_order(item)
                     if was_created:
                         created += 1
                     else:
@@ -256,6 +261,262 @@ class EvergoUser(Profile):
                 page += 1
 
         return created, updated
+
+    def load_customers_from_queries(
+        self,
+        *,
+        raw_queries: str,
+        timeout: int = 20,
+    ) -> dict[str, Any]:
+        """Load customers/orders from SO codes and customer name fragments.
+
+        Returns a summary payload with loaded records and unresolved inputs.
+        """
+        if not self.evergo_email or not self.evergo_password:
+            raise EvergoAPIError("Evergo credentials are incomplete.")
+
+        sales_orders, customer_names = self.parse_customer_queries(raw_queries=raw_queries)
+        unresolved: list[str] = []
+        customers_loaded = 0
+        orders_created = 0
+        orders_updated = 0
+        placeholders_created = 0
+
+        with requests.Session() as session:
+            self._login_session(session=session, timeout=timeout)
+
+            for so_number in sales_orders:
+                order_payloads = self._fetch_orders_for_lookup(
+                    session=session,
+                    timeout=timeout,
+                    so_number=so_number,
+                )
+                if not order_payloads:
+                    self._ensure_placeholder_order(so_number=so_number)
+                    placeholders_created += 1
+                    unresolved.append(so_number)
+                    continue
+
+                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_loaded += customers_inc
+                orders_created += created_inc
+                orders_updated += updated_inc
+
+            for customer_name in customer_names:
+                order_payloads = self._fetch_orders_for_lookup(
+                    session=session,
+                    timeout=timeout,
+                    customer_name=customer_name,
+                )
+                if not order_payloads:
+                    unresolved.append(customer_name)
+                    continue
+
+                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_loaded += customers_inc
+                orders_created += created_inc
+                orders_updated += updated_inc
+
+        return {
+            "sales_orders": sales_orders,
+            "customer_names": customer_names,
+            "customers_loaded": customers_loaded,
+            "orders_created": orders_created,
+            "orders_updated": orders_updated,
+            "placeholders_created": placeholders_created,
+            "unresolved": unresolved,
+        }
+
+    @classmethod
+    def parse_customer_queries(cls, *, raw_queries: str) -> tuple[list[str], list[str]]:
+        """Parse free-form admin input into SO numbers and customer-name queries."""
+        source = (raw_queries or "").strip()
+        if not source:
+            return [], []
+
+        sales_orders: list[str] = []
+        seen_sales_orders: set[str] = set()
+        for token in cls.SALES_ORDER_PATTERN.findall(source):
+            normalized = token.strip().upper()
+            if normalized and normalized not in seen_sales_orders:
+                seen_sales_orders.add(normalized)
+                sales_orders.append(normalized)
+
+        names_blob = source
+        for so_number in sales_orders:
+            names_blob = re.sub(rf"\b{re.escape(so_number)}\b", " ", names_blob, flags=re.IGNORECASE)
+
+        customer_names: list[str] = []
+        seen_names: set[str] = set()
+        for chunk in cls.CUSTOMER_QUERY_DELIMITERS.split(names_blob):
+            normalized = " ".join(chunk.split())
+            if len(normalized) < 2:
+                continue
+            if normalized.lower() in seen_names:
+                continue
+            seen_names.add(normalized.lower())
+            customer_names.append(normalized)
+
+        return sales_orders, customer_names
+
+    def _fetch_orders_for_lookup(
+        self,
+        *,
+        session: requests.Session,
+        timeout: int,
+        so_number: str | None = None,
+        customer_name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch all order payload rows for one SO number or customer name query."""
+        page = 1
+        rows: list[dict[str, Any]] = []
+        while True:
+            payload = self._request_json(
+                session=session,
+                timeout=timeout,
+                method="GET",
+                url=self.API_ORDERS_URL,
+                params={
+                    "page": page,
+                    "ingenieroAsignadoId": self.evergo_user_id or "",
+                    "numero": so_number or "",
+                    "conCargador": "",
+                    "cliente": customer_name or "",
+                    "from": "",
+                    "to": "",
+                },
+            )
+            data = payload.get("data") if isinstance(payload, dict) else None
+            if not isinstance(data, list) or not data:
+                break
+            for item in data:
+                if isinstance(item, dict) and self._is_assigned_to_user(item):
+                    rows.append(item)
+
+            last_page = _to_int(payload.get("last_page")) if isinstance(payload, dict) else None
+            current_page = _to_int(payload.get("current_page")) if isinstance(payload, dict) else page
+            if last_page and current_page and current_page >= last_page:
+                break
+            page += 1
+        return rows
+
+    def _process_order_payloads(self, order_payloads: list[dict[str, Any]]) -> tuple[int, int, int]:
+        """Upsert orders/customers and return created/updated/customer counters."""
+        customers_loaded = 0
+        orders_created = 0
+        orders_updated = 0
+
+        for payload in order_payloads:
+            was_created = self._upsert_order(payload)
+            customer_created = self._upsert_customer_from_order(payload)
+            customers_loaded += int(customer_created)
+            if was_created:
+                orders_created += 1
+            else:
+                orders_updated += 1
+
+        return customers_loaded, orders_created, orders_updated
+
+    def _ensure_placeholder_order(self, *, so_number: str) -> EvergoOrder:
+        """Create/update a provisional local order row when SO is not found upstream."""
+        remote_id = _placeholder_remote_id(order_number=so_number)
+        order, _ = EvergoOrder.objects.update_or_create(
+            remote_id=remote_id,
+            defaults={
+                "user": self,
+                "order_number": so_number,
+                "validation_state": EvergoOrder.VALIDATION_STATE_PLACEHOLDER,
+                "raw_payload": {"placeholder": True, "order_number": so_number},
+            },
+        )
+        return order
+
+    def _upsert_customer_from_order(self, payload: dict[str, Any]) -> bool:
+        """Create/update a customer snapshot derived from one order payload."""
+        customer_payload = payload.get("cliente")
+        install_payload = payload.get("orden_instalacion")
+        if not isinstance(customer_payload, dict) and not isinstance(install_payload, dict):
+            return False
+
+        customer_id = _to_int(customer_payload.get("id")) if isinstance(customer_payload, dict) else None
+        customer_name = ""
+        if isinstance(customer_payload, dict):
+            customer_name = _nested_name(customer_payload)
+        if not customer_name and isinstance(install_payload, dict):
+            customer_name = str(install_payload.get("nombre_completo") or "").strip()
+
+        latest_so = str(payload.get("numero_orden") or "").strip()
+        phone = ""
+        address = ""
+        if isinstance(install_payload, dict):
+            phone = str(
+                install_payload.get("telefono_celular")
+                or install_payload.get("telefono_fijo1")
+                or install_payload.get("telefono_fijo2")
+                or ""
+            ).strip()
+            address = str(
+                install_payload.get("direccion")
+                or " ".join(
+                    filter(
+                        None,
+                        [
+                            install_payload.get("calle"),
+                            install_payload.get("num_ext"),
+                            install_payload.get("num_int"),
+                            install_payload.get("colonia"),
+                            install_payload.get("municipio"),
+                            install_payload.get("ciudad"),
+                            install_payload.get("codigo_postal"),
+                        ],
+                    )
+                )
+                or ""
+            ).strip()
+
+        order = None
+        remote_order_id = _to_int(payload.get("id"))
+        if remote_order_id is not None:
+            order = EvergoOrder.objects.filter(remote_id=remote_order_id).first()
+
+        defaults = {
+            "name": customer_name,
+            "email": str(customer_payload.get("email") or "") if isinstance(customer_payload, dict) else "",
+            "phone_number": phone,
+            "address": address,
+            "latest_so": latest_so,
+            "latest_order": order,
+            "latest_order_updated_at": _parse_dt(payload.get("updated_at")),
+            "raw_payload": {
+                "cliente": customer_payload if isinstance(customer_payload, dict) else {},
+                "orden_instalacion": install_payload if isinstance(install_payload, dict) else {},
+            },
+        }
+
+        if customer_id is not None:
+            _, created = EvergoCustomer.objects.update_or_create(
+                user=self,
+                remote_id=customer_id,
+                defaults=defaults,
+            )
+            return created
+
+        if not customer_name:
+            return False
+
+        existing_customer = (
+            EvergoCustomer.objects.filter(user=self, remote_id__isnull=True, name=customer_name)
+            .order_by("id")
+            .first()
+        )
+        if existing_customer is not None:
+            for field_name, value in defaults.items():
+                setattr(existing_customer, field_name, value)
+            existing_customer.save(update_fields=[*defaults.keys(), "refreshed_at"])
+            return False
+
+        EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
+        return True
 
     def _login_session(self, *, session: requests.Session, timeout: int) -> None:
         """Authenticate a requests session against Evergo."""
@@ -391,6 +652,7 @@ class EvergoUser(Profile):
             "raw_payload": payload,
             "source_created_at": _parse_dt(payload.get("created_at")),
             "source_updated_at": _parse_dt(payload.get("updated_at")),
+            "validation_state": EvergoOrder.VALIDATION_STATE_VALIDATED,
         }
         charge_points = payload.get("cargadores")
         if isinstance(charge_points, list):
@@ -400,6 +662,16 @@ class EvergoUser(Profile):
             remote_id=remote_id,
             defaults=defaults,
         )
+
+        order_number = defaults["order_number"].strip().upper()
+        if order_number:
+            placeholder_remote_id = _placeholder_remote_id(order_number=order_number)
+            (
+                EvergoOrder.objects.filter(remote_id=placeholder_remote_id)
+                .exclude(pk=order.pk)
+                .delete()
+            )
+
         order.sync_dynamic_field_values(payload)
         return created
 
@@ -434,6 +706,13 @@ class EvergoOrderFieldValue(models.Model):
 class EvergoOrder(models.Model):
     """Local cache of Evergo installer/coordinator orders for the authenticated user."""
 
+    VALIDATION_STATE_VALIDATED = "validated"
+    VALIDATION_STATE_PLACEHOLDER = "placeholder"
+    VALIDATION_STATE_CHOICES = (
+        (VALIDATION_STATE_VALIDATED, "Validated in Evergo"),
+        (VALIDATION_STATE_PLACEHOLDER, "Temporary placeholder"),
+    )
+
     user = models.ForeignKey(EvergoUser, on_delete=models.CASCADE, related_name="orders")
     remote_id = models.PositiveIntegerField(unique=True, db_index=True)
     order_number = models.CharField(max_length=64, blank=True)
@@ -461,6 +740,11 @@ class EvergoOrder(models.Model):
     source_created_at = models.DateTimeField(null=True, blank=True)
     source_updated_at = models.DateTimeField(null=True, blank=True)
     raw_payload = models.JSONField(default=dict, blank=True)
+    validation_state = models.CharField(
+        max_length=20,
+        choices=VALIDATION_STATE_CHOICES,
+        default=VALIDATION_STATE_VALIDATED,
+    )
     refreshed_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -516,6 +800,41 @@ class EvergoOrder(models.Model):
         self.save(update_fields=["estimated_amount", "refreshed_at"])
 
 
+class EvergoCustomer(models.Model):
+    """Local cache of customer info sourced from Evergo sales-order payloads."""
+
+    user = models.ForeignKey(EvergoUser, on_delete=models.CASCADE, related_name="customers")
+    remote_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+    name = models.CharField(max_length=255)
+    email = models.EmailField(blank=True)
+    phone_number = models.CharField(max_length=64, blank=True)
+    address = models.CharField(max_length=512, blank=True)
+    latest_so = models.CharField(max_length=64, blank=True)
+    latest_order = models.ForeignKey(
+        EvergoOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customers",
+    )
+    latest_order_updated_at = models.DateTimeField(null=True, blank=True)
+    raw_payload = models.JSONField(default=dict, blank=True)
+    refreshed_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Evergo Customer"
+        verbose_name_plural = "Evergo Customers"
+        unique_together = (("user", "remote_id"),)
+        ordering = ("-latest_order_updated_at", "name")
+
+    def __str__(self) -> str:
+        """Return a concise customer label."""
+        if self.latest_so:
+            return f"{self.name} ({self.latest_so})"
+        return self.name
+
+
 def _to_int(value: Any) -> int | None:
     """Convert loosely typed API integers into local integer fields."""
     if value in (None, ""):
@@ -524,6 +843,14 @@ def _to_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _placeholder_remote_id(*, order_number: str) -> int:
+    """Build a deterministic positive integer to persist a provisional SO row."""
+    # Reserve [1_500_000_000, 2_000_000_000) for placeholders to avoid collisions
+    # with current real Evergo IDs while keeping deterministic order-number mapping.
+    digest = hashlib.sha256(order_number.strip().upper().encode("utf-8")).hexdigest()[:12]
+    return 1_500_000_000 + (int(digest, 16) % 500_000_000)
 
 
 def _first_dict(value: Any) -> dict[str, Any]:
