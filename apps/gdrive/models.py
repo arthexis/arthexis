@@ -70,11 +70,11 @@ class GoogleAccount(Profile):
 
     def _token_expired(self) -> bool:
         """Return ``True`` when the current access token is missing or expired."""
-        if not self.access_token:
-            return True
-        if not self.token_expires_at:
-            return True
-        return timezone.now() >= self.token_expires_at
+        return (
+            not self.access_token
+            or not self.token_expires_at
+            or timezone.now() >= self.token_expires_at
+        )
 
     def get_access_token(self, force_refresh: bool = False) -> str:
         """Resolve an access token, refreshing with OAuth when needed."""
@@ -91,7 +91,7 @@ class GoogleAccount(Profile):
             "refresh_token": (self.resolve_sigils("refresh_token") or "").strip(),
             "grant_type": "refresh_token",
         }
-        if not payload["client_id"] or not payload["client_secret"] or not payload["refresh_token"]:
+        if not all(payload[key] for key in ("client_id", "client_secret", "refresh_token")):
             raise ValidationError(_("Google OAuth credentials are incomplete."))
 
         response = requests.post(token_url, data=payload, timeout=20)
@@ -105,7 +105,7 @@ class GoogleAccount(Profile):
         expires_in = int(data.get("expires_in") or 3600)
         self.access_token = access_token
         self.token_expires_at = timezone.now() + timedelta(seconds=max(30, expires_in - 30))
-        self.save(update_fields=["access_token", "token_expires_at", "updated"])
+        self.save(update_fields=["access_token", "token_expires_at"])
         return access_token
 
 

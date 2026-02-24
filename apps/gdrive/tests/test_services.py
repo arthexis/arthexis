@@ -95,3 +95,78 @@ def test_get_or_introspect_columns_reuses_cached_columns():
     columns = gateway.get_or_introspect_columns(sheet)
 
     assert columns == [cached]
+
+@pytest.mark.django_db
+def test_fetch_sheet_metadata_persists_metadata_only(monkeypatch):
+    """Metadata fetch should persist cache without referencing unknown model fields."""
+
+    user = get_user_model().objects.create_user(username="gdrive-meta-user", password="x")
+    account = GoogleAccount.objects.create(
+        user=user,
+        email="meta@example.com",
+        client_id="client",
+        client_secret="secret",
+        refresh_token="refresh",
+    )
+    sheet = GoogleSheet.objects.create(
+        name="Meta sheet",
+        account=account,
+        spreadsheet_id="spreadsheet-meta",
+        default_worksheet="Sheet1",
+    )
+    gateway = GoogleSheetsGateway(account)
+
+    def fake_request(self, method, url, **kwargs):
+        return {"spreadsheetId": sheet.spreadsheet_id, "properties": {"title": "Meta"}}
+
+    gateway._request = MethodType(fake_request, gateway)
+
+    saved_update_fields = {}
+    original_save = GoogleSheet.save
+
+    def tracking_save(self, *args, **kwargs):
+        saved_update_fields["value"] = kwargs.get("update_fields")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(GoogleSheet, "save", tracking_save)
+
+    payload = gateway.fetch_sheet_metadata(sheet)
+
+    assert payload["spreadsheetId"] == "spreadsheet-meta"
+    assert saved_update_fields["value"] == ["metadata"]
+
+
+@pytest.mark.django_db
+def test_append_rows_uses_input_rows_when_schema_empty():
+    """Append should preserve provided values when introspection yields no headers."""
+
+    user = get_user_model().objects.create_user(username="gdrive-append-user", password="x")
+    account = GoogleAccount.objects.create(
+        user=user,
+        email="append@example.com",
+        client_id="client",
+        client_secret="secret",
+        refresh_token="refresh",
+    )
+    sheet = GoogleSheet.objects.create(
+        name="Append sheet",
+        account=account,
+        spreadsheet_id="spreadsheet-append",
+        default_worksheet="Sheet1",
+    )
+    gateway = GoogleSheetsGateway(account)
+
+    gateway.get_or_introspect_columns = MethodType(lambda self, tracked_sheet, worksheet=None: [], gateway)
+
+    captured = {}
+
+    def fake_request(self, method, url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return {"updatedRows": 1}
+
+    gateway._request = MethodType(fake_request, gateway)
+
+    result = gateway.append_rows(sheet, rows=[{"name": "alpha", "count": "2"}])
+
+    assert result["updatedRows"] == 1
+    assert captured["json"] == {"values": [["alpha", "2"]]}

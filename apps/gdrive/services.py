@@ -55,7 +55,7 @@ class GoogleSheetsGateway:
         url = f"{self.base_url}/{sheet.spreadsheet_id}"
         payload = self._request("GET", url, params={"includeGridData": "false"})
         sheet.metadata = payload
-        sheet.save(update_fields=["metadata", "updated"])
+        sheet.save(update_fields=["metadata"])
         return payload
 
     def read_virtual_table(
@@ -95,7 +95,10 @@ class GoogleSheetsGateway:
         target = worksheet or sheet.default_worksheet
         columns = self.get_or_introspect_columns(sheet, target)
         ordered_headers = [column.name for column in columns]
-        body_rows = [[row.get(header, "") for header in ordered_headers] for row in rows]
+        if ordered_headers:
+            body_rows = [[row.get(header, "") for header in ordered_headers] for row in rows]
+        else:
+            body_rows = [list(row.values()) for row in rows]
 
         rng = f"{target}!A1"
         url = f"{self.base_url}/{sheet.spreadsheet_id}/values/{rng}:append"
