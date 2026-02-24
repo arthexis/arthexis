@@ -1,8 +1,10 @@
 import pytest
 from django.core.exceptions import ValidationError
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.blog.models import BlogArticle, BlogCodeReference, BlogSigilShortcut
+from apps.blog.sigils import resolve_blog_article_sigils
 
 
 @pytest.mark.django_db
@@ -60,3 +62,40 @@ def test_specialized_sigil_shortcut_requires_root_and_key(admin_user):
 
     with pytest.raises(ValidationError):
         shortcut.full_clean()
+
+
+@pytest.mark.django_db
+def test_blog_article_absolute_url_uses_engineering_blog_path(admin_user):
+    article = BlogArticle.objects.create(title="Canonical", body="x", author=admin_user)
+
+    assert article.get_absolute_url() == f"/engineering/blog/{article.slug}/"
+    assert reverse("blog-list") == "/engineering/blog/"
+
+
+@pytest.mark.django_db
+def test_blog_article_body_as_html_renders_markdown_and_html(admin_user):
+    markdown_article = BlogArticle.objects.create(
+        title="Markdown",
+        body="# Heading\n\nSome **bold** text",
+        body_format=BlogArticle.BodyFormat.MARKDOWN,
+        author=admin_user,
+    )
+    html_article = BlogArticle.objects.create(
+        title="HTML",
+        body="<h2>Title</h2><p>Body</p>",
+        body_format=BlogArticle.BodyFormat.HTML,
+        author=admin_user,
+    )
+
+    assert "<h1" in markdown_article.body_as_html
+    assert "<strong>bold</strong>" in markdown_article.body_as_html
+    assert "<h2>Title</h2>" in html_article.body_as_html
+
+
+@pytest.mark.django_db
+def test_resolve_blog_article_sigils_resolves_nested_shortcuts(admin_user):
+    article = BlogArticle.objects.create(title="Sigils", body="x", author=admin_user)
+    BlogSigilShortcut.objects.create(article=article, token="BLOG.A", expansion_template="[BLOG.B]")
+    BlogSigilShortcut.objects.create(article=article, token="BLOG.B", expansion_template="Done")
+
+    assert resolve_blog_article_sigils("Start [BLOG.A]", article=article) == "Start Done"
