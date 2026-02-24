@@ -12,7 +12,7 @@ from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_test_login_populates_remote_fields(mock_session_cls):
     """Evergo login should persist the expected profile fields from the API payload."""
     User = get_user_model()
@@ -72,7 +72,7 @@ def test_test_login_populates_remote_fields(mock_session_cls):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_test_login_raises_specific_error_for_419(mock_session_cls):
     """Evergo login should surface a specific CSRF/session message when backend responds 419."""
     User = get_user_model()
@@ -98,7 +98,7 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_cls):
     """Load orders should upsert assigned orders and refresh learned dropdown field values."""
     User = get_user_model()
@@ -211,7 +211,7 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock_session_cls):
     """Regression: customer wizard should create customer rows and provisional SO placeholders."""
     User = get_user_model()
