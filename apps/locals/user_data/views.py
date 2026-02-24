@@ -143,7 +143,7 @@ def _seed_fixture_entries_authorized(
             )
         if request.user.is_superuser:
             continue
-        _, model_admin = allowed[label]
+        model, model_admin = allowed[label]
         if not (
             model_admin.has_add_permission(request)
             and model_admin.has_change_permission(request)
