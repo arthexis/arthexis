@@ -202,6 +202,8 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
     assert order.order_number == "GLY01026"
     assert order.assigned_engineer_id == 58642
     assert order.charger_count == 1
+    assert order.phone_primary == ""
+    assert order.phone_secondary == ""
 
     assert not EvergoOrder.objects.filter(remote_id=39759).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="sitio", remote_id=36).exists()
@@ -286,3 +288,51 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
 
     placeholder = EvergoOrder.objects.get(order_number="BAD999")
     assert placeholder.validation_state == EvergoOrder.VALIDATION_STATE_PLACEHOLDER
+
+
+@pytest.mark.django_db
+def test_upsert_order_extracts_contact_and_address_components():
+    """Regression: order sync should persist phone and address pieces for admin usage."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-upsert", email="suite-upsert@example.com")
+    profile = EvergoUser.objects.create(user=suite_user)
+
+    payload = {
+        "id": 29545,
+        "numero_orden": "GM01321",
+        "idSitio": 25,
+        "sitio": {"id": 25, "nombre": "Chevrolet"},
+        "idCliente": 63100,
+        "cliente": {"id": 63100, "name": "JESUS ALBERTO CORTEZ HARO"},
+        "orden_instalacion": {
+            "telefono_celular": "+528111852788",
+            "telefono_fijo1": "81 7770 0000",
+            "telefono_fijo2": "81 7770 1111",
+            "calle": "santa barbara",
+            "num_ext": "404",
+            "num_int": "2B",
+            "entre_calles": "A y B",
+            "colonia": "Fuentes de Santa Lucia",
+            "municipio": "Apodaca",
+            "ciudad": "Ciudad Apodaca",
+            "codigo_postal": "66647",
+        },
+        "created_at": "2026-01-08T22:06:58.000000Z",
+        "updated_at": "2026-01-13T02:18:42.000000Z",
+    }
+
+    created = profile._upsert_order(payload)
+
+    assert created is True
+    order = EvergoOrder.objects.get(remote_id=29545)
+    assert order.site_name == "Chevrolet"
+    assert order.phone_primary == "+528111852788"
+    assert order.phone_secondary == "81 7770 0000"
+    assert order.address_street == "santa barbara"
+    assert order.address_num_ext == "404"
+    assert order.address_num_int == "2B"
+    assert order.address_between_streets == "A y B"
+    assert order.address_neighborhood == "Fuentes de Santa Lucia"
+    assert order.address_municipality == "Apodaca"
+    assert order.address_city == "Ciudad Apodaca"
+    assert order.address_postal_code == "66647"

@@ -61,6 +61,18 @@ class EvergoOrder(models.Model):
     site_name = models.CharField(max_length=255, blank=True)
     client_id = models.PositiveIntegerField(null=True, blank=True)
     client_name = models.CharField(max_length=255, blank=True)
+    phone_primary = models.CharField(max_length=64, blank=True)
+    phone_secondary = models.CharField(max_length=64, blank=True)
+
+    address_street = models.CharField(max_length=255, blank=True)
+    address_num_ext = models.CharField(max_length=64, blank=True)
+    address_num_int = models.CharField(max_length=64, blank=True)
+    address_between_streets = models.CharField(max_length=255, blank=True)
+    address_neighborhood = models.CharField(max_length=255, blank=True)
+    address_municipality = models.CharField(max_length=255, blank=True)
+    address_city = models.CharField(max_length=255, blank=True)
+    address_state = models.CharField(max_length=255, blank=True)
+    address_postal_code = models.CharField(max_length=32, blank=True)
 
     assigned_engineer_id = models.PositiveIntegerField(null=True, blank=True)
     assigned_engineer_name = models.CharField(max_length=255, blank=True)
@@ -74,6 +86,7 @@ class EvergoOrder(models.Model):
     scheduled_for = models.DateTimeField(null=True, blank=True)
     source_created_at = models.DateTimeField(null=True, blank=True)
     source_updated_at = models.DateTimeField(null=True, blank=True)
+    source_last_contact_at = models.DateTimeField(null=True, blank=True)
     raw_payload = models.JSONField(default=dict, blank=True)
     validation_state = models.CharField(
         max_length=20,

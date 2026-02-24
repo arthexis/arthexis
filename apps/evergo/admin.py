@@ -4,6 +4,7 @@ from django.contrib import admin, messages
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -223,9 +224,9 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         "order_number",
         "user",
         "status_name",
-        "site_name",
+        "brand_name",
         "assigned_engineer_name",
-        "validation_state",
+        "validation_state_check",
         "refreshed_at",
     )
     list_filter = (
@@ -242,7 +243,117 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         "assigned_engineer_name",
         "assigned_coordinator_name",
     )
-    readonly_fields = ("raw_payload", "validation_state", "refreshed_at", "created_at")
+    readonly_fields = (
+        "validation_state_check",
+        "phone_primary",
+        "phone_secondary",
+        "address_street",
+        "address_num_ext",
+        "address_num_int",
+        "address_between_streets",
+        "address_neighborhood",
+        "address_municipality",
+        "address_city",
+        "address_state",
+        "address_postal_code",
+        "full_address",
+        "source_age_days",
+        "last_contact_age_days",
+        "raw_payload",
+        "refreshed_at",
+        "created_at",
+    )
+
+    fieldsets = (
+        (
+            "Order",
+            {
+                "fields": (
+                    "user",
+                    "remote_id",
+                    "order_number",
+                    "status_name",
+                    "site_name",
+                    "validation_state_check",
+                )
+            },
+        ),
+        (
+            "Contact",
+            {
+                "fields": ("phone_primary", "phone_secondary"),
+            },
+        ),
+        (
+            "Address",
+            {
+                "fields": (
+                    "address_street",
+                    "address_num_ext",
+                    "address_num_int",
+                    "address_between_streets",
+                    "address_neighborhood",
+                    "address_municipality",
+                    "address_city",
+                    "address_state",
+                    "address_postal_code",
+                    "full_address",
+                )
+            },
+        ),
+        (
+            "Aging",
+            {"fields": ("source_created_at", "source_age_days", "source_last_contact_at", "last_contact_age_days")},
+        ),
+        (
+            "Timestamps",
+            {"fields": ("source_updated_at", "refreshed_at", "created_at")},
+        ),
+        (
+            "Raw payload",
+            {"fields": ("raw_payload",)},
+        ),
+    )
+
+    @admin.display(description="Brand", ordering="site_name")
+    def brand_name(self, obj):
+        """Display the synced site name as brand column in list view."""
+        return obj.site_name
+
+    @admin.display(description="Valid", boolean=True)
+    def validation_state_check(self, obj):
+        """Render a checkmark when the order is fully validated upstream."""
+        return obj.validation_state == EvergoOrder.VALIDATION_STATE_VALIDATED
+
+    @admin.display(description="Full address")
+    def full_address(self, obj):
+        """Concatenate address parts for easy copy/paste."""
+        parts = [
+            obj.address_street,
+            obj.address_num_ext,
+            obj.address_num_int,
+            obj.address_between_streets,
+            obj.address_neighborhood,
+            obj.address_municipality,
+            obj.address_city,
+            obj.address_state,
+            obj.address_postal_code,
+        ]
+        return " ".join(part for part in parts if part).strip()
+
+    @admin.display(description="Days since source created")
+    def source_age_days(self, obj):
+        """Return elapsed days since the source order creation timestamp."""
+        if not obj.source_created_at:
+            return "-"
+        return (timezone.now() - obj.source_created_at).days
+
+    @admin.display(description="Days since last contact/comment")
+    def last_contact_age_days(self, obj):
+        """Return elapsed days since last known contact/comment timestamp."""
+        if not obj.source_last_contact_at:
+            return "-"
+        return (timezone.now() - obj.source_last_contact_at).days
 
     def load_orders_wizard(self, request, queryset=None):
         """Redirect the order dashboard tool to the shared load wizard view."""
