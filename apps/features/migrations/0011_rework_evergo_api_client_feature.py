@@ -70,14 +70,28 @@ def _build_feature_defaults(application_manager, fields: dict) -> dict:
         "admin_requirements": fields.get("admin_requirements", ""),
         "public_requirements": fields.get("public_requirements", ""),
         "service_requirements": fields.get("service_requirements", ""),
-        "admin_views": fields.get("admin_views", []) or [],
-        "public_views": fields.get("public_views", []) or [],
-        "service_views": fields.get("service_views", []) or [],
-        "code_locations": fields.get("code_locations", []) or [],
-        "protocol_coverage": fields.get("protocol_coverage", {}) or {},
+        "admin_views": fields.get("admin_views") or [],
+        "public_views": fields.get("public_views") or [],
+        "service_views": fields.get("service_views") or [],
+        "code_locations": fields.get("code_locations") or [],
+        "protocol_coverage": fields.get("protocol_coverage") or {},
         "is_seed_data": bool(fields.get("is_seed_data", True)),
         "is_deleted": bool(fields.get("is_deleted", False)),
     }
+
+
+def _reassign_related_rows(source_feature, target_feature):
+    """Move FK-backed rows pointing at source feature onto target feature."""
+
+    for relation in source_feature._meta.related_objects:
+        if relation.many_to_many:
+            continue
+
+        field_name = relation.field.name
+        related_model = relation.related_model
+        related_model._base_manager.filter(**{field_name: source_feature.pk}).update(
+            **{field_name: target_feature.pk}
+        )
 
 
 def _reseed_feature(apps, source_slug: str, target_slug: str, fixture_path: Path):
@@ -107,12 +121,14 @@ def _reseed_feature(apps, source_slug: str, target_slug: str, fixture_path: Path
         )
         return
 
-    feature_manager.update_or_create(
+    target_feature, _ = feature_manager.update_or_create(
         slug=target_slug,
         defaults=defaults,
     )
 
     if source_slug != target_slug:
+        if source_feature and target_feature and source_feature.pk != target_feature.pk:
+            _reassign_related_rows(source_feature, target_feature)
         feature_manager.filter(slug=source_slug).delete()
 
 
