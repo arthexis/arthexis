@@ -119,10 +119,6 @@ _discard_local_git_changes() {
 
 mkdir -p "$LOCK_DIR"
 
-# Prime sudo credentials on interactive WSL sessions so later systemd calls can
-# prompt once instead of failing under non-interactive sudo invocations.
-arthexis_prime_sudo_credentials >/dev/null 2>&1 || true
-
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
     return 0
@@ -1122,6 +1118,12 @@ run_detached_upgrade() {
 
 if (( DETACHED )); then
   run_detached_upgrade
+fi
+
+# Prime sudo credentials on interactive WSL sessions only when upgrade actions
+# may require privileged systemd operations (skip read-only --check mode).
+if [[ $CHECK_ONLY -ne 1 ]]; then
+  arthexis_prime_sudo_credentials >/dev/null 2>&1 || true
 fi
 
 mkdir -p "$LOCK_DIR"
