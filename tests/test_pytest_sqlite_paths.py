@@ -31,3 +31,19 @@ def test_set_writable_sqlite_env_preserves_writable_override(monkeypatch: pytest
     conftest._set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", tmp_path / "fallback.sqlite3")
 
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == str(configured)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("configured", [":memory:", "file:memdb1?mode=memory&cache=shared"])
+def test_set_writable_sqlite_env_preserves_special_sqlite_names(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    configured: str,
+) -> None:
+    """SQLite in-memory and URI names should not be replaced by path fallback logic."""
+
+    monkeypatch.setenv("ARTHEXIS_SQLITE_PATH", configured)
+
+    conftest._set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", tmp_path / "fallback.sqlite3")
+
+    assert os.environ["ARTHEXIS_SQLITE_PATH"] == configured

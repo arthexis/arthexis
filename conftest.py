@@ -28,16 +28,25 @@ def _sqlite_path_is_writable(path_value: str) -> bool:
     parent = candidate.parent
     try:
         parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=parent):
+            pass
     except OSError:
         return False
-    return os.access(parent, os.W_OK)
+    return True
+
+
+def _sqlite_uses_special_name(path_value: str) -> bool:
+    """Return True for SQLite values that are not filesystem paths."""
+
+    value = path_value.strip()
+    return value == ":memory:" or value.startswith("file:")
 
 
 def _set_writable_sqlite_env(var_name: str, fallback: Path) -> None:
     """Set SQLite env vars to writable paths while preserving valid caller overrides."""
 
     configured = os.environ.get(var_name)
-    if configured and _sqlite_path_is_writable(configured):
+    if configured and (_sqlite_uses_special_name(configured) or _sqlite_path_is_writable(configured)):
         return
     os.environ[var_name] = str(fallback)
 
