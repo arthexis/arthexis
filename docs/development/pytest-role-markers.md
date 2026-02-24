@@ -33,6 +33,29 @@ Because CI leaves `NODE_FEATURES` unset, feature-marked tests always run in the
 default pipeline. Locally you can constrain them to a specific set of features
 by exporting `NODE_FEATURES`.
 
+
+## Pipeline markers
+
+In addition to role/feature markers, the test suite defines pipeline-focused
+markers that control how tests are segmented and selected:
+
+- `@pytest.mark.critical` for high-risk paths that must always run in CI.
+- `@pytest.mark.regression` for reported regressions (automatically included
+  whenever critical tests are selected).
+- `@pytest.mark.slow` for long-running tests that are moved to the segmented
+  slow bucket during local pipeline simulation.
+- `@pytest.mark.integration` for integration-focused tests that are grouped
+  separately from critical and slow suites in segmented runs.
+
+Use these markers to keep CI-safe coverage explicit and to make segmented local
+runs deterministic.
+
+## Fixture-loading markers
+
+Use `@pytest.mark.sigil_roots` when a DB-backed test requires default
+`SigilRoot` fixtures to be loaded before execution. The global autouse fixture
+checks for this marker and loads fixture data once per test session.
+
 ## Critical markers
 
 Use `@pytest.mark.critical` for tests that must always run in CI install/upgrade
