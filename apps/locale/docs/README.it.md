@@ -54,11 +54,9 @@ Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare 
   | `UnlockConnector` | ✅ | ✅ | ✅ | Sblocchiamo i connettori bloccati senza intervento in loco. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP.** Esplora il lavoro pianificato per i cataloghi OCPP 1.6, 2.0.1 e 2.1 nel [cookbook della roadmap OCPP](apps/docs/cookbooks/ocpp-roadmap.md).
-
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 - Scopri il [cookbook di integrazione API con Odoo](apps/docs/cookbooks/odoo-integrations.md) per i dettagli sulle sincronizzazioni delle credenziali dei dipendenti tramite `res.users` e sulle ricerche del catalogo prodotti tramite `product.product`.
-- Funziona su Windows 11 e Ubuntu 22.04 LTS.
+- Funziona su Windows 11 e Ubuntu 24.
 - Testato per il Raspberry Pi 4 Modello B.
 
 Progetto in sviluppo aperto e molto attivo.
@@ -112,8 +110,6 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Linux: esegui [`./start.sh`](start.sh) e arresta con [`./stop.sh`](stop.sh).
    - Windows: esegui [`start.bat`](start.bat) e interrompi con `Ctrl+C`.
 
-Lo script di configurazione dei ruoli si trova ora nella directory principale come [`./configure.sh`](configure.sh). Gli helper di ciclo di vita per servizi e aggiornamenti vivono in [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` e `scripts/delegated-upgrade.sh`. Gli helper di manutenzione legacy (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` e `ws.sh`) sono stati rimossi.
-
 ### 3. Installare e aggiornare
 - **Linux:**
    - Esegui [`./install.sh`](install.sh) con un flag per il ruolo del nodo; consulta la tabella sull'architettura dei ruoli qui sopra per le opzioni e i valori predefiniti di ciascun ruolo.
@@ -129,7 +125,13 @@ Lo script di configurazione dei ruoli si trova ora nella directory principale co
 ### 4. Amministrazione
 - Accedi al Django admin su `localhost:8888/admin/` per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
 - Consulta gli admindocs su `localhost:8888/admindocs/` per leggere la documentazione API generata automaticamente dai tuoi modelli.
-- Canali di aggiornamento: le nuove installazioni usano `--fixed` per impostazione predefinita e lasciano l'aggiornamento automatico disattivato. Attiva gli aggiornamenti automatici sul canale stabile con `--stable` (controlli settimanali il giovedì mattina, prima delle 5:00, allineati alle release), segui rapidamente le revisioni del branch principale con `--unstable` (controlli ogni 15 minuti) oppure usa il canale latest con `--latest` (controlli giornalieri alla stessa ora).
+- Schema dei canali di aggiornamento:
+
+| Canale | Cadenza di controllo | Scopo | Flag di attivazione |
+| --- | --- | --- | --- |
+| Stable | Settimanale (giovedì prima delle 5:00) | Segue le revisioni di rilascio con controlli automatici settimanali. | `--stable` (predefinito) |
+| Latest | Giornaliera (stessa ora) | Segue le revisioni più recenti della mainline con controlli giornalieri. | `--latest` / `-l` o `--unstable` |
+| Manual | Nessuna (solo aggiornamenti manuali) | Disattiva il ciclo di aggiornamento automatico per il pieno controllo operativo. | _Esegui gli upgrade su richiesta senza specificare un canale._ |
 - Segui la [Guida all'installazione e all'amministrazione](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](apps/docs/cookbooks/payment-processors.md).

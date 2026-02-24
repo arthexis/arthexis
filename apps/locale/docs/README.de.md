@@ -54,11 +54,9 @@ Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene 
   | `UnlockConnector` | ✅ | ✅ | ✅ | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6-, 2.0.1- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](apps/docs/cookbooks/ocpp-roadmap.md).
-
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 - Details findest du im [Odoo-API-Integrations-Cookbook](apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
-- Läuft auf Windows 11 und Ubuntu 22.04 LTS.
+- Läuft auf Windows 11 und Ubuntu 24.
 - Getestet für den Raspberry Pi 4 Model B.
 
 Projekt in offener, sehr aktiver Entwicklung.
@@ -112,8 +110,6 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
    - Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
    - Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
 
-Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure.sh`](configure.sh). Weitere Lebenszyklus-Helferskripte für Dienste und Upgrades befinden sich im Ordner [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` und `scripts/delegated-upgrade.sh`. Veraltete Wartungsskripte (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` und `ws.sh`) wurden entfernt.
-
 ### 3. Installieren und Aktualisieren
 - **Linux:**
    - [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen; siehe die obige Tabelle zur Rollenarchitektur für die rollenspezifischen Optionen und Standardwerte.
@@ -129,7 +125,13 @@ Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure
 ### 4. Administration
 - Greife über `localhost:8888/admin/` auf den Django-Admin zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
 - Durchstöbere die admindocs unter `localhost:8888/admindocs/`, um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
-- Upgrade-Kanäle: Neue Installationen setzen standardmäßig `--fixed` und lassen Auto-Upgrade deaktiviert. Aktiviere automatische Updates auf dem stabilen Kanal mit `--stable` (wöchentliche Prüfungen am Donnerstagmorgen vor 5:00 gemäß den Releases), verfolge Hauptzweig-Revisionen schnell mit `--unstable` (Prüfungen alle 15 Minuten) oder nutze den Latest-Kanal mit `--latest` (tägliche Prüfungen zur gleichen Uhrzeit).
+- Upgrade-Kanal-Schema:
+
+| Kanal | Prüfintervall | Zweck | Aktivierungsflag |
+| --- | --- | --- | --- |
+| Stable | Wöchentlich (Donnerstag vor 5:00 Uhr) | Folgt Release-Revisionen mit automatischen Wochenprüfungen. | `--stable` (Standard) |
+| Latest | Täglich (gleiche Uhrzeit) | Folgt den neuesten Mainline-Revisionen mit täglichen Prüfungen. | `--latest` / `-l` oder `--unstable` |
+| Manual | Keine (nur manuelle Upgrades) | Deaktiviert die automatische Upgrade-Schleife für volle Betreiberkontrolle. | _Upgrades bei Bedarf ohne Kanal-Flag ausführen._ |
 - Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
 - Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
