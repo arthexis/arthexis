@@ -3,6 +3,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+import bleach
+import markdown
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -10,6 +13,68 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
+
+
+
+MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists", "fenced_code"]
+
+_ALLOWED_MARKDOWN_TAGS = set(bleach.sanitizer.ALLOWED_TAGS) | {
+    "blockquote",
+    "code",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "img",
+    "p",
+    "pre",
+    "span",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+}
+_ALLOWED_MARKDOWN_ATTRIBUTES = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": ["href", "title", "rel"],
+    "code": ["class"],
+    "div": ["class"],
+    "h1": ["id", "class"],
+    "h2": ["id", "class"],
+    "h3": ["id", "class"],
+    "h4": ["id", "class"],
+    "h5": ["id", "class"],
+    "h6": ["id", "class"],
+    "img": ["src", "alt", "title", "loading"],
+    "p": ["class"],
+    "pre": ["class"],
+    "span": ["class"],
+    "table": ["class"],
+    "tbody": ["class"],
+    "td": ["class", "colspan", "rowspan"],
+    "tfoot": ["class"],
+    "th": ["class", "colspan", "rowspan", "scope"],
+    "thead": ["class"],
+    "tr": ["class"],
+}
+_ALLOWED_MARKDOWN_PROTOCOLS = set(bleach.sanitizer.ALLOWED_PROTOCOLS)
+
+
+def _sanitize_blog_html(html: str) -> str:
+    return bleach.clean(
+        html,
+        tags=_ALLOWED_MARKDOWN_TAGS,
+        attributes=_ALLOWED_MARKDOWN_ATTRIBUTES,
+        protocols=_ALLOWED_MARKDOWN_PROTOCOLS,
+        strip=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -127,6 +192,18 @@ class BlogArticle(models.Model):
 
     def get_absolute_url(self):
         return reverse("blog-detail", kwargs={"slug": self.slug})
+
+    @property
+    def body_as_html(self) -> str:
+        """Render article body to safe HTML according to selected body format."""
+
+        if self.body_format == self.BodyFormat.HTML:
+            return _sanitize_blog_html(self.body or "")
+        if self.body_format == self.BodyFormat.MARKDOWN:
+            html = markdown.markdown(self.body or "", extensions=MARKDOWN_EXTENSIONS)
+            return _sanitize_blog_html(html)
+
+        return _sanitize_blog_html((self.body or "").replace("\n", "<br>"))
 
     @property
     def reading_time_minutes(self) -> int:

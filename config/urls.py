@@ -67,7 +67,7 @@ def autodiscovered_urlpatterns():
             # Skip third-party apps outside of the project
             continue
 
-        if app_config.label in {"pages", "docs"}:
+        if app_config.label in {"pages", "docs", "blog"}:
             # Root pages URLs are handled explicitly below
             continue
 
