@@ -1,5 +1,7 @@
 """Tests for the Mobility House EVCS simulator proposal module."""
 
+import pytest
+
 from apps.simulators.evcs_mobilityhouse import (
     MobilityHouseOcppUnavailableError,
     MobilityHouseSimulatorConfig,
@@ -8,26 +10,47 @@ from apps.simulators.evcs_mobilityhouse import (
 )
 
 
-def test_proposal_requires_ocpp_dependency():
+def test_proposal_requires_ocpp_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
     """The proposal should fail fast when the optional dependency is missing."""
 
-    try:
+    monkeypatch.setattr("apps.simulators.evcs_mobilityhouse.find_spec", lambda _: None)
+
+    with pytest.raises(MobilityHouseOcppUnavailableError):
         ensure_mobilityhouse_ocpp_available()
-    except MobilityHouseOcppUnavailableError:
-        return
-    assert False, "Expected MobilityHouseOcppUnavailableError when ocpp is not installed."
 
 
-def test_build_simulator_proposal_propagates_missing_dependency():
+def test_build_simulator_proposal_propagates_missing_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Building the proposal should expose the same dependency error."""
+
+    monkeypatch.setattr("apps.simulators.evcs_mobilityhouse.find_spec", lambda _: None)
 
     config = MobilityHouseSimulatorConfig(
         charge_point_id="CP-PROPOSAL-1",
         central_system_uri="ws://localhost:8000/ws/ocpp/CP-PROPOSAL-1",
     )
 
-    try:
+    with pytest.raises(MobilityHouseOcppUnavailableError):
         build_simulator_proposal(config)
-    except MobilityHouseOcppUnavailableError:
-        return
-    assert False, "Expected MobilityHouseOcppUnavailableError when ocpp is not installed."
+
+
+def test_build_simulator_proposal_succeeds_when_dependency_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Proposal construction should succeed when the optional dependency is available."""
+
+    monkeypatch.setattr("apps.simulators.evcs_mobilityhouse.find_spec", lambda _: object())
+
+    config = MobilityHouseSimulatorConfig(
+        charge_point_id="CP-PROPOSAL-1",
+        central_system_uri="ws://localhost:8000/ws/ocpp/CP-PROPOSAL-1",
+    )
+
+    proposal = build_simulator_proposal(config)
+
+    assert proposal.config == config
+    assert (
+        proposal.adapter_path
+        == "apps.simulators.evcs_mobilityhouse.MobilityHouseChargePointAdapter"
+    )
