@@ -29,6 +29,7 @@
     {% endif %}
   </div>
   <div class="admin-home-actions">
+    <!-- NOTE: Keep actions sorted alphabetically by label. -->
     {% url 'admin:actions_remoteaction_my_openapi_spec' as actions_spec_url %}
     {% if actions_spec_url %}<a class="button" href="{{ actions_spec_url }}">{% translate 'Actions' %}</a>{% endif %}
     <a class="button" href="{% url 'admin:config' %}">{% translate 'Config' %}</a>
