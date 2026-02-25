@@ -80,21 +80,16 @@ run_runserver_preflight() {
     echo "Cached migration fingerprint is stale; rerunning migration preflight..."
   fi
 
-  echo "Inspecting migrations before runserver..."
-  if migration_plan=$("$python_bin" manage.py showmigrations --plan); then
-    if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
-      echo "Applying pending migrations..."
-      "$python_bin" manage.py migrate --noinput
-    else
-      echo "No pending migrations detected; skipping migrate."
-    fi
+  echo "Checking for unapplied migrations before runserver..."
+  if "$python_bin" manage.py migrate --check; then
+    echo "No pending migrations detected; skipping migrate."
   else
-    echo "Failed to inspect migrations" >&2
-    return 1
-  fi
+    echo "Pending migrations detected; applying migrations..."
+    "$python_bin" manage.py migrate --noinput
 
-  echo "Running Django migration check once before runserver..."
-  "$python_bin" manage.py migrate --check
+    echo "Verifying migration state after applying migrations..."
+    "$python_bin" manage.py migrate --check
+  fi
 
   echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
   RUNSERVER_PREFLIGHT_DONE=true
