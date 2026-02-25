@@ -107,6 +107,20 @@ def test_extract_document_blurb_skips_yaml_front_matter(tmp_path: Path):
     assert blurb == "Useful intro sentence."
 
 
+def test_extract_document_blurb_does_not_treat_rule_after_heading_as_front_matter(tmp_path: Path):
+    """A thematic break after a heading should not toggle front matter parsing."""
+
+    doc = tmp_path / "rule-after-heading.md"
+    doc.write_text(
+        "# Title\n---\nReal content here\n---\n",
+        encoding="utf-8",
+    )
+
+    blurb = views._extract_document_blurb(doc)
+
+    assert blurb == "--- Real content here ---"
+
+
 def test_extract_document_blurb_truncates_at_word_boundary(tmp_path: Path):
     """Truncation should preserve full words when possible."""
 
