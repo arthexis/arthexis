@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .models import ExperienceReference, QRRedirect, QRRedirectLead, ShortURL
+from .reference_utils import filter_visible_references
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,9 @@ def _resolve_target_url(request: HttpRequest, target_url: str) -> str:
     target_url = (target_url or "").strip()
     parsed = urlparse(target_url)
     if parsed.scheme in {"http", "https"} and parsed.netloc:
-        if not url_has_allowed_host_and_scheme(target_url, allowed_hosts={parsed.netloc}):
+        if not url_has_allowed_host_and_scheme(
+            target_url, allowed_hosts={parsed.netloc}
+        ):
             raise ValueError("Unsafe redirect target")
         return target_url
     if target_url.startswith("/") and not parsed.scheme and not parsed.netloc:
@@ -89,7 +92,9 @@ def qr_redirect_public_view(request: HttpRequest, slug: str) -> HttpResponse:
             ip_address=_extract_client_ip(request),
         )
     except Exception:  # pragma: no cover - best effort logging
-        logger.debug("Failed to record QRRedirectLead for %s", qr_entry.slug, exc_info=True)
+        logger.debug(
+            "Failed to record QRRedirectLead for %s", qr_entry.slug, exc_info=True
+        )
 
     context = {
         "qr_entry": qr_entry,
@@ -101,10 +106,15 @@ def qr_redirect_public_view(request: HttpRequest, slug: str) -> HttpResponse:
     return render(request, "links/qr_redirect_public.html", context)
 
 
-def reference_public_frame_view(request: HttpRequest, reference_id: int) -> HttpResponse:
+def reference_public_frame_view(
+    request: HttpRequest, reference_id: int
+) -> HttpResponse:
     """Render a public iframe viewer for an ExperienceReference target URL."""
 
     reference = get_object_or_404(ExperienceReference, pk=reference_id)
+    if not filter_visible_references([reference], request=request):
+        raise Http404("Reference not available.")
+
     try:
         iframe_url = _resolve_target_url(request, reference.value)
     except ValueError:
