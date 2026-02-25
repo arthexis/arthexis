@@ -203,6 +203,54 @@ def _iter_document_paths(root: Path) -> list[Path]:
     return sorted(documents)
 
 
+def _extract_document_blurb(path: Path, *, max_length: int = 220) -> str:
+    """Return a short summary line for the library index entry at ``path``."""
+
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+    candidates: list[str] = []
+    in_front_matter = False
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped == "---" and not candidates:
+            in_front_matter = not in_front_matter
+            continue
+        if in_front_matter:
+            continue
+        if stripped.startswith("#"):
+            continue
+        candidates.append(stripped)
+        if len(candidates) >= 3:
+            break
+
+    if not candidates:
+        return ""
+
+    summary = " ".join(candidates)
+    if len(summary) <= max_length:
+        return summary
+    return f"{summary[: max_length - 1].rstrip()}…"
+
+
+def _build_library_item(path: Path, root: Path, route_name: str) -> dict[str, str]:
+    """Build a single document-library item with URL and blurb metadata."""
+
+    relative = path.relative_to(root).as_posix()
+    description = _extract_document_blurb(path)
+    if not description:
+        description = f"Reference documentation for {relative}."
+    return {
+        "label": relative,
+        "url": reverse(route_name, args=[relative]),
+        "description": description,
+    }
+
+
 def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
     """Build a library index for docs and apps/docs content."""
 
@@ -212,29 +260,13 @@ def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
 
     docs_files = _iter_document_paths(docs_root)
     if docs_files:
-        items = [
-            {
-                "label": path.relative_to(docs_root).as_posix(),
-                "url": reverse(
-                    "docs:docs-document",
-                    args=[path.relative_to(docs_root).as_posix()],
-                ),
-            }
-            for path in docs_files
-        ]
+        items = [_build_library_item(path, docs_root, "docs:docs-document") for path in docs_files]
         sections.append({"title": "Documentation", "items": items})
 
     apps_docs_files = _iter_document_paths(apps_docs_root)
     if apps_docs_files:
         items = [
-            {
-                "label": path.relative_to(apps_docs_root).as_posix(),
-                "url": reverse(
-                    "docs:apps-docs-document",
-                    args=[path.relative_to(apps_docs_root).as_posix()],
-                ),
-            }
-            for path in apps_docs_files
+            _build_library_item(path, apps_docs_root, "docs:apps-docs-document") for path in apps_docs_files
         ]
         sections.append({"title": "Application Docs", "items": items})
 

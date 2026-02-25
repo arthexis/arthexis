@@ -2,13 +2,10 @@
 
 from pathlib import Path
 
-import pytest
 from django.http import Http404, HttpResponse
 from django.test import RequestFactory
 
 from apps.docs import views
-
-
 
 def test_missing_docs_path_renders_library_fallback(monkeypatch):
     """Regression: missing docs routes should show the library fallback instead of a blank page."""
@@ -61,3 +58,36 @@ def test_document_library_index_is_cached(monkeypatch):
     assert first == second
     assert state["calls"] == 1
     assert state["timeout"] == views.DOCUMENT_LIBRARY_CACHE_TIMEOUT
+
+
+def test_extract_document_blurb_reads_first_content_line(tmp_path: Path):
+    """Regression: library blurbs should skip headings and use the first body paragraph."""
+
+    doc = tmp_path / "guide.md"
+    doc.write_text("# Heading\n\nFirst useful sentence.\nSecond sentence.", encoding="utf-8")
+
+    blurb = views._extract_document_blurb(doc, max_length=80)
+
+    assert blurb == "First useful sentence. Second sentence."
+
+
+def test_collect_document_library_includes_item_blurbs(tmp_path: Path, monkeypatch):
+    """Regression: each document library item should include a short description blurb."""
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "guide.md").write_text("Guide summary line.", encoding="utf-8")
+
+    apps_docs_dir = tmp_path / "apps" / "docs"
+    apps_docs_dir.mkdir(parents=True)
+    (apps_docs_dir / "cookbook.md").write_text("Cookbook summary line.", encoding="utf-8")
+
+    monkeypatch.setattr(views, "reverse", lambda route, args: f"/{route}/{args[0]}")
+
+    sections = views._collect_document_library(tmp_path)
+
+    assert sections
+    for section in sections:
+        for item in section["items"]:
+            assert "description" in item
+            assert item["description"]

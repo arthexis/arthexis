@@ -4,10 +4,10 @@
 
 {% block content %}
 <div class="row">
-  <div class="col-12 col-lg-9">
+  <div class="col-12">
     <div class="markdown-body">
       <h1>{{ title }}</h1>
-      <p>{% trans "Browse the full developer document library below." %}</p>
+      <p>{% trans "Browse curated developer references below with quick summaries to help you choose the right guide." %}</p>
       {% if missing_document %}
         <div class="alert alert-warning" role="alert">
           {% blocktrans with missing_document=missing_document %}The requested document "{{ missing_document }}" was not found. Choose one of the available documents below.{% endblocktrans %}
@@ -16,11 +16,18 @@
       {% if sections %}
         {% for section in sections %}
           <h2>{{ section.title }}</h2>
-          <ul>
+          <div class="row row-cols-1 row-cols-lg-2 g-3 mb-4">
             {% for item in section.items %}
-              <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+              <div class="col">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h3 class="h5 mb-2"><a href="{{ item.url }}">{{ item.label }}</a></h3>
+                    <p class="mb-0 text-muted">{{ item.description }}</p>
+                  </div>
+                </div>
+              </div>
             {% endfor %}
-          </ul>
+          </div>
         {% endfor %}
       {% else %}
         <p class="text-muted">{% trans "No documents are available." %}</p>

@@ -140,7 +140,7 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 - Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ### 5. Development
-- Browse the [Developer Documentation Library](/docs/library/) for architecture references, protocol manuals, and contribution workflows.
+- Browse the [Developer Documentation Library](https://arthexis.com/docs/library/) for architecture references, protocol manuals, and contribution workflows.
 
 ## Support
 
