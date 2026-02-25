@@ -32,6 +32,7 @@ from .uptime import (
     _build_uptime_report,
     _build_uptime_segments,
     _load_shutdown_periods,
+    _system_boot_time,
     _suite_offline_period,
     _suite_uptime,
     _suite_uptime_details,
