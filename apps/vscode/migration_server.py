@@ -450,21 +450,25 @@ def _hash_file(path: Path) -> str:
 def _site_packages_paths() -> list[Path]:
     """Return candidate site-packages paths for the active interpreter."""
 
+    resolved_paths = sysconfig.get_paths()
     candidates: list[Path] = []
     for key in ("purelib", "platlib"):
-        resolved = sysconfig.get_paths().get(key)
+        resolved = resolved_paths.get(key)
         if resolved:
             candidates.append(Path(resolved))
 
-    candidates.extend(
-        [
-            Path(sys.prefix) / "Lib" / "site-packages",
-            Path(sys.prefix)
-            / "lib"
-            / f"python{sys.version_info.major}.{sys.version_info.minor}"
-            / "site-packages",
-        ]
-    )
+    if not candidates:
+        # Fallback for unusual/embedded environments where sysconfig omits
+        # purelib/platlib paths.
+        candidates.extend(
+            [
+                Path(sys.prefix) / "Lib" / "site-packages",
+                Path(sys.prefix)
+                / "lib"
+                / f"python{sys.version_info.major}.{sys.version_info.minor}"
+                / "site-packages",
+            ]
+        )
 
     unique_candidates: list[Path] = []
     seen: set[Path] = set()
@@ -484,13 +488,22 @@ def _cleanup_invalid_site_packages_distributions() -> list[Path]:
     for site_packages in _site_packages_paths():
         if not site_packages.exists() or not site_packages.is_dir():
             continue
-        for entry in site_packages.iterdir():
+        try:
+            entries = site_packages.iterdir()
+        except OSError:
+            continue
+        for entry in entries:
             name = entry.name.lower()
             if not name.startswith("~"):
                 continue
-            is_metadata_artifact = ".dist-info" in name or ".egg-info" in name
-            is_packaging_tool_artifact = name.lstrip("~").startswith(
-                ("setuptools", "pip", "wheel")
+            is_metadata_artifact = name.endswith(".dist-info") or name.endswith(
+                ".egg-info"
+            )
+            normalized_name = name.lstrip("~")
+            packaging_tools = ("setuptools", "pip", "wheel")
+            is_packaging_tool_artifact = any(
+                normalized_name.startswith((tool, tool[1:]))
+                for tool in packaging_tools
             )
             if not is_metadata_artifact and not is_packaging_tool_artifact:
                 continue
