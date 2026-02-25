@@ -27,21 +27,22 @@ clear_wifi_mac_pins() {
 
 configure_wifi_profile() {
   local connection_id="$1"
-  local mode iface
+  local mode iface ipv4_method
   local -a props
 
-  mapfile -t props < <(LC_ALL=C nmcli --get-values 802-11-wireless.mode,connection.interface-name connection show "$connection_id") || return
+  mapfile -t props < <(LC_ALL=C nmcli --get-values 802-11-wireless.mode,connection.interface-name,ipv4.method connection show "$connection_id") || return
   mode="${props[0]:-}"
   iface="${props[1]:-}"
+  ipv4_method="${props[2]:-}"
 
   clear_wifi_mac_pins "$connection_id"
 
-  if [[ "$mode" == "ap" ]]; then
+  if [[ "$mode" == "ap" || "$ipv4_method" == "shared" ]]; then
     nmcli connection modify "$connection_id" \
       connection.interface-name "$AP_IFACE" \
       connection.autoconnect yes \
       ipv4.method shared || return
-    log "AP profile '$connection_id' pinned to $AP_IFACE."
+    log "AP profile '$connection_id' pinned to $AP_IFACE (mode='${mode:-unset}', ipv4.method='${ipv4_method:-unset}')."
     return
   fi
 
