@@ -33,12 +33,14 @@ def test_scan_sources_no_irq_uses_direct_polling_reader():
     assert read_mock.call_args.kwargs.get("timeout", 0) <= 0.1
 
 
-def test_rfid_check_scan_no_irq_forces_local_polling():
-    """`rfid check --scan --no-irq` should pass the force-poll option to local scanning."""
+@pytest.mark.parametrize("service_is_available", [True, False])
+def test_rfid_check_scan_no_irq_forces_local_polling(service_is_available):
+    """`rfid check --scan --no-irq` should force local polling regardless of service availability."""
 
     command = Command()
     with (
-        patch("apps.cards.management.commands.rfid.service_available", return_value=False),
+        patch("apps.cards.management.commands.rfid.service_available", return_value=service_is_available),
+        patch.object(command, "_scan_via_attempt") as attempt_scan_mock,
         patch.object(
             command,
             "_scan_via_local",
@@ -48,4 +50,6 @@ def test_rfid_check_scan_no_irq_forces_local_polling():
         result = command._scan({"timeout": 0.5, "no_irq": True})
 
     assert result["rfid"] == "A1B2C3D4"
+    attempt_scan_mock.assert_not_called()
+    local_scan_mock.assert_called_once()
     assert local_scan_mock.call_args.kwargs.get("no_irq") is True
