@@ -112,7 +112,7 @@ def test_terminate_process_without_psutil_prefers_killpg_for_isolated_group() ->
     with mock.patch.object(migration_server.os, "name", "posix"), mock.patch.object(
         migration_server.os, "getpgid", return_value=900, create=True
     ) as mocked_getpgid, mock.patch.object(
-        migration_server.os, "getpgrp", return_value=100
+        migration_server.os, "getpgrp", return_value=100, create=True
     ) as mocked_getpgrp, mock.patch.object(
         migration_server.os, "killpg"
     ) as mocked_killpg, mock.patch.object(
@@ -131,7 +131,7 @@ def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches(
 
     with mock.patch.object(migration_server.os, "name", "posix"), mock.patch.object(
         migration_server.os, "getpgid", return_value=100, create=True
-    ), mock.patch.object(migration_server.os, "getpgrp", return_value=100), mock.patch.object(
+    ), mock.patch.object(migration_server.os, "getpgrp", return_value=100, create=True), mock.patch.object(
         migration_server.os, "killpg"
     ) as mocked_killpg, mock.patch.object(migration_server.os, "kill") as mocked_kill:
         migration_server._terminate_process_without_psutil(9876)

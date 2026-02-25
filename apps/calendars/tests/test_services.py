@@ -65,7 +65,7 @@ def test_gateway_requires_account():
 
 @pytest.mark.django_db
 def test_list_events_url_encodes_calendar_id(monkeypatch):
-    """Calendar IDs with reserved URL characters should be percent-encoded."""
+    """Regression: calendar IDs with reserved URL characters must be percent-encoded."""
     user = get_user_model().objects.create_user(username="cal-svc-2", password="x")
     account = GoogleAccount.objects.create(
         user=user,
