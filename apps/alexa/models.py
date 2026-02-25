@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
+from encrypted_model_fields.fields import EncryptedCharField
 
 from apps.core.models.ownable import Ownable
 
@@ -16,8 +18,8 @@ class AlexaAccount(Ownable):
 
     name = models.CharField(max_length=150)
     client_id = models.CharField(max_length=255)
-    client_secret = models.CharField(max_length=255)
-    refresh_token = models.CharField(max_length=255)
+    client_secret = EncryptedCharField(max_length=255)
+    refresh_token = EncryptedCharField(max_length=255)
     api_base_url = models.URLField(
         default="https://api.amazonalexa.com",
         help_text=_("Base Alexa API URL used for reminder operations."),
@@ -32,9 +34,15 @@ class AlexaAccount(Ownable):
         verbose_name_plural = _("Alexa accounts")
         constraints = [
             models.UniqueConstraint(
-                fields=("name", "user", "group"),
-                name="alexa_account_unique_owner_name",
-            )
+                fields=("name", "user"),
+                condition=Q(user__isnull=False, group__isnull=True),
+                name="alexa_account_unique_user_name",
+            ),
+            models.UniqueConstraint(
+                fields=("name", "group"),
+                condition=Q(user__isnull=True, group__isnull=False),
+                name="alexa_account_unique_group_name",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -47,7 +55,7 @@ class AlexaAccount(Ownable):
         missing_fields = [
             field
             for field in ("client_id", "client_secret", "refresh_token")
-            if not getattr(self, field, "").strip()
+            if not (getattr(self, field, "") or "").strip()
         ]
         if missing_fields:
             raise ValidationError(
@@ -59,11 +67,11 @@ class AlexaAccount(Ownable):
 
     def validate_credentials(self) -> None:
         """Perform lightweight checks for required credential values."""
-        if not self.client_id.strip():
+        if not (self.client_id or "").strip():
             raise AlexaCredentialsError("Missing Alexa client ID.")
-        if not self.client_secret.strip():
+        if not (self.client_secret or "").strip():
             raise AlexaCredentialsError("Missing Alexa client secret.")
-        if not self.refresh_token.strip():
+        if not (self.refresh_token or "").strip():
             raise AlexaCredentialsError("Missing Alexa refresh token.")
 
 
@@ -100,9 +108,15 @@ class AlexaReminder(Ownable):
         verbose_name_plural = _("Alexa reminders")
         constraints = [
             models.UniqueConstraint(
-                fields=("event_key", "user", "group"),
-                name="alexa_reminder_unique_owner_event",
-            )
+                fields=("event_key", "user"),
+                condition=Q(user__isnull=False, group__isnull=True),
+                name="alexa_reminder_unique_user_event",
+            ),
+            models.UniqueConstraint(
+                fields=("event_key", "group"),
+                condition=Q(user__isnull=True, group__isnull=False),
+                name="alexa_reminder_unique_group_event",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -162,6 +176,22 @@ class AlexaReminderDelivery(models.Model):
                 name="alexa_reminder_delivery_unique_pair",
             )
         ]
+
+    def clean(self) -> None:
+        """Ensure reminder and account ownership match."""
+        super().clean()
+        if not self.reminder_id or not self.account_id:
+            return
+        if (
+            self.reminder.user_id != self.account.user_id
+            or self.reminder.group_id != self.account.group_id
+        ):
+            raise ValidationError(_("Reminder and account must belong to the same owner."))
+
+    def save(self, *args, **kwargs):
+        """Validate ownership invariants before persisting."""
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         """Return compact delivery status label."""
