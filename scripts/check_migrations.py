@@ -9,6 +9,13 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
+from scripts.build_migration_baseline import (
+    DEFAULT_APPS,
+    DEFAULT_RECENT_SQUASH_WINDOW,
+    DEFAULT_THRESHOLD,
+    evaluate_app_baseline,
+)
+
 
 def _local_app_labels(apps_module, settings_module) -> list[str]:
     base_dir = Path(settings_module.BASE_DIR)
@@ -104,6 +111,39 @@ def _check_migrations(labels: Iterable[str]) -> int:
     return 1
 
 
+def _check_baseline_depths(
+    app_labels: Iterable[str],
+    *,
+    threshold: int = DEFAULT_THRESHOLD,
+    recent_window: int = DEFAULT_RECENT_SQUASH_WINDOW,
+) -> int:
+    """Fail when high-churn apps exceed depth without a recent squash marker."""
+
+    failures: list[str] = []
+    for app_label in app_labels:
+        status = evaluate_app_baseline(app_label, repo_root=REPO_ROOT)
+        if status.exceeds_threshold(threshold) and not status.has_recent_squash(
+            recent_window
+        ):
+            failures.append(
+                f"{app_label}: depth={status.active_chain_depth}, "
+                f"latest={status.latest_number}, last_squash={status.latest_squash_number}"
+            )
+
+    if failures:
+        print(
+            "Migration baseline policy check failed. Run scripts/build_migration_baseline.py "
+            "during the release train to create a fresh squash marker:",
+            file=sys.stderr,
+        )
+        for failure in failures:
+            print(f"  - {failure}", file=sys.stderr)
+        return 1
+
+    print("Migration baseline depth policy passed.")
+    return 0
+
+
 def main() -> int:
     try:
         import django
@@ -124,7 +164,10 @@ def main() -> int:
     os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
     django.setup()
     labels = _local_app_labels(apps, settings)
-    return _check_migrations(labels)
+    migration_check = _check_migrations(labels)
+    if migration_check != 0:
+        return migration_check
+    return _check_baseline_depths(DEFAULT_APPS)
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry
