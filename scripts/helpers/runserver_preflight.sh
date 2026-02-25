@@ -80,19 +80,51 @@ run_runserver_preflight() {
     echo "Cached migration fingerprint is stale; rerunning migration preflight..."
   fi
 
+  local migrate_check_output=""
+  local migrate_check_status=0
+
+  run_migrate_check() {
+    migrate_check_output=$("$python_bin" manage.py migrate --check 2>&1)
+    migrate_check_status=$?
+
+    if [ "$migrate_check_status" -eq 0 ]; then
+      return 0
+    fi
+
+    if echo "$migrate_check_output" | grep -Eq "unapplied migration|Run 'python manage.py migrate'"; then
+      return 10
+    fi
+
+    echo "Migration preflight failed while checking migration state:" >&2
+    echo "$migrate_check_output" >&2
+    return 1
+  }
+
   echo "Checking for unapplied migrations before runserver..."
-  if "$python_bin" manage.py migrate --check; then
+  if run_migrate_check; then
     echo "No pending migrations detected; skipping migrate."
   else
+    migrate_check_status=$?
+    if [ "$migrate_check_status" -ne 10 ]; then
+      return 1
+    fi
+
     echo "Pending migrations detected; applying migrations..."
-    "$python_bin" manage.py migrate --noinput
+    if ! "$python_bin" manage.py migrate --noinput; then
+      echo "Migration preflight failed while applying migrations." >&2
+      return 1
+    fi
 
     echo "Verifying migration state after applying migrations..."
-    "$python_bin" manage.py migrate --check
+    if ! "$python_bin" manage.py migrate --check; then
+      echo "Migration preflight failed: migrations are still pending after apply." >&2
+      return 1
+    fi
   fi
 
   echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
   RUNSERVER_PREFLIGHT_DONE=true
   export DJANGO_SUPPRESS_MIGRATION_CHECK=1
   RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+  return 0
 }
