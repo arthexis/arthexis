@@ -1,10 +1,12 @@
 import hashlib
 import importlib.util
 from pathlib import Path
+from datetime import timedelta
 
 import pytest
 
 from django.conf import settings
+from django.utils import timezone
 
 pytestmark = pytest.mark.critical
 
@@ -96,3 +98,53 @@ def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
     assert env_refresh_module._fixture_hashes_by_app(fixtures) == {
         label: digest.hexdigest() for label, digest in expected.items()
     }
+
+
+@pytest.mark.django_db
+def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
+    from apps.nginx.models import SiteConfiguration
+
+    applied_at = timezone.now() - timedelta(hours=2)
+    validated_at = timezone.now() - timedelta(hours=1)
+    SiteConfiguration.objects.create(
+        name="preview-example",
+        enabled=False,
+        last_applied_at=applied_at,
+        last_validated_at=validated_at,
+        last_message="runtime state",
+    )
+
+    updated = env_refresh_module._upsert_site_configuration(
+        {
+            "name": "preview-example",
+            "enabled": True,
+            "mode": "public",
+            "protocol": "http",
+            "role": "Terminal",
+            "port": 8888,
+            "certificate": None,
+            "external_websockets": True,
+            "managed_subdomains": "admin,api,status",
+            "include_ipv6": False,
+            "expected_path": "/etc/nginx/sites-enabled/arthexis-preview-example.conf",
+            "site_entries_path": "apps/nginx/fixtures/data/nginx-sites-preview.json",
+            "site_destination": "/etc/nginx/sites-enabled/arthexis-sites.conf",
+            "last_applied_at": None,
+            "last_validated_at": None,
+            "last_message": "",
+        }
+    )
+
+    assert updated is True
+    assert SiteConfiguration.objects.filter(name="preview-example").count() == 1
+    config = SiteConfiguration.objects.get(name="preview-example")
+    assert config.enabled is True
+    assert config.last_applied_at == applied_at
+    assert config.last_validated_at == validated_at
+    assert config.last_message == "runtime state"
+
+
+@pytest.mark.django_db
+def test_upsert_site_configuration_returns_false_when_name_missing(env_refresh_module):
+    result = env_refresh_module._upsert_site_configuration({"enabled": True})
+    assert result is False

@@ -547,7 +547,7 @@ def _load_auto_upgrade_log_entries(
         line = raw_line.strip()
         if not line:
             continue
-        timestamp_str, _, message = line.partition(" ")
+        timestamp_str, _separator, message = line.partition(" ")
         message = message.strip()
         timestamp = _parse_log_timestamp(timestamp_str)
         if not message:

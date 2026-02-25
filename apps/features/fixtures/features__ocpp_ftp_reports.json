@@ -3,8 +3,8 @@
     "model": "features.feature",
     "fields": {
       "slug": "ocpp-ftp-reports",
-      "display": "OCPP FTP Report Uploads",
-      "summary": "Provide FTP endpoints for charge points to upload diagnostics and report archives.",
+      "display": "OCPP-aware FTP Server",
+      "summary": "Provide an OCPP-aware FTP server for charge points to upload diagnostics and report archives.",
       "is_enabled": true,
       "main_app": [
         "ocpp"
@@ -12,9 +12,9 @@
       "node_feature": [
         "ftp-server"
       ],
-      "admin_requirements": "Offer a quick action to configure and link a local FTP server for charge points configured to upload diagnostics.",
+      "admin_requirements": "Offer a quick action to configure and link the OCPP-aware local FTP server for charge points uploading diagnostics.",
       "public_requirements": "",
-      "service_requirements": "Expose an embedded FTP server for OCPP report uploads and keep charge points linked to the local FTP configuration.",
+      "service_requirements": "Expose an embedded OCPP-aware FTP server for report uploads and keep charge points linked to local FTP configuration.",
       "admin_views": [
         "admin:ocpp_charger_changelist",
         "admin:ftp_ftpserver_changelist"
@@ -33,7 +33,8 @@
       "created_at": "2026-03-07T18:00:00Z",
       "updated_at": "2026-03-07T18:00:00Z",
       "is_seed_data": true,
-      "is_deleted": false
+      "is_deleted": false,
+      "source": "mainstream"
     }
   }
 ]

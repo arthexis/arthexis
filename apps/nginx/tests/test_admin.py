@@ -6,7 +6,7 @@ from django.urls import reverse
 from apps.certs.models import CertbotCertificate, SelfSignedCertificate
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
-from apps.nginx.renderers import generate_primary_config
+from apps.nginx.renderers import generate_unified_config
 
 
 @pytest.mark.django_db
@@ -27,8 +27,11 @@ def test_preview_view_shows_file_status(admin_client, tmp_path):
         '[{"domain": "test.example.com", "require_https": false}]', encoding="utf-8"
     )
 
-    primary_content = generate_primary_config(
-        config.mode, config.port, include_ipv6=config.include_ipv6
+    primary_content = generate_unified_config(
+        config.mode,
+        config.port,
+        include_ipv6=config.include_ipv6,
+        site_config_path=config.staged_site_config,
     )
     primary_path.write_text(primary_content, encoding="utf-8")
 
@@ -38,9 +41,8 @@ def test_preview_view_shows_file_status(admin_client, tmp_path):
     assert response.status_code == 200
     rendered = response.content.decode()
     assert str(config.expected_destination) in rendered
-    assert str(config.site_destination_path) in rendered
+    assert str(config.site_destination_path) not in rendered
     assert "Existing file already matches this content." in rendered
-    assert "File does not exist on disk." in rendered
 
 
 @pytest.mark.django_db

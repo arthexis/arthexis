@@ -14,3 +14,5 @@ This site aggregates operator guides, architecture notes, and development refere
 - [Standalone Desktop Implementation Plan](development/standalone-desktop-implementation.md)
 - [Suite Services Report](suite-services-report.md)
 - [USB Camera Power-Off](usb-camera-power-off.md)
+- [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)
+- [Watchtower Codex Skill Proposal](development/watchtower-codex-skill-proposal.md)

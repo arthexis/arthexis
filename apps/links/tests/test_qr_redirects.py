@@ -3,7 +3,7 @@ from django.urls import reverse
 import pytest
 
 from apps.links import models as links_models
-from apps.links.models import QRRedirect, QRRedirectLead
+from apps.links.models.redirects import QRRedirect, QRRedirectLead
 
 pytestmark = pytest.mark.critical
 

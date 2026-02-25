@@ -4,9 +4,9 @@ import pytest
 
 from apps.nginx import config_utils
 from apps.nginx.renderers import (
-    apply_site_entries,
     generate_primary_config,
     generate_site_entries_content,
+    generate_unified_config,
 )
 
 pytestmark = pytest.mark.critical
@@ -41,43 +41,7 @@ def test_generate_primary_config_external_websockets_toggle():
     assert config_utils.WEBSOCKET_MAP_DIRECTIVE not in disabled
     assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
 
-def test_apply_site_entries(tmp_path: Path):
-    staging = tmp_path / "sites.json"
-    staging.write_text(
-        """
-        [
-          {"domain": "example.com", "require_https": true},
-          {"domain": "example.com", "require_https": false},
-          {"domain": "demo.arthexis.com", "require_https": false}
-        ]
-        """,
-        encoding="utf-8",
-    )
 
-    dest = tmp_path / "sites.conf"
-    changed = apply_site_entries(staging, "public", 8888, dest, https_enabled=True)
-
-    assert changed is True
-    content = dest.read_text(encoding="utf-8")
-    assert "Managed site for example.com" in content
-    assert "return 301 https://$host$request_uri;" in content
-    assert "demo.arthexis.com" in content
-
-def test_generate_site_entries_content_matches_written_file(tmp_path: Path):
-    staging = tmp_path / "sites.json"
-    staging.write_text(
-        """
-        [{"domain": "preview.example.com", "require_https": false}]
-        """,
-        encoding="utf-8",
-    )
-
-    dest = tmp_path / "sites.conf"
-
-    preview_content = generate_site_entries_content(staging, "internal", 8080)
-    apply_site_entries(staging, "internal", 8080, dest)
-
-    assert dest.read_text(encoding="utf-8") == preview_content
 
 def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
     staging = tmp_path / "sites.json"
@@ -132,3 +96,21 @@ def test_ssl_directives_use_bundled_fallback(monkeypatch, tmp_path: Path):
 
     assert f"include {bundled_options}" in config
     assert f"ssl_dhparam {bundled_dhparam}" in config
+
+
+
+def test_generate_unified_config_includes_managed_sites(tmp_path: Path):
+    """Unified nginx config should include primary and managed site blocks in one file."""
+
+    staging = tmp_path / "sites.json"
+    staging.write_text('[{"domain": "tenant.example.com", "require_https": true}]', encoding="utf-8")
+
+    content = generate_unified_config(
+        "public",
+        8080,
+        https_enabled=True,
+        site_config_path=staging,
+    )
+
+    assert "server_name arthexis.com *.arthexis.com;" in content
+    assert "Managed site for tenant.example.com" in content

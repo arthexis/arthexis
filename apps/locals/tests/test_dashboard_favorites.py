@@ -75,6 +75,33 @@ class DashboardFavoritesTests(TestCase):
         self.client.force_login(self.user)
         self.dashboard_url = reverse("admin:index")
 
+    @staticmethod
+    def _favorites_app_list():
+        return [
+            {
+                "app_label": "auth",
+                "models": [
+                    {
+                        "name": "Users",
+                        "object_name": "User",
+                        "app_label": "auth",
+                        "model": get_user_model(),
+                    }
+                ],
+            },
+            {
+                "app_label": "locals",
+                "models": [
+                    {
+                        "name": "Favorites",
+                        "object_name": "Favorite",
+                        "app_label": "locals",
+                        "model": Favorite,
+                    }
+                ],
+            },
+        ]
+
     def test_favorites_render_after_cache_was_empty(self):
         # First request with no favorites populates an empty cache entry.
         self.client.get(self.dashboard_url)
@@ -129,3 +156,47 @@ class DashboardFavoritesTests(TestCase):
         self.assertTrue(get_cached_user_favorites.called)
         _, kwargs = get_cached_user_favorites.call_args
         self.assertFalse(kwargs.get("show_model_badges"))
+
+    def test_favorite_entries_sort_variants(self):
+        user_ct = ContentType.objects.get_for_model(get_user_model())
+        favorite_ct = ContentType.objects.get_for_model(Favorite)
+        test_cases = [
+            {
+                "name": "sorts by model display name",
+                "user_favorite": {"priority": 9},
+                "favorite_favorite": {"priority": 1},
+                "result": lambda entries: [entry["model"]["name"] for entry in entries],
+                "expected": ["Favorites", "Users"],
+            },
+            {
+                "name": "sorts by custom label when present",
+                "user_favorite": {"custom_label": "A Users Shortcut", "priority": 99},
+                "favorite_favorite": {"custom_label": "Z Favorites Shortcut", "priority": 1},
+                "result": lambda entries: [entry["favorite"].custom_label for entry in entries],
+                "expected": ["A Users Shortcut", "Z Favorites Shortcut"],
+            },
+        ]
+
+        for case in test_cases:
+            with self.subTest(case=case["name"]):
+                Favorite.objects.all().delete()
+                favorite_user = Favorite.objects.create(
+                    user=self.user,
+                    content_type=user_ct,
+                    **case["user_favorite"],
+                )
+                favorite_favorite = Favorite.objects.create(
+                    user=self.user,
+                    content_type=favorite_ct,
+                    **case["favorite_favorite"],
+                )
+
+                entries = favorite_entries(
+                    self._favorites_app_list(),
+                    {
+                        user_ct.id: favorite_user,
+                        favorite_ct.id: favorite_favorite,
+                    },
+                )
+
+                self.assertEqual(case["result"](entries), case["expected"])

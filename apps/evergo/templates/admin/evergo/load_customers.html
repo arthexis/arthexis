@@ -1,0 +1,76 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .evergo-load-customers-form textarea {
+      padding: 12px 14px;
+      line-height: 1.5;
+    }
+
+    .evergo-load-customers-form .form-line-copy {
+      margin: 0 0 12px;
+      display: block;
+    }
+
+    .evergo-load-customers-form .submit-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .evergo-load-customers-form .submit-row .button,
+    .evergo-load-customers-form .submit-row .default {
+      box-sizing: border-box;
+      border-radius: 4px;
+      min-width: 140px;
+      text-align: center;
+      display: inline-block;
+      text-decoration: none;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <h1>{{ title }}</h1>
+    <form method="post" novalidate class="evergo-load-customers-form">
+      {% csrf_token %}
+
+      <fieldset class="module aligned">
+        <div class="form-row">
+          {{ form.profile.errors }}
+          {{ form.profile.label_tag }}
+          {{ form.profile }}
+          {% if form.profile.help_text %}
+            <div class="help">{{ form.profile.help_text }}</div>
+          {% endif %}
+          <p class="help form-line-copy">
+            Need a profile first?
+            <a href="{{ add_profile_url }}">Create a new Evergo profile</a>.
+          </p>
+        </div>
+
+        <div class="form-row">
+          {{ form.raw_queries.errors }}
+          {{ form.raw_queries.label_tag }}
+          <p class="help form-line-copy">
+            Paste one or many SO numbers and/or customer names below.
+          </p>
+          {{ form.raw_queries }}
+          <p class="help form-line-copy">
+            Values can be separated in any manner (spaces, commas, semicolons, pipes, tabs, or new lines).
+          </p>
+          {% if form.raw_queries.help_text %}
+            <div class="help">{{ form.raw_queries.help_text }}</div>
+          {% endif %}
+        </div>
+      </fieldset>
+
+      <div class="submit-row">
+        <input type="submit" class="default" value="Load customers" />
+        <a href="{% url 'admin:evergo_evergouser_changelist' %}" class="button">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -12,7 +12,7 @@ from pathlib import Path
 from django.conf import settings
 
 from apps.nginx.config_utils import MAINTENANCE_ROOT
-from apps.nginx.renderers import apply_site_entries, generate_primary_config
+from apps.nginx.renderers import generate_unified_config
 
 SITES_AVAILABLE_DIR = Path("/etc/nginx/sites-available")
 SITES_ENABLED_DIR = Path("/etc/nginx/sites-enabled")
@@ -188,48 +188,34 @@ def apply_nginx_configuration(
 
     record_lock_state(mode, port, role)
 
-    proxy_target = None
 
     primary_dest = destination or Path("/etc/nginx/sites-enabled/arthexis.conf")
     keep_paths = {primary_dest}
-    if site_destination:
-        keep_paths.add(site_destination)
+    try:
+        config_content = generate_unified_config(
+            mode,
+            port,
+            certificate=certificate,
+            https_enabled=https_enabled,
+            include_ipv6=include_ipv6,
+            external_websockets=external_websockets,
+            site_config_path=site_config_path,
+            subdomain_prefixes=subdomain_prefixes,
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
 
     subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
     _remove_nginx_configs(keep=keep_paths, sudo=sudo)
     subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-available/default"], check=False)
     subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-enabled/default"], check=False)
-    config_content = generate_primary_config(
-        mode,
-        port,
-        certificate=certificate,
-        https_enabled=https_enabled,
-        include_ipv6=include_ipv6,
-        external_websockets=external_websockets,
-    )
+    if site_destination and site_destination != primary_dest:
+        subprocess.run([sudo, "rm", "-f", str(site_destination)], check=False)
+
     _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
     _ensure_site_enabled(primary_dest, sudo=sudo)
 
     _ensure_maintenance_assets(sudo=sudo)
-
-    site_changed = False
-    if site_config_path and site_destination:
-        try:
-            site_changed = apply_site_entries(
-                site_config_path,
-                mode,
-                port,
-                site_destination,
-                https_enabled=https_enabled,
-                external_websockets=external_websockets,
-                proxy_target=proxy_target,
-                subdomain_prefixes=subdomain_prefixes,
-                sudo=sudo,
-            )
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        else:
-            _ensure_site_enabled(site_destination, sudo=sudo)
 
     validated = False
     reloaded = False

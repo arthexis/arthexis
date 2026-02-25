@@ -12,7 +12,7 @@ from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_test_login_populates_remote_fields(mock_session_cls):
     """Evergo login should persist the expected profile fields from the API payload."""
     User = get_user_model()
@@ -72,7 +72,7 @@ def test_test_login_populates_remote_fields(mock_session_cls):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_test_login_raises_specific_error_for_419(mock_session_cls):
     """Evergo login should surface a specific CSRF/session message when backend responds 419."""
     User = get_user_model()
@@ -98,7 +98,7 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.requests.Session")
+@patch("apps.evergo.models.user.requests.Session")
 def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_cls):
     """Load orders should upsert assigned orders and refresh learned dropdown field values."""
     User = get_user_model()
@@ -202,9 +202,137 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
     assert order.order_number == "GLY01026"
     assert order.assigned_engineer_id == 58642
     assert order.charger_count == 1
+    assert order.phone_primary == ""
+    assert order.phone_secondary == ""
 
     assert not EvergoOrder.objects.filter(remote_id=39759).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="sitio", remote_id=36).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="estatus", remote_id=8).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="preorden_tipo", remote_id=107).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="payment_by", remote_name="Brand").exists()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.requests.Session")
+def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock_session_cls):
+    """Regression: customer wizard should create customer rows and provisional SO placeholders."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-customer", email="suite-customer@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="reginaldocts@evergo.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+
+    mock_session = mock_session_cls.return_value.__enter__.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+
+    def _response(payload):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = payload
+        return response
+
+    def request_side_effect(*, method, url, params=None, **kwargs):
+        if url.endswith("/login"):
+            return _response({"id": 58642, "name": "Reginaldo", "email": "reginaldocts@evergo.com"})
+        if "ordenes/instalador-coordinador" in url:
+            if params and params.get("numero") == "J00830":
+                return _response(
+                    {
+                        "current_page": 1,
+                        "last_page": 1,
+                        "data": [
+                            {
+                                "id": 30161,
+                                "numero_orden": "J00830",
+                                "idCliente": 67883,
+                                "user_tecnico_id": 58642,
+                                "updated_at": "2026-02-23T20:00:33.000000Z",
+                                "cliente": {
+                                    "id": 67883,
+                                    "name": "irma ravize",
+                                    "email": "irma@notaria55mty.com",
+                                },
+                                "orden_instalacion": {
+                                    "telefono_celular": "+528115889790",
+                                    "direccion": "capellania 107 San Pedro Garza García",
+                                    "nombre_completo": "irma ravize",
+                                },
+                            }
+                        ],
+                    }
+                )
+            if params and params.get("numero") == "BAD999":
+                return _response({"current_page": 1, "last_page": 1, "data": []})
+            if params and params.get("cliente") == "irma ravize":
+                return _response({"current_page": 1, "last_page": 1, "data": []})
+        raise AssertionError(f"Unexpected URL {url} params={params}")
+
+    mock_session.request.side_effect = request_side_effect
+
+    summary = profile.load_customers_from_queries(raw_queries="J00830; BAD999; irma ravize")
+
+    assert summary["orders_created"] >= 1
+    assert summary["placeholders_created"] == 1
+    assert "BAD999" in summary["unresolved"]
+    assert "irma ravize" in summary["unresolved"]
+
+    customer = profile.customers.get(remote_id=67883)
+    assert customer.latest_so == "J00830"
+    assert customer.phone_number == "+528115889790"
+
+    placeholder = EvergoOrder.objects.get(order_number="BAD999")
+    assert placeholder.validation_state == EvergoOrder.VALIDATION_STATE_PLACEHOLDER
+
+
+@pytest.mark.django_db
+def test_upsert_order_extracts_contact_and_address_components():
+    """Regression: order sync should persist phone and address pieces for admin usage."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-upsert", email="suite-upsert@example.com")
+    profile = EvergoUser.objects.create(user=suite_user)
+
+    payload = {
+        "id": 29545,
+        "numero_orden": "GM01321",
+        "idSitio": 25,
+        "sitio": {"id": 25, "nombre": "Chevrolet"},
+        "idCliente": 63100,
+        "cliente": {"id": 63100, "name": "JESUS ALBERTO CORTEZ HARO"},
+        "orden_instalacion": {
+            "telefono_celular": "+528111852788",
+            "telefono_fijo1": "81 7770 0000",
+            "telefono_fijo2": "81 7770 1111",
+            "calle": "santa barbara",
+            "num_ext": "404",
+            "num_int": "2B",
+            "entre_calles": "A y B",
+            "colonia": "Fuentes de Santa Lucia",
+            "municipio": "Apodaca",
+            "ciudad": "Ciudad Apodaca",
+            "codigo_postal": "66647",
+        },
+        "created_at": "2026-01-08T22:06:58.000000Z",
+        "updated_at": "2026-01-13T02:18:42.000000Z",
+    }
+
+    created = profile._upsert_order(payload)
+
+    assert created is True
+    order = EvergoOrder.objects.get(remote_id=29545)
+    assert order.site_name == "Chevrolet"
+    assert order.phone_primary == "+528111852788"
+    assert order.phone_secondary == "81 7770 0000"
+    assert order.address_street == "santa barbara"
+    assert order.address_num_ext == "404"
+    assert order.address_num_int == "2B"
+    assert order.address_between_streets == "A y B"
+    assert order.address_neighborhood == "Fuentes de Santa Lucia"
+    assert order.address_municipality == "Apodaca"
+    assert order.address_city == "Ciudad Apodaca"
+    assert order.address_postal_code == "66647"

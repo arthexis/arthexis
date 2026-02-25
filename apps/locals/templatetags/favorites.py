@@ -241,7 +241,13 @@ def favorite_entries(app_list, favorites_map):
                 "ct_id": ct_id,
             })
 
-    entries.sort(key=lambda entry: (entry["favorite"].priority, entry["favorite"].pk))
+    entries.sort(
+        key=lambda entry: (
+            _favorite_sort_label(entry).casefold(),
+            entry["favorite"].priority,
+            entry["favorite"].pk,
+        )
+    )
 
     return entries
 
@@ -309,3 +315,16 @@ def _render_favorites(app_list, favorites_map, show_changelinks, show_model_badg
             "request": request,
         },
     )
+
+
+def _favorite_sort_label(entry):
+    """Return the display label used to sort dashboard favorite entries."""
+    favorite = entry.get("favorite")
+    if favorite and favorite.custom_label:
+        return favorite.custom_label
+
+    model = entry.get("model")
+    if isinstance(model, dict):
+        return model.get("name") or model.get("object_name") or ""
+
+    return getattr(model, "name", None) or getattr(model, "object_name", "")

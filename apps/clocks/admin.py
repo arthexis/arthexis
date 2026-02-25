@@ -70,9 +70,9 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             return None
         if not feature.is_enabled:
             if auto_enable and node:
-                _, auto_enabled = NodeFeatureAssignment.objects.update_or_create(
+                auto_enabled = NodeFeatureAssignment.objects.update_or_create(
                     node=node, feature=feature
-                )
+                )[1]
                 node.sync_feature_tasks()
                 self.message_user(
                     request,

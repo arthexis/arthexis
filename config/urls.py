@@ -67,7 +67,7 @@ def autodiscovered_urlpatterns():
             # Skip third-party apps outside of the project
             continue
 
-        if app_config.label in {"pages", "docs"}:
+        if app_config.label in {"pages", "docs", "blog"}:
             # Root pages URLs are handled explicitly below
             continue
 
@@ -150,6 +150,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
     path("", include("apps.docs.urls")),
+    path("", include("apps.blog.urls")),
     path("", include("apps.sites.urls")),
 ]
 

@@ -4,9 +4,11 @@ import os
 import shutil
 
 from django.contrib import admin, messages
+
+from apps.core.admin import OwnableAdminMixin
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from .models import SeleniumBrowser, SeleniumScript
+from .models import SeleniumBrowser, SeleniumScript, SessionCookie
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +105,32 @@ class SeleniumScriptAdmin(admin.ModelAdmin):
                 % {"count": executed},
                 level=messages.SUCCESS,
             )
+
+
+@admin.register(SessionCookie)
+class SessionCookieAdmin(OwnableAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "name",
+        "owner_display",
+        "source",
+        "state",
+        "cookie_count",
+        "last_used_at",
+        "last_validated_at",
+        "rejection_count",
+    )
+    list_filter = ("state", "source")
+    search_fields = ("name", "source", "last_rejection_reason")
+    readonly_fields = (
+        "cookie_count",
+        "last_used_at",
+        "last_validated_at",
+        "rejection_count",
+        "last_rejection_reason",
+    )
+    exclude = ("cookies",)
+
+    @admin.display(description=_("Cookie count"))
+    def cookie_count(self, obj: SessionCookie) -> int:
+        return len(obj.cookies or [])
+

@@ -458,25 +458,28 @@
         </div>
       </div>
     </div>
-    <div
-      id="footer-placeholder"
-      class="footer-placeholder container mt-5 border-top pt-3"
-      hx-get="{% url 'pages:footer-fragment' %}{% if force_footer %}?force=1{% endif %}"
-      hx-trigger="revealed"
-      hx-swap="outerHTML"
-    >
-      <div class="text-center text-muted py-4">
-        <div
-          class="spinner-border spinner-border-sm"
-          role="status"
-          aria-label="{% trans 'Loading footer' %}"
-        ></div>
-        <span class="ms-2">{% trans "Loading footer..." %}</span>
+    {% url 'pages:footer-fragment' as footer_fragment_url %}
+    {% if not hide_default_footer and footer_fragment_url %}
+      <div
+        id="footer-placeholder"
+        class="footer-placeholder container mt-5 border-top pt-3"
+        hx-get="{{ footer_fragment_url }}{% if force_footer %}?force=1{% endif %}"
+        hx-trigger="revealed"
+        hx-swap="outerHTML"
+      >
+        <div class="text-center text-muted py-4">
+          <div
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-label="{% trans 'Loading footer' %}"
+          ></div>
+          <span class="ms-2">{% trans "Loading footer..." %}</span>
+        </div>
       </div>
-    </div>
-    <noscript>
-      {% render_footer %}
-    </noscript>
+      <noscript>
+        {% render_footer %}
+      </noscript>
+    {% endif %}
     <script src="{% static 'htmx/htmx.min.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     {% if chat_enabled %}

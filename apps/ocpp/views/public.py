@@ -573,6 +573,7 @@ def charger_status(request, cid, connector=None):
             "show_connector_tabs": show_connector_tabs,
             "show_connector_overview_cards": show_connector_overview_cards,
             "charging_limit": _charging_limit_details(charger),
+            "hide_default_footer": True,
         },
     )
 
@@ -659,6 +660,7 @@ def charger_session_search(request, cid, connector=None):
             "status_url": status_url,
             "date_view": date_view,
             "date_toggle_links": date_toggle_links,
+            "hide_default_footer": True,
         },
     )
 
@@ -767,6 +769,7 @@ def charger_log_page(request, cid, connector=None):
             "log_limit_label": limit_label,
             "log_download_url": log_download_url,
             "log_filename": download_filename,
+            "hide_default_footer": True,
         },
     )
 

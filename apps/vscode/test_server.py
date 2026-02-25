@@ -29,7 +29,7 @@ diff_snapshots = migration.diff_snapshots
 wait_for_changes = migration.wait_for_changes
 
 PREFIX = "[Test Server]"
-PYTEST_DURATIONS_COUNT = 5
+PYTEST_DURATIONS_COUNT = 10
 PYTEST_DURATIONS_MIN_SECONDS = 0.0
 SUMMARY_LINE_RE = re.compile(r"=+ (.+?) =+")
 SUMMARY_COUNT_RE = re.compile(r"(\d+)\s+(failed|error|errors)")
@@ -133,8 +133,14 @@ def test_run_tests_triggers_screenshot_after_unmarked_group(monkeypatch):
 
     calls: list[str] = []
 
-    def fake_group(_base_dir: Path, *, label: str, marker: str) -> tuple[bool, int | None]:
-        del marker
+    def fake_group(
+        _base_dir: Path,
+        *,
+        label: str,
+        marker: str,
+        durations_count: int,
+    ) -> tuple[bool, int | None]:
+        del marker, durations_count
         calls.append(label)
         return True, 0
 
@@ -155,8 +161,14 @@ def test_run_tests_triggers_screenshot_after_unmarked_group(monkeypatch):
 def test_run_tests_skips_screenshot_when_regular_group_fails(monkeypatch):
     """Ensure screenshot capture is skipped when regular tests fail."""
 
-    def fake_group(_base_dir: Path, *, label: str, marker: str) -> tuple[bool, int | None]:
-        del marker
+    def fake_group(
+        _base_dir: Path,
+        *,
+        label: str,
+        marker: str,
+        durations_count: int,
+    ) -> tuple[bool, int | None]:
+        del marker, durations_count
         if label == "unmarked":
             return False, 1
         return True, 0
@@ -447,7 +459,7 @@ def _run_migration_check_command(
 
 
 def _run_test_group(
-    base_dir: Path, *, label: str, marker: str
+    base_dir: Path, *, label: str, marker: str, durations_count: int
 ) -> tuple[bool, int | None]:
     """Execute a group of pytest tests filtered by markers."""
 
@@ -458,7 +470,7 @@ def _run_test_group(
         "-m",
         marker,
         "--color=yes",
-        f"--durations={PYTEST_DURATIONS_COUNT}",
+        f"--durations={durations_count}",
         f"--durations-min={PYTEST_DURATIONS_MIN_SECONDS}",
     ]
     env = os.environ.copy()
@@ -551,6 +563,31 @@ def test_run_command_with_output_kills_process_on_interrupt(monkeypatch):
     assert fake_process.wait_called is True
 
 
+def test_run_test_group_uses_configured_durations_count(monkeypatch):
+    """Regression: pytest duration output count should be configurable."""
+
+    recorded_command = {"value": None}
+
+    def fake_run(command: list[str], *, cwd: Path, env: dict[str, str]) -> _TestRunResult:
+        del cwd, env
+        recorded_command["value"] = command
+        return _TestRunResult(returncode=0, failed_count=0)
+
+    monkeypatch.setattr(sys.modules[__name__], "_run_command_with_output", fake_run)
+
+    success, failed_count = _run_test_group(
+        Path("."),
+        label="critical",
+        marker="critical",
+        durations_count=17,
+    )
+
+    assert success is True
+    assert failed_count == 0
+    assert recorded_command["value"] is not None
+    assert "--durations=17" in recorded_command["value"]
+
+
 def _extract_failed_count(output_lines: Iterable[str]) -> int | None:
     summary_text = None
     for line in output_lines:
@@ -568,7 +605,7 @@ def _strip_ansi(text: str) -> str:
     return re.sub("\x1b\\[[0-9;]*m", "", text)
 
 
-def run_tests(base_dir: Path) -> bool:
+def run_tests(base_dir: Path, *, durations_count: int = PYTEST_DURATIONS_COUNT) -> bool:
     """Execute the test suite grouped by markers."""
 
     groups = _marker_groups()
@@ -578,6 +615,7 @@ def run_tests(base_dir: Path) -> bool:
             base_dir,
             label=label,
             marker=marker,
+            durations_count=durations_count,
         )
         results.append((label, success, failed_count))
         if label == "unmarked" and success:
@@ -801,7 +839,12 @@ def test_marker_groups_are_mutually_exclusive() -> None:
     )
 
 
-def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
+def run_env_refresh_with_tests(
+    base_dir: Path,
+    *,
+    latest: bool,
+    durations_count: int,
+) -> bool:
     """Run env-refresh and then execute the full test suite."""
 
     if _migration_merge_required(base_dir):
@@ -809,7 +852,7 @@ def run_env_refresh_with_tests(base_dir: Path, *, latest: bool) -> bool:
     if run_env_refresh(base_dir, latest=latest):
         print(f"{PREFIX} env-refresh completed successfully.")
         migration.request_runserver_restart(LOCK_DIR)
-        run_tests(base_dir)
+        run_tests(base_dir, durations_count=durations_count)
     else:
         print(f"{PREFIX} env-refresh failed. Awaiting further changes.")
     return True
@@ -844,6 +887,15 @@ def main(argv: list[str] | None = None) -> int:
         default=1.0,
         help="Sleep for this many seconds after detecting a change to allow batches.",
     )
+    parser.add_argument(
+        "--durations-count",
+        type=int,
+        default=PYTEST_DURATIONS_COUNT,
+        help=(
+            "Number of slowest tests to show per pytest section "
+            f"(default: {PYTEST_DURATIONS_COUNT})."
+        ),
+    )
     args = parser.parse_args(argv)
 
     update_requirements(BASE_DIR)
@@ -852,7 +904,11 @@ def main(argv: list[str] | None = None) -> int:
     print(PREFIX, "Watching for changes... Press Ctrl+C to stop.")
     with server_state(LOCK_DIR):
         try:
-            if not run_env_refresh_with_tests(BASE_DIR, latest=args.latest):
+            if not run_env_refresh_with_tests(
+                BASE_DIR,
+                latest=args.latest,
+                durations_count=args.durations_count,
+            ):
                 return 0
             snapshot = collect_source_mtimes(BASE_DIR)
 
@@ -878,7 +934,11 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"{PREFIX} Changes detected: {display}")
-                if not run_env_refresh_with_tests(BASE_DIR, latest=args.latest):
+                if not run_env_refresh_with_tests(
+                    BASE_DIR,
+                    latest=args.latest,
+                    durations_count=args.durations_count,
+                ):
                     return 0
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:

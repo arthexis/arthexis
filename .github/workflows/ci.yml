@@ -88,7 +88,7 @@ jobs:
       - name: Run Ruff
         run: |
           source .venv/bin/activate
-          ruff check --select E9 .
+          ruff check --select E9,F823 .
       - name: Run tests
         run: |
           set -o pipefail
@@ -174,7 +174,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          ruff check --select E9 .
+          ruff check --select E9,F823 .
       - name: Run tests on upgraded install
         run: |
           set -Eeuo pipefail
