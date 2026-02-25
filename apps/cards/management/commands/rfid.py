@@ -69,6 +69,7 @@ class Command(BaseCommand):
         parser.add_argument("--kind", choices=[choice[0] for choice in RFID.KIND_CHOICES], help="Optional RFID kind when validating a UID directly.")
         parser.add_argument("--endianness", choices=[choice[0] for choice in RFID.ENDIANNESS_CHOICES], help="Optional endianness when validating a UID directly.")
         parser.add_argument("--timeout", type=float, default=5.0, help="How long to wait for a scan before timing out when running non-interactively (seconds).")
+        parser.add_argument("--no-irq", action="store_true", help="Bypass IRQ/background-reader path and force direct polling for a scan.")
         parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response.")
 
     def _handle_check(self, options):
@@ -117,7 +118,8 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        result = self._scan_via_attempt(timeout) if service_available() else self._scan_via_local(timeout)
+        no_irq = options.get("no_irq", False)
+        result = self._scan_via_attempt(timeout) if service_available() else self._scan_via_local(timeout, no_irq=no_irq)
         if result.get("error"):
             return result
         if not result.get("rfid"):
@@ -152,7 +154,7 @@ class Command(BaseCommand):
             payload.setdefault("label_id", attempt.label_id)
         return payload
 
-    def _scan_via_local(self, timeout: float) -> dict:
+    def _scan_via_local(self, timeout: float, *, no_irq: bool = False) -> dict:
         interactive = sys.stdin.isatty()
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
@@ -162,7 +164,7 @@ class Command(BaseCommand):
         while True:
             if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
-            result = scan_sources(timeout=0.2)
+            result = scan_sources(timeout=0.2, no_irq=no_irq)
             if result.get("rfid") or result.get("error"):
                 return result
             if not interactive and time.monotonic() - start >= timeout:
