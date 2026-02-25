@@ -302,6 +302,7 @@ document.addEventListener('DOMContentLoaded', function () {
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}
+<link rel="stylesheet" href="{% static 'core/admin_ui_framework.css' %}">
 <style>
 .breadcrumbs__copy-link {
     margin-left: 0.5rem;
