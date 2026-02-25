@@ -177,6 +177,43 @@ def _calculate_power_totals(
     }
 
 
+def _calculate_ev_charging_totals(
+    *,
+    battery_kwh: Decimal,
+    start_soc: Decimal,
+    target_soc: Decimal,
+    charger_power_kw: Decimal,
+    charging_efficiency: Decimal,
+    tariff_mxn_kwh: Optional[Decimal],
+) -> dict[str, Decimal]:
+    """Return EV charging energy, duration, and cost estimation totals."""
+
+    soc_delta = (target_soc - start_soc) / Decimal("100")
+    battery_energy_needed = (battery_kwh * soc_delta).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    wall_energy_needed = (battery_energy_needed / charging_efficiency).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    charging_time_hours = (wall_energy_needed / charger_power_kw).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+    totals: dict[str, Decimal] = {
+        "battery_energy_needed": battery_energy_needed,
+        "wall_energy_needed": wall_energy_needed,
+        "charging_time_hours": charging_time_hours,
+    }
+    if tariff_mxn_kwh is not None:
+        totals["tariff_mxn_kwh"] = tariff_mxn_kwh.quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP
+        )
+        totals["estimated_cost_mxn"] = (wall_energy_needed * tariff_mxn_kwh).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    return totals
+
+
 @landing(_lazy("Energy Tariff Calculator"))
 @login_required(login_url="pages:login")
 def energy_tariff_calculator(request):
@@ -317,6 +354,112 @@ def electrical_power_calculator(request):
                 form["power_factor"] = str(values["power_factor"])
 
     response = TemplateResponse(request, "awg/electrical_power_calculator.html", context)
+
+    template = response.resolve_template(response.template_name)
+    response.add_post_render_callback(lambda r: setattr(r, "context", context))
+    response.render()
+
+    signal_template = getattr(template, "template", template)
+    test_signals.template_rendered.send(
+        sender=signal_template.__class__,
+        template=signal_template,
+        context=context,
+        request=request,
+    )
+    return response
+
+
+@landing(_lazy("EV Charging Session Calculator"))
+@login_required(login_url="pages:login")
+def ev_charging_calculator(request):
+    """Estimate EV charging time and energy cost for a target SOC window."""
+
+    form_data = request.POST or request.GET
+    form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
+    form.setdefault("charging_efficiency", "0.90")
+    context: dict[str, object] = {"form": form}
+
+    if request.method == "POST":
+        error: Optional[str] = None
+        fields = {
+            "battery_kwh": request.POST.get("battery_kwh"),
+            "start_soc": request.POST.get("start_soc"),
+            "target_soc": request.POST.get("target_soc"),
+            "charger_power_kw": request.POST.get("charger_power_kw"),
+            "charging_efficiency": request.POST.get("charging_efficiency", "0.90"),
+            "tariff_mxn_kwh": request.POST.get("tariff_mxn_kwh"),
+        }
+
+        for required in (
+            "battery_kwh",
+            "start_soc",
+            "target_soc",
+            "charger_power_kw",
+            "charging_efficiency",
+        ):
+            if not fields[required]:
+                error = _("%(field)s is required.") % {
+                    "field": required.replace("_", " ").title()
+                }
+                break
+
+        values: dict[str, Decimal] = {}
+        if not error:
+            try:
+                values["battery_kwh"] = Decimal(fields["battery_kwh"] or "0")
+                values["start_soc"] = Decimal(fields["start_soc"] or "0")
+                values["target_soc"] = Decimal(fields["target_soc"] or "0")
+                values["charger_power_kw"] = Decimal(fields["charger_power_kw"] or "0")
+                values["charging_efficiency"] = Decimal(
+                    fields["charging_efficiency"] or "0"
+                )
+                if fields["tariff_mxn_kwh"]:
+                    values["tariff_mxn_kwh"] = Decimal(fields["tariff_mxn_kwh"])
+            except (InvalidOperation, TypeError):
+                error = _("All numeric fields must be valid numbers.")
+
+        if not error:
+            if not all(value.is_finite() for value in values.values()):
+                error = _("All numeric fields must be finite numbers.")
+            elif values["battery_kwh"] <= 0:
+                error = _("Battery capacity must be greater than zero.")
+            elif values["charger_power_kw"] <= 0:
+                error = _("Charger power must be greater than zero.")
+            elif values["start_soc"] < 0 or values["target_soc"] > 100:
+                error = _("State of charge must stay between 0 and 100 percent.")
+            elif values["target_soc"] <= values["start_soc"]:
+                error = _("Target SOC must be greater than start SOC.")
+            elif (
+                values["charging_efficiency"] <= 0
+                or values["charging_efficiency"] > 1
+            ):
+                error = _("Charging efficiency must be greater than 0 and at most 1.")
+            elif "tariff_mxn_kwh" in values and values["tariff_mxn_kwh"] < 0:
+                error = _("Tariff must be zero or greater.")
+
+        if error:
+            context["error"] = error
+        else:
+            try:
+                totals = _calculate_ev_charging_totals(
+                    battery_kwh=values["battery_kwh"],
+                    start_soc=values["start_soc"],
+                    target_soc=values["target_soc"],
+                    charger_power_kw=values["charger_power_kw"],
+                    charging_efficiency=values["charging_efficiency"],
+                    tariff_mxn_kwh=values.get("tariff_mxn_kwh"),
+                )
+            except (InvalidOperation, ZeroDivisionError):
+                context["error"] = _(
+                    "Unable to calculate EV charging totals for the provided values."
+                )
+            else:
+                context["result"] = totals
+                for field, value in fields.items():
+                    if value:
+                        form[field] = value
+
+    response = TemplateResponse(request, "awg/ev_charging_calculator.html", context)
 
     template = response.resolve_template(response.template_name)
     response.add_post_render_callback(lambda r: setattr(r, "context", context))
