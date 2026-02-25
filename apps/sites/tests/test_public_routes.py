@@ -4,11 +4,15 @@ from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.urls import reverse
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
 from apps.energy.models import ClientReport
+from apps.features.models import Feature
+from apps.modules.models import Module
+from apps.sites.models import Landing
 
 
 @pytest.fixture
@@ -186,3 +190,55 @@ def test_whatsapp_webhook_post_payload_validation(
     assert response.status_code == expected_status
     if expected_status == 201:
         assert response.json()["status"] == "ok"
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_disabled_returns_blank_public_home(client):
+    """Home should render a blank page when the interface feature is disabled."""
+
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    assert b"<body></body>" in response.content
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_redirects_to_configured_interface_landing(client):
+    """Disabled interface feature should redirect home to configured interface landing."""
+
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+    module = Module.objects.create(path="operator")
+    landing = Landing.objects.create(module=module, path="/operator/", label="Operator")
+
+    site, _created = Site.objects.get_or_create(
+        domain="testserver",
+        defaults={"name": "testserver"},
+    )
+    site.interface_landing = landing
+    site.save(update_fields=["interface_landing"])
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 302
+    assert response["Location"] == "/operator/?operator_interface=1"
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_interface_mode_hides_public_navigation(client):
+    """Interface mode query parameter should hide top-level navigation chrome."""
+
+    response = client.get(f"{reverse('pages:index')}?operator_interface=1")
+
+    assert response.status_code == 200
+    assert b"navbar navbar-expand-lg" not in response.content

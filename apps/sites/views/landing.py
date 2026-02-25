@@ -14,6 +14,7 @@ from django.core.cache import cache
 
 from apps.core import changelog
 from apps.docs import views as docs_views
+from apps.features.utils import is_suite_feature_enabled
 from apps.docs import rendering
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
@@ -62,7 +63,23 @@ def footer_fragment(request):
 
 @landing("Home")
 def index(request):
+    """Render the public home page or interface fallback when configured."""
+
     site = get_site(request)
+    interface_enabled = is_suite_feature_enabled("operator-site-interface", default=True)
+    if not interface_enabled:
+        interface_landing = getattr(site, "interface_landing", None) if site else None
+        if (
+            interface_landing
+            and not getattr(interface_landing, "is_deleted", False)
+            and interface_landing.enabled
+        ):
+            target_path = interface_landing.path
+            if target_path and target_path != request.path:
+                separator = "&" if "?" in target_path else "?"
+                return redirect(f"{target_path}{separator}operator_interface=1")
+        return render(request, "pages/operator_interface_blank.html")
+
     if site:
         referrer_landing = get_referrer_landing(request, site)
         skip_default_landing = False
