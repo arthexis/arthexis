@@ -91,3 +91,28 @@ def test_collect_document_library_includes_item_blurbs(tmp_path: Path, monkeypat
         for item in section["items"]:
             assert "description" in item
             assert item["description"]
+
+
+def test_extract_document_blurb_skips_yaml_front_matter(tmp_path: Path):
+    """Regression: YAML front matter should be skipped and first content paragraph extracted."""
+
+    doc = tmp_path / "frontmatter.md"
+    doc.write_text(
+        "---\ntitle: Example\nsummary: ignore this metadata\n---\n\n# Heading\n\nUseful intro sentence.",
+        encoding="utf-8",
+    )
+
+    blurb = views._extract_document_blurb(doc)
+
+    assert blurb == "Useful intro sentence."
+
+
+def test_extract_document_blurb_truncates_at_word_boundary(tmp_path: Path):
+    """Truncation should preserve full words when possible."""
+
+    doc = tmp_path / "long.md"
+    doc.write_text("Alpha beta gamma delta epsilon", encoding="utf-8")
+
+    blurb = views._extract_document_blurb(doc, max_length=16)
+
+    assert blurb == "Alpha beta…"
