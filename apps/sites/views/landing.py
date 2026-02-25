@@ -6,6 +6,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template import loader
 from django.template.response import TemplateResponse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.translation import gettext as _
@@ -75,8 +76,20 @@ def index(request):
             and interface_landing.enabled
         ):
             target_path = interface_landing.path
-            if target_path and target_path != request.path:
+            if target_path:
                 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
+                if not url_has_allowed_host_and_scheme(
+                    url=target_path,
+                    allowed_hosts={request.get_host()},
+                    require_https=request.is_secure(),
+                ):
+                    logger.warning(
+                        "Blocked unsafe operator interface redirect for site %s: %s",
+                        getattr(site, "pk", None),
+                        target_path,
+                    )
+                    return render(request, "pages/operator_interface_blank.html")
 
                 parsed_target = urlparse(target_path)
                 params = parse_qs(parsed_target.query, keep_blank_values=True)
@@ -84,7 +97,9 @@ def index(request):
                 rebuilt_target = parsed_target._replace(
                     query=urlencode(params, doseq=True)
                 )
-                return redirect(urlunparse(rebuilt_target))
+                redirect_target = urlunparse(rebuilt_target)
+                if redirect_target != request.get_full_path():
+                    return redirect(redirect_target)
         return render(request, "pages/operator_interface_blank.html")
 
     if site:
