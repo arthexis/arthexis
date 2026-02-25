@@ -61,6 +61,27 @@
     .log-viewer-status.error {
       color: var(--error-fg, #ba2121);
     }
+    .log-viewer-actions .log-viewer-copy-button {
+      margin-left: auto;
+    }
+    .log-viewer-meta {
+      margin: 0 0 16px;
+      display: grid;
+      gap: 8px;
+    }
+    .log-viewer-meta-row {
+      display: grid;
+      gap: 4px;
+    }
+    .log-viewer-meta-label {
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .log-viewer-path {
+      width: 100%;
+      max-width: 100%;
+      font-family: var(--font-monospace, monospace);
+    }
   </style>
 {% endblock %}
 
@@ -98,9 +119,25 @@
       {% translate 'Log copied to your clipboard.' as copy_success %}
       {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
       {% translate 'Copy to clipboard' as copy_label %}
+      {% if log_last_updated or log_full_path %}
+        <div class="log-viewer-meta">
+          {% if log_last_updated %}
+            <div class="log-viewer-meta-row">
+              <span class="log-viewer-meta-label">{% translate "Last updated" %}</span>
+              <span>{{ log_last_updated }}</span>
+            </div>
+          {% endif %}
+          {% if log_full_path %}
+            <div class="log-viewer-meta-row">
+              <label class="log-viewer-meta-label" for="log-full-path">{% translate "Log path" %}</label>
+              <input id="log-full-path" class="vTextField log-viewer-path" type="text" value="{{ log_full_path }}" readonly onclick="this.select();">
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
       {% with encoded_log=selected_log|urlencode %}
         {% with download_url="?log="|add:encoded_log|add:"&download=1" %}
-          {% with viewer_prefix="system-log" viewer_wrapper_class="" viewer_heading=viewer_heading log_filename=selected_log log_download_url=download_url log_content=log_content copy_label=copy_label copy_success=copy_success copy_error=copy_error copy_status_class="log-viewer-status" content_class="log-viewer-content" hide_limit_slider=hide_limit_slider %}
+          {% with viewer_prefix="system-log" viewer_wrapper_class="" viewer_heading=viewer_heading log_filename=selected_log log_download_url=download_url log_content=log_content copy_label=copy_label copy_success=copy_success copy_error=copy_error copy_status_class="log-viewer-status" copy_button_class="button button-secondary log-viewer-copy-button" content_class="log-viewer-content" hide_limit_slider=hide_limit_slider %}
             {% include "includes/log_viewer.html" %}
           {% endwith %}
         {% endwith %}

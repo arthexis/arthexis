@@ -210,6 +210,8 @@ def log_viewer(request):
     selected_log = request.GET.get("log", "")
     log_content = ""
     log_error = ""
+    log_full_path = ""
+    log_last_updated = ""
     download_requested = request.GET.get("download") == "1"
 
     if selected_log:
@@ -228,6 +230,18 @@ def log_viewer(request):
                     log_content = selected_path.read_text(
                         encoding="utf-8", errors="replace"
                     )
+
+                log_full_path = str(selected_path.resolve())
+                try:
+                    modified_at = datetime.fromtimestamp(selected_path.stat().st_mtime)
+                    modified_at = timezone.make_aware(
+                        modified_at, timezone=timezone.get_current_timezone()
+                    )
+                    log_last_updated = timezone.localtime(modified_at).strftime(
+                        "%Y-%m-%d %H:%M:%S %Z"
+                    )
+                except OSError:
+                    log_last_updated = ""
             except OSError as exc:  # pragma: no cover - filesystem edge cases
                 logger.warning("Unable to read log file %s", selected_path, exc_info=exc)
                 log_error = _(
@@ -255,6 +269,8 @@ def log_viewer(request):
             "log_error": log_error,
             "log_notice": log_notice,
             "logs_directory": logs_dir,
+            "log_full_path": log_full_path,
+            "log_last_updated": log_last_updated,
             "hide_limit_slider": True,
         }
     )
