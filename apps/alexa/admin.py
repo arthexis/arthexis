@@ -4,6 +4,8 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.admin import OwnableAdminMixin
+
 from .models import (
     AlexaAccount,
     AlexaCredentialsError,
@@ -22,7 +24,7 @@ class AlexaReminderDeliveryInline(admin.TabularInline):
 
 
 @admin.register(AlexaAccount)
-class AlexaAccountAdmin(admin.ModelAdmin):
+class AlexaAccountAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Admin for Alexa account credentials with a credential test action."""
 
     list_display = (
@@ -71,7 +73,7 @@ class AlexaAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(AlexaReminder)
-class AlexaReminderAdmin(admin.ModelAdmin):
+class AlexaReminderAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Admin for reminders and their per-account delivery state."""
 
     list_display = (

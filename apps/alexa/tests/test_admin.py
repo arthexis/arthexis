@@ -16,7 +16,11 @@ from apps.alexa.models import AlexaAccount
 def test_alexa_admin_test_credentials_updates_last_check_fields():
     """Regression: admin credential test action should store result metadata."""
 
-    user = get_user_model().objects.create_user(username="alexa-admin-owner")
+    user = get_user_model().objects.create_user(
+        username="alexa-admin-owner",
+        is_staff=True,
+        is_superuser=True,
+    )
     valid = AlexaAccount.objects.create(
         name="Valid Alexa",
         user=user,
