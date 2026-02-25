@@ -37,6 +37,7 @@ hardware = [
 include-package-data = true
 
 [tool.setuptools.package-data]
+"arthexis.scripts" = [ "*.sh",]
 config = [ "**/*",]
 "apps.release" = [ "**/*",]
 "apps.energy" = [ "**/*",]
