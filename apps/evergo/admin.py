@@ -14,7 +14,7 @@ from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
 from .forms import EvergoLoadCustomersForm
-from .models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
+from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 def _load_customers_admin_view(admin_instance, request):
@@ -361,6 +361,25 @@ class EvergoOrderFieldValueAdmin(admin.ModelAdmin):
     readonly_fields = ("last_seen_at", "created_at", "raw_payload")
 
 
+class EvergoArtifactInline(admin.TabularInline):
+    """Allow image/PDF attachments directly from customer admin."""
+
+    model = EvergoArtifact
+    extra = 1
+    fields = ("file", "artifact_type", "created_at")
+    readonly_fields = ("artifact_type", "created_at")
+
+
+@admin.register(EvergoArtifact)
+class EvergoArtifactAdmin(admin.ModelAdmin):
+    """Manage artifacts linked to Evergo customers."""
+
+    list_display = ("customer", "artifact_type", "file", "created_at")
+    list_filter = ("artifact_type", "customer__user")
+    search_fields = ("customer__name", "customer__latest_so", "file")
+    readonly_fields = ("artifact_type", "created_at")
+
+
 @admin.register(EvergoCustomer)
 class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
@@ -371,6 +390,8 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_filter = ("user",)
     search_fields = ("latest_so", "name", "phone_number", "address", "email")
     readonly_fields = ("raw_payload", "refreshed_at", "created_at")
+    inlines = (EvergoArtifactInline,)
+    view_on_site = True
 
     def get_urls(self):
         """Register custom admin routes for Evergo customer tools."""

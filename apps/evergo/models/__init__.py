@@ -1,5 +1,6 @@
 """Public model exports for the Evergo app."""
 
+from .artifact import EvergoArtifact
 from .customer import EvergoCustomer
 from .order import EvergoOrder, EvergoOrderFieldValue
 from .parsing import (
@@ -14,6 +15,7 @@ from .parsing import (
 from .user import EvergoLoginResult, EvergoUser
 
 __all__ = [
+    "EvergoArtifact",
     "EvergoCustomer",
     "EvergoLoginResult",
     "EvergoOrder",

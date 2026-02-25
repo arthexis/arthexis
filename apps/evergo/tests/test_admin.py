@@ -8,7 +8,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
+from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @pytest.mark.django_db
@@ -248,3 +248,28 @@ def test_evergo_order_and_field_value_admin_changelists_render(admin_client):
     assert order_changelist.status_code == 200
     assert field_value_changelist.status_code == 200
     assert customer_changelist.status_code == 200
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_change_form_shows_view_on_site_and_artifacts_inline(admin_client):
+    """Regression: customer admin should expose View on site and artifact attachment inline."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-customer-public",
+        email="suite-admin-customer-public@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-customer-public@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="Public Jane", latest_so="SO-501")
+
+    change_url = reverse("admin:evergo_evergocustomer_change", args=[customer.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    content = response.content.decode().lower()
+    assert "view on site" in content
+    assert "artifacts-0-file" in content
