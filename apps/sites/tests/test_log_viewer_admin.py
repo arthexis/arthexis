@@ -27,6 +27,9 @@ def test_admin_log_viewer_displays_full_log_without_slider(admin_client, setting
     assert 'type="range"' not in content
     assert "line-1" in content
     assert "line-4" in content
+    assert "Last updated" in content
+    assert str(log_path.resolve()) in content
+    assert "log-viewer-copy-button" in content
 
 
 @pytest.mark.django_db
