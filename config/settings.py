@@ -460,6 +460,7 @@ LOCAL_APPS = [
     "apps.links",
     "apps.docs",
     "apps.gdrive",
+    "apps.calendars",
     "apps.maps",
     "apps.locals",
     "apps.locale",
@@ -988,5 +989,13 @@ CELERY_BEAT_SCHEDULE = {
     "certificate_expiration_refresh": {
         "task": "apps.certs.tasks.refresh_certificate_expirations",
         "schedule": crontab(minute=0, hour=2),
+    },
+    "google_calendar_snapshot_sync": {
+        "task": "apps.calendars.tasks.sync_google_calendars",
+        "schedule": timedelta(minutes=15),
+    },
+    "google_calendar_trigger_runner": {
+        "task": "apps.calendars.tasks.run_calendar_event_triggers",
+        "schedule": timedelta(minutes=1),
     },
 }
