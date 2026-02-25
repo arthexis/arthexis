@@ -129,3 +129,108 @@ class DashboardFavoritesTests(TestCase):
         self.assertTrue(get_cached_user_favorites.called)
         _, kwargs = get_cached_user_favorites.call_args
         self.assertFalse(kwargs.get("show_model_badges"))
+
+    def test_favorite_entries_sort_alphabetically_by_display_name(self):
+        user_ct = ContentType.objects.get_for_model(get_user_model())
+        favorite_ct = ContentType.objects.get_for_model(Favorite)
+
+        favorite_user = Favorite.objects.create(
+            user=self.user,
+            content_type=user_ct,
+            priority=9,
+        )
+        favorite_favorite = Favorite.objects.create(
+            user=self.user,
+            content_type=favorite_ct,
+            priority=1,
+        )
+
+        app_list = [
+            {
+                "app_label": "auth",
+                "models": [
+                    {
+                        "name": "Users",
+                        "object_name": "User",
+                        "app_label": "auth",
+                        "model": get_user_model(),
+                    }
+                ],
+            },
+            {
+                "app_label": "locals",
+                "models": [
+                    {
+                        "name": "Favorites",
+                        "object_name": "Favorite",
+                        "app_label": "locals",
+                        "model": Favorite,
+                    }
+                ],
+            },
+        ]
+
+        entries = favorite_entries(
+            app_list,
+            {
+                user_ct.id: favorite_user,
+                favorite_ct.id: favorite_favorite,
+            },
+        )
+
+        self.assertEqual([entry["model"]["name"] for entry in entries], ["Favorites", "Users"])
+
+    def test_favorite_entries_sort_uses_custom_label_first(self):
+        user_ct = ContentType.objects.get_for_model(get_user_model())
+        favorite_ct = ContentType.objects.get_for_model(Favorite)
+
+        favorite_user = Favorite.objects.create(
+            user=self.user,
+            content_type=user_ct,
+            custom_label="A Users Shortcut",
+            priority=99,
+        )
+        favorite_favorite = Favorite.objects.create(
+            user=self.user,
+            content_type=favorite_ct,
+            custom_label="Z Favorites Shortcut",
+            priority=1,
+        )
+
+        app_list = [
+            {
+                "app_label": "auth",
+                "models": [
+                    {
+                        "name": "Users",
+                        "object_name": "User",
+                        "app_label": "auth",
+                        "model": get_user_model(),
+                    }
+                ],
+            },
+            {
+                "app_label": "locals",
+                "models": [
+                    {
+                        "name": "Favorites",
+                        "object_name": "Favorite",
+                        "app_label": "locals",
+                        "model": Favorite,
+                    }
+                ],
+            },
+        ]
+
+        entries = favorite_entries(
+            app_list,
+            {
+                user_ct.id: favorite_user,
+                favorite_ct.id: favorite_favorite,
+            },
+        )
+
+        self.assertEqual(
+            [entry["favorite"].custom_label for entry in entries],
+            ["A Users Shortcut", "Z Favorites Shortcut"],
+        )
