@@ -16,13 +16,16 @@ def is_suite_feature_enabled(slug: str, *, default: bool = True) -> bool:
     """
 
     try:
-        feature = Feature.objects.filter(slug=slug).only("is_enabled").first()
+        is_enabled = (
+            Feature.objects.filter(slug=slug)
+            .values_list("is_enabled", flat=True)
+            .first()
+        )
     except (OperationalError, ProgrammingError):
         return default
-    if feature is None:
+    if is_enabled is None:
         return default
-    return bool(feature.is_enabled)
+    return bool(is_enabled)
 
 
 __all__ = ["is_suite_feature_enabled"]
-
