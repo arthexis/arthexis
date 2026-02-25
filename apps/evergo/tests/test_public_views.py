@@ -43,6 +43,13 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
     assert "Av Siempre Viva 742" in content
     assert "Open in Google Maps" in content
     assert "maps.google.com" in content
+    assert "Last Order Number:" not in content
+    assert "Full Name:" not in content
+    assert "Phone Number:" not in content
+    assert "Full Address:" not in content
+    assert "@media print" in content
+    assert "A4 portrait" in content
+    assert "figure:nth-of-type(2n)" in content
     assert reverse("evergo:customer-artifact-download", args=[customer.pk, artifact_pdf.pk]) in content
 
 
