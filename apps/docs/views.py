@@ -217,9 +217,10 @@ def _extract_document_blurb(path: Path, *, max_length: int = 220) -> str:
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped == "---" and not candidates:
-            in_front_matter = not in_front_matter
-            continue
+        if stripped == "---":
+            if in_front_matter or not candidates:
+                in_front_matter = not in_front_matter
+                continue
         if in_front_matter:
             continue
         if stripped.startswith("#"):
@@ -234,7 +235,12 @@ def _extract_document_blurb(path: Path, *, max_length: int = 220) -> str:
     summary = " ".join(candidates)
     if len(summary) <= max_length:
         return summary
-    return f"{summary[: max_length - 1].rstrip()}…"
+
+    cut_off = summary.rfind(" ", 0, max_length)
+    if cut_off == -1:
+        cut_off = max_length - 1
+
+    return f"{summary[:cut_off].rstrip()}…"
 
 
 def _build_library_item(path: Path, root: Path, route_name: str) -> dict[str, str]:
