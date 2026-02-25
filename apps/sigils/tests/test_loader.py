@@ -63,3 +63,38 @@ def test_load_fixture_sigil_roots_retries_on_locked(monkeypatch, caplog):
     assert reset_calls["count"] == 1
     assert SigilRoot.objects.filter(prefix="retry").exists()
     assert any("Retrying SigilRoot save" in msg for msg in caplog.messages)
+
+
+@pytest.mark.django_db
+def test_regression_load_fixture_sigil_roots_uses_signal_database_for_content_types(monkeypatch):
+    """Regression: content type lookups must use the signal-provided database alias."""
+
+    entries = iter(
+        [
+            {
+                "prefix": "dbalias",
+                "context_type": "entity",
+                "content_type": ["contenttypes", "contenttype"],
+            }
+        ]
+    )
+    monkeypatch.setattr(loader, "_iter_fixture_entries", lambda _path: entries)
+
+    lookup_calls = []
+
+    class StubCTManager:
+        def get_by_natural_key(self, app_label, model_name):
+            lookup_calls.append((app_label, model_name))
+            return None
+
+    class StubCTObjects:
+        def db_manager(self, using):
+            lookup_calls.append(using)
+            return StubCTManager()
+
+    monkeypatch.setattr(loader.ContentType, "objects", StubCTObjects())
+
+    loader.load_fixture_sigil_roots(using="default")
+
+    assert lookup_calls[0] == "default"
+    assert lookup_calls[1] == ("contenttypes", "contenttype")
