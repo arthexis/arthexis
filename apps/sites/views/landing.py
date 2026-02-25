@@ -76,8 +76,15 @@ def index(request):
         ):
             target_path = interface_landing.path
             if target_path and target_path != request.path:
-                separator = "&" if "?" in target_path else "?"
-                return redirect(f"{target_path}{separator}operator_interface=1")
+                from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
+                parsed_target = urlparse(target_path)
+                params = parse_qs(parsed_target.query, keep_blank_values=True)
+                params["operator_interface"] = ["1"]
+                rebuilt_target = parsed_target._replace(
+                    query=urlencode(params, doseq=True)
+                )
+                return redirect(urlunparse(rebuilt_target))
         return render(request, "pages/operator_interface_blank.html")
 
     if site:

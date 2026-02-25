@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
-from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, FieldError
 from django.core.management import CommandError, call_command
 from django.shortcuts import redirect
 from django.urls import path
@@ -170,17 +170,15 @@ class SiteAdmin(DjangoSiteAdmin):
 
     def get_queryset(self, request):
         ensure_site_fields()
-        queryset = super().get_queryset(request)
+        return super().get_queryset(request)
+
+    def get_list_display(self, request):
+        list_display = list(super().get_list_display(request))
         try:
             Site._meta.get_field("interface_landing")
-        except FieldDoesNotExist:
-            return queryset
-        # The optional ``default_landing`` field is injected at runtime. Avoid
-        # applying ``select_related`` because the relation may not always be fully
-        # configured on proxy models, which can raise ``FieldError`` during query
-        # evaluation. Returning the base queryset keeps the change list working even
-        # when the field is unavailable.
-        return queryset
+        except (FieldDoesNotExist, FieldError):
+            return tuple(item for item in list_display if item != "interface_landing")
+        return tuple(list_display)
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "links" / "fixtures"

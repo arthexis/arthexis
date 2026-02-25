@@ -12,6 +12,7 @@ from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from apps.modules.models import Module
 from apps.sites.utils import user_in_site_operator_group
+from apps.features.utils import is_suite_feature_enabled
 from .models import SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
@@ -60,9 +61,21 @@ def nav_links(request):
     user = getattr(request, "user", None)
     user_is_authenticated = getattr(user, "is_authenticated", False)
     user_is_staff = getattr(user, "is_staff", False)
+    user_is_superuser = getattr(user, "is_superuser", False)
+    is_site_operator = user_in_site_operator_group(user)
     role_id = getattr(role, "id", "none")
     site_id = getattr(site, "id", "none")
-    operator_interface_mode = request.GET.get("operator_interface") in {"1", "true", "True"}
+    operator_interface_requested = request.GET.get("operator_interface") in {
+        "1",
+        "true",
+        "True",
+    }
+    operator_interface_mode = (
+        operator_interface_requested
+        and user_is_authenticated
+        and (user_is_staff or user_is_superuser or is_site_operator)
+        and not is_suite_feature_enabled("operator-site-interface", default=True)
+    )
 
     if not user_is_authenticated:
         template_id = getattr(getattr(site, "template", None), "id", "none")
@@ -91,14 +104,12 @@ def nav_links(request):
 
     valid_modules = []
     current_module = None
-    user_is_superuser = getattr(user, "is_superuser", False)
     if user_is_authenticated:
         user_group_names = set(user.groups.values_list("name", flat=True))
         user_group_ids = set(user.groups.values_list("id", flat=True))
     else:
         user_group_names = set()
         user_group_ids = set()
-    is_site_operator = user_in_site_operator_group(user)
     feature_checker = FeatureChecker()
 
     def _is_charge_points_module(candidate: Module) -> bool:

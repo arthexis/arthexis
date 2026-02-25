@@ -15,6 +15,7 @@ def seed_feature(apps, schema_editor):
         slug=FEATURE_SLUG,
         defaults={
             "display": "Operator Site Interface",
+            "source": "mainstream",
             "summary": (
                 "Controls whether the public site is shown and optionally redirects "
                 "the root URL to a focused operator interface view."
