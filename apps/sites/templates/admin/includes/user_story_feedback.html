@@ -39,6 +39,7 @@
         id="user-story-form"
         method="post"
         action="{% url 'pages:user-story-submit' %}"
+        enctype="multipart/form-data"
         data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
         data-network-error="{% trans 'Network error. Please try again.' %}"
         data-copy-success="{% trans 'Copied!' %}"
@@ -126,6 +127,19 @@
             <span id="user-story-char-count">0</span>/400
           </div>
         </div>
+        {% if request.user.is_authenticated %}
+          <div class="user-story-field">
+            <label for="user-story-attachments" class="user-story-label">{% trans 'Attachments' %}</label>
+            <input type="file" class="user-story-input" id="user-story-attachments" name="attachments" multiple>
+            <div class="user-story-help">
+              {% if request.user.is_staff %}
+                {% trans 'Staff can attach any number of files.' %}
+              {% else %}
+                {% trans 'You can attach up to 3 files.' %}
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
         <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
         </button>

@@ -126,6 +126,13 @@ class UserStory(Lead):
         if message_list:
             lines.append(f"**Messages:** {message_list}")
 
+        attachment_names = list(
+            self.attachments.order_by("id").values_list("file", flat=True)
+        )
+        if attachment_names:
+            lines.append("**Attachments:**")
+            lines.extend(f"- {name}" for name in attachment_names)
+
         comment = (self.comments or "").strip()
         if comment:
             lines.extend(["", comment])
@@ -198,3 +205,23 @@ class UserStory(Lead):
         if not self.should_enqueue_github_issue(created=created, raw=raw):
             return
         self.enqueue_github_issue_creation()
+
+
+class UserStoryAttachment(models.Model):
+    """File uploaded alongside a user feedback submission."""
+
+    user_story = models.ForeignKey(
+        UserStory,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="user_story_attachments/%Y/%m/%d")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = _("User Story Attachment")
+        verbose_name_plural = _("User Story Attachments")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.file.name
