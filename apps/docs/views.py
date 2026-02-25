@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.http import FileResponse, Http404, HttpResponse
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
@@ -227,6 +227,8 @@ def _extract_document_blurb(path: Path, *, max_length: int = 220) -> str:
             continue
         if stripped.startswith("#"):
             continue
+        if stripped == "---":
+            continue
         candidates.append(stripped)
         if len(candidates) >= 3:
             break
@@ -252,9 +254,14 @@ def _build_library_item(path: Path, root: Path, route_name: str) -> dict[str, st
     description = _extract_document_blurb(path)
     if not description:
         description = f"Reference documentation for {relative}."
+    try:
+        url = reverse(route_name, args=[relative])
+    except NoReverseMatch:
+        logger.warning("Unable to reverse %r for %s", route_name, relative)
+        url = ""
     return {
         "label": relative,
-        "url": reverse(route_name, args=[relative]),
+        "url": url,
         "description": description,
     }
 
@@ -268,13 +275,19 @@ def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
 
     docs_files = _iter_document_paths(docs_root)
     if docs_files:
-        items = [_build_library_item(path, docs_root, "docs:docs-document") for path in docs_files]
+        items = [
+            item
+            for path in docs_files
+            if (item := _build_library_item(path, docs_root, "docs:docs-document"))["url"]
+        ]
         sections.append({"title": "Documentation", "items": items})
 
     apps_docs_files = _iter_document_paths(apps_docs_root)
     if apps_docs_files:
         items = [
-            _build_library_item(path, apps_docs_root, "docs:apps-docs-document") for path in apps_docs_files
+            item
+            for path in apps_docs_files
+            if (item := _build_library_item(path, apps_docs_root, "docs:apps-docs-document"))["url"]
         ]
         sections.append({"title": "Application Docs", "items": items})
 
