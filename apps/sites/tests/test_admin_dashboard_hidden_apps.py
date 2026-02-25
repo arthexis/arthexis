@@ -31,3 +31,17 @@ def test_admin_dashboard_bootstraps_client_side_hidden_app_filter(admin_client):
     assert "admin-dashboard-hidden-apps" in content
     assert "dashboard-app-visibility-bootstrap" in content
     assert "admin_dashboard_visibility.js" in content
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+@pytest.mark.integration
+def test_admin_app_index_does_not_render_hide_controls(admin_client):
+    """Per-app index should not render hide controls without dashboard visibility JS."""
+
+    response = admin_client.get(reverse("admin:app_list", args=("core",)))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "data-app-visibility-toggle" not in content
+    assert "Show Hidden apps" not in content

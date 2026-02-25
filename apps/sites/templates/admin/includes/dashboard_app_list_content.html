@@ -8,7 +8,7 @@
       {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
       {{ favorites_block }}
     {% endwith %}
-  {% endif %}
+{% endif %}
   <div id="dashboard-app-list" data-dashboard-app-list>
   {% with show_model_badges=show_model_badges|default:True %}
   {% celery_feature_enabled as celery_enabled %}
@@ -25,6 +25,7 @@
             >
               {{ app.name }}
             </a>
+            {% if enable_app_visibility_controls %}
             <button
               type="button"
               class="app-visibility-toggle button-link"
@@ -35,6 +36,7 @@
             >
               {% translate 'Hide' %}
             </button>
+            {% endif %}
           </div>
         </caption>
         <thead class="visually-hidden">
@@ -61,9 +63,11 @@
   {% endfor %}
   {% endwith %}
   </div>
+  {% if enable_app_visibility_controls %}
   <p class="dashboard-hidden-apps-toggle" data-hidden-apps-toggle-wrap data-show-label="{% translate 'Show Hidden apps' %}" data-hide-label="{% translate 'Hide Hidden apps' %}" hidden>
     <button type="button" class="button-link" data-hidden-apps-toggle>{% translate 'Show Hidden apps' %}</button>
   </p>
+  {% endif %}
 {% else %}
   <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
 {% endif %}
