@@ -31,6 +31,24 @@ def test_feature_admin_change_form_renders_source_as_readonly(admin_client):
 
 
 @pytest.mark.django_db
+def test_feature_admin_change_form_uses_single_line_autogrow_textareas(admin_client):
+    """Regression: feature admin textareas should default to one row and autogrow."""
+
+    feature = Feature.objects.create(
+        slug="autogrow-feature",
+        display="Autogrow Feature",
+        source=Feature.Source.CUSTOM,
+    )
+
+    change_url = reverse("admin:features_feature_change", args=[feature.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    assert b'rows="1"' in response.content
+    assert b"feature-admin-autogrow" in response.content
+
+
+@pytest.mark.django_db
 def test_feature_admin_reload_base_tool_drops_all_and_loads_fixtures(admin_client):
     """Regression: reload-base tool should clear features and load all mainstream fixtures."""
 

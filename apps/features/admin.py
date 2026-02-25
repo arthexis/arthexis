@@ -1,6 +1,8 @@
 from pathlib import Path
 
+from django import forms
 from django.conf import settings
+from django.db import models
 from django.contrib import admin, messages
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -18,10 +20,19 @@ from apps.locals.user_data import EntityModelAdmin
 from .models import Feature, FeatureNote, FeatureTest
 
 
+def _autogrow_textarea_widget() -> forms.Textarea:
+    """Return a compact textarea widget that grows automatically in the browser."""
+
+    return forms.Textarea(attrs={"rows": 1, "class": "feature-admin-autogrow"})
+
+
 class FeatureTestInline(admin.TabularInline):
     model = FeatureTest
     extra = 0
     fields = ("name", "node_id", "is_regression_guard", "notes")
+    formfield_overrides = {
+        models.TextField: {"widget": _autogrow_textarea_widget()},
+    }
 
 
 class FeatureNoteInline(admin.TabularInline):
@@ -29,6 +40,9 @@ class FeatureNoteInline(admin.TabularInline):
     extra = 0
     fields = ("author", "body", "updated_at")
     readonly_fields = ("updated_at",)
+    formfield_overrides = {
+        models.TextField: {"widget": _autogrow_textarea_widget()},
+    }
 
 
 @admin.register(Feature)
@@ -91,6 +105,13 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         ),
     )
     inlines = [FeatureNoteInline, FeatureTestInline]
+    formfield_overrides = {
+        models.TextField: {"widget": _autogrow_textarea_widget()},
+        models.JSONField: {"widget": _autogrow_textarea_widget()},
+    }
+
+    class Media:
+        js = ("features/admin/feature_admin_autogrow.js",)
 
     def _mainstream_fixture_paths(self) -> list[Path]:
         """Return fixture files used to seed mainstream suite features."""
