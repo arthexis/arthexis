@@ -93,14 +93,13 @@ class ReferenceAdmin(EntityModelAdmin):
         "alt_text",
         "content_type",
         "link",
-        "open_in_admin_frame",
+        "open_in_frames",
         "header",
         "footer",
         "visibility",
         "validation_status",
         "validated_url_at",
         "author",
-        "transaction_uuid",
     )
     readonly_fields = (
         "uses",
@@ -166,13 +165,17 @@ class ReferenceAdmin(EntityModelAdmin):
             )
         return ""
 
-    @admin.display(description="Open in Admin Frame")
-    def open_in_admin_frame(self, obj):
+    @admin.display(description="Open in Frame")
+    def open_in_frames(self, obj):
         if obj.value:
-            url = reverse("admin:links_reference_frame", args=[obj.pk])
+            admin_url = reverse("admin:links_reference_frame", args=[obj.pk])
+            public_url = reverse("links:reference-public-frame", args=[obj.pk])
             return format_html(
-                '<a href="{}" target="_blank" rel="noopener noreferrer">open</a>',
-                url,
+                '<a href="{}" target="_blank" rel="noopener noreferrer">Admin</a> '
+                '<span style="color:#888;">|</span> '
+                '<a href="{}" target="_blank" rel="noopener noreferrer">Public</a>',
+                admin_url,
+                public_url,
             )
         return ""
 
@@ -214,18 +217,23 @@ class ReferenceAdmin(EntityModelAdmin):
             {"transaction_uuid": str(transaction_uuid), "ids": created_ids}
         )
 
+    def _build_frame_context(self, request, obj, *, title):
+        """Build base template context shared by reference iframe views."""
+
+        return {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": obj,
+            "title": title,
+            "iframe_url": obj.value,
+        }
+
     def frame_view(self, request, reference_id):
         obj = self.get_object(request, reference_id)
         if obj is None:
             raise Http404("Reference does not exist")
 
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "original": obj,
-            "title": str(obj),
-            "iframe_url": obj.value,
-        }
+        context = self._build_frame_context(request, obj, title=f"Admin Frame · {obj}")
 
         return TemplateResponse(
             request,

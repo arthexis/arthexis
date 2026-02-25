@@ -11,8 +11,44 @@
 {% endblock %}
 
 {% block content %}
-<h1 class="page-title">{{ original }}</h1>
-<div style="height: 80vh; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
-    <iframe src="{{ iframe_url }}" title="{{ original }}" style="width: 100%; height: 100%; border: 0;"></iframe>
+<div style="max-width: 1220px; margin: 0 auto;">
+    <input
+        id="frame-url-display"
+        type="text"
+        readonly
+        value="{{ iframe_url }}"
+        style="width:100%; box-sizing:border-box; margin-bottom:12px; border:1px solid #ccc; border-radius:6px; padding:10px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;"
+    >
+    <div style="height: 78vh; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;">
+        <iframe
+            id="reference-frame"
+            src="{{ iframe_url }}"
+            title="{{ original }}"
+            style="width: 100%; height: 100%; border: 0;"
+        ></iframe>
+    </div>
 </div>
+<script>
+(function () {
+    const iframe = document.getElementById("reference-frame");
+    const urlDisplay = document.getElementById("frame-url-display");
+
+    function updateUrlBar(url) {
+        if (url) {
+            urlDisplay.value = url;
+        }
+    }
+
+    function tryReadIframeLocation() {
+        try {
+            updateUrlBar(iframe.contentWindow.location.href);
+        } catch (error) {
+            updateUrlBar(iframe.src);
+        }
+    }
+
+    iframe.addEventListener("load", tryReadIframeLocation);
+    setInterval(tryReadIframeLocation, 500);
+})();
+</script>
 {% endblock %}
