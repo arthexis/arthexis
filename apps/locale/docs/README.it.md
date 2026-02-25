@@ -8,8 +8,6 @@
 
 Costellazione Arthexis è una suite software basata su Django che centralizza gli strumenti per gestire l'infrastruttura di ricarica dei veicoli elettrici e orchestrare prodotti e servizi legati all'energia.
 
-[Visualizza tutti i documenti per sviluppatori](/docs/library/)
-
 Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare funzionalità passate e future insieme ad altri aggiornamenti.
 
 ## Caratteristiche della suite
@@ -130,16 +128,20 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 | Canale | Cadenza di controllo | Scopo | Flag di attivazione |
 | --- | --- | --- | --- |
 | Stable | Settimanale (giovedì prima delle 5:00) | Segue le revisioni di rilascio con controlli automatici settimanali. | `--stable` |
-| Latest | Ogni 15 minuti | Alias di `--unstable`; segue le revisioni più recenti con controlli frequenti. | `--latest` / `-l` o `--unstable` |
+| Latest | Giornaliera (alla stessa ora) | Segue le revisioni più recenti della linea principale con controlli quotidiani. | `--latest` / `-l` o `--unstable` |
 | Manual | Nessuna (solo aggiornamenti manuali) | Disattiva il ciclo di aggiornamento automatico per il pieno controllo operativo. Questo è il comportamento predefinito se non specifichi un canale. | _Esegui gli upgrade su richiesta senza specificare un canale._ |
 - Segui la [Guida all'installazione e all'amministrazione](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
 - Fai riferimento al [Cookbook dei sigilli](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md) quando configuri impostazioni basate su token tra gli ambienti.
+- Comprendi fixture seed e file per utente con [Gestione dei dati locali del nodo](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/managing-local-node-data.md).
 - Gestisci esportazioni, importazioni e tracciamenti con il [Cookbook sui dati utente](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
 - Pianifica le strategie di rilascio delle funzionalità con il [Cookbook sulle funzionalità dei nodi](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
 - Cura scorciatoie per gli utenti esperti tramite il [Cookbook dei preferiti](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
 - Collega i workspace Slack con il [Cookbook di onboarding dello Slack Bot](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
+
+### 5. Sviluppo
+- Consulta la [Libreria della documentazione per sviluppatori](/docs/library/) per riferimenti di architettura, manuali di protocollo e flussi di contribuzione.
 
 ## Supporto
 
