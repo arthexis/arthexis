@@ -42,18 +42,6 @@
     .log-viewer-heading h2 {
       margin: 0;
     }
-    .log-viewer-slider {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 200px;
-    }
-    .log-viewer-slider label {
-      font-weight: 600;
-    }
-    .log-viewer-slider input[type="range"] {
-      min-width: 200px;
-    }
     .log-viewer-content {
       max-height: 60vh;
       overflow: auto;
@@ -111,8 +99,8 @@
       {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
       {% translate 'Copy to clipboard' as copy_label %}
       {% with encoded_log=selected_log|urlencode %}
-        {% with download_url="?log="|add:encoded_log|add:"&limit="|add:log_limit_choice|add:"&download=1" %}
-          {% with viewer_prefix="system-log" viewer_wrapper_class="" viewer_heading=viewer_heading log_filename=selected_log log_download_url=download_url log_limit_options=log_limit_options log_limit_index=log_limit_index log_limit_label=log_limit_label log_content=log_content copy_label=copy_label copy_success=copy_success copy_error=copy_error copy_status_class="log-viewer-status" content_class="log-viewer-content" limit_slider_class="log-viewer-limit" limit_slider_log=selected_log %}
+        {% with download_url="?log="|add:encoded_log|add:"&download=1" %}
+          {% with viewer_prefix="system-log" viewer_wrapper_class="" viewer_heading=viewer_heading log_filename=selected_log log_download_url=download_url log_content=log_content copy_label=copy_label copy_success=copy_success copy_error=copy_error copy_status_class="log-viewer-status" content_class="log-viewer-content" hide_limit_slider=hide_limit_slider %}
             {% include "includes/log_viewer.html" %}
           {% endwith %}
         {% endwith %}

@@ -1,5 +1,4 @@
 import logging
-from collections import deque
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -192,14 +191,9 @@ class ViewHistoryAdmin(EntityModelAdmin):
         return {"labels": labels, "datasets": datasets, "meta": meta}
 
 
-def _read_log_tail(path: Path, limit: int) -> str:
-    """Return the last ``limit`` lines from ``path`` preserving newlines."""
-
-    with path.open("r", encoding="utf-8") as handle:
-        return "".join(deque(handle, maxlen=limit))
-
-
 def log_viewer(request):
+    """Render the admin log viewer with full log file contents."""
+
     logs_dir = Path(settings.BASE_DIR) / "logs"
     logs_exist = logs_dir.exists() and logs_dir.is_dir()
     available_logs = []
@@ -216,17 +210,6 @@ def log_viewer(request):
     selected_log = request.GET.get("log", "")
     log_content = ""
     log_error = ""
-    limit_options = [
-        {"value": "20", "label": "20"},
-        {"value": "40", "label": "40"},
-        {"value": "100", "label": "100"},
-        {"value": "all", "label": _("All")},
-    ]
-    allowed_limits = [item["value"] for item in limit_options]
-    limit_choice = request.GET.get("limit", "20")
-    if limit_choice not in allowed_limits:
-        limit_choice = "20"
-    limit_index = allowed_limits.index(limit_choice)
     download_requested = request.GET.get("download") == "1"
 
     if selected_log:
@@ -239,27 +222,12 @@ def log_viewer(request):
                         as_attachment=True,
                         filename=selected_log,
                     )
-                if limit_choice == "all":
-                    try:
-                        log_content = selected_path.read_text(encoding="utf-8")
-                    except UnicodeDecodeError:
-                        log_content = selected_path.read_text(
-                            encoding="utf-8", errors="replace"
-                        )
-                else:
-                    try:
-                        limit_value = int(limit_choice)
-                    except (TypeError, ValueError):
-                        limit_value = 20
-                        limit_choice = "20"
-                        limit_index = allowed_limits.index(limit_choice)
-                    try:
-                        log_content = _read_log_tail(selected_path, limit_value)
-                    except UnicodeDecodeError:
-                        with selected_path.open(
-                            "r", encoding="utf-8", errors="replace"
-                        ) as handle:
-                            log_content = "".join(deque(handle, maxlen=limit_value))
+                try:
+                    log_content = selected_path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    log_content = selected_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
             except OSError as exc:  # pragma: no cover - filesystem edge cases
                 logger.warning("Unable to read log file %s", selected_path, exc_info=exc)
                 log_error = _(
@@ -277,7 +245,6 @@ def log_viewer(request):
     else:
         log_notice = ""
 
-    limit_label = limit_options[limit_index]["label"]
     context = {**admin.site.each_context(request)}
     context.update(
         {
@@ -288,10 +255,7 @@ def log_viewer(request):
             "log_error": log_error,
             "log_notice": log_notice,
             "logs_directory": logs_dir,
-            "log_limit_options": limit_options,
-            "log_limit_index": limit_index,
-            "log_limit_choice": limit_choice,
-            "log_limit_label": limit_label,
+            "hide_limit_slider": True,
         }
     )
     return TemplateResponse(request, "admin/log_viewer.html", context)

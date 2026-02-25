@@ -35,24 +35,26 @@
       </div>
     {% endif %}
     <div class="{{ viewer_actions_class|default:'log-viewer-actions' }}">
-      <div class="{{ viewer_slider_class|default:'log-viewer-slider' }}">
-        <label for="{{ prefix }}-limit">
-          {{ limit_label_text|default:default_limit_label }}:
-          <span id="{{ prefix }}-limit-value">{{ log_limit_label }}</span>
-        </label>
-        <input
-          type="range"
-          id="{{ prefix }}-limit"
-          class="{{ limit_slider_class|default:'log-viewer-limit' }}"
-          min="0"
-          max="{{ log_limit_options|length|add:'-1' }}"
-          step="1"
-          value="{{ log_limit_index }}"
-          list="{{ prefix }}-limit-options"
-          {% if limit_slider_data %}{% for key, value in limit_slider_data.items %}data-{{ key }}="{{ value }}" {% endfor %}{% endif %}{% if limit_slider_log %}data-log="{{ limit_slider_log }}"{% endif %}
-        >
-        <datalist id="{{ prefix }}-limit-options">{% for option in log_limit_options %}<option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>{% endfor %}</datalist>
-      </div>
+      {% if not hide_limit_slider %}
+        <div class="{{ viewer_slider_class|default:'log-viewer-slider' }}">
+          <label for="{{ prefix }}-limit">
+            {{ limit_label_text|default:default_limit_label }}:
+            <span id="{{ prefix }}-limit-value">{{ log_limit_label }}</span>
+          </label>
+          <input
+            type="range"
+            id="{{ prefix }}-limit"
+            class="{{ limit_slider_class|default:'log-viewer-limit' }}"
+            min="0"
+            max="{{ log_limit_options|length|add:'-1' }}"
+            step="1"
+            value="{{ log_limit_index }}"
+            list="{{ prefix }}-limit-options"
+            {% if limit_slider_data %}{% for key, value in limit_slider_data.items %}data-{{ key }}="{{ value }}" {% endfor %}{% endif %}{% if limit_slider_log %}data-log="{{ limit_slider_log }}"{% endif %}
+          >
+          <datalist id="{{ prefix }}-limit-options">{% for option in log_limit_options %}<option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>{% endfor %}</datalist>
+        </div>
+      {% endif %}
       {% if show_copy|default:True %}
         <button
           type="button"
@@ -70,7 +72,7 @@
         ></span>
       {% endif %}
     </div>
-    {{ log_limit_options|json_script:prefix|add:'-limit-data' }}
+    {% if not hide_limit_slider %}{{ log_limit_options|json_script:prefix|add:'-limit-data' }}{% endif %}
     {% with provided_content=log_content|default_if_none:'' %}
       {% if provided_content %}
         <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ provided_content }}</pre>
