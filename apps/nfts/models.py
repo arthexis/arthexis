@@ -37,6 +37,8 @@ class NFT(Entity):
 
     class Meta:
         ordering = ("token_id",)
+        verbose_name = _("NFT")
+        verbose_name_plural = _("NFTs")
 
     def __str__(self) -> str:  # pragma: no cover - trivial representation
         return self.token_id
@@ -76,6 +78,8 @@ class RFIDBoundIdentity(Entity):
 
     class Meta:
         ordering = ("identity_key",)
+        verbose_name = _("RFID-bound NFT identity")
+        verbose_name_plural = _("RFID-bound NFT identities")
 
     def __str__(self) -> str:  # pragma: no cover - trivial representation
         return self.identity_key
@@ -143,6 +147,8 @@ class NFTTransfer(Entity):
 
     class Meta:
         ordering = ("-transferred_on",)
+        verbose_name = _("NFT RFID transfer")
+        verbose_name_plural = _("NFT RFID transfers")
 
 
 __all__ = ["NFT", "NFTTransfer", "RFIDBoundIdentity"]
