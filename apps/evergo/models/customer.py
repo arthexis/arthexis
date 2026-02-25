@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db import models
+from django.urls import reverse
 
 
 class EvergoCustomer(models.Model):
@@ -38,3 +39,7 @@ class EvergoCustomer(models.Model):
         if self.latest_so:
             return f"{self.name} ({self.latest_so})"
         return self.name
+
+    def get_absolute_url(self) -> str:
+        """Return the public-facing URL for this customer profile."""
+        return reverse("evergo:customer-public-detail", kwargs={"pk": self.pk})
