@@ -16,6 +16,61 @@ from .forms import EvergoLoadCustomersForm
 from .models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
+def _load_customers_admin_view(admin_instance, request):
+    """Render and process the shared Evergo customer-loading wizard."""
+    if request.method == "POST":
+        form = EvergoLoadCustomersForm(request.POST, request_user=request.user)
+        if form.is_valid():
+            profile = form.cleaned_data["profile"]
+            raw_queries = form.cleaned_data["raw_queries"]
+            try:
+                summary = profile.load_customers_from_queries(raw_queries=raw_queries)
+            except EvergoAPIError as exc:
+                admin_instance.message_user(
+                    request,
+                    _("Failed loading customers for %(profile)s: %(error)s")
+                    % {"profile": str(profile), "error": exc},
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(
+                    reverse("admin:evergo_evergocustomer_load_customers")
+                )
+            admin_instance.message_user(
+                request,
+                _(
+                    "Customer sync completed. Customers loaded: %(customers)s | "
+                    "Orders created: %(created)s | Orders updated: %(updated)s | "
+                    "Placeholders: %(placeholders)s"
+                )
+                % {
+                    "customers": summary["customers_loaded"],
+                    "created": summary["orders_created"],
+                    "updated": summary["orders_updated"],
+                    "placeholders": summary["placeholders_created"],
+                },
+                level=messages.SUCCESS,
+            )
+            if summary["unresolved"]:
+                admin_instance.message_user(
+                    request,
+                    _("Not found in Evergo: %(items)s")
+                    % {"items": ", ".join(summary["unresolved"])},
+                    level=messages.WARNING,
+                )
+            return HttpResponseRedirect(reverse("admin:evergo_evergocustomer_changelist"))
+    else:
+        form = EvergoLoadCustomersForm(request_user=request.user)
+
+    context = {
+        **admin_instance.admin_site.each_context(request),
+        "opts": admin_instance.model._meta,
+        "title": _("Load Evergo Customers"),
+        "form": form,
+        "add_profile_url": reverse("admin:evergo_evergouser_add"),
+    }
+    return render(request, "admin/evergo/load_customers.html", context)
+
+
 @admin.register(EvergoUser)
 class EvergoUserAdmin(
     SaveBeforeChangeAction, OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin
@@ -55,7 +110,6 @@ class EvergoUserAdmin(
         "updated_at",
     )
     actions = ("_test_login_and_sync_bulk_action",)
-    changelist_actions = ("load_customers_wizard",)
     change_actions = ("test_login_and_sync_action",)
     fieldsets = (
         (
@@ -127,81 +181,6 @@ class EvergoUserAdmin(
             level=messages.SUCCESS,
         )
         return True
-
-    def get_urls(self):
-        """Register custom admin routes for Evergo tools."""
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                "load-customers/",
-                self.admin_site.admin_view(self.load_customers_view),
-                name="evergo_evergouser_load_customers",
-            )
-        ]
-        return custom_urls + urls
-
-    def load_customers_wizard(self, request, queryset=None):
-        """Redirect changelist action to the customer-loading wizard."""
-        return HttpResponseRedirect(reverse("admin:evergo_evergouser_load_customers"))
-
-    load_customers_wizard.label = _("Load Customers")
-    load_customers_wizard.short_description = _("Load Customers")
-    load_customers_wizard.requires_queryset = False
-
-    def load_customers_view(self, request):
-        """Render/handle the SO-customer import wizard."""
-        if request.method == "POST":
-            form = EvergoLoadCustomersForm(request.POST, request_user=request.user)
-            if form.is_valid():
-                profile = form.cleaned_data["profile"]
-                raw_queries = form.cleaned_data["raw_queries"]
-                try:
-                    summary = profile.load_customers_from_queries(raw_queries=raw_queries)
-                except EvergoAPIError as exc:
-                    self.message_user(
-                        request,
-                        _("Failed loading customers for %(profile)s: %(error)s")
-                        % {"profile": str(profile), "error": exc},
-                        level=messages.ERROR,
-                    )
-                    return HttpResponseRedirect(
-                        reverse("admin:evergo_evergouser_load_customers")
-                    )
-                else:
-                    self.message_user(
-                        request,
-                        _(
-                            "Customer sync completed. Customers loaded: %(customers)s | "
-                            "Orders created: %(created)s | Orders updated: %(updated)s | "
-                            "Placeholders: %(placeholders)s"
-                        )
-                        % {
-                            "customers": summary["customers_loaded"],
-                            "created": summary["orders_created"],
-                            "updated": summary["orders_updated"],
-                            "placeholders": summary["placeholders_created"],
-                        },
-                        level=messages.SUCCESS,
-                    )
-                    if summary["unresolved"]:
-                        self.message_user(
-                            request,
-                            _("Not found in Evergo: %(items)s")
-                            % {"items": ", ".join(summary["unresolved"])},
-                            level=messages.WARNING,
-                        )
-                    return HttpResponseRedirect(reverse("admin:evergo_evergouser_changelist"))
-        else:
-            form = EvergoLoadCustomersForm(request_user=request.user)
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Load Evergo Customers"),
-            "form": form,
-            "add_profile_url": reverse("admin:evergo_evergouser_add"),
-        }
-        return render(request, "admin/evergo/load_customers.html", context)
 
     (
         _test_login_and_sync_bulk_action,
@@ -357,7 +336,7 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     def load_orders_wizard(self, request, queryset=None):
         """Redirect the order dashboard tool to the shared load wizard view."""
-        return HttpResponseRedirect(reverse("admin:evergo_evergouser_load_customers"))
+        return HttpResponseRedirect(reverse("admin:evergo_evergocustomer_load_customers"))
 
     load_orders_wizard.label = _("Load Orders")
     load_orders_wizard.short_description = _("Load Orders")
@@ -375,10 +354,36 @@ class EvergoOrderFieldValueAdmin(admin.ModelAdmin):
 
 
 @admin.register(EvergoCustomer)
-class EvergoCustomerAdmin(admin.ModelAdmin):
+class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
+
+    changelist_actions = ("load_customers_wizard",)
 
     list_display = ("latest_so", "name", "phone_number", "address", "user")
     list_filter = ("user",)
     search_fields = ("latest_so", "name", "phone_number", "address", "email")
     readonly_fields = ("raw_payload", "refreshed_at", "created_at")
+
+    def get_urls(self):
+        """Register custom admin routes for Evergo customer tools."""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "load-customers/",
+                self.admin_site.admin_view(self.load_customers_view),
+                name="evergo_evergocustomer_load_customers",
+            )
+        ]
+        return custom_urls + urls
+
+    def load_customers_wizard(self, request, queryset=None):
+        """Redirect changelist action to the customer-loading wizard."""
+        return HttpResponseRedirect(reverse("admin:evergo_evergocustomer_load_customers"))
+
+    load_customers_wizard.label = _("Load Customers")
+    load_customers_wizard.short_description = _("Load Customers")
+    load_customers_wizard.requires_queryset = False
+
+    def load_customers_view(self, request):
+        """Render/handle the sales-order customer import wizard."""
+        return _load_customers_admin_view(self, request)

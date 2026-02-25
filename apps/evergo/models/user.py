@@ -102,8 +102,8 @@ class EvergoUser(Profile):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Evergo User"
-        verbose_name_plural = "Evergo Users"
+        verbose_name = "Evergo Contractor"
+        verbose_name_plural = "Evergo Contractors"
 
     def __str__(self) -> str:
         """Return a readable identifier for admin lists."""

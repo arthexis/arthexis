@@ -25,16 +25,29 @@ def test_evergo_admin_app_and_changelist_are_accessible(admin_client):
     assert changelist_response.status_code == 200
 
 
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_tool_action_is_registered_on_customers_only(admin_client):
+    """Regression: Load Customers tool-action endpoint should exist for customers, not contractors."""
+
+    customer_tool_url = reverse("admin:evergo_evergocustomer_actions", args=["load_customers_wizard"])
+    response = admin_client.get(customer_tool_url)
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("admin:evergo_evergocustomer_load_customers")
+
+    contractor_tool_url = reverse("admin:evergo_evergouser_actions", args=["load_customers_wizard"])
+    contractor_response = admin_client.get(contractor_tool_url)
+    assert contractor_response.status_code == 404
 
 
 @pytest.mark.django_db
 def test_evergo_admin_load_orders_and_load_customers_actions_redirect_to_shared_wizard(admin_client):
     """Regression: both admin actions should redirect to the same shared wizard URL."""
 
-    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
 
     load_orders_action_url = reverse("admin:evergo_evergoorder_actions", args=["load_orders_wizard"])
-    load_customers_action_url = reverse("admin:evergo_evergouser_actions", args=["load_customers_wizard"])
+    load_customers_action_url = reverse("admin:evergo_evergocustomer_actions", args=["load_customers_wizard"])
 
     load_orders_response = admin_client.get(load_orders_action_url)
     load_customers_response = admin_client.get(load_customers_action_url)
@@ -129,7 +142,7 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
         evergo_password="secret",  # noqa: S106
     )
 
-    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
     get_response = admin_client.get(wizard_url)
     assert get_response.status_code == 200
 
@@ -151,7 +164,7 @@ def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_cre
         evergo_password="secret",  # noqa: S106
     )
 
-    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
     response = admin_client.get(wizard_url)
 
     assert response.status_code == 200
@@ -176,7 +189,7 @@ def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_cu
         evergo_password="secret",  # noqa: S106
     )
 
-    wizard_url = reverse("admin:evergo_evergouser_load_customers")
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
     response = admin_client.post(
         wizard_url,
         {"profile": other_profile.pk, "raw_queries": "J00830"},
