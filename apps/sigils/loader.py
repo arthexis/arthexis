@@ -61,7 +61,10 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
         if isinstance(content_type, (list, tuple)) and len(content_type) == 2:
             app_label, model_name = content_type
             try:
-                ct_obj = ContentType.objects.get_by_natural_key(app_label, model_name)
+                ct_obj = ContentType.objects.db_manager(using).get_by_natural_key(
+                    app_label,
+                    model_name,
+                )
             except ContentType.DoesNotExist:
                 skipped_roots.append(f"'{prefix}' ({app_label}.{model_name})")
                 continue
