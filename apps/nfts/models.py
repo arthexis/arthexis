@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+
+if TYPE_CHECKING:
+    from apps.cards.models import RFID
 
 
 class NFT(Entity):
@@ -93,7 +98,7 @@ class RFIDBoundIdentity(Entity):
                 {"current_rfid": _("Cannot bind identity to a blocked RFID card.")}
             )
 
-    def transfer_to_rfid(self, target_rfid: "models.Model", *, actor: str = "") -> "NFTTransfer":
+    def transfer_to_rfid(self, target_rfid: "RFID", *, actor: str = "") -> "NFTTransfer":
         """Transfer this identity to ``target_rfid`` and persist transfer history."""
 
         if target_rfid is None:
@@ -101,18 +106,21 @@ class RFIDBoundIdentity(Entity):
         if not target_rfid.allowed:
             raise ValidationError(_("Target RFID card is blocked and cannot receive identities."))
 
-        previous_rfid = self.current_rfid
-        self.current_rfid = target_rfid
-        self.payload_written_to_card = False
-        self.last_transferred_on = timezone.now()
-        self.save(update_fields=["current_rfid", "payload_written_to_card", "last_transferred_on"])
+        with transaction.atomic():
+            previous_rfid = self.current_rfid
+            self.current_rfid = target_rfid
+            self.payload_written_to_card = False
+            self.last_transferred_on = timezone.now()
+            self.save(
+                update_fields=["current_rfid", "payload_written_to_card", "last_transferred_on"]
+            )
 
-        return NFTTransfer.objects.create(
-            identity=self,
-            from_rfid=previous_rfid,
-            to_rfid=target_rfid,
-            actor=actor,
-        )
+            return NFTTransfer.objects.create(
+                identity=self,
+                from_rfid=previous_rfid,
+                to_rfid=target_rfid,
+                actor=actor,
+            )
 
     def sync_payload_from_nft(self) -> None:
         """Copy NFT payload into card payload storage for upcoming card writes."""
@@ -139,7 +147,8 @@ class NFTTransfer(Entity):
     )
     to_rfid = models.ForeignKey(
         "cards.RFID",
-        on_delete=models.PROTECT,
+        null=True,
+        on_delete=models.SET_NULL,
         related_name="nft_transfers_to",
     )
     actor = models.CharField(max_length=255, blank=True, default="")

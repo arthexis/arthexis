@@ -11,7 +11,7 @@ class RFIDBoundIdentityTests(TestCase):
     """Verify NFT identity state transitions and validation rules."""
 
     def test_transfer_updates_current_rfid_and_creates_history(self) -> None:
-        """Transfering an identity should update the active card and audit row."""
+        """Transferring an identity should update the active card and audit row."""
 
         nft = NFT.objects.create(token_id="token-1", payload=b"nft-bytes")
         source = RFID.objects.create(rfid="A1B2C3D4")
@@ -31,6 +31,20 @@ class RFIDBoundIdentityTests(TestCase):
         self.assertEqual(identity.transfers.count(), 1)
         self.assertEqual(transfer.from_rfid, source)
         self.assertEqual(transfer.to_rfid, target)
+
+
+    def test_transfer_to_rfid_rejects_blocked_target(self) -> None:
+        """Transferring to a blocked card should raise a validation error."""
+
+        nft = NFT.objects.create(token_id="token-blocked")
+        source = RFID.objects.create(rfid="SOURCE01")
+        blocked = RFID.objects.create(rfid="BLOCKED01", allowed=False)
+        identity = RFIDBoundIdentity.objects.create(
+            identity_key="identity-blocked", nft=nft, current_rfid=source
+        )
+
+        with self.assertRaises(ValidationError):
+            identity.transfer_to_rfid(blocked)
 
     def test_clean_rejects_blocked_target_card(self) -> None:
         """Binding to blocked cards should raise a validation error."""
