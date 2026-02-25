@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from apps.cards import rfid_service
-from apps.cards.background_reader import lock_file_path
+from apps.cards.background_reader import is_configured, lock_file_path
 from apps.cards.detect import detect_scanner
 from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
@@ -83,7 +83,7 @@ class Command(BaseCommand):
             "RFID reader configuration: "
             f"{'configured' if configured else 'not configured'}"
         )
-        if ping:
+        if ping is not None:
             self.stdout.write(self.style.SUCCESS("RFID service state: reachable"))
             return
         self.stdout.write(self.style.WARNING("RFID service state: unreachable"))
