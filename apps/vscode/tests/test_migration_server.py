@@ -159,6 +159,79 @@ def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     assert env["ARTHEXIS_DB_BACKEND"] == "sqlite"
 
 
+def test_cleanup_invalid_site_packages_distributions_removes_setuptools_artifacts(tmp_path: Path) -> None:
+    """Regression: stale ``~setuptools`` metadata should be deleted before pip runs."""
+
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir(parents=True)
+    bad_dir = site_packages / "~etuptools-72.0.0.dist-info"
+    bad_dir.mkdir()
+    bad_file = site_packages / "~setuptools"
+    bad_file.write_text("stale", encoding="utf-8")
+    safe_file = site_packages / "~my-local-package"
+    safe_file.write_text("keep", encoding="utf-8")
+
+    with mock.patch.object(migration_server, "_site_packages_paths", return_value=[site_packages]):
+        cleaned = migration_server._cleanup_invalid_site_packages_distributions()
+
+    assert bad_dir in cleaned
+    assert bad_file in cleaned
+    assert bad_dir.exists() is False
+    assert bad_file.exists() is False
+    assert safe_file.exists() is True
+
+
+def test_cleanup_invalid_site_packages_distributions_skips_unreadable_path() -> None:
+    """Cleanup should be best-effort when a site-packages path cannot be read."""
+
+    with mock.patch.object(migration_server, "_site_packages_paths") as mocked_paths:
+        unreadable = mock.Mock()
+        unreadable.exists.return_value = True
+        unreadable.is_dir.return_value = True
+        unreadable.iterdir.side_effect = PermissionError("blocked")
+        mocked_paths.return_value = [unreadable]
+
+        assert migration_server._cleanup_invalid_site_packages_distributions() == []
+
+
+def test_cleanup_invalid_site_packages_distributions_ignores_backup_like_metadata(tmp_path: Path) -> None:
+    """Only true metadata suffixes should be removed, not backup-like names."""
+
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir(parents=True)
+    backup = site_packages / "~something.dist-info.bak"
+    backup.write_text("keep", encoding="utf-8")
+
+    with mock.patch.object(migration_server, "_site_packages_paths", return_value=[site_packages]):
+        cleaned = migration_server._cleanup_invalid_site_packages_distributions()
+
+    assert backup not in cleaned
+    assert backup.exists() is True
+
+
+def test_update_requirements_cleans_invalid_site_packages_before_install(tmp_path: Path) -> None:
+    """Ensure requirements installation performs stale metadata cleanup first."""
+
+    req_file = tmp_path / "requirements.txt"
+    req_file.write_text("django==5.0\n", encoding="utf-8")
+
+    hash_file = tmp_path / ".locks" / "requirements.sha256"
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
+    hash_file.write_text("different", encoding="utf-8")
+
+    completed = mock.Mock(returncode=0)
+    with mock.patch.object(migration_server.subprocess, "run", return_value=completed), mock.patch.object(
+        migration_server, "_windows_process_group_kwargs", return_value={}
+    ), mock.patch.object(
+        migration_server,
+        "_cleanup_invalid_site_packages_distributions",
+        return_value=[Path("/tmp/~etuptools")],
+    ) as mocked_cleanup:
+        assert migration_server.update_requirements(tmp_path) is True
+
+    mocked_cleanup.assert_called_once_with()
+
+
 def test_update_requirements_passes_windows_process_group_kwargs(tmp_path: Path) -> None:
     """Ensure dependency installation uses Windows process-group kwargs."""
 

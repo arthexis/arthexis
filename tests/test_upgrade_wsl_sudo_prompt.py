@@ -35,3 +35,15 @@ def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
 
     assert gate in script_text
     assert script_text.index(gate) > parse_done
+
+
+def test_upgrade_script_cleans_generated_merge_migrations() -> None:
+    """Regression: generated merge migrations should be removed before dirty check."""
+
+    script_text = Path("upgrade.sh").read_text(encoding="utf-8")
+
+    assert "Removing generated migration" in script_text
+    assert (
+        "^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\\.py$"
+        in script_text
+    )

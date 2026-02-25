@@ -493,6 +493,7 @@ LOCAL_APPS = [
     "apps.features",
     "apps.widgets",
     "apps.sites",
+    "apps.smb",
     "apps.summary",
     "apps.services",
     "apps.certs",

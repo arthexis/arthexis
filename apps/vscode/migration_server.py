@@ -9,8 +9,10 @@ import json
 import multiprocessing
 import os
 import signal
+import shutil
 import subprocess
 import sys
+import sysconfig
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -445,6 +447,79 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _site_packages_paths() -> list[Path]:
+    """Return candidate site-packages paths for the active interpreter."""
+
+    resolved_paths = sysconfig.get_paths()
+    candidates: list[Path] = []
+    for key in ("purelib", "platlib"):
+        resolved = resolved_paths.get(key)
+        if resolved:
+            candidates.append(Path(resolved))
+
+    if not candidates:
+        # Fallback for unusual/embedded environments where sysconfig omits
+        # purelib/platlib paths.
+        candidates.extend(
+            [
+                Path(sys.prefix) / "Lib" / "site-packages",
+                Path(sys.prefix)
+                / "lib"
+                / f"python{sys.version_info.major}.{sys.version_info.minor}"
+                / "site-packages",
+            ]
+        )
+
+    unique_candidates: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve(strict=False)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique_candidates.append(resolved)
+    return unique_candidates
+
+
+def _cleanup_invalid_site_packages_distributions() -> list[Path]:
+    """Remove stale temporary package artifacts such as ``~etuptools`` entries."""
+
+    cleaned: list[Path] = []
+    for site_packages in _site_packages_paths():
+        if not site_packages.exists() or not site_packages.is_dir():
+            continue
+        try:
+            entries = site_packages.iterdir()
+        except OSError:
+            continue
+        for entry in entries:
+            name = entry.name.lower()
+            if not name.startswith("~"):
+                continue
+            is_metadata_artifact = name.endswith(".dist-info") or name.endswith(
+                ".egg-info"
+            )
+            normalized_name = name.lstrip("~")
+            packaging_tools = ("setuptools", "pip", "wheel")
+            is_packaging_tool_artifact = any(
+                normalized_name.startswith((tool, tool[1:]))
+                for tool in packaging_tools
+            )
+            if not is_metadata_artifact and not is_packaging_tool_artifact:
+                continue
+            try:
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                continue
+            cleaned.append(entry)
+    return cleaned
+
+
 def _update_requirements_impl(
     base_dir: Path,
     *,
@@ -478,6 +553,13 @@ def _update_requirements_impl(
 
     if current_hash == stored_hash:
         return False
+
+    cleaned_entries = _cleanup_invalid_site_packages_distributions()
+    if cleaned_entries:
+        print(
+            f"{prefix} Removed stale package metadata: "
+            + ", ".join(path.name for path in cleaned_entries)
+        )
 
     print(f"{prefix} Installing Python requirements...")
     if helper_script.exists():

@@ -8,12 +8,13 @@
       {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
       {{ favorites_block }}
     {% endwith %}
-  {% endif %}
+{% endif %}
+  <div id="dashboard-app-list" data-dashboard-app-list>
   {% with show_model_badges=show_model_badges|default:True %}
   {% celery_feature_enabled as celery_enabled %}
   {% for app in app_list %}
     {% if app.app_label != 'django_celery_beat' or celery_enabled %}
-    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}" data-app-label="{{ app.app_label }}">
+    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}" data-app-label="{{ app.app_label }}" data-app-name="{{ app.name }}">
       <table>
         <caption class="app-caption">
           <div class="app-caption-inner">
@@ -24,6 +25,18 @@
             >
               {{ app.name }}
             </a>
+            {% if enable_app_visibility_controls %}
+            <button
+              type="button"
+              class="app-visibility-toggle button-link"
+              data-app-visibility-toggle
+              data-app-label="{{ app.app_label }}"
+              data-hide-label="{% translate 'Hide' %}"
+              data-unhide-label="{% translate 'Unhide' %}"
+            >
+              {% translate 'Hide' %}
+            </button>
+            {% endif %}
           </div>
         </caption>
         <thead class="visually-hidden">
@@ -49,6 +62,12 @@
     {% endif %}
   {% endfor %}
   {% endwith %}
+  </div>
+  {% if enable_app_visibility_controls %}
+  <p class="dashboard-hidden-apps-toggle" data-hidden-apps-toggle-wrap data-show-label="{% translate 'Show Hidden apps' %}" data-hide-label="{% translate 'Hide Hidden apps' %}" hidden>
+    <button type="button" class="button-link" data-hidden-apps-toggle>{% translate 'Show Hidden apps' %}</button>
+  </p>
+  {% endif %}
 {% else %}
   <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
 {% endif %}

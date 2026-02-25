@@ -1,0 +1,70 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<style>
+  .public-reference-shell {
+    max-width: 1280px;
+    margin: 1.25rem auto;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, .16);
+    background: linear-gradient(180deg, #f8fafc, #fff 220px);
+    overflow: hidden;
+  }
+  .public-reference-urlbar {
+    padding: 12px;
+    border-bottom: 1px solid #e2e8f0;
+    background: rgba(255, 255, 255, .85);
+    backdrop-filter: blur(5px);
+  }
+  .public-reference-urlbar input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: .65rem .9rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: #fff;
+  }
+  .public-reference-frame {
+    height: 78vh;
+    min-height: 580px;
+  }
+  .public-reference-frame iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+  }
+</style>
+
+<div class="public-reference-shell">
+  <div class="public-reference-urlbar">
+    <input id="public-frame-url-display" type="text" readonly value="{{ iframe_url }}">
+  </div>
+  <div class="public-reference-frame">
+    <iframe id="public-reference-frame" src="{{ iframe_url }}" title="{{ reference.alt_text|default:reference }}"></iframe>
+  </div>
+</div>
+
+<script>
+(function () {
+  const frame = document.getElementById("public-reference-frame");
+  const urlDisplay = document.getElementById("public-frame-url-display");
+
+  function syncLocation() {
+    try {
+      urlDisplay.value = frame.contentWindow.location.href;
+    } catch (error) {
+      urlDisplay.value = frame.src;
+    }
+  }
+
+  frame.addEventListener("load", syncLocation);
+  setInterval(syncLocation, 500);
+})();
+</script>
+{% endblock %}

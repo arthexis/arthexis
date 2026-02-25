@@ -11,31 +11,35 @@
 {% endblock %}
 
 {% block content %}
-<h1>{% trans "Discover" %}</h1>
-<p>{% trans "Trigger a fresh nmcli scan to populate or refresh the stored network connections." %}</p>
-<form method="post" action="{{ scan_url }}">
-  {% csrf_token %}
-  <p>
-    <button type="submit" class="default">{% trans "Discover" %}</button>
-    <a href="{{ changelist_url }}" class="button">{% trans "Back to list" %}</a>
-  </p>
-</form>
+<div class="admin-ui-panel admin-ui-stack">
+  <h1>{% trans "Discover" %}</h1>
+  <p class="admin-ui-muted">{% trans "Trigger a fresh nmcli scan to populate or refresh the stored network connections." %}</p>
+  <form method="post" action="{{ scan_url }}">
+    {% csrf_token %}
+    <div class="admin-ui-actions">
+      <button type="submit" class="admin-ui-button admin-ui-button--primary">{% trans "Discover" %}</button>
+      <a href="{{ changelist_url }}" class="admin-ui-button admin-ui-button--secondary">{% trans "Back to list" %}</a>
+    </div>
+  </form>
 
-{% if result %}
-  <h2>{% trans "Discovery results" %}</h2>
-  <ul>
-    <li>{% blocktrans with count=result.count %}Connections found: {{ count }}{% endblocktrans %}</li>
-    <li>{% blocktrans with created=result.created updated=result.updated %}Created {{ created }}, updated {{ updated }}.{% endblocktrans %}</li>
-    {% if result.errors %}
-      <li>
-        {% trans "Warnings" %}
-        <ul>
-        {% for error in result.errors %}
-          <li>{{ error }}</li>
-        {% endfor %}
-        </ul>
-      </li>
-    {% endif %}
-  </ul>
-{% endif %}
+  {% if result %}
+    <section>
+      <h2>{% trans "Discovery results" %}</h2>
+      <ul class="admin-ui-results">
+        <li>{% blocktrans with count=result.count %}Connections found: {{ count }}{% endblocktrans %}</li>
+        <li>{% blocktrans with created=result.created updated=result.updated %}Created {{ created }}, updated {{ updated }}.{% endblocktrans %}</li>
+        {% if result.errors %}
+          <li>
+            {% trans "Warnings" %}
+            <ul>
+            {% for error in result.errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+            </ul>
+          </li>
+        {% endif %}
+      </ul>
+    </section>
+  {% endif %}
+</div>
 {% endblock %}
