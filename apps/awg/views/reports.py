@@ -15,6 +15,9 @@ from apps.energy.models import EnergyTariff
 from apps.sites.utils import landing
 
 
+MAX_POWER_CALCULATOR_INPUT = Decimal("1000000000")
+
+
 def _format_decimal(value: Decimal, places: str = "0.0000") -> Decimal:
     """Return ``value`` quantized to the requested decimal ``places``."""
 
@@ -154,11 +157,13 @@ def _calculate_power_totals(
     """Return key power-triangle values for electrician sizing checks."""
 
     phase_multiplier = Decimal("3").sqrt() if phases == "3" else Decimal("1")
-    kva = (voltage * current * phase_multiplier / Decimal("1000")).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
-    kw = (kva * power_factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    kvar = max(Decimal("0"), (kva * kva) - (kw * kw)).sqrt().quantize(
+    kva_raw = voltage * current * phase_multiplier / Decimal("1000")
+    kw_raw = kva_raw * power_factor
+    kvar_raw = max(Decimal("0"), (kva_raw * kva_raw) - (kw_raw * kw_raw)).sqrt()
+
+    kva = kva_raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    kw = kw_raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    kvar = kvar_raw.quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
     recommended_breaker = (current * Decimal("1.25")).quantize(
@@ -249,7 +254,6 @@ def electrical_power_calculator(request):
     form_data = request.POST or request.GET
     form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
     form.setdefault("phases", "1")
-    max_input_value = Decimal("1000000000")
     context: dict[str, object] = {"form": form}
 
     if request.method == "POST":
@@ -283,8 +287,11 @@ def electrical_power_calculator(request):
             elif values["voltage"] <= 0 or values["current"] <= 0:
                 error = _("Voltage and current must be greater than zero.")
             elif values["power_factor"] <= 0 or values["power_factor"] > 1:
-                error = _("Power factor must be between 0 and 1.")
-            elif values["voltage"] > max_input_value or values["current"] > max_input_value:
+                error = _("Power factor must be greater than 0 and at most 1.")
+            elif (
+                values["voltage"] > MAX_POWER_CALCULATOR_INPUT
+                or values["current"] > MAX_POWER_CALCULATOR_INPUT
+            ):
                 error = _("Voltage and current are too large to calculate safely.")
             elif fields["phases"] not in {"1", "3"}:
                 error = _("Phases must be either 1 or 3.")

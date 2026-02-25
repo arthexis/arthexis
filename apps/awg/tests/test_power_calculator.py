@@ -24,7 +24,7 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
         request = self.factory.post("/awg/electrical-power/", data)
         request.user = self.user
         with patch("django.template.response.TemplateResponse.render", autospec=True) as render:
-            render.side_effect = lambda response: response
+            render.side_effect = lambda instance: instance
             return electrical_power_calculator(request)
 
     def _get(self):
@@ -33,7 +33,7 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
         request = self.factory.get("/awg/electrical-power/")
         request.user = self.user
         with patch("django.template.response.TemplateResponse.render", autospec=True) as render:
-            render.side_effect = lambda response: response
+            render.side_effect = lambda instance: instance
             return electrical_power_calculator(request)
 
     def test_get_renders_calculator(self):
@@ -79,6 +79,23 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
             "Voltage and current are too large to calculate safely.",
         )
 
+    def test_post_calculates_three_phase_values(self):
+        """Three-phase inputs should exercise the sqrt(3) calculation path."""
+
+        response = self._post(
+            {
+                "voltage": "208",
+                "current": "30",
+                "power_factor": "0.85",
+                "phases": "3",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.context_data["result"]
+        self.assertEqual(result["kw"], Decimal("9.19"))
+        self.assertEqual(result["recommended_breaker"], Decimal("37.50"))
+
     def test_post_rejects_invalid_power_factor(self):
         """Power factor values outside 0-1 should return a user-facing error."""
 
@@ -94,5 +111,5 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.context_data["error"],
-            "Power factor must be between 0 and 1.",
+            "Power factor must be greater than 0 and at most 1.",
         )
