@@ -1,5 +1,6 @@
 """Models for SMB server and partition orchestration."""
 
+from encrypted_model_fields.fields import EncryptedCharField
 from django.db import models
 
 
@@ -10,7 +11,7 @@ class SMBServer(models.Model):
     host = models.CharField(max_length=255)
     port = models.PositiveIntegerField(default=445)
     username = models.CharField(max_length=120, blank=True, default="")
-    password = models.CharField(max_length=255, blank=True, default="")
+    password = EncryptedCharField(max_length=255, blank=True, default="")
     domain = models.CharField(max_length=120, blank=True, default="")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

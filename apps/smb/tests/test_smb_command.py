@@ -58,10 +58,51 @@ def test_smb_configure_and_create_and_list_regression() -> None:
 def test_smb_discover_outputs_detected_partitions_regression() -> None:
     """Regression: smb discover should print parsed lsblk partition rows."""
 
-    fake_output = '{"blockdevices":[{"name":"sda","type":"disk"},{"name":"sda1","type":"part","fstype":"ext4","size":"1048576"}]}'
+    fake_output = (
+        '{"blockdevices":[{"name":"sda","type":"disk","children":['
+        '{"name":"sda1","type":"part","fstype":"ext4","size":"1048576"}'
+        ']}]}'
+    )
     out = StringIO()
     with patch("apps.smb.services.subprocess.run") as mock_run:
         mock_run.return_value.stdout = fake_output
         call_command("smb", "discover", stdout=out)
 
     assert "/dev/sda1 fs=ext4 size=1048576" in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_smb_create_does_not_set_last_discovered_at_regression() -> None:
+    """Regression: manual partition creation should not stamp discovery time."""
+
+    call_command(
+        "smb",
+        "configure",
+        "--name",
+        "primary",
+        "--host",
+        "files.example.internal",
+    )
+
+    call_command(
+        "smb",
+        "create",
+        "--server",
+        "primary",
+        "--name",
+        "Finance",
+        "--share",
+        "finance",
+        "--path",
+        "/mnt/finance",
+    )
+
+    partition = SMBPartition.objects.get(share_name="finance")
+    assert partition.last_discovered_at is None
+
+
+def test_smb_server_password_field_is_encrypted_regression() -> None:
+    """Regression: SMB server credentials should use encrypted model fields."""
+
+    password_field = SMBServer._meta.get_field("password")
+    assert password_field.__class__.__name__ == "EncryptedCharField"

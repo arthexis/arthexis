@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from django.db import transaction
 
@@ -68,7 +67,6 @@ def create_partition(
             "filesystem": filesystem,
             "size_bytes": size_bytes,
             "mount_options": mount_options,
-            "last_discovered_at": datetime.now(tz=timezone.utc),
             "is_enabled": True,
         },
     )
@@ -91,17 +89,24 @@ def discover_partitions() -> list[DiscoveredPartition]:
         raise SMBDiscoveryError(f"lsblk failed: {exc.stderr.strip()}") from exc
 
     payload = json.loads(completed.stdout)
+
     devices: list[DiscoveredPartition] = []
-    for node in payload.get("blockdevices", []):
-        if node.get("type") != "part":
-            continue
-        size_raw = node.get("size")
-        size_value = int(size_raw) if str(size_raw).isdigit() else None
-        devices.append(
-            DiscoveredPartition(
-                device=f"/dev/{node.get('name', '').strip()}",
-                filesystem=node.get("fstype") or "",
-                size_bytes=size_value,
-            )
-        )
+
+    def _collect_partition_nodes(nodes: list[dict]) -> None:
+        for node in nodes:
+            if node.get("type") == "part":
+                size_raw = node.get("size")
+                size_value = int(size_raw) if str(size_raw).isdigit() else None
+                devices.append(
+                    DiscoveredPartition(
+                        device=f"/dev/{node.get('name', '').strip()}",
+                        filesystem=node.get("fstype") or "",
+                        size_bytes=size_value,
+                    )
+                )
+            children = node.get("children") or []
+            if children:
+                _collect_partition_nodes(children)
+
+    _collect_partition_nodes(payload.get("blockdevices", []))
     return devices
