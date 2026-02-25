@@ -15,7 +15,6 @@ The implementation is intentionally lightweight and non-invasive:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import import_module
 from importlib.util import find_spec
 from typing import Any
 
@@ -78,10 +77,12 @@ def build_simulator_proposal(
     """
 
     ensure_mobilityhouse_ocpp_available()
-    import_module("ocpp")
     return MobilityHouseSimulatorProposal(
         config=config,
-        adapter_path="apps.simulators.evcs_mobilityhouse.MobilityHouseChargePointAdapter",
+        adapter_path=(
+            f"{MobilityHouseChargePointAdapter.__module__}"
+            f".{MobilityHouseChargePointAdapter.__qualname__}"
+        ),
         notes=(
             "Use ocpp.v16.ChargePoint or ocpp.v201.ChargePoint as protocol adapters.",
             "Map existing simulator controls (duration, repeat, delay) into asynchronous scenario plugins.",
