@@ -75,9 +75,23 @@ input[type="submit"].admin-ui-button--secondary {
     color: var(--body-fg, #111827);
 }
 
-.admin-ui-button:hover,
-.admin-ui-button:focus-visible {
-    filter: brightness(0.97);
+.admin-ui-button--primary:hover,
+.admin-ui-button--primary:focus-visible,
+button.admin-ui-button--primary:hover,
+button.admin-ui-button--primary:focus-visible,
+input[type="submit"].admin-ui-button--primary:hover,
+input[type="submit"].admin-ui-button--primary:focus-visible {
+    background: color-mix(in srgb, var(--button-bg, #2563eb) 90%, black 10%);
+    border-color: color-mix(in srgb, var(--button-bg, #2563eb) 90%, black 10%);
+}
+
+.admin-ui-button--secondary:hover,
+.admin-ui-button--secondary:focus-visible,
+button.admin-ui-button--secondary:hover,
+button.admin-ui-button--secondary:focus-visible,
+input[type="submit"].admin-ui-button--secondary:hover,
+input[type="submit"].admin-ui-button--secondary:focus-visible {
+    background: color-mix(in srgb, var(--admin-ui-muted-bg) 90%, black 10%);
 }
 
 .admin-ui-results {
