@@ -285,6 +285,8 @@ class SessionCookie(Ownable):
     long-running jobs can reuse successful sessions across calls and restarts.
     """
 
+    owner_required = True
+
     class State(models.TextChoices):
         ACTIVE = "active", _("Active")
         STALE = "stale", _("Stale")
@@ -320,12 +322,14 @@ class SessionCookie(Ownable):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    (Q(user__isnull=True) & Q(group__isnull=True))
-                    | (Q(user__isnull=False) & Q(group__isnull=True))
+                    (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
                 name="selenium_sessioncookie_owner_exclusive",
             )
+        ]
+        indexes = [
+            models.Index(fields=["state", "expires_at"], name="sel_sc_state_exp_idx"),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
