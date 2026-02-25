@@ -12,6 +12,7 @@ from apps.core.entity import Entity
 DEFAULT_MODEL_WIKI_URLS: dict[tuple[str, str], str] = {
     ("app", "app.Application"): "https://en.wikipedia.org/wiki/Application_software",
     ("ocpp", "ocpp.Charger"): "https://en.wikipedia.org/wiki/Open_Charge_Point_Protocol",
+    ("smb", "smb.SMBServer"): "https://en.wikipedia.org/wiki/Server_Message_Block",
 }
 
 
