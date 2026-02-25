@@ -38,8 +38,8 @@ When creating or updating admin templates:
 1. Wrap content in `.admin-ui-panel` when the page represents a focused task.
 2. Put top-level content blocks in `.admin-ui-stack`.
 3. Use `.admin-ui-actions` for any row that mixes links and buttons.
-4. Apply `.admin-ui-button` to *every* clickable action in custom content.
-5. Prefer the `--primary`/`--secondary` modifiers over ad-hoc inline styles.
+4. Apply `.admin-ui-button` with a modifier class (for example, `.admin-ui-button--primary` or `.admin-ui-button--secondary`) to *every* clickable action in custom content.
+5. Prefer the `--primary`/`--secondary` modifiers over ad-hoc inline styles, since `.admin-ui-button` alone intentionally does not set a filled background.
 6. Keep custom CSS local only when the framework lacks a needed primitive.
 
 ## Prototype application
