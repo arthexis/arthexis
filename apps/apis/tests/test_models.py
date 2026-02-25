@@ -57,3 +57,23 @@ def test_resource_method_str_includes_operation_context_regression() -> None:
     )
 
     assert str(resource_method) == "Inventory: GET /stock/{sku} (Get stock)"
+
+
+@pytest.mark.django_db
+def test_resource_method_coerces_empty_json_structures_regression() -> None:
+    """Regression: empty structure values should normalize to empty objects."""
+
+    api = APIExplorer.objects.create(name="Orders", base_url="https://orders.example.com")
+    method = ResourceMethod(
+        api=api,
+        operation_name="Create order",
+        resource_path="/orders",
+        http_method=ResourceMethod.HttpMethod.POST,
+        request_structure=None,
+        response_structure="",
+    )
+
+    method.full_clean()
+
+    assert method.request_structure == {}
+    assert method.response_structure == {}
