@@ -1,6 +1,7 @@
 """Regression coverage for runserver preflight startup checks."""
 
 from pathlib import Path
+import re
 
 import pytest
 
@@ -24,17 +25,27 @@ def test_preflight_avoids_showmigrations_scan(runserver_preflight_contents: str)
 
 def test_preflight_uses_migrate_check_then_apply(runserver_preflight_contents: str) -> None:
     """Preflight should gate migration application behind migrate --check."""
-    assert 'if "$python_bin" manage.py migrate --check; then' in runserver_preflight_contents
-    assert '"$python_bin" manage.py migrate --noinput' in runserver_preflight_contents
-    assert '"$python_bin" manage.py migrate --check' in runserver_preflight_contents
-
-
-def test_preflight_treats_failed_check_as_fatal(runserver_preflight_contents: str) -> None:
-    """Preflight should fail fast when migrate --check errors unexpectedly."""
-    assert 'run_migrate_check() {' in runserver_preflight_contents
-    assert 'Migration preflight failed while checking migration state:' in runserver_preflight_contents
+    assert "run_migrate_check() {" in runserver_preflight_contents
+    assert "if run_migrate_check; then" in runserver_preflight_contents
     assert 'if [ "$migrate_check_status" -ne 10 ]; then' in runserver_preflight_contents
-    assert 'return 1' in runserver_preflight_contents
+    assert re.search(
+        r"Checking for unapplied migrations before runserver\.\.\.[\s\S]*"
+        r"if run_migrate_check; then[\s\S]*"
+        r"Pending migrations detected; applying migrations\.\.\.[\s\S]*"
+        r"manage\.py migrate --noinput[\s\S]*"
+        r"Verifying migration state after applying migrations\.\.\.[\s\S]*"
+        r"manage\.py migrate --check",
+        runserver_preflight_contents,
+    )
+
+
+def test_preflight_handles_migrate_check_status_safely(runserver_preflight_contents: str) -> None:
+    """Preflight should safely capture migrate --check status under strict shell modes."""
+    assert 'if migrate_check_output=$("$python_bin" manage.py migrate --check 2>&1); then' in runserver_preflight_contents
+    assert 'migrate_check_status=0' in runserver_preflight_contents
+    assert 'migrate_check_status=$?' in runserver_preflight_contents
+    assert "grep -Eq" not in runserver_preflight_contents
+    assert "unapplied migration|Run 'python manage.py migrate'" not in runserver_preflight_contents
 
 
 def test_preflight_treats_apply_or_recheck_failures_as_fatal(runserver_preflight_contents: str) -> None:
