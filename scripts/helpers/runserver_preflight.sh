@@ -84,20 +84,17 @@ run_runserver_preflight() {
   local migrate_check_status=0
 
   run_migrate_check() {
-    migrate_check_output=$("$python_bin" manage.py migrate --check 2>&1)
-    migrate_check_status=$?
+    if migrate_check_output=$("$python_bin" manage.py migrate --check 2>&1); then
+      migrate_check_status=0
+    else
+      migrate_check_status=$?
+    fi
 
     if [ "$migrate_check_status" -eq 0 ]; then
       return 0
     fi
 
-    if echo "$migrate_check_output" | grep -Eq "unapplied migration|Run 'python manage.py migrate'"; then
-      return 10
-    fi
-
-    echo "Migration preflight failed while checking migration state:" >&2
-    echo "$migrate_check_output" >&2
-    return 1
+    return 10
   }
 
   echo "Checking for unapplied migrations before runserver..."
