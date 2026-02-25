@@ -63,6 +63,9 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Session Cookie",
                 "verbose_name_plural": "Session Cookies",
+                "indexes": [
+                    models.Index(fields=["state", "expires_at"], name="sel_sc_state_exp_idx"),
+                ],
             },
         ),
     ]

@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
@@ -348,21 +348,35 @@ class SessionCookie(Ownable):
                 raise InvalidCookiePayloadError(
                     "Each cookie must include both 'name' and 'value' keys."
                 )
+            if not isinstance(cookie["name"], str) or not cookie["name"].strip():
+                raise InvalidCookiePayloadError(
+                    "Cookie 'name' must be a non-empty string."
+                )
+            if not isinstance(cookie["value"], str):
+                raise InvalidCookiePayloadError("Cookie 'value' must be a string.")
         return payload
+
+    def _save_fields(self, fields: list[str]) -> None:
+        """Persist only selected fields when possible, falling back for new rows."""
+
+        if self.pk is None:
+            self.save()
+            return
+        self.save(update_fields=fields)
 
     def set_cookies(self, payload: list[dict], *, save: bool = True) -> None:
         """Assign cookie payload and optionally persist the model."""
 
         self.cookies = self.clean_cookie_payload(payload)
         if save:
-            self.save(update_fields=["cookies"])
+            self._save_fields(["cookies"])
 
     def mark_used(self, *, save: bool = True) -> None:
         """Mark the cookie as recently used by an automation task."""
 
         self.last_used_at = timezone.now()
         if save:
-            self.save(update_fields=["last_used_at"])
+            self._save_fields(["last_used_at"])
 
     def mark_valid(self, *, save: bool = True) -> None:
         """Mark the session cookies as valid after successful use."""
@@ -371,28 +385,29 @@ class SessionCookie(Ownable):
         self.last_validated_at = timezone.now()
         self.last_rejection_reason = ""
         if save:
-            self.save(
-                update_fields=[
-                    "state",
-                    "last_validated_at",
-                    "last_rejection_reason",
-                ]
-            )
+            self._save_fields(["state", "last_validated_at", "last_rejection_reason"])
 
     def mark_rejected(self, reason: str, *, save: bool = True) -> None:
         """Mark the cookie jar as rejected by an upstream service."""
 
+        normalized_reason = reason.strip()
         self.state = self.State.REJECTED
-        self.rejection_count += 1
-        self.last_rejection_reason = reason.strip()
-        if save:
-            self.save(
-                update_fields=[
-                    "state",
-                    "rejection_count",
-                    "last_rejection_reason",
-                ]
+        self.last_rejection_reason = normalized_reason
+
+        if save and self.pk is not None:
+            type(self).objects.filter(pk=self.pk).update(
+                state=self.State.REJECTED,
+                rejection_count=F("rejection_count") + 1,
+                last_rejection_reason=normalized_reason,
             )
+            self.refresh_from_db(
+                fields=["state", "rejection_count", "last_rejection_reason"]
+            )
+            return
+
+        self.rejection_count += 1
+        if save:
+            self._save_fields(["state", "rejection_count", "last_rejection_reason"])
 
     def is_expired(self) -> bool:
         """Return ``True`` when the session cookie expiry has passed."""
