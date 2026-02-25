@@ -16,11 +16,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-
 ALLOWED_COMMAND_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 DISCOVERED_COMMAND_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 DEFAULT_CACHE_TTL_SECONDS = 30
-DEPRECATED_COMMAND_DISCOVERY_SCRIPT = """
+DEFAULT_MANAGE_TIMEOUT_SECONDS = 60
+ABSORBED_COMMAND_DISCOVERY_SCRIPT = """
 from django.core.management import get_commands
 from importlib import import_module
 for command_name, app_name in sorted(get_commands().items()):
@@ -54,7 +54,23 @@ class CommandOptions:
 def _cache_ttl_seconds() -> int:
     """Read and sanitize cache TTL from environment."""
     configured = os.getenv("ARTHEXIS_COMMAND_CACHE_TTL", str(DEFAULT_CACHE_TTL_SECONDS))
-    return int(configured) if configured.isdigit() else DEFAULT_CACHE_TTL_SECONDS
+    try:
+        value = int(configured)
+    except ValueError:
+        return DEFAULT_CACHE_TTL_SECONDS
+    return value if value > 0 else DEFAULT_CACHE_TTL_SECONDS
+
+
+def _manage_timeout_seconds() -> int:
+    """Read and sanitize manage.py timeout from environment."""
+    configured = os.getenv(
+        "ARTHEXIS_MANAGE_TIMEOUT", str(DEFAULT_MANAGE_TIMEOUT_SECONDS)
+    )
+    try:
+        value = int(configured)
+    except ValueError:
+        return DEFAULT_MANAGE_TIMEOUT_SECONDS
+    return value if value > 0 else DEFAULT_MANAGE_TIMEOUT_SECONDS
 
 
 def _cache_file(base_dir: Path, name: str) -> Path:
@@ -70,7 +86,9 @@ def _read_cached_lines(cache_file: Path, ttl_seconds: int) -> list[str] | None:
         cache_age = time.time() - cache_file.stat().st_mtime
         if cache_age >= ttl_seconds:
             return None
-        return [line for line in cache_file.read_text(encoding="utf-8").splitlines() if line]
+        return [
+            line for line in cache_file.read_text(encoding="utf-8").splitlines() if line
+        ]
     except OSError:
         return None
 
@@ -93,9 +111,26 @@ def _run_manage(base_dir: Path, *args: str) -> str:
         CommandApiError: When manage.py invocation fails.
     """
     cmd = [sys.executable, "manage.py", *args]
-    result = subprocess.run(cmd, cwd=base_dir, text=True, capture_output=True, check=False)
+    timeout = _manage_timeout_seconds()
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=base_dir,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise CommandApiError(
+            f"manage.py timed out after {timeout}s. Check Django configuration and dependencies."
+        ) from exc
     if result.returncode != 0:
-        raise CommandApiError(result.stderr.strip() or result.stdout.strip() or "manage.py invocation failed")
+        raise CommandApiError(
+            result.stderr.strip()
+            or result.stdout.strip()
+            or "manage.py invocation failed"
+        )
     return result.stdout
 
 
@@ -119,7 +154,9 @@ def discover_commands(base_dir: Path, options: CommandOptions) -> list[str]:
                 commands.append(token)
 
     if not commands:
-        raise CommandApiError("Command discovery returned no results. Check Django configuration.")
+        raise CommandApiError(
+            "Command discovery returned no results. Check Django configuration."
+        )
 
     deduped = sorted(set(commands))
     _write_cache_lines(cache_file, deduped)
@@ -134,7 +171,7 @@ def discover_absorbed_commands(base_dir: Path) -> set[str]:
     if cached is not None:
         return set(cached)
 
-    output = _run_manage(base_dir, "shell", "-c", DEPRECATED_COMMAND_DISCOVERY_SCRIPT)
+    output = _run_manage(base_dir, "shell", "-c", ABSORBED_COMMAND_DISCOVERY_SCRIPT)
     absorbed = {line.strip() for line in output.splitlines() if line.strip()}
     _write_cache_lines(cache_file, sorted(absorbed))
     return absorbed
@@ -164,14 +201,24 @@ def _build_command_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="action")
 
     shared_parser = argparse.ArgumentParser(add_help=False)
-    shared_parser.add_argument("--deprecated", action="store_true", help="include absorbed/deprecated commands")
+    shared_parser.add_argument(
+        "--deprecated", action="store_true", help="include absorbed/deprecated commands"
+    )
     shared_group = shared_parser.add_mutually_exclusive_group()
-    shared_group.add_argument("--celery", action="store_true", help="discover commands in celery mode")
-    shared_group.add_argument("--no-celery", action="store_true", help="discover commands outside celery mode")
+    shared_group.add_argument(
+        "--celery", action="store_true", help="discover commands in celery mode"
+    )
+    shared_group.add_argument(
+        "--no-celery", action="store_true", help="discover commands outside celery mode"
+    )
 
-    subparsers.add_parser("list", help="list available Django commands", parents=[shared_parser])
+    subparsers.add_parser(
+        "list", help="list available Django commands", parents=[shared_parser]
+    )
 
-    run_parser = subparsers.add_parser("run", help="run a Django command", parents=[shared_parser])
+    run_parser = subparsers.add_parser(
+        "run", help="run a Django command", parents=[shared_parser]
+    )
     run_parser.add_argument("django_command", help="Django command name")
     run_parser.add_argument("args", nargs=argparse.REMAINDER, help="command arguments")
 
@@ -180,7 +227,10 @@ def _build_command_parser() -> argparse.ArgumentParser:
 
 def _options_from_args(parsed: argparse.Namespace) -> CommandOptions:
     """Build command options from parsed arguments."""
-    return CommandOptions(celery=bool(getattr(parsed, "celery", False)), deprecated=bool(parsed.deprecated))
+    return CommandOptions(
+        celery=bool(getattr(parsed, "celery", False)),
+        deprecated=bool(parsed.deprecated),
+    )
 
 
 def _resolve_command(base_dir: Path, raw_command: str, options: CommandOptions) -> str:
@@ -194,8 +244,14 @@ def _resolve_command(base_dir: Path, raw_command: str, options: CommandOptions) 
     if command in commands:
         return command
 
-    prefix_matches = [candidate for candidate in commands if candidate.startswith(command)]
-    contains_matches = [candidate for candidate in commands if command in candidate and not candidate.startswith(command)]
+    prefix_matches = [
+        candidate for candidate in commands if candidate.startswith(command)
+    ]
+    contains_matches = [
+        candidate
+        for candidate in commands
+        if command in candidate and not candidate.startswith(command)
+    ]
 
     message_lines = [f"No exact match for '{raw_command}'."]
     if prefix_matches or contains_matches:
@@ -215,15 +271,19 @@ def list_commands(base_dir: Path, options: CommandOptions) -> int:
         print(command)
     print()
     print("Usage: arthexis cmd list [--deprecated] [--celery|--no-celery]")
-    print("Usage: arthexis cmd run [--deprecated] [--celery|--no-celery] <django-command> [args...]")
+    print(
+        "Usage: arthexis cmd run [--deprecated] [--celery|--no-celery] <django-command> [args...]"
+    )
     return 0
 
 
-def run_command(base_dir: Path, raw_command: str, command_args: list[str], options: CommandOptions) -> int:
+def run_command(
+    base_dir: Path, raw_command: str, command_args: list[str], options: CommandOptions
+) -> int:
     """Validate and execute a Django command."""
     command = _resolve_command(base_dir, raw_command, options)
     process = subprocess.run(
-        [sys.executable, "manage.py", command, *command_args, options.celery_flag],
+        [sys.executable, "manage.py", command, *command_args],
         cwd=base_dir,
         check=False,
     )
@@ -261,7 +321,9 @@ def main(argv: list[str] | None = None) -> int:
         if parsed.action == "list":
             return list_commands(base_dir, _options_from_args(parsed))
         if parsed.action == "run":
-            return run_command(base_dir, parsed.django_command, parsed.args, _options_from_args(parsed))
+            return run_command(
+                base_dir, parsed.django_command, parsed.args, _options_from_args(parsed)
+            )
     except CommandApiError as exc:
         print(str(exc), file=sys.stderr)
         return 1
