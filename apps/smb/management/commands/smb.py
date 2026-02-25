@@ -1,6 +1,7 @@
 """Management command for SMB partition orchestration."""
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Prefetch
 
 from apps.smb.models import SMBPartition, SMBServer
 from apps.smb.services import SMBDiscoveryError, configure_server, create_partition, discover_partitions
@@ -97,14 +98,16 @@ class Command(BaseCommand):
     def _list_configuration(self) -> None:
         """Print configured SMB servers and partition mappings."""
 
-        servers = SMBServer.objects.prefetch_related("partitions").order_by("name")
+        servers = SMBServer.objects.prefetch_related(
+            Prefetch("partitions", queryset=SMBPartition.objects.order_by("name"))
+        ).order_by("name")
         if not servers:
             self.stdout.write("No SMB servers configured.")
             return
 
         for server in servers:
             self.stdout.write(f"{server.name}: {server.host}:{server.port}")
-            partitions = list(server.partitions.order_by("name"))
+            partitions = list(server.partitions.all())
             if not partitions:
                 self.stdout.write("  (no partitions)")
                 continue
