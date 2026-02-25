@@ -362,24 +362,12 @@ reset_safe_git_changes() {
   # resolution so they do not block upgrades.
   local generated_merge_migrations=()
   while IFS= read -r status_line; do
-    [[ -z "$status_line" ]] && continue
-
-    if [[ "${status_line:0:2}" != "??" ]]; then
-      continue
+    if [[ "${status_line:0:2}" == "?? " ]]; then
+      local untracked_path="${status_line:3}"
+      if [[ "$untracked_path" =~ ^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\.py$ ]]; then
+        generated_merge_migrations+=("$untracked_path")
+      fi
     fi
-
-    local untracked_path
-    untracked_path="${status_line:3}"
-
-    if [[ ! "$untracked_path" =~ ^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\.py$ ]]; then
-      continue
-    fi
-
-    if git ls-files --error-unmatch "$untracked_path" >/dev/null 2>&1; then
-      continue
-    fi
-
-    generated_merge_migrations+=("$untracked_path")
   done <<< "$status_output"
 
   if [ ${#generated_merge_migrations[@]} -gt 0 ]; then
