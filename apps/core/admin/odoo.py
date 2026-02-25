@@ -9,7 +9,6 @@ from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.discovery.services import record_discovery_item, start_discovery
@@ -126,19 +125,23 @@ class OdooEmployeeAdmin(
         """Return a username that does not collide with existing local users."""
 
         user_model = get_user_model()
-        candidate = base_username
-        if not user_model.all_objects.filter(username=candidate).exists():
-            return candidate
+        if not user_model.all_objects.filter(username=base_username).exists():
+            return base_username
 
         suffix = f"-odoo-{odoo_uid}"
-        candidate = f"{base_username}{suffix}"
-        if not user_model.all_objects.filter(username=candidate).exists():
-            return candidate
+        candidate_with_suffix = f"{base_username}{suffix}"
+        colliding_usernames = set(
+            user_model.all_objects.filter(
+                username__startswith=candidate_with_suffix
+            ).values_list("username", flat=True)
+        )
+        if candidate_with_suffix not in colliding_usernames:
+            return candidate_with_suffix
 
         counter = 2
         while True:
-            candidate = f"{base_username}{suffix}-{counter}"
-            if not user_model.all_objects.filter(username=candidate).exists():
+            candidate = f"{candidate_with_suffix}-{counter}"
+            if candidate not in colliding_usernames:
                 return candidate
             counter += 1
 
@@ -183,8 +186,8 @@ class OdooEmployeeAdmin(
                 host=source_profile.host,
                 database=source_profile.database,
                 username=login or username,
-                password=source_profile.password,
-                verified_on=timezone.now(),
+                password="",
+                verified_on=None,
                 odoo_uid=odoo_uid,
                 email=email,
                 partner_id=partner_id,
@@ -233,8 +236,18 @@ class OdooEmployeeAdmin(
     def load_employees_view(self, request):
         """Create all missing local Odoo employee profiles for the active Odoo DB."""
 
-        if not self.has_view_or_change_permission(request):
+        if not self.has_change_permission(request):
             raise PermissionDenied
+
+        if request.method != "POST":
+            self.message_user(
+                request,
+                _("Use a POST request to run the employee import."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+            )
 
         profile = getattr(request.user, "odoo_employee", None)
         if not profile or not profile.is_verified:
