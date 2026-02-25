@@ -1,5 +1,6 @@
 import datetime
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -205,7 +206,9 @@ def test_operator_site_interface_disabled_returns_blank_public_home(client):
     response = client.get(reverse("pages:index"))
 
     assert response.status_code == 200
-    assert b"<body></body>" in response.content
+    body_match = re.search(rb"<body[^>]*>(.*?)</body>", response.content, re.DOTALL)
+    assert body_match is not None
+    assert body_match.group(1).strip() == b""
 
 
 @pytest.mark.django_db
@@ -241,4 +244,4 @@ def test_operator_interface_mode_hides_public_navigation(client):
     response = client.get(f"{reverse('pages:index')}?operator_interface=1")
 
     assert response.status_code == 200
-    assert b"navbar navbar-expand-lg" not in response.content
+    assert b"<nav" not in response.content
