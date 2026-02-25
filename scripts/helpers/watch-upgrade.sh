@@ -15,14 +15,6 @@ BASE_DIR="${ARTHEXIS_BASE_DIR:-$(pwd)}"
 LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"
 LOG_FILE="${LOG_DIR}/watch-upgrade.log"
 
-SYSTEMCTL_CMD=()
-if command -v systemctl >/dev/null 2>&1; then
-  SYSTEMCTL_CMD=(systemctl)
-  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-    SYSTEMCTL_CMD=(sudo -n systemctl)
-  fi
-fi
-
 log() {
   echo "$(date --iso-8601=seconds) $*" >&2
 }
@@ -72,41 +64,15 @@ UPGRADE_CMD[0]="$(resolve_upgrade_command "${UPGRADE_CMD[0]}")"
 
 log "Upgrade command: ${UPGRADE_CMD[*]}"
 
-control_with_sudo() {
-  local action="$1"
-  local unit="$2"
+ORCHESTRATOR="$BASE_DIR/scripts/helpers/predeploy-migrate-orchestrator.sh"
 
-  if [ -z "$unit" ] || ! command -v systemctl >/dev/null 2>&1; then
-    return 0
-  fi
-
-  local runner=(systemctl)
-  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-    runner=(sudo -n systemctl)
-  fi
-
-  if [ -n "$unit" ]; then
-    log "systemctl ${action} ${unit}"
-  fi
-
-  "${runner[@]}" "$action" "$unit" || true
-}
-
-control_with_sudo stop "$SERVICE_NAME"
+if [ ! -x "$ORCHESTRATOR" ]; then
+  log "Deploy orchestrator missing at $ORCHESTRATOR"
+  exit 1
+fi
 
 STATUS=0
-if [ ! -x "${UPGRADE_CMD[0]}" ] && [ -f "${UPGRADE_CMD[0]}" ]; then
-  chmod +x "${UPGRADE_CMD[0]}" 2>/dev/null || true
-fi
-
-if [ -x "${UPGRADE_CMD[0]}" ]; then
-  (cd "$BASE_DIR" && "${UPGRADE_CMD[@]}") || STATUS=$?
-else
-  echo "Upgrade command ${UPGRADE_CMD[*]} is not executable" >&2
-  STATUS=1
-fi
-
-control_with_sudo start "$SERVICE_NAME"
+(cd "$BASE_DIR" && "$ORCHESTRATOR" "$SERVICE_NAME" "${UPGRADE_CMD[@]}") || STATUS=$?
 
 echo "$(date --iso-8601=seconds) Finished detached upgrade with status $STATUS" >&2
 exit "$STATUS"
