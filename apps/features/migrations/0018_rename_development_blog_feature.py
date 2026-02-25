@@ -12,15 +12,23 @@ NEW_DISPLAY = "Development Blog"
 def rename_development_blog_feature(apps, schema_editor):
     """Rename the seeded development blog feature slug and display."""
 
-    del schema_editor
     Feature = apps.get_model("features", "Feature")
-    feature_manager = getattr(Feature, "all_objects", Feature._base_manager)
+    FeatureTest = apps.get_model("features", "FeatureTest")
+    FeatureNote = apps.get_model("features", "FeatureNote")
+    db_alias = schema_editor.connection.alias
+
+    feature_manager = getattr(Feature, "all_objects", Feature._base_manager).using(db_alias)
+    feature_test_manager = getattr(FeatureTest, "all_objects", FeatureTest._base_manager).using(db_alias)
+    feature_note_manager = getattr(FeatureNote, "all_objects", FeatureNote._base_manager).using(db_alias)
 
     old_feature = feature_manager.filter(slug=OLD_SLUG).first()
     new_feature = feature_manager.filter(slug=NEW_SLUG).first()
 
     if old_feature and new_feature and old_feature.pk != new_feature.pk:
+        feature_test_manager.filter(feature=old_feature).update(feature=new_feature)
+        feature_note_manager.filter(feature=old_feature).update(feature=new_feature)
         feature_manager.filter(pk=old_feature.pk).delete()
+        old_feature = None
 
     target_feature = new_feature or old_feature
     if not target_feature:
@@ -35,15 +43,23 @@ def rename_development_blog_feature(apps, schema_editor):
 def rollback_development_blog_feature(apps, schema_editor):
     """Restore the seeded development blog feature slug and display."""
 
-    del schema_editor
     Feature = apps.get_model("features", "Feature")
-    feature_manager = getattr(Feature, "all_objects", Feature._base_manager)
+    FeatureTest = apps.get_model("features", "FeatureTest")
+    FeatureNote = apps.get_model("features", "FeatureNote")
+    db_alias = schema_editor.connection.alias
+
+    feature_manager = getattr(Feature, "all_objects", Feature._base_manager).using(db_alias)
+    feature_test_manager = getattr(FeatureTest, "all_objects", FeatureTest._base_manager).using(db_alias)
+    feature_note_manager = getattr(FeatureNote, "all_objects", FeatureNote._base_manager).using(db_alias)
 
     old_feature = feature_manager.filter(slug=OLD_SLUG).first()
     new_feature = feature_manager.filter(slug=NEW_SLUG).first()
 
     if old_feature and new_feature and old_feature.pk != new_feature.pk:
-        feature_manager.filter(pk=old_feature.pk).delete()
+        feature_test_manager.filter(feature=new_feature).update(feature=old_feature)
+        feature_note_manager.filter(feature=new_feature).update(feature=old_feature)
+        feature_manager.filter(pk=new_feature.pk).delete()
+        new_feature = None
 
     target_feature = old_feature or new_feature
     if not target_feature:
