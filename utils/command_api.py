@@ -64,20 +64,26 @@ def _cache_file(base_dir: Path, name: str) -> Path:
 
 def _read_cached_lines(cache_file: Path, ttl_seconds: int) -> list[str] | None:
     """Read cache file if fresh enough; otherwise return None."""
-    if not cache_file.exists():
+    try:
+        if not cache_file.exists():
+            return None
+        cache_age = time.time() - cache_file.stat().st_mtime
+        if cache_age >= ttl_seconds:
+            return None
+        return [line for line in cache_file.read_text(encoding="utf-8").splitlines() if line]
+    except OSError:
         return None
-    cache_age = time.time() - cache_file.stat().st_mtime
-    if cache_age >= ttl_seconds:
-        return None
-    return [line for line in cache_file.read_text(encoding="utf-8").splitlines() if line]
 
 
 def _write_cache_lines(cache_file: Path, lines: Iterable[str]) -> None:
     """Persist cached lines atomically when possible."""
-    cache_file.parent.mkdir(parents=True, exist_ok=True)
-    cache_tmp = cache_file.with_suffix(f"{cache_file.suffix}.tmp")
-    cache_tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    cache_tmp.replace(cache_file)
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_tmp = cache_file.with_suffix(f"{cache_file.suffix}.tmp")
+        cache_tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        cache_tmp.replace(cache_file)
+    except OSError:
+        return
 
 
 def _run_manage(base_dir: Path, *args: str) -> str:
@@ -157,17 +163,15 @@ def _build_command_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="arthexis cmd", add_help=True)
     subparsers = parser.add_subparsers(dest="action")
 
-    list_parser = subparsers.add_parser("list", help="list available Django commands")
-    list_parser.add_argument("--deprecated", action="store_true", help="include absorbed/deprecated commands")
-    list_group = list_parser.add_mutually_exclusive_group()
-    list_group.add_argument("--celery", action="store_true", help="discover commands in celery mode")
-    list_group.add_argument("--no-celery", action="store_true", help="discover commands outside celery mode")
+    shared_parser = argparse.ArgumentParser(add_help=False)
+    shared_parser.add_argument("--deprecated", action="store_true", help="include absorbed/deprecated commands")
+    shared_group = shared_parser.add_mutually_exclusive_group()
+    shared_group.add_argument("--celery", action="store_true", help="discover commands in celery mode")
+    shared_group.add_argument("--no-celery", action="store_true", help="discover commands outside celery mode")
 
-    run_parser = subparsers.add_parser("run", help="run a Django command")
-    run_parser.add_argument("--deprecated", action="store_true", help="allow absorbed/deprecated commands")
-    run_group = run_parser.add_mutually_exclusive_group()
-    run_group.add_argument("--celery", action="store_true", help="run command in celery mode")
-    run_group.add_argument("--no-celery", action="store_true", help="run command outside celery mode")
+    subparsers.add_parser("list", help="list available Django commands", parents=[shared_parser])
+
+    run_parser = subparsers.add_parser("run", help="run a Django command", parents=[shared_parser])
     run_parser.add_argument("django_command", help="Django command name")
     run_parser.add_argument("args", nargs=argparse.REMAINDER, help="command arguments")
 
