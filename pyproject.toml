@@ -22,6 +22,10 @@ content-type = "text/markdown"
 Repository = "https://github.com/arthexis/arthexis"
 Homepage = "https://arthexis.com"
 
+
+[project.scripts]
+arthexis = "arthexis.__main__:main"
+
 [project.optional-dependencies]
 hardware = [
   "gpiozero==2.0.1; sys_platform == \"linux\"",
