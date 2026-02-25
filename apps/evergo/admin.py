@@ -1,6 +1,7 @@
 """Admin configuration for Evergo integration."""
 
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
@@ -18,6 +19,15 @@ from .models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUs
 
 def _load_customers_admin_view(admin_instance, request):
     """Render and process the shared Evergo customer-loading wizard."""
+    opts = admin_instance.model._meta
+    changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+
+    if request.method == "POST":
+        if not admin_instance.has_change_permission(request):
+            raise PermissionDenied
+    elif not admin_instance.has_view_or_change_permission(request):
+        raise PermissionDenied
+
     if request.method == "POST":
         form = EvergoLoadCustomersForm(request.POST, request_user=request.user)
         if form.is_valid():
@@ -32,32 +42,30 @@ def _load_customers_admin_view(admin_instance, request):
                     % {"profile": str(profile), "error": exc},
                     level=messages.ERROR,
                 )
-                return HttpResponseRedirect(
-                    reverse("admin:evergo_evergocustomer_load_customers")
-                )
-            admin_instance.message_user(
-                request,
-                _(
-                    "Customer sync completed. Customers loaded: %(customers)s | "
-                    "Orders created: %(created)s | Orders updated: %(updated)s | "
-                    "Placeholders: %(placeholders)s"
-                )
-                % {
-                    "customers": summary["customers_loaded"],
-                    "created": summary["orders_created"],
-                    "updated": summary["orders_updated"],
-                    "placeholders": summary["placeholders_created"],
-                },
-                level=messages.SUCCESS,
-            )
-            if summary["unresolved"]:
+            else:
                 admin_instance.message_user(
                     request,
-                    _("Not found in Evergo: %(items)s")
-                    % {"items": ", ".join(summary["unresolved"])},
-                    level=messages.WARNING,
+                    _(
+                        "Customer sync completed. Customers loaded: %(customers)s | "
+                        "Orders created: %(created)s | Orders updated: %(updated)s | "
+                        "Placeholders: %(placeholders)s"
+                    )
+                    % {
+                        "customers": summary["customers_loaded"],
+                        "created": summary["orders_created"],
+                        "updated": summary["orders_updated"],
+                        "placeholders": summary["placeholders_created"],
+                    },
+                    level=messages.SUCCESS,
                 )
-            return HttpResponseRedirect(reverse("admin:evergo_evergocustomer_changelist"))
+                if summary["unresolved"]:
+                    admin_instance.message_user(
+                        request,
+                        _("Not found in Evergo: %(items)s")
+                        % {"items": ", ".join(summary["unresolved"])},
+                        level=messages.WARNING,
+                    )
+                return HttpResponseRedirect(changelist_url)
     else:
         form = EvergoLoadCustomersForm(request_user=request.user)
 
