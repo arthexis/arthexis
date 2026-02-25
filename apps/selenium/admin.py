@@ -114,11 +114,23 @@ class SessionCookieAdmin(OwnableAdminMixin, admin.ModelAdmin):
         "owner_display",
         "source",
         "state",
+        "cookie_count",
         "last_used_at",
         "last_validated_at",
         "rejection_count",
     )
     list_filter = ("state", "source")
     search_fields = ("name", "source", "last_rejection_reason")
-    readonly_fields = ("last_used_at", "last_validated_at", "rejection_count", "last_rejection_reason")
+    readonly_fields = (
+        "cookie_count",
+        "last_used_at",
+        "last_validated_at",
+        "rejection_count",
+        "last_rejection_reason",
+    )
+    exclude = ("cookies",)
+
+    @admin.display(description=_("Cookie count"))
+    def cookie_count(self, obj: SessionCookie) -> int:
+        return len(obj.cookies or [])
 
