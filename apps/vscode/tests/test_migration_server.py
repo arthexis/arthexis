@@ -189,3 +189,17 @@ def test_is_debugger_session_returns_false_without_debugger_variables() -> None:
     """Regression: regular shell sessions should not suppress interrupts."""
 
     assert migration_server._is_debugger_session({}) is False
+
+
+def test_main_handles_interrupt_while_installing_requirements(monkeypatch) -> None:
+    """Regression: Ctrl+C during dependency install should exit the server cleanly."""
+
+    monkeypatch.setattr(
+        migration_server,
+        "update_requirements",
+        mock.Mock(side_effect=KeyboardInterrupt),
+    )
+    monkeypatch.setattr(migration_server, "collect_source_mtimes", mock.Mock())
+    monkeypatch.setattr(migration_server, "run_env_refresh_with_report", mock.Mock())
+
+    assert migration_server.main([]) == 0
