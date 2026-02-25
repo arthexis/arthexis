@@ -3,10 +3,13 @@ from xmlrpc.client import Fault, ProtocolError
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.discovery.services import record_discovery_item, start_discovery
@@ -51,7 +54,7 @@ class OdooEmployeeAdmin(
     readonly_fields = ("verified_on", "odoo_uid", "name", "email", "partner_id")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
-    changelist_actions = ["my_profile", "generate_quote_report"]
+    changelist_actions = ["my_profile", "load_employees", "generate_quote_report"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         ("Configuration", {"fields": ("host", "database")}),
@@ -90,6 +93,181 @@ class OdooEmployeeAdmin(
         verify_credentials,
         verify_credentials_action,
     ) = _build_credentials_actions("verify_credentials", "_verify_credentials")
+
+    def get_urls(self):
+        """Register custom admin URLs for Odoo employee tools."""
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "load-employees/",
+                self.admin_site.admin_view(self.load_employees_view),
+                name="odoo_odooemployee_load_employees",
+            )
+        ]
+        return custom + urls
+
+    def _load_employees_url(self) -> str:
+        """Return the URL for loading users from the active Odoo database."""
+
+        return reverse("admin:odoo_odooemployee_load_employees")
+
+    @admin.action(description=_("Load Employees"))
+    def load_employees(self, request, queryset=None):
+        """Redirect to the no-queryset employee import tool view."""
+
+        return HttpResponseRedirect(self._load_employees_url())
+
+    load_employees.label = _("Load Employees")
+    load_employees.short_description = _("Load Employees")
+    load_employees.requires_queryset = False
+
+    def _resolve_unique_username(self, base_username: str, odoo_uid: int) -> str:
+        """Return a username that does not collide with existing local users."""
+
+        user_model = get_user_model()
+        candidate = base_username
+        if not user_model.all_objects.filter(username=candidate).exists():
+            return candidate
+
+        suffix = f"-odoo-{odoo_uid}"
+        candidate = f"{base_username}{suffix}"
+        if not user_model.all_objects.filter(username=candidate).exists():
+            return candidate
+
+        counter = 2
+        while True:
+            candidate = f"{base_username}{suffix}-{counter}"
+            if not user_model.all_objects.filter(username=candidate).exists():
+                return candidate
+            counter += 1
+
+    def _create_odoo_employee_profile(self, source_profile, payload: dict[str, object]) -> bool:
+        """Create one missing employee profile from Odoo user payload data."""
+
+        odoo_uid = payload.get("id")
+        if not isinstance(odoo_uid, int):
+            return False
+
+        login = str(payload.get("login") or "").strip()
+        email = str(payload.get("email") or "").strip()
+        base_username = login or email or f"odoo-user-{odoo_uid}"
+        username = self._resolve_unique_username(base_username, odoo_uid)
+
+        name = str(payload.get("name") or "").strip()
+        first_name = name
+        last_name = ""
+        if " " in name:
+            first_name, last_name = name.split(" ", 1)
+
+        partner_info = payload.get("partner_id")
+        partner_id = None
+        if isinstance(partner_info, (list, tuple)) and partner_info:
+            try:
+                partner_id = int(partner_info[0])
+            except (TypeError, ValueError):
+                partner_id = None
+
+        user_model = get_user_model()
+        with transaction.atomic():
+            user = user_model.objects.create(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+            OdooEmployee.objects.create(
+                user=user,
+                host=source_profile.host,
+                database=source_profile.database,
+                username=login or username,
+                password=source_profile.password,
+                verified_on=timezone.now(),
+                odoo_uid=odoo_uid,
+                email=email,
+                partner_id=partner_id,
+            )
+        return True
+
+    def _load_missing_employees(self, profile) -> tuple[int, int]:
+        """Load missing Odoo employees and return ``(created, skipped)`` counts."""
+
+        remote_users = profile.execute(
+            "res.users",
+            "search_read",
+            [[("active", "=", True), ("share", "=", False)]],
+            fields=["id", "name", "email", "login", "partner_id"],
+            limit=0,
+        )
+
+        existing_uids = set(
+            OdooEmployee.objects.filter(
+                host=profile.host,
+                database=profile.database,
+            )
+            .exclude(odoo_uid__isnull=True)
+            .values_list("odoo_uid", flat=True)
+        )
+        created = 0
+        skipped = 0
+        for remote_user in remote_users:
+            odoo_uid = remote_user.get("id")
+            if odoo_uid in existing_uids:
+                skipped += 1
+                continue
+            try:
+                was_created = self._create_odoo_employee_profile(profile, remote_user)
+            except IntegrityError:
+                logger.exception("Could not create Odoo employee for payload=%s", remote_user)
+                skipped += 1
+                continue
+            if was_created:
+                created += 1
+                existing_uids.add(odoo_uid)
+            else:
+                skipped += 1
+        return created, skipped
+
+    def load_employees_view(self, request):
+        """Create all missing local Odoo employee profiles for the active Odoo DB."""
+
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+
+        profile = getattr(request.user, "odoo_employee", None)
+        if not profile or not profile.is_verified:
+            self.message_user(
+                request,
+                _(
+                    "Configure and verify your Odoo employee before loading employees."
+                ),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+            )
+
+        try:
+            created, skipped = self._load_missing_employees(profile)
+        except (Fault, ProtocolError, ValueError) as exc:
+            self.message_user(
+                request,
+                _("Unable to load employees from Odoo: %(error)s") % {"error": exc},
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                _("Employee sync completed. Created: %(created)s | Skipped: %(skipped)s")
+                % {"created": created, "skipped": skipped},
+                level=messages.SUCCESS,
+            )
+
+        return HttpResponseRedirect(
+            reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+        )
 
 
 @admin.register(OdooProduct)
