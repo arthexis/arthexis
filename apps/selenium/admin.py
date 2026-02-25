@@ -4,6 +4,8 @@ import os
 import shutil
 
 from django.contrib import admin, messages
+
+from apps.core.admin import OwnableAdminMixin
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from .models import SeleniumBrowser, SeleniumScript, SessionCookie
@@ -106,8 +108,16 @@ class SeleniumScriptAdmin(admin.ModelAdmin):
 
 
 @admin.register(SessionCookie)
-class SessionCookieAdmin(admin.ModelAdmin):
-    list_display = ("name", "source", "state", "last_used_at", "last_validated_at", "rejection_count")
+class SessionCookieAdmin(OwnableAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "name",
+        "owner_display",
+        "source",
+        "state",
+        "last_used_at",
+        "last_validated_at",
+        "rejection_count",
+    )
     list_filter = ("state", "source")
     search_fields = ("name", "source", "last_rejection_reason")
     readonly_fields = ("last_used_at", "last_validated_at", "rejection_count", "last_rejection_reason")

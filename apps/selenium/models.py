@@ -14,6 +14,7 @@ from playwright.sync_api import Browser as PlaywrightBrowserInstance
 from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
 from apps.core.entity import Entity, EntityManager
+from apps.core.models import Ownable
 from apps.sigils.sigil_resolver import resolve_sigils
 from apps.selenium.playwright import normalize_playwright_cookie
 
@@ -277,7 +278,7 @@ class SeleniumScript(Entity):
             driver.quit()
 
 
-class SessionCookie(Entity):
+class SessionCookie(Ownable):
     """Persistent browser session cookies for automation flows.
 
     The model stores cookie payloads in a Playwright-compatible shape so
@@ -316,6 +317,16 @@ class SessionCookie(Entity):
     class Meta:
         verbose_name = _("Session Cookie")
         verbose_name_plural = _("Session Cookies")
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    (Q(user__isnull=True) & Q(group__isnull=True))
+                    | (Q(user__isnull=False) & Q(group__isnull=True))
+                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                ),
+                name="selenium_sessioncookie_owner_exclusive",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
