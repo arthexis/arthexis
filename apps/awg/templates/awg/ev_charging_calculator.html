@@ -1,0 +1,56 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "EV Charging Session Calculator" %}{% endblock %}
+{% block content %}
+<h1>{% trans "EV Charging Session Calculator" %}</h1>
+<p class="text-muted">{% trans "Estimate charging energy from battery SOC, charger power, and efficiency." %}</p>
+<form method="post" id="ev-charging-calculator" class="mb-3">
+  {% csrf_token %}
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label" for="battery_kwh">{% trans "Battery Capacity (kWh)" %}</label>
+      <input id="battery_kwh" name="battery_kwh" type="number" step="0.01" min="0.01" class="form-control" value="{{ form.battery_kwh }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="start_soc">{% trans "Start SOC (%)" %}</label>
+      <input id="start_soc" name="start_soc" type="number" step="0.01" min="0" max="100" class="form-control" value="{{ form.start_soc }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="target_soc">{% trans "Target SOC (%)" %}</label>
+      <input id="target_soc" name="target_soc" type="number" step="0.01" min="0" max="100" class="form-control" value="{{ form.target_soc }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="charger_power_kw">{% trans "Charger Power (kW)" %}</label>
+      <input id="charger_power_kw" name="charger_power_kw" type="number" step="0.01" min="0.01" class="form-control" value="{{ form.charger_power_kw }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="charging_efficiency">{% trans "Charging Efficiency (0-1)" %}</label>
+      <input id="charging_efficiency" name="charging_efficiency" type="number" step="0.01" min="0.01" max="1" class="form-control" value="{{ form.charging_efficiency }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="tariff_mxn_kwh">{% trans "Tariff (MXN/kWh, optional)" %}</label>
+      <input id="tariff_mxn_kwh" name="tariff_mxn_kwh" type="number" step="0.0001" min="0" class="form-control" value="{{ form.tariff_mxn_kwh }}">
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary mt-3">{% trans "Calculate" %}</button>
+</form>
+
+{% if error %}
+<p class="text-danger">{% trans "Error:" %} {{ error }}</p>
+{% endif %}
+
+{% if result %}
+<h2>{% trans "Results" %}</h2>
+<table class="table table-sm">
+  <tbody>
+    <tr><th>{% trans "Battery Energy Added (kWh)" %}</th><td>{{ result.battery_energy_needed }}</td></tr>
+    <tr><th>{% trans "Energy Drawn from Grid (kWh)" %}</th><td>{{ result.wall_energy_needed }}</td></tr>
+    <tr><th>{% trans "Estimated Charging Time (hours)" %}</th><td>{{ result.charging_time_hours }}</td></tr>
+    {% if result.tariff_mxn_kwh %}
+    <tr><th>{% trans "Tariff (MXN/kWh)" %}</th><td>{{ result.tariff_mxn_kwh }}</td></tr>
+    <tr><th>{% trans "Estimated Session Cost (MXN)" %}</th><td>{{ result.estimated_cost_mxn }}</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
