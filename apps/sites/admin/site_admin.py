@@ -93,6 +93,7 @@ class SiteAdmin(DjangoSiteAdmin):
         "name",
         "template",
         "default_landing",
+        "interface_landing",
         "managed",
         "require_https",
     )
@@ -101,6 +102,7 @@ class SiteAdmin(DjangoSiteAdmin):
         "name",
         "template",
         "default_landing",
+        "interface_landing",
         "managed",
         "require_https",
     )
@@ -170,7 +172,7 @@ class SiteAdmin(DjangoSiteAdmin):
         ensure_site_fields()
         queryset = super().get_queryset(request)
         try:
-            Site._meta.get_field("default_landing")
+            Site._meta.get_field("interface_landing")
         except FieldDoesNotExist:
             return queryset
         # The optional ``default_landing`` field is injected at runtime. Avoid

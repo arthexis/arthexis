@@ -62,10 +62,14 @@ def nav_links(request):
     user_is_staff = getattr(user, "is_staff", False)
     role_id = getattr(role, "id", "none")
     site_id = getattr(site, "id", "none")
+    operator_interface_mode = request.GET.get("operator_interface") in {"1", "true", "True"}
 
     if not user_is_authenticated:
         template_id = getattr(getattr(site, "template", None), "id", "none")
-        cache_key = f"nav_links:anon:{role_id}:{site_id}:{template_id}"
+        cache_key = (
+            f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
+            f"interface:{int(operator_interface_mode)}"
+        )
         cached = cache.get(cache_key)
         if cached:
             return cached
@@ -296,6 +300,7 @@ def nav_links(request):
         "chat_enabled": chat_enabled,
         "chat_socket_path": chat_socket_path,
         "site_template": site_template,
+        "operator_interface_mode": operator_interface_mode,
     }
     if not user_is_authenticated:
         cache.set(cache_key, context, timeout=300)

@@ -67,6 +67,21 @@ _FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
             limit_choices_to={"is_deleted": False, "enabled": True},
         ),
     ),
+    (
+        "interface_landing",
+        lambda: models.ForeignKey(
+            "pages.Landing",
+            on_delete=models.SET_NULL,
+            related_name="interface_for_sites",
+            null=True,
+            blank=True,
+            verbose_name=_("Interface landing"),
+            help_text=_(
+                "Landing visitors should be redirected to when the Operator Site Interface suite feature is disabled."
+            ),
+            limit_choices_to={"is_deleted": False, "enabled": True},
+        ),
+    ),
 )
 
 
