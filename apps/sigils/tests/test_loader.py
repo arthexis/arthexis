@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import Mock
 from django.apps import apps as django_apps
 from django.db import OperationalError
 from django.db.models.signals import post_migrate
@@ -80,21 +81,17 @@ def test_regression_load_fixture_sigil_roots_uses_signal_database_for_content_ty
     )
     monkeypatch.setattr(loader, "_iter_fixture_entries", lambda _path: entries)
 
-    lookup_calls = []
+    mock_ct_manager = Mock()
+    mock_ct_manager.get_by_natural_key.side_effect = loader.ContentType.DoesNotExist
 
-    class StubCTManager:
-        def get_by_natural_key(self, app_label, model_name):
-            lookup_calls.append((app_label, model_name))
-            return None
+    mock_objects = Mock()
+    mock_objects.db_manager.return_value = mock_ct_manager
 
-    class StubCTObjects:
-        def db_manager(self, using):
-            lookup_calls.append(using)
-            return StubCTManager()
-
-    monkeypatch.setattr(loader.ContentType, "objects", StubCTObjects())
+    monkeypatch.setattr(loader.ContentType, "objects", mock_objects)
 
     loader.load_fixture_sigil_roots(using="default")
 
-    assert lookup_calls[0] == "default"
-    assert lookup_calls[1] == ("contenttypes", "contenttype")
+    mock_objects.db_manager.assert_called_once_with("default")
+    mock_ct_manager.get_by_natural_key.assert_called_once_with(
+        "contenttypes", "contenttype"
+    )
