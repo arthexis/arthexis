@@ -76,6 +76,6 @@ class ResourceMethod(models.Model):
         for field_name in ("request_structure", "response_structure"):
             payload = getattr(self, field_name)
             if payload in (None, ""):
-                continue
-            if not isinstance(payload, (dict, list)):
+                setattr(self, field_name, dict())
+            elif not isinstance(payload, (dict, list)):
                 raise ValidationError({field_name: "Structure must be a JSON object or array."})
