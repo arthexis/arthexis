@@ -43,7 +43,14 @@ def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[st
             capture_output=True,
             text=True,
             check=False,
+            timeout=1.5,
         )
+    except subprocess.TimeoutExpired:
+        return {
+            "status": str(_("Unknown")),
+            "enabled": "",
+            "missing": False,
+        }
     except Exception:
         return {
             "status": str(_("Unknown")),
@@ -63,8 +70,11 @@ def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[st
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=1.5,
             )
             enabled_state = (enabled_result.stdout or enabled_result.stderr).strip()
+        except subprocess.TimeoutExpired:
+            enabled_state = ""
         except Exception:
             enabled_state = ""
 
