@@ -8,8 +8,6 @@
 
 Arthexis Constellation is a Django-based software suite that centralizes tools for managing electric vehicle charging infrastructure and orchestrating energy-related products and services.
 
-[View all Developer Documents](/docs/library/)
-
 Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and future features and other updates.
 
 ## Suite Features
@@ -141,15 +139,11 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 - Curate shortcuts for power users through the [Favorites Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
 - Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
+### 5. Development
+- Browse the [Developer Documentation Library](/docs/library/) for architecture references, protocol manuals, and contribution workflows.
+
 ## Support
 
 Arthexis Constellation is still under very active development and new features are added every day.
 
 If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.
-
-## Codex Skills (Repo-local)
-
-This repository includes two reusable Codex skills under [`skills/`](skills/):
-
-- [`skills/django-change-safety/SKILL.md`](skills/django-change-safety/SKILL.md): backend safety workflow for docstrings, specific exceptions, fixture+reversible-migration pairing, new-app admin registration, and regression-aware test reporting.
-- [`skills/ui-preview-capture/SKILL.md`](skills/ui-preview-capture/SKILL.md): deterministic Django UI/admin preview flow with migrate/runserver setup, fixed admin credentials, Playwright port forwarding, Chromium-first/Firefox-fallback strategy, and screenshot artifact reporting.
