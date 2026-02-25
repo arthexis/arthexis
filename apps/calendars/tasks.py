@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import timedelta, timezone as dt_timezone
 
 from celery import current_app, shared_task
 from celery.exceptions import NotRegistered
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -60,18 +60,19 @@ def run_calendar_event_triggers() -> int:
             if start_at is None:
                 continue
             if timezone.is_naive(start_at):
-                start_at = timezone.make_aware(start_at, timezone=timezone.utc)
+                start_at = timezone.make_aware(start_at, timezone=dt_timezone.utc)
             execute_at = start_at - timedelta(minutes=trigger.lead_time_minutes)
             if execute_at > now:
                 continue
 
             event_updated = _extract_event_updated(event, default=now)
             try:
-                CalendarEventDispatch.objects.create(
-                    trigger=trigger,
-                    event_id=event_id,
-                    event_updated=event_updated,
-                )
+                with transaction.atomic():
+                    CalendarEventDispatch.objects.create(
+                        trigger=trigger,
+                        event_id=event_id,
+                        event_updated=event_updated,
+                    )
             except IntegrityError:
                 continue
 
@@ -97,7 +98,7 @@ def _extract_event_updated(event: dict, default):
     """Extract event update timestamp with fallback to ``default``."""
     updated = parse_datetime(str(event.get("updated") or ""))
     if updated is not None and timezone.is_naive(updated):
-        updated = timezone.make_aware(updated, timezone=timezone.utc)
+        updated = timezone.make_aware(updated, timezone=dt_timezone.utc)
     return updated or default
 
 

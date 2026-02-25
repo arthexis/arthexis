@@ -13,7 +13,7 @@ from apps.gdrive.models import GoogleAccount
 
 @pytest.mark.django_db
 def test_run_calendar_event_triggers_dispatches_once(monkeypatch):
-    """Trigger runner should dispatch due event once and deduplicate by revision."""
+    """Regression: trigger runner dispatches due events once per event revision."""
     user = get_user_model().objects.create_user(username="cal-user", password="x")
     account = GoogleAccount.objects.create(
         user=user,
@@ -119,7 +119,7 @@ def test_run_calendar_event_triggers_skips_unregistered_task(monkeypatch):
 
 @pytest.mark.django_db
 def test_run_calendar_event_triggers_handles_naive_datetime(monkeypatch):
-    """Naive event datetimes should be normalized before due-time comparison."""
+    """Regression: naive event datetimes are normalized before due-time comparison."""
     user = get_user_model().objects.create_user(username="cal-user-3", password="x")
     account = GoogleAccount.objects.create(
         user=user,

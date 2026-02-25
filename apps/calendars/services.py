@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -74,8 +74,8 @@ class GoogleCalendarGateway:
             params={
                 "singleEvents": "true",
                 "orderBy": "startTime",
-                "timeMin": window.time_min.astimezone(timezone.utc).isoformat(),
-                "timeMax": window.time_max.astimezone(timezone.utc).isoformat(),
+                "timeMin": window.time_min.astimezone(dt_timezone.utc).isoformat(),
+                "timeMax": window.time_max.astimezone(dt_timezone.utc).isoformat(),
             },
         )
         items = payload.get("items") or []
