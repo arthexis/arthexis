@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
 from playwright.sync_api import Browser as PlaywrightBrowserInstance
@@ -21,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 class UnsupportedBrowserEngineError(ValueError):
     """Raised when a browser engine cannot be launched via Playwright."""
+
+
+class InvalidCookiePayloadError(ValueError):
+    """Raised when a session cookie payload does not match the expected shape."""
 
 
 @dataclass
@@ -270,3 +275,121 @@ class SeleniumScript(Entity):
                 exec(compiled, exec_globals, exec_globals)
         finally:
             driver.quit()
+
+
+class SessionCookie(Entity):
+    """Persistent browser session cookies for automation flows.
+
+    The model stores cookie payloads in a Playwright-compatible shape so
+    long-running jobs can reuse successful sessions across calls and restarts.
+    """
+
+    class State(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        STALE = "stale", _("Stale")
+        REJECTED = "rejected", _("Rejected")
+
+    name = models.CharField(max_length=100, unique=True)
+    source = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text=_("Optional source label (service, node, or account)."),
+    )
+    cookies = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Cookie list compatible with Playwright BrowserContext.add_cookies."),
+    )
+    state = models.CharField(
+        max_length=20,
+        choices=State.choices,
+        default=State.ACTIVE,
+    )
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_validated_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    rejection_count = models.PositiveIntegerField(default=0)
+    last_rejection_reason = models.TextField(blank=True)
+
+    objects = EntityManager()
+
+    class Meta:
+        verbose_name = _("Session Cookie")
+        verbose_name_plural = _("Session Cookies")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    def natural_key(self):  # pragma: no cover - fixture helper
+        return (self.name,)
+
+    def clean_cookie_payload(self, payload: list[dict]) -> list[dict]:
+        """Validate and normalize a cookie list for persistence."""
+
+        if not isinstance(payload, list):
+            raise InvalidCookiePayloadError("Cookie payload must be a list of mappings.")
+        for cookie in payload:
+            if not isinstance(cookie, dict):
+                raise InvalidCookiePayloadError(
+                    "Each cookie entry must be a mapping with cookie attributes."
+                )
+            if "name" not in cookie or "value" not in cookie:
+                raise InvalidCookiePayloadError(
+                    "Each cookie must include both 'name' and 'value' keys."
+                )
+        return payload
+
+    def set_cookies(self, payload: list[dict], *, save: bool = True) -> None:
+        """Assign cookie payload and optionally persist the model."""
+
+        self.cookies = self.clean_cookie_payload(payload)
+        if save:
+            self.save(update_fields=["cookies"])
+
+    def mark_used(self, *, save: bool = True) -> None:
+        """Mark the cookie as recently used by an automation task."""
+
+        self.last_used_at = timezone.now()
+        if save:
+            self.save(update_fields=["last_used_at"])
+
+    def mark_valid(self, *, save: bool = True) -> None:
+        """Mark the session cookies as valid after successful use."""
+
+        self.state = self.State.ACTIVE
+        self.last_validated_at = timezone.now()
+        self.last_rejection_reason = ""
+        if save:
+            self.save(
+                update_fields=[
+                    "state",
+                    "last_validated_at",
+                    "last_rejection_reason",
+                ]
+            )
+
+    def mark_rejected(self, reason: str, *, save: bool = True) -> None:
+        """Mark the cookie jar as rejected by an upstream service."""
+
+        self.state = self.State.REJECTED
+        self.rejection_count += 1
+        self.last_rejection_reason = reason.strip()
+        if save:
+            self.save(
+                update_fields=[
+                    "state",
+                    "rejection_count",
+                    "last_rejection_reason",
+                ]
+            )
+
+    def is_expired(self) -> bool:
+        """Return ``True`` when the session cookie expiry has passed."""
+
+        return bool(self.expires_at and self.expires_at <= timezone.now())
+
+    def as_playwright_cookies(self) -> list[dict]:
+        """Return normalized cookie payload for Playwright contexts."""
+
+        payload = self.clean_cookie_payload(self.cookies)
+        return [normalize_playwright_cookie(cookie) for cookie in payload]

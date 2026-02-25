@@ -6,7 +6,7 @@ import shutil
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from .models import SeleniumBrowser, SeleniumScript
+from .models import SeleniumBrowser, SeleniumScript, SessionCookie
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +103,12 @@ class SeleniumScriptAdmin(admin.ModelAdmin):
                 % {"count": executed},
                 level=messages.SUCCESS,
             )
+
+
+@admin.register(SessionCookie)
+class SessionCookieAdmin(admin.ModelAdmin):
+    list_display = ("name", "source", "state", "last_used_at", "last_validated_at", "rejection_count")
+    list_filter = ("state", "source")
+    search_fields = ("name", "source", "last_rejection_reason")
+    readonly_fields = ("last_used_at", "last_validated_at", "rejection_count", "last_rejection_reason")
+
