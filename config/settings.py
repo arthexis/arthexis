@@ -487,6 +487,7 @@ LOCAL_APPS = [
     "apps.awg",
     "apps.chats",
     "apps.aws",
+    "apps.alexa",
     "apps.socials",
     "apps.ops",
     "apps.survey",
