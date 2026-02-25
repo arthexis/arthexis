@@ -135,7 +135,7 @@
               {% if request.user.is_staff %}
                 {% trans 'Staff can attach any number of files.' %}
               {% else %}
-                {% trans 'You can attach up to 3 files.' %}
+                {% blocktrans with limit=user_story_max_non_staff_attachments %}You can attach up to {{ limit }} files.{% endblocktrans %}
               {% endif %}
             </div>
           </div>

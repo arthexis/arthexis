@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
@@ -67,6 +69,19 @@ class UserStoryForm(forms.ModelForm):
     """Feedback form for user stories, including optional authenticated attachments."""
 
     MAX_NON_STAFF_ATTACHMENTS = 3
+    MAX_ATTACHMENT_FILE_SIZE_BYTES = 10 * 1024 * 1024
+    ALLOWED_ATTACHMENT_EXTENSIONS = {
+        "txt",
+        "log",
+        "csv",
+        "json",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "pdf",
+    }
 
     class Meta:
         model = UserStory
@@ -137,7 +152,6 @@ class UserStoryForm(forms.ModelForm):
     def clean_messages(self):
         return (self.cleaned_data.get("messages") or "").strip()
 
-
     def clean_attachments(self) -> list[UploadedFile]:
         """Validate attachment permissions and count constraints by user role."""
 
@@ -158,12 +172,23 @@ class UserStoryForm(forms.ModelForm):
                 code="too_many_attachments",
             )
 
+        allowed_extensions = sorted(self.ALLOWED_ATTACHMENT_EXTENSIONS)
+        for attachment in attachments:
+            extension = Path(attachment.name).suffix.lower().lstrip(".")
+            if extension not in self.ALLOWED_ATTACHMENT_EXTENSIONS:
+                raise forms.ValidationError(
+                    _("Unsupported file type. Allowed extensions: %(extensions)s")
+                    % {"extensions": ", ".join(allowed_extensions)},
+                    code="unsupported_attachment_type",
+                )
+            if attachment.size > self.MAX_ATTACHMENT_FILE_SIZE_BYTES:
+                raise forms.ValidationError(
+                    _("Each file must be %(max_size_mb)s MB or smaller.")
+                    % {"max_size_mb": self.MAX_ATTACHMENT_FILE_SIZE_BYTES // (1024 * 1024)},
+                    code="attachment_too_large",
+                )
+
         return attachments
-
-    def get_cleaned_attachments(self) -> list[UploadedFile]:
-        """Return validated uploaded attachment files."""
-
-        return self.cleaned_data.get("attachments") or []
 
     def save(self, commit=True):
         instance = super().save(commit=False)

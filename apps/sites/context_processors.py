@@ -11,6 +11,7 @@ from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from apps.modules.models import Module
+from apps.sites.forms import UserStoryForm
 from apps.sites.utils import user_in_site_operator_group
 from .models import SiteTemplate
 
@@ -296,6 +297,7 @@ def nav_links(request):
         "chat_enabled": chat_enabled,
         "chat_socket_path": chat_socket_path,
         "site_template": site_template,
+        "user_story_max_non_staff_attachments": UserStoryForm.MAX_NON_STAFF_ATTACHMENTS,
     }
     if not user_is_authenticated:
         cache.set(cache_key, context, timeout=300)

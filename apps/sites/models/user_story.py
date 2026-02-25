@@ -131,7 +131,7 @@ class UserStory(Lead):
         )
         if attachment_names:
             lines.append("**Attachments:**")
-            lines.extend(f"- {name}" for name in attachment_names)
+            lines.extend(f"- {attachment_name}" for attachment_name in attachment_names)
 
         comment = (self.comments or "").strip()
         if comment:
@@ -183,6 +183,8 @@ class UserStory(Lead):
         return issue_url
 
     def should_enqueue_github_issue(self, *, created: bool, raw: bool) -> bool:
+        if getattr(self, "_skip_initial_github_enqueue", False):
+            return False
         if raw or not created:
             return False
         if self.rating >= 5:

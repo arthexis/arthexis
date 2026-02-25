@@ -243,7 +243,10 @@ def submit_user_story(request):
         form.instance.user = request.user
 
     if form.is_valid():
+        attachments = form.cleaned_data.get("attachments") or []
         story = form.save(commit=False)
+        if attachments:
+            story._skip_initial_github_enqueue = True
         if anonymous_placeholder and story.name == anonymous_placeholder:
             story.name = ""
         if request.user.is_authenticated:
@@ -263,11 +266,12 @@ def submit_user_story(request):
         if language_code:
             story.language_code = language_code
         story.save()
-        attachments = form.get_cleaned_attachments()
         if attachments:
             UserStoryAttachment.objects.bulk_create(
                 [UserStoryAttachment(user_story=story, file=attachment) for attachment in attachments]
             )
+            story._skip_initial_github_enqueue = False
+            story.enqueue_github_issue_creation()
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)
