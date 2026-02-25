@@ -181,6 +181,34 @@ def test_cleanup_invalid_site_packages_distributions_removes_setuptools_artifact
     assert safe_file.exists() is True
 
 
+def test_cleanup_invalid_site_packages_distributions_skips_unreadable_path() -> None:
+    """Cleanup should be best-effort when a site-packages path cannot be read."""
+
+    with mock.patch.object(migration_server, "_site_packages_paths") as mocked_paths:
+        unreadable = mock.Mock()
+        unreadable.exists.return_value = True
+        unreadable.is_dir.return_value = True
+        unreadable.iterdir.side_effect = PermissionError("blocked")
+        mocked_paths.return_value = [unreadable]
+
+        assert migration_server._cleanup_invalid_site_packages_distributions() == []
+
+
+def test_cleanup_invalid_site_packages_distributions_ignores_backup_like_metadata(tmp_path: Path) -> None:
+    """Only true metadata suffixes should be removed, not backup-like names."""
+
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir(parents=True)
+    backup = site_packages / "~something.dist-info.bak"
+    backup.write_text("keep", encoding="utf-8")
+
+    with mock.patch.object(migration_server, "_site_packages_paths", return_value=[site_packages]):
+        cleaned = migration_server._cleanup_invalid_site_packages_distributions()
+
+    assert backup not in cleaned
+    assert backup.exists() is True
+
+
 def test_update_requirements_cleans_invalid_site_packages_before_install(tmp_path: Path) -> None:
     """Ensure requirements installation performs stale metadata cleanup first."""
 
