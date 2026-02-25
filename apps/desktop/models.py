@@ -66,13 +66,19 @@ class RegisteredExtension(Entity):
         if not self.extension.startswith("."):
             raise ValidationError({"extension": "Extension must start with a dot."})
 
-        if " " in self.extension:
-            raise ValidationError({"extension": "Extension cannot include spaces."})
+        if any(char in self.extension for char in (" ", "/", "\\")):
+            raise ValidationError(
+                {
+                    "extension": (
+                        "Extension cannot include spaces or path separators."
+                    )
+                }
+            )
 
         if not self.django_command.strip():
             raise ValidationError({"django_command": "Command name is required."})
 
-        if self.filename_as_input and not self.filename_sigil.strip():
+        if not self.filename_as_input and not self.filename_sigil.strip():
             raise ValidationError(
                 {"filename_sigil": "Filename sigil cannot be empty."}
             )
