@@ -9,7 +9,7 @@ from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, Http4
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .models import QRRedirect, QRRedirectLead, ShortURL
+from .models import ExperienceReference, QRRedirect, QRRedirectLead, ShortURL
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,23 @@ def qr_redirect_public_view(request: HttpRequest, slug: str) -> HttpResponse:
         "page_title": qr_entry.title or qr_entry.slug,
     }
     return render(request, "links/qr_redirect_public.html", context)
+
+
+def reference_public_frame_view(request: HttpRequest, reference_id: int) -> HttpResponse:
+    """Render a public iframe viewer for an ExperienceReference target URL."""
+
+    reference = get_object_or_404(ExperienceReference, pk=reference_id)
+    try:
+        iframe_url = _resolve_target_url(request, reference.value)
+    except ValueError:
+        return HttpResponseBadRequest("Invalid redirect target.")
+
+    context = {
+        "reference": reference,
+        "iframe_url": iframe_url,
+        "page_title": reference.alt_text or str(reference),
+    }
+    return render(request, "links/reference_public_frame.html", context)
 
 
 def short_url_redirect(request: HttpRequest, slug: str) -> HttpResponse:
