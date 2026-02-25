@@ -29,9 +29,11 @@ def _format_timestamp(dt: datetime | None) -> str:
 def _format_datetime(dt: datetime | None) -> str:
     """Return ``dt`` formatted as ``YYYY-mm-dd HH:MM`` for concise UI labels."""
 
-    if not dt:
+    if dt is None:
         return ""
-    return date_format(timezone.localtime(dt), "Y-m-d H:i")
+    if timezone.is_aware(dt):
+        dt = timezone.localtime(dt)
+    return date_format(dt, "Y-m-d H:i")
 
 
 def format_datetime(dt: datetime | None) -> str:

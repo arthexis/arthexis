@@ -246,9 +246,13 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=1.5,
             )
             service_status = result.stdout.strip()
             running = service_status == "active"
+        except subprocess.TimeoutExpired:
+            service_status = ""
+            running = False
         except Exception:
             pass
     else:
@@ -290,7 +294,7 @@ def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
     if not text:
         return None
 
-    parts = text.split("\t")
+    parts = text.split("\t", 3)
     timestamp_raw = parts[0] if parts else ""
     script = parts[1] if len(parts) > 1 else ""
     event = parts[2] if len(parts) > 2 else ""

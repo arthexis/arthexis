@@ -175,10 +175,16 @@ def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], st
 
     try:
         result = subprocess.run(
-            ["last", "-x", "-F"], capture_output=True, check=False, text=True
+            ["last", "-x", "-F"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
         )
     except FileNotFoundError:
         return [], _("The `last` command is not available on this node.")
+    except subprocess.TimeoutExpired:
+        return [], _("Timed out while reading uptime history from the system log.")
 
     if result.returncode not in (0, 1):
         return [], _("Unable to read uptime history from the system log.")

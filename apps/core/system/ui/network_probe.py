@@ -41,9 +41,11 @@ def _parse_runserver_port(command_line: str) -> int | None:
         match = pattern.search(command_line)
         if match:
             try:
-                return int(match.group(1))
+                port = int(match.group(1))
             except ValueError:
                 continue
+            if 1 <= port <= 65535:
+                return port
     return None
 
 
@@ -132,8 +134,11 @@ def _detect_runserver_process() -> tuple[bool, int | None]:
             capture_output=True,
             text=True,
             check=False,
+            timeout=1.0,
         )
     except FileNotFoundError:
+        return False, None
+    except subprocess.TimeoutExpired:
         return False, None
     except Exception:
         return False, None
@@ -164,7 +169,7 @@ def _probe_ports(candidates: list[int]) -> tuple[bool, int | None]:
         try:
             with closing(socket.create_connection(("localhost", port), timeout=0.25)):
                 return True, port
-        except OSError:
+        except (OSError, OverflowError, ValueError):
             continue
     return False, None
 
@@ -172,7 +177,7 @@ def _probe_ports(candidates: list[int]) -> tuple[bool, int | None]:
 def _port_candidates(default_port: int) -> list[int]:
     """Return a prioritized list of ports to probe for the HTTP service."""
 
-    candidates = [default_port]
+    candidates = [default_port] if 1 <= default_port <= 65535 else []
     for port in (8000, 8888):
         if port not in candidates:
             candidates.append(port)
