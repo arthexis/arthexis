@@ -31,6 +31,7 @@ from apps.core.admindocs import (
     OrderedModelIndexView,
 )
 from apps.sites import views as pages_views
+from apps.pyxel import admin_views as pyxel_admin_views
 
 # Ensure admin registrations (e.g., OCPP chargers) are loaded before URL
 # resolution to avoid missing admin views such as /admin/ocpp/charger/.
@@ -125,6 +126,11 @@ urlpatterns = [
         "admin/model-graph/<str:app_label>/",
         admin.site.admin_view(pages_views.admin_model_graph),
         name="admin-model-graph",
+    ),
+    path(
+        "admin/pyxel/live-stats/",
+        admin.site.admin_view(pyxel_admin_views.open_live_stats_view),
+        name="admin-pyxel-live-stats",
     ),
     path("version/", core_views.version_info, name="version-info"),
     path(
