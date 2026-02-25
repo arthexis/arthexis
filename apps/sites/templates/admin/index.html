@@ -76,4 +76,33 @@
 
 {% block extrahead %}
   {{ block.super }}
+  <script>
+    (function () {
+      const dashboardStoragePrefix = "admin-dashboard-hidden-apps";
+      const storageUserKey = "{{ request.user.pk|default:'anon'|escapejs }}";
+      window.__adminDashboardUserKey = storageUserKey;
+      const storageKey = `${dashboardStoragePrefix}:${window.location.origin}:${storageUserKey}`;
+      const hiddenApps = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+
+      if (!Array.isArray(hiddenApps) || hiddenApps.length === 0) {
+        return;
+      }
+
+      const sanitizedLabels = hiddenApps
+        .filter((label) => typeof label === "string" && label.length)
+        .map((label) => label.replace(/[^a-zA-Z0-9_-]/g, ""));
+
+      if (!sanitizedLabels.length) {
+        return;
+      }
+
+      const styleTag = document.createElement("style");
+      styleTag.id = "dashboard-app-visibility-bootstrap";
+      styleTag.textContent = sanitizedLabels
+        .map((label) => `#content-main .module[data-app-label=\"${label}\"]{display:none;}`)
+        .join("\n");
+      document.head.appendChild(styleTag);
+    })();
+  </script>
+  <script src="{% static 'sites/js/admin_dashboard_visibility.js' %}" defer></script>
 {% endblock %}
