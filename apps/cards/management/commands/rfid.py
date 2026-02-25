@@ -30,10 +30,11 @@ class Command(BaseCommand):
 
     help = "RFID command group. Use `rfid <check|watch|service|doctor|import|export>`."
     DEFAULT_SCAN_TIMEOUT = max(30.0, rfid_service.DEFAULT_SCAN_TIMEOUT)
+    DEFAULT_ACTION = "status"
 
     def add_arguments(self, parser):
         """Register subcommands and their arguments."""
-        subparsers = parser.add_subparsers(dest="action", required=True)
+        subparsers = parser.add_subparsers(dest="action", required=False)
 
         check_parser = subparsers.add_parser("check", help="Validate RFID tags by UID, label, or scan.")
         self._add_check_arguments(check_parser)
@@ -55,11 +56,37 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """Dispatch to the selected RFID action."""
-        action = options["action"]
+        action = options.get("action") or self.DEFAULT_ACTION
         handler = getattr(self, f"_handle_{action}", None)
         if handler is None:
             raise CommandError(f"Unsupported RFID action: {action}")
         handler(options)
+
+    def _handle_status(self, options):
+        """Show RFID service runtime state and scanner configuration summary."""
+        del options
+        endpoint = service_endpoint()
+        lock_path = rfid_service.rfid_service_lock_path()
+        scanner_lock = lock_file_path()
+        configured = is_configured()
+        ping = rfid_service.request_service("ping", timeout=0.5)
+
+        self.stdout.write(self.style.MIGRATE_HEADING("RFID Status"))
+        self.stdout.write(f"Service endpoint: {endpoint.host}:{endpoint.port}")
+        self.stdout.write(
+            f"Service lock: {lock_path} ({'present' if lock_path.exists() else 'missing'})"
+        )
+        self.stdout.write(
+            f"Scanner lock: {scanner_lock} ({'present' if scanner_lock.exists() else 'missing'})"
+        )
+        self.stdout.write(
+            "RFID reader configuration: "
+            f"{'configured' if configured else 'not configured'}"
+        )
+        if ping:
+            self.stdout.write(self.style.SUCCESS("RFID service state: reachable"))
+            return
+        self.stdout.write(self.style.WARNING("RFID service state: unreachable"))
 
     def _add_check_arguments(self, parser):
         target = parser.add_mutually_exclusive_group(required=True)
