@@ -179,6 +179,33 @@ def test_search_orders_view_accepts_post_selected_action(admin_client, admin_use
 
 @pytest.mark.regression
 @pytest.mark.django_db
+def test_load_employees_changelist_action_posts_to_import_endpoint(admin_client, admin_user):
+    """The changelist action wiring submits load_employees and redirects to the import view."""
+
+    employee = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odooemployee_changelist"),
+        {
+            "action": "load_employees",
+            "_selected_action": [str(employee.pk)],
+            "index": "0",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("admin:odoo_odooemployee_load_employees")
+
+@pytest.mark.regression
+@pytest.mark.django_db
 def test_load_employees_action_creates_missing_odoo_profiles(admin_client, admin_user, monkeypatch):
     """The Odoo employee tool action creates missing local users and profiles."""
 

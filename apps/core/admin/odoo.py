@@ -120,6 +120,8 @@ class OdooEmployeeAdmin(
     load_employees.label = _("Load Employees")
     load_employees.short_description = _("Load Employees")
     load_employees.requires_queryset = False
+    load_employees.methods = ("POST",)
+    load_employees.button_type = "form"
 
     def _resolve_unique_username(self, base_username: str, odoo_uid: int) -> str:
         """Return a username that does not collide with existing local users."""
@@ -223,7 +225,12 @@ class OdooEmployeeAdmin(
             try:
                 was_created = self._create_odoo_employee_profile(profile, remote_user)
             except IntegrityError:
-                logger.exception("Could not create Odoo employee for payload=%s", remote_user)
+                logger.exception(
+                    "Could not create Odoo employee during sync (odoo_uid=%s, host=%s, database=%s)",
+                    remote_user.get("id"),
+                    profile.host,
+                    profile.database,
+                )
                 skipped += 1
                 continue
             if was_created:
@@ -264,7 +271,12 @@ class OdooEmployeeAdmin(
 
         try:
             created, skipped = self._load_missing_employees(profile)
-        except (Fault, ProtocolError, ValueError) as exc:
+        except (Fault, ProtocolError, OSError, ValueError) as exc:
+            logger.exception(
+                "Unable to load employees from Odoo (user_id=%s, profile_id=%s)",
+                getattr(request.user, "pk", None),
+                getattr(profile, "pk", None),
+            )
             self.message_user(
                 request,
                 _("Unable to load employees from Odoo: %(error)s") % {"error": exc},
