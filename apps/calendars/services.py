@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 import requests
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -40,7 +40,7 @@ class GoogleCalendarGateway:
 
     def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         if not self.account:
-            raise ValidationError("Tracked calendar has no Google account configured.")
+            raise GoogleCalendarError("Tracked calendar has no Google account configured.")
         token = self.account.get_access_token()
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
@@ -57,7 +57,8 @@ class GoogleCalendarGateway:
 
     def fetch_calendar_metadata(self) -> dict[str, Any]:
         """Fetch and persist metadata for the tracked calendar."""
-        payload = self._request("GET", f"{self.base_url}/{self.calendar.calendar_id}")
+        calendar_id = quote(self.calendar.calendar_id, safe="")
+        payload = self._request("GET", f"{self.base_url}/{calendar_id}")
         self.calendar.name = payload.get("summary") or self.calendar.name
         self.calendar.timezone = payload.get("timeZone") or self.calendar.timezone
         self.calendar.metadata = payload
@@ -66,9 +67,10 @@ class GoogleCalendarGateway:
 
     def list_events(self, window: CalendarEventWindow) -> list[dict[str, Any]]:
         """List events between ``time_min`` and ``time_max`` ordered by start time."""
+        calendar_id = quote(self.calendar.calendar_id, safe="")
         payload = self._request(
             "GET",
-            f"{self.base_url}/{self.calendar.calendar_id}/events",
+            f"{self.base_url}/{calendar_id}/events",
             params={
                 "singleEvents": "true",
                 "orderBy": "startTime",

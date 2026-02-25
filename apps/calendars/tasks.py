@@ -4,11 +4,17 @@ from datetime import timedelta
 
 from celery import current_app, shared_task
 from celery.exceptions import NotRegistered
-from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .models import CalendarEventDispatch, CalendarEventTrigger, GoogleCalendar
-from .services import CalendarEventWindow, GoogleCalendarGateway, _extract_event_datetime
+from .services import (
+    CalendarEventWindow,
+    GoogleCalendarError,
+    GoogleCalendarGateway,
+    _extract_event_datetime,
+)
 
 
 @shared_task(name="apps.calendars.tasks.sync_google_calendars")
@@ -21,7 +27,7 @@ def sync_google_calendars(horizon_minutes: int = 1440) -> int:
         try:
             gateway.fetch_calendar_metadata()
             synced += gateway.sync_event_snapshots(horizon_minutes=horizon_minutes)
-        except (ValidationError, RuntimeError):
+        except GoogleCalendarError:
             continue
     return synced
 
@@ -41,7 +47,7 @@ def run_calendar_event_triggers() -> int:
         gateway = GoogleCalendarGateway(trigger.calendar)
         try:
             events = gateway.list_events(window)
-        except (ValidationError, RuntimeError):
+        except GoogleCalendarError:
             continue
 
         for event in events:
@@ -53,41 +59,45 @@ def run_calendar_event_triggers() -> int:
             start_at = _extract_event_datetime(event.get("start") or {})
             if start_at is None:
                 continue
+            if timezone.is_naive(start_at):
+                start_at = timezone.make_aware(start_at, timezone=timezone.utc)
             execute_at = start_at - timedelta(minutes=trigger.lead_time_minutes)
             if execute_at > now:
                 continue
 
             event_updated = _extract_event_updated(event, default=now)
-            if CalendarEventDispatch.objects.filter(
-                trigger=trigger,
-                event_id=event_id,
-                event_updated=event_updated,
-            ).exists():
+            try:
+                CalendarEventDispatch.objects.create(
+                    trigger=trigger,
+                    event_id=event_id,
+                    event_updated=event_updated,
+                )
+            except IntegrityError:
                 continue
 
             kwargs = {
                 "calendar_event": event,
-                "calendar_id": trigger.calendar_id,
+                "calendar_id": trigger.calendar.calendar_id,
                 "trigger_id": trigger.pk,
             }
             try:
                 current_app.send_task(trigger.task_name, kwargs=kwargs)
             except NotRegistered:
+                CalendarEventDispatch.objects.filter(
+                    trigger=trigger,
+                    event_id=event_id,
+                    event_updated=event_updated,
+                ).delete()
                 continue
-            CalendarEventDispatch.objects.create(
-                trigger=trigger,
-                event_id=event_id,
-                event_updated=event_updated,
-            )
             dispatched += 1
     return dispatched
 
 
 def _extract_event_updated(event: dict, default):
     """Extract event update timestamp with fallback to ``default``."""
-    from django.utils.dateparse import parse_datetime
-
     updated = parse_datetime(str(event.get("updated") or ""))
+    if updated is not None and timezone.is_naive(updated):
+        updated = timezone.make_aware(updated, timezone=timezone.utc)
     return updated or default
 
 

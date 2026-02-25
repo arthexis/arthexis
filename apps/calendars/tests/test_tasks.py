@@ -67,6 +67,7 @@ def test_run_calendar_event_triggers_dispatches_once(monkeypatch):
     assert len(calls) == 1
     assert calls[0][0] == trigger.task_name
     assert calls[0][1]["trigger_id"] == trigger.pk
+    assert calls[0][1]["calendar_id"] == calendar.calendar_id
     assert CalendarEventDispatch.objects.count() == 1
 
 
@@ -114,3 +115,54 @@ def test_run_calendar_event_triggers_skips_unregistered_task(monkeypatch):
 
     assert count == 0
     assert CalendarEventDispatch.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_run_calendar_event_triggers_handles_naive_datetime(monkeypatch):
+    """Naive event datetimes should be normalized before due-time comparison."""
+    user = get_user_model().objects.create_user(username="cal-user-3", password="x")
+    account = GoogleAccount.objects.create(
+        user=user,
+        email="cal3@example.com",
+        client_id="client",
+        client_secret="secret",
+        refresh_token="refresh",
+    )
+    calendar = GoogleCalendar.objects.create(
+        name="Ops3",
+        calendar_id="ops3@example.com",
+        account=account,
+    )
+    trigger = CalendarEventTrigger.objects.create(
+        calendar=calendar,
+        name="Run naive",
+        task_name="apps.content.tasks.run_scheduled_web_samplers",
+        lead_time_minutes=0,
+    )
+
+    now = timezone.now()
+    event = {
+        "id": "evt-3",
+        "summary": "Anything",
+        "updated": now.replace(tzinfo=None).isoformat(),
+        "start": {"dateTime": (now - timedelta(minutes=1)).replace(tzinfo=None).isoformat()},
+    }
+
+    from apps.calendars import tasks as calendar_tasks
+    from apps.calendars.services import GoogleCalendarGateway
+
+    monkeypatch.setattr(GoogleCalendarGateway, "list_events", lambda self, window: [event])
+
+    calls = []
+
+    def fake_send_task(name, kwargs=None, **extra):
+        calls.append((name, kwargs))
+
+    monkeypatch.setattr(calendar_tasks.current_app, "send_task", fake_send_task)
+
+    count = run_calendar_event_triggers()
+
+    assert count == 1
+    assert len(calls) == 1
+    dispatch = CalendarEventDispatch.objects.get(trigger=trigger, event_id="evt-3")
+    assert timezone.is_aware(dispatch.event_updated)
