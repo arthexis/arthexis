@@ -93,3 +93,24 @@ def test_rfid_without_action_shows_status(tmp_path, capsys, monkeypatch):
     assert "Service endpoint:" in output
     assert "RFID reader configuration:" in output
     assert "RFID service state: reachable" in output
+
+
+@pytest.mark.django_db
+def test_rfid_status_does_not_delete_scanner_lock(tmp_path, capsys, monkeypatch):
+    """Status checks must not mutate scanner lock state."""
+    monkeypatch.setattr(settings, "BASE_DIR", tmp_path, raising=False)
+    _write_lock(tmp_path / ".locks" / "rfid-service.lck")
+    scanner_lock = tmp_path / ".locks" / "rfid.lck"
+    _write_lock(scanner_lock, "stale-marker")
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+
+    with patch.object(
+        rfid_command.rfid_service,
+        "request_service",
+        return_value={"ok": True},
+    ):
+        call_command("rfid")
+
+    output = capsys.readouterr().out
+    assert "RFID reader configuration: configured" in output
+    assert scanner_lock.exists()

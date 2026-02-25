@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from apps.cards import rfid_service
-from apps.cards.background_reader import is_configured, lock_file_path
+from apps.cards.background_reader import lock_file_path
 from apps.cards.detect import detect_scanner
 from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
@@ -68,7 +68,7 @@ class Command(BaseCommand):
         endpoint = service_endpoint()
         lock_path = rfid_service.rfid_service_lock_path()
         scanner_lock = lock_file_path()
-        configured = is_configured()
+        configured = scanner_lock.exists()
         ping = rfid_service.request_service("ping", timeout=0.5)
 
         self.stdout.write(self.style.MIGRATE_HEADING("RFID Status"))
