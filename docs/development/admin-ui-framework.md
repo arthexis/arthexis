@@ -44,10 +44,11 @@ When creating or updating admin templates:
 
 ## Prototype application
 
-The framework has been prototyped in the `nmcli` app custom admin pages:
+The framework has been prototyped in custom admin pages across `nmcli` and a more complex `ocpp` change list:
 
 - `apps/nmcli/templates/admin/nmcli/networkconnection/run_scan.html`
 - `apps/nmcli/templates/admin/nmcli/apclient/run_scan.html`
+- `apps/ocpp/templates/admin/ocpp/simulator/change_list.html`
 
 These pages now use common panel, stack, action row, and button primitives to eliminate mismatched action control sizing.
 
