@@ -2,29 +2,17 @@
 
 from __future__ import annotations
 
+import importlib.resources
 import subprocess
 import sys
-from pathlib import Path
-
-
-def _repo_root() -> Path:
-    """Return the repository root directory for this package checkout."""
-    return Path(__file__).resolve().parents[1]
-
-
-def _resolve_cli_path() -> Path:
-    """Return the shell implementation path for the resolve subcommand."""
-    return _repo_root() / "scripts" / "resolve_cli.sh"
 
 
 def _run_resolve_subcommand(args: list[str]) -> int:
     """Execute the resolve shell entrypoint with passthrough arguments."""
-    resolve_script = _resolve_cli_path()
-    if not resolve_script.exists():
-        raise FileNotFoundError(f"Resolve CLI helper not found: {resolve_script}")
-
-    completed = subprocess.run([str(resolve_script), *args], check=False)
-    return completed.returncode
+    script_resource = importlib.resources.files("arthexis.scripts").joinpath("resolve_cli.sh")
+    with importlib.resources.as_file(script_resource) as resolve_script_path:
+        completed = subprocess.run(["bash", str(resolve_script_path), *args], check=False)
+        return completed.returncode
 
 
 def _print_usage() -> None:

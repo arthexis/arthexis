@@ -40,23 +40,29 @@ def _run_command(
     fake_python: Path,
     tmp_path: Path,
     stdin_text: str = "",
+    *,
+    cwd: Path = REPO_ROOT,
+    include_fake_arthexis: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a resolve entrypoint with a deterministic fake Python interpreter."""
-    fake_arthexis = tmp_path / "arthexis"
-    fake_arthexis.write_text(
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        f"exec {sys.executable} -m arthexis \"$@\"\n",
-        encoding="utf-8",
-    )
-    fake_arthexis.chmod(fake_arthexis.stat().st_mode | stat.S_IEXEC)
-
     env = dict(os.environ)
     env["PYTHON"] = str(fake_python)
-    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+
+    path_prefix = str(tmp_path)
+    if include_fake_arthexis:
+        fake_arthexis = tmp_path / "arthexis"
+        fake_arthexis.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            f"exec {sys.executable} -m arthexis \"$@\"\n",
+            encoding="utf-8",
+        )
+        fake_arthexis.chmod(fake_arthexis.stat().st_mode | stat.S_IEXEC)
+
+    env["PATH"] = f"{path_prefix}:{env['PATH']}"
     return subprocess.run(
         command,
-        cwd=REPO_ROOT,
+        cwd=cwd,
         env=env,
         input=stdin_text,
         text=True,
@@ -120,3 +126,20 @@ def test_resolve_help_text_is_equivalent(fake_python: Path, tmp_path: Path) -> N
     assert new_result.returncode == 0
     assert legacy_result.stdout == new_result.stdout
     assert legacy_result.stderr == new_result.stderr
+
+
+def test_resolve_shim_works_from_any_working_directory(fake_python: Path, tmp_path: Path) -> None:
+    """The compatibility shim should work via absolute path outside the repo cwd."""
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir()
+
+    result = _run_command(
+        [str(LEGACY_ENTRYPOINT), "--text", "hello"],
+        fake_python,
+        tmp_path,
+        cwd=outside_cwd,
+        include_fake_arthexis=False,
+    )
+
+    assert result.returncode == 0
+    assert "ARGV:-m arthexis resolve --text hello" in result.stdout
