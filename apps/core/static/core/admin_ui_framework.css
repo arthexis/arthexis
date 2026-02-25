@@ -1,0 +1,94 @@
+:root {
+    --admin-ui-radius-sm: 0.375rem;
+    --admin-ui-radius-md: 0.5rem;
+    --admin-ui-space-1: 0.25rem;
+    --admin-ui-space-2: 0.5rem;
+    --admin-ui-space-3: 0.75rem;
+    --admin-ui-space-4: 1rem;
+    --admin-ui-space-6: 1.5rem;
+    --admin-ui-control-height: 2.5rem;
+    --admin-ui-control-height-sm: 2.125rem;
+    --admin-ui-control-padding-x: 0.875rem;
+    --admin-ui-border-color: color-mix(in srgb, var(--hairline-color, #d4d9e2) 78%, #000 22%);
+    --admin-ui-muted-bg: color-mix(in srgb, var(--body-bg, #fff) 94%, var(--body-fg, #0f172a) 6%);
+    --admin-ui-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.admin-ui-panel {
+    border: 1px solid var(--admin-ui-border-color);
+    border-radius: var(--admin-ui-radius-md);
+    background: var(--body-bg, #fff);
+    padding: var(--admin-ui-space-4);
+    box-shadow: var(--admin-ui-shadow-sm);
+}
+
+.admin-ui-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--admin-ui-space-4);
+}
+
+.admin-ui-muted {
+    color: var(--body-quiet-color, #6b7280);
+}
+
+.admin-ui-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--admin-ui-space-2);
+    margin-top: var(--admin-ui-space-2);
+}
+
+.admin-ui-button,
+.admin-ui-button:link,
+.admin-ui-button:visited,
+button.admin-ui-button,
+input[type="submit"].admin-ui-button {
+    min-height: var(--admin-ui-control-height);
+    padding: 0 var(--admin-ui-control-padding-x);
+    border-radius: var(--admin-ui-radius-sm);
+    border: 1px solid var(--admin-ui-border-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.admin-ui-button--primary,
+button.admin-ui-button--primary,
+input[type="submit"].admin-ui-button--primary {
+    border-color: var(--button-bg, #2563eb);
+    background: var(--button-bg, #2563eb);
+    color: var(--button-fg, #fff);
+}
+
+.admin-ui-button--secondary,
+button.admin-ui-button--secondary,
+input[type="submit"].admin-ui-button--secondary {
+    border-color: var(--admin-ui-border-color);
+    background: var(--admin-ui-muted-bg);
+    color: var(--body-fg, #111827);
+}
+
+.admin-ui-button:hover,
+.admin-ui-button:focus-visible {
+    filter: brightness(0.97);
+}
+
+.admin-ui-results {
+    margin: 0;
+    padding-left: var(--admin-ui-space-6);
+}
+
+.admin-ui-results > li {
+    margin-bottom: var(--admin-ui-space-1);
+}
+
+.admin-ui-results ul {
+    margin-top: var(--admin-ui-space-2);
+}
