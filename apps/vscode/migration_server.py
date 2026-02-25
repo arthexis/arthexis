@@ -654,7 +654,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    update_requirements(BASE_DIR)
+    try:
+        update_requirements(BASE_DIR)
+    except KeyboardInterrupt:
+        print(
+            "[Migration Server] Stopped after receiving an interrupt signal. "
+            "If you did not press Ctrl+C, this likely came from your IDE/debugger "
+            "stopping or restarting the session."
+        )
+        return 0
+
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")

@@ -1,0 +1,1 @@
+"""Desktop assistant integration app."""

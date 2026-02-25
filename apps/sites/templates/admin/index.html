@@ -37,6 +37,8 @@
     <a class="button" href="{% url 'admin:config' %}">{% translate 'Django Config' %}</a>
     <a class="button" href="{% url 'admin:sigil_builder' %}">{% translate 'Sigil Builder' %}</a>
     <a class="button" href="{% url 'admin:log_viewer' %}">{% translate 'Log Viewer' %}</a>
+    {% url 'admin:actions_remoteaction_my_openapi_spec' as actions_spec_url %}
+    {% if actions_spec_url %}<a class="button" href="{{ actions_spec_url }}">{% translate 'My Actions Spec' %}</a>{% endif %}
   </div>
 </div>
 {% endblock %}
