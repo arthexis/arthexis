@@ -271,7 +271,8 @@ def submit_user_story(request):
                 [UserStoryAttachment(user_story=story, file=attachment) for attachment in attachments]
             )
             story._skip_initial_github_enqueue = False
-            story.enqueue_github_issue_creation()
+            if story.should_enqueue_github_issue(created=True, raw=False):
+                story.enqueue_github_issue_creation()
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)

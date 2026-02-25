@@ -125,6 +125,39 @@ def test_staff_feedback_allows_unlimited_attachments(client, settings):
 
 
 @pytest.mark.django_db
+def test_rating_five_feedback_with_attachments_does_not_enqueue_github_issue(client, settings, monkeypatch):
+    """Regression: attachment flow should not enqueue GitHub issue creation for 5-star feedback."""
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+    user = get_user_model().objects.create_user(
+        username="feedback-five", email="feedback-five@example.com", password="secret"
+    )
+    client.force_login(user)
+
+    enqueue_calls: list[int] = []
+
+    def _capture_enqueue(self):
+        enqueue_calls.append(self.pk)
+
+    monkeypatch.setattr(UserStory, "enqueue_github_issue_creation", _capture_enqueue)
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={
+            "rating": 5,
+            "comments": "Great!",
+            "attachments": [
+                SimpleUploadedFile("ok.txt", b"data", content_type="text/plain")
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert enqueue_calls == []
+
+
+@pytest.mark.django_db
 def test_authenticated_feedback_rejects_disallowed_attachment_extension(client, settings):
     """Regression: authenticated users cannot upload executable or HTML-style attachments."""
 
