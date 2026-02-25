@@ -213,14 +213,16 @@ def _extract_document_blurb(path: Path, *, max_length: int = 220) -> str:
 
     candidates: list[str] = []
     in_front_matter = False
+    seen_non_blank = False
     for line in raw_text.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
         if stripped == "---":
-            if in_front_matter or not candidates:
+            if in_front_matter or not seen_non_blank:
                 in_front_matter = not in_front_matter
                 continue
+        seen_non_blank = True
         if in_front_matter:
             continue
         if stripped.startswith("#"):
