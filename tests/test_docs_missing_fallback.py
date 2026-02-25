@@ -118,7 +118,26 @@ def test_extract_document_blurb_does_not_treat_rule_after_heading_as_front_matte
 
     blurb = views._extract_document_blurb(doc)
 
-    assert blurb == "--- Real content here ---"
+    assert blurb == "Real content here"
+
+
+
+
+def test_collect_document_library_skips_items_when_reverse_fails(tmp_path: Path, monkeypatch):
+    """Unresolvable routes should not break library generation or caching."""
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "guide.md").write_text("Guide summary line.", encoding="utf-8")
+
+    def fake_reverse(_route, args):
+        raise views.NoReverseMatch("boom")
+
+    monkeypatch.setattr(views, "reverse", fake_reverse)
+
+    sections = views._collect_document_library(tmp_path)
+
+    assert sections == [{"title": "Documentation", "items": []}]
 
 
 def test_extract_document_blurb_truncates_at_word_boundary(tmp_path: Path):
