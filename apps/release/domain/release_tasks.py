@@ -147,6 +147,21 @@ def _maybe_create_maintenance_branch(
 
 
 
+def _stage_migration_baselines(*, base_dir: Path | None = None) -> None:
+    """Stage migration files updated by baseline automation."""
+
+    base_dir = base_dir or Path.cwd()
+    migration_dirs = [
+        base_dir / "apps" / app_label / "migrations"
+        for app_label in MIGRATION_BASELINE_APPS
+    ]
+    existing_dirs = [path for path in migration_dirs if path.exists()]
+    if not existing_dirs:
+        return
+
+    _run(["git", "add", "-A", *map(str, existing_dirs)], cwd=base_dir)
+
+
 def run_migration_baseline_window(*, base_dir: Path | None = None) -> None:
     """Run the release-train migration baseline helper with policy defaults."""
 
@@ -218,6 +233,7 @@ def prepare_release(version: str, *, base_dir: Path | None = None) -> None:
     version_file.write_text(f"{version}\n")
 
     run_migration_baseline_window(base_dir=base_dir)
+    _stage_migration_baselines(base_dir=base_dir)
     capture_migration_state(version, base_dir=base_dir)
 
     release_dir = base_dir / "releases" / version
