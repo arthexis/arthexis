@@ -20,10 +20,10 @@ threads/comments and resolve threads that are now outdated by your new changes.
 
 ## Permissions
 - If repository/user permissions allow thread resolution, perform it directly.
-- If permissions or tooling are missing, report exactly what blocked automatic
-  resolution and which threads remain open.
+- If permissions or tooling are missing, report exactly what blocked resolution
+  and which threads remain open.
 
 ## Safety
-- Never auto-resolve broad design discussions unless the conversation explicitly
+- Never resolve broad design discussions unless the conversation explicitly
   indicates closure.
 - Never resolve threads that request external validation you did not perform.
