@@ -6,6 +6,7 @@ import ipaddress
 import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -85,7 +86,12 @@ def is_local_request(request) -> bool:
 
 
 def launch_live_stats_subprocess() -> subprocess.Popen:
-    """Start the detached management command that opens the live-stats Pyxel window."""
+    """Start the detached management command that opens the live-stats Pyxel window.
+
+    The process is expected to keep running while the Pyxel viewport is open. If it
+    exits immediately, we treat that as a launch failure and surface the captured
+    stderr output to the admin user.
+    """
 
     command = [
         sys.executable,
@@ -93,13 +99,28 @@ def launch_live_stats_subprocess() -> subprocess.Popen:
         "live_stats_viewport",
     ]
     try:
-        return subprocess.Popen(
+        process = subprocess.Popen(
             command,
             cwd=str(settings.BASE_DIR),
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
             start_new_session=True,
         )
+        startup_deadline = time.monotonic() + 1.0
+        while time.monotonic() < startup_deadline:
+            if process.poll() is not None:
+                _, stderr_output = process.communicate()
+                error_detail = (stderr_output or "").strip()
+                if error_detail:
+                    raise PyxelLiveStatsLaunchError(
+                        f"Unable to launch Pyxel live stats window: {error_detail}"
+                    )
+                raise PyxelLiveStatsLaunchError(
+                    "Unable to launch Pyxel live stats window: process exited immediately"
+                )
+            time.sleep(0.05)
+        return process
     except OSError as exc:
         raise PyxelLiveStatsLaunchError("Unable to launch Pyxel live stats window") from exc
 
