@@ -139,6 +139,20 @@ def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches(
     mocked_killpg.assert_not_called()
     mocked_kill.assert_called_once_with(9876, migration_server.signal.SIGTERM)
 
+
+
+def test_should_watch_file_supports_posix_style_relative_path() -> None:
+    """Regression: watcher filtering should accept string-based relative paths."""
+
+    assert migration_server._should_watch_file("apps/vscode/test_server.py") is True
+    assert migration_server._should_watch_file("apps/vscode/README.md") is False
+
+
+def test_should_watch_file_handles_windows_style_relative_path() -> None:
+    """Regression: watcher filtering should handle Windows-style separators."""
+
+    assert migration_server._should_watch_file(r"apps\vscode\migration_server.py") is True
+
 def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     """Ensure migration-server refresh forces SQLite fallback for responsiveness."""
 

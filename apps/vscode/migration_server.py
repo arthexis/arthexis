@@ -186,12 +186,19 @@ def _should_skip_dir(parts: Iterable[str]) -> bool:
     return False
 
 
-def _should_watch_file(relative_path: Path) -> bool:
-    """Return ``True`` when *relative_path* represents a watched file."""
+def _should_watch_file(relative_path: str) -> bool:
+    """Return ``True`` when *relative_path* represents a watched file.
 
-    if relative_path.name in WATCH_FILENAMES:
+    ``pathlib.Path.name`` can block on some Python 3.13 Windows debug sessions
+    when the path object was composed from mixed-style separators. Using plain
+    string parsing keeps change detection responsive and platform agnostic.
+    """
+
+    file_name = os.path.basename(relative_path)
+    if file_name in WATCH_FILENAMES:
         return True
-    return relative_path.suffix.lower() in WATCH_EXTENSIONS
+    _root, suffix = os.path.splitext(file_name)
+    return suffix.lower() in WATCH_EXTENSIONS
 
 
 def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
@@ -205,12 +212,12 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
             continue
         dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_root.parts, d))]
         for name in files:
-            rel_path = rel_root / name
+            rel_path = (rel_root / name).as_posix()
             if not _should_watch_file(rel_path):
                 continue
             full_path = Path(root, name)
             try:
-                snapshot[rel_path.as_posix()] = full_path.stat().st_mtime_ns
+                snapshot[rel_path] = full_path.stat().st_mtime_ns
             except FileNotFoundError:
                 continue
     return snapshot
