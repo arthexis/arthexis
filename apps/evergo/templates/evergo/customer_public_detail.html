@@ -163,7 +163,7 @@
         {% if pdf_artifact %}
             <a
                 class="btn"
-                href="{% url 'evergo:customer-artifact-download' customer.pk pdf_artifact.pk %}"
+                href="{% url 'evergo:customer-artifact-download' customer.pk pdf_artifact.pk %}?sig={{ artifact_download_signature|urlencode }}"
             >Download PDF</a>
         {% endif %}
     </main>

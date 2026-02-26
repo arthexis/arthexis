@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.public_links import build_artifact_signature, build_customer_signature
 
 
 @pytest.mark.django_db
@@ -33,7 +34,7 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
     EvergoArtifact.objects.create(customer=customer, file=image)
     artifact_pdf = EvergoArtifact.objects.create(customer=customer, file=pdf)
 
-    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+    response = client.get(customer.get_absolute_url())
 
     assert response.status_code == 200
     content = response.content.decode()
@@ -48,7 +49,25 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
     assert "Phone Number:" not in content
     assert "Full Address:" not in content
     assert "A4 portrait" in content
-    assert reverse("evergo:customer-artifact-download", args=[customer.pk, artifact_pdf.pk]) in content
+    download_path = reverse("evergo:customer-artifact-download", args=[customer.pk, artifact_pdf.pk])
+    assert f"{download_path}?sig=" in content
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_requires_signature(client):
+    """Security: detail page should reject requests without a valid signature."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-unauth", email="owner-unauth@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-unauth@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="Jane Doe")
+
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db
@@ -67,9 +86,40 @@ def test_customer_artifact_download_rejects_non_pdf(client):
         file=SimpleUploadedFile("photo.jpg", b"img", content_type="image/jpeg"),
     )
 
-    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+    signature = build_artifact_signature(customer.pk, image.pk)
+    response = client.get(
+        reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]),
+        {"sig": signature},
+    )
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_requires_valid_signature(client):
+    """Security: download endpoint should require a valid customer/artifact signature."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-4", email="owner4@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner4@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    pdf = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf"),
+    )
+
+    response_without_sig = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, pdf.pk]))
+    bad_signature = build_customer_signature(customer.pk)
+    response_bad_sig = client.get(
+        reverse("evergo:customer-artifact-download", args=[customer.pk, pdf.pk]),
+        {"sig": bad_signature},
+    )
+
+    assert response_without_sig.status_code == 403
+    assert response_bad_sig.status_code == 403
 
 
 @pytest.mark.django_db

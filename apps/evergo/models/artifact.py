@@ -17,6 +17,7 @@ class EvergoArtifact(models.Model):
         (ARTIFACT_TYPE_IMAGE, "Image"),
         (ARTIFACT_TYPE_PDF, "PDF"),
     )
+    SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
     customer = models.ForeignKey(
         "evergo.EvergoCustomer",
@@ -60,7 +61,7 @@ class EvergoArtifact(models.Model):
         if suffix == ".pdf":
             self.artifact_type = self.ARTIFACT_TYPE_PDF
             return
-        if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
+        if suffix in self.SUPPORTED_IMAGE_SUFFIXES:
             self.artifact_type = self.ARTIFACT_TYPE_IMAGE
             return
         raise ValidationError({"file": "Only image files and PDFs are allowed."})

@@ -5,6 +5,8 @@ from __future__ import annotations
 from django.db import models
 from django.urls import reverse
 
+from apps.evergo.public_links import build_customer_signature
+
 
 class EvergoCustomer(models.Model):
     """Local cache of customer info sourced from Evergo sales-order payloads."""
@@ -42,4 +44,5 @@ class EvergoCustomer(models.Model):
 
     def get_absolute_url(self) -> str:
         """Return the public-facing URL for this customer profile."""
-        return reverse("evergo:customer-public-detail", kwargs={"pk": self.pk})
+        path = reverse("evergo:customer-public-detail", kwargs={"pk": self.pk})
+        return f"{path}?sig={build_customer_signature(self.pk)}"
