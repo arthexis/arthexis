@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from apps.core.management.deprecation import absorbed_into_command
 
 
-@absorbed_into_command("video debug")
+@absorbed_into_command("video --list-streams")
 class Command(BaseCommand):
     """Backward-compatible wrapper around the unified video command."""
 
