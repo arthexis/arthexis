@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from pathlib import Path
 
 from django.conf import settings
@@ -15,6 +16,28 @@ from django.core.management.base import CommandError
 
 class BundleVerificationError(CommandError):
     """Raised when a release migration bundle cannot be verified."""
+
+RELEASE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _resolve_signing_key() -> str:
+    """Return configured HMAC signing key when available."""
+
+    return (
+        os.environ.get("RELEASE_BUNDLE_SIGNING_KEY")
+        or os.environ.get("ARTHEXIS_RELEASE_BUNDLE_SIGNING_KEY")
+        or ""
+    ).strip()
+
+
+def _assert_relative_to(base: Path, candidate: Path, *, label: str) -> None:
+    """Ensure candidate stays within base directory."""
+
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise BundleVerificationError(f"{label} escapes bundle directory: {candidate}") from exc
+
 
 
 class Command(BaseCommand):
@@ -49,13 +72,23 @@ class Command(BaseCommand):
         """Apply bundle-based migrations with deterministic verification."""
 
         target_version = str(options["target_version"]).strip()
+        if not RELEASE_VERSION_PATTERN.fullmatch(target_version):
+            raise BundleVerificationError(f"Invalid target version: {target_version!r}")
         installed_version = self._resolve_installed_version(options.get("installed_version"))
+        if not RELEASE_VERSION_PATTERN.fullmatch(installed_version):
+            raise BundleVerificationError(f"Invalid installed version: {installed_version!r}")
         bundle_dir = self._resolve_bundle_dir(target_version, options.get("bundle_dir"))
 
         try:
             self._verify_bundle(bundle_dir)
             if installed_version == target_version:
-                self.stdout.write(self.style.SUCCESS("Installed version already matches target; no migration needed."))
+                call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
+                call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        "Installed version matches target; database state verified and synchronized."
+                    )
+                )
                 return
 
             manifest = self._load_manifest(bundle_dir, installed_version, target_version)
@@ -92,9 +125,9 @@ class Command(BaseCommand):
         """Resolve migration bundle directory path."""
 
         if explicit_dir:
-            bundle_dir = Path(explicit_dir)
+            bundle_dir = Path(explicit_dir).expanduser().resolve()
         else:
-            bundle_dir = Path(settings.BASE_DIR) / "releases" / target_version / "migrations"
+            bundle_dir = (Path(settings.BASE_DIR) / "releases" / target_version / "migrations").resolve()
 
         if not bundle_dir.exists():
             raise BundleVerificationError(f"Bundle directory not found: {bundle_dir}")
@@ -115,18 +148,15 @@ class Command(BaseCommand):
             if len(parts) != 2:
                 raise BundleVerificationError(f"Malformed checksum line: {entry}")
             expected_digest, relative_path = parts
-            artifact_path = bundle_dir / relative_path
+            artifact_path = (bundle_dir / relative_path).resolve()
+            _assert_relative_to(bundle_dir, artifact_path, label="Bundle artifact path")
             if not artifact_path.exists():
                 raise BundleVerificationError(f"Bundle artifact is missing: {relative_path}")
             actual_digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
             if actual_digest != expected_digest:
                 raise BundleVerificationError(f"Checksum mismatch for {relative_path}")
 
-        signing_key = (
-            os.environ.get("RELEASE_BUNDLE_SIGNING_KEY")
-            or os.environ.get("ARTHEXIS_RELEASE_BUNDLE_SIGNING_KEY")
-            or ""
-        ).strip()
+        signing_key = _resolve_signing_key()
         signature_file = bundle_dir / "checksums.sha256.sig"
         if signing_key and not signature_file.exists():
             raise BundleVerificationError("Bundle signature file is missing")

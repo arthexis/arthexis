@@ -57,8 +57,30 @@ def test_apply_release_migrations_uses_manifest_delta(monkeypatch, settings, tmp
 
     call_command("apply_release_migrations", target_version, bundle_dir=str(bundle_dir))
 
-    assert calls[0][0][:3] == ("migrate", "demoapp", "0002_auto")
+    assert calls[0][0] == ("migrate", "demoapp", "0002_auto", "--noinput")
     assert calls[1][0] == ("migrate", "--check")
+
+
+def test_apply_release_migrations_same_version_still_syncs_db(monkeypatch, settings, tmp_path) -> None:
+    """Regression: same-version invocation should still ensure database migration state."""
+
+    settings.BASE_DIR = tmp_path
+    version = "3.0.0"
+    (tmp_path / "VERSION").write_text(version + "\n", encoding="utf-8")
+    bundle_dir = _write_bundle(tmp_path, version, version)
+
+    calls: list[tuple[object, ...]] = []
+
+    def fake_call_command(*args, **kwargs):
+        calls.append(args)
+
+    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+
+    call_command("apply_release_migrations", version, bundle_dir=str(bundle_dir))
+
+    assert ("migrate", "--noinput") in calls
+    assert ("migrate", "--check") in calls
+    assert not any(len(call) > 1 and call[0] == "migrate" and call[1] == "demoapp" for call in calls)
 
 
 def test_apply_release_migrations_falls_back_on_bundle_mismatch(monkeypatch, settings, tmp_path) -> None:
