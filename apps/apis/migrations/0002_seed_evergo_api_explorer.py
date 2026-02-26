@@ -7,25 +7,22 @@ from django.db import migrations
 
 
 EVERGO_API_NAME = "Evergo API"
+EVERGO_API_BASE_URL = "https://portal-backend.evergo.com/api/mex/v1/"
+EVERGO_API_DESCRIPTION = "Evergo portal backend endpoints used by the Evergo integration."
 
 
-def _load_fixture_payload() -> tuple[dict, tuple[dict, ...]]:
-    """Load Evergo API explorer and endpoint definitions from fixture data."""
+def _load_fixture_payload() -> tuple[dict, ...]:
+    """Load Evergo endpoint definitions from fixture data."""
 
     fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "apis__evergo_endpoints.json"
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
 
-    api_fields = next(
-        entry["fields"]
-        for entry in payload
-        if entry.get("model") == "apis.apiexplorer" and entry.get("fields", {}).get("name") == EVERGO_API_NAME
-    )
     endpoint_fields = tuple(
         entry["fields"]
         for entry in payload
         if entry.get("model") == "apis.resourcemethod"
     )
-    return api_fields, endpoint_fields
+    return endpoint_fields
 
 
 def seed_evergo_api_explorer(apps, schema_editor):
@@ -35,13 +32,13 @@ def seed_evergo_api_explorer(apps, schema_editor):
     APIExplorer = apps.get_model("apis", "APIExplorer")
     ResourceMethod = apps.get_model("apis", "ResourceMethod")
 
-    api_fields, endpoint_fields = _load_fixture_payload()
+    endpoint_fields = _load_fixture_payload()
     api, created = APIExplorer.objects.get_or_create(
         name=EVERGO_API_NAME,
         defaults={
-            "base_url": api_fields["base_url"],
-            "description": api_fields["description"],
-            "is_active": api_fields["is_active"],
+            "base_url": EVERGO_API_BASE_URL,
+            "description": EVERGO_API_DESCRIPTION,
+            "is_active": True,
         },
     )
     if not created:
@@ -72,7 +69,7 @@ def unseed_evergo_api_explorer(apps, schema_editor):
     if api is None:
         return
 
-    _, endpoint_fields = _load_fixture_payload()
+    endpoint_fields = _load_fixture_payload()
     for endpoint in endpoint_fields:
         ResourceMethod.objects.filter(
             api=api,
