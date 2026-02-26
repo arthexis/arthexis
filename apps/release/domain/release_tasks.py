@@ -5,6 +5,7 @@ import json
 import hashlib
 import hmac
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +16,7 @@ from apps.release import git_utils
 MIGRATION_BASELINE_APPS: tuple[str, ...] = ("nodes", "features", "ocpp", "links")
 MIGRATION_BASELINE_THRESHOLD = 12
 MIGRATION_BASELINE_RECENT_WINDOW = 3
+RELEASE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 """Release-train baseline window.
 
 A baseline is required when one of the high-churn apps grows beyond
@@ -188,6 +190,10 @@ def run_migration_baseline_window(*, base_dir: Path | None = None) -> None:
 def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
     """Capture release migration artifacts, graph snapshots, and checksums."""
 
+    version = version.strip()
+    if not RELEASE_VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"Invalid release version: {version!r}")
+
     base_dir = base_dir or Path.cwd()
     out_dir = base_dir / "releases" / version
     migrations_dir = out_dir / "migrations"
@@ -298,7 +304,7 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
         if not artifact.exists():
             continue
         digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
-        relative_path = artifact.relative_to(migrations_dir)
+        relative_path = Path(os.path.relpath(artifact, migrations_dir))
         checksum_lines.append(f"{digest}  {relative_path.as_posix()}")
 
     checksums_path = migrations_dir / "checksums.sha256"
