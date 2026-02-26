@@ -42,7 +42,7 @@
     {% if request|pyxel_local_request %}
       <form method="post" action="{% url 'admin-pyxel-live-stats' %}" class="admin-home-actions__form">
         {% csrf_token %}
-        <button type="submit" class="button">{% translate 'Pyxel Live Stats' %}</button>
+        <button type="submit" class="button">{% translate 'Pyxel' %}</button>
       </form>
     {% endif %}
   </div>
