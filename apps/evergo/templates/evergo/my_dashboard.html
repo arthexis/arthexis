@@ -1,0 +1,179 @@
+{% load i18n %}
+<!doctype html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% trans "My Evergo Dashboard" %}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #121212;
+      --muted: #5c6670;
+      --border: #d7dbe0;
+      --panel: #f7f8fa;
+      --link: #0b5ed7;
+      --table-head: #edf2fb;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #11151b;
+        --fg: #e6edf5;
+        --muted: #9aa8b8;
+        --border: #2a3340;
+        --panel: #17202b;
+        --link: #8db9ff;
+        --table-head: #1f2a38;
+      }
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1rem auto;
+      max-width: 1080px;
+      padding: 0 0.9rem;
+      line-height: 1.4;
+      background: var(--bg);
+      color: var(--fg);
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-top: -0.35rem;
+      margin-bottom: 1rem;
+    }
+
+    a { color: var(--link); }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      padding: 0.55rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--fg);
+    }
+
+    .copy-area {
+      min-height: 160px;
+      margin-top: 0.45rem;
+      margin-bottom: 0.85rem;
+    }
+
+    button {
+      margin-top: 0.55rem;
+      padding: 0.55rem 0.85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--fg);
+      cursor: pointer;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.65rem;
+      border: 1px solid var(--border);
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--table-head); }
+
+    .error {
+      border: 1px solid #d9534f;
+      background: color-mix(in srgb, #d9534f 12%, var(--bg));
+      color: var(--fg);
+      padding: 0.55rem;
+      border-radius: 8px;
+      margin-top: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>{% trans "My Evergo Dashboard" %}</h1>
+  <p class="subtitle">{% trans "Public operator view for quick SO and customer lookups." %}</p>
+
+  {% if error_message and not profile %}
+    <p class="error">{{ error_message }}</p>
+  {% else %}
+    <div class="summary">
+      <strong>{% trans "Username:" %}</strong> <span>{{ username }}</span>
+      <a
+        href="{{ portal_orders_url }}"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="{% trans 'Open Evergo Orders in new tab' %}"
+        title="{% trans 'Open Evergo Orders in a new tab' %}"
+      >🔗↗</a>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <label for="sales_orders">{% trans "SOs and usernames" %}</label>
+      <p class="subtitle">{% trans "Use SOs and/or @username tokens (one per line, comma, semicolon, spaces)." %}</p>
+      <textarea id="sales_orders" name="sales_orders">{{ input_value }}</textarea>
+      <button type="submit">{% trans "Generate table" %}</button>
+    </form>
+
+    {% if error_message %}
+      <p class="error">{{ error_message }}</p>
+    {% endif %}
+
+    {% if rows %}
+      <h2>{% trans "Copy / Paste Table (TSV)" %}</h2>
+      <textarea class="copy-area" readonly>{{ rows_tsv }}</textarea>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{% trans "SO" %}</th>
+              <th>{% trans "Customer Name" %}</th>
+              <th>{% trans "Status" %}</th>
+              <th>{% trans "Full Address" %}</th>
+              <th>{% trans "Phone" %}</th>
+              <th>{% trans "Charger Brand" %}</th>
+              <th>{% trans "City (Municipio)" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>
+                  <a href="{{ row.so_url }}" target="_blank" rel="noopener noreferrer">{{ row.so }}</a>
+                </td>
+                <td>{{ row.customer_name }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ row.full_address }}</td>
+                <td>{{ row.phone }}</td>
+                <td>{{ row.charger_brand }}</td>
+                <td>{{ row.city }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+</body>
+</html>

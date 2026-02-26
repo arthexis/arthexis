@@ -1,0 +1,99 @@
+[
+  {
+    "model": "apis.apiexplorer",
+    "fields": {
+      "name": "Evergo Backend (MEX v1)",
+      "base_url": "https://portal-backend.evergo.com/api/mex/v1",
+      "description": "Catalog of known Evergo backend endpoints observed from portal flows.",
+      "is_active": true
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "Get current user",
+      "resource_path": "/user",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {},
+      "notes": "Portal bootstrap user context."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "Get order by remote id",
+      "resource_path": "/ordenes/{order_id}",
+      "http_method": "GET",
+      "request_structure": {"order_id": "int"},
+      "response_structure": {},
+      "notes": "Order detail endpoint."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "Get order CFE kit",
+      "resource_path": "/ordenes/kit-cfe/{order_id}",
+      "http_method": "GET",
+      "request_structure": {"order_id": "int"},
+      "response_structure": {},
+      "notes": "CFE kit details by order id."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "List order statuses",
+      "resource_path": "/config/catalogs/orden-estatus",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [],
+      "notes": "Catalog endpoint for order status labels."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "List coordinators available for assignment",
+      "resource_path": "/config/catalogs/instaladores/empresas/coord-para-asignar",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [],
+      "notes": "Coordinator reassignment candidates."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "Get technical visit questionnaire",
+      "resource_path": "/reportes/ordenes/{order_id}/visita-tecnica/cuestionario-preguntas",
+      "http_method": "GET",
+      "request_structure": {"order_id": "int"},
+      "response_structure": [],
+      "notes": "Question set used for technical visit reports."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "List reassignment reasons",
+      "resource_path": "/users/reassignment_reason",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [],
+      "notes": "Reasons catalog for user reassignment flows."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "operation_name": "List crew people",
+      "resource_path": "/users/crew-people",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [],
+      "notes": "Crew users listing endpoint."
+    }
+  }
+]

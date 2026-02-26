@@ -7,8 +7,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 
-from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
 
 
 @pytest.mark.django_db
@@ -90,3 +91,132 @@ def test_evergo_artifact_validation_blocks_unsupported_file_extensions(filename)
             customer=customer,
             file=SimpleUploadedFile(filename, b"bad"),
         )
+
+
+@pytest.mark.django_db
+def test_my_dashboard_renders_username_external_link_and_orders_table(client):
+    """Regression: dashboard should render operator table and external orders link."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard", email="dash@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9001,
+        order_number="J00830",
+        client_name="Irma Ravize",
+        status_name="Pendiente",
+        phone_primary="8115889790",
+        site_name="Chevrolet",
+        address_street="Capellania",
+        address_num_ext="107",
+        address_neighborhood="Centro",
+        address_municipality="Apodaca",
+        address_state="NL",
+        address_postal_code="66600",
+    )
+
+    dashboard_url = profile.dashboard_public_url()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            EvergoUser,
+            "load_customers_from_queries",
+            lambda self, *, raw_queries, timeout=20: (_ for _ in ()).throw(AssertionError("should not call API when local SO exists")),
+        )
+        response = client.post(dashboard_url, {"sales_orders": "J00830"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "My Evergo Dashboard" in content
+    assert "evergo-dashboard" in content
+    assert "target=\"_blank\"" in content
+    assert "J00830" in content
+    assert "Irma Ravize" in content
+    assert "Chevrolet" in content
+    assert "Apodaca" in content
+
+
+@pytest.mark.django_db
+def test_my_dashboard_rejects_invalid_token(client):
+    """Regression: dashboard URL should reject malformed or expired signatures."""
+    response = client.get(reverse("evergo:my-dashboard", args=["invalid-token"]))
+
+    assert response.status_code == 200
+    assert "invalid or has expired" in response.content.decode().lower()
+
+
+@pytest.mark.django_db
+def test_my_dashboard_renders_tsv_copy_block(client):
+    """Regression: dashboard should render TSV block for quick copy/paste."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-tsv", email="dash-tsv@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-tsv@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9002,
+        order_number="GM01321",
+        client_name="Jesus Cortez",
+        status_name="Programada",
+        phone_primary="8111111111",
+        site_name="Chevrolet",
+        address_street="Santa Barbara",
+        address_num_ext="404",
+        address_municipality="Apodaca",
+        address_state="NL",
+        address_postal_code="66647",
+    )
+
+    response = client.post(profile.dashboard_public_url(), {"sales_orders": "GM01321"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Copy / Paste Table (TSV)" in content
+    assert "SO\tCustomer Name\tStatus" in content
+    assert "GM01321\tJesus Cortez\tProgramada" in content
+
+
+@pytest.mark.django_db
+def test_my_dashboard_supports_username_token_latest_order_lookup(client):
+    """Regression: dashboard @username queries should resolve latest local order."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-user", email="dash-user@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-user@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9100,
+        order_number="GM01320",
+        client_name="Irma Ravize",
+        source_updated_at=timezone.now() - timezone.timedelta(days=2),
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9101,
+        order_number="GM01321",
+        client_name="Irma Ravize",
+        source_updated_at=timezone.now() - timezone.timedelta(days=1),
+    )
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            EvergoUser,
+            "load_customers_from_queries",
+            lambda self, *, raw_queries, timeout=20: (_ for _ in ()).throw(AssertionError("should not call API when username is local")),
+        )
+        response = client.post(profile.dashboard_public_url(), {"sales_orders": "@irma"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "GM01321" in content
+    assert "GM01320" not in content
