@@ -90,7 +90,7 @@ class Command(BaseCommand):
             if installed_version == target_version:
                 call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
                 call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
-                self._run_deferred_data_transforms(skip=bool(options.get("skip_data_transforms")))
+                self._run_deferred_data_transforms(skip=options["skip_data_transforms"])
                 self.stdout.write(
                     self.style.SUCCESS(
                         "Installed version matches target; database state verified and synchronized."
@@ -101,7 +101,7 @@ class Command(BaseCommand):
             manifest = self._load_manifest(bundle_dir, installed_version, target_version)
             self._apply_manifest(manifest)
             call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
-            self._run_deferred_data_transforms(skip=bool(options.get("skip_data_transforms")))
+            self._run_deferred_data_transforms(skip=options["skip_data_transforms"])
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Applied migration bundle for {installed_version} -> {target_version}."
@@ -113,7 +113,7 @@ class Command(BaseCommand):
             self.stderr.write(self.style.WARNING(f"{exc}. Falling back to Django migrate."))
             call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
             call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
-            self._run_deferred_data_transforms(skip=bool(options.get("skip_data_transforms")))
+            self._run_deferred_data_transforms(skip=options["skip_data_transforms"])
 
     def _resolve_installed_version(self, explicit_version: str | None) -> str:
         """Resolve installed version from explicit input or local VERSION file."""
@@ -230,10 +230,13 @@ class Command(BaseCommand):
             self.stdout.write("Skipping deferred data transforms.")
             return
 
-        call_command(
-            "run_release_data_transforms",
-            "--max-batches",
-            "1",
-            stdout=self.stdout,
-            stderr=self.stderr,
-        )
+        try:
+            call_command(
+                "run_release_data_transforms",
+                "--max-batches",
+                "1",
+                stdout=self.stdout,
+                stderr=self.stderr,
+            )
+        except Exception as exc:  # pragma: no cover - defensive non-blocking path
+            self.stderr.write(self.style.WARNING(f"Deferred data transforms failed: {exc}"))

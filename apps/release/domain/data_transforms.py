@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,35 @@ class TransformResult:
 
 
 TransformRunner = Callable[[dict[str, object]], TransformResult]
+
+_PACKAGE_RELEASE_NORMALIZATION_BATCH_SIZE = 100
+_LOCK_REGISTRY_GUARD = threading.Lock()
+_TRANSFORM_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _database_identity() -> str:
+    """Return a stable identity marker for checkpoint compatibility."""
+
+    config = connection.settings_dict
+    return "|".join(
+        [
+            str(connection.vendor),
+            str(config.get("NAME") or ""),
+            str(config.get("HOST") or ""),
+            str(config.get("PORT") or ""),
+        ]
+    )
+
+
+def _transform_lock(name: str) -> threading.Lock:
+    """Return lock used to serialize execution for a transform name."""
+
+    with _LOCK_REGISTRY_GUARD:
+        lock = _TRANSFORM_LOCKS.get(name)
+        if lock is None:
+            lock = threading.Lock()
+            _TRANSFORM_LOCKS[name] = lock
+        return lock
 
 
 def _checkpoint_dir(base_dir: Path | None = None) -> Path:
@@ -55,7 +86,13 @@ def _store_checkpoint(name: str, payload: dict[str, object], *, base_dir: Path |
     """Persist checkpoint payload for a transform."""
 
     path = _checkpoint_dir(base_dir) / f"{name}.json"
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    with tmp_path.open("w", encoding="utf-8") as tmp_file:
+        tmp_file.write(serialized)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+    tmp_path.replace(path)
 
 
 def _run_package_release_version_normalization(checkpoint: dict[str, object]) -> TransformResult:
@@ -69,7 +106,7 @@ def _run_package_release_version_normalization(checkpoint: dict[str, object]) ->
     except (TypeError, ValueError):
         last_pk = 0
 
-    batch_size = 100
+    batch_size = _PACKAGE_RELEASE_NORMALIZATION_BATCH_SIZE
     updated = 0
     processed = 0
 
@@ -82,13 +119,19 @@ def _run_package_release_version_normalization(checkpoint: dict[str, object]) ->
     if not items:
         return TransformResult(updated=0, processed=0, complete=True)
 
-    with transaction.atomic():
-        for release in items:
-            processed += 1
-            normalized = PackageRelease.normalize_version(release.version)
-            if normalized != release.version:
-                release.version = normalized
-                release.save(update_fields=["version"])
+    for release in items:
+        processed += 1
+        normalized = PackageRelease.normalize_version(release.version)
+        if normalized != release.version:
+            release.version = normalized
+            try:
+                with transaction.atomic():
+                    release.save(update_fields=["version"])
+            except IntegrityError:
+                logger.warning(
+                    "Skipping release version normalization due to collision for release pk=%s", release.pk
+                )
+            else:
                 updated += 1
 
     checkpoint["last_pk"] = items[-1].pk
@@ -113,9 +156,13 @@ def run_transform(name: str, *, base_dir: Path | None = None) -> TransformResult
     if runner is None:
         raise KeyError(f"Unknown release transform: {name}")
 
-    checkpoint = _load_checkpoint(name, base_dir=base_dir)
-    result = runner(checkpoint)
-    checkpoint["complete"] = result.complete
-    _store_checkpoint(name, checkpoint, base_dir=base_dir)
-    return result
-
+    with _transform_lock(name):
+        checkpoint = _load_checkpoint(name, base_dir=base_dir)
+        identity = _database_identity()
+        if checkpoint.get("database_identity") != identity:
+            checkpoint = {"database_identity": identity}
+        result = runner(checkpoint)
+        checkpoint["complete"] = result.complete
+        checkpoint["database_identity"] = identity
+        _store_checkpoint(name, checkpoint, base_dir=base_dir)
+        return result
