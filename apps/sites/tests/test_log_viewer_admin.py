@@ -1,6 +1,7 @@
 """Regression tests for admin log viewer rendering."""
 
 from pathlib import Path
+import re
 
 import pytest
 from django.urls import reverse
@@ -56,5 +57,28 @@ def test_admin_dashboard_has_upgrade_quick_action(admin_client):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert ">Upgrade<" in content
-    assert reverse("admin:system-upgrade-report") in content
+    upgrade_url = reverse("admin:system-upgrade-report")
+    pattern = re.compile(fr'<a[^>]*href="{re.escape(upgrade_url)}"[^>]*>\s*Upgrade\s*</a>')
+    assert pattern.search(content), "Could not find the upgrade link in the admin dashboard."
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+@pytest.mark.integration
+def test_admin_dashboard_hides_upgrade_quick_action_for_non_superusers(client, django_user_model):
+    """The admin dashboard quick actions should hide the Upgrade button from non-superusers."""
+
+    staff_user = django_user_model.objects.create_user(
+        username="staff-user",
+        email="staff@example.com",
+        password="unsafe-test-password",
+        is_staff=True,
+    )
+    client.force_login(staff_user)
+
+    response = client.get(reverse("admin:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert ">Upgrade<" not in content
+    assert reverse("admin:system-upgrade-report") not in content
