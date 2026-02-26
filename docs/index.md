@@ -1,6 +1,8 @@
 # Arthexis Documentation
 
-This site aggregates operator guides, architecture notes, and development references for Arthexis Constellation.
+This site aggregates operator guides, architecture notes, and development references for the Arthexis software suite.
+
+In Arthexis terminology, the suite is the collection of applications, while the Constellation is the fleet of nodes running that suite.
 
 ## Quick links
 - [Auto-Upgrade Flow](auto-upgrade.md)
