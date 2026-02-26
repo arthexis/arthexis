@@ -10,7 +10,9 @@ from urllib.parse import unquote, urlsplit
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
 
@@ -73,6 +75,12 @@ class EvergoUser(Profile):
     )
     CUSTOMER_QUERY_DELIMITERS = re.compile(r"[,;\|\n\r\t]+")
     SALES_ORDER_PATTERN = re.compile(r"\b[A-Za-z]{1,4}\d{3,8}\b")
+    DASHBOARD_TOKEN_SALT = "apps.evergo.dashboard"
+    DASHBOARD_TOKEN_MAX_AGE_SECONDS = getattr(
+        settings,
+        "EVERGO_DASHBOARD_TOKEN_MAX_AGE_SECONDS",
+        60 * 60 * 24 * 14,
+    )
 
     profile_fields = ("evergo_email", "evergo_password")
 
@@ -334,6 +342,33 @@ class EvergoUser(Profile):
             "placeholders_created": placeholders_created,
             "unresolved": unresolved,
         }
+
+    def build_dashboard_token(self) -> str:
+        """Return a signed token that grants access to this profile dashboard."""
+        signer = TimestampSigner(salt=self.DASHBOARD_TOKEN_SALT)
+        return signer.sign(str(self.pk))
+
+    @classmethod
+    def resolve_dashboard_token(cls, *, token: str) -> "EvergoUser":
+        """Resolve a signed dashboard token into an `EvergoUser` instance."""
+        signer = TimestampSigner(salt=cls.DASHBOARD_TOKEN_SALT)
+        try:
+            unsigned = signer.unsign(token, max_age=cls.DASHBOARD_TOKEN_MAX_AGE_SECONDS)
+            profile_pk = int(unsigned)
+        except (BadSignature, SignatureExpired, ValueError) as exc:
+            raise EvergoAPIError("The dashboard URL is invalid or has expired.") from exc
+
+        try:
+            return cls.objects.get(pk=profile_pk)
+        except cls.DoesNotExist as exc:
+            raise EvergoAPIError("The dashboard URL is invalid.") from exc
+
+    def dashboard_public_url(self) -> str:
+        """Return the public URL for this user's My Evergo Dashboard."""
+        return reverse(
+            "evergo:my-dashboard",
+            kwargs={"token": self.build_dashboard_token()},
+        )
 
     @classmethod
     def parse_customer_queries(cls, *, raw_queries: str) -> tuple[list[str], list[str]]:

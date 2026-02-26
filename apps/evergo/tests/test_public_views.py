@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
 
 
 @pytest.mark.django_db
@@ -90,3 +90,67 @@ def test_evergo_artifact_validation_blocks_unsupported_file_extensions(filename)
             customer=customer,
             file=SimpleUploadedFile(filename, b"bad"),
         )
+
+
+@pytest.mark.django_db
+def test_my_dashboard_renders_username_external_link_and_orders_table(client):
+    """Regression: dashboard should render operator table and external orders link."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard", email="dash@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9001,
+        order_number="J00830",
+        client_name="Irma Ravize",
+        status_name="Pendiente",
+        phone_primary="8115889790",
+        site_name="Chevrolet",
+        address_street="Capellania",
+        address_num_ext="107",
+        address_neighborhood="Centro",
+        address_municipality="Apodaca",
+        address_state="NL",
+        address_postal_code="66600",
+    )
+
+    dashboard_url = profile.dashboard_public_url()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            EvergoUser,
+            "load_customers_from_queries",
+            lambda self, *, raw_queries, timeout=20: {
+                "sales_orders": ["J00830"],
+                "customer_names": [],
+                "customers_loaded": 1,
+                "orders_created": 0,
+                "orders_updated": 1,
+                "placeholders_created": 0,
+                "unresolved": [],
+            },
+        )
+        response = client.post(dashboard_url, {"sales_orders": "J00830"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "My Evergo Dashboard" in content
+    assert "evergo-dashboard" in content
+    assert "target=\"_blank\"" in content
+    assert "J00830" in content
+    assert "Irma Ravize" in content
+    assert "Chevrolet" in content
+    assert "Apodaca" in content
+
+
+@pytest.mark.django_db
+def test_my_dashboard_rejects_invalid_token(client):
+    """Regression: dashboard URL should reject malformed or expired signatures."""
+    response = client.get(reverse("evergo:my-dashboard", args=["invalid-token"]))
+
+    assert response.status_code == 200
+    assert "invalid or has expired" in response.content.decode().lower()

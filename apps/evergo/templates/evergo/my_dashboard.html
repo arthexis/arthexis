@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Evergo Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    textarea { width: 100%; min-height: 90px; }
+  </style>
+</head>
+<body>
+  <h1>My Evergo Dashboard</h1>
+
+  {% if error_message and not profile %}
+    <p>{{ error_message }}</p>
+  {% else %}
+    <p>
+      <strong>Username:</strong> {{ username }}
+      <a href="{{ portal_orders_url }}" target="_blank" rel="noopener noreferrer" aria-label="Open Evergo Orders in new tab">↗</a>
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+      <label for="sales_orders">SOs (one per line, comma, semicolon, or spaces)</label>
+      <textarea id="sales_orders" name="sales_orders">{{ input_value }}</textarea>
+      <button type="submit">Generate Table</button>
+    </form>
+
+    {% if error_message %}
+      <p>{{ error_message }}</p>
+    {% endif %}
+
+    {% if rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>SO</th>
+            <th>Customer Name</th>
+            <th>Status</th>
+            <th>Full Address</th>
+            <th>Phone</th>
+            <th>Charger Brand</th>
+            <th>City (Municipio)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.so }}</td>
+              <td>{{ row.customer_name }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.full_address }}</td>
+              <td>{{ row.phone }}</td>
+              <td>{{ row.charger_brand }}</td>
+              <td>{{ row.city }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endif %}
+</body>
+</html>
