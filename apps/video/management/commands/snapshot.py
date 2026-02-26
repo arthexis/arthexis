@@ -9,9 +9,10 @@ from apps.core.management.deprecation import absorbed_into_command
 class Command(BaseCommand):
     """Backward-compatible wrapper for snapshot capture."""
 
-    help = "Capture a snapshot from the default camera and print the file path."
+    help = "Capture a snapshot from the default camera. Deprecated: use `video snapshot`."
 
     def handle(self, *args, **options) -> None:
         """Delegate snapshot handling to the unified ``video`` command."""
 
-        call_command("video", snapshot=True, auto_enable=True, discover=True)
+        self.stdout.write(self.style.WARNING("`snapshot` is deprecated; use `video snapshot`."))
+        call_command("video", "snapshot", auto_enable=True, discover=True)

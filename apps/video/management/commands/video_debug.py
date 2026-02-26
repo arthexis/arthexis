@@ -9,7 +9,7 @@ from apps.core.management.deprecation import absorbed_into_command
 class Command(BaseCommand):
     """Backward-compatible wrapper around the unified video command."""
 
-    help = "Run snapshot and MJPEG stream diagnostics."
+    help = "Run snapshot and MJPEG stream diagnostics. Deprecated: use `video` sub-actions."
 
     def add_arguments(self, parser) -> None:
         """Register legacy debug arguments."""
@@ -24,19 +24,36 @@ class Command(BaseCommand):
         parser.add_argument("--include-inactive", action="store_true", help="Include inactive MJPEG streams.")
 
     def handle(self, *args, **options) -> None:
-        """Delegate legacy debug options to ``video`` command flags."""
+        """Delegate legacy debug options to ``video`` command sub-actions."""
+
+        self.stdout.write(self.style.WARNING("`video_debug` is deprecated; use `video` sub-actions."))
 
         if not any(options[key] for key in ("list", "snapshot", "mjpeg")):
             options["list"] = True
 
-        call_command(
-            "video",
-            snapshot=options["snapshot"],
-            device=options.get("device"),
-            discover=options["refresh_devices"],
-            list_streams=options["list"],
-            auto_enable=options["auto_enable"],
-            mjpeg=options["mjpeg"],
-            stream=options.get("stream"),
-            include_inactive=options["include_inactive"],
-        )
+        if options["list"]:
+            call_command(
+                "video",
+                "list",
+                discover=options["refresh_devices"],
+                list_streams=True,
+                auto_enable=options["auto_enable"],
+                include_inactive=options["include_inactive"],
+            )
+
+        if options["snapshot"]:
+            call_command(
+                "video",
+                "snapshot",
+                device=options.get("device"),
+                discover=options["refresh_devices"],
+                auto_enable=options["auto_enable"],
+            )
+
+        if options["mjpeg"]:
+            call_command(
+                "video",
+                "mjpeg",
+                stream=options.get("stream"),
+                include_inactive=options["include_inactive"],
+            )
