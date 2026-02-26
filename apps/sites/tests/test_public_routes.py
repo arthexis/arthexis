@@ -298,10 +298,10 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
 
 @pytest.mark.django_db
 @pytest.mark.regression
-def test_operator_interface_mode_hides_public_navigation(client):
-    """Interface mode query parameter should hide top-level navigation chrome."""
+def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(client):
+    """Anonymous query-string toggles must not suppress public navigation chrome."""
 
     response = client.get(f"{reverse('pages:index')}?operator_interface=1")
 
     assert response.status_code == 200
-    assert b"<nav" not in response.content
+    assert b"<nav" in response.content
