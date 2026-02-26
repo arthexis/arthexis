@@ -994,10 +994,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "google_calendar_snapshot_sync": {
         "task": "apps.calendars.tasks.sync_google_calendars",
-        "schedule": timedelta(minutes=15),
+        "schedule": timedelta(hours=1),
     },
     "google_calendar_trigger_runner": {
         "task": "apps.calendars.tasks.run_calendar_event_triggers",
-        "schedule": timedelta(minutes=1),
+        "schedule": timedelta(minutes=15),
     },
 }
