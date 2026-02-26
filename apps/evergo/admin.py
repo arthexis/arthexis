@@ -1,5 +1,6 @@
 """Admin configuration for Evergo integration."""
 
+import re
 from datetime import datetime, time, timedelta
 
 from django.contrib import admin, messages
@@ -387,6 +388,7 @@ class _CustomerDateRangeFilter(admin.SimpleListFilter):
 
     parameter_name = ""
     title = ""
+    field_name = ""
 
     def lookups(self, request, model_admin):
         """Expose common date-range options for customer list filtering."""
@@ -413,20 +415,21 @@ class _CustomerDateRangeFilter(admin.SimpleListFilter):
         end = timezone.make_aware(datetime.combine(today + timedelta(days=1), time.min))
         return start, end
 
+    def queryset(self, request, queryset):
+        """Apply a date range to the configured model field when selected."""
+        bounds = self._bounds()
+        if not bounds or not self.field_name:
+            return queryset
+        start, end = bounds
+        return queryset.filter(**{f"{self.field_name}__gte": start, f"{self.field_name}__lt": end})
+
 
 class CustomerLoadedAtFilter(_CustomerDateRangeFilter):
     """Filter Evergo customers by local load timestamp ranges."""
 
     title = _("Loaded locally")
     parameter_name = "loaded_at_range"
-
-    def queryset(self, request, queryset):
-        """Apply local creation-date range filtering when selected."""
-        bounds = self._bounds()
-        if not bounds:
-            return queryset
-        start, end = bounds
-        return queryset.filter(created_at__gte=start, created_at__lt=end)
+    field_name = "created_at"
 
 
 class CustomerUpdatedAtFilter(_CustomerDateRangeFilter):
@@ -434,14 +437,7 @@ class CustomerUpdatedAtFilter(_CustomerDateRangeFilter):
 
     title = _("Updated locally")
     parameter_name = "updated_at_range"
-
-    def queryset(self, request, queryset):
-        """Apply local refresh-date range filtering when selected."""
-        bounds = self._bounds()
-        if not bounds:
-            return queryset
-        start, end = bounds
-        return queryset.filter(refreshed_at__gte=start, refreshed_at__lt=end)
+    field_name = "refreshed_at"
 
 
 class CustomerRemoteUpdatedAtFilter(_CustomerDateRangeFilter):
@@ -449,14 +445,7 @@ class CustomerRemoteUpdatedAtFilter(_CustomerDateRangeFilter):
 
     title = _("Updated remotely")
     parameter_name = "remote_updated_at_range"
-
-    def queryset(self, request, queryset):
-        """Apply remote-source update-date range filtering when selected."""
-        bounds = self._bounds()
-        if not bounds:
-            return queryset
-        start, end = bounds
-        return queryset.filter(latest_order_updated_at__gte=start, latest_order_updated_at__lt=end)
+    field_name = "latest_order_updated_at"
 
 
 @admin.register(EvergoCustomer)
@@ -464,6 +453,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
 
     changelist_actions = ("load_customers_wizard",)
+    list_select_related = ("user", "latest_order")
 
     list_display = ("latest_so", "name", "status_of_last_so", "phone_number_display", "address", "user")
     list_filter = ("user", CustomerLoadedAtFilter, CustomerUpdatedAtFilter, CustomerRemoteUpdatedAtFilter)
@@ -504,10 +494,8 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
         """Return a cleaned phone value without Mexico +52/52 dialing prefixes."""
         phone = (obj.phone_number or "").strip()
         compact = phone.replace(" ", "").replace("-", "")
-        if compact.startswith("+52"):
-            return phone[3:].lstrip(" -")
-        if compact.startswith("52"):
-            return phone[2:].lstrip(" -")
+        if compact.startswith(("+52", "52")):
+            return re.sub(r"^\+?\s*52[\s-]*", "", phone)
         return phone
 
     def load_customers_view(self, request):
