@@ -10,6 +10,52 @@
   </div>
 {% endblock %}
 
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .export-summary {
+      margin: 0;
+    }
+
+    .export-columns-list {
+      margin: 0.5rem 0 0;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .export-columns-list li {
+      margin-bottom: 0.35rem;
+    }
+
+    .export-column-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .export-column-option input[type="checkbox"] {
+      margin: 0;
+    }
+
+    .import-identifier {
+      color: var(--default-button-bg, #0c4b33);
+      font-weight: 600;
+    }
+
+    .import-identifier-badge {
+      font-size: 0.8em;
+      font-weight: 600;
+      color: var(--link-fg, #417690);
+    }
+
+    .export-column-help {
+      margin-top: 0.65rem;
+      color: var(--body-quiet-color, #666);
+      font-size: 0.92em;
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
   <div id="content-main">
     <form method="post" class="module aligned">
@@ -26,7 +72,7 @@
       </fieldset>
       <fieldset class="module aligned">
         <div class="form-row">
-          <p>
+          <p class="export-summary">
             {% blocktrans with record_count=export_count column_count=export_columns|length %}
               You are about to export {{ record_count }} record(s) with {{ column_count }} column(s).
             {% endblocktrans %}
@@ -34,15 +80,28 @@
         </div>
         <div class="form-row">
           <label>{% trans "Columns to export" %}</label>
-          <ul class="admin-select-list">
+          <ul class="export-columns-list">
             {% for column in export_columns %}
-              <li>{{ column.label }} <span class="quiet">({{ column.name }})</span></li>
+              <li>
+                <label class="export-column-option{% if column.is_import_identifier %} import-identifier{% endif %}">
+                  <input type="checkbox" name="export_columns" value="{{ column.name }}" {% if column.selected %}checked{% endif %} />
+                  <span>
+                    {{ column.label }} <span class="quiet">({{ column.name }})</span>
+                    {% if column.is_import_identifier %}
+                      <span class="import-identifier-badge">{% trans "Import ID" %}</span>
+                    {% endif %}
+                  </span>
+                </label>
+              </li>
             {% endfor %}
           </ul>
+          <p class="help export-column-help">
+            {% trans "Highlighted columns are identifiers commonly used to map rows back onto existing records during import." %}
+          </p>
         </div>
       </fieldset>
       <div class="submit-row">
-        <input type="submit" value="{% trans 'Export' %}" class="default" />
+        <button type="submit" class="button default">{% trans 'Export' %}</button>
         <a href="{{ changelist_url }}" class="button cancel-link">{% trans 'Cancel' %}</a>
       </div>
     </form>

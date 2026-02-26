@@ -273,3 +273,71 @@ def test_evergo_customer_admin_change_form_shows_view_on_site_and_artifacts_inli
     content = response.content.decode().lower()
     assert "view on site" in content
     assert "artifacts-0-file" in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_renders_selectable_columns_and_tsv(admin_client):
+    """Regression: export view should offer selectable columns and TSV output."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-export-columns",
+        email="suite-admin-export-columns@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-export-columns@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoCustomer.objects.create(
+        user=profile,
+        remote_id=7001,
+        name="Export User",
+        email="export-user@example.com",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.get(export_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'type="checkbox" name="export_columns" value="remote_id" checked' in content
+    assert "Import ID" in content
+    assert '<option value="tsv">TSV</option>' in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_honors_column_selection_for_tsv(admin_client):
+    """Regression: TSV export should include only selected columns in requested order."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-export-tsv",
+        email="suite-admin-export-tsv@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-export-tsv@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoCustomer.objects.create(
+        user=profile,
+        remote_id=7002,
+        name="TSV Export User",
+        email="tsv-export@example.com",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        export_url,
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/tab-separated-values")
+    rows = response.content.decode("utf-8").strip().splitlines()
+    assert rows[0] == "remote_id	name"
+    assert rows[1].startswith("7002	TSV Export User")
