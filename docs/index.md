@@ -5,6 +5,7 @@ This site aggregates operator guides, architecture notes, and development refere
 ## Quick links
 - [Auto-Upgrade Flow](auto-upgrade.md)
 - [CodeQL Configuration](development/codeql.md)
+- [EVCS Simulator v2 Proposal](development/evcs-simulator-v2-proposal.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)

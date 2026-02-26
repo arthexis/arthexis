@@ -8,7 +8,7 @@ from apps.cards.models import RFID, RFIDAttempt
 
 from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin
-from .reader import toggle_deep_read
+from .reader import read_rfid, toggle_deep_read
 from .utils import convert_endianness_value, normalize_endianness
 from .rfid_service import deep_read_via_service
 
@@ -128,19 +128,27 @@ def record_scan_attempt(
 
 
 def scan_sources(
-    request=None, *, endianness: str | None = None, timeout: float | None = None
+    request=None,
+    *,
+    endianness: str | None = None,
+    timeout: float | None = None,
+    no_irq: bool = False,
 ):
     """Read the next RFID tag from the local scanner."""
     start_time = time.monotonic()
     service_mode = "on-demand"
-    start()
     if not is_configured():
         return {"rfid": None, "label_id": None, "service_mode": service_mode}
+    if not no_irq:
+        start()
     remaining_timeout = 0.0
     if timeout is not None:
         elapsed = time.monotonic() - start_time
         remaining_timeout = max(0.0, timeout - elapsed)
-    result = get_next_tag(timeout=remaining_timeout)
+    if no_irq:
+        result = read_rfid(timeout=remaining_timeout, use_irq=False)
+    else:
+        result = get_next_tag(timeout=remaining_timeout)
     if not result:
         return {"rfid": None, "label_id": None, "service_mode": service_mode}
     if result.get("error"):

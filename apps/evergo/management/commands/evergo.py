@@ -29,6 +29,29 @@ class Command(BaseCommand):
             action="store_true",
             help="Attempt Evergo login and sync fields after saving credentials.",
         )
+        parser.add_argument(
+            "--load-customers",
+            action="store_true",
+            help=(
+                "Run the same customer/order sync workflow exposed in the admin load customers wizard."
+            ),
+        )
+        parser.add_argument(
+            "--queries",
+            help=(
+                "Free-form SO numbers and customer names, matching the admin wizard format."
+            ),
+        )
+        parser.add_argument(
+            "--queries-file",
+            help="Path to a UTF-8 text file with SO numbers and/or customer names.",
+        )
+        parser.add_argument(
+            "--timeout",
+            type=int,
+            default=20,
+            help="Evergo API timeout in seconds for login and load-customer calls.",
+        )
 
     def handle(self, *args, **options):
         """Execute command flow for profile creation, update, and credential testing."""
@@ -67,6 +90,33 @@ class Command(BaseCommand):
                 )
             )
 
+        if options.get("load_customers"):
+            raw_queries = self._resolve_queries(options)
+            timeout = options.get("timeout") or 20
+            if timeout <= 0:
+                raise CommandError("--timeout must be greater than zero.")
+
+            try:
+                summary = profile.load_customers_from_queries(
+                    raw_queries=raw_queries,
+                    timeout=timeout,
+                )
+            except EvergoAPIError as exc:
+                raise CommandError(f"Evergo customer load failed: {exc}") from exc
+
+            unresolved = summary["unresolved"]
+            unresolved_label = ", ".join(unresolved) if unresolved else "none"
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Customer sync completed. "
+                    f"Customers loaded: {summary['customers_loaded']} | "
+                    f"Orders created: {summary['orders_created']} | "
+                    f"Orders updated: {summary['orders_updated']} | "
+                    f"Placeholders: {summary['placeholders_created']} | "
+                    f"Unresolved: {unresolved_label}"
+                )
+            )
+
     def _resolve_user(self, identifier: str):
         """Fetch a Suite user by username or email, raising a command error when missing."""
         User = get_user_model()
@@ -97,3 +147,32 @@ class Command(BaseCommand):
         if user is None:
             raise CommandError(f"Suite user '{identifier}' was not found.")
         return user
+
+    def _resolve_queries(self, options: dict[str, object]) -> str:
+        """Get free-form customer-load queries from CLI flags."""
+        inline_queries = options.get("queries")
+        queries_file = options.get("queries_file")
+
+        if inline_queries and queries_file:
+            raise CommandError("Use only one of --queries or --queries-file.")
+
+        if inline_queries:
+            resolved = str(inline_queries).strip()
+            if resolved:
+                return resolved
+            raise CommandError("--queries must contain at least one SO number or customer name.")
+
+        if not queries_file:
+            raise CommandError("--load-customers requires --queries or --queries-file.")
+
+        try:
+            with open(str(queries_file), encoding="utf-8") as handle:
+                resolved = handle.read().strip()
+        except FileNotFoundError as exc:
+            raise CommandError(f"Queries file '{queries_file}' was not found.") from exc
+        except OSError as exc:
+            raise CommandError(f"Could not read queries file '{queries_file}': {exc}") from exc
+
+        if not resolved:
+            raise CommandError("--queries-file must contain at least one SO number or customer name.")
+        return resolved

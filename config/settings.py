@@ -494,6 +494,7 @@ LOCAL_APPS = [
     "apps.modules",
     "apps.features",
     "apps.widgets",
+    "apps.apis",
     "apps.sites",
     "apps.smb",
     "apps.summary",

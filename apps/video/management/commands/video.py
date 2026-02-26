@@ -7,10 +7,12 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, Q
 from django.utils import timezone as django_timezone
 from django.utils.dateparse import parse_datetime
+import logging
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.video.frame_cache import (
@@ -19,9 +21,104 @@ from apps.video.frame_cache import (
     get_frame,
     get_frame_cache,
     get_status,
+    store_frame,
+    store_status,
 )
-from apps.video.models import MjpegStream, VideoDevice
+from apps.video.models import MjpegDependencyError, MjpegStream, VideoDevice
 from apps.video.utils import WORK_DIR, has_rpi_camera_stack
+
+logger = logging.getLogger("apps.video.camera_service")
+
+
+def _setting_default_float(name: str, fallback: float) -> float:
+    """Return float setting value while preserving valid zero values."""
+
+    configured = getattr(settings, name, fallback)
+    return fallback if configured is None else float(configured)
+
+
+class _StreamCapture:
+    """Capture MJPEG frames from a single video stream device."""
+
+    def __init__(self, stream: MjpegStream):
+        self.stream = stream
+        self._cv2 = None
+        self._capture = None
+        self._last_capture = 0.0
+        self._last_error: str | None = None
+        self._last_logged_error: str | None = None
+
+    def _ensure_capture(self) -> bool:
+        """Ensure an OpenCV capture handle exists and is opened."""
+
+        if self._cv2 is None:
+            self._cv2 = self.stream._load_cv2()
+        if self._capture is None:
+            self._capture = self._cv2.VideoCapture(self.stream.video_device.identifier)
+        if not self._capture.isOpened():
+            self._capture.release()
+            self._capture = None
+            self._last_error = "Unable to open video device"
+            return False
+        return True
+
+    def close(self) -> None:
+        """Release any allocated OpenCV capture resources."""
+
+        if self._capture is not None:
+            self._capture.release()
+            self._capture = None
+
+    def capture_frame(self, *, interval: float) -> bytes | None:
+        """Capture and JPEG-encode the next frame when interval has elapsed."""
+
+        now = time.monotonic()
+        if (now - self._last_capture) < interval:
+            return None
+        if not self._ensure_capture():
+            return None
+        self._last_capture = now
+        success, frame = self._capture.read()
+        if not success:
+            self._last_error = "Camera read failed"
+            return None
+        frame = self.stream._rotate_frame(frame, self._cv2)
+        success, buffer = self._cv2.imencode(".jpg", frame)
+        if not success:
+            self._last_error = "JPEG encode failed"
+            return None
+        self._last_error = None
+        return buffer.tobytes()
+
+    def status_payload(self) -> dict[str, object]:
+        """Build status payload for Redis-backed stream health reporting."""
+
+        return {
+            "stream": self.stream.slug,
+            "device": self.stream.video_device.identifier,
+            "last_error": self._last_error,
+            "updated_at": django_timezone.now().isoformat(),
+        }
+
+    def log_status(self) -> None:
+        """Log stream status transitions only when status changes."""
+
+        if self._last_error == self._last_logged_error:
+            return
+        self._last_logged_error = self._last_error
+        if self._last_error:
+            logger.warning(
+                "Camera service error for %s (%s): %s",
+                self.stream.slug,
+                self.stream.video_device.identifier,
+                self._last_error,
+            )
+        else:
+            logger.info(
+                "Camera service recovered for %s (%s)",
+                self.stream.slug,
+                self.stream.video_device.identifier,
+            )
 
 
 class Command(BaseCommand):
@@ -105,22 +202,64 @@ class Command(BaseCommand):
             action="store_true",
             help="List MJPEG streams in addition to video devices.",
         )
+        parser.add_argument(
+            "--interval",
+            type=float,
+            default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2),
+            help="Seconds between frame capture attempts per stream.",
+        )
+        parser.add_argument(
+            "--sleep",
+            type=float,
+            default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05),
+            help="Seconds to sleep between capture loops.",
+        )
+
+        subparsers = parser.add_subparsers(dest="action")
+
+        list_parser = subparsers.add_parser("list", help="List video devices and optional stream details.")
+        list_parser.add_argument("--discover", action="store_true", help="Discover devices before listing.")
+        list_parser.add_argument("--refresh-devices", action="store_true", help="Alias for --discover.")
+        list_parser.add_argument("--list-streams", action="store_true", help="List MJPEG streams.")
+        list_parser.add_argument("--include-inactive", action="store_true", help="Include inactive MJPEG streams.")
+        list_parser.add_argument("--auto-enable", action="store_true", help="Enable feature automatically when discovering.")
+
+        snapshot_parser = subparsers.add_parser("snapshot", help="Capture a still snapshot from a video device.")
+        snapshot_parser.add_argument("--device", help="Video device ID, slug, or identifier.")
+        snapshot_parser.add_argument("--discover", action="store_true", help="Discover devices before capture.")
+        snapshot_parser.add_argument("--refresh-devices", action="store_true", help="Alias for --discover.")
+        snapshot_parser.add_argument("--auto-enable", action="store_true", help="Enable feature automatically.")
+
+        mjpeg_parser = subparsers.add_parser("mjpeg", help="Capture frame(s) from MJPEG stream cache.")
+        mjpeg_parser.add_argument("--stream", help="MJPEG stream slug or ID to capture.")
+        mjpeg_parser.add_argument("--include-inactive", action="store_true", help="Include inactive MJPEG streams.")
+
+        subparsers.add_parser("doctor", help="Run server-side video diagnostics.")
+
+        service_parser = subparsers.add_parser("service", help="Run camera service capture loop.")
+        service_parser.add_argument("--interval", type=float, default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2), help="Seconds between frame capture attempts per stream.")
+        service_parser.add_argument("--sleep", type=float, default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05), help="Seconds to sleep between capture loops.")
 
     def handle(self, *args, **options) -> None:
         """Execute video camera management actions."""
 
-        if options["doctor"]:
+        action = options.get("action")
+        normalized = self._normalize_legacy_flags(options)
+
+        if action == "doctor" or normalized["doctor"]:
             self._run_doctor()
             return
 
-        options["discover"] = options["discover"] or options["refresh_devices"]
+        if action == "service":
+            self._run_service(interval=normalized["interval"], sleep=normalized["sleep"])
+            return
 
-        if options["enable"] and options["disable"]:
+        if normalized["enable"] and normalized["disable"]:
             raise CommandError("Choose only one of --enable or --disable.")
 
         node = Node.get_local()
         needs_node = any(
-            options[key]
+            normalized[key]
             for key in ("enable", "disable", "discover", "samples", "snapshot")
         )
         if needs_node and node is None:
@@ -131,82 +270,98 @@ class Command(BaseCommand):
             try:
                 feature = NodeFeature.objects.get(slug="video-cam")
             except NodeFeature.DoesNotExist as exc:
-                raise CommandError(
-                    "The Video Camera node feature is not configured."
-                ) from exc
+                raise CommandError("The Video Camera node feature is not configured.") from exc
+
+        self._maybe_enable_or_disable_feature(node=node, feature=feature, options=normalized)
+
+        if any(normalized[key] for key in ("discover", "samples", "snapshot")):
+            self._ensure_feature_enabled(node, feature, auto_enable=normalized["auto_enable"])
+
+        if normalized["discover"]:
+            created, updated = VideoDevice.refresh_from_system(node=node)
+            self.stdout.write(self.style.SUCCESS(f"Detected {created} new and {updated} existing video devices."))
+
+        should_list_devices = action in {None, "list"} or any(
+            normalized[key] for key in ("discover", "enable", "disable", "samples", "snapshot", "mjpeg")
+        )
+        if should_list_devices:
+            self._list_devices(node)
+
+        if normalized["list_streams"]:
+            self._list_streams(include_inactive=normalized["include_inactive"])
+
+        if normalized["snapshot"]:
+            self._capture_snapshot(node, normalized.get("device"))
+
+        if normalized["mjpeg"]:
+            self._capture_mjpeg(
+                stream_identifier=normalized.get("stream"),
+                include_inactive=normalized["include_inactive"],
+            )
+
+        samples = normalized.get("samples")
+        if samples is not None:
+            self._capture_samples(node=node, feature=feature, options=normalized, samples=samples)
+
+    def _normalize_legacy_flags(self, options: dict[str, object]) -> dict[str, object]:
+        """Merge sub-action arguments with legacy top-level flags for compatibility."""
+
+        normalized = dict(options)
+        action = normalized.get("action")
+
+        normalized["discover"] = bool(normalized.get("discover") or normalized.get("refresh_devices"))
+
+        if action == "list":
+            normalized["list_streams"] = bool(normalized.get("list_streams"))
+        elif action == "snapshot":
+            normalized["snapshot"] = True
+        elif action == "mjpeg":
+            normalized["mjpeg"] = True
+        elif action == "service":
+            normalized["service"] = True
+
+        return normalized
+
+    def _maybe_enable_or_disable_feature(
+        self,
+        *,
+        node: Node | None,
+        feature: NodeFeature | None,
+        options: dict[str, object],
+    ) -> None:
+        """Apply explicit enable and disable feature options."""
 
         if options["enable"]:
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
-            self.stdout.write(
-                self.style.SUCCESS("Enabled the Video Camera feature for the node.")
-            )
+            self.stdout.write(self.style.SUCCESS("Enabled the Video Camera feature for the node."))
             if not has_rpi_camera_stack():
-                self.stdout.write(
-                    self.style.WARNING(
-                        "Raspberry Pi camera stack not detected; enabling anyway."
-                    )
-                )
+                self.stdout.write(self.style.WARNING("Raspberry Pi camera stack not detected; enabling anyway."))
 
         if options["disable"]:
-            deleted, _ = NodeFeatureAssignment.objects.filter(
-                node=node, feature=feature
-            ).delete()
+            deleted, _ = NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
             if deleted:
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        "Disabled the Video Camera feature for the node."
-                    )
-                )
+                self.stdout.write(self.style.SUCCESS("Disabled the Video Camera feature for the node."))
             else:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "Video Camera feature was not enabled for the node."
-                    )
-                )
+                self.stdout.write(self.style.WARNING("Video Camera feature was not enabled for the node."))
 
-        auto_enable = options["auto_enable"]
-        if any(options[key] for key in ("discover", "samples", "snapshot")):
-            self._ensure_feature_enabled(node, feature, auto_enable=auto_enable)
-
-        if options["discover"]:
-            created, updated = VideoDevice.refresh_from_system(node=node)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Detected {created} new and {updated} existing video devices."
-                )
-            )
-
-        self._list_devices(node)
-        if options["list_streams"]:
-            self._list_streams(include_inactive=options["include_inactive"])
-
-        samples = options.get("samples")
-        if options["snapshot"]:
-            self._capture_snapshot(node, options.get("device"))
-
-        if options["mjpeg"]:
-            self._capture_mjpeg(
-                stream_identifier=options.get("stream"),
-                include_inactive=options["include_inactive"],
-            )
-
-        if samples is None:
-            return
+    def _capture_samples(
+        self,
+        *,
+        node: Node | None,
+        feature: NodeFeature | None,
+        options: dict[str, object],
+        samples: int,
+    ) -> None:
+        """Capture sample frames and emit the rendered sample output path."""
 
         if samples <= 0:
             raise CommandError("Samples must be a positive integer.")
 
-        if not feature.is_enabled and not options["enable"]:
-            self.stdout.write(
-                self.style.WARNING("Video Camera feature is currently disabled.")
-            )
+        if feature is not None and not feature.is_enabled and not options["enable"]:
+            self.stdout.write(self.style.WARNING("Video Camera feature is currently disabled."))
 
         if not has_rpi_camera_stack():
-            self.stdout.write(
-                self.style.WARNING(
-                    "Raspberry Pi camera stack not detected; capture may fail."
-                )
-            )
+            self.stdout.write(self.style.WARNING("Raspberry Pi camera stack not detected; capture may fail."))
 
         device = self._resolve_video_device(node, options.get("device"))
         if device is None:
@@ -470,6 +625,61 @@ class Command(BaseCommand):
                     f"Camera service error for stream={stream.slug}: {last_error}"
                 )
             )
+
+
+    def _run_service(self, *, interval: float, sleep: float) -> None:
+        """Run the MJPEG camera capture service loop."""
+
+        if not frame_cache_url():
+            raise CommandError("A Redis URL must be configured to use camera_service.")
+
+        captures: dict[int, _StreamCapture] = {}
+        self.stdout.write(self.style.SUCCESS("Starting camera service..."))
+        try:
+            while True:
+                streams = (
+                    MjpegStream.objects.filter(is_active=True)
+                    .select_related("video_device")
+                    .order_by("pk")
+                )
+                active_ids = {stream.pk for stream in streams}
+                for stream_id in list(captures):
+                    if stream_id not in active_ids:
+                        captures[stream_id].close()
+                        captures.pop(stream_id, None)
+
+                for stream in streams:
+                    capture = captures.get(stream.pk)
+                    if capture is None:
+                        capture = _StreamCapture(stream)
+                        captures[stream.pk] = capture
+                    try:
+                        frame_bytes = capture.capture_frame(interval=interval)
+                    except MjpegDependencyError as exc:
+                        capture._last_error = str(exc)
+                        logger.warning("MJPEG dependency error for %s: %s", stream.slug, exc)
+                        store_status(stream, capture.status_payload())
+                        capture.log_status()
+                        continue
+                    except Exception as exc:  # pragma: no cover - runtime device error
+                        capture._last_error = str(exc)
+                        logger.warning("Camera capture error for %s: %s", stream.slug, exc)
+                        store_status(stream, capture.status_payload())
+                        capture.log_status()
+                        continue
+
+                    payload = capture.status_payload()
+                    if frame_bytes:
+                        store_frame(stream, frame_bytes)
+                    if frame_bytes or payload.get("last_error"):
+                        store_status(stream, payload)
+                        capture.log_status()
+                time.sleep(sleep)
+        except KeyboardInterrupt:
+            self.stdout.write(self.style.WARNING("Camera service stopped."))
+        finally:
+            for capture in captures.values():
+                capture.close()
 
     def _list_devices(self, node: Node | None) -> None:
         queryset = VideoDevice.objects.all()

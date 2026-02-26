@@ -53,3 +53,11 @@ def test_preflight_treats_apply_or_recheck_failures_as_fatal(runserver_preflight
     assert 'if ! "$python_bin" manage.py migrate --noinput; then' in runserver_preflight_contents
     assert 'Migration preflight failed while applying migrations.' in runserver_preflight_contents
     assert 'Migration preflight failed: migrations are still pending after apply.' in runserver_preflight_contents
+
+
+def test_preflight_honors_predeploy_marker_before_fallback(runserver_preflight_contents: str) -> None:
+    """Preflight should trust a successful pre-deploy marker before applying migrations again."""
+    assert 'PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"' in runserver_preflight_contents
+    assert "read_predeploy_marker_fingerprint()" in runserver_preflight_contents
+    assert "Found successful pre-deploy migration marker; verifying migration state..." in runserver_preflight_contents
+    assert "Pre-deploy migration marker verified; skipping migration apply fallback." in runserver_preflight_contents

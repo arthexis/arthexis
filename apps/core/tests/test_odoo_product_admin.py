@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 from django.utils import timezone
 
 import pytest
 
 from apps.odoo.models import OdooEmployee, OdooProduct
+from apps.users.models import User
 
 
 @pytest.mark.regression
@@ -173,3 +175,167 @@ def test_search_orders_view_accepts_post_selected_action(admin_client, admin_use
 
     assert response.status_code == 200
     assert "S0001" in response.rendered_content
+
+
+@pytest.mark.regression
+@pytest.mark.django_db
+def test_load_employees_changelist_action_posts_to_import_endpoint(admin_client, admin_user):
+    """The changelist object action endpoint redirects to the import view."""
+
+    employee = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odooemployee_actions", kwargs={"tool": "load_employees"})
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("admin:odoo_odooemployee_load_employees")
+
+@pytest.mark.regression
+@pytest.mark.django_db
+def test_load_employees_action_creates_missing_odoo_profiles(admin_client, admin_user, monkeypatch):
+    """The Odoo employee tool action creates missing local users and profiles."""
+
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    OdooEmployee.objects.create(
+        user=User.objects.create(username="existing-user"),
+        host=profile.host,
+        database=profile.database,
+        username="existing",
+        password="secret",
+        odoo_uid=10,
+        verified_on=timezone.now(),
+    )
+
+    def fake_execute(self, model, method, *args, **kwargs):
+        assert self.pk == profile.pk
+        assert model == "res.users"
+        assert method == "search_read"
+        return [
+            {
+                "id": 10,
+                "name": "Existing User",
+                "email": "existing@example.com",
+                "login": "existing",
+                "partner_id": [201, "Existing"],
+            },
+            {
+                "id": 11,
+                "name": "Ana Gomez",
+                "email": "ana@example.com",
+                "login": "ana",
+                "partner_id": [202, "Ana"],
+            },
+        ]
+
+    monkeypatch.setattr(OdooEmployee, "execute", fake_execute)
+
+    response = admin_client.post(reverse("admin:odoo_odooemployee_load_employees"))
+    assert response.status_code == 302
+
+    created_profile = OdooEmployee.objects.get(odoo_uid=11)
+    assert created_profile.username == "ana"
+    assert created_profile.host == profile.host
+    assert created_profile.database == profile.database
+    assert created_profile.user.username == "ana"
+    assert created_profile.user.has_usable_password() is False
+    assert created_profile.password == ""
+    assert created_profile.verified_on is None
+    assert OdooEmployee.objects.filter(host=profile.host, database=profile.database).count() == 3
+
+
+@pytest.mark.regression
+@pytest.mark.django_db
+def test_load_employees_action_requires_verified_profile(admin_client, admin_user, monkeypatch):
+    """The tool action redirects without syncing when Odoo credentials are not verified."""
+
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+    )
+
+    def fail_execute(*args, **kwargs):
+        raise AssertionError("execute should not be called for unverified profiles")
+
+    monkeypatch.setattr(OdooEmployee, "execute", fail_execute)
+
+    response = admin_client.post(reverse("admin:odoo_odooemployee_load_employees"))
+    assert response.status_code == 302
+    assert OdooEmployee.objects.count() == 1
+
+
+@pytest.mark.regression
+@pytest.mark.django_db
+def test_load_employees_action_rejects_get_requests(admin_client, admin_user, monkeypatch):
+    """The import endpoint only performs sync when called with POST."""
+
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    def fail_execute(*args, **kwargs):
+        raise AssertionError("execute should not be called for GET requests")
+
+    monkeypatch.setattr(OdooEmployee, "execute", fail_execute)
+
+    response = admin_client.get(reverse("admin:odoo_odooemployee_load_employees"))
+    assert response.status_code == 302
+    assert OdooEmployee.objects.count() == 1
+
+
+@pytest.mark.regression
+@pytest.mark.django_db
+def test_load_employees_action_requires_change_permission(client, monkeypatch):
+    """Users without change permission cannot trigger the import endpoint."""
+
+    viewer = User.objects.create_user(
+        username="viewer",
+        password="viewer-pass",
+        is_staff=True,
+    )
+    viewer.user_permissions.add(Permission.objects.get(codename="view_odooemployee"))
+
+    OdooEmployee.objects.create(
+        user=viewer,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="viewer",
+        password="secret",
+        odoo_uid=101,
+        verified_on=timezone.now(),
+    )
+
+    def fail_execute(*args, **kwargs):
+        raise AssertionError("execute should not be called without change permission")
+
+    monkeypatch.setattr(OdooEmployee, "execute", fail_execute)
+
+    assert client.login(username="viewer", password="viewer-pass")
+    response = client.post(reverse("admin:odoo_odooemployee_load_employees"))
+    assert response.status_code == 403

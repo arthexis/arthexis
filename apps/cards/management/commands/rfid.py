@@ -30,10 +30,11 @@ class Command(BaseCommand):
 
     help = "RFID command group. Use `rfid <check|watch|service|doctor|import|export>`."
     DEFAULT_SCAN_TIMEOUT = max(30.0, rfid_service.DEFAULT_SCAN_TIMEOUT)
+    DEFAULT_ACTION = "status"
 
     def add_arguments(self, parser):
         """Register subcommands and their arguments."""
-        subparsers = parser.add_subparsers(dest="action", required=True)
+        subparsers = parser.add_subparsers(dest="action", required=False)
 
         check_parser = subparsers.add_parser("check", help="Validate RFID tags by UID, label, or scan.")
         self._add_check_arguments(check_parser)
@@ -55,11 +56,37 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """Dispatch to the selected RFID action."""
-        action = options["action"]
+        action = options.get("action") or self.DEFAULT_ACTION
         handler = getattr(self, f"_handle_{action}", None)
         if handler is None:
             raise CommandError(f"Unsupported RFID action: {action}")
         handler(options)
+
+    def _handle_status(self, options):
+        """Show RFID service runtime state and scanner configuration summary."""
+        del options
+        endpoint = service_endpoint()
+        lock_path = rfid_service.rfid_service_lock_path()
+        scanner_lock = lock_file_path()
+        configured = scanner_lock.exists()
+        ping = rfid_service.request_service("ping", timeout=0.5)
+
+        self.stdout.write(self.style.MIGRATE_HEADING("RFID Status"))
+        self.stdout.write(f"Service endpoint: {endpoint.host}:{endpoint.port}")
+        self.stdout.write(
+            f"Service lock: {lock_path} ({'present' if lock_path.exists() else 'missing'})"
+        )
+        self.stdout.write(
+            f"Scanner lock: {scanner_lock} ({'present' if scanner_lock.exists() else 'missing'})"
+        )
+        self.stdout.write(
+            "RFID reader configuration: "
+            f"{'configured' if configured else 'not configured'}"
+        )
+        if ping is not None:
+            self.stdout.write(self.style.SUCCESS("RFID service state: reachable"))
+            return
+        self.stdout.write(self.style.WARNING("RFID service state: unreachable"))
 
     def _add_check_arguments(self, parser):
         target = parser.add_mutually_exclusive_group(required=True)
@@ -69,6 +96,7 @@ class Command(BaseCommand):
         parser.add_argument("--kind", choices=[choice[0] for choice in RFID.KIND_CHOICES], help="Optional RFID kind when validating a UID directly.")
         parser.add_argument("--endianness", choices=[choice[0] for choice in RFID.ENDIANNESS_CHOICES], help="Optional endianness when validating a UID directly.")
         parser.add_argument("--timeout", type=float, default=5.0, help="How long to wait for a scan before timing out when running non-interactively (seconds).")
+        parser.add_argument("--no-irq", action="store_true", help="Bypass IRQ/background-reader path and force direct polling for a scan.")
         parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response.")
 
     def _handle_check(self, options):
@@ -117,7 +145,11 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        result = self._scan_via_attempt(timeout) if service_available() else self._scan_via_local(timeout)
+        no_irq = options.get("no_irq", False)
+        if no_irq or not service_available():
+            result = self._scan_via_local(timeout, no_irq=no_irq)
+        else:
+            result = self._scan_via_attempt(timeout)
         if result.get("error"):
             return result
         if not result.get("rfid"):
@@ -152,7 +184,7 @@ class Command(BaseCommand):
             payload.setdefault("label_id", attempt.label_id)
         return payload
 
-    def _scan_via_local(self, timeout: float) -> dict:
+    def _scan_via_local(self, timeout: float, *, no_irq: bool = False) -> dict:
         interactive = sys.stdin.isatty()
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
@@ -162,7 +194,7 @@ class Command(BaseCommand):
         while True:
             if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
-            result = scan_sources(timeout=0.2)
+            result = scan_sources(timeout=0.2, no_irq=no_irq)
             if result.get("rfid") or result.get("error"):
                 return result
             if not interactive and time.monotonic() - start >= timeout:

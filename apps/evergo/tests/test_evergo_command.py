@@ -102,3 +102,106 @@ def test_evergo_command_raises_for_ambiguous_user_identifier():
             "--password",
             "secret",
         )
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_evergo_command_load_customers_with_inline_queries():
+    """Command should execute admin-equivalent customer load when requested."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-load", email="suite-load@example.com")
+    profile = EvergoUser.objects.create(user=suite_user, evergo_email="ops@example.com", evergo_password="secret")
+
+    stdout = io.StringIO()
+    with patch.object(EvergoUser, "load_customers_from_queries") as mock_loader:
+        mock_loader.return_value = {
+            "sales_orders": ["J00123"],
+            "customer_names": ["Acme"],
+            "customers_loaded": 1,
+            "orders_created": 2,
+            "orders_updated": 3,
+            "placeholders_created": 0,
+            "unresolved": ["Acme"],
+        }
+
+        call_command(
+            "evergo",
+            suite_user.username,
+            "--load-customers",
+            "--queries",
+            "J00123, Acme",
+            "--timeout",
+            "12",
+            stdout=stdout,
+        )
+
+    mock_loader.assert_called_once_with(raw_queries="J00123, Acme", timeout=12)
+    output = stdout.getvalue()
+    assert "Customer sync completed" in output
+    assert "Unresolved: Acme" in output
+    profile.refresh_from_db()
+    assert profile.evergo_email == "ops@example.com"
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_evergo_command_load_customers_requires_query_source():
+    """Command should reject load-customer runs that do not provide any queries."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-missing", email="suite-missing@example.com")
+
+    with pytest.raises(CommandError, match="requires --queries or --queries-file"):
+        call_command("evergo", suite_user.username, "--load-customers")
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_evergo_command_load_customers_rejects_conflicting_query_sources(tmp_path):
+    """Command should reject passing both inline and file query sources at once."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-conflict", email="suite-conflict@example.com")
+    queries_file = tmp_path / "queries.txt"
+    queries_file.write_text("J00123", encoding="utf-8")
+
+    with pytest.raises(CommandError, match="Use only one of --queries or --queries-file"):
+        call_command(
+            "evergo",
+            suite_user.username,
+            "--load-customers",
+            "--queries",
+            "J00123",
+            "--queries-file",
+            str(queries_file),
+        )
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_evergo_command_load_customers_supports_queries_file(tmp_path):
+    """Command should read raw queries from a UTF-8 file and execute sync."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-file", email="suite-file@example.com")
+    EvergoUser.objects.create(user=suite_user, evergo_email="ops@example.com", evergo_password="secret")
+    queries_file = tmp_path / "queries.txt"
+    queries_file.write_text("J00123\nBeta Customer", encoding="utf-8")
+
+    with patch.object(EvergoUser, "load_customers_from_queries") as mock_loader:
+        mock_loader.return_value = {
+            "sales_orders": ["J00123"],
+            "customer_names": ["Beta Customer"],
+            "customers_loaded": 2,
+            "orders_created": 1,
+            "orders_updated": 1,
+            "placeholders_created": 0,
+            "unresolved": [],
+        }
+
+        call_command(
+            "evergo",
+            suite_user.username,
+            "--load-customers",
+            "--queries-file",
+            str(queries_file),
+        )
+
+    mock_loader.assert_called_once_with(raw_queries="J00123\nBeta Customer", timeout=20)

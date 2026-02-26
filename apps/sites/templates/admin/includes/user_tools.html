@@ -8,8 +8,6 @@
     <a href="{{ docsroot }}">{% trans 'Docs' %}</a> /
   {% endif %}
   <a href="{% url 'certs-trust' %}">{% trans 'Trust' %}</a> /
-  {% url 'admin:actions_remoteaction_my_openapi_spec' as actions_spec_url %}
-  {% if actions_spec_url %}<a href="{{ actions_spec_url }}">{% trans 'My Actions Spec' %}</a> /{% endif %}
   {% if user.pk %}
     {% admin_profile_url user as profile_url %}
     {% if profile_url %}

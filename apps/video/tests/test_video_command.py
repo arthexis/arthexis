@@ -513,3 +513,97 @@ def test_video_command_sample_waits_for_new_bytes_when_frame_id_missing(tmp_path
 
     with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
         call_command("video", samples=2)
+
+
+@pytest.mark.django_db
+def test_video_snapshot_subaction_matches_legacy_snapshot_flag(capsys):
+    """Ensure snapshot sub-action produces the same success output as legacy flag mode."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+
+    class SnapshotResult:
+        sample = SimpleNamespace(path="/tmp/snapshot.jpg")
+
+    with (
+        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+        patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
+    ):
+        call_command("video", snapshot=True)
+
+    legacy_output = capsys.readouterr().out
+
+    with (
+        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+        patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
+    ):
+        call_command("video", "snapshot")
+
+    action_output = capsys.readouterr().out
+    assert "Snapshot saved to /tmp/snapshot.jpg" in legacy_output
+    assert "Snapshot saved to /tmp/snapshot.jpg" in action_output
+
+
+@patch("apps.video.management.commands.video.get_frame")
+@patch("apps.video.management.commands.video.MjpegStream")
+@patch("apps.video.management.commands.video.Node")
+@pytest.mark.django_db
+def test_video_mjpeg_subaction_matches_legacy_flag_output(node_mock, stream_mock, frame_mock, capsys):
+    """Ensure mjpeg sub-action preserves legacy capture output behavior."""
+
+    node_mock.get_local.return_value = None
+    stream = SimpleNamespace(store_frame_bytes=Mock(), slug="stream-1")
+    stream_mock.objects.all.return_value.filter.return_value.order_by.return_value = [stream]
+    frame_mock.return_value = SimpleNamespace(frame_bytes=b"frame")
+
+    call_command("video", mjpeg=True)
+    legacy_output = capsys.readouterr().out
+
+    stream.store_frame_bytes.reset_mock()
+    call_command("video", "mjpeg")
+    action_output = capsys.readouterr().out
+
+    assert "Captured frames for 1 stream(s)." in legacy_output
+    assert "Captured frames for 1 stream(s)." in action_output
+
+
+def test_video_doctor_subaction_matches_legacy_flag(capsys):
+    """Ensure doctor sub-action remains equivalent to legacy --doctor flag."""
+
+    with patch("apps.video.management.commands.video.Command._run_doctor") as doctor_mock:
+        call_command("video", doctor=True)
+    doctor_mock.assert_called_once()
+
+    with patch("apps.video.management.commands.video.Command._run_doctor") as doctor_mock:
+        call_command("video", "doctor")
+    doctor_mock.assert_called_once()
+    assert capsys.readouterr().out == ""
+
+
+def test_video_service_subaction_invokes_service_runner():
+    """Ensure service sub-action dispatches to the long-running service loop."""
+
+    with patch("apps.video.management.commands.video.Command._run_service") as service_mock:
+        call_command("video", "service", interval=0.33, sleep=0.12)
+
+    service_mock.assert_called_once_with(interval=0.33, sleep=0.12)
+
+@override_settings(VIDEO_FRAME_CAPTURE_INTERVAL=0.0, VIDEO_FRAME_SERVICE_SLEEP=0.0)
+def test_video_command_setting_defaults_preserve_zero():
+    """Preserve explicit zero-valued interval/sleep settings as CLI defaults."""
+
+    from apps.video.management.commands.video import _setting_default_float
+
+    assert _setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2) == 0.0
+    assert _setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05) == 0.0

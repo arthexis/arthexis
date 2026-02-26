@@ -7,6 +7,7 @@ if [ -n "${LOCK_DIR:-}" ]; then
 fi
 
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
+PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
 
 compute_migration_fingerprint() {
   local base_dir
@@ -42,6 +43,40 @@ print(hasher.hexdigest())
 PY
 }
 
+read_predeploy_marker_fingerprint() {
+  local marker_file="${1:-$PREDEPLOY_MIGRATIONS_MARKER_FILE}"
+  local python_bin
+
+  if [ ! -f "$marker_file" ]; then
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    return 1
+  fi
+
+  "$python_bin" - "$marker_file" <<'PY'
+import json
+import pathlib
+import sys
+
+marker = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if payload.get("status") != "success":
+    raise SystemExit(1)
+
+fingerprint = payload.get("fingerprint")
+if not isinstance(fingerprint, str) or not fingerprint:
+    raise SystemExit(1)
+
+print(fingerprint)
+PY
+}
+
 run_runserver_preflight() {
   if [ "${RUNSERVER_PREFLIGHT_DONE:-false}" = true ]; then
     return 0
@@ -64,6 +99,23 @@ run_runserver_preflight() {
     echo "Forcing migration preflight refresh..."
   elif [ -f "$MIGRATIONS_SHA_FILE" ]; then
     stored_fingerprint=$(cat "$MIGRATIONS_SHA_FILE")
+  fi
+
+  local marker_fingerprint=""
+  if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ] && marker_fingerprint=$(read_predeploy_marker_fingerprint); then
+    if [ "$marker_fingerprint" = "$fingerprint" ]; then
+      echo "Found successful pre-deploy migration marker; verifying migration state..."
+      if "$python_bin" manage.py migrate --check; then
+        echo "Pre-deploy migration marker verified; skipping migration apply fallback."
+        echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+        RUNSERVER_PREFLIGHT_DONE=true
+        export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+        RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+        return 0
+      fi
+
+      echo "Pre-deploy migration marker did not verify cleanly; running fallback migration preflight..."
+    fi
   fi
 
   if [ "$stored_fingerprint" = "$fingerprint" ] && [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then

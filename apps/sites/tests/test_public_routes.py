@@ -1,14 +1,19 @@
 import datetime
 import json
+import re
 from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.urls import reverse
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
 from apps.energy.models import ClientReport
+from apps.features.models import Feature
+from apps.modules.models import Module
+from apps.sites.models import Landing
 
 
 @pytest.fixture
@@ -186,3 +191,117 @@ def test_whatsapp_webhook_post_payload_validation(
     assert response.status_code == expected_status
     if expected_status == 201:
         assert response.json()["status"] == "ok"
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_disabled_returns_blank_public_home(client):
+    """Home should render a blank page when the interface feature is disabled."""
+
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    body_match = re.search(rb"<body[^>]*>(.*?)</body>", response.content, re.DOTALL)
+    assert body_match is not None
+    assert body_match.group(1).strip() == b""
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_redirects_to_configured_interface_landing(client):
+    """Disabled interface feature should redirect home to configured interface landing."""
+
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+    module = Module.objects.create(path="operator")
+    landing = Landing.objects.create(module=module, path="/operator/", label="Operator")
+
+    site, _created = Site.objects.get_or_create(
+        domain="testserver",
+        defaults={"name": "testserver"},
+    )
+    site.interface_landing = landing
+    site.save(update_fields=["interface_landing"])
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 302
+    assert response["Location"] == "/operator/?operator_interface=1"
+
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client):
+    """Landing redirects once and then renders without self-redirect loops."""
+
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+    module = Module.objects.create(path="operator-loop")
+    landing = Landing.objects.create(
+        module=module,
+        path="/?foo=1",
+        label="Operator Loop Safe",
+    )
+
+    site, _created = Site.objects.get_or_create(
+        domain="testserver",
+        defaults={"name": "testserver"},
+    )
+    site.interface_landing = landing
+    site.save(update_fields=["interface_landing"])
+
+    first = client.get(reverse("pages:index"))
+    assert first.status_code == 302
+    assert first["Location"] == "/?foo=1&operator_interface=1"
+
+    second = client.get(first["Location"])
+    assert second.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
+    """Unsafe absolute/scheme-relative targets should not redirect users away."""
+
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+    module = Module.objects.create(path="operator-unsafe")
+    landing = Landing.objects.create(
+        module=module,
+        path="//malicious.example/phish",
+        label="Unsafe",
+    )
+
+    site, _created = Site.objects.get_or_create(
+        domain="testserver",
+        defaults={"name": "testserver"},
+    )
+    site.interface_landing = landing
+    site.save(update_fields=["interface_landing"])
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    assert b"<body" in response.content
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(client):
+    """Anonymous query-string toggles must not suppress public navigation chrome."""
+
+    response = client.get(f"{reverse('pages:index')}?operator_interface=1")
+
+    assert response.status_code == 200
+    assert b"<nav" in response.content
