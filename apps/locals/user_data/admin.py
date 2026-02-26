@@ -311,6 +311,24 @@ class ImportExportAdminMixin:
             return f"'{text}"
         return text
 
+    def _build_delimited_export_response(
+        self, queryset, export_fields, opts, *, delimiter, content_type, extension
+    ):
+        response = HttpResponse(content_type=content_type)
+        response["Content-Disposition"] = (
+            f"attachment; filename={opts.app_label}_{opts.model_name}.{extension}"
+        )
+        writer = csv.writer(response, delimiter=delimiter)
+        writer.writerow([field.name for field in export_fields])
+        for obj in queryset:
+            writer.writerow(
+                [
+                    self._sanitize_csv_value(field.value_from_object(obj))
+                    for field in export_fields
+                ]
+            )
+        return response
+
     def export_view(self, request):
         """Render export confirmation and stream model data in selected format."""
         if not self.has_view_permission(request):
@@ -328,46 +346,40 @@ class ImportExportAdminMixin:
             request.GET = original_get
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
-        selected_export_column_names = request.POST.getlist("export_columns")
-        if request.method == "POST" and selected_export_column_names:
-            selected_name_set = set(selected_export_column_names)
+        if request.method == "POST" and export_format:
+            selected_export_column_names = request.POST.getlist("export_columns")
+            if not selected_export_column_names:
+                return HttpResponseBadRequest(_("Select at least one column to export."))
+            export_field_by_name = {field.name: field for field in export_fields}
             export_fields = [
-                field for field in export_fields if field.name in selected_name_set
+                export_field_by_name[name]
+                for name in selected_export_column_names
+                if name in export_field_by_name
             ]
-        if not export_fields:
-            export_fields = self._get_export_fields(request)
+            if not export_fields:
+                return HttpResponseBadRequest(
+                    _("Select at least one valid column to export.")
+                )
         export_field_names = [field.name for field in export_fields]
         if export_format:
             if export_format == "csv":
-                response = HttpResponse(content_type="text/csv")
-                response["Content-Disposition"] = (
-                    f"attachment; filename={opts.app_label}_{opts.model_name}.csv"
+                return self._build_delimited_export_response(
+                    queryset,
+                    export_fields,
+                    opts,
+                    delimiter=",",
+                    content_type="text/csv",
+                    extension="csv",
                 )
-                writer = csv.writer(response)
-                writer.writerow(export_field_names)
-                for obj in queryset:
-                    writer.writerow(
-                        [
-                            self._sanitize_csv_value(field.value_from_object(obj))
-                            for field in export_fields
-                        ]
-                    )
-                return response
             if export_format == "tsv":
-                response = HttpResponse(content_type="text/tab-separated-values")
-                response["Content-Disposition"] = (
-                    f"attachment; filename={opts.app_label}_{opts.model_name}.tsv"
+                return self._build_delimited_export_response(
+                    queryset,
+                    export_fields,
+                    opts,
+                    delimiter="\t",
+                    content_type="text/tab-separated-values",
+                    extension="tsv",
                 )
-                writer = csv.writer(response, delimiter="\t")
-                writer.writerow(export_field_names)
-                for obj in queryset:
-                    writer.writerow(
-                        [
-                            self._sanitize_csv_value(field.value_from_object(obj))
-                            for field in export_fields
-                        ]
-                    )
-                return response
             if export_format == "json":
                 payload = serialize("json", queryset, fields=export_field_names)
                 response = HttpResponse(payload, content_type="application/json")
