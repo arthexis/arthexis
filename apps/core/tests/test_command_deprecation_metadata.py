@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django.core.management import get_commands, load_command_class
+
+from utils.command_api import CommandOptions, filtered_commands
 
 
 def test_absorbed_wrapper_commands_expose_replacement_metadata() -> None:
@@ -26,6 +30,14 @@ def test_absorbed_wrapper_commands_expose_replacement_metadata() -> None:
         "register-node-curl": "node register_curl",
         "registration_ready": "node ready",
         "update-peer-nodes": "node peers",
+        "lcd_write": "lcd write",
+        "lcd_plan": "lcd plan",
+        "lcd_replay": "lcd replay",
+        "lcd_calibrate": "lcd calibrate",
+        "lcd_animate": "lcd animate",
+        "lcd_debug": "lcd debug",
+        "video_debug": "video debug",
+        "snapshot": "video snapshot",
     }
 
     registered = get_commands()
@@ -39,3 +51,24 @@ def test_absorbed_wrapper_commands_expose_replacement_metadata() -> None:
 
         assert getattr(command.__class__, "arthexis_absorbed_command", False) is True
         assert getattr(command.__class__, "arthexis_replacement_command", "") == replacement
+
+
+def test_filtered_commands_hides_absorbed_wrappers_unless_deprecated_requested() -> None:
+    """Command API should hide absorbed wrappers unless --deprecated is set."""
+
+    wrapper_commands = {
+        "lcd_write",
+        "lcd_plan",
+        "lcd_replay",
+        "lcd_calibrate",
+        "lcd_animate",
+        "lcd_debug",
+        "video_debug",
+        "snapshot",
+    }
+
+    default_commands = set(filtered_commands(Path.cwd(), CommandOptions(deprecated=False)))
+    deprecated_commands = set(filtered_commands(Path.cwd(), CommandOptions(deprecated=True)))
+
+    assert wrapper_commands.isdisjoint(default_commands)
+    assert wrapper_commands.issubset(deprecated_commands)
