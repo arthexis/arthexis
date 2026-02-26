@@ -124,15 +124,7 @@ def test_my_dashboard_renders_username_external_link_and_orders_table(client):
         monkeypatch.setattr(
             EvergoUser,
             "load_customers_from_queries",
-            lambda self, *, raw_queries, timeout=20: {
-                "sales_orders": ["J00830"],
-                "customer_names": [],
-                "customers_loaded": 1,
-                "orders_created": 0,
-                "orders_updated": 1,
-                "placeholders_created": 0,
-                "unresolved": [],
-            },
+            lambda self, *, raw_queries, timeout=20: (_ for _ in ()).throw(AssertionError("should not call API when local SO exists")),
         )
         response = client.post(dashboard_url, {"sales_orders": "J00830"})
 
@@ -154,3 +146,37 @@ def test_my_dashboard_rejects_invalid_token(client):
 
     assert response.status_code == 200
     assert "invalid or has expired" in response.content.decode().lower()
+
+
+@pytest.mark.django_db
+def test_my_dashboard_renders_tsv_copy_block(client):
+    """Regression: dashboard should render TSV block for quick copy/paste."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-tsv", email="dash-tsv@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-tsv@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9002,
+        order_number="GM01321",
+        client_name="Jesus Cortez",
+        status_name="Programada",
+        phone_primary="8111111111",
+        site_name="Chevrolet",
+        address_street="Santa Barbara",
+        address_num_ext="404",
+        address_municipality="Apodaca",
+        address_state="NL",
+        address_postal_code="66647",
+    )
+
+    response = client.post(profile.dashboard_public_url(), {"sales_orders": "GM01321"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Copy / Paste Table (TSV)" in content
+    assert "SO\tCustomer Name\tStatus" in content
+    assert "GM01321\tJesus Cortez\tProgramada" in content

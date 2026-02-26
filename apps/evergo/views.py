@@ -8,7 +8,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 
 from .exceptions import EvergoAPIError
-from .models import EvergoArtifact, EvergoOrder, EvergoCustomer, EvergoUser
+from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
 
 
 def customer_public_detail(request, pk: int) -> HttpResponse:
@@ -19,9 +19,15 @@ def customer_public_detail(request, pk: int) -> HttpResponse:
     )
     artifacts = list(customer.artifacts.all())
     address = customer.address.strip()
-    google_maps_url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(address)}" if address else ""
+    google_maps_url = (
+        f"https://www.google.com/maps/search/?api=1&query={quote_plus(address)}"
+        if address
+        else ""
+    )
     google_maps_embed_url = (
-        f"https://maps.google.com/maps?q={quote_plus(address)}&z=15&output=embed" if address else ""
+        f"https://maps.google.com/maps?q={quote_plus(address)}&z=15&output=embed"
+        if address
+        else ""
     )
     pdf_artifact = next((artifact for artifact in artifacts if artifact.is_pdf), None)
 
@@ -54,6 +60,58 @@ def _build_full_address(order: EvergoOrder) -> str:
     return combined or order.address_between_streets or ""
 
 
+def _serialize_dashboard_row(order: EvergoOrder) -> dict[str, str]:
+    """Normalize a local order into dashboard row columns."""
+    return {
+        "so": order.order_number,
+        "customer_name": order.client_name,
+        "status": order.status_name,
+        "full_address": _build_full_address(order),
+        "phone": order.phone_primary or order.phone_secondary,
+        "charger_brand": order.site_name,
+        "city": order.address_municipality or order.address_city,
+    }
+
+
+def _rows_to_tsv(rows: list[dict[str, str]]) -> str:
+    """Convert dashboard rows into a tab-separated copy/paste block."""
+    if not rows:
+        return ""
+    headers = [
+        "SO",
+        "Customer Name",
+        "Status",
+        "Full Address",
+        "Phone",
+        "Charger Brand",
+        "City (Municipio)",
+    ]
+    lines = ["\t".join(headers)]
+    for row in rows:
+        lines.append(
+            "\t".join(
+                [
+                    row["so"],
+                    row["customer_name"],
+                    row["status"],
+                    row["full_address"],
+                    row["phone"],
+                    row["charger_brand"],
+                    row["city"],
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def _find_local_orders(profile: EvergoUser, *, sales_orders: list[str]) -> tuple[list[EvergoOrder], list[str]]:
+    """Return locally cached orders for SOs and list any unresolved SO identifiers."""
+    local_orders = list(profile.orders.filter(order_number__in=sales_orders).order_by("order_number", "remote_id"))
+    found_so = {order.order_number for order in local_orders if order.order_number}
+    unresolved = [so for so in sales_orders if so not in found_so]
+    return local_orders, unresolved
+
+
 def my_dashboard(request, token: str) -> HttpResponse:
     """Render the public My Evergo Dashboard for a signed profile token."""
     profile = None
@@ -68,26 +126,31 @@ def my_dashboard(request, token: str) -> HttpResponse:
     else:
         if request.method == "POST":
             input_value = str(request.POST.get("sales_orders") or "")
-            if input_value.strip():
+            sales_orders, _customer_names = profile.parse_customer_queries(raw_queries=input_value)
+
+            local_orders, unresolved_sales_orders = _find_local_orders(
+                profile,
+                sales_orders=sales_orders,
+            )
+            order_map: dict[str, EvergoOrder] = {
+                order.order_number: order for order in local_orders if order.order_number
+            }
+
+            if unresolved_sales_orders:
                 try:
-                    summary = profile.load_customers_from_queries(raw_queries=input_value)
+                    profile.load_customers_from_queries(raw_queries="\n".join(unresolved_sales_orders))
                 except EvergoAPIError as exc:
                     error_message = str(exc)
                 else:
-                    order_numbers = summary["sales_orders"]
-                    orders = profile.orders.filter(order_number__in=order_numbers).order_by("order_number")
-                    rows = [
-                        {
-                            "so": order.order_number,
-                            "customer_name": order.client_name,
-                            "status": order.status_name,
-                            "full_address": _build_full_address(order),
-                            "phone": order.phone_primary or order.phone_secondary,
-                            "charger_brand": order.site_name,
-                            "city": order.address_municipality or order.address_city,
-                        }
-                        for order in orders
-                    ]
+                    refreshed_orders = profile.orders.filter(order_number__in=unresolved_sales_orders).order_by(
+                        "order_number",
+                        "remote_id",
+                    )
+                    for order in refreshed_orders:
+                        if order.order_number and order.order_number not in order_map:
+                            order_map[order.order_number] = order
+
+            rows = [_serialize_dashboard_row(order_map[so]) for so in sales_orders if so in order_map]
 
     context = {
         "profile": profile,
@@ -95,6 +158,7 @@ def my_dashboard(request, token: str) -> HttpResponse:
         "portal_orders_url": "https://portal-mex.evergo.com/ordenes/lista",
         "input_value": input_value,
         "rows": rows,
+        "rows_tsv": _rows_to_tsv(rows),
         "error_message": error_message,
     }
     return render(request, "evergo/my_dashboard.html", context)
