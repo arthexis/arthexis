@@ -27,10 +27,11 @@ clear_wifi_mac_pins() {
 
 configure_wifi_profile() {
   local connection_id="$1"
-  local mode iface ipv4_method
+  local mode iface ipv4_method props_raw
   local -a props
 
-  mapfile -t props < <(LC_ALL=C nmcli --get-values 802-11-wireless.mode,connection.interface-name,ipv4.method connection show "$connection_id") || return
+  props_raw="$(LC_ALL=C nmcli --get-values 802-11-wireless.mode,connection.interface-name,ipv4.method connection show "$connection_id")" || return
+  mapfile -t props <<<"$props_raw"
   mode="${props[0]:-}"
   iface="${props[1]:-}"
   ipv4_method="${props[2]:-}"
