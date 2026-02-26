@@ -521,7 +521,7 @@ def _load_upgrade_policy(policy_id: int | None):
         return None
 
     try:
-        return UpgradePolicy.objects.filter(pk=policy_id).first()
+        return UpgradePolicy.objects.filter(pk=policy_id, is_active=True).first()
     except DatabaseError:
         return None
 

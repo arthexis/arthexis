@@ -95,3 +95,33 @@ def test_fast_lane_forces_hourly_interval(monkeypatch, tmp_path: Path):
     assert task.interval.every == 1440
     assert task.interval.period == IntervalSchedule.MINUTES
     assert task.crontab is None
+
+
+@pytest.mark.django_db
+def test_ignores_inactive_upgrade_policies(tmp_path: Path):
+    """Periodic task scheduling only uses active upgrade policies."""
+
+    from django_celery_beat.models import IntervalSchedule, PeriodicTask
+    from apps.nodes.models import UpgradePolicy
+
+    UpgradePolicy.objects.update(is_active=False)
+    UpgradePolicy.objects.create(
+        name="Inactive Fast",
+        channel="unstable",
+        interval_minutes=5,
+        is_active=False,
+    )
+    UpgradePolicy.objects.create(
+        name="Active Stable",
+        channel="stable",
+        interval_minutes=45,
+        is_active=True,
+    )
+
+    with override_settings(BASE_DIR=tmp_path):
+        ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
+
+    task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
+    assert task.interval is not None
+    assert task.interval.period == IntervalSchedule.MINUTES
+    assert task.interval.every == 45
