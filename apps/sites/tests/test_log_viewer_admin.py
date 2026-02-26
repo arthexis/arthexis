@@ -44,3 +44,17 @@ def test_admin_dashboard_uses_short_logs_label(admin_client):
     content = response.content.decode()
     assert ">Logs<" in content
     assert "Log Viewer" not in content
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+@pytest.mark.integration
+def test_admin_dashboard_has_upgrade_quick_action(admin_client):
+    """The admin dashboard quick actions should expose a direct Upgrade button."""
+
+    response = admin_client.get(reverse("admin:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert ">Upgrade<" in content
+    assert reverse("admin:system-upgrade-report") in content
