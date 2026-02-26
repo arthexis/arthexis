@@ -598,3 +598,12 @@ def test_video_service_subaction_invokes_service_runner():
         call_command("video", "service", interval=0.33, sleep=0.12)
 
     service_mock.assert_called_once_with(interval=0.33, sleep=0.12)
+
+@override_settings(VIDEO_FRAME_CAPTURE_INTERVAL=0.0, VIDEO_FRAME_SERVICE_SLEEP=0.0)
+def test_video_command_setting_defaults_preserve_zero():
+    """Preserve explicit zero-valued interval/sleep settings as CLI defaults."""
+
+    from apps.video.management.commands.video import _setting_default_float
+
+    assert _setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2) == 0.0
+    assert _setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05) == 0.0
