@@ -276,7 +276,7 @@ def submit_user_story(request):
     if not data.get("path"):
         data["path"] = request.get_full_path()
 
-    form = UserStoryForm(data, user=request.user)
+    form = UserStoryForm(data, files=request.FILES, user=request.user)
     if request.user.is_authenticated:
         form.instance.user = request.user
 
