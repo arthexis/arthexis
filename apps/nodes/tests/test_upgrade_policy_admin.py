@@ -31,3 +31,13 @@ def test_activate_selected_upgrade_policies_action(admin_client):
     assert response.status_code == 200
     inactive.refresh_from_db()
     assert inactive.is_active is True
+
+
+@pytest.mark.django_db
+def test_upgrade_policy_changelist_uses_short_pypi_column_label(admin_client):
+    """Upgrade policy changelist renders a short column heading for PyPI requirements."""
+
+    response = admin_client.get(reverse("admin:nodes_upgradepolicy_changelist"))
+
+    assert response.status_code == 200
+    assert "Requires PyPI" in response.content.decode()
