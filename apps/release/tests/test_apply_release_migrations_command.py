@@ -59,6 +59,7 @@ def test_apply_release_migrations_uses_manifest_delta(monkeypatch, settings, tmp
 
     assert calls[0][0] == ("migrate", "demoapp", "0002_auto", "--noinput")
     assert calls[1][0] == ("migrate", "--check")
+    assert calls[2][0] == ("run_release_data_transforms", "--max-batches", "1")
 
 
 def test_apply_release_migrations_same_version_still_syncs_db(monkeypatch, settings, tmp_path) -> None:
@@ -80,6 +81,7 @@ def test_apply_release_migrations_same_version_still_syncs_db(monkeypatch, setti
 
     assert ("migrate", "--noinput") in calls
     assert ("migrate", "--check") in calls
+    assert ("run_release_data_transforms", "--max-batches", "1") in calls
     assert not any(len(call) > 1 and call[0] == "migrate" and call[1] == "demoapp" for call in calls)
 
 
@@ -106,6 +108,7 @@ def test_apply_release_migrations_falls_back_on_bundle_mismatch(monkeypatch, set
 
     assert ("migrate", "--noinput") in calls
     assert ("migrate", "--check") in calls
+    assert ("run_release_data_transforms", "--max-batches", "1") in calls
 
 
 def test_apply_release_migrations_validates_signature_when_key_is_set(monkeypatch, settings, tmp_path) -> None:
@@ -134,3 +137,31 @@ def test_apply_release_migrations_validates_signature_when_key_is_set(monkeypatc
     call_command("apply_release_migrations", target_version, bundle_dir=str(bundle_dir))
 
     assert ("migrate", "demoapp", "0002_auto", "--noinput") in calls
+
+
+def test_apply_release_migrations_skips_data_transforms_when_requested(monkeypatch, settings, tmp_path) -> None:
+    """Regression: command should skip deferred transforms when explicitly requested."""
+
+    settings.BASE_DIR = tmp_path
+    installed_version = "1.0.0"
+    target_version = "1.1.0"
+    (tmp_path / "VERSION").write_text(installed_version + "\n", encoding="utf-8")
+    bundle_dir = _write_bundle(tmp_path, target_version, installed_version)
+
+    calls: list[tuple[object, ...]] = []
+
+    def fake_call_command(*args, **kwargs):
+        calls.append(args)
+
+    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+
+    call_command(
+        "apply_release_migrations",
+        target_version,
+        bundle_dir=str(bundle_dir),
+        skip_data_transforms=True,
+    )
+
+    assert ("migrate", "demoapp", "0002_auto", "--noinput") in calls
+    assert ("migrate", "--check") in calls
+    assert ("run_release_data_transforms", "--max-batches", "1") not in calls
