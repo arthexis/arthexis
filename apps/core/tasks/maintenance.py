@@ -79,3 +79,29 @@ run_client_report_schedule = shared_task(_run_client_report_schedule)
 run_client_report_schedule_legacy = shared_task(
     name="apps.core.tasks.run_client_report_schedule"
 )(_run_client_report_schedule)
+
+
+def _run_release_data_transform(transform_name: str) -> None:
+    """Execute one deferred release data transform."""
+
+    from apps.release.domain import run_transform
+
+    try:
+        result = run_transform(transform_name)
+    except KeyError:
+        logger.warning("Unknown release transform %s", transform_name)
+        return
+
+    logger.info(
+        "Release transform %s processed=%s updated=%s complete=%s",
+        transform_name,
+        result.processed,
+        result.updated,
+        result.complete,
+    )
+
+
+run_release_data_transform = shared_task(_run_release_data_transform)
+run_release_data_transform_legacy = shared_task(
+    name="apps.core.tasks.run_release_data_transform"
+)(_run_release_data_transform)
