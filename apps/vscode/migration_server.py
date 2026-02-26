@@ -186,12 +186,12 @@ def _should_skip_dir(parts: Iterable[str]) -> bool:
     return False
 
 
-def _should_watch_file(relative_path: Path) -> bool:
-    """Return ``True`` when *relative_path* represents a watched file."""
+def _should_watch_file(filename: str) -> bool:
+    """Return ``True`` when *filename* represents a watched file."""
 
-    if relative_path.name in WATCH_FILENAMES:
+    if filename in WATCH_FILENAMES:
         return True
-    return relative_path.suffix.lower() in WATCH_EXTENSIONS
+    return Path(filename).suffix.lower() in WATCH_EXTENSIONS
 
 
 def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
@@ -206,7 +206,7 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
         dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_root.parts, d))]
         for name in files:
             rel_path = rel_root / name
-            if not _should_watch_file(rel_path):
+            if not _should_watch_file(name):
                 continue
             full_path = Path(root, name)
             try:

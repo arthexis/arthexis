@@ -139,6 +139,15 @@ def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches(
     mocked_killpg.assert_not_called()
     mocked_kill.assert_called_once_with(9876, migration_server.signal.SIGTERM)
 
+
+
+def test_should_watch_file_uses_filename_only() -> None:
+    """Regression: watch checks should not require constructing pathlib paths."""
+
+    assert migration_server._should_watch_file("manage.py") is True
+    assert migration_server._should_watch_file("module.PY") is True
+    assert migration_server._should_watch_file("notes.bin") is False
+
 def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     """Ensure migration-server refresh forces SQLite fallback for responsiveness."""
 
