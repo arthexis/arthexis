@@ -622,14 +622,14 @@ def run_deferred_node_migrations(
         "Constellation": "CONS",
     }
 
-    role_total = NodeRole.objects.filter(
+    remaining_roles_qs = NodeRole.objects.filter(
         acronym__isnull=True,
         name__in=role_map.keys(),
-    ).count()
+    )
     removable_nodes = Node.objects.filter(
         Q(is_seed_data=True)
         | (
-            Q(current_relation="SELF")
+            Q(current_relation=Node.Relation.SELF)
             & (
                 Q(hostname="arthexis.com")
                 | Q(network_hostname="arthexis.com")
@@ -638,39 +638,46 @@ def run_deferred_node_migrations(
             )
         )
     )
-    node_total = removable_nodes.count()
-    total = role_total + node_total
+    if checkpoint.total_items <= 0 and checkpoint.processed_items <= 0:
+        checkpoint.total_items = remaining_roles_qs.count() + removable_nodes.count()
+    total = checkpoint.total_items
 
     role_updates = 0
-    for role in NodeRole.objects.filter(
-        acronym__isnull=True,
-        name__in=role_map.keys(),
-    ).order_by("pk")[:batch_size]:
+    roles_to_update = list(remaining_roles_qs.order_by("pk")[:batch_size])
+    for role in roles_to_update:
         role.acronym = role_map[role.name]
-        role.save(update_fields=["acronym"])
-        role_updates += 1
+    if roles_to_update:
+        NodeRole.objects.bulk_update(roles_to_update, ["acronym"])
+        role_updates = len(roles_to_update)
 
     remaining = max(batch_size - role_updates, 0)
     node_deletions = 0
+    last_pk = checkpoint.last_pk or 0
     if remaining > 0:
         removable_ids = list(
-            removable_nodes.order_by("pk").values_list("pk", flat=True)[:remaining]
+            removable_nodes.filter(pk__gt=last_pk)
+            .order_by("pk")
+            .values_list("pk", flat=True)[:remaining]
         )
         if removable_ids:
             node_deletions, _ = Node.objects.filter(pk__in=removable_ids).delete()
+            checkpoint.last_pk = max(removable_ids)
 
-    remaining_roles = NodeRole.objects.filter(
-        acronym__isnull=True,
-        name__in=role_map.keys(),
-    ).count()
-    processed = max(total - (remaining_roles + removable_nodes.count()), 0)
-    is_complete = processed >= total if total else True
+    remaining_roles = remaining_roles_qs.count()
+    remaining_nodes = removable_nodes.count()
+    processed = max(total - (remaining_roles + remaining_nodes), 0)
+    is_complete = remaining_roles == 0 and remaining_nodes == 0
 
-    checkpoint.total_items = total
     checkpoint.processed_items = processed
     checkpoint.is_complete = is_complete
     checkpoint.save(
-        update_fields=["total_items", "processed_items", "is_complete", "updated_at"]
+        update_fields=[
+            "total_items",
+            "processed_items",
+            "last_pk",
+            "is_complete",
+            "updated_at",
+        ]
     )
 
     return {

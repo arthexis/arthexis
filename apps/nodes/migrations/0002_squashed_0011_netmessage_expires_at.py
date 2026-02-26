@@ -14,9 +14,9 @@ from django.db import migrations, models
 # Move them and any dependencies into this file, then update the
 # RunPython operations to refer to the local versions:
 # apps.nodes.migrations.0004_remove_invalid_clipboard_tasks
-# apps.nodes.migrations.0005_remove_seed_nodes
-# apps.nodes.migrations.0009_remove_arthexis_self_node
-# apps.nodes.migrations.0010_noderole_acronym
+#
+# NOTE: Heavy transforms from 0005, 0009, and 0010 were replaced with
+# noop_transform and are now handled by deferred background tasks.
 
 
 def remove_invalid_clipboard_tasks(apps, schema_editor):

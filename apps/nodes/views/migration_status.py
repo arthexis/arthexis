@@ -21,6 +21,7 @@ def deferred_migration_status(request):
                 "processed_items": 0,
                 "percent_complete": 0.0,
                 "is_complete": False,
+                "updated_at": None,
             }
         )
 

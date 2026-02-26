@@ -27,6 +27,24 @@ class NodeMigrationCheckpointAdmin(admin.ModelAdmin):
     )
     ordering = ("key",)
 
+    def has_add_permission(self, request) -> bool:
+        """Disallow checkpoint creation from admin for monitor-only access."""
+
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:
+        """Disallow checkpoint deletion from admin for monitor-only access."""
+
+        return False
+
+    def get_actions(self, request):
+        """Hide bulk delete action for monitor-only access."""
+
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
+
+
     @admin.display(description="Progress (%)")
     def completion_percent(self, obj: NodeMigrationCheckpoint) -> float:
         """Render percentage completion in the admin changelist."""
