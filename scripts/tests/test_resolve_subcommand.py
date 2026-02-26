@@ -11,7 +11,10 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = pytest.mark.regression
+pytestmark = [
+    pytest.mark.regression,
+    pytest.mark.pr("PR-5652", "2026-02-26T00:00:00Z"),
+]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +36,14 @@ def fake_python(tmp_path: Path) -> Path:
     )
     fake_python_path.chmod(fake_python_path.stat().st_mode | stat.S_IEXEC)
     return fake_python_path
+
+
+def _legacy_command() -> list[str]:
+    """Return a cross-platform invocation for the legacy resolve shell entrypoint."""
+
+    if os.name == "nt":
+        return ["bash", str(LEGACY_ENTRYPOINT)]
+    return [str(LEGACY_ENTRYPOINT)]
 
 
 def _run_command(
@@ -88,7 +99,7 @@ def test_resolve_entrypoints_are_argument_equivalent(
     stdin_text: str,
 ) -> None:
     """Legacy and new resolve commands should forward identical resolver invocations."""
-    legacy_result = _run_command([str(LEGACY_ENTRYPOINT), *legacy_args], fake_python, tmp_path, stdin_text=stdin_text)
+    legacy_result = _run_command([*_legacy_command(), *legacy_args], fake_python, tmp_path, stdin_text=stdin_text)
     new_result = _run_command([*NEW_ENTRYPOINT, *new_args], fake_python, tmp_path, stdin_text=stdin_text)
 
     assert legacy_result.returncode == 0
@@ -108,7 +119,7 @@ def test_resolve_entrypoints_are_argument_equivalent(
 )
 def test_resolve_entrypoints_preserve_error_messages(fake_python: Path, tmp_path: Path, bad_args: list[str]) -> None:
     """Both entrypoints should preserve resolve.sh validation errors exactly."""
-    legacy_result = _run_command([str(LEGACY_ENTRYPOINT), *bad_args], fake_python, tmp_path)
+    legacy_result = _run_command([*_legacy_command(), *bad_args], fake_python, tmp_path)
     new_result = _run_command([*NEW_ENTRYPOINT, *bad_args], fake_python, tmp_path)
 
     assert legacy_result.returncode == 1
@@ -119,7 +130,7 @@ def test_resolve_entrypoints_preserve_error_messages(fake_python: Path, tmp_path
 
 def test_resolve_help_text_is_equivalent(fake_python: Path, tmp_path: Path) -> None:
     """The compatibility shim should preserve the legacy help output."""
-    legacy_result = _run_command([str(LEGACY_ENTRYPOINT), "--help"], fake_python, tmp_path)
+    legacy_result = _run_command([*_legacy_command(), "--help"], fake_python, tmp_path)
     new_result = _run_command([*NEW_ENTRYPOINT, "--help"], fake_python, tmp_path)
 
     assert legacy_result.returncode == 0
@@ -134,7 +145,7 @@ def test_resolve_shim_works_from_any_working_directory(fake_python: Path, tmp_pa
     outside_cwd.mkdir()
 
     result = _run_command(
-        [str(LEGACY_ENTRYPOINT), "--text", "hello"],
+        [*_legacy_command(), "--text", "hello"],
         fake_python,
         tmp_path,
         cwd=outside_cwd,
