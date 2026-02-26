@@ -30,14 +30,14 @@ def test_absorbed_wrapper_commands_expose_replacement_metadata() -> None:
         "register-node-curl": "node register_curl",
         "registration_ready": "node ready",
         "update-peer-nodes": "node peers",
-        "lcd_write": "lcd write",
+        "lcd_animate": "lcd animate",
+        "lcd_calibrate": "lcd calibrate",
+        "lcd_debug": "lcd debug",
         "lcd_plan": "lcd plan",
         "lcd_replay": "lcd replay",
-        "lcd_calibrate": "lcd calibrate",
-        "lcd_animate": "lcd animate",
-        "lcd_debug": "lcd debug",
-        "video_debug": "video debug",
-        "snapshot": "video snapshot",
+        "lcd_write": "lcd write",
+        "snapshot": "video --snapshot",
+        "video_debug": "video --list-streams",
     }
 
     registered = get_commands()
@@ -57,14 +57,14 @@ def test_filtered_commands_hides_absorbed_wrappers_unless_deprecated_requested()
     """Command API should hide absorbed wrappers unless --deprecated is set."""
 
     wrapper_commands = {
-        "lcd_write",
+        "lcd_animate",
+        "lcd_calibrate",
+        "lcd_debug",
         "lcd_plan",
         "lcd_replay",
-        "lcd_calibrate",
-        "lcd_animate",
-        "lcd_debug",
-        "video_debug",
+        "lcd_write",
         "snapshot",
+        "video_debug",
     }
 
     default_commands = set(filtered_commands(Path.cwd(), CommandOptions(deprecated=False)))
