@@ -110,7 +110,32 @@ admin.ModelAdmin.changelist_view = changelist_view_with_object_links
 _original_admin_get_app_list = admin.AdminSite.get_app_list
 
 
+def _get_application_priority_map(Application):
+    """Return a map of application labels to configured priority numbers."""
+    return {
+        name: priority
+        for name, priority in Application.objects.filter(order__isnull=False).values_list(
+            "name", "order"
+        )
+    }
+
+
+def _priority_suffix(index: int) -> str:
+    """Convert a zero-based index into alphabetical suffixes (a, b, ..., aa)."""
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    result = ""
+    current = index
+    while True:
+        current, remainder = divmod(current, len(alphabet))
+        result = alphabet[remainder] + result
+        if current == 0:
+            break
+        current -= 1
+    return result
+
+
 def get_app_list_with_protocol_forwarder(self, request, app_label=None):
+    """Sort the admin app list using optional Application priorities first."""
     try:
         Application = django_apps.get_model("app", "Application")
     except LookupError:
@@ -122,17 +147,41 @@ def get_app_list_with_protocol_forwarder(self, request, app_label=None):
     if app_label:
         result = [entry for entry in result if entry.get("app_label") == app_label]
 
+    priority_map = _get_application_priority_map(Application)
+
     ordered_result = []
+    grouped_priorities = {}
 
     for entry in result:
-        app_label = entry.get("app_label")
-        entry_name = str(app_label or entry.get("name"))
+        current_app_label = entry.get("app_label")
+        entry_name = str(current_app_label or entry.get("name"))
+        priority = priority_map.get(current_app_label)
 
         ordered_entry = entry.copy()
         ordered_entry["name"] = Application.format_display_name(entry_name)
+        ordered_entry["_sort_priority"] = priority
         ordered_result.append(ordered_entry)
 
-    ordered_result.sort(key=lambda entry: (entry.get("name"), entry.get("app_label")))
+        if priority is not None:
+            grouped_priorities.setdefault(priority, []).append(ordered_entry)
+
+    for priority, entries in grouped_priorities.items():
+        if len(entries) <= 1:
+            continue
+        entries.sort(key=lambda item: (item.get("name"), item.get("app_label")))
+        for index, item in enumerate(entries):
+            item["name"] = f"{priority}{_priority_suffix(index)}. {item['name']}"
+
+    ordered_result.sort(
+        key=lambda entry: (
+            entry.get("_sort_priority") is None,
+            entry.get("_sort_priority") if entry.get("_sort_priority") is not None else 0,
+            entry.get("name"),
+            entry.get("app_label"),
+        )
+    )
+    for entry in ordered_result:
+        entry.pop("_sort_priority", None)
     return ordered_result
 
 
