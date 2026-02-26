@@ -111,7 +111,7 @@ def apply_upgrade_policies() -> str:
 
     for assignment in assignments:
         policy = assignment.policy
-        if not policy:
+        if not policy or not getattr(policy, "is_active", True):
             continue
         interval_minutes = int(getattr(policy, "interval_minutes", 0) or 0)
         if assignment.last_checked_at and interval_minutes > 0:
