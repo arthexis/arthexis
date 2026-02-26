@@ -40,5 +40,5 @@ def test_admin_dashboard_actions_row_uses_standard_pyxel_button(admin_client, mo
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert '<button type="submit" class="button">Pyxel</button>' in content
+    assert '<input type="submit" class="button" value="Pyxel">' in content
     assert "Pyxel Live Stats" not in content
