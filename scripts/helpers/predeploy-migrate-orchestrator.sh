@@ -114,10 +114,6 @@ log_event "service_switch" "start" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "" 0
 control_service stop "$SERVICE_NAME"
 
 STATUS=0
-if [ ! -x "${DEPLOY_CMD[0]}" ] && [ -f "${DEPLOY_CMD[0]}" ]; then
-  chmod +x "${DEPLOY_CMD[0]}" 2>/dev/null || true
-fi
-
 if [ -x "${DEPLOY_CMD[0]}" ]; then
   (cd "$BASE_DIR" && "${DEPLOY_CMD[@]}") || STATUS=$?
 else
