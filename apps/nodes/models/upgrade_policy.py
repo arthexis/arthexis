@@ -38,6 +38,10 @@ class UpgradePolicy(Entity):
         default=False,
         help_text=_("Require the latest PyPI packages before upgrading."),
     )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Enable this policy for upgrade scheduling and execution."),
+    )
 
     objects = UpgradePolicyManager()
 

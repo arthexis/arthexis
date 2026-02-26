@@ -275,7 +275,7 @@ def _resolve_policy_interval_minutes() -> int:
         if local:
             policies = list(local.upgrade_policies.all())
         else:
-            policies = list(UpgradePolicy.objects.all())
+            policies = list(UpgradePolicy.objects.filter(is_active=True))
     except DatabaseError:
         return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
 
