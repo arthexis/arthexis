@@ -39,6 +39,40 @@ def _script_path_for_bash(script_path: Path) -> str:
     return f"/mnt/{drive.lower()}/{relative}"
 
 
+def _run_script_with_nmcli_mock(tmp_path: Path, nmcli_mock_contents: str) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Run nmcli-setup with a supplied nmcli mock script and return result and call log."""
+    if BASH is None:
+        pytest.skip("bash not found in PATH")
+
+    log_path = tmp_path / "calls.log"
+    nmcli_mock = tmp_path / "nmcli"
+    nmcli_mock.write_text(nmcli_mock_contents, encoding="utf-8")
+    nmcli_mock.chmod(0o755)
+
+    bash_parent = Path(BASH).parent
+    path_parts = (_script_path_for_bash(tmp_path), _script_path_for_bash(bash_parent))
+    path_sep = ":" if (os.name == "nt" and bash_parent.name.lower() in ("system32", "syswow64")) else os.pathsep
+    env = {
+        **os.environ,
+        "PATH": path_sep.join(path_parts),
+        "NMCLI_MOCK_LOG": _script_path_for_bash(log_path),
+    }
+    env.pop("BASH_ENV", None)
+    env.pop("ENV", None)
+
+    script_path = _script_path_for_bash(SCRIPT_PATH)
+    result = subprocess.run(
+        [BASH, script_path],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    calls = log_path.read_text(encoding="utf-8")
+    return result, calls
+
+
 def test_nmcli_setup_script_has_valid_bash_syntax() -> None:
     """The setup script should parse successfully under bash."""
     if BASH is None:
@@ -158,12 +192,8 @@ exit 0
 
 def test_nmcli_setup_treats_shared_wifi_profile_as_ap_role(tmp_path: Path) -> None:
     """A wifi profile with ipv4 shared should be pinned to the AP interface."""
-    if BASH is None:
-        pytest.skip("bash not found in PATH")
-
-    log_path = tmp_path / "calls.log"
-    nmcli_mock = tmp_path / "nmcli"
-    nmcli_mock.write_text(
+    result, calls = _run_script_with_nmcli_mock(
+        tmp_path,
         """#!/usr/bin/env bash
 set -euo pipefail
 LOG_FILE=${NMCLI_MOCK_LOG:?}
@@ -187,32 +217,8 @@ fi
 
 exit 0
 """,
-        encoding="utf-8",
-    )
-    nmcli_mock.chmod(0o755)
-
-    bash_parent = Path(BASH).parent
-    path_parts = (_script_path_for_bash(tmp_path), _script_path_for_bash(bash_parent))
-    path_sep = ":" if (os.name == "nt" and bash_parent.name.lower() in ("system32", "syswow64")) else os.pathsep
-    env = {
-        **os.environ,
-        "PATH": path_sep.join(path_parts),
-        "NMCLI_MOCK_LOG": _script_path_for_bash(log_path),
-    }
-    env.pop("BASH_ENV", None)
-    env.pop("ENV", None)
-
-    script_path = _script_path_for_bash(SCRIPT_PATH)
-    result = subprocess.run(
-        [BASH, script_path],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=env,
     )
 
     assert result.returncode == 0, result.stderr
-    assert "AP profile 'arthexis-ap' pinned to wlan1" in result.stdout
-
-    calls = log_path.read_text(encoding="utf-8")
-    assert "connection modify arthexis-ap connection.interface-name wlan1" in calls
+    assert "AP profile 'arthexis-ap' pinned to wlan1 (mode='infrastructure', ipv4.method='shared')" in result.stdout
+    assert "connection modify arthexis-ap connection.interface-name wlan1 connection.autoconnect yes ipv4.method shared" in calls
