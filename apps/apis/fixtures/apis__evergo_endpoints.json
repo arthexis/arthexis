@@ -1,0 +1,119 @@
+[
+  {
+    "model": "apis.apiexplorer",
+    "pk": 1001,
+    "fields": {
+      "name": "Evergo API",
+      "base_url": "https://portal-backend.evergo.com/api/mex/v1/",
+      "description": "Evergo portal backend endpoints used by the Evergo integration.",
+      "is_active": true
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 1101,
+    "fields": {
+      "api": 1001,
+      "operation_name": "Login",
+      "resource_path": "/login",
+      "http_method": "POST",
+      "request_structure": {
+        "email": "string",
+        "password": "string"
+      },
+      "response_structure": {
+        "id": "number",
+        "name": "string",
+        "email": "string",
+        "subempresas": [
+          {
+            "id": "number",
+            "idInstalaEmpresa": "number",
+            "empresa": "string",
+            "nombre": "string"
+          }
+        ]
+      },
+      "notes": "Authenticates contractor credentials and returns profile metadata."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 1102,
+    "fields": {
+      "api": 1001,
+      "operation_name": "List Sites",
+      "resource_path": "/config/catalogs/sitios/all",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "nombre": "string"
+        }
+      ],
+      "notes": "Returns available site catalog entries."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 1103,
+    "fields": {
+      "api": 1001,
+      "operation_name": "Search Engineers",
+      "resource_path": "/ordenes/search-ingenieros",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "nombre": "string"
+        }
+      ],
+      "notes": "Returns engineer catalog entries for order assignment."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 1104,
+    "fields": {
+      "api": 1001,
+      "operation_name": "List Order Statuses",
+      "resource_path": "/config/catalogs/orden-estatus",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "nombre": "string"
+        }
+      ],
+      "notes": "Returns order status catalog entries."
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 1105,
+    "fields": {
+      "api": 1001,
+      "operation_name": "List Coordinator Orders",
+      "resource_path": "/ordenes/instalador-coordinador",
+      "http_method": "GET",
+      "request_structure": {
+        "estatus": "number|null",
+        "sitio": "number|null",
+        "ingeniero": "number|null",
+        "busqueda": "string|null"
+      },
+      "response_structure": {
+        "data": [
+          {
+            "id": "number",
+            "numeroOrden": "string"
+          }
+        ]
+      },
+      "notes": "Searches orders for the authenticated installer/coordinator."
+    }
+  }
+]
