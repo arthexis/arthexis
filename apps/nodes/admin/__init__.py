@@ -1,3 +1,4 @@
+from .migration_checkpoint_admin import NodeMigrationCheckpointAdmin
 from .email_outbox_admin import EmailOutboxAdmin
 from .inlines import NodeFeatureAssignmentInline
 from .net_message_admin import NetMessageAdmin
@@ -12,6 +13,7 @@ __all__ = [
     "NetMessageAdmin",
     "NodeAdmin",
     "NodeFeatureAdmin",
+    "NodeMigrationCheckpointAdmin",
     "NodeRoleAdmin",
     "PlatformAdmin",
     "NodeFeatureAssignmentInline",

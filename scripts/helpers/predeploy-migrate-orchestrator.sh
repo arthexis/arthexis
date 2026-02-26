@@ -49,6 +49,27 @@ control_service() {
   "${runner[@]}" "$action" "$unit" || true
 }
 
+queue_post_upgrade_tasks() {
+  local python_bin="$1"
+  local queue_status=0
+
+  if ! (cd "$BASE_DIR" && "$python_bin" manage.py shell -c '
+from apps.celery.utils import schedule_task
+from apps.nodes.tasks import run_deferred_node_migrations
+
+queued = schedule_task(run_deferred_node_migrations, countdown=30, require_enabled=True)
+print("queued" if queued else "skipped")
+'); then
+    queue_status=$?
+    echo "Deferred migration task enqueue failed with status ${queue_status}; continuing deploy." >&2
+    log_event "post_upgrade_task_enqueue" "failed" "" "" 0
+    return 0
+  fi
+
+  log_event "post_upgrade_task_enqueue" "success" "" "" 0
+  return 0
+}
+
 run_predeploy_migrations() {
   local python_bin=""
   local fingerprint=""
@@ -75,6 +96,8 @@ run_predeploy_migrations() {
 
   (cd "$BASE_DIR" && "$python_bin" manage.py migrate --noinput)
   (cd "$BASE_DIR" && "$python_bin" manage.py migrate --check)
+
+  queue_post_upgrade_tasks "$python_bin"
 
   ended_at_epoch="$(date +%s)"
   ended_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
