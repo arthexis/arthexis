@@ -9,7 +9,7 @@
       "channel": "stable",
       "interval_minutes": 10080,
       "requires_canaries": false,
-      "requires_pypi_packages": false
+      "requires_pypi_packages": true
     }
   }
 ]
