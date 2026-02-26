@@ -273,7 +273,7 @@ def _resolve_policy_interval_minutes() -> int:
 
     try:
         if local:
-            policies = list(local.upgrade_policies.all())
+            policies = list(local.upgrade_policies.filter(is_active=True))
         else:
             policies = list(UpgradePolicy.objects.filter(is_active=True))
     except DatabaseError:

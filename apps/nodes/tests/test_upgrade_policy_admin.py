@@ -7,30 +7,42 @@ from apps.nodes.models import UpgradePolicy
 pytestmark = pytest.mark.critical
 
 
+@pytest.mark.parametrize(
+    ("action", "initial_active", "expected_active"),
+    [
+        ("activate_selected_policies", False, True),
+        ("deactivate_selected_policies", True, False),
+    ],
+)
 @pytest.mark.django_db
-def test_activate_selected_upgrade_policies_action(admin_client):
-    """Admin action activates selected upgrade policies from the changelist."""
+def test_upgrade_policy_bulk_activation_actions(
+    admin_client,
+    action,
+    initial_active,
+    expected_active,
+):
+    """Admin actions toggle selected upgrade policies from the changelist."""
 
-    inactive = UpgradePolicy.objects.create(
-        name="Inactive Policy",
+    policy = UpgradePolicy.objects.create(
+        name=f"Policy for {action}",
         channel=UpgradePolicy.Channel.STABLE,
         interval_minutes=30,
-        is_active=False,
+        is_active=initial_active,
     )
 
     response = admin_client.post(
         reverse("admin:nodes_upgradepolicy_changelist"),
         {
-            "action": "activate_selected_policies",
-            "_selected_action": [str(inactive.pk)],
+            "action": action,
+            "_selected_action": [str(policy.pk)],
             "index": "0",
         },
         follow=True,
     )
 
     assert response.status_code == 200
-    inactive.refresh_from_db()
-    assert inactive.is_active is True
+    policy.refresh_from_db()
+    assert policy.is_active is expected_active
 
 
 @pytest.mark.django_db
