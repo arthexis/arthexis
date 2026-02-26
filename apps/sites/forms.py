@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.conf import settings
@@ -15,6 +17,22 @@ from .models import UserStory, UserStoryAttachment
 
 ANONYMOUS_ATTACHMENT_LIMIT = 0
 AUTHENTICATED_ATTACHMENT_LIMIT = 3
+DEFAULT_MAX_ATTACHMENT_FILE_SIZE = 5 * 1024 * 1024
+DEFAULT_ALLOWED_ATTACHMENT_EXTENSIONS = (
+    "txt",
+    "csv",
+    "json",
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+)
 
 
 class MultipleFileInput(forms.ClearableFileInput):
@@ -83,7 +101,7 @@ class UserStoryForm(forms.ModelForm):
     def __init__(self, *args, user=None, files=None, **kwargs):
         self.user = user
         self.upload_files = files.getlist("attachments") if files is not None else []
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, files=files, **kwargs)
 
         if user is not None and user.is_authenticated:
             name_field = self.fields["name"]
@@ -131,6 +149,23 @@ class UserStoryForm(forms.ModelForm):
             return None
         return int(getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", AUTHENTICATED_ATTACHMENT_LIMIT))
 
+    def get_allowed_attachment_extensions(self) -> tuple[str, ...]:
+        """Return normalized set of extensions accepted by attachment uploads."""
+
+        configured = getattr(
+            settings,
+            "USER_STORY_ATTACHMENT_ALLOWED_EXTENSIONS",
+            DEFAULT_ALLOWED_ATTACHMENT_EXTENSIONS,
+        )
+        return tuple(ext.lower().lstrip(".") for ext in configured)
+
+    def get_max_attachment_file_size(self) -> int:
+        """Return the maximum attachment size in bytes."""
+
+        return int(
+            getattr(settings, "USER_STORY_ATTACHMENT_MAX_BYTES", DEFAULT_MAX_ATTACHMENT_FILE_SIZE)
+        )
+
     def clean_comments(self):
         """Validate comments length according to role-based limits."""
 
@@ -138,7 +173,8 @@ class UserStoryForm(forms.ModelForm):
         limit = self.get_comment_limit()
         if limit is not None and len(comments) > limit:
             raise forms.ValidationError(
-                _("Please keep your comment under 400 characters."), code="too_long"
+                _("Please keep your comment under %(limit)s characters.") % {"limit": limit},
+                code="too_long",
             )
         return comments
 
@@ -159,7 +195,22 @@ class UserStoryForm(forms.ModelForm):
                 % {"count": limit},
                 code="too_many_files",
             )
-        return self.cleaned_data.get("attachments")
+        allowed_extensions = self.get_allowed_attachment_extensions()
+        max_file_size = self.get_max_attachment_file_size()
+        for uploaded_file in self.upload_files:
+            extension = Path(uploaded_file.name).suffix.lstrip(".").lower()
+            if allowed_extensions and extension not in allowed_extensions:
+                raise forms.ValidationError(
+                    _("Unsupported file type: %(extension)s.") % {"extension": extension or _("unknown")},
+                    code="invalid_file_type",
+                )
+            if uploaded_file.size > max_file_size:
+                raise forms.ValidationError(
+                    _("Each attachment must be %(size)s MB or smaller.")
+                    % {"size": max_file_size // (1024 * 1024)},
+                    code="file_too_large",
+                )
+        return self.upload_files
 
     def clean_name(self):
         name = (self.cleaned_data.get("name") or "").strip()

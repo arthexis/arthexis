@@ -175,3 +175,61 @@ def test_attachment_limit_validation_message_uses_singular_for_one(settings):
     assert not form.is_valid()
     assert "attachments" in form.errors
     assert "up to 1 file." in form.errors["attachments"][0]
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_form_rejects_disallowed_attachment_extension(settings):
+    """Attachments with non-whitelisted file extensions should be rejected."""
+
+    settings.USER_STORY_ATTACHMENT_ALLOWED_EXTENSIONS = ("txt",)
+    user = get_user_model().objects.create_user(
+        username="extcheck",
+        email="extcheck@example.com",
+        password="secret",
+    )
+
+    form = UserStoryForm(
+        data={"name": "extcheck", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        files=MultiValueDict(
+            {
+                "attachments": [
+                    SimpleUploadedFile("bad.exe", b"nope"),
+                ]
+            }
+        ),
+        user=user,
+    )
+
+    assert not form.is_valid()
+    assert "attachments" in form.errors
+    assert "Unsupported file type" in form.errors["attachments"][0]
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_form_rejects_oversized_attachments(settings):
+    """Attachments larger than configured maximum should be rejected."""
+
+    settings.USER_STORY_ATTACHMENT_MAX_BYTES = 1024
+    user = get_user_model().objects.create_user(
+        username="sizecheck",
+        email="sizecheck@example.com",
+        password="secret",
+    )
+
+    form = UserStoryForm(
+        data={"name": "sizecheck", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        files=MultiValueDict(
+            {
+                "attachments": [
+                    SimpleUploadedFile("large.txt", b"x" * 2048),
+                ]
+            }
+        ),
+        user=user,
+    )
+
+    assert not form.is_valid()
+    assert "attachments" in form.errors
+    assert "MB or smaller" in form.errors["attachments"][0]
