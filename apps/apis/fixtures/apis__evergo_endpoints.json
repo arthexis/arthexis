@@ -5,13 +5,17 @@
       "name": "Evergo API",
       "base_url": "https://portal-backend.evergo.com/api/mex/v1/",
       "description": "Evergo portal backend endpoints used by the Evergo integration.",
-      "is_active": true
+      "is_active": true,
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
     }
   },
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": ["Evergo API"],
+      "api": [
+        "Evergo API"
+      ],
       "operation_name": "Login",
       "resource_path": "/login",
       "http_method": "POST",
@@ -32,13 +36,17 @@
           }
         ]
       },
-      "notes": "Authenticates contractor credentials and returns profile metadata."
+      "notes": "Authenticates contractor credentials and returns profile metadata.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
     }
   },
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": ["Evergo API"],
+      "api": [
+        "Evergo API"
+      ],
       "operation_name": "List Sites",
       "resource_path": "/config/catalogs/sitios/all",
       "http_method": "GET",
@@ -49,13 +57,17 @@
           "nombre": "string"
         }
       ],
-      "notes": "Returns available site catalog entries."
+      "notes": "Returns available site catalog entries.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
     }
   },
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": ["Evergo API"],
+      "api": [
+        "Evergo API"
+      ],
       "operation_name": "Search Engineers",
       "resource_path": "/ordenes/search-ingenieros",
       "http_method": "GET",
@@ -66,13 +78,17 @@
           "nombre": "string"
         }
       ],
-      "notes": "Returns engineer catalog entries for order assignment."
+      "notes": "Returns engineer catalog entries for order assignment.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
     }
   },
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": ["Evergo API"],
+      "api": [
+        "Evergo API"
+      ],
       "operation_name": "List Order Statuses",
       "resource_path": "/config/catalogs/orden-estatus",
       "http_method": "GET",
@@ -83,13 +99,17 @@
           "nombre": "string"
         }
       ],
-      "notes": "Returns order status catalog entries."
+      "notes": "Returns order status catalog entries.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
     }
   },
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": ["Evergo API"],
+      "api": [
+        "Evergo API"
+      ],
       "operation_name": "List Coordinator Orders",
       "resource_path": "/ordenes/instalador-coordinador",
       "http_method": "GET",
@@ -107,7 +127,9 @@
           }
         ]
       },
-      "notes": "Searches orders for the authenticated installer/coordinator."
+      "notes": "Searches orders for the authenticated installer/coordinator.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
     }
   }
 ]
