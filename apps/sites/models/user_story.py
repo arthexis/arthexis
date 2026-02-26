@@ -23,10 +23,7 @@ class UserStory(Lead):
         validators=[MinValueValidator(1), MaxValueValidator(5)],
         help_text=_("Rate your experience from 1 (lowest) to 5 (highest)."),
     )
-    comments = models.TextField(
-        validators=[MaxLengthValidator(400)],
-        help_text=_("Share more about your experience."),
-    )
+    comments = models.TextField(help_text=_("Share more about your experience."))
     messages = models.TextField(
         blank=True,
         validators=[MaxLengthValidator(2000)],
@@ -198,3 +195,30 @@ class UserStory(Lead):
         if not self.should_enqueue_github_issue(created=created, raw=raw):
             return
         self.enqueue_github_issue_creation()
+
+
+def user_story_attachment_upload_to(instance: "UserStoryAttachment", filename: str) -> str:
+    """Return an upload path for feedback attachments."""
+
+    story_id = instance.user_story_id or "unassigned"
+    return f"sites/user_story_attachments/{story_id}/{filename}"
+
+
+class UserStoryAttachment(models.Model):
+    """File attached to a user feedback submission."""
+
+    user_story = models.ForeignKey(
+        UserStory,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=user_story_attachment_upload_to)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["uploaded_at", "pk"]
+        verbose_name = _("User Story Attachment")
+        verbose_name_plural = _("User Story Attachments")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.file.name.rsplit("/", maxsplit=1)[-1]

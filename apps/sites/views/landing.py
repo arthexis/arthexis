@@ -276,7 +276,7 @@ def submit_user_story(request):
     if not data.get("path"):
         data["path"] = request.get_full_path()
 
-    form = UserStoryForm(data, user=request.user)
+    form = UserStoryForm(data, files=request.FILES, user=request.user)
     if request.user.is_authenticated:
         form.instance.user = request.user
 
@@ -301,6 +301,7 @@ def submit_user_story(request):
         if language_code:
             story.language_code = language_code
         story.save()
+        form.save_attachments()
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)
