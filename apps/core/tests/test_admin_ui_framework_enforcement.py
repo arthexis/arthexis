@@ -82,12 +82,12 @@ def _contains_custom_css(template_text: str) -> bool:
 
 
 def _templates_with_custom_css() -> set[str]:
-    """Return relative template paths that currently define custom CSS."""
+    """Return template paths with custom CSS and no explicit override marker."""
 
     template_paths_with_custom_css: set[str] = set()
     for template_path in _admin_template_paths():
         template_text = template_path.read_text(encoding="utf-8")
-        if _contains_custom_css(template_text):
+        if _contains_custom_css(template_text) and CUSTOM_ADMIN_CSS_OVERRIDE_MARKER not in template_text:
             template_paths_with_custom_css.add(template_path.relative_to(PROJECT_ROOT).as_posix())
     return template_paths_with_custom_css
 
