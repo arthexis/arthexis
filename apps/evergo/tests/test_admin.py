@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
@@ -273,3 +275,131 @@ def test_evergo_customer_admin_change_form_shows_view_on_site_and_artifacts_inli
     content = response.content.decode().lower()
     assert "view on site" in content
     assert "artifacts-0-file" in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_client):
+    """Regression: changelist should show last SO status and trim +52/52 phone prefixes."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-customer-list",
+        email="suite-admin-customer-list@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-customer-list@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=7001,
+        order_number="SO-7001",
+        status_name="Instalado",
+    )
+    EvergoCustomer.objects.create(
+        user=profile,
+        name="Customer List",
+        latest_so="SO-7001",
+        latest_order=order,
+        phone_number="+52 5512345678",
+    )
+
+    changelist_url = reverse("admin:evergo_evergocustomer_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Status of Last SO" in content
+    assert "Instalado" in content
+    assert "+52 5512345678" not in content
+    assert "5512345678" in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_change_form_has_status_readonly(admin_client):
+    """Regression: customer change form should include readonly status of last SO."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-customer-status",
+        email="suite-admin-customer-status@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-customer-status@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=7002, status_name="Programado")
+    customer = EvergoCustomer.objects.create(user=profile, name="Customer Status", latest_order=order)
+
+    change_url = reverse("admin:evergo_evergocustomer_change", args=[customer.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Status of Last SO" in content
+    assert "Programado" in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_date_filters_local_and_remote(admin_client):
+    """Regression: customer changelist should filter local and remote date ranges."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-customer-filters",
+        email="suite-admin-customer-filters@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-customer-filters@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    now = timezone.now()
+    order_recent = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=8001,
+        source_updated_at=now,
+    )
+    order_old = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=8002,
+        source_updated_at=now - timedelta(days=40),
+    )
+
+    recent = EvergoCustomer.objects.create(
+        user=profile,
+        name="Recent Customer",
+        latest_order=order_recent,
+        latest_order_updated_at=now,
+    )
+    old = EvergoCustomer.objects.create(
+        user=profile,
+        name="Old Customer",
+        latest_order=order_old,
+        latest_order_updated_at=now - timedelta(days=40),
+    )
+
+    EvergoCustomer.objects.filter(pk=old.pk).update(
+        created_at=now - timedelta(days=40),
+        refreshed_at=now - timedelta(days=40),
+    )
+
+    changelist_url = reverse("admin:evergo_evergocustomer_changelist")
+
+    local_loaded_response = admin_client.get(changelist_url, {"loaded_at_range": "today"})
+    assert local_loaded_response.status_code == 200
+    assert recent.name in local_loaded_response.content.decode("utf-8")
+    assert old.name not in local_loaded_response.content.decode("utf-8")
+
+    local_updated_response = admin_client.get(changelist_url, {"updated_at_range": "today"})
+    assert local_updated_response.status_code == 200
+    assert recent.name in local_updated_response.content.decode("utf-8")
+    assert old.name not in local_updated_response.content.decode("utf-8")
+
+    remote_updated_response = admin_client.get(changelist_url, {"remote_updated_at_range": "today"})
+    assert remote_updated_response.status_code == 200
+    assert recent.name in remote_updated_response.content.decode("utf-8")
+    assert old.name not in remote_updated_response.content.decode("utf-8")

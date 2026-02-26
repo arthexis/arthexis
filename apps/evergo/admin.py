@@ -1,5 +1,7 @@
 """Admin configuration for Evergo integration."""
 
+from datetime import datetime, time, timedelta
+
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
@@ -380,16 +382,93 @@ class EvergoArtifactAdmin(admin.ModelAdmin):
     readonly_fields = ("artifact_type", "created_at")
 
 
+class _CustomerDateRangeFilter(admin.SimpleListFilter):
+    """Shared date-range filter helper used by Evergo customer changelist filters."""
+
+    parameter_name = ""
+    title = ""
+
+    def lookups(self, request, model_admin):
+        """Expose common date-range options for customer list filtering."""
+        return (
+            ("today", _("Today")),
+            ("week", _("This week")),
+            ("month", _("This month")),
+        )
+
+    def _bounds(self) -> tuple[datetime, datetime] | None:
+        """Build timezone-aware datetime bounds for the selected date range."""
+        value = self.value()
+        if value not in {"today", "week", "month"}:
+            return None
+
+        today = timezone.localdate()
+        start_date = today
+        if value == "week":
+            start_date = today - timedelta(days=today.weekday())
+        elif value == "month":
+            start_date = today.replace(day=1)
+
+        start = timezone.make_aware(datetime.combine(start_date, time.min))
+        end = timezone.make_aware(datetime.combine(today + timedelta(days=1), time.min))
+        return start, end
+
+
+class CustomerLoadedAtFilter(_CustomerDateRangeFilter):
+    """Filter Evergo customers by local load timestamp ranges."""
+
+    title = _("Loaded locally")
+    parameter_name = "loaded_at_range"
+
+    def queryset(self, request, queryset):
+        """Apply local creation-date range filtering when selected."""
+        bounds = self._bounds()
+        if not bounds:
+            return queryset
+        start, end = bounds
+        return queryset.filter(created_at__gte=start, created_at__lt=end)
+
+
+class CustomerUpdatedAtFilter(_CustomerDateRangeFilter):
+    """Filter Evergo customers by local update timestamp ranges."""
+
+    title = _("Updated locally")
+    parameter_name = "updated_at_range"
+
+    def queryset(self, request, queryset):
+        """Apply local refresh-date range filtering when selected."""
+        bounds = self._bounds()
+        if not bounds:
+            return queryset
+        start, end = bounds
+        return queryset.filter(refreshed_at__gte=start, refreshed_at__lt=end)
+
+
+class CustomerRemoteUpdatedAtFilter(_CustomerDateRangeFilter):
+    """Filter Evergo customers by last remote order update timestamp ranges."""
+
+    title = _("Updated remotely")
+    parameter_name = "remote_updated_at_range"
+
+    def queryset(self, request, queryset):
+        """Apply remote-source update-date range filtering when selected."""
+        bounds = self._bounds()
+        if not bounds:
+            return queryset
+        start, end = bounds
+        return queryset.filter(latest_order_updated_at__gte=start, latest_order_updated_at__lt=end)
+
+
 @admin.register(EvergoCustomer)
 class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
 
     changelist_actions = ("load_customers_wizard",)
 
-    list_display = ("latest_so", "name", "phone_number", "address", "user")
-    list_filter = ("user",)
+    list_display = ("latest_so", "name", "status_of_last_so", "phone_number_display", "address", "user")
+    list_filter = ("user", CustomerLoadedAtFilter, CustomerUpdatedAtFilter, CustomerRemoteUpdatedAtFilter)
     search_fields = ("latest_so", "name", "phone_number", "address", "email")
-    readonly_fields = ("raw_payload", "refreshed_at", "created_at")
+    readonly_fields = ("status_of_last_so", "phone_number_display", "raw_payload", "refreshed_at", "created_at")
     inlines = (EvergoArtifactInline,)
     view_on_site = True
 
@@ -412,6 +491,24 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     load_customers_wizard.label = _("Load Customers")
     load_customers_wizard.short_description = _("Load Customers")
     load_customers_wizard.requires_queryset = False
+
+    @admin.display(description=_("Status of Last SO"))
+    def status_of_last_so(self, obj):
+        """Return the latest order status label for the customer."""
+        if obj.latest_order and obj.latest_order.status_name:
+            return obj.latest_order.status_name
+        return "-"
+
+    @admin.display(description=_("Phone number"))
+    def phone_number_display(self, obj):
+        """Return a cleaned phone value without Mexico +52/52 dialing prefixes."""
+        phone = (obj.phone_number or "").strip()
+        compact = phone.replace(" ", "").replace("-", "")
+        if compact.startswith("+52"):
+            return phone[3:].lstrip(" -")
+        if compact.startswith("52"):
+            return phone[2:].lstrip(" -")
+        return phone
 
     def load_customers_view(self, request):
         """Render/handle the sales-order customer import wizard."""
