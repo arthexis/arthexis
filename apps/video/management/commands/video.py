@@ -30,6 +30,13 @@ from apps.video.utils import WORK_DIR, has_rpi_camera_stack
 logger = logging.getLogger("apps.video.camera_service")
 
 
+def _setting_default_float(name: str, fallback: float) -> float:
+    """Return float setting value while preserving valid zero values."""
+
+    configured = getattr(settings, name, fallback)
+    return fallback if configured is None else float(configured)
+
+
 class _StreamCapture:
     """Capture MJPEG frames from a single video stream device."""
 
@@ -198,13 +205,13 @@ class Command(BaseCommand):
         parser.add_argument(
             "--interval",
             type=float,
-            default=float(getattr(settings, "VIDEO_FRAME_CAPTURE_INTERVAL", 0.2) or 0.2),
+            default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2),
             help="Seconds between frame capture attempts per stream.",
         )
         parser.add_argument(
             "--sleep",
             type=float,
-            default=float(getattr(settings, "VIDEO_FRAME_SERVICE_SLEEP", 0.05) or 0.05),
+            default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05),
             help="Seconds to sleep between capture loops.",
         )
 
@@ -230,8 +237,8 @@ class Command(BaseCommand):
         subparsers.add_parser("doctor", help="Run server-side video diagnostics.")
 
         service_parser = subparsers.add_parser("service", help="Run camera service capture loop.")
-        service_parser.add_argument("--interval", type=float, default=float(getattr(settings, "VIDEO_FRAME_CAPTURE_INTERVAL", 0.2) or 0.2), help="Seconds between frame capture attempts per stream.")
-        service_parser.add_argument("--sleep", type=float, default=float(getattr(settings, "VIDEO_FRAME_SERVICE_SLEEP", 0.05) or 0.05), help="Seconds to sleep between capture loops.")
+        service_parser.add_argument("--interval", type=float, default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2), help="Seconds between frame capture attempts per stream.")
+        service_parser.add_argument("--sleep", type=float, default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05), help="Seconds to sleep between capture loops.")
 
     def handle(self, *args, **options) -> None:
         """Execute video camera management actions."""
@@ -623,8 +630,6 @@ class Command(BaseCommand):
     def _run_service(self, *, interval: float, sleep: float) -> None:
         """Run the MJPEG camera capture service loop."""
 
-        interval = float(interval)
-        sleep = float(sleep)
         if not frame_cache_url():
             raise CommandError("A Redis URL must be configured to use camera_service.")
 

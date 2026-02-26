@@ -28,10 +28,10 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.WARNING("`camera_service` is deprecated; use `video service`."))
 
-        kwargs: dict[str, float] = {}
-        if options.get("interval") is not None:
-            kwargs["interval"] = float(options["interval"])
-        if options.get("sleep") is not None:
-            kwargs["sleep"] = float(options["sleep"])
+        kwargs: dict[str, float] = {
+            key: value
+            for key, value in options.items()
+            if key in ("interval", "sleep") and value is not None
+        }
 
         call_command("video", "service", **kwargs)
