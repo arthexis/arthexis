@@ -73,7 +73,16 @@ run_predeploy_migrations() {
   started_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   log_event "predeploy_migrate" "start" "$started_at_iso" "" 0
 
-  (cd "$BASE_DIR" && "$python_bin" manage.py migrate --noinput)
+  local target_version=""
+  if [ -f "$BASE_DIR/VERSION" ]; then
+    target_version="$(tr -d '[:space:]' < "$BASE_DIR/VERSION")"
+  fi
+
+  if [ -n "$target_version" ]; then
+    (cd "$BASE_DIR" && "$python_bin" manage.py apply_release_migrations "$target_version")
+  else
+    (cd "$BASE_DIR" && "$python_bin" manage.py migrate --noinput)
+  fi
   (cd "$BASE_DIR" && "$python_bin" manage.py migrate --check)
 
   ended_at_epoch="$(date +%s)"

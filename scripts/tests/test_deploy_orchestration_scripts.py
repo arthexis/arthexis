@@ -22,6 +22,7 @@ def test_watch_upgrade_uses_predeploy_orchestrator() -> None:
 def test_orchestrator_runs_migrations_before_service_switch() -> None:
     """The orchestrator should run migrate/apply checks before service stop/start operations."""
     contents = ORCHESTRATOR_PATH.read_text(encoding="utf-8")
+    assert '"$python_bin" manage.py apply_release_migrations "$target_version"' in contents
     assert '"$python_bin" manage.py migrate --noinput' in contents
     assert '"$python_bin" manage.py migrate --check' in contents
     assert 'control_service stop "$SERVICE_NAME"' in contents
