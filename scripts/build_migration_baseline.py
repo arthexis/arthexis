@@ -119,7 +119,7 @@ def evaluate_app_baseline(app_label: str, *, repo_root: Path = REPO_ROOT) -> App
 
     for info in files:
         attrs = _migration_attributes(info.path)
-        replaces_entries = attrs.get("replaces", []) or []
+        replaces_entries = attrs.get("replaces", [])
         if replaces_entries:
             squash_numbers.append(info.number)
             for replace_app, replace_name in replaces_entries:
@@ -179,7 +179,7 @@ def _validate_squashed_file(app_label: str, squashed_file: Path) -> None:
         )
 
     attrs = _migration_attributes(squashed_file)
-    replaces_entries = attrs.get("replaces", []) or []
+    replaces_entries = attrs.get("replaces", [])
     if not replaces_entries:
         raise MigrationBaselineError(
             f"Generated squash migration is missing replaces entries: {squashed_file.name}"
@@ -191,7 +191,7 @@ def _validate_squashed_file(app_label: str, squashed_file: Path) -> None:
             f"Generated squash migration does not replace local migrations: {squashed_file.name}"
         )
 
-    dependencies = attrs.get("dependencies", []) or []
+    dependencies = attrs.get("dependencies", [])
     stale_dependencies = [
         dep_name
         for dep_app, dep_name in dependencies
@@ -299,4 +299,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())
