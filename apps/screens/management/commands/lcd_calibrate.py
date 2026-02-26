@@ -2,8 +2,10 @@
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("lcd calibrate")
 class Command(BaseCommand):
     """Delegate legacy lcd_calibrate invocations to the unified lcd command."""
 

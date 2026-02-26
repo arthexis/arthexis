@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("video debug")
 class Command(BaseCommand):
     """Backward-compatible wrapper around the unified video command."""
 

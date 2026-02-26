@@ -2,8 +2,10 @@
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("lcd animate")
 class Command(BaseCommand):
     """Delegate legacy lcd_animate invocations to the unified lcd command."""
 
