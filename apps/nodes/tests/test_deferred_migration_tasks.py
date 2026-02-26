@@ -56,3 +56,6 @@ def test_node_deferred_migration_status_endpoint_returns_percent(client):
     assert payload["key"] == "nodes:legacy-data-cleanup"
     assert payload["percent_complete"] == 25.0
     assert payload["is_complete"] is False
+    assert "updated_at" in payload
+    assert isinstance(payload["updated_at"], str)
+    assert payload["updated_at"]
