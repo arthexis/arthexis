@@ -304,6 +304,13 @@ def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_cli
         latest_order=order,
         phone_number="+52 5512345678",
     )
+    EvergoCustomer.objects.create(
+        user=profile,
+        name="Customer List 2",
+        latest_so="SO-7001-B",
+        latest_order=order,
+        phone_number="52 5598765432",
+    )
 
     changelist_url = reverse("admin:evergo_evergocustomer_changelist")
     response = admin_client.get(changelist_url)
@@ -314,6 +321,8 @@ def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_cli
     assert "Instalado" in content
     assert "+52 5512345678" not in content
     assert "5512345678" in content
+    assert "52 5598765432" not in content
+    assert "5598765432" in content
 
 
 @pytest.mark.django_db
@@ -389,17 +398,21 @@ def test_evergo_customer_admin_date_filters_local_and_remote(admin_client):
 
     changelist_url = reverse("admin:evergo_evergocustomer_changelist")
 
-    local_loaded_response = admin_client.get(changelist_url, {"loaded_at_range": "today"})
-    assert local_loaded_response.status_code == 200
-    assert recent.name in local_loaded_response.content.decode("utf-8")
-    assert old.name not in local_loaded_response.content.decode("utf-8")
+    for range_value in ("today", "week", "month"):
+        local_loaded_response = admin_client.get(changelist_url, {"loaded_at_range": range_value})
+        assert local_loaded_response.status_code == 200
+        local_loaded_content = local_loaded_response.content.decode("utf-8")
+        assert recent.name in local_loaded_content
+        assert old.name not in local_loaded_content
 
-    local_updated_response = admin_client.get(changelist_url, {"updated_at_range": "today"})
-    assert local_updated_response.status_code == 200
-    assert recent.name in local_updated_response.content.decode("utf-8")
-    assert old.name not in local_updated_response.content.decode("utf-8")
+        local_updated_response = admin_client.get(changelist_url, {"updated_at_range": range_value})
+        assert local_updated_response.status_code == 200
+        local_updated_content = local_updated_response.content.decode("utf-8")
+        assert recent.name in local_updated_content
+        assert old.name not in local_updated_content
 
-    remote_updated_response = admin_client.get(changelist_url, {"remote_updated_at_range": "today"})
-    assert remote_updated_response.status_code == 200
-    assert recent.name in remote_updated_response.content.decode("utf-8")
-    assert old.name not in remote_updated_response.content.decode("utf-8")
+        remote_updated_response = admin_client.get(changelist_url, {"remote_updated_at_range": range_value})
+        assert remote_updated_response.status_code == 200
+        remote_updated_content = remote_updated_response.content.decode("utf-8")
+        assert recent.name in remote_updated_content
+        assert old.name not in remote_updated_content
