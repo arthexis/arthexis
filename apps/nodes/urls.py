@@ -17,6 +17,7 @@ urlpatterns = [
         name="register-telemetry",
     ),
     path("screenshot/", views.capture, name="node-screenshot"),
+    path("migration-status/", views.deferred_migration_status, name="node-migration-status"),
     path("net-message/", views.net_message, name="net-message"),
     path("net-message/pull/", views.net_message_pull, name="net-message-pull"),
     path("network/chargers/", views.network_chargers, name="node-network-chargers"),

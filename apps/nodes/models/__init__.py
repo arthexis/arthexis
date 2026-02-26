@@ -8,6 +8,7 @@ from .features import (
     NodeFeatureMixin,
 )
 from .core.net_message import NetMessage, PendingNetMessage
+from .migration_checkpoint import NodeMigrationCheckpoint
 from .core.node import Node, User, node_information_updated
 from .core.platform import Platform
 from .core.role import NodeRole, NodeRoleManager, get_terminal_role
@@ -23,6 +24,7 @@ __all__ = [
     "NodeFeatureDefaultAction",
     "NodeFeatureManager",
     "NodeFeatureMixin",
+    "NodeMigrationCheckpoint",
     "NodeRole",
     "NodeRoleManager",
     "NodeUpgradePolicyAssignment",

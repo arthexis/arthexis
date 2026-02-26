@@ -8,7 +8,6 @@ import django.db.migrations.operations.special
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
-from django.db.models import Q
 
 
 # Functions from the following migrations need manual copying.
@@ -18,15 +17,6 @@ from django.db.models import Q
 # apps.nodes.migrations.0005_remove_seed_nodes
 # apps.nodes.migrations.0009_remove_arthexis_self_node
 # apps.nodes.migrations.0010_noderole_acronym
-
-
-ACRONYM_MAP = {
-    "Terminal": "TERM",
-    "Control": "CTRL",
-    "Satellite": "SATL",
-    "Watchtower": "WTTW",
-    "Constellation": "CONS",
-}
 
 
 def remove_invalid_clipboard_tasks(apps, schema_editor):
@@ -41,37 +31,13 @@ def remove_invalid_clipboard_tasks(apps, schema_editor):
     PeriodicTask.objects.filter(conditions).delete()
 
 
-def remove_seed_nodes(apps, schema_editor):
-    Node = apps.get_model("nodes", "Node")
-    Node.objects.filter(is_seed_data=True).delete()
-
-
-def remove_arthexis_self_node(apps, schema_editor):
-    Node = apps.get_model("nodes", "Node")
-    Node.objects.filter(
-        Q(current_relation="SELF")
-        & (
-            Q(hostname="arthexis.com")
-            | Q(network_hostname="arthexis.com")
-            | Q(address="arthexis.com")
-            | Q(public_endpoint="arthexis")
-        )
-    ).delete()
-
-
-def assign_acronyms(apps, schema_editor):
-    NodeRole = apps.get_model("nodes", "NodeRole")
-    for name, acronym in ACRONYM_MAP.items():
-        try:
-            role = NodeRole.objects.get(name=name)
-        except NodeRole.DoesNotExist:
-            continue
-        if role.acronym != acronym:
-            role.acronym = acronym
-            role.save(update_fields=["acronym"])
+def noop_transform(apps, schema_editor):
+    """Keep squashed migration schema-safe while deferring heavy transforms."""
 
 
 def remove_acronyms(apps, schema_editor):
+    """Reverse acronym assignment in legacy, non-squashed migration flows."""
+
     NodeRole = apps.get_model("nodes", "NodeRole")
     NodeRole.objects.all().update(acronym=None)
 
@@ -329,7 +295,7 @@ class Migration(migrations.Migration):
             reverse_code=django.db.migrations.operations.special.RunPython.noop,
         ),
         migrations.RunPython(
-            code=remove_seed_nodes,
+            code=noop_transform,
             reverse_code=django.db.migrations.operations.special.RunPython.noop,
         ),
         migrations.CreateModel(
@@ -412,7 +378,7 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunPython(
-            code=remove_arthexis_self_node,
+            code=noop_transform,
             reverse_code=django.db.migrations.operations.special.RunPython.noop,
         ),
         migrations.AddField(
@@ -421,7 +387,7 @@ class Migration(migrations.Migration):
             field=models.CharField(blank=True, max_length=4, null=True, unique=True),
         ),
         migrations.RunPython(
-            code=assign_acronyms,
+            code=noop_transform,
             reverse_code=remove_acronyms,
         ),
         migrations.AddField(

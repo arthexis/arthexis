@@ -16,12 +16,14 @@ from .registration import (
     register_visitor_telemetry,
 )
 from .screenshots import capture
+from .migration_status import deferred_migration_status
 
 __all__ = [
     "_clean_requester_hint",
     "_get_route_address",
     "_load_signed_node",
     "capture",
+    "deferred_migration_status",
     "forward_chargers",
     "net_message",
     "net_message_pull",
