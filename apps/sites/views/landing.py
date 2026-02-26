@@ -301,6 +301,7 @@ def submit_user_story(request):
         if language_code:
             story.language_code = language_code
         story.save()
+        form.save_attachments()
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)

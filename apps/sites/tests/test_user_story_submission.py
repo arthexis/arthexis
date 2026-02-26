@@ -112,3 +112,66 @@ def test_form_enforces_comment_limit_for_non_staff():
 
     assert not form.is_valid()
     assert "comments" in form.errors
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_form_save_attachments_after_manual_instance_save(settings):
+    """Attachments should persist even when the instance is saved with commit=False first."""
+
+    staff = get_user_model().objects.create_user(
+        username="manualsave",
+        email="manualsave@example.com",
+        password="secret",
+        is_staff=True,
+    )
+
+    form = UserStoryForm(
+        data={"name": "manualsave", "rating": 5, "comments": "Looks good", "path": "/manual", "messages": ""},
+        files=MultiValueDict(
+            {
+                "attachments": [
+                    SimpleUploadedFile("first.txt", b"1"),
+                    SimpleUploadedFile("second.txt", b"2"),
+                ]
+            }
+        ),
+        user=staff,
+    )
+
+    assert form.is_valid(), form.errors
+    story = form.save(commit=False)
+    story.save()
+    form.save_attachments()
+
+    assert UserStoryAttachment.objects.filter(user_story=story).count() == 2
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_attachment_limit_validation_message_uses_singular_for_one(settings):
+    """Attachment count validation should use singular noun when the limit is one."""
+
+    settings.USER_STORY_ATTACHMENT_LIMIT = 1
+    user = get_user_model().objects.create_user(
+        username="onefile",
+        email="onefile@example.com",
+        password="secret",
+    )
+
+    form = UserStoryForm(
+        data={"name": "onefile", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        files=MultiValueDict(
+            {
+                "attachments": [
+                    SimpleUploadedFile("a.txt", b"a"),
+                    SimpleUploadedFile("b.txt", b"b"),
+                ]
+            }
+        ),
+        user=user,
+    )
+
+    assert not form.is_valid()
+    assert "attachments" in form.errors
+    assert "up to 1 file." in form.errors["attachments"][0]

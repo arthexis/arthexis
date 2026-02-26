@@ -7,6 +7,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 from django.views.decorators.debug import sensitive_variables
 
 from .models import UserStory, UserStoryAttachment
@@ -150,7 +151,12 @@ class UserStoryForm(forms.ModelForm):
             raise forms.ValidationError(_("File uploads are not available for your account."), code="forbidden")
         if limit is not None and limit > 0 and attachment_count > limit:
             raise forms.ValidationError(
-                _("You can upload up to %(count)s files.") % {"count": limit},
+                ngettext(
+                    "You can upload up to %(count)s file.",
+                    "You can upload up to %(count)s files.",
+                    limit,
+                )
+                % {"count": limit},
                 code="too_many_files",
             )
         return self.cleaned_data.get("attachments")
@@ -177,6 +183,13 @@ class UserStoryForm(forms.ModelForm):
             instance.user = self.user
         if commit:
             instance.save()
-            for uploaded_file in self.upload_files:
-                UserStoryAttachment.objects.create(user_story=instance, file=uploaded_file)
+            self.save_attachments()
         return instance
+
+    def save_attachments(self):
+        """Persist uploaded attachments for the current instance once it exists."""
+
+        if not self.instance.pk:
+            return
+        for uploaded_file in self.upload_files:
+            UserStoryAttachment.objects.create(user_story=self.instance, file=uploaded_file)
