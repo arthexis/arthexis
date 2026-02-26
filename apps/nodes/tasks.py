@@ -21,7 +21,11 @@ from django.utils import timezone as django_timezone
 from apps.content.models import ContentSample
 from apps.core.tasks.auto_upgrade import check_github_updates
 from apps.core import uptime_constants, uptime_utils
-from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, lcd_feature_enabled, queue_startup_message
+from apps.screens.startup_notifications import (
+    LCD_HIGH_LOCK_FILE,
+    lcd_feature_enabled,
+    queue_startup_message,
+)
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
 from apps.content.utils import capture_and_save_screenshot
 
@@ -30,12 +34,13 @@ logger = logging.getLogger(__name__)
 STARTUP_NET_MESSAGE_CACHE_KEY = "nodes:startup_net_message:sent"
 
 
-
 def _startup_message_cache_key() -> str:
     try:
         boot_time = psutil.boot_time()
     except Exception:
-        logger.debug("Unable to determine boot time for startup Net Message cache", exc_info=True)
+        logger.debug(
+            "Unable to determine boot time for startup Net Message cache", exc_info=True
+        )
         boot_time = None
 
     if boot_time:
@@ -45,7 +50,9 @@ def _startup_message_cache_key() -> str:
 
 
 @shared_task
-def send_startup_net_message(lock_file: str | None = None, port: str | None = None) -> str:
+def send_startup_net_message(
+    lock_file: str | None = None, port: str | None = None
+) -> str:
     """Queue the LCD startup Net Message once Celery is available."""
 
     cache_key = _startup_message_cache_key()
@@ -58,9 +65,7 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
 
     base_dir = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parents[1]))
     target_lock = (
-        Path(lock_file)
-        if lock_file
-        else base_dir / ".locks" / LCD_HIGH_LOCK_FILE
+        Path(lock_file) if lock_file else base_dir / ".locks" / LCD_HIGH_LOCK_FILE
     )
     lock_dir = target_lock.parent.resolve()
 
@@ -91,9 +96,9 @@ def apply_upgrade_policies() -> str:
 
     try:
         assignments = list(
-            NodeUpgradePolicyAssignment.objects.select_related("policy").filter(
-                node=local
-            ).order_by("policy__interval_minutes")
+            NodeUpgradePolicyAssignment.objects.select_related("policy")
+            .filter(node=local)
+            .order_by("policy__interval_minutes")
         )
     except DatabaseError:
         return "skipped:db-unavailable"
@@ -243,7 +248,6 @@ def _format_duration_hms(seconds: int | None) -> str:
     return f"{minutes}m{secs}s"
 
 
-
 PING_FAILURE_CACHE_KEY = "nodes:connectivity:wlan1_failures"
 PING_FAILURE_THRESHOLD = 3
 PING_TARGET = "8.8.8.8"
@@ -364,7 +368,9 @@ def poll_upstream() -> None:
                     url, data=payload_json, headers=headers, timeout=5
                 )
             except Exception as exc:
-                logger.warning("Polling upstream node %s via %s failed: %s", upstream.pk, url, exc)
+                logger.warning(
+                    "Polling upstream node %s via %s failed: %s", upstream.pk, url, exc
+                )
                 continue
             if response.ok:
                 try:
@@ -440,11 +446,15 @@ def _resolve_node_admin():
     return NodeAdmin(Node, admin.site)
 
 
-def _summarize_update_results(local_result: dict | None, remote_result: dict | None) -> str:
+def _summarize_update_results(
+    local_result: dict | None, remote_result: dict | None
+) -> str:
     """Return ``success``, ``partial`` or ``error`` based on admin responses."""
 
     local_ok = bool(local_result.get("ok")) if isinstance(local_result, dict) else False
-    remote_ok = bool(remote_result.get("ok")) if isinstance(remote_result, dict) else False
+    remote_ok = (
+        bool(remote_result.get("ok")) if isinstance(remote_result, dict) else False
+    )
     if local_ok and remote_ok:
         return "success"
     if local_ok or remote_ok:
@@ -561,7 +571,10 @@ def monitor_nmcli() -> dict[str, object]:
 
     role_name = getattr(getattr(local, "role", None), "name", None)
     if role_name not in Node.CONNECTIVITY_MONITOR_ROLES:
-        return {"skipped": True, "reason": "Connectivity monitoring not enabled for role"}
+        return {
+            "skipped": True,
+            "reason": "Connectivity monitoring not enabled for role",
+        }
 
     success, detail = _ping_target()
     if success:
@@ -579,3 +592,93 @@ def monitor_nmcli() -> dict[str, object]:
             cache.set(PING_FAILURE_CACHE_KEY, 0, None)
 
     return result
+
+
+DEFERRED_NODE_MIGRATION_BATCH_SIZE = 500
+
+
+@shared_task
+def run_deferred_node_migrations(
+    batch_size: int = DEFERRED_NODE_MIGRATION_BATCH_SIZE,
+) -> dict[str, object]:
+    """Execute deferrable node migration transforms in idempotent batches."""
+
+    from django.db.models import Q
+
+    from .models import NodeMigrationCheckpoint, NodeRole
+
+    if batch_size < 1:
+        raise ValueError("batch_size must be greater than zero")
+
+    checkpoint, _ = NodeMigrationCheckpoint.objects.get_or_create(
+        key="nodes:legacy-data-cleanup"
+    )
+
+    role_map = {
+        "Terminal": "TERM",
+        "Control": "CTRL",
+        "Satellite": "SATL",
+        "Watchtower": "WTTW",
+        "Constellation": "CONS",
+    }
+
+    role_total = NodeRole.objects.filter(
+        acronym__isnull=True,
+        name__in=role_map.keys(),
+    ).count()
+    removable_nodes = Node.objects.filter(
+        Q(is_seed_data=True)
+        | (
+            Q(current_relation="SELF")
+            & (
+                Q(hostname="arthexis.com")
+                | Q(network_hostname="arthexis.com")
+                | Q(address="arthexis.com")
+                | Q(public_endpoint="arthexis")
+            )
+        )
+    )
+    node_total = removable_nodes.count()
+    total = role_total + node_total
+
+    role_updates = 0
+    for role in NodeRole.objects.filter(
+        acronym__isnull=True,
+        name__in=role_map.keys(),
+    ).order_by("pk")[:batch_size]:
+        role.acronym = role_map[role.name]
+        role.save(update_fields=["acronym"])
+        role_updates += 1
+
+    remaining = max(batch_size - role_updates, 0)
+    node_deletions = 0
+    if remaining > 0:
+        removable_ids = list(
+            removable_nodes.order_by("pk").values_list("pk", flat=True)[:remaining]
+        )
+        if removable_ids:
+            node_deletions, _ = Node.objects.filter(pk__in=removable_ids).delete()
+
+    remaining_roles = NodeRole.objects.filter(
+        acronym__isnull=True,
+        name__in=role_map.keys(),
+    ).count()
+    processed = max(total - (remaining_roles + removable_nodes.count()), 0)
+    is_complete = processed >= total if total else True
+
+    checkpoint.total_items = total
+    checkpoint.processed_items = processed
+    checkpoint.is_complete = is_complete
+    checkpoint.save(
+        update_fields=["total_items", "processed_items", "is_complete", "updated_at"]
+    )
+
+    return {
+        "key": checkpoint.key,
+        "total_items": total,
+        "processed_items": processed,
+        "is_complete": is_complete,
+        "batch_size": batch_size,
+        "role_updates": role_updates,
+        "node_deletions": node_deletions,
+    }
