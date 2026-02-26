@@ -33,7 +33,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         """Run requested transforms and print per-batch progress."""
 
-        max_batches = int(options["max_batches"])
+        max_batches = options["max_batches"]
         if max_batches < 1:
             raise CommandError("--max-batches must be >= 1")
 
