@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class UserStory(Lead):
+    """Feedback submitted by users from the public/private feedback widget."""
+
     path = models.CharField(max_length=500)
     name = models.CharField(max_length=40, blank=True)
     rating = models.PositiveSmallIntegerField(
@@ -198,3 +200,30 @@ class UserStory(Lead):
         if not self.should_enqueue_github_issue(created=created, raw=raw):
             return
         self.enqueue_github_issue_creation()
+
+
+def user_story_attachment_upload_to(instance: "UserStoryAttachment", filename: str) -> str:
+    """Return the upload path used for feedback attachments."""
+
+    story_id = instance.user_story_id or "pending"
+    return f"sites/user_story_attachments/{story_id}/{filename}"
+
+
+class UserStoryAttachment(models.Model):
+    """File uploaded alongside a :class:`UserStory` submission."""
+
+    user_story = models.ForeignKey(
+        UserStory,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=user_story_attachment_upload_to)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["uploaded_at", "id"]
+        verbose_name = _("User Story Attachment")
+        verbose_name_plural = _("User Story Attachments")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.file.name

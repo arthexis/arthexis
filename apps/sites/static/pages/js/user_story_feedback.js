@@ -11,7 +11,6 @@
   const successAlert = document.getElementById('user-story-success');
   const errorAlert = document.getElementById('user-story-error');
   const commentField = document.getElementById('user-story-comments');
-  const counter = document.getElementById('user-story-char-count');
   const submitBtn = form.querySelector('button[type="submit"]');
   const ratingInputs = overlay.querySelectorAll('.user-story-rating input');
   const ratingLabels = overlay.querySelectorAll('.user-story-rating label');
@@ -24,6 +23,7 @@
   const copyErrorMessage = form.dataset.copyError;
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const messageField = form.querySelector('input[name="messages"]');
+  const attachmentField = form.querySelector('input[name="attachments"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -33,12 +33,6 @@
     }
     return ratingHint.dataset[`ratingMessage${index}`] || null;
   });
-
-  const setCharCount = () => {
-    if (counter && commentField) {
-      counter.textContent = commentField.value.length;
-    }
-  };
 
   const setRatingHintText = ratingValue => {
     if (!ratingHint) {
@@ -99,7 +93,6 @@
       overlay.setAttribute('hidden', '');
       resetAlerts();
       form.reset();
-      setCharCount();
       setRatingHint();
       if (previousFocus) {
         previousFocus.focus();
@@ -130,11 +123,6 @@
       closeOverlay();
     }
   });
-
-  if (commentField) {
-    commentField.addEventListener('input', setCharCount);
-    setCharCount();
-  }
 
   if (ratingInputs && ratingInputs.length) {
     ratingInputs.forEach(input => {
@@ -312,10 +300,40 @@
     });
   }
 
+
+  const validateAttachments = () => {
+    if (!attachmentField) {
+      return '';
+    }
+    const maxFilesRaw = attachmentField.dataset.maxFiles;
+    if (!maxFilesRaw) {
+      return '';
+    }
+    const maxFiles = Number(maxFilesRaw);
+    if (!Number.isFinite(maxFiles) || maxFiles <= 0) {
+      return '';
+    }
+    const fileCount = attachmentField.files ? attachmentField.files.length : 0;
+    if (fileCount > maxFiles) {
+      return `You can upload up to ${maxFiles} files.`;
+    }
+    return '';
+  };
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
+
+    const attachmentError = validateAttachments();
+    if (attachmentError) {
+      if (errorAlert) {
+        errorAlert.textContent = attachmentError;
+        errorAlert.classList.remove('is-hidden');
+        errorAlert.removeAttribute('hidden');
+      }
+      return;
+    }
 
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -333,7 +351,6 @@
 
       if (response.ok) {
         form.reset();
-        setCharCount();
         setRatingHint();
         if (successAlert) {
           successAlert.textContent = defaultSuccessMessage;

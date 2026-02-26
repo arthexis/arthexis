@@ -6,10 +6,22 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.locals.user_data import EntityModelAdmin
 
-from ..models import UserStory
+from ..models import UserStory, UserStoryAttachment
 
 
 logger = logging.getLogger(__name__)
+
+class UserStoryAttachmentInline(admin.TabularInline):
+    """Read-only attachment list for a user story."""
+
+    model = UserStoryAttachment
+    extra = 0
+    fields = ("file", "uploaded_at")
+    readonly_fields = fields
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(UserStory)
@@ -54,6 +66,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "github_issue_url",
     )
     ordering = ("-submitted_at",)
+    inlines = (UserStoryAttachmentInline,)
     fields = (
         "name",
         "rating",

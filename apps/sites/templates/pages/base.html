@@ -332,6 +332,7 @@
           <form
             id="user-story-form"
             method="post"
+            enctype="multipart/form-data"
             action="{% url 'pages:user-story-submit' %}"
             data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
             data-network-error="{% trans 'Network error. Please try again.' %}"
@@ -411,14 +412,31 @@
                 id="user-story-comments"
                 name="comments"
                 rows="4"
-                maxlength="400"
+                {% if not request.user.is_staff %}maxlength="400"{% endif %}
                 placeholder="{% trans 'Share details about your experience (max 400 characters)' %}"
                 required
               ></textarea>
-              <div class="form-text">
-                <span id="user-story-char-count">0</span>/400
-              </div>
             </div>
+            {% if request.user.is_authenticated %}
+              <div class="mb-3">
+                <label for="user-story-attachments" class="form-label">{% trans 'Attachments' %}</label>
+                <input
+                  type="file"
+                  class="form-control"
+                  id="user-story-attachments"
+                  name="attachments"
+                  {% if not request.user.is_staff %}data-max-files="3"{% endif %}
+                  multiple
+                >
+                <div class="form-text">
+                  {% if request.user.is_staff %}
+                    {% trans 'Attach one or more files.' %}
+                  {% else %}
+                    {% trans 'Attach up to 3 files.' %}
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
             <button type="submit" class="btn btn-primary w-100 py-2">
               {% trans 'Submit feedback' %}
             </button>
