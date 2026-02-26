@@ -98,16 +98,13 @@ class Command(BaseCommand):
         """Dispatch to the selected release action."""
 
         action = options["action"]
-        if action == "prepare":
-            return self._handle_prepare(options)
-        if action == "build":
-            return self._handle_build(options)
-        if action == "capture-state":
-            return self._handle_capture_state(options)
-        if action == "clean-logs":
-            return self._handle_clean_logs(options)
-        if action == "check-pypi":
-            return self._handle_check_pypi(options)
+        handler_name = f"_handle_{action.replace('-', '_')}"
+        handler = getattr(self, handler_name, None)
+        if handler:
+            return handler(options)
+
+        # This path should be unreachable with `required=True` on the subparser,
+        # but it serves as a safeguard.
         raise CommandError(f"Unsupported action '{action}'.")
 
     def _handle_prepare(self, options: dict[str, object]) -> None:
