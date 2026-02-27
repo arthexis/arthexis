@@ -74,6 +74,27 @@ class EvergoUser(Profile):
     CUSTOMER_QUERY_DELIMITERS = re.compile(r"[,;\|\n\r\t]+")
     SALES_ORDER_PATTERN = re.compile(r"\b[A-Za-z]{1,4}\d{3,8}\b")
 
+    API_ORDER_DETAIL_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_ORDER_DETAIL_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/ordenes/{order_id}",
+    )
+    API_SAVE_VISITA_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_SAVE_VISITA_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/save-visita-tecnica",
+    )
+    API_ASSIGN_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_ASSIGN_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/asignar",
+    )
+    API_REPORT_INSTALL_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_REPORT_INSTALL_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/save-reporte-instalacion",
+    )
+
     profile_fields = ("evergo_email", "evergo_password")
 
     evergo_email = models.EmailField(blank=True)
@@ -334,6 +355,88 @@ class EvergoUser(Profile):
             "placeholders_created": placeholders_created,
             "unresolved": unresolved,
         }
+
+
+    def fetch_order_detail(self, *, order_id: int, timeout: int = 20) -> dict[str, Any]:
+        """Fetch the latest order payload for a public tracking session."""
+        with requests.Session() as session:
+            self._login_session(session=session, timeout=timeout)
+            return self._request_json(
+                session=session,
+                timeout=timeout,
+                method="GET",
+                url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
+            )
+
+    def fetch_charger_brand_options(self, *, timeout: int = 20) -> list[str]:
+        """Build charger-brand options from the user's currently assigned orders."""
+        seen: set[str] = set()
+        for payload in EvergoOrder.objects.filter(user=self).values_list("raw_payload", flat=True)[:100]:
+            if not isinstance(payload, dict):
+                continue
+            for charger in payload.get("cargadores") or []:
+                if not isinstance(charger, dict):
+                    continue
+                brand = str(charger.get("nombre") or charger.get("modelo") or "").strip()
+                if brand:
+                    seen.add(brand)
+        return sorted(seen)
+
+    def submit_tracking_phase_one(
+        self,
+        *,
+        order_id: int,
+        payload: dict[str, Any],
+        files: dict[str, Any],
+        timeout: int = 30,
+    ) -> dict[str, Any]:
+        """Submit phase-one tracking data across Visita, Asignar and Instalación calls."""
+        with requests.Session() as session:
+            self._login_session(session=session, timeout=timeout)
+            order_payload = self._request_json(
+                session=session,
+                timeout=timeout,
+                method="GET",
+                url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
+            )
+
+            visita_response = session.post(
+                self.API_SAVE_VISITA_URL_TEMPLATE.format(order_id=order_id),
+                data=payload,
+                files=files,
+                timeout=timeout,
+            )
+            if visita_response.status_code >= 400:
+                raise EvergoAPIError(f"Visita Tecnica failed with status {visita_response.status_code}.")
+
+            assign_response = session.post(
+                self.API_ASSIGN_URL_TEMPLATE.format(order_id=order_id),
+                json={"order_id": order_id, "fecha_visita": payload.get("fecha_visita")},
+                timeout=timeout,
+            )
+            if assign_response.status_code >= 400:
+                raise EvergoAPIError(f"Asignar failed with status {assign_response.status_code}.")
+
+            install_response = session.post(
+                self.API_REPORT_INSTALL_URL_TEMPLATE.format(order_id=order_id),
+                data=payload,
+                files=files,
+                timeout=timeout,
+            )
+            if install_response.status_code >= 400:
+                raise EvergoAPIError(
+                    f"Reporte de Instalacion failed with status {install_response.status_code}."
+                )
+
+            return {
+                "order_payload": order_payload,
+                "phase_1_status": visita_response.status_code,
+                "phase_1_payload": visita_response.json() if visita_response.content else {},
+                "assign_status": assign_response.status_code,
+                "assign_payload": assign_response.json() if assign_response.content else {},
+                "install_status": install_response.status_code,
+                "install_payload": install_response.json() if install_response.content else {},
+            }
 
     @classmethod
     def parse_customer_queries(cls, *, raw_queries: str) -> tuple[list[str], list[str]]:
