@@ -35,7 +35,7 @@ class PyxelViewport(PixelScreen):
         constraints = [
             models.UniqueConstraint(
                 fields=["is_default"],
-                condition=models.Q(is_default=True, is_deleted=False),
+                condition=models.Q(is_default=True),
                 name="pyxel_single_default_viewport",
             )
         ]
@@ -128,3 +128,11 @@ class PyxelViewport(PixelScreen):
             self.update_pixels(bitmap)
 
         pyxel.run(_update, _draw)
+
+    def delete(self, using=None, keep_parents=False):
+        """Clear default flag before soft deletion so another viewport can be default."""
+
+        if self.is_seed_data and self.is_default:
+            self.is_default = False
+            self.save(update_fields=["is_default"])
+        return super().delete(using=using, keep_parents=keep_parents)

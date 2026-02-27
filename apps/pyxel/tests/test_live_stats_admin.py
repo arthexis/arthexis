@@ -258,3 +258,36 @@ def test_open_viewport_view_by_pk_launches_requested_viewport(client, django_use
 
     assert response.status_code == 302
     assert called["slug"] == viewport.slug
+
+
+def test_soft_deleted_seed_default_does_not_block_new_default():
+    """Soft-deleting a seeded default should allow promoting another default viewport."""
+
+    from apps.pyxel.models import PyxelViewport
+
+    seeded_default = PyxelViewport.objects.create(
+        slug="seeded-default",
+        name="Seeded Default",
+        skin="virtual",
+        columns=8,
+        rows=8,
+        pyxel_script="def draw():\n    pass",
+        is_default=True,
+        is_seed_data=True,
+    )
+
+    seeded_default.delete()
+
+    assert PyxelViewport.all_objects.get(pk=seeded_default.pk).is_default is False
+
+    replacement = PyxelViewport.objects.create(
+        slug="replacement-default",
+        name="Replacement Default",
+        skin="virtual",
+        columns=8,
+        rows=8,
+        pyxel_script="def draw():\n    pass",
+        is_default=True,
+    )
+
+    assert replacement.is_default is True
