@@ -339,6 +339,38 @@ def test_upsert_order_extracts_contact_and_address_components():
 
 
 @pytest.mark.django_db
+def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
+    """Regression: whitespace municipio should not block a valid ciudad fallback in address composition."""
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(
+        username="suite-customer-locality-blank-municipio",
+        email="suite-customer-locality-blank-municipio@example.com",
+    )
+    profile = EvergoUser.objects.create(user=suite_user)
+
+    payload = {
+        "id": 43121,
+        "numero_orden": "SO-43121",
+        "updated_at": "2026-01-13T02:18:42.000000Z",
+        "cliente": {"id": 11002, "name": "Ciudad Fallback", "email": "ciudad@example.com"},
+        "orden_instalacion": {
+            "calle": "santa barbara",
+            "num_ext": "404",
+            "colonia": "Fuentes de Santa Lucia",
+            "municipio": "   ",
+            "ciudad": "Monterrey",
+            "codigo_postal": "64000",
+        },
+    }
+
+    created = profile._upsert_customer_from_order(payload)
+
+    assert created is True
+    customer = EvergoCustomer.objects.get(user=profile, remote_id=11002)
+    assert "Monterrey" in customer.address
+
+
+@pytest.mark.django_db
 def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
     """Regression: customer address fallback should avoid municipio/ciudad duplication by preferring municipio."""
     user_model = get_user_model()

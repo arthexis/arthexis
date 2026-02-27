@@ -719,7 +719,9 @@ class EvergoUser(Profile):
                 or install_payload.get("telefono_fijo2")
                 or ""
             ).strip()
-            locality = install_payload.get("municipio") or install_payload.get("ciudad")
+            municipio = str(install_payload.get("municipio") or "").strip()
+            ciudad = str(install_payload.get("ciudad") or "").strip()
+            locality = municipio or ciudad
             address = str(
                 install_payload.get("direccion")
                 or " ".join(

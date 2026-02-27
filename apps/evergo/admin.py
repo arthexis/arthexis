@@ -538,6 +538,13 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     inlines = (EvergoArtifactInline,)
     view_on_site = True
 
+    def get_queryset(self, request):
+        """Limit customer rows to the signed-in owner unless user is superuser."""
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(user__user=request.user)
+
     def get_urls(self):
         """Register custom admin routes for Evergo customer tools."""
         urls = super().get_urls()
