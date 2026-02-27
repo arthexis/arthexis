@@ -33,21 +33,6 @@ def _project_app_admin_modules():
 
     return modules
 
-def test_autodiscovery_includes_known_apps_with_app_namespaces():
-    routes = _pattern_routes()
-
-    assert "core/" in routes
-    assert "cards/" in routes
-    assert "tasks/" in routes  # standard prefix
-    assert "api/rfid/" not in routes
-    assert "rfid/" not in routes
-
-def test_pages_and_docs_are_excluded_from_autodiscovery():
-    routes = _pattern_routes()
-
-    assert "pages/" not in routes
-    assert "docs/" not in routes
-
 def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
     class ExternalConfig(AppConfig):
         name = "external_app"

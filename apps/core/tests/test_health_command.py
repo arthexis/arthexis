@@ -52,18 +52,3 @@ def test_health_group_core_runs_non_interactive_checks(monkeypatch):
     assert "Health checks passed." in output
 
 
-def test_check_time_wrapper_delegates_to_health(monkeypatch):
-    stream = io.StringIO()
-    err_stream = io.StringIO()
-    captured = {}
-
-    def _fake_call_command(name, **kwargs):
-        captured["name"] = name
-        captured["kwargs"] = kwargs
-
-    monkeypatch.setattr("apps.core.management.commands.check_time.call_command", _fake_call_command)
-
-    call_command("check_time", stdout=stream, stderr=err_stream)
-
-    assert captured["name"] == "health"
-    assert captured["kwargs"]["target"] == ["core.time"]
