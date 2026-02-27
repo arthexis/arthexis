@@ -28,6 +28,7 @@ from django.db.models import (
     FloatField,
     F,
     OuterRef,
+    Q,
     Subquery,
     Sum,
     Value,
@@ -725,13 +726,22 @@ def _has_active_session(tx_obj) -> bool:
 def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
     """Return an active transaction from cache or persistence."""
 
-    tx_obj = store.get_transaction(charger.charger_id, charger.connector_id) or (
-        Transaction.objects.filter(charger=charger, stop_time__isnull=True)
-        .order_by("-start_time")
-        .first()
-    )
+    tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
+    if not isinstance(tx_obj, Transaction):
+        tx_obj = (
+            Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+            .order_by("-start_time")
+            .first()
+        )
     if _is_superseded_open_transaction(charger, tx_obj):
-        return None
+        tx_obj = (
+            Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+            .exclude(pk=getattr(tx_obj, "pk", None))
+            .order_by("-start_time")
+            .first()
+        )
+        if _is_superseded_open_transaction(charger, tx_obj):
+            return None
     return tx_obj
 
 
@@ -752,15 +762,16 @@ def _is_superseded_open_transaction(charger: Charger, tx_obj: Transaction | None
     if tx_obj.pk:
         sibling_transactions = sibling_transactions.exclude(pk=tx_obj.pk)
 
-    if tx_obj.start_time and sibling_transactions.filter(start_time__gt=tx_obj.start_time).exists():
-        return True
+    conditions = Q()
+    if tx_obj.start_time:
+        conditions |= Q(start_time__gt=tx_obj.start_time)
+    if tx_obj.received_start_time:
+        conditions |= Q(received_start_time__gt=tx_obj.received_start_time)
 
-    if tx_obj.received_start_time and sibling_transactions.filter(
-        received_start_time__gt=tx_obj.received_start_time
-    ).exists():
-        return True
+    if not conditions:
+        return False
 
-    return False
+    return sibling_transactions.filter(conditions).exists()
 
 
 def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
