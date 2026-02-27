@@ -183,7 +183,8 @@
       </li>
     {% endfor %}
     </ol>
-    {% if (github_credentials_missing or github_token_using_stored) and not done %}
+    {% if not done %}
+    {% if github_credentials_missing or github_token_using_stored %}
     <div class="token-card">
       {% if github_token_using_stored %}
       <h2>🔑 {% trans "GitHub token" %}</h2>
@@ -209,6 +210,7 @@
       </form>
       {% endif %}
     </div>
+    {% endif %}
     {% endif %}
     {% if paused and started and not done and not error %}
     {% if not github_token_required %}
