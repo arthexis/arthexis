@@ -4,7 +4,7 @@ from typing import Iterable
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseRedirect
+from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
@@ -16,21 +16,19 @@ from .forms import FetchDatabaseForm, FetchInstanceForm
 from .models import AWSCredentials, LightsailDatabase, LightsailInstance
 from .services import (
     LightsailFetchError,
+    consolidate_lightsail_instances,
     fetch_lightsail_database,
     fetch_lightsail_instance,
+    list_lightsail_instances,
+    list_lightsail_regions,
     parse_database_details,
     parse_instance_details,
 )
 
 
-@admin.register(AWSCredentials)
-class AWSCredentialsAdmin(admin.ModelAdmin):
-    list_display = ("name", "access_key_id", "created_at")
-    search_fields = ("name", "access_key_id")
-    readonly_fields = ("created_at",)
-
-
 class LightsailActionMixin(DjangoObjectActions):
+    """Shared object-action and dashboard-action helpers for AWS admins."""
+
     changelist_actions: list[str] = []
     dashboard_actions: list[str] = []
 
@@ -50,6 +48,8 @@ class LightsailActionMixin(DjangoObjectActions):
         return getattr(self, "dashboard_actions", [])
 
     def resolve_credentials(self, form):
+        """Resolve selected or inline credential values from a fetch form."""
+
         credentials = form.cleaned_data.get("credentials")
         access_key = form.cleaned_data.get("access_key_id")
         secret_key = form.cleaned_data.get("secret_access_key")
@@ -64,12 +64,127 @@ class LightsailActionMixin(DjangoObjectActions):
             )
         return credentials, created
 
+    def _load_instances_for_credentials(
+        self,
+        *,
+        request: HttpRequest,
+        credentials: AWSCredentials,
+        source_label: str,
+    ) -> tuple[int, int]:
+        """Load Lightsail instances across regions and consolidate records."""
+
+        created_total = 0
+        updated_total = 0
+        loaded_regions = 0
+        for region in list_lightsail_regions():
+            details = list_lightsail_instances(region=region, credentials=credentials)
+            created_count, updated_count = consolidate_lightsail_instances(
+                region=region,
+                details=details,
+                credentials=credentials,
+            )
+            created_total += created_count
+            updated_total += updated_count
+            loaded_regions += 1
+
+        discovery = start_discovery(
+            _("Load Instances"),
+            request,
+            model=LightsailInstance,
+            metadata={"action": "aws_lightsail_instances_load", "source": source_label},
+        )
+        if discovery:
+            for instance in LightsailInstance.objects.filter(credentials=credentials):
+                record_discovery_item(
+                    discovery,
+                    obj=instance,
+                    label=instance.name,
+                    created=False,
+                    overwritten=True,
+                    data={"region": instance.region},
+                )
+
+        self.message_user(
+            request,
+            _("Loaded instances for %(credential)s across %(regions)s regions: %(created)s created, %(updated)s updated.")
+            % {
+                "credential": credentials.name,
+                "regions": loaded_regions,
+                "created": created_total,
+                "updated": updated_total,
+            },
+            messages.SUCCESS,
+        )
+        return created_total, updated_total
+
+
+@admin.register(AWSCredentials)
+class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
+    """Admin for stored AWS credential sets."""
+
+    actions = ["load_instances_for_selected"]
+    changelist_actions = ["load_instances"]
+    dashboard_actions = ["load_instances"]
+    list_display = ("name", "access_key_id", "created_at")
+    search_fields = ("name", "access_key_id")
+    readonly_fields = ("created_at",)
+
+    def _default_credentials(self) -> AWSCredentials | None:
+        """Return the first configured credential entry when present."""
+
+        return AWSCredentials.objects.order_by("name", "pk").first()
+
+    def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
+        """Tool action that loads instances with the first credential set."""
+
+        credentials = self._default_credentials()
+        if credentials is None:
+            self.message_user(request, _("Create AWS credentials before loading instances."), messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
+
+        try:
+            self._load_instances_for_credentials(
+                request=request,
+                credentials=credentials,
+                source_label="credentials_tool",
+            )
+        except LightsailFetchError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+        return HttpResponseRedirect(reverse("admin:aws_lightsailinstance_changelist"))
+
+    load_instances.label = _("Load Instances")
+    load_instances.short_description = _("Load Instances")
+    load_instances.requires_queryset = False
+
+    @admin.action(description=_("Load instances for selected"))
+    def load_instances_for_selected(self, request, queryset):
+        """Bulk action that loads instances for selected credential entries."""
+
+        if not queryset.exists():
+            self.message_user(request, _("Select at least one credential."), messages.WARNING)
+            return
+
+        for credentials in queryset.order_by("name", "pk"):
+            try:
+                self._load_instances_for_credentials(
+                    request=request,
+                    credentials=credentials,
+                    source_label="credentials_selected",
+                )
+            except LightsailFetchError as exc:
+                self.message_user(
+                    request,
+                    _("Could not load instances for %(credential)s: %(error)s")
+                    % {"credential": credentials.name, "error": exc},
+                    messages.ERROR,
+                )
+
 
 @admin.register(LightsailInstance)
 class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
-    actions = ["fetch"]
-    changelist_actions = ["fetch"]
-    dashboard_actions = ["fetch"]
+    actions = ["fetch", "load_instances"]
+    changelist_actions = ["fetch", "load_instances"]
+    dashboard_actions = ["fetch", "load_instances"]
     list_display = (
         "name",
         "region",
@@ -115,6 +230,28 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     fetch.short_description = _("Discover")
     fetch.requires_queryset = False
     fetch.is_discover_action = True
+
+    def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
+        """Load and consolidate Lightsail instances for configured credentials."""
+
+        credentials = AWSCredentials.objects.order_by("name", "pk").first()
+        if credentials is None:
+            self.message_user(request, _("Create AWS credentials before loading instances."), messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
+
+        try:
+            self._load_instances_for_credentials(
+                request=request,
+                credentials=credentials,
+                source_label="instance_tool",
+            )
+        except LightsailFetchError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+        return HttpResponseRedirect(reverse("admin:aws_lightsailinstance_changelist"))
+
+    load_instances.label = _("Load Instances")
+    load_instances.short_description = _("Load Instances")
+    load_instances.requires_queryset = False
 
     def fetch_view(self, request):
         if not self.has_view_or_change_permission(request):
@@ -178,15 +315,13 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
                 if created:
                     self.message_user(
                         request,
-                        _("Instance %(name)s created from AWS data.")
-                        % {"name": instance.name},
+                        _("Instance %(name)s created from AWS data.") % {"name": instance.name},
                         messages.SUCCESS,
                     )
                 else:
                     self.message_user(
                         request,
-                        _("Instance %(name)s updated from AWS data.")
-                        % {"name": instance.name},
+                        _("Instance %(name)s updated from AWS data.") % {"name": instance.name},
                         messages.SUCCESS,
                     )
                 if created_credentials:
@@ -316,15 +451,13 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
                 if created:
                     self.message_user(
                         request,
-                        _("Database %(name)s created from AWS data.")
-                        % {"name": database.name},
+                        _("Database %(name)s created from AWS data.") % {"name": database.name},
                         messages.SUCCESS,
                     )
                 else:
                     self.message_user(
                         request,
-                        _("Database %(name)s updated from AWS data.")
-                        % {"name": database.name},
+                        _("Database %(name)s updated from AWS data.") % {"name": database.name},
                         messages.SUCCESS,
                     )
                 if created_credentials:

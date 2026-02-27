@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from .models import AWSCredentials, LightsailDatabase, LightsailInstance
+
+
 try:
     import boto3
     from botocore.exceptions import BotoCoreError, ClientError
@@ -17,11 +20,12 @@ def _require_boto3():
         )
     return boto3
 
-from .models import AWSCredentials, LightsailDatabase, LightsailInstance
-
-
 class LightsailFetchError(Exception):
     """Raised when Lightsail resources cannot be fetched."""
+
+
+class LightsailPaginationError(LightsailFetchError):
+    """Raised when paginated Lightsail listing calls fail."""
 
 
 def _lightsail_client(
@@ -49,6 +53,15 @@ def _lightsail_client(
         )
     session = module.session.Session(**session_kwargs)
     return session.client("lightsail")
+
+
+def list_lightsail_regions() -> list[str]:
+    """Return available Lightsail regions from boto3 metadata."""
+
+    module = _require_boto3()
+    session = module.session.Session()
+    regions: list[str] = session.get_available_regions("lightsail") or []
+    return sorted({code for code in regions}) or ["us-east-1"]
 
 
 def fetch_lightsail_instance(
@@ -110,6 +123,66 @@ def fetch_lightsail_database(
     except (BotoCoreError, ClientError) as exc:  # pragma: no cover - runtime safety
         raise LightsailFetchError(str(exc)) from exc
     return response.get("relationalDatabase", {})
+
+
+def list_lightsail_instances(
+    *,
+    region: str,
+    credentials: Optional[AWSCredentials] = None,
+    access_key_id: str | None = None,
+    secret_access_key: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return all Lightsail instances for one region."""
+
+    client = _lightsail_client(
+        region,
+        credentials,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+    )
+    instances: list[dict[str, Any]] = []
+    page_token: str | None = None
+    while True:
+        try:
+            if page_token:
+                response = client.get_instances(pageToken=page_token)
+            else:
+                response = client.get_instances()
+        except (BotoCoreError, ClientError) as exc:  # pragma: no cover - runtime safety
+            raise LightsailPaginationError(str(exc)) from exc
+        instances.extend(response.get("instances", []))
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+    return instances
+
+
+def consolidate_lightsail_instances(
+    *,
+    region: str,
+    details: list[dict[str, Any]],
+    credentials: AWSCredentials | None = None,
+) -> tuple[int, int]:
+    """Create or update LightsailInstance rows from API payloads."""
+
+    created_count = 0
+    updated_count = 0
+    for item in details:
+        name = item.get("name")
+        if not name:
+            continue
+        defaults = parse_instance_details(item)
+        defaults.update({"region": region, "credentials": credentials})
+        _, created = LightsailInstance.objects.update_or_create(
+            name=name,
+            region=region,
+            defaults=defaults,
+        )
+        if created:
+            created_count += 1
+        else:
+            updated_count += 1
+    return created_count, updated_count
 
 
 def parse_database_details(data: dict[str, Any]) -> dict[str, Any]:
