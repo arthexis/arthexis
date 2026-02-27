@@ -1,5 +1,6 @@
 import logging
 import re
+from collections import deque
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -52,12 +53,16 @@ def _build_log_dashboard(logs_dir: Path, available_logs: list[str]) -> dict[str,
     for filename in available_logs:
         file_path = logs_dir / filename
         try:
-            lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            recent_lines: deque[str] = deque(maxlen=500)
+            line_count = 0
+            with file_path.open("r", encoding="utf-8", errors="replace") as log_file:
+                for raw_line in log_file:
+                    line_count += 1
+                    recent_lines.append(raw_line.rstrip("\r\n"))
         except OSError as exc:  # pragma: no cover - filesystem edge cases
             logger.warning("Unable to aggregate log file %s", file_path, exc_info=exc)
             continue
 
-        recent_lines = lines[-500:]
         per_file_levels = {"DEBUG": 0, "INFO": 0, "WARNING": 0, "ERROR": 0, "CRITICAL": 0}
         for line in recent_lines:
             level = _extract_level(line)
@@ -65,7 +70,7 @@ def _build_log_dashboard(logs_dir: Path, available_logs: list[str]) -> dict[str,
                 per_file_levels[level] += 1
                 level_totals[level] += 1
 
-        total_lines += len(lines)
+        total_lines += line_count
         try:
             modified_at = datetime.fromtimestamp(file_path.stat().st_mtime)
             modified_at = timezone.make_aware(modified_at, timezone=timezone.get_current_timezone())
@@ -76,7 +81,7 @@ def _build_log_dashboard(logs_dir: Path, available_logs: list[str]) -> dict[str,
         file_summaries.append(
             {
                 "name": filename,
-                "line_count": len(lines),
+                "line_count": line_count,
                 "recent_warning": per_file_levels["WARNING"],
                 "recent_error": per_file_levels["ERROR"],
                 "recent_critical": per_file_levels["CRITICAL"],
