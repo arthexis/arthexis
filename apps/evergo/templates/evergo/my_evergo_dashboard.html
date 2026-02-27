@@ -34,7 +34,21 @@
 
     <form method="post" class="card">
         {% csrf_token %}
+        {% if form.non_field_errors %}
+            <ul>
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
         <label for="{{ form.raw_queries.id_for_label }}">{{ form.raw_queries.label }}</label>
+        {% if form.raw_queries.errors %}
+            <ul>
+                {% for error in form.raw_queries.errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
         {{ form.raw_queries }}
         <p class="muted">{{ form.raw_queries.help_text }}</p>
         <button type="submit">{% trans "Generate table" %}</button>

@@ -22,14 +22,6 @@ EXPECTED_METHOD_PATHS = {
     ("GET", "/users/crew-people"),
 }
 
-EVERGO_MODEL_URLS = (
-    EvergoUser.API_LOGIN_URL,
-    EvergoUser.API_SITIOS_URL,
-    EvergoUser.API_INGENIEROS_URL,
-    EvergoUser.API_ORDEN_ESTATUS_URL,
-    EvergoUser.API_ORDERS_URL,
-)
-
 
 @pytest.mark.django_db
 def test_evergo_api_explorer_seeded_endpoints_regression() -> None:
@@ -52,9 +44,14 @@ def test_evergo_api_explorer_matches_model_endpoints_regression() -> None:
     api = APIExplorer.objects.get(name="Evergo API")
     seeded_paths = {method.resource_path for method in ResourceMethod.objects.filter(api=api)}
     base_path = urlparse(api.base_url).path
+    model_urls = {
+        value
+        for attr, value in vars(EvergoUser).items()
+        if attr.startswith("API_") and attr.endswith("_URL") and isinstance(value, str)
+    }
     expected_paths = {
         f"/{urlparse(url).path.removeprefix(base_path).lstrip('/')}"
-        for url in EVERGO_MODEL_URLS
+        for url in model_urls
     }
 
     assert expected_paths.issubset(seeded_paths)

@@ -73,8 +73,12 @@ def my_evergo_dashboard(request, token) -> HttpResponse:
         raw_queries = form.cleaned_data["raw_queries"]
         sales_orders, customer_names = profile.parse_customer_queries(raw_queries=raw_queries)
         if sales_orders or customer_names:
-            has_local = _has_any_local_matches(profile=profile, sales_orders=sales_orders, customer_names=customer_names)
-            if not has_local:
+            has_complete_local = _has_all_local_matches(
+                profile=profile,
+                sales_orders=sales_orders,
+                customer_names=customer_names,
+            )
+            if not has_complete_local:
                 try:
                     profile.load_customers_from_queries(raw_queries=raw_queries)
                 except EvergoAPIError as exc:
@@ -92,30 +96,44 @@ def my_evergo_dashboard(request, token) -> HttpResponse:
     return render(request, "evergo/my_evergo_dashboard.html", context)
 
 
-def _has_any_local_matches(*, profile: EvergoUser, sales_orders: list[str], customer_names: list[str]) -> bool:
-    """Check whether local cache already contains at least one row for dashboard lookups."""
-    query = Q(user=profile)
+def _build_dashboard_query_filters(*, sales_orders: list[str], customer_names: list[str]) -> Q:
+    """Build shared Q filters for sales-order and customer-name dashboard lookups."""
     filters = Q()
     if sales_orders:
         filters |= Q(order_number__in=sales_orders)
-    if customer_names:
-        for name in customer_names:
-            filters |= Q(client_name__icontains=name)
-    if not filters:
+    for name in customer_names:
+        filters |= Q(client_name__icontains=name)
+    return filters
+
+
+def _has_all_local_matches(*, profile: EvergoUser, sales_orders: list[str], customer_names: list[str]) -> bool:
+    """Return True only when local cache covers every requested lookup term."""
+    if not sales_orders and not customer_names:
         return False
-    return EvergoOrder.objects.filter(query & filters).exists()
+
+    query = Q(user=profile)
+    orders_qs = EvergoOrder.objects.filter(query)
+
+    if sales_orders:
+        found_sales_orders = {
+            number
+            for number in orders_qs.filter(order_number__in=sales_orders).values_list("order_number", flat=True)
+            if number
+        }
+        if any(so not in found_sales_orders for so in sales_orders):
+            return False
+
+    for name in customer_names:
+        if not orders_qs.filter(client_name__icontains=name).exists():
+            return False
+
+    return True
 
 
 def _build_dashboard_rows(*, profile: EvergoUser, sales_orders: list[str], customer_names: list[str]) -> list[dict[str, str]]:
     """Assemble dashboard table rows from local EvergoOrder cache."""
     query = Q(user=profile)
-    filters = Q()
-    if sales_orders:
-        filters |= Q(order_number__in=sales_orders)
-    if customer_names:
-        for name in customer_names:
-            filters |= Q(client_name__icontains=name)
-
+    filters = _build_dashboard_query_filters(sales_orders=sales_orders, customer_names=customer_names)
     if not filters:
         return []
 
@@ -154,25 +172,33 @@ def _format_full_address(order: EvergoOrder) -> str:
     return full or "-"
 
 
+def _sanitize_tsv_value(value: str | None) -> str:
+    """Sanitize TSV cell values for structure and spreadsheet formula safety."""
+    normalized = str(value or "").replace("\t", " ").replace("\r", " ").replace("\n", " ")
+    if normalized.startswith(("=", "+", "-", "@")):
+        return f"'" + normalized
+    return normalized
+
 def _to_tsv(rows: list[dict[str, str]]) -> str:
-    """Convert dashboard rows into copy/paste TSV text."""
+    """Convert dashboard rows into copy/paste TSV text with basic CSV-injection hardening."""
     headers = ["SO", "Customer Name", "Status", "Full Address", "Phone", "Charger Brand", "City (Municipio)"]
-    lines = ["\t".join(headers)]
+    lines = ["	".join(headers)]
     for row in rows:
         lines.append(
-            "\t".join(
+            "	".join(
                 [
-                    row["so"],
-                    row["customer_name"],
-                    row["status"],
-                    row["full_address"],
-                    row["phone"],
-                    row["charger_brand"],
-                    row["city"],
+                    _sanitize_tsv_value(row["so"]),
+                    _sanitize_tsv_value(row["customer_name"]),
+                    _sanitize_tsv_value(row["status"]),
+                    _sanitize_tsv_value(row["full_address"]),
+                    _sanitize_tsv_value(row["phone"]),
+                    _sanitize_tsv_value(row["charger_brand"]),
+                    _sanitize_tsv_value(row["city"]),
                 ]
             )
         )
     return "\n".join(lines)
+
 
 
 @login_required
