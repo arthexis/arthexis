@@ -11,6 +11,7 @@ class Transaction(Entity):
     class StopReason(models.TextChoices):
         """Known stop reasons reported by OCPP stop events."""
 
+        DE_AUTHORIZED = "DeAuthorized", _("De-authorized")
         EMERGENCY_STOP = "EmergencyStop", _("Emergency stop")
         EV_DISCONNECTED = "EVDisconnected", _("EV disconnected")
         HARD_RESET = "HardReset", _("Hard reset")
@@ -20,7 +21,6 @@ class Transaction(Entity):
         REBOOT = "Reboot", _("Reboot")
         REMOTE = "Remote", _("Remote")
         SOFT_RESET = "SoftReset", _("Soft reset")
-        DE_AUTHORIZED = "DeAuthorized", _("De-authorized")
 
     charger = models.ForeignKey(
         "Charger", on_delete=models.CASCADE, related_name="transactions", null=True

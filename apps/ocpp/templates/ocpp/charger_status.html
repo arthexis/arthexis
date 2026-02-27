@@ -357,7 +357,7 @@
         <td>{{ tx.kw|floatformat:2 }}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="{% if charger.connector_id is None %}7{% else %}6{% endif %}">{% trans "No sessions found." %}</td></tr>
+      <tr><td colspan="{% if charger.connector_id is None %}6{% else %}5{% endif %}">{% trans "No sessions found." %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

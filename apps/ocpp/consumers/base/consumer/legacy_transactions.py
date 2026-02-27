@@ -149,7 +149,7 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = transaction_info.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
-            stop_reason_value = str(trigger_reason or "").strip()
+            stop_reason_value = trigger_reason[:64]
             if stop_reason_value:
                 tx_obj.stop_reason = stop_reason_value
             if vid_value:
@@ -305,7 +305,7 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = payload.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
-            stop_reason_value = str((payload.get("reason") or "")).strip()
+            stop_reason_value = str((payload.get("reason") or "")).strip()[:64]
             if stop_reason_value:
                 tx_obj.stop_reason = stop_reason_value
             if vid_value:
