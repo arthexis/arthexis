@@ -145,8 +145,8 @@ class RecoverSelectedActionTests(TestCase):
         self.assertIn("Recovered 2 deleted Favorites.", messages)
 
 
-class UserDatumActionChoicesTests(TestCase):
-    """Regression tests for user-data action choice rendering."""
+class ActionChoicesDeduplicationTests(TestCase):
+    """Regression tests for admin action choice rendering."""
 
     def test_get_action_choices_deduplicates_duplicate_values(self):
         """Regression: duplicated action values should appear only once in choices."""
@@ -161,8 +161,8 @@ class UserDatumActionChoicesTests(TestCase):
             return_value=[
                 ("", "---------"),
                 ("", "---------"),
-                ("toggle_selected_user_data", "Toggle selected User Data"),
-                ("toggle_selected_user_data", "Toggle selected User Data"),
+                ("toggle_selected_seed_data", "Toggle selected Seed Data"),
+                ("toggle_selected_seed_data", "Toggle selected Seed Data"),
             ],
         ):
             choices = model_admin.get_action_choices(request)
@@ -171,6 +171,6 @@ class UserDatumActionChoicesTests(TestCase):
             choices,
             [
                 ("", "---------"),
-                ("toggle_selected_user_data", "Toggle selected User Data"),
+                ("toggle_selected_seed_data", "Toggle selected Seed Data"),
             ],
         )

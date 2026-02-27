@@ -50,7 +50,7 @@ The import process loads each fixture and, when available, re-applies the `is_us
 
 Several admin surfaces let you toggle whether an object should be captured as user data:
 
-- **List actions** – Models such as RFID tags expose the `Toggle selected User Data` bulk action in the Django admin (`apps/core/admin.py` lines 3026-3055).
+- **Row toggle icon** – Change lists expose a per-row toggle icon so operators can mark one record at a time as user data.
 - **Favorites interface** – The favorites dashboard supports tagging shortcuts as user data via checkboxes (`apps/locals/templates/admin/favorite_list.html`).
 - **Change forms** – When an object is edited through a custom form that includes the `is_user_data` switch, saving the change updates the fixture immediately (`apps/core/admin.py` lines 1857-1902).
 
