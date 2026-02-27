@@ -19,6 +19,17 @@ def test_admin_user_tools_omits_actions_spec_link(admin_client):
     assert "My Actions Spec" not in content
 
 
+def test_admin_user_tools_password_label_is_shortened(admin_client):
+    """Top user-tools row should show the shortened Password link label."""
+
+    response = admin_client.get(reverse("admin:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert '>{0}<'.format('Password') in content
+    assert 'Change password' not in content
+
+
 def test_admin_dashboard_actions_row_includes_actions_button(admin_client):
     """Second-row dashboard actions should include an Actions button."""
 
