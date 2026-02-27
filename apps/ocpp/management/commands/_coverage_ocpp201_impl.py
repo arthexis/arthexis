@@ -8,7 +8,7 @@ from apps.ocpp.management.commands._ocpp_command_helpers import (
     add_coverage_arguments,
     warn_deprecated_command,
 )
-from apps.ocpp.management.commands.coverage_ocpp16 import (
+from apps.ocpp.management.commands._coverage_ocpp16_impl import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
 )

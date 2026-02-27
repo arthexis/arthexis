@@ -26,7 +26,7 @@ def test_lcd_plan_includes_high_and_low(monkeypatch, temp_base_dir: Path) -> Non
 
     out = StringIO()
     with override_settings(BASE_DIR=temp_base_dir):
-        call_command("lcd_plan", seconds=12, stdout=out)
+        call_command("lcd", "plan", seconds=12, stdout=out)
 
     output = out.getvalue()
     assert "[high]" in output
@@ -46,7 +46,7 @@ def test_lcd_plan_prioritizes_event(monkeypatch, temp_base_dir: Path) -> None:
 
     out = StringIO()
     with override_settings(BASE_DIR=temp_base_dir):
-        call_command("lcd_plan", seconds=6, stdout=out)
+        call_command("lcd", "plan", seconds=6, stdout=out)
 
     output = out.getvalue()
     assert "[event]" in output

@@ -36,7 +36,7 @@ def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):
     )
 
     with override_settings(BASE_DIR=tmp_path):
-        call_command("lcd_debug", "--double")
+        call_command("lcd", "debug", "--double")
 
     report_path = tmp_path / "work" / "lcd-debug.txt"
     assert report_path.exists()

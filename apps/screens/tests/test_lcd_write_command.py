@@ -30,7 +30,7 @@ def read_lock(base_dir: Path):
 def test_creates_lock_file_and_sets_values(temp_base_dir: Path):
     with override_settings(BASE_DIR=temp_base_dir):
         call_command(
-            "lcd_write",
+            "lcd", "write",
             subject="Hello",
             body="World",
         )
@@ -47,7 +47,7 @@ def test_updates_existing_lock_without_overwriting_missing_fields(temp_base_dir:
 
     with override_settings(BASE_DIR=temp_base_dir):
         call_command(
-            "lcd_write",
+            "lcd", "write",
             body="Updated",
         )
 
@@ -62,7 +62,7 @@ def test_delete_lock_file(temp_base_dir: Path):
     lock_file.write_text("Subject\nBody\n", encoding="utf-8")
 
     with override_settings(BASE_DIR=temp_base_dir):
-        call_command("lcd_write", delete=True)
+        call_command("lcd", "write", delete=True)
 
     assert not lock_file.exists()
 
@@ -80,7 +80,7 @@ def test_restart_reports_failure(temp_base_dir: Path):
             )
 
             with pytest.raises(CommandError, match="restart failed"):
-                call_command("lcd_write", restart=True, service_name="demo")
+                call_command("lcd", "write", restart=True, service_name="demo")
 
 
 def test_restart_handles_missing_systemctl(temp_base_dir: Path):
@@ -93,7 +93,7 @@ def test_restart_handles_missing_systemctl(temp_base_dir: Path):
             with pytest.raises(
                 CommandError, match="systemctl not available; cannot restart lcd service"
             ):
-                call_command("lcd_write", restart=True, service_name="demo")
+                call_command("lcd", "write", restart=True, service_name="demo")
 
     mock_run.assert_called_once_with(
         ["systemctl", "restart", "lcd-demo"], capture_output=True, text=True
@@ -121,7 +121,7 @@ def test_lcd_write_sigil_resolution_modes(
 
     with override_settings(BASE_DIR=temp_base_dir):
         call_command(
-            "lcd_write",
+            "lcd", "write",
             subject="[ENV.LCD_SUBJECT]",
             body="Body",
             resolve_sigils=resolve_sigils,
