@@ -15,13 +15,18 @@ concurrency:
 
 on:
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   schedule:
     - cron: '0 2 * * 1'
   workflow_dispatch:
 
 jobs:
   install:
-    if: ${{ needs.upgrade.result == 'failure' }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
     needs: upgrade
     runs-on: ubuntu-latest
     services:
@@ -102,6 +107,7 @@ jobs:
           path: pytest.log
           if-no-files-found: warn
   upgrade:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -188,7 +194,7 @@ jobs:
           path: pytest.log
           if-no-files-found: warn
   notify-failure:
-    if: ${{ failure() && github.event_name == 'pull_request' }}
+    if: ${{ failure() && github.event_name == 'pull_request' && !github.event.pull_request.draft }}
     needs:
       - install
       - upgrade
