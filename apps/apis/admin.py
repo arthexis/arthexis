@@ -9,15 +9,13 @@ class ResourceMethodInline(admin.TabularInline):
     """Inline editor for API resource methods."""
 
     model = ResourceMethod
-    extra = 1
+    extra = 0
     fields = (
         "operation_name",
         "resource_path",
         "http_method",
-        "request_structure",
-        "response_structure",
-        "notes",
     )
+    show_change_link = True
 
 
 @admin.register(APIExplorer)
