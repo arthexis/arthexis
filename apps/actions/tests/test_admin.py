@@ -90,6 +90,29 @@ def test_remote_action_token_dashboard_includes_generate_action_link(admin_clien
     )
 
 
+def test_remote_action_token_dashboard_shows_generate_link_for_add_only_admin(client):
+    """Regression: dashboard keeps Generate Token visible for add-only users."""
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="token_dashboard_add_only",
+        password="test-password",
+        is_staff=True,
+    )
+    add_permission = Permission.objects.get(codename="add_remoteactiontoken")
+    user.user_permissions.add(add_permission)
+    client.force_login(user)
+
+    response = client.get(reverse("admin:index"))
+
+    assert response.status_code == 200
+    action_url = reverse("admin:actions_remoteactiontoken_generate_token")
+
+    parser = _LinkParser()
+    parser.feed(response.content.decode())
+    assert any(link.get("href") == action_url for link in parser.links)
+
+
 def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessible(client):
     """Regression: quick generator redirects to add page when changelist is not viewable."""
 
