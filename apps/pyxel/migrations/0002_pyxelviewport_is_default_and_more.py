@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="pyxelviewport",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("is_default", True)),
+                condition=models.Q(("is_default", True), ("is_deleted", False)),
                 fields=("is_default",),
                 name="pyxel_single_default_viewport",
             ),

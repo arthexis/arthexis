@@ -29,6 +29,19 @@ def test_is_local_request_rejects_non_local_ip(monkeypatch, rf):
     assert live_stats.is_local_request(request) is False
 
 
+def test_is_local_request_ignores_forwarded_for_header(monkeypatch, rf):
+    """Forwarded headers must not grant local access for remote socket peers."""
+
+    request = rf.get(
+        "/admin/",
+        REMOTE_ADDR="203.0.113.7",
+        HTTP_X_FORWARDED_FOR="127.0.0.1",
+    )
+    monkeypatch.setattr(live_stats, "local_ip_addresses", lambda include_loopback=True: {"127.0.0.1"})
+
+    assert live_stats.is_local_request(request) is False
+
+
 def test_admin_index_omits_pyxel_button(client, django_user_model, monkeypatch):
     """Dashboard no longer renders the old top-row Pyxel button."""
 

@@ -18,7 +18,6 @@ class PyxelViewportAdmin(admin.ModelAdmin):
         "resolution_height",
         "pyxel_fps",
     )
-    list_editable = ("is_default",)
     search_fields = ("name", "slug", "skin", "pyxel_script")
 
     def changelist_view(self, request, extra_context=None):

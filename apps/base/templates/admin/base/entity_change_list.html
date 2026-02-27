@@ -4,7 +4,7 @@
 {% block object-tools-items %}
     {% if open_viewport_url %}
         <li>
-            <form method="post" action="{{ open_viewport_url }}" style="display: inline;">
+            <form method="post" action="{{ open_viewport_url }}" class="inline-form">
                 {% csrf_token %}
                 <button type="submit" class="historylink">{% trans "Open Viewport" %}</button>
             </form>

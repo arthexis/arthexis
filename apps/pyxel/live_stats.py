@@ -43,14 +43,8 @@ def _normalize_ip(value: str | None) -> str:
 
 
 def request_client_ip(request) -> str:
-    """Resolve the request client IP from forwarded and direct socket metadata."""
+    """Resolve the request client IP from direct socket metadata only."""
 
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded_for:
-        first_hop = forwarded_for.split(",", 1)[0]
-        normalized_forwarded = _normalize_ip(first_hop)
-        if normalized_forwarded:
-            return normalized_forwarded
     return _normalize_ip(request.META.get("REMOTE_ADDR", ""))
 
 

@@ -35,7 +35,7 @@ class PyxelViewport(PixelScreen):
         constraints = [
             models.UniqueConstraint(
                 fields=["is_default"],
-                condition=models.Q(is_default=True),
+                condition=models.Q(is_default=True, is_deleted=False),
                 name="pyxel_single_default_viewport",
             )
         ]
