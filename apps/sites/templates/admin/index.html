@@ -30,7 +30,9 @@
   </div>
   <div class="admin-home-actions">
     {% url 'admin:actions_remoteaction_my_openapi_spec' as actions_spec_url %}
+    {% url 'admin:actions_remoteactiontoken_generate_token' as generate_token_url %}
     {% if actions_spec_url %}<a class="button" href="{{ actions_spec_url }}">{% translate 'Actions' %}</a>{% endif %}
+    {% if generate_token_url %}<a class="button" href="{{ generate_token_url }}">{% translate 'Generate Token' %}</a>{% endif %}
     <a class="button" href="{% url 'admin:config' %}">{% translate 'Config' %}</a>
     <a class="button" href="{% url 'admin:user_data' %}">{% translate 'Data' %}</a>
     <a class="button" href="{% url 'admin:nodes_nodefeature_discover' %}">{% translate 'Discover' %}</a>

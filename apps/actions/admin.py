@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import yaml
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import redirect
-from django.urls import path
+from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -69,7 +71,7 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
 
 
 @admin.register(RemoteActionToken)
-class RemoteActionTokenAdmin(EntityModelAdmin):
+class RemoteActionTokenAdmin(DjangoObjectActions, EntityModelAdmin):
     """Issue and manage bearer tokens used by remote actors."""
 
     list_display = (
@@ -84,6 +86,88 @@ class RemoteActionTokenAdmin(EntityModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("user__username", "label", "key_prefix")
     readonly_fields = ("key_prefix", "key_hash", "last_used_at", "created_at")
+    changelist_actions = ["generate_token"]
+    change_list_template = "django_object_actions/change_list.html"
+    fieldsets = (
+        (_("Details"), {"fields": ("label", "expires_at", "is_active")}),
+        (
+            _("Security"),
+            {"fields": ("key_prefix", "key_hash", "last_used_at", "created_at")},
+        ),
+        (_("Owner"), {"fields": ("user",)}),
+    )
+
+    def get_changelist_actions(self, request):  # pragma: no cover - admin hook
+        """Expose tool actions to dashboard templates that inspect changelist actions."""
+
+        parent = getattr(super(), "get_changelist_actions", None)
+        actions = []
+        if callable(parent):
+            existing = parent(request)
+            if existing:
+                actions.extend(existing)
+        for action in self.changelist_actions:
+            if action not in actions:
+                actions.append(action)
+        return actions
+
+    def get_urls(self):
+        """Register custom admin endpoint used by changelist and dashboard tools."""
+
+        custom_urls = [
+            path(
+                "generate-token/",
+                self.admin_site.admin_view(self.generate_token_view),
+                name="actions_remoteactiontoken_generate_token",
+            )
+        ]
+        return custom_urls + super().get_urls()
+
+    def get_changeform_initial_data(self, request):
+        """Default owner and expiry when manually creating a token in admin."""
+
+        initial = super().get_changeform_initial_data(request)
+        initial.setdefault("user", request.user.pk)
+        initial.setdefault(
+            "expires_at",
+            timezone.localtime(timezone.now() + RemoteActionToken.DEFAULT_EXPIRATION),
+        )
+        return initial
+
+    def _issue_default_token_for_request_user(self, request) -> str:
+        """Issue a token for the current user and return its one-time raw key."""
+
+        _token, raw_key = RemoteActionToken.issue_for_user(
+            request.user,
+            expires_at=timezone.now() + RemoteActionToken.DEFAULT_EXPIRATION,
+        )
+        return raw_key
+
+    @admin.action(description=_("Generate Token"))
+    def generate_token(self, request, queryset=None):
+        """Redirect object-tool action to one-click token generation endpoint."""
+
+        return redirect(reverse("admin:actions_remoteactiontoken_generate_token"))
+
+    generate_token.label = _("Generate Token")
+    generate_token.short_description = _("Generate Token")
+    generate_token.changelist = True
+    generate_token.requires_queryset = False
+
+    def generate_token_view(self, request):
+        """Generate a bearer token for the current user from dashboard/changelist."""
+
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
+        raw_key = self._issue_default_token_for_request_user(request)
+        self.message_user(
+            request,
+            _("Bearer token created. Copy it now — it will not be shown again: %(token)s")
+            % {"token": raw_key},
+            level=messages.SUCCESS,
+        )
+        return redirect("admin:actions_remoteactiontoken_changelist")
 
     def save_model(self, request, obj, form, change):
         """Ensure tokens created in admin always get a valid hashed bearer value."""
@@ -113,4 +197,3 @@ class RemoteActionTokenAdmin(EntityModelAdmin):
         obj.is_active = token.is_active
         obj.last_used_at = token.last_used_at
         obj.created_at = token.created_at
-
