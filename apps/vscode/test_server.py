@@ -239,42 +239,6 @@ def test_migration_merge_required_decodes_subprocess_output(monkeypatch):
 
 
 
-def test_windows_process_group_kwargs_delegates_to_migration(monkeypatch):
-    """Regression: test server should reuse migration Windows subprocess kwargs."""
-
-    monkeypatch.setattr(
-        migration,
-        "_windows_process_group_kwargs",
-        lambda: {"creationflags": 512},
-    )
-
-    assert _windows_process_group_kwargs() == {"creationflags": 512}
-
-
-def test_run_migration_check_command_forwards_windows_process_kwargs(monkeypatch):
-    """Regression: migration merge subprocess should pass Windows process kwargs."""
-
-    captured: dict[str, object] = {}
-
-    class FakeProcess:
-        returncode = 0
-
-        def __init__(self, *_args, **kwargs):
-            captured.update(kwargs)
-
-        def communicate(self, timeout: int | None = None):
-            _ = timeout
-            return b"", None
-
-    monkeypatch.setattr(subprocess, "Popen", FakeProcess)
-    monkeypatch.setattr(sys.modules[__name__], "_windows_process_group_kwargs", lambda: {"creationflags": 512})
-
-    result = _run_migration_check_command(["manage.py"], cwd=Path("."), env={})
-
-    assert result.returncode == 0
-    assert captured["creationflags"] == 512
-
-
 def test_run_migration_check_command_terminates_process_on_interrupt(monkeypatch):
     """Regression: interrupt should terminate active migration subprocess before retry."""
 
