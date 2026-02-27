@@ -13,6 +13,8 @@ def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
 
     script_text = Path("upgrade.sh").read_text(encoding="utf-8")
 
+    assert '. "$BASE_DIR/scripts/helpers/common.sh"' in script_text
+
     parse_start = script_text.index("while [[ $# -gt 0 ]]; do\n")
     parse_done = script_text.index("done\n", parse_start)
     gate = "if [[ $CHECK_ONLY -ne 1 ]]; then\n  arthexis_prime_sudo_credentials >/dev/null 2>&1 || true\nfi"
