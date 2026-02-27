@@ -220,3 +220,72 @@ def test_my_dashboard_supports_username_token_latest_order_lookup(client):
     content = response.content.decode()
     assert "GM01321" in content
     assert "GM01320" not in content
+
+
+@pytest.mark.django_db
+def test_my_dashboard_triggers_remote_sync_for_unresolved_customer_name_queries(client):
+    """Regression: customer-name-only lookups should trigger a remote refresh when cache misses."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-remote", email="dash-remote@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-remote@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    calls: list[str] = []
+
+    def _fake_load(self, *, raw_queries, timeout=20):
+        del self, timeout
+        calls.append(raw_queries)
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(EvergoUser, "load_customers_from_queries", _fake_load)
+        response = client.post(profile.dashboard_public_url(), {"sales_orders": "Jane Doe"})
+
+    assert response.status_code == 200
+    assert calls == ["Jane Doe"]
+
+
+@pytest.mark.django_db
+def test_my_dashboard_preserves_latest_local_order_when_username_query_matches_same_so(client):
+    """Regression: deduped order map should keep newest SO row when both query types match."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-dedupe", email="dash-dedupe@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-dedupe@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9200,
+        order_number="SO-1",
+        client_name="Alpha Test",
+        status_name="Older status",
+        source_updated_at=timezone.now() - timezone.timedelta(days=3),
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9201,
+        order_number="SO-1",
+        client_name="Alpha Test",
+        status_name="Newest status",
+        source_updated_at=timezone.now() - timezone.timedelta(days=1),
+    )
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            EvergoUser,
+            "load_customers_from_queries",
+            lambda self, *, raw_queries, timeout=20: (_ for _ in ()).throw(
+                AssertionError("should not call API when local cache has SO")
+            ),
+        )
+        response = client.post(profile.dashboard_public_url(), {"sales_orders": "SO-1 @alpha"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "SO-1" in content
+    assert "Newest status" in content
+    assert "Older status" not in content

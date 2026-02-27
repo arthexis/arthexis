@@ -5,8 +5,11 @@
       "name": "Evergo Backend (MEX v1)",
       "base_url": "https://portal-backend.evergo.com/api/mex/v1",
       "description": "Catalog of known Evergo backend endpoints observed from portal flows.",
-      "is_active": true
-    }
+      "is_active": true,
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    },
+    "pk": 1
   },
   {
     "model": "apis.resourcemethod",
@@ -16,8 +19,12 @@
       "http_method": "GET",
       "request_structure": {},
       "response_structure": {},
-      "notes": "Portal bootstrap user context."
-    }
+      "notes": "Portal bootstrap user context.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 2
   },
   {
     "model": "apis.resourcemethod",
@@ -25,10 +32,16 @@
       "operation_name": "Get order by remote id",
       "resource_path": "/ordenes/{order_id}",
       "http_method": "GET",
-      "request_structure": {"order_id": "int"},
+      "request_structure": {
+        "order_id": "int"
+      },
       "response_structure": {},
-      "notes": "Order detail endpoint."
-    }
+      "notes": "Order detail endpoint.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 3
   },
   {
     "model": "apis.resourcemethod",
@@ -36,10 +49,16 @@
       "operation_name": "Get order CFE kit",
       "resource_path": "/ordenes/kit-cfe/{order_id}",
       "http_method": "GET",
-      "request_structure": {"order_id": "int"},
+      "request_structure": {
+        "order_id": "int"
+      },
       "response_structure": {},
-      "notes": "CFE kit details by order id."
-    }
+      "notes": "CFE kit details by order id.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 4
   },
   {
     "model": "apis.resourcemethod",
@@ -49,8 +68,12 @@
       "http_method": "GET",
       "request_structure": {},
       "response_structure": [],
-      "notes": "Catalog endpoint for order status labels."
-    }
+      "notes": "Catalog endpoint for order status labels.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 5
   },
   {
     "model": "apis.resourcemethod",
@@ -60,8 +83,12 @@
       "http_method": "GET",
       "request_structure": {},
       "response_structure": [],
-      "notes": "Coordinator reassignment candidates."
-    }
+      "notes": "Coordinator reassignment candidates.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 6
   },
   {
     "model": "apis.resourcemethod",
@@ -69,10 +96,16 @@
       "operation_name": "Get technical visit questionnaire",
       "resource_path": "/reportes/ordenes/{order_id}/visita-tecnica/cuestionario-preguntas",
       "http_method": "GET",
-      "request_structure": {"order_id": "int"},
+      "request_structure": {
+        "order_id": "int"
+      },
       "response_structure": [],
-      "notes": "Question set used for technical visit reports."
-    }
+      "notes": "Question set used for technical visit reports.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 7
   },
   {
     "model": "apis.resourcemethod",
@@ -82,8 +115,12 @@
       "http_method": "GET",
       "request_structure": {},
       "response_structure": [],
-      "notes": "Reasons catalog for user reassignment flows."
-    }
+      "notes": "Reasons catalog for user reassignment flows.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 8
   },
   {
     "model": "apis.resourcemethod",
@@ -93,7 +130,11 @@
       "http_method": "GET",
       "request_structure": {},
       "response_structure": [],
-      "notes": "Crew users listing endpoint."
-    }
+      "notes": "Crew users listing endpoint.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z",
+      "api": 1
+    },
+    "pk": 9
   }
 ]

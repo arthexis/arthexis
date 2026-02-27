@@ -177,16 +177,28 @@ def my_dashboard(request, token: str) -> HttpResponse:
                 usernames=username_queries,
             )
 
-            order_map: dict[str, EvergoOrder] = {
-                order.order_number: order
-                for order in [*local_orders, *username_orders]
-                if order.order_number
-            }
+            order_map: dict[str, EvergoOrder] = {}
+            for order in [*local_orders, *username_orders]:
+                if order.order_number:
+                    order_map.setdefault(order.order_number, order)
 
-            needs_remote_sync = bool(unresolved_sales_orders or unresolved_usernames)
+            unresolved_customer_names: list[str] = []
+            if customer_names:
+                for customer_name in customer_names:
+                    if profile.orders.filter(client_name__icontains=customer_name).exists():
+                        continue
+                    unresolved_customer_names.append(customer_name)
+
+            needs_remote_sync = bool(
+                unresolved_sales_orders or unresolved_usernames or unresolved_customer_names
+            )
             if needs_remote_sync:
                 try:
-                    remote_queries = unresolved_sales_orders + [f"{name}" for name in unresolved_usernames]
+                    remote_queries = (
+                        unresolved_sales_orders
+                        + [f"{name}" for name in unresolved_usernames]
+                        + unresolved_customer_names
+                    )
                     profile.load_customers_from_queries(raw_queries="\n".join(remote_queries))
                 except EvergoAPIError as exc:
                     error_message = str(exc)

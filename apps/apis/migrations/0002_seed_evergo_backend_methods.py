@@ -59,14 +59,17 @@ def seed_evergo_backend_methods(apps, schema_editor):
         if not operation_name or not resource_path or not http_method:
             continue
 
+        request_structure = fields.get("request_structure")
+        response_structure = fields.get("response_structure")
+
         ResourceMethod.objects.update_or_create(
             api=explorer,
             operation_name=operation_name,
             resource_path=resource_path,
             http_method=http_method,
             defaults={
-                "request_structure": fields.get("request_structure") or {},
-                "response_structure": fields.get("response_structure") or {},
+                "request_structure": request_structure if request_structure is not None else {},
+                "response_structure": response_structure if response_structure is not None else {},
                 "notes": str(fields.get("notes") or ""),
             },
         )
