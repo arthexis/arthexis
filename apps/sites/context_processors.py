@@ -312,6 +312,9 @@ def nav_links(request):
         "chat_socket_path": chat_socket_path,
         "site_template": site_template,
         "operator_interface_mode": operator_interface_mode,
+        "user_story_attachment_limit": int(
+            getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
+        ),
     }
     if not user_is_authenticated:
         cache.set(cache_key, context, timeout=300)

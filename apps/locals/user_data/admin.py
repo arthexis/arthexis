@@ -271,6 +271,7 @@ class ImportExportAdminMixin:
         return super().changelist_view(request, extra_context=extra_context)
 
     def _get_export_fields(self, request):
+        """Return exportable model fields honoring explicit admin field ordering."""
         opts = self.model._meta
         field_names = list(self.get_fields(request))
         if not field_names:
@@ -283,6 +284,24 @@ class ImportExportAdminMixin:
                 export_fields.append(field)
         return export_fields or list(opts.fields)
 
+    def _get_import_identifier_field_names(self):
+        """Return field names that should be emphasized for re-import safety.
+
+        The identifiers include primary keys, unique fields, and model-level
+        unique constraints such as ``unique_together``.
+        """
+
+        opts = self.model._meta
+        identifier_field_names = {
+            field.name
+            for field in opts.fields
+            if getattr(field, "primary_key", False) or getattr(field, "unique", False)
+        }
+        for constraint in getattr(opts, "unique_together", ()):
+            for field_name in constraint:
+                identifier_field_names.add(field_name)
+        return identifier_field_names
+
     @staticmethod
     def _sanitize_csv_value(value):
         if value is None:
@@ -292,7 +311,26 @@ class ImportExportAdminMixin:
             return f"'{text}"
         return text
 
+    def _build_delimited_export_response(
+        self, queryset, export_fields, opts, *, delimiter, content_type, extension
+    ):
+        response = HttpResponse(content_type=content_type)
+        response["Content-Disposition"] = (
+            f"attachment; filename={opts.app_label}_{opts.model_name}.{extension}"
+        )
+        writer = csv.writer(response, delimiter=delimiter)
+        writer.writerow([field.name for field in export_fields])
+        for obj in queryset:
+            writer.writerow(
+                [
+                    self._sanitize_csv_value(field.value_from_object(obj))
+                    for field in export_fields
+                ]
+            )
+        return response
+
     def export_view(self, request):
+        """Render export confirmation and stream model data in selected format."""
         if not self.has_view_permission(request):
             raise PermissionDenied
         params = request.POST if request.method == "POST" else request.GET
@@ -308,23 +346,40 @@ class ImportExportAdminMixin:
             request.GET = original_get
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
+        if request.method == "POST" and export_format:
+            selected_export_column_names = request.POST.getlist("export_columns")
+            if not selected_export_column_names:
+                return HttpResponseBadRequest(_("Select at least one column to export."))
+            export_field_by_name = {field.name: field for field in export_fields}
+            export_fields = [
+                export_field_by_name[name]
+                for name in selected_export_column_names
+                if name in export_field_by_name
+            ]
+            if not export_fields:
+                return HttpResponseBadRequest(
+                    _("Select at least one valid column to export.")
+                )
         export_field_names = [field.name for field in export_fields]
         if export_format:
             if export_format == "csv":
-                response = HttpResponse(content_type="text/csv")
-                response["Content-Disposition"] = (
-                    f"attachment; filename={opts.app_label}_{opts.model_name}.csv"
+                return self._build_delimited_export_response(
+                    queryset,
+                    export_fields,
+                    opts,
+                    delimiter=",",
+                    content_type="text/csv",
+                    extension="csv",
                 )
-                writer = csv.writer(response)
-                writer.writerow(export_field_names)
-                for obj in queryset:
-                    writer.writerow(
-                        [
-                            self._sanitize_csv_value(field.value_from_object(obj))
-                            for field in export_fields
-                        ]
-                    )
-                return response
+            if export_format == "tsv":
+                return self._build_delimited_export_response(
+                    queryset,
+                    export_fields,
+                    opts,
+                    delimiter="\t",
+                    content_type="text/tab-separated-values",
+                    extension="tsv",
+                )
             if export_format == "json":
                 payload = serialize("json", queryset, fields=export_field_names)
                 response = HttpResponse(payload, content_type="application/json")
@@ -337,6 +392,8 @@ class ImportExportAdminMixin:
             f"admin:{opts.app_label}_{opts.model_name}_changelist"
         )
         context = admin.site.each_context(request)
+        selected_name_set = set(export_field_names)
+        identifier_name_set = self._get_import_identifier_field_names()
         context.update(
             {
                 "title": _("Export %(name)s") % {"name": opts.verbose_name_plural},
@@ -344,12 +401,18 @@ class ImportExportAdminMixin:
                 "changelist_url": changelist_url,
                 "export_count": queryset.count(),
                 "export_columns": [
-                    {"name": field.name, "label": field.verbose_name}
+                    {
+                        "name": field.name,
+                        "label": field.verbose_name,
+                        "selected": field.name in selected_name_set,
+                        "is_import_identifier": field.name in identifier_name_set,
+                    }
                     for field in export_fields
                 ],
                 "export_formats": [
                     {"value": "json", "label": _("JSON")},
                     {"value": "csv", "label": _("CSV")},
+                    {"value": "tsv", "label": _("TSV")},
                 ],
             }
         )

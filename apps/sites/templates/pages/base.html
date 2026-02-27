@@ -333,6 +333,7 @@
             id="user-story-form"
             method="post"
             action="{% url 'pages:user-story-submit' %}"
+            enctype="multipart/form-data"
             data-submit-error="{% trans 'We could not submit your feedback. Please try again.' %}"
             data-network-error="{% trans 'Network error. Please try again.' %}"
             data-copy-success="{% trans 'Copied!' %}"
@@ -411,13 +412,18 @@
                 id="user-story-comments"
                 name="comments"
                 rows="4"
-                maxlength="400"
-                placeholder="{% trans 'Share details about your experience (max 400 characters)' %}"
+                placeholder="{% trans 'Share details about your experience' %}"
                 required
               ></textarea>
-              <div class="form-text">
-                <span id="user-story-char-count">0</span>/400
-              </div>
+              {% if request.user.is_authenticated %}
+                <div class="mt-2">
+                  <label for="user-story-attachments" class="form-label">{% trans 'Attachments' %}</label>
+                  <input class="form-control" id="user-story-attachments" name="attachments" type="file" multiple>
+                  {% if not request.user.is_staff %}
+                    <div class="form-text">{% blocktrans with limit=user_story_attachment_limit %}You can upload up to {{ limit }} files.{% endblocktrans %}</div>
+                  {% endif %}
+                </div>
+              {% endif %}
             </div>
             <button type="submit" class="btn btn-primary w-100 py-2">
               {% trans 'Submit feedback' %}
