@@ -127,6 +127,7 @@ class LegacyTransactionHandlersMixin:
             return {"idTokenInfo": {"status": "Invalid"}}
 
         if event_type == "ended":
+            trigger_reason = str((payload.get("triggerReason") or "")).strip()
             tx_obj = store.transactions.pop(self.store_key, None)
             if not tx_obj and ocpp_tx_id:
                 tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
@@ -148,6 +149,9 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = transaction_info.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
+            stop_reason_value = trigger_reason[:64]
+            if stop_reason_value:
+                tx_obj.stop_reason = stop_reason_value
             if vid_value:
                 tx_obj.vid = vid_value
             if vin_value:
@@ -301,6 +305,9 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = payload.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
+            stop_reason_value = str((payload.get("reason") or "")).strip()[:64]
+            if stop_reason_value:
+                tx_obj.stop_reason = stop_reason_value
             if vid_value:
                 tx_obj.vid = vid_value
             if vin_value:

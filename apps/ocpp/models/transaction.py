@@ -8,6 +8,20 @@ from .meter_value import MeterValue
 class Transaction(Entity):
     """Charging session data stored for each charger."""
 
+    class StopReason(models.TextChoices):
+        """Known stop reasons reported by OCPP stop events."""
+
+        DE_AUTHORIZED = "DeAuthorized", _("De-authorized")
+        EMERGENCY_STOP = "EmergencyStop", _("Emergency stop")
+        EV_DISCONNECTED = "EVDisconnected", _("EV disconnected")
+        HARD_RESET = "HardReset", _("Hard reset")
+        LOCAL = "Local", _("Local")
+        OTHER = "Other", _("Other")
+        POWER_LOSS = "PowerLoss", _("Power loss")
+        REBOOT = "Reboot", _("Reboot")
+        REMOTE = "Remote", _("Remote")
+        SOFT_RESET = "SoftReset", _("Soft reset")
+
     charger = models.ForeignKey(
         "Charger", on_delete=models.CASCADE, related_name="transactions", null=True
     )
@@ -75,6 +89,7 @@ class Transaction(Entity):
     )
     start_time = models.DateTimeField()
     stop_time = models.DateTimeField(null=True, blank=True)
+    stop_reason = models.CharField(max_length=64, blank=True, default="")
     received_start_time = models.DateTimeField(null=True, blank=True)
     received_stop_time = models.DateTimeField(null=True, blank=True)
 

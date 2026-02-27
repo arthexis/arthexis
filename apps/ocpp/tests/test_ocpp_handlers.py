@@ -1406,6 +1406,7 @@ async def test_transaction_event_ended_updates_and_notifies():
         "eventType": "Ended",
         "timestamp": "2024-01-04T00:00:00Z",
         "evse": {"id": 1},
+        "triggerReason": "RemoteStop",
         "transactionInfo": {"transactionId": "TX-TE-3", "meterStop": 50},
     }
 
@@ -1414,6 +1415,7 @@ async def test_transaction_event_ended_updates_and_notifies():
     refreshed = await database_sync_to_async(Transaction.objects.get)(pk=tx_obj.pk)
     assert refreshed.meter_stop == 50
     assert refreshed.stop_time == parse_datetime("2024-01-04T00:00:00Z")
+    assert refreshed.stop_reason == "RemoteStop"
     assert store.transactions.get(consumer.store_key) is None
 
     assert store.transaction_events

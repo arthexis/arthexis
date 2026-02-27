@@ -335,6 +335,7 @@
         <th>{% trans "ID" %}</th>
         <th>{% trans "Start" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
         <th>{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
+        <th>{% trans "Stop reason" %}</th>
         <th>{% trans "Energy (kW)" %}</th>
       </tr>
     </thead>
@@ -346,16 +347,17 @@
         {% endif %}
         <td><a href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a></td>
         {% if date_view == "received" %}
-        <td>{{ tx.received_start_time|default:tx.start_time }}</td>
-        <td>{{ tx.received_stop_time|default:tx.stop_time|default:"-" }}</td>
+        <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
+        <td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>
         {% else %}
-        <td>{{ tx.start_time }}</td>
-        <td>{{ tx.stop_time|default:"-" }}</td>
+        <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
+        <td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>
         {% endif %}
+        <td>{{ tx.stop_reason|default:"-" }}</td>
         <td>{{ tx.kw|floatformat:2 }}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="{% if charger.connector_id is None %}5{% else %}4{% endif %}">{% trans "No sessions found." %}</td></tr>
+      <tr><td colspan="{% if charger.connector_id is None %}6{% else %}5{% endif %}">{% trans "No sessions found." %}</td></tr>
       {% endfor %}
     </tbody>
   </table>
