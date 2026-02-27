@@ -6,7 +6,9 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
@@ -416,6 +418,137 @@ def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_cli
 
 
 @pytest.mark.django_db
+def test_evergo_customer_admin_get_queryset_limits_non_superuser_visibility():
+    """Security regression: non-superusers should only see customers from their own Evergo profile."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-owner-visible",
+        email="suite-admin-owner-visible@example.com",
+        is_staff=True,
+    )
+    other_owner = user_model.objects.create_user(
+        username="suite-admin-owner-hidden",
+        email="suite-admin-owner-hidden@example.com",
+        is_staff=True,
+    )
+
+    owner_profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-owner-visible@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    other_profile = EvergoUser.objects.create(
+        user=other_owner,
+        evergo_email="suite-admin-owner-hidden@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    visible_customer = EvergoCustomer.objects.create(user=owner_profile, name="Visible Customer")
+    EvergoCustomer.objects.create(user=other_profile, name="Hidden Customer")
+
+    model_admin = admin.site._registry[EvergoCustomer]
+    request = RequestFactory().get(reverse("admin:evergo_evergocustomer_changelist"))
+    request.user = owner
+
+    queryset = model_admin.get_queryset(request)
+
+    assert list(queryset.values_list("id", flat=True)) == [visible_customer.id]
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_get_queryset_allows_superuser_visibility(admin_client):
+    """Superusers should retain visibility across all customers."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-owner-all-visible",
+        email="suite-admin-owner-all-visible@example.com",
+    )
+    other_owner = user_model.objects.create_user(
+        username="suite-admin-owner-all-hidden",
+        email="suite-admin-owner-all-hidden@example.com",
+    )
+
+    owner_profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-owner-all-visible@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    other_profile = EvergoUser.objects.create(
+        user=other_owner,
+        evergo_email="suite-admin-owner-all-hidden@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    visible_customer = EvergoCustomer.objects.create(user=owner_profile, name="Visible Customer")
+    hidden_customer = EvergoCustomer.objects.create(user=other_profile, name="Hidden Customer")
+
+    model_admin = admin.site._registry[EvergoCustomer]
+    request = RequestFactory().get(reverse("admin:evergo_evergocustomer_changelist"))
+    request.user = admin_client.get(reverse("admin:index")).wsgi_request.user
+
+    queryset = model_admin.get_queryset(request)
+
+    assert set(queryset.values_list("id", flat=True)) == {visible_customer.id, hidden_customer.id}
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_changelist_links_and_filters(admin_client):
+    """Regression: customer changelist should link customer and SO columns and filter by locality/status."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-customer-links",
+        email="suite-admin-customer-links@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-customer-links@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    installed_order = EvergoOrder.objects.create(user=profile, remote_id=9101, status_name="Instalado")
+    scheduled_order = EvergoOrder.objects.create(user=profile, remote_id=9102, status_name="Programado")
+
+    EvergoCustomer.objects.create(
+        user=profile,
+        name="Customer Apodaca",
+        latest_so="SO-9101",
+        latest_order=installed_order,
+        address="santa barbara 404 Apodaca 66647",
+        raw_payload={"orden_instalacion": {"municipio": "Apodaca", "ciudad": "Ciudad Apodaca"}},
+    )
+    EvergoCustomer.objects.create(
+        user=profile,
+        name="Customer Monterrey",
+        latest_so="SO-9102",
+        latest_order=scheduled_order,
+        address="centro Monterrey 64000",
+        raw_payload={"orden_instalacion": {"ciudad": "Monterrey"}},
+    )
+
+    changelist_url = reverse("admin:evergo_evergocustomer_changelist")
+    response = admin_client.get(changelist_url)
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+
+    assert 'scope="col" class="column-user"' not in content
+    assert '/admin/evergo/evergocustomer/' in content
+    assert reverse("admin:evergo_evergoorder_change", args=[installed_order.pk]) in content
+    assert "SO-9101" in content
+
+    city_filtered = admin_client.get(changelist_url, {"city_municipio": "Apodaca"})
+    assert city_filtered.status_code == 200
+    city_content = city_filtered.content.decode("utf-8")
+    assert "Customer Apodaca" in city_content
+    assert "Customer Monterrey" not in city_content
+
+    status_filtered = admin_client.get(changelist_url, {"last_so_status": "Programado"})
+    assert status_filtered.status_code == 200
+    status_content = status_filtered.content.decode("utf-8")
+    assert "Customer Monterrey" in status_content
+    assert "Customer Apodaca" not in status_content
+
 def test_evergo_customer_admin_change_form_has_status_readonly(admin_client):
     """Regression: customer change form should include readonly status of last SO."""
 
