@@ -94,17 +94,24 @@ def _rows_to_tsv(rows: list[dict[str, str]]) -> str:
         "City (Municipio)",
     ]
     lines = ["\t".join(headers)]
+
+    def _sanitize_tsv_cell(value: str) -> str:
+        cleaned = str(value or "").replace("\t", " ").replace("\r", " ").replace("\n", " ")
+        if cleaned[:1] in {"=", "+", "-", "@"}:
+            return f"'{cleaned}"
+        return cleaned
+
     for row in rows:
         lines.append(
             "\t".join(
                 [
-                    row["so"],
-                    row["customer_name"],
-                    row["status"],
-                    row["full_address"],
-                    row["phone"],
-                    row["charger_brand"],
-                    row["city"],
+                    _sanitize_tsv_cell(row["so"]),
+                    _sanitize_tsv_cell(row["customer_name"]),
+                    _sanitize_tsv_cell(row["status"]),
+                    _sanitize_tsv_cell(row["full_address"]),
+                    _sanitize_tsv_cell(row["phone"]),
+                    _sanitize_tsv_cell(row["charger_brand"]),
+                    _sanitize_tsv_cell(row["city"]),
                 ]
             )
         )
@@ -114,7 +121,7 @@ def _rows_to_tsv(rows: list[dict[str, str]]) -> str:
 def _find_local_orders(profile: EvergoUser, *, sales_orders: list[str]) -> tuple[list[EvergoOrder], list[str]]:
     """Return locally cached orders for SOs and list any unresolved SO identifiers."""
     local_orders = list(
-        profile.orders.filter(order_number__in=sales_orders).order_by("order_number", "-source_updated_at", "remote_id")
+        profile.orders.filter(order_number__in=sales_orders).order_by("order_number", "-source_updated_at", "-remote_id")
     )
     found_so = {order.order_number for order in local_orders if order.order_number}
     unresolved = [so for so in sales_orders if so not in found_so]
@@ -207,7 +214,7 @@ def my_dashboard(request, token: str) -> HttpResponse:
                 refreshed_orders = profile.orders.filter(order_number__in=unresolved_sales_orders).order_by(
                     "order_number",
                     "-source_updated_at",
-                    "remote_id",
+                    "-remote_id",
                 )
                 for order in refreshed_orders:
                     if order.order_number:

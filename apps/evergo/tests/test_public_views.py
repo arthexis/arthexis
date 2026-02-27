@@ -289,3 +289,77 @@ def test_my_dashboard_preserves_latest_local_order_when_username_query_matches_s
     assert "SO-1" in content
     assert "Newest status" in content
     assert "Older status" not in content
+
+
+@pytest.mark.django_db
+def test_my_dashboard_tsv_escapes_formula_cells(client):
+    """Regression: TSV output should neutralize spreadsheet formula-like cell values."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-tsv-safe", email="dash-tsv-safe@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-tsv-safe@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9300,
+        order_number="=SO-007",
+        client_name="@Danger Name",
+        status_name="+Pending",
+        phone_primary="-8111111111",
+        site_name="Normal",
+        address_municipality="Apodaca",
+    )
+
+    response = client.post(profile.dashboard_public_url(), {"sales_orders": "=SO-007"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "'=SO-007	'@Danger Name	'+Pending" in content
+    assert "	'-8111111111	" in content
+
+
+@pytest.mark.django_db
+def test_my_dashboard_prefers_higher_remote_id_for_same_timestamp_duplicates(client):
+    """Regression: tie-breaking for identical timestamps should keep latest remote id row."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-remote-id", email="dash-remote-id@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="dash-remote-id@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    same_ts = timezone.now() - timezone.timedelta(days=1)
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9400,
+        order_number="SO-TIE",
+        client_name="Tie Customer",
+        status_name="Old remote",
+        source_updated_at=same_ts,
+    )
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=9401,
+        order_number="SO-TIE",
+        client_name="Tie Customer",
+        status_name="New remote",
+        source_updated_at=same_ts,
+    )
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            EvergoUser,
+            "load_customers_from_queries",
+            lambda self, *, raw_queries, timeout=20: (_ for _ in ()).throw(
+                AssertionError("should not call API when local cache has SO")
+            ),
+        )
+        response = client.post(profile.dashboard_public_url(), {"sales_orders": "SO-TIE"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "SO-TIE" in content
+    assert "New remote" in content
+    assert "Old remote" not in content
