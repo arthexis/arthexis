@@ -1,6 +1,9 @@
 """Forms used by Evergo admin and public tools."""
 
+import re
+
 from django import forms
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from .models import EvergoUser
@@ -115,3 +118,33 @@ class EvergoOrderTrackingForm(forms.Form):
         ]
         if not self.is_bound:
             self.initial.setdefault("fecha_visita", timezone.localtime().strftime("%Y-%m-%dT%H:%M"))
+
+
+class EvergoDashboardLookupForm(forms.Form):
+    """Collect free-form SO/customer queries for dashboard table generation."""
+
+    max_queries = 100
+
+    raw_queries = forms.CharField(
+        max_length=4000,
+        label="SO numbers and/or customer names",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 6,
+                "placeholder": "GM01162, GM01163\nJuan Perez",
+            }
+        ),
+        help_text=(
+            "Use one or many values separated by commas, spaces, semicolons, tabs, or line breaks."
+        ),
+    )
+
+    def clean_raw_queries(self) -> str:
+        """Trim and bound lookup tokens to limit dashboard query work."""
+        raw_queries = (self.cleaned_data.get("raw_queries") or "").strip()
+        tokens = [chunk for chunk in re.split(r"[,;|\s]+", raw_queries) if chunk]
+        if len(tokens) > self.max_queries:
+            raise ValidationError(
+                f"Too many values in raw_queries. Submit at most {self.max_queries} values."
+            )
+        return raw_queries

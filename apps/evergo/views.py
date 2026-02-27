@@ -5,15 +5,16 @@ from __future__ import annotations
 from urllib.parse import quote_plus
 
 from django.conf import settings
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.translation import gettext as _
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
-from .forms import EvergoOrderTrackingForm
-from .models import EvergoArtifact, EvergoCustomer, EvergoOrder
+from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
+from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
 from .services import ensure_image_payload
 
 
@@ -22,6 +23,7 @@ EVERGO_PORTAL_ORDER_URL_TEMPLATE = getattr(
     "EVERGO_PORTAL_ORDER_URL_TEMPLATE",
     "https://portal-mex.evergo.com/ordenes/{order_id}",
 )
+EVERGO_PORTAL_MAIN_URL = getattr(settings, "EVERGO_PORTAL_MAIN_URL", "https://portal-mex.evergo.com/")
 
 
 def customer_public_detail(request, pk: int) -> HttpResponse:
@@ -58,6 +60,145 @@ def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpRespon
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{artifact.filename}"'
     return response
+
+
+def my_evergo_dashboard(request, token) -> HttpResponse:
+    """Render the secure public dashboard for one Evergo profile token."""
+    profile = get_object_or_404(EvergoUser.objects.select_related("user"), dashboard_token=token)
+    rows: list[dict[str, str]] = []
+    copy_table = ""
+    form = EvergoDashboardLookupForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        raw_queries = form.cleaned_data["raw_queries"]
+        sales_orders, customer_names = profile.parse_customer_queries(raw_queries=raw_queries)
+        if sales_orders or customer_names:
+            has_complete_local = _has_all_local_matches(
+                profile=profile,
+                sales_orders=sales_orders,
+                customer_names=customer_names,
+            )
+            if not has_complete_local:
+                try:
+                    profile.load_customers_from_queries(raw_queries=raw_queries)
+                except EvergoAPIError as exc:
+                    messages.warning(request, _("Evergo API sync failed: %(error)s") % {"error": str(exc)})
+            rows = _build_dashboard_rows(profile=profile, sales_orders=sales_orders, customer_names=customer_names)
+            copy_table = _to_tsv(rows)
+
+    context = {
+        "profile": profile,
+        "form": form,
+        "rows": rows,
+        "copy_table": copy_table,
+        "evergo_main_url": EVERGO_PORTAL_MAIN_URL,
+    }
+    return render(request, "evergo/my_evergo_dashboard.html", context)
+
+
+def _build_dashboard_query_filters(*, sales_orders: list[str], customer_names: list[str]) -> Q:
+    """Build shared Q filters for sales-order and customer-name dashboard lookups."""
+    filters = Q()
+    if sales_orders:
+        filters |= Q(order_number__in=sales_orders)
+    for name in customer_names:
+        filters |= Q(client_name__icontains=name)
+    return filters
+
+
+def _has_all_local_matches(*, profile: EvergoUser, sales_orders: list[str], customer_names: list[str]) -> bool:
+    """Return True only when local cache covers every requested lookup term."""
+    if not sales_orders and not customer_names:
+        return False
+
+    query = Q(user=profile)
+    orders_qs = EvergoOrder.objects.filter(query)
+
+    if sales_orders:
+        found_sales_orders = {
+            number
+            for number in orders_qs.filter(order_number__in=sales_orders).values_list("order_number", flat=True)
+            if number
+        }
+        if any(so not in found_sales_orders for so in sales_orders):
+            return False
+
+    for name in customer_names:
+        if not orders_qs.filter(client_name__icontains=name).exists():
+            return False
+
+    return True
+
+
+def _build_dashboard_rows(*, profile: EvergoUser, sales_orders: list[str], customer_names: list[str]) -> list[dict[str, str]]:
+    """Assemble dashboard table rows from local EvergoOrder cache."""
+    query = Q(user=profile)
+    filters = _build_dashboard_query_filters(sales_orders=sales_orders, customer_names=customer_names)
+    if not filters:
+        return []
+
+    orders = EvergoOrder.objects.filter(query & filters).order_by("order_number", "remote_id")
+    rows: list[dict[str, str]] = []
+    for order in orders:
+        rows.append(
+            {
+                "so": order.order_number or str(order.remote_id),
+                "so_url": EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id),
+                "customer_name": order.client_name or "-",
+                "status": order.status_name or "-",
+                "full_address": _format_full_address(order),
+                "phone": order.phone_primary or order.phone_secondary or "-",
+                "charger_brand": order.site_name or "-",
+                "city": order.address_municipality or order.address_city or "-",
+            }
+        )
+    return rows
+
+
+def _format_full_address(order: EvergoOrder) -> str:
+    """Return single-line readable full address from cached order address fields."""
+    parts = [
+        order.address_street,
+        order.address_num_ext,
+        order.address_num_int,
+        order.address_between_streets,
+        order.address_neighborhood,
+        order.address_municipality,
+        order.address_city,
+        order.address_state,
+        order.address_postal_code,
+    ]
+    full = " ".join(part.strip() for part in parts if part and part.strip())
+    return full or "-"
+
+
+def _sanitize_tsv_value(value: str | None) -> str:
+    """Sanitize TSV cell values for structure and spreadsheet formula safety."""
+    normalized = str(value or "").replace("\t", " ").replace("\r", " ").replace("\n", " ")
+    if normalized.startswith(("=", "+", "-", "@")):
+        return f"'" + normalized
+    return normalized
+
+def _to_tsv(rows: list[dict[str, str]]) -> str:
+    """Convert dashboard rows into copy/paste TSV text with basic CSV-injection hardening."""
+    headers = ["SO", "Customer Name", "Status", "Full Address", "Phone", "Charger Brand", "City (Municipio)"]
+    lines = ["	".join(headers)]
+    for row in rows:
+        lines.append(
+            "	".join(
+                [
+                    _sanitize_tsv_value(row["so"]),
+                    _sanitize_tsv_value(row["customer_name"]),
+                    _sanitize_tsv_value(row["status"]),
+                    _sanitize_tsv_value(row["full_address"]),
+                    _sanitize_tsv_value(row["phone"]),
+                    _sanitize_tsv_value(row["charger_brand"]),
+                    _sanitize_tsv_value(row["city"]),
+                ]
+            )
+        )
+    return "\n".join(lines)
+
 
 
 @login_required

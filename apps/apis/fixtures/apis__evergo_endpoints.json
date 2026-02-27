@@ -120,5 +120,146 @@
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
     }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "Get Current User",
+      "resource_path": "/user",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {
+        "id": "number",
+        "name": "string",
+        "email": "string"
+      },
+      "notes": "Returns authenticated Evergo user profile.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "Get Order Detail",
+      "resource_path": "/ordenes/{order_id}",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {
+        "id": "number",
+        "numero_orden": "string"
+      },
+      "notes": "Returns full Evergo order details by remote id.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "Get Order Kit CFE",
+      "resource_path": "/ordenes/kit-cfe/{order_id}",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {
+        "id": "number"
+      },
+      "notes": "Returns Kit CFE data for a specific order.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "List Assignment Crews",
+      "resource_path": "/config/catalogs/instaladores/empresas/coord-para-asignar",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "nombre": "string"
+        }
+      ],
+      "notes": "Lists installer companies/coordinators available for assignment.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "Get Technical Visit Questions",
+      "resource_path": "/reportes/ordenes/{order_id}/visita-tecnica/cuestionario-preguntas",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "descripcion": "string"
+        }
+      ],
+      "notes": "Returns questionnaire fields for technical visit reports.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "List Reassignment Reasons",
+      "resource_path": "/users/reassignment_reason",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "nombre": "string"
+        }
+      ],
+      "notes": "Lists valid reasons for reassigning an order.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "fields": {
+      "api": [
+        "Evergo API"
+      ],
+      "operation_name": "List Crew People",
+      "resource_path": "/users/crew-people",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": [
+        {
+          "id": "number",
+          "name": "string"
+        }
+      ],
+      "notes": "Lists crew members for assignment flows.",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
   }
 ]

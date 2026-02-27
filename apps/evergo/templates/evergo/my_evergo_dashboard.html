@@ -1,0 +1,94 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans "My Evergo Dashboard" %}</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: Inter, Arial, sans-serif; margin: 1.2rem auto; max-width: 1100px; padding: 0 1rem; }
+        .card { border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+        textarea, input { width: 100%; padding: .6rem; border-radius: 8px; border: 1px solid #777; box-sizing:border-box; }
+        button { padding: .65rem 1rem; border: 0; border-radius: 8px; background:#0b5ed7; color:#fff; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { border-bottom:1px solid color-mix(in srgb, CanvasText 16%, transparent); padding:.5rem; text-align:left; vertical-align: top; }
+        .muted { opacity: .78; }
+        .external-icon { text-decoration: none; margin-left: .35rem; }
+    </style>
+</head>
+<body>
+    <h1>{% trans "My Evergo Dashboard" %}</h1>
+
+    <div class="card">
+        <strong>{% trans "Username" %}:</strong> {{ profile.user.username }}
+        <span class="muted">({% trans "read only" %})</span>
+        <a class="external-icon" href="{{ evergo_main_url }}" target="_blank" rel="noopener noreferrer" title="{% trans 'View assigned orders in Evergo' %}">↗</a>
+    </div>
+
+    {% if messages %}
+      <div class="card">
+        {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" class="card">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <ul>
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        <label for="{{ form.raw_queries.id_for_label }}">{{ form.raw_queries.label }}</label>
+        {% if form.raw_queries.errors %}
+            <ul>
+                {% for error in form.raw_queries.errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {{ form.raw_queries }}
+        <p class="muted">{{ form.raw_queries.help_text }}</p>
+        <button type="submit">{% trans "Generate table" %}</button>
+    </form>
+
+    {% if rows %}
+        <div class="card">
+            <h2>{% trans "Order results" %}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>SO</th>
+                        <th>{% trans "Customer Name" %}</th>
+                        <th>{% trans "Status" %}</th>
+                        <th>{% trans "Full Address" %}</th>
+                        <th>{% trans "Phone" %}</th>
+                        <th>{% trans "Charger Brand" %}</th>
+                        <th>{% trans "City (Municipio)" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td><a href="{{ row.so_url }}" target="_blank" rel="noopener noreferrer">{{ row.so }}</a></td>
+                            <td>{{ row.customer_name }}</td>
+                            <td>{{ row.status }}</td>
+                            <td>{{ row.full_address }}</td>
+                            <td>{{ row.phone }}</td>
+                            <td>{{ row.charger_brand }}</td>
+                            <td>{{ row.city }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>{% trans "Copy / Paste table" %}</h2>
+            <textarea rows="10" readonly>{{ copy_table }}</textarea>
+        </div>
+    {% endif %}
+</body>
+</html>
