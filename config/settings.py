@@ -493,6 +493,7 @@ LOCAL_APPS = [
     "apps.survey",
     "apps.modules",
     "apps.features",
+    "apps.prompts",
     "apps.widgets",
     "apps.apis",
     "apps.sites",

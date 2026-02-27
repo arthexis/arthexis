@@ -14,6 +14,12 @@ repos:
         language: system
         pass_filenames: false
         stages: [commit]
+      - id: prompt-storage
+        name: Ensure prompt fixture stored for code changes
+        entry: scripts/git-hooks/pre-commit-prompt-storage.sh
+        language: system
+        pass_filenames: false
+        stages: [commit]
       - id: ruff
         name: ruff
         entry: ruff check --select E9,F823
