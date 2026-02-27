@@ -8,7 +8,7 @@ from apps.ocpp.management.commands._ocpp_command_helpers import (
     add_coverage_arguments,
     warn_deprecated_command,
 )
-from apps.ocpp.management.commands.coverage_ocpp16 import (
+from apps.ocpp.management.coverage_ocpp16_impl import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
 )
@@ -17,14 +17,14 @@ from utils.coverage import coverage_color, render_badge
 
 
 def _load_spec() -> dict[str, list[str]]:
-    """Load OCPP 2.1 call definitions from protocol specs."""
-    data = load_protocol_spec_from_file(spec_path("ocpp21"))
+    """Load OCPP 2.0.1 call definitions from protocol specs."""
+    data = load_protocol_spec_from_file(spec_path("ocpp201"))
     return data["calls"]
 
 
-def run_coverage_ocpp21(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
-    """Generate OCPP 2.1 coverage output and badge."""
-    app_dir = Path(__file__).resolve().parents[2]
+def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
+    """Generate OCPP 2.0.1 coverage output and badge."""
+    app_dir = Path(__file__).resolve().parents[1]
     project_root = app_dir.parent.parent
     spec = _load_spec()
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
@@ -75,29 +75,29 @@ def run_coverage_ocpp21(*, badge_path=None, json_path=None, stdout=None, stderr=
             path = project_root / path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(output + "\n", encoding="utf-8")
-    badge_output = Path(badge_path) if badge_path else project_root / "media" / "ocpp21_coverage.svg"
+    badge_output = Path(badge_path) if badge_path else project_root / "media" / "ocpp201_coverage.svg"
     if not badge_output.is_absolute():
         badge_output = project_root / badge_output
     badge_output.parent.mkdir(parents=True, exist_ok=True)
     badge_output.write_text(
-        render_badge("ocpp 2.1", f"{round(overall_percentage, 1)}%", coverage_color(overall_percentage)) + "\n",
+        render_badge("ocpp 2.0.1", f"{round(overall_percentage, 1)}%", coverage_color(overall_percentage)) + "\n",
         encoding="utf-8",
     )
     if overall_percentage < 100 and stderr:
-        stderr.write("OCPP 2.1 coverage is incomplete; consider adding more handlers.")
+        stderr.write("OCPP 2.0.1 coverage is incomplete; consider adding more handlers.")
         stderr.write(f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.")
     if stdout:
         stdout.write("Command completed without failure.")
 
 
 class Command(BaseCommand):
-    help = "Compute OCPP 2.1 call coverage and generate a badge."
+    help = "Compute OCPP 2.0.1 call coverage and generate a badge."
 
     def add_arguments(self, parser) -> None:
         add_coverage_arguments(parser)
 
     def handle(self, *args, **options):
-        warn_deprecated_command("coverage_ocpp21", "ocpp coverage --version 2.1")
+        warn_deprecated_command("coverage_ocpp201", "ocpp coverage --version 2.0.1")
         command_options = {
             key: value
             for key, value in options.items()
@@ -107,7 +107,7 @@ class Command(BaseCommand):
             "ocpp",
             "coverage",
             "--version",
-            "2.1",
+            "2.0.1",
             stdout=self.stdout,
             stderr=self.stderr,
             **command_options,

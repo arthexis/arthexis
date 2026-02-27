@@ -1,74 +1,70 @@
-"""Tests for absorbed command deprecation metadata."""
+"""Regression tests for removed absorbed management command wrappers."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from django.core.management import get_commands, load_command_class
+from django.core.management import get_commands
 
 from utils.command_api import CommandOptions, filtered_commands
 
 
-def test_absorbed_wrapper_commands_expose_replacement_metadata() -> None:
-    """Legacy wrappers should publish replacement metadata via the decorator."""
-    expected_replacements = {
-        "export_rfids": "rfid export",
-        "import_rfids": "rfid import",
-        "rfid_doctor": "rfid doctor",
-        "rfid_service": "rfid service",
-        "watch_rfid": "rfid watch",
-        "check_admin": "health --target core.admin",
-        "check_lcd_send": "health --target core.lcd_send",
-        "check_lcd_service": "health --target core.lcd_service",
-        "check_next_upgrade": "health --target core.next_upgrade",
-        "check_rfid": "rfid check --uid <UID>",
-        "check_system_user": "health --target core.system_user",
-        "check_time": "health --target core.time",
-        "check_nodes": "node check",
-        "lan-find-node": "node discover",
-        "register-node": "node register",
-        "register-node-curl": "node register_curl",
-        "registration_ready": "node ready",
-        "update-peer-nodes": "node peers",
-        "lcd_animate": "lcd animate",
-        "lcd_calibrate": "lcd calibrate",
-        "lcd_debug": "lcd debug",
-        "lcd_plan": "lcd plan",
-        "lcd_replay": "lcd replay",
-        "lcd_write": "lcd write",
-        "snapshot": "video --snapshot",
-        "video_debug": "video --list-streams",
-    }
+REMOVED_WRAPPER_COMMANDS = {
+    "export_rfids",
+    "import_rfids",
+    "rfid_doctor",
+    "rfid_service",
+    "watch_rfid",
+    "check_admin",
+    "check_lcd_send",
+    "check_lcd_service",
+    "check_next_upgrade",
+    "check_rfid",
+    "check_system_user",
+    "check_time",
+    "check_nodes",
+    "lan-find-node",
+    "register-node",
+    "register-node-curl",
+    "registration_ready",
+    "update-peer-nodes",
+    "lcd_animate",
+    "lcd_calibrate",
+    "lcd_debug",
+    "lcd_plan",
+    "lcd_replay",
+    "lcd_write",
+    "snapshot",
+    "video_debug",
+    "build_pypi",
+    "check_pypi",
+    "clean_release_logs",
+    "prepare_release",
+    "capture_release_state",
+    "coverage_ocpp16",
+    "coverage_ocpp201",
+    "coverage_ocpp21",
+    "import_transactions",
+    "export_transactions",
+    "ocpp_extract",
+    "ocpp_replay",
+    "check_forwarders",
+    "rfid_check",
+}
 
-    registered = get_commands()
-    for command_name, replacement in expected_replacements.items():
-        assert command_name in registered, (
-            f"Command '{command_name}' from expected_replacements is not registered; "
-            "check INSTALLED_APPS and command module names."
-        )
-        app_name = registered[command_name]
-        command = load_command_class(app_name, command_name)
 
-        assert getattr(command.__class__, "arthexis_absorbed_command", False) is True
-        assert getattr(command.__class__, "arthexis_replacement_command", "") == replacement
+def test_removed_wrappers_are_not_registered_commands() -> None:
+    """Regression: removed wrapper entrypoints should not register with Django."""
+
+    registered = set(get_commands())
+    assert REMOVED_WRAPPER_COMMANDS.isdisjoint(registered)
 
 
-def test_filtered_commands_hides_absorbed_wrappers_unless_deprecated_requested() -> None:
-    """Command API should hide absorbed wrappers unless --deprecated is set."""
-
-    wrapper_commands = {
-        "lcd_animate",
-        "lcd_calibrate",
-        "lcd_debug",
-        "lcd_plan",
-        "lcd_replay",
-        "lcd_write",
-        "snapshot",
-        "video_debug",
-    }
+def test_filtered_commands_excludes_removed_wrappers_even_with_deprecated() -> None:
+    """Removed wrappers should not reappear when ``--deprecated`` filtering is enabled."""
 
     default_commands = set(filtered_commands(Path.cwd(), CommandOptions(deprecated=False)))
     deprecated_commands = set(filtered_commands(Path.cwd(), CommandOptions(deprecated=True)))
 
-    assert wrapper_commands.isdisjoint(default_commands)
-    assert wrapper_commands.issubset(deprecated_commands)
+    assert REMOVED_WRAPPER_COMMANDS.isdisjoint(default_commands)
+    assert REMOVED_WRAPPER_COMMANDS.isdisjoint(deprecated_commands)

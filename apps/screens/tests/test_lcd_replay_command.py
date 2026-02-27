@@ -51,7 +51,7 @@ def test_lcd_replay_command_uses_history(monkeypatch, tmp_path):
     )
 
     with override_settings(BASE_DIR=tmp_path):
-        call_command("lcd_replay", minutes=1)
+        call_command("lcd", "replay", minutes=1)
 
     assert replayer.ran is True
     assert writer.calls

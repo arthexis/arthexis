@@ -267,7 +267,7 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
 
 def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
     """Generate OCPP 1.6 coverage output and badge."""
-    app_dir = Path(__file__).resolve().parents[2]
+    app_dir = Path(__file__).resolve().parents[1]
     project_root = app_dir.parent.parent
     spec = _load_spec()
 
