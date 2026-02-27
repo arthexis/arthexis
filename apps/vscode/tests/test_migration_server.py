@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from apps.vscode import migration_server
 
 
@@ -138,6 +140,22 @@ def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches(
 
     mocked_killpg.assert_not_called()
     mocked_kill.assert_called_once_with(9876, migration_server.signal.SIGTERM)
+
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("apps/vscode/test_server.py", True),
+        ("apps/vscode/README.md", False),
+        (r"apps\vscode\migration_server.py", True),
+        (r"apps\vscode\README.md", False),
+    ],
+)
+def test_should_watch_file(path: str, expected: bool) -> None:
+    """Regression: watcher filtering should handle POSIX and Windows-style paths."""
+
+    assert migration_server._should_watch_file(path) is expected
 
 def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     """Ensure migration-server refresh forces SQLite fallback for responsiveness."""
