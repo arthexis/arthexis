@@ -265,6 +265,8 @@ def test_soft_deleted_seed_default_does_not_block_new_default():
 
     from apps.pyxel.models import PyxelViewport
 
+    PyxelViewport.all_objects.update(is_default=False)
+
     seeded_default = PyxelViewport.objects.create(
         slug="seeded-default",
         name="Seeded Default",
@@ -283,6 +285,40 @@ def test_soft_deleted_seed_default_does_not_block_new_default():
     replacement = PyxelViewport.objects.create(
         slug="replacement-default",
         name="Replacement Default",
+        skin="virtual",
+        columns=8,
+        rows=8,
+        pyxel_script="def draw():\n    pass",
+        is_default=True,
+    )
+
+    assert replacement.is_default is True
+
+
+def test_soft_deleted_non_seed_default_does_not_block_new_default():
+    """Soft-deleting any default viewport should allow promoting a replacement default."""
+
+    from apps.pyxel.models import PyxelViewport
+
+    PyxelViewport.all_objects.update(is_default=False)
+
+    default_viewport = PyxelViewport.objects.create(
+        slug="non-seeded-default",
+        name="Non-seeded Default",
+        skin="virtual",
+        columns=8,
+        rows=8,
+        pyxel_script="def draw():\n    pass",
+        is_default=True,
+    )
+
+    default_viewport.delete()
+
+    assert PyxelViewport.all_objects.get(pk=default_viewport.pk).is_default is False
+
+    replacement = PyxelViewport.objects.create(
+        slug="non-seeded-replacement-default",
+        name="Non-seeded Replacement Default",
         skin="virtual",
         columns=8,
         rows=8,

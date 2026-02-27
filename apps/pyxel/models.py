@@ -132,7 +132,7 @@ class PyxelViewport(PixelScreen):
     def delete(self, using=None, keep_parents=False):
         """Clear default flag before soft deletion so another viewport can be default."""
 
-        if self.is_seed_data and self.is_default:
+        if self.is_default:
             self.is_default = False
             self.save(update_fields=["is_default"])
         return super().delete(using=using, keep_parents=keep_parents)
