@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from django.template.loader import render_to_string
 
 from apps.core.views.reports.release_publish import pipeline
 from apps.core.views.reports.release_publish.exceptions import PublishPending
@@ -84,3 +85,22 @@ def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monke
 
     assert {path.name for path in artifacts} == {wheel.name, sdist.name}
     assert len(artifacts) == 2
+
+
+def test_release_progress_template_renders_github_token_prompt_conditionally():
+    """Regression: release progress template must parse boolean token conditions without parentheses."""
+    html = render_to_string(
+        "core/release_progress.html",
+        {
+            "done": False,
+            "github_credentials_missing": True,
+            "github_token_using_stored": False,
+            "github_token_required": True,
+            "current_step": "publish",
+            "step_states": [],
+            "release": type("Release", (), {"pk": 1, "__str__": lambda self: "Release 1"})(),
+            "action": "publish",
+        },
+    )
+
+    assert "GitHub token required" in html
