@@ -28,6 +28,7 @@ from django.db.models import (
     FloatField,
     F,
     OuterRef,
+    Q,
     Subquery,
     Sum,
     Value,
@@ -725,13 +726,52 @@ def _has_active_session(tx_obj) -> bool:
 def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
     """Return an active transaction from cache or persistence."""
 
-    return store.get_transaction(
-        charger.charger_id, charger.connector_id
-    ) or (
-        Transaction.objects.filter(charger=charger, stop_time__isnull=True)
-        .order_by("-start_time")
-        .first()
-    )
+    tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
+    if not isinstance(tx_obj, Transaction):
+        tx_obj = (
+            Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+            .order_by("-start_time")
+            .first()
+        )
+    if _is_superseded_open_transaction(charger, tx_obj):
+        tx_obj = (
+            Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+            .exclude(pk=getattr(tx_obj, "pk", None))
+            .order_by("-start_time")
+            .first()
+        )
+        if _is_superseded_open_transaction(charger, tx_obj):
+            return None
+    return tx_obj
+
+
+def _is_superseded_open_transaction(charger: Charger, tx_obj: Transaction | None) -> bool:
+    """Return whether ``tx_obj`` was superseded by a newer transaction.
+
+    Some chargers fail to send ``StopTransaction`` and leave an old row with
+    ``stop_time`` set to ``NULL``. When newer sessions already exist for the
+    same connector, that stale row should not be treated as active.
+    """
+
+    if not isinstance(tx_obj, Transaction):
+        return False
+    if tx_obj.stop_time is not None:
+        return False
+
+    sibling_transactions = Transaction.objects.filter(charger=charger)
+    if tx_obj.pk:
+        sibling_transactions = sibling_transactions.exclude(pk=tx_obj.pk)
+
+    conditions = Q()
+    if tx_obj.start_time:
+        conditions |= Q(start_time__gt=tx_obj.start_time)
+    if tx_obj.received_start_time:
+        conditions |= Q(received_start_time__gt=tx_obj.received_start_time)
+
+    if not conditions:
+        return False
+
+    return sibling_transactions.filter(conditions).exists()
 
 
 def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:

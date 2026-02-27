@@ -150,3 +150,80 @@ def test_connector_overview_uses_active_transaction_fallback(monkeypatch):
 
     assert overview[0]["status"] == STATUS_BADGE_MAP["charging"][0]
     assert overview[0]["color"] == STATUS_BADGE_MAP["charging"][1]
+
+
+@pytest.mark.django_db
+def test_active_transaction_ignores_open_row_when_newer_session_exists(monkeypatch):
+    """Regression: stale open sessions should not force a charging badge."""
+
+    charger = common.Charger.objects.create(
+        charger_id="CP-STUCK",
+        connector_id=2,
+        last_status="Charging",
+        last_error_code="NoError",
+    )
+    stale_open = common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(hours=9),
+        received_start_time=timezone.now() - datetime.timedelta(hours=9),
+    )
+    common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(hours=3),
+        received_start_time=timezone.now() - datetime.timedelta(hours=3),
+        stop_time=timezone.now() - datetime.timedelta(hours=2, minutes=50),
+    )
+
+    monkeypatch.setattr(common.store, "get_transaction", lambda *_args, **_kwargs: None)
+
+    assert common._is_superseded_open_transaction(charger, stale_open) is True
+    assert common._active_transaction_for_charger(charger) is None
+
+
+@pytest.mark.django_db
+def test_active_transaction_keeps_open_row_when_it_is_latest(monkeypatch):
+    """Open sessions remain active when no newer transaction exists."""
+
+    charger = common.Charger.objects.create(
+        charger_id="CP-LIVE",
+        connector_id=1,
+        last_status="Charging",
+        last_error_code="NoError",
+    )
+    active_tx = common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(minutes=10),
+        received_start_time=timezone.now() - datetime.timedelta(minutes=10),
+    )
+
+    monkeypatch.setattr(common.store, "get_transaction", lambda *_args, **_kwargs: None)
+
+    assert common._is_superseded_open_transaction(charger, active_tx) is False
+    assert common._active_transaction_for_charger(charger) == active_tx
+
+
+@pytest.mark.django_db
+def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_superseded(monkeypatch):
+    """Regression: superseded cache rows should not hide a newer persisted open transaction."""
+
+    charger = common.Charger.objects.create(
+        charger_id="CP-CACHE-DRIFT",
+        connector_id=3,
+        last_status="Charging",
+        last_error_code="NoError",
+    )
+    stale_cached_tx = common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(hours=4),
+        received_start_time=timezone.now() - datetime.timedelta(hours=4),
+    )
+    fresh_open_tx = common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(minutes=5),
+        received_start_time=timezone.now() - datetime.timedelta(minutes=5),
+    )
+
+    monkeypatch.setattr(common.store, "get_transaction", lambda *_args, **_kwargs: stale_cached_tx)
+
+    assert common._is_superseded_open_transaction(charger, stale_cached_tx) is True
+    assert common._active_transaction_for_charger(charger) == fresh_open_tx
