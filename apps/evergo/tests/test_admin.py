@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import re
 from unittest.mock import patch
 
 import pytest
@@ -368,6 +369,77 @@ def test_evergo_customer_export_view_rejects_empty_column_selection(
 
     assert response.status_code == 400
     assert "Select at least one column" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_scopes_to_selected_records(admin_client, evergo_customer_export_record):
+    """Regression: export view should scope to selected rows and show selected summary."""
+
+    first = evergo_customer_export_record(
+        username="suite-admin-export-selected-1",
+        email="suite-admin-export-selected-1@example.com",
+        remote_id=7101,
+        name="Selected One",
+    )
+    evergo_customer_export_record(
+        username="suite-admin-export-selected-2",
+        email="suite-admin-export-selected-2@example.com",
+        remote_id=7102,
+        name="Not Selected",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.get(
+        export_url,
+        {"export_scope": "selected", "selected": [str(first.pk)]},
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "about to export 1 selected record using" in content
+    assert 'name="export_scope_selected"' in content
+    assert re.search(
+        r'<input[^>]*id="id_export_scope_selected"[^>]*checked',
+        content,
+    )
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_exports_only_selected_records(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: selected export should include only the selected records."""
+
+    first = evergo_customer_export_record(
+        username="suite-admin-export-selected-file-1",
+        email="suite-admin-export-selected-file-1@example.com",
+        remote_id=7201,
+        name="Selected Export",
+    )
+    evergo_customer_export_record(
+        username="suite-admin-export-selected-file-2",
+        email="suite-admin-export-selected-file-2@example.com",
+        remote_id=7202,
+        name="Skipped Export",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        f"{export_url}?export_scope=selected&selected={first.pk}",
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+            "selected": [str(first.pk)],
+            "export_scope_selected": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert "7201\tSelected Export" in body
+    assert "7202\tSkipped Export" not in body
+
+
 def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_client):
     """Regression: changelist should show last SO status and trim +52/52 phone prefixes."""
 

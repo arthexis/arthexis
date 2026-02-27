@@ -244,6 +244,7 @@ class ImportExportAdminMixin:
     def _build_delimited_export_response(
         self, queryset, export_fields, opts, *, delimiter, content_type, extension
     ):
+        """Return a delimited file response for the provided queryset and fields."""
         response = HttpResponse(content_type=content_type)
         response["Content-Disposition"] = (
             f"attachment; filename={opts.app_label}_{opts.model_name}.{extension}"
@@ -259,6 +260,15 @@ class ImportExportAdminMixin:
             )
         return response
 
+    def _selected_queryset(self, request, queryset):
+        """Return queryset filtered to selected primary keys when requested."""
+        selected_values = request.GET.getlist("selected")
+        selected_ids = [value for value in selected_values if value]
+        export_scope = request.GET.get("export_scope")
+        if export_scope != "selected" or not selected_ids:
+            return queryset, False
+        return queryset.filter(pk__in=selected_ids), True
+
     def export_view(self, request):
         """Render export confirmation and stream model data in selected format."""
         if not self.has_view_permission(request):
@@ -268,12 +278,15 @@ class ImportExportAdminMixin:
         original_get = request.GET
         filtered_get = request.GET.copy()
         filtered_get.pop("format", None)
+        filtered_get.pop("export_scope", None)
+        filtered_get.pop("selected", None)
         request.GET = filtered_get
         try:
             changelist = self.get_changelist_instance(request)
             queryset = changelist.get_queryset(request)
         finally:
             request.GET = original_get
+        queryset, exporting_selected = self._selected_queryset(request, queryset)
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
         if request.method == "POST" and export_format:
@@ -330,6 +343,8 @@ class ImportExportAdminMixin:
                 "opts": opts,
                 "changelist_url": changelist_url,
                 "export_count": queryset.count(),
+                "exporting_selected": exporting_selected,
+                "selected_ids": request.GET.getlist("selected") if exporting_selected else [],
                 "export_columns": [
                     {
                         "name": field.name,

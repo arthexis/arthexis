@@ -17,9 +17,26 @@
 
 {% block content %}
   <div id="content-main">
-    <form method="post" class="module aligned">
+    <form method="post" class="module aligned export-form">
       {% csrf_token %}
-      <fieldset class="module aligned">
+      {% if selected_ids %}
+        {% for selected_id in selected_ids %}
+          <input type="hidden" name="selected" value="{{ selected_id }}" />
+        {% endfor %}
+      {% endif %}
+      <fieldset class="module aligned export-fieldset">
+        <div class="form-row">
+          <label for="id_export_scope_selected">{% trans "Export scope" %}</label>
+          <label>
+            <input
+              id="id_export_scope_selected"
+              type="checkbox"
+              name="export_scope_selected"
+              {% if exporting_selected %}checked{% endif %}
+            />
+            {% trans "Export only selected items" %}
+          </label>
+        </div>
         <div class="form-row">
           <label for="id_export_format">{% trans "Export format" %}</label>
           <select name="format" id="id_export_format" required>
@@ -29,12 +46,22 @@
           </select>
         </div>
       </fieldset>
-      <fieldset class="module aligned">
+      <fieldset class="module aligned export-fieldset">
         <div class="form-row">
           <p class="export-summary">
-            {% blocktrans with record_count=export_count column_count=export_columns|length %}
-              You are about to export {{ record_count }} record(s) with {{ column_count }} column(s).
-            {% endblocktrans %}
+            {% if exporting_selected %}
+              {% blocktrans count record_count=export_count with column_count=export_columns|length %}
+                You are about to export {{ record_count }} selected record using {{ column_count }} column.
+              {% plural %}
+                You are about to export {{ record_count }} selected records using {{ column_count }} columns.
+              {% endblocktrans %}
+            {% else %}
+              {% blocktrans count record_count=export_count with column_count=export_columns|length %}
+                You are about to export {{ record_count }} record using {{ column_count }} column.
+              {% plural %}
+                You are about to export {{ record_count }} records using {{ column_count }} columns.
+              {% endblocktrans %}
+            {% endif %}
           </p>
         </div>
         <div class="form-row">
@@ -60,9 +87,41 @@
         </div>
       </fieldset>
       <div class="submit-row">
-        <button type="submit" class="button default">{% trans 'Export' %}</button>
+        <input type="submit" value="{% trans 'Export' %}" class="default" />
         <a href="{{ changelist_url }}" class="button cancel-link">{% trans 'Cancel' %}</a>
       </div>
     </form>
   </div>
+  <script>
+    (function () {
+      "use strict";
+
+      function syncExportScopeParams() {
+        var scopeInput = document.getElementById("id_export_scope_selected");
+        if (!scopeInput) {
+          return;
+        }
+        var selectedInputs = document.querySelectorAll("input[name='selected']");
+        var form = scopeInput.form;
+        if (!form) {
+          return;
+        }
+        var exportSelected = scopeInput.checked && selectedInputs.length > 0;
+        var currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete("export_scope");
+        currentUrl.searchParams.delete("selected");
+        if (exportSelected) {
+          currentUrl.searchParams.set("export_scope", "selected");
+          selectedInputs.forEach(function (input) {
+            currentUrl.searchParams.append("selected", input.value);
+          });
+        }
+        window.location.href = currentUrl.toString();
+      }
+
+      document
+        .getElementById("id_export_scope_selected")
+        ?.addEventListener("change", syncExportScopeParams);
+    })();
+  </script>
 {% endblock %}
