@@ -86,6 +86,7 @@ class RemoteActionTokenAdmin(DjangoObjectActions, EntityModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("user__username", "label", "key_prefix")
     readonly_fields = ("key_prefix", "key_hash", "last_used_at", "created_at")
+    actions = ("generate_token",)
     changelist_actions = ["generate_token"]
     change_list_template = "django_object_actions/change_list.html"
     fieldsets = (
