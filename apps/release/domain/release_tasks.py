@@ -164,7 +164,8 @@ def _stage_migration_baselines(*, base_dir: Path | None = None) -> None:
     if not existing_dirs:
         return
 
-    _run(["git", "add", "-A", *map(str, existing_dirs)], cwd=base_dir)
+    migration_args = [path.as_posix() for path in existing_dirs]
+    _run(["git", "add", "-A", *migration_args], cwd=base_dir)
 
 
 def run_migration_baseline_window(*, base_dir: Path | None = None) -> None:
