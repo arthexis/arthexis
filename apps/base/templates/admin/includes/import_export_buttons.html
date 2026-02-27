@@ -2,7 +2,13 @@
 
 {% if model_export_url %}
     <li>
-        <a href="{{ model_export_url }}{% if export_querystring %}?{{ export_querystring }}{% endif %}" class="historylink" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}">
+        <a
+            href="{{ model_export_url }}{% if export_querystring %}?{{ export_querystring }}{% endif %}"
+            class="historylink"
+            title="{% trans 'Export' %}"
+            aria-label="{% trans 'Export' %}"
+            data-admin-export-link="true"
+        >
             <span aria-hidden="true">{% trans "Export" %}</span>
             <span class="visually-hidden">{% trans "Export" %}</span>
         </a>
@@ -16,3 +22,31 @@
         </a>
     </li>
 {% endif %}
+
+<script>
+  (function() {
+    const exportLink = document.querySelector('[data-admin-export-link="true"]');
+    if (!exportLink) {
+      return;
+    }
+    exportLink.addEventListener('click', function(event) {
+      const changelistForm = document.getElementById('changelist-form');
+      if (!changelistForm) {
+        return;
+      }
+      const selectedCheckboxes = changelistForm.querySelectorAll(
+        'input[name="_selected_action"]:checked'
+      );
+      if (!selectedCheckboxes.length) {
+        return;
+      }
+      event.preventDefault();
+      const targetUrl = new URL(exportLink.href, window.location.origin);
+      selectedCheckboxes.forEach(function(checkbox) {
+        targetUrl.searchParams.append('_selected_action', checkbox.value);
+      });
+      targetUrl.searchParams.set('selected_only', '1');
+      window.location.href = targetUrl.toString();
+    });
+  })();
+</script>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 
+from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -259,21 +260,42 @@ class ImportExportAdminMixin:
             )
         return response
 
-    def export_view(self, request):
-        """Render export confirmation and stream model data in selected format."""
-        if not self.has_view_permission(request):
-            raise PermissionDenied
+    def _get_selected_export_scope(self, request):
+        """Return selected object primary keys and whether to scope export to them."""
+
         params = request.POST if request.method == "POST" else request.GET
-        export_format = params.get("format", "").lower()
+        selected_object_ids = [pk for pk in params.getlist(ACTION_CHECKBOX_NAME) if pk]
+        selected_only = params.get("selected_only") in {"1", "true", "on"}
+        if request.method != "POST" and selected_object_ids and "selected_only" not in params:
+            selected_only = True
+        return selected_object_ids, selected_only
+
+    def _resolve_export_queryset(self, request):
+        """Build export queryset honoring changelist filters and selected-object scope."""
+
         original_get = request.GET
         filtered_get = request.GET.copy()
         filtered_get.pop("format", None)
+        filtered_get.pop(ACTION_CHECKBOX_NAME, None)
+        filtered_get.pop("selected_only", None)
         request.GET = filtered_get
         try:
             changelist = self.get_changelist_instance(request)
             queryset = changelist.get_queryset(request)
         finally:
             request.GET = original_get
+        selected_object_ids, selected_only = self._get_selected_export_scope(request)
+        if selected_only and selected_object_ids:
+            queryset = queryset.filter(pk__in=selected_object_ids)
+        return queryset, selected_object_ids, selected_only
+
+    def export_view(self, request):
+        """Render export confirmation and stream model data in selected format."""
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        params = request.POST if request.method == "POST" else request.GET
+        export_format = params.get("format", "").lower()
+        queryset, selected_object_ids, selected_only = self._resolve_export_queryset(request)
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
         if request.method == "POST" and export_format:
@@ -330,6 +352,10 @@ class ImportExportAdminMixin:
                 "opts": opts,
                 "changelist_url": changelist_url,
                 "export_count": queryset.count(),
+                "selected_count": len(selected_object_ids),
+                "selected_only": selected_only,
+                "selected_object_ids": selected_object_ids,
+                "selected_checkbox_name": ACTION_CHECKBOX_NAME,
                 "export_columns": [
                     {
                         "name": field.name,

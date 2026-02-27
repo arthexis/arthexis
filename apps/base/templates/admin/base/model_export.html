@@ -19,6 +19,9 @@
   <div id="content-main">
     <form method="post" class="module aligned">
       {% csrf_token %}
+      {% for selected_object_id in selected_object_ids %}
+        <input type="hidden" name="{{ selected_checkbox_name }}" value="{{ selected_object_id }}" />
+      {% endfor %}
       <fieldset class="module aligned">
         <div class="form-row">
           <label for="id_export_format">{% trans "Export format" %}</label>
@@ -32,11 +35,28 @@
       <fieldset class="module aligned">
         <div class="form-row">
           <p class="export-summary">
+            {% if selected_count %}
+              {% blocktrans with selected_count=selected_count %}
+                You selected {{ selected_count }} record(s) from the changelist.
+              {% endblocktrans %}
+            {% endif %}
             {% blocktrans with record_count=export_count column_count=export_columns|length %}
               You are about to export {{ record_count }} record(s) with {{ column_count }} column(s).
             {% endblocktrans %}
           </p>
         </div>
+        {% if selected_count %}
+          <div class="form-row">
+            <label class="export-scope-option" for="id_selected_only">
+              <input type="checkbox" id="id_selected_only" name="selected_only" value="1" {% if selected_only %}checked{% endif %} />
+              <span>
+                {% blocktrans with selected_count=selected_count %}
+                  Export only selected record(s) ({{ selected_count }})
+                {% endblocktrans %}
+              </span>
+            </label>
+          </div>
+        {% endif %}
         <div class="form-row">
           <label>{% trans "Columns to export" %}</label>
           <ul class="export-columns-list">

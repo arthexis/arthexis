@@ -2,6 +2,16 @@
   margin: 0;
 }
 
+.export-scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.export-scope-option input[type="checkbox"] {
+  margin: 0;
+}
+
 .export-columns-list {
   margin: 0.5rem 0 0;
   padding-left: 0;

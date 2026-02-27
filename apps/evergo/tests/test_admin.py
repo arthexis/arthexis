@@ -368,6 +368,74 @@ def test_evergo_customer_export_view_rejects_empty_column_selection(
 
     assert response.status_code == 400
     assert "Select at least one column" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_defaults_to_selected_rows_when_passed_from_changelist(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: selected changelist rows should scope export by default."""
+
+    selected_customer = evergo_customer_export_record(
+        username="suite-admin-export-scope-selected",
+        email="suite-admin-export-scope-selected@example.com",
+        remote_id=7004,
+        name="Selected",
+    )
+    evergo_customer_export_record(
+        username="suite-admin-export-scope-unselected",
+        email="suite-admin-export-scope-unselected@example.com",
+        remote_id=7005,
+        name="Unselected",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.get(export_url, {"_selected_action": [selected_customer.pk]})
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "You selected 1 record(s) from the changelist." in content
+    assert "You are about to export 1 record(s)" in content
+    assert 'name="selected_only" value="1" checked' in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_allows_toggling_back_to_all_rows(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: export scope toggle should allow exporting all filtered rows."""
+
+    selected_customer = evergo_customer_export_record(
+        username="suite-admin-export-toggle-selected",
+        email="suite-admin-export-toggle-selected@example.com",
+        remote_id=7006,
+        name="Toggle Selected",
+    )
+    evergo_customer_export_record(
+        username="suite-admin-export-toggle-other",
+        email="suite-admin-export-toggle-other@example.com",
+        remote_id=7007,
+        name="Toggle Other",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        export_url,
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+            "_selected_action": [str(selected_customer.pk)],
+            "selected_only": "0",
+        },
+    )
+
+    assert response.status_code == 200
+    rows = response.content.decode("utf-8").strip().splitlines()
+    assert len(rows) == 3
+    assert any("7006\tToggle Selected" in row for row in rows[1:])
+    assert any("7007\tToggle Other" in row for row in rows[1:])
+
+
 def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_client):
     """Regression: changelist should show last SO status and trim +52/52 phone prefixes."""
 
