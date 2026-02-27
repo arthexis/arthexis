@@ -1,4 +1,6 @@
 import logging
+import re
+from collections import deque
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -19,6 +21,94 @@ from ..models import ViewHistory
 
 
 logger = logging.getLogger(__name__)
+LOG_LEVEL_NAMES = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+LEVEL_PATTERN = re.compile(r"\[(" + "|".join(LOG_LEVEL_NAMES) + r")\]")
+RECENT_LOG_LINE_WINDOW = 500
+VIEWER_LINE_LIMIT = 5000
+
+
+def _extract_level(log_line: str) -> str:
+    """Return a normalized log level parsed from a line, or UNKNOWN when absent."""
+
+    level_match = LEVEL_PATTERN.search(log_line)
+    if not level_match:
+        return "UNKNOWN"
+    return level_match.group(1)
+
+
+def _recommended_log_stack() -> dict[str, str]:
+    """Return the suggested third-party logging stack for operations dashboards."""
+
+    return {
+        "name": "Grafana Loki + Promtail",
+        "summary": "Low-overhead log aggregation with dashboarding and alerting via Grafana.",
+        "url": "https://grafana.com/oss/loki/",
+    }
+
+
+def _build_log_dashboard(logs_dir: Path, available_logs: list[str]) -> dict[str, object]:
+    """Aggregate high-level operational insights across all available log files."""
+
+    level_totals: dict[str, int] = {level: 0 for level in LOG_LEVEL_NAMES}
+    file_summaries: list[dict[str, object]] = []
+    total_lines = 0
+
+    for filename in available_logs:
+        file_path = logs_dir / filename
+        try:
+            line_count = 0
+            recent_lines: deque[str] = deque(maxlen=RECENT_LOG_LINE_WINDOW)
+            with file_path.open("r", encoding="utf-8", errors="replace") as log_file:
+                for line in log_file:
+                    line_count += 1
+                    recent_lines.append(line)
+        except OSError as exc:  # pragma: no cover - filesystem edge cases
+            logger.warning("Unable to aggregate log file %s", file_path, exc_info=exc)
+            continue
+
+        per_file_levels = {level: 0 for level in LOG_LEVEL_NAMES}
+        for line in recent_lines:
+            level = _extract_level(line)
+            if level in per_file_levels:
+                per_file_levels[level] += 1
+                level_totals[level] += 1
+
+        total_lines += line_count
+        try:
+            modified_at = datetime.fromtimestamp(file_path.stat().st_mtime)
+            modified_at = timezone.make_aware(modified_at, timezone=timezone.get_current_timezone())
+            modified_label = timezone.localtime(modified_at).strftime("%Y-%m-%d %H:%M:%S %Z")
+        except OSError:
+            modified_label = ""
+
+        file_summaries.append(
+            {
+                "name": filename,
+                "line_count": line_count,
+                "recent_warning": per_file_levels["WARNING"],
+                "recent_error": per_file_levels["ERROR"],
+                "recent_critical": per_file_levels["CRITICAL"],
+                "last_updated": modified_label,
+            }
+        )
+
+    level_rows = [{"level": level, "count": count} for level, count in level_totals.items()]
+    return {
+        "total_files": len(available_logs),
+        "total_lines": total_lines,
+        "level_rows": level_rows,
+        "file_rows": file_summaries,
+    }
+
+
+def _read_recent_log_content(file_path: Path, max_lines: int = VIEWER_LINE_LIMIT) -> str:
+    """Read up to the last ``max_lines`` from a log file using bounded memory."""
+
+    recent_lines: deque[str] = deque(maxlen=max_lines)
+    with file_path.open("r", encoding="utf-8", errors="replace") as log_file:
+        for line in log_file:
+            recent_lines.append(line)
+    return "".join(recent_lines)
 
 
 @admin.register(ViewHistory)
@@ -192,7 +282,7 @@ class ViewHistoryAdmin(EntityModelAdmin):
 
 
 def log_viewer(request):
-    """Render the admin log viewer with full log file contents."""
+    """Render the admin log viewer with recent log file contents."""
 
     logs_dir = Path(settings.BASE_DIR) / "logs"
     logs_exist = logs_dir.exists() and logs_dir.is_dir()
@@ -206,6 +296,13 @@ def log_viewer(request):
             ],
             key=str.lower,
         )
+
+    dashboard = _build_log_dashboard(logs_dir, available_logs) if available_logs else {
+        "total_files": 0,
+        "total_lines": 0,
+        "level_rows": [],
+        "file_rows": [],
+    }
 
     selected_log = request.GET.get("log", "")
     log_content = ""
@@ -224,12 +321,7 @@ def log_viewer(request):
                         as_attachment=True,
                         filename=selected_log,
                     )
-                try:
-                    log_content = selected_path.read_text(encoding="utf-8")
-                except UnicodeDecodeError:
-                    log_content = selected_path.read_text(
-                        encoding="utf-8", errors="replace"
-                    )
+                log_content = _read_recent_log_content(selected_path)
 
                 log_full_path = str(selected_path.resolve())
                 try:
@@ -272,6 +364,8 @@ def log_viewer(request):
             "log_full_path": log_full_path,
             "log_last_updated": log_last_updated,
             "hide_limit_slider": True,
+            "log_dashboard": dashboard,
+            "recommended_stack": _recommended_log_stack(),
         }
     )
     return TemplateResponse(request, "admin/log_viewer.html", context)
