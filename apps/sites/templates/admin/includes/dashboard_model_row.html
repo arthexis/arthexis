@@ -37,7 +37,7 @@
     </span>
   </th>
 
-  {% if model.admin_url and show_changelinks %}
+  {% if show_changelinks %}
     {% model_admin_actions app_label model.object_name as extra_actions %}
     <td class="actions">
       {% for action in extra_actions %}
