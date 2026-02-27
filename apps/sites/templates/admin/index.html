@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static admin_extras tz widgets pyxel_admin %}
+{% load i18n static admin_extras tz widgets %}
 
 {% block extrastyle %}
   {{ block.super }}
@@ -43,12 +43,6 @@
     <a class="button" href="{% url 'admin:sigil_builder' %}">{% translate 'Sigil' %}</a>
     {% if user.is_superuser %}
       <a class="button" href="{% url 'admin:system-upgrade-report' %}">{% translate 'Upgrade' %}</a>
-    {% endif %}
-    {% if request|pyxel_local_request %}
-      <form method="post" action="{% url 'admin-pyxel-live-stats' %}" class="admin-home-actions__form">
-        {% csrf_token %}
-        <input type="submit" class="button" value="{% translate 'Pyxel' %}">
-      </form>
     {% endif %}
   </div>
 </div>

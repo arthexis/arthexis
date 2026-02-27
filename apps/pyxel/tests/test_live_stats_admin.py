@@ -29,8 +29,8 @@ def test_is_local_request_rejects_non_local_ip(monkeypatch, rf):
     assert live_stats.is_local_request(request) is False
 
 
-def test_admin_index_shows_pyxel_button_for_local_request(client, django_user_model, monkeypatch):
-    """Dashboard renders the Pyxel button only for local admin sessions."""
+def test_admin_index_omits_pyxel_button(client, django_user_model, monkeypatch):
+    """Dashboard no longer renders the old top-row Pyxel button."""
 
     admin_user = django_user_model.objects.create_superuser(
         username="admin",
@@ -43,25 +43,7 @@ def test_admin_index_shows_pyxel_button_for_local_request(client, django_user_mo
     response = client.get(reverse("admin:index"), REMOTE_ADDR="127.0.0.1")
 
     assert response.status_code == 200
-    assert b'<input type="submit" class="button" value="Pyxel">' in response.content
-    assert b"Pyxel Live Stats" not in response.content
-
-
-def test_admin_index_hides_pyxel_button_for_remote_request(client, django_user_model, monkeypatch):
-    """Dashboard hides the launcher button for non-local client IP addresses."""
-
-    admin_user = django_user_model.objects.create_superuser(
-        username="admin",
-        email="admin@example.com",
-        password="admin123",
-    )
-    client.force_login(admin_user)
-    monkeypatch.setattr(live_stats, "local_ip_addresses", lambda include_loopback=True: {"127.0.0.1"})
-
-    response = client.get(reverse("admin:index"), REMOTE_ADDR="10.12.0.5")
-
-    assert response.status_code == 200
-    assert b'<input type="submit" class="button" value="Pyxel">' not in response.content
+    assert b"value=\"Pyxel\"" not in response.content
 
 
 def test_open_live_stats_view_launches_subprocess_for_local_request(
@@ -146,3 +128,120 @@ def test_launch_live_stats_subprocess_returns_running_process(monkeypatch):
     returned_process = live_stats.launch_live_stats_subprocess()
 
     assert returned_process is process
+
+
+def test_pyxel_changelist_exposes_open_viewport_action(client, django_user_model, monkeypatch):
+    """Pyxel changelist should render the Open Viewport action in object tools."""
+
+    from apps.pyxel.models import PyxelViewport
+
+    admin_user = django_user_model.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="admin123",
+    )
+    client.force_login(admin_user)
+    monkeypatch.setattr(live_stats, "local_ip_addresses", lambda include_loopback=True: {"127.0.0.1"})
+    PyxelViewport.objects.update(is_default=False)
+    PyxelViewport.objects.create(
+        slug="test-vp",
+        name="Test VP",
+        skin="virtual",
+        columns=10,
+        rows=10,
+        pyxel_script="def draw():\n    pass",
+    )
+
+    response = client.get(reverse("admin:pyxel_pyxelviewport_changelist"), REMOTE_ADDR="127.0.0.1")
+
+    assert response.status_code == 200
+    assert reverse("admin-pyxel-open-viewport") in response.content.decode()
+
+
+def test_open_viewport_view_uses_default_when_multiple(client, django_user_model, monkeypatch):
+    """Open Viewport launches the default viewport when more than one exists."""
+
+    from apps.pyxel import admin_views as pyxel_admin_views
+    from apps.pyxel.models import PyxelViewport
+
+    admin_user = django_user_model.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="admin123",
+    )
+    client.force_login(admin_user)
+    monkeypatch.setattr(live_stats, "local_ip_addresses", lambda include_loopback=True: {"127.0.0.1"})
+
+    PyxelViewport.objects.update(is_default=False)
+    PyxelViewport.objects.create(
+        slug="secondary",
+        name="Secondary",
+        skin="virtual",
+        columns=10,
+        rows=10,
+        pyxel_script="def draw():\n    pass",
+        is_default=False,
+    )
+    default_viewport = PyxelViewport.objects.create(
+        slug="default",
+        name="Default",
+        skin="virtual",
+        columns=10,
+        rows=10,
+        pyxel_script="def draw():\n    pass",
+        is_default=True,
+    )
+
+    called = {"slug": None}
+
+    def _fake_launch(*, viewport_slug=None):
+        called["slug"] = viewport_slug
+        return object()
+
+    monkeypatch.setattr(pyxel_admin_views, "launch_viewport_subprocess", _fake_launch)
+
+    response = client.post(reverse("admin-pyxel-open-viewport"), REMOTE_ADDR="127.0.0.1")
+
+    assert response.status_code == 302
+    assert called["slug"] == default_viewport.slug
+
+
+def test_open_viewport_view_by_pk_launches_requested_viewport(client, django_user_model, monkeypatch):
+    """Object-level action should launch the specific viewport represented by the change form."""
+
+    from apps.pyxel import admin_views as pyxel_admin_views
+    from apps.pyxel.models import PyxelViewport
+
+    admin_user = django_user_model.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="admin123",
+    )
+    client.force_login(admin_user)
+    monkeypatch.setattr(live_stats, "local_ip_addresses", lambda include_loopback=True: {"127.0.0.1"})
+
+    PyxelViewport.objects.update(is_default=False)
+    viewport = PyxelViewport.objects.create(
+        slug="single",
+        name="Single",
+        skin="virtual",
+        columns=10,
+        rows=10,
+        pyxel_script="def draw():\n    pass",
+    )
+
+    called = {"slug": None}
+
+    def _fake_launch(*, viewport_slug=None):
+        called["slug"] = viewport_slug
+        return object()
+
+    monkeypatch.setattr(pyxel_admin_views, "launch_viewport_subprocess", _fake_launch)
+
+    response = client.post(
+        reverse("admin-pyxel-open-viewport-specific", args=[viewport.pk]),
+        REMOTE_ADDR="127.0.0.1",
+    )
+
+    assert response.status_code == 302
+    assert called["slug"] == viewport.slug

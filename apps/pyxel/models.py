@@ -24,10 +24,38 @@ class PyxelViewport(PixelScreen):
         default=20,
         help_text=_("Frame rate passed to Pyxel when rendering this viewport."),
     )
+    is_default = models.BooleanField(
+        default=False,
+        help_text=_("Use as the default viewport when opening from admin list actions."),
+    )
 
     class Meta:
         verbose_name = _("Pyxel viewport")
         verbose_name_plural = _("Pyxel viewports")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_default"],
+                condition=models.Q(is_default=True),
+                name="pyxel_single_default_viewport",
+            )
+        ]
+
+    @classmethod
+    def default_or_only(cls):
+        """Return the only viewport or the configured default when multiple exist."""
+
+        count = cls.objects.count()
+        if count == 0:
+            raise cls.DoesNotExist("No Pyxel viewport exists")
+        if count == 1:
+            return cls.objects.first()
+
+        default_viewport = cls.objects.filter(is_default=True).first()
+        if default_viewport is None:
+            raise cls.MultipleObjectsReturned(
+                "Multiple Pyxel viewports exist. Mark one viewport as default."
+            )
+        return default_viewport
 
     def _import_pyxel(self, pyxel_module=None):
         if pyxel_module is not None:

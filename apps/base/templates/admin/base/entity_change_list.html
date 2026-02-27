@@ -2,6 +2,14 @@
 {% load i18n %}
 
 {% block object-tools-items %}
+    {% if open_viewport_url %}
+        <li>
+            <form method="post" action="{{ open_viewport_url }}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="historylink">{% trans "Open Viewport" %}</button>
+            </form>
+        </li>
+    {% endif %}
     {% if soft_deleted_url %}
         {% if soft_deleted_count %}
             {% blocktrans count count=soft_deleted_count asvar soft_deleted_label %}

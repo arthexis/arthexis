@@ -41,8 +41,8 @@ def test_admin_dashboard_actions_row_includes_actions_button(admin_client):
     assert expected_button in response.content.decode()
 
 
-def test_admin_dashboard_actions_row_uses_standard_pyxel_button(admin_client, monkeypatch):
-    """Pyxel launcher should use the same standard button style and short label."""
+def test_admin_dashboard_actions_row_omits_pyxel_button(admin_client, monkeypatch):
+    """Dashboard action row should no longer show the legacy Pyxel top-row button."""
 
     from apps.pyxel import live_stats
 
@@ -51,5 +51,4 @@ def test_admin_dashboard_actions_row_uses_standard_pyxel_button(admin_client, mo
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert '<input type="submit" class="button" value="Pyxel">' in content
-    assert "Pyxel Live Stats" not in content
+    assert 'value="Pyxel"' not in content
