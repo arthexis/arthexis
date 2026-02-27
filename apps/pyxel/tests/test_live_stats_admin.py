@@ -296,7 +296,7 @@ def test_soft_deleted_seed_default_does_not_block_new_default():
 
 
 def test_soft_deleted_non_seed_default_does_not_block_new_default():
-    """Soft-deleting any default viewport should allow promoting a replacement default."""
+    """Deleting a non-seeded default should allow promoting a replacement default."""
 
     from apps.pyxel.models import PyxelViewport
 
@@ -312,9 +312,10 @@ def test_soft_deleted_non_seed_default_does_not_block_new_default():
         is_default=True,
     )
 
+    deleted_pk = default_viewport.pk
     default_viewport.delete()
 
-    assert PyxelViewport.all_objects.get(pk=default_viewport.pk).is_default is False
+    assert not PyxelViewport.all_objects.filter(pk=deleted_pk).exists()
 
     replacement = PyxelViewport.objects.create(
         slug="non-seeded-replacement-default",
