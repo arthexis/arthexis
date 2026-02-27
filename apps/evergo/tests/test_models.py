@@ -8,7 +8,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from apps.evergo.exceptions import EvergoAPIError
-from apps.evergo.models import EvergoOrder, EvergoOrderFieldValue, EvergoUser
+from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
 @pytest.mark.django_db
@@ -336,3 +336,33 @@ def test_upsert_order_extracts_contact_and_address_components():
     assert order.address_municipality == "Apodaca"
     assert order.address_city == "Ciudad Apodaca"
     assert order.address_postal_code == "66647"
+
+
+@pytest.mark.django_db
+def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
+    """Regression: customer address fallback should avoid municipio/ciudad duplication by preferring municipio."""
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(username="suite-customer-locality", email="suite-customer-locality@example.com")
+    profile = EvergoUser.objects.create(user=suite_user)
+
+    payload = {
+        "id": 43120,
+        "numero_orden": "SO-43120",
+        "updated_at": "2026-01-13T02:18:42.000000Z",
+        "cliente": {"id": 11001, "name": "Municipio First", "email": "municipio@example.com"},
+        "orden_instalacion": {
+            "calle": "santa barbara",
+            "num_ext": "404",
+            "colonia": "Fuentes de Santa Lucia",
+            "municipio": "Apodaca",
+            "ciudad": "Ciudad Apodaca",
+            "codigo_postal": "66647",
+        },
+    }
+
+    created = profile._upsert_customer_from_order(payload)
+
+    assert created is True
+    customer = EvergoCustomer.objects.get(user=profile, remote_id=11001)
+    assert "Apodaca" in customer.address
+    assert "Ciudad Apodaca" not in customer.address

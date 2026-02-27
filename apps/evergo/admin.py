@@ -5,6 +5,8 @@ from datetime import datetime, time, timedelta
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
+from django.utils.html import format_html
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
@@ -448,15 +450,89 @@ class CustomerRemoteUpdatedAtFilter(_CustomerDateRangeFilter):
     field_name = "latest_order_updated_at"
 
 
+class CustomerCityFilter(admin.SimpleListFilter):
+    """Filter customers by city-like locality from municipio/ciudad payload values."""
+
+    title = _("City / Municipio")
+    parameter_name = "city_municipio"
+
+    def lookups(self, request, model_admin):
+        """Return distinct municipality/city values from customer payloads."""
+        values = set()
+        queryset = model_admin.get_queryset(request)
+        for payload in queryset.values_list("raw_payload", flat=True):
+            if not isinstance(payload, dict):
+                continue
+            install_payload = payload.get("orden_instalacion")
+            if not isinstance(install_payload, dict):
+                continue
+            municipio = str(install_payload.get("municipio") or "").strip()
+            ciudad = str(install_payload.get("ciudad") or "").strip()
+            if municipio:
+                values.add(municipio)
+            elif ciudad:
+                values.add(ciudad)
+        return [(value, value) for value in sorted(values)]
+
+    def queryset(self, request, queryset):
+        """Filter customers where municipio or ciudad exactly matches selected value."""
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(raw_payload__orden_instalacion__municipio__iexact=value)
+            | Q(raw_payload__orden_instalacion__ciudad__iexact=value)
+        )
+
+
+class CustomerStatusFilter(admin.SimpleListFilter):
+    """Filter customers by latest order status label."""
+
+    title = _("Status")
+    parameter_name = "last_so_status"
+
+    def lookups(self, request, model_admin):
+        """Return distinct status names from linked latest orders."""
+        statuses = (
+            model_admin.get_queryset(request)
+            .exclude(latest_order__status_name="")
+            .exclude(latest_order__status_name__isnull=True)
+            .values_list("latest_order__status_name", flat=True)
+            .distinct()
+            .order_by("latest_order__status_name")
+        )
+        return [(status, status) for status in statuses]
+
+    def queryset(self, request, queryset):
+        """Filter customers where latest order status equals selected value."""
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(latest_order__status_name=value)
+
+
 @admin.register(EvergoCustomer)
 class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
 
     changelist_actions = ("load_customers_wizard",)
-    list_select_related = ("user", "latest_order")
+    list_select_related = ("latest_order",)
 
-    list_display = ("latest_so", "name", "status_of_last_so", "phone_number_display", "address", "user")
-    list_filter = ("user", CustomerLoadedAtFilter, CustomerUpdatedAtFilter, CustomerRemoteUpdatedAtFilter)
+    list_display = (
+        "name",
+        "latest_so_link",
+        "status_of_last_so",
+        "address_display",
+        "phone_number_display",
+    )
+    list_filter = (
+        CustomerCityFilter,
+        CustomerStatusFilter,
+        CustomerLoadedAtFilter,
+        CustomerUpdatedAtFilter,
+        CustomerRemoteUpdatedAtFilter,
+    )
+    list_display_links = ("name",)
     search_fields = ("latest_so", "name", "phone_number", "address", "email")
     readonly_fields = ("status_of_last_so", "phone_number_display", "raw_payload", "refreshed_at", "created_at")
     inlines = (EvergoArtifactInline,)
@@ -497,6 +573,31 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
         if compact.startswith(("+52", "52")):
             return re.sub(r"^\+?\s*52[\s-]*", "", phone)
         return phone
+
+    @admin.display(description=_("Last SO"), ordering="latest_so")
+    def latest_so_link(self, obj):
+        """Render latest SO value and link it to the linked latest order when available."""
+        if not obj.latest_so:
+            return "-"
+        if not obj.latest_order_id:
+            return obj.latest_so
+        change_url = reverse("admin:evergo_evergoorder_change", args=[obj.latest_order_id])
+        return format_html('<a href="{}">{}</a>', change_url, obj.latest_so)
+
+    @admin.display(description=_("Address"), ordering="address")
+    def address_display(self, obj):
+        """Return address with normalized municipio/ciudad duplication removed."""
+        address = (obj.address or "").strip()
+        install_payload = obj.raw_payload.get("orden_instalacion") if isinstance(obj.raw_payload, dict) else {}
+        if not isinstance(install_payload, dict):
+            return address
+        municipio = str(install_payload.get("municipio") or "").strip()
+        ciudad = str(install_payload.get("ciudad") or "").strip()
+        if not municipio or not ciudad:
+            return address
+        if ciudad.lower() == municipio.lower() or municipio.lower() in ciudad.lower():
+            return re.sub(re.escape(ciudad), municipio, address, flags=re.IGNORECASE)
+        return address
 
     def load_customers_view(self, request):
         """Render/handle the sales-order customer import wizard."""
