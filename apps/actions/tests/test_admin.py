@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import datetime
+from html.parser import HTMLParser
 
 import pytest
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +17,19 @@ from apps.actions.models import RemoteActionToken
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration, pytest.mark.regression]
+
+
+class _LinkParser(HTMLParser):
+    """Collect anchor tag attributes from rendered HTML."""
+
+    def __init__(self):
+        super().__init__()
+        self.links: list[dict[str, str]] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "a":
+            return
+        self.links.append(dict(attrs))
 
 
 def test_remote_action_token_admin_add_defaults_to_request_user(admin_client):
@@ -60,5 +76,28 @@ def test_remote_action_token_dashboard_includes_generate_button(admin_client):
 
     assert response.status_code == 200
     action_url = reverse("admin:actions_remoteactiontoken_generate_token")
-    expected = f'<a class="button" href="{action_url}">Generate Token</a>'
-    assert expected in response.content.decode()
+    parser = _LinkParser()
+    parser.feed(response.content.decode())
+    assert any(
+        link.get("href") == action_url and "button" in link.get("class", "").split()
+        for link in parser.links
+    )
+
+
+def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessible(client):
+    """Regression: quick generator redirects to add page when changelist is not viewable."""
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="token_creator_only",
+        password="test-password",
+        is_staff=True,
+    )
+    add_permission = Permission.objects.get(codename="add_remoteactiontoken")
+    user.user_permissions.add(add_permission)
+    client.force_login(user)
+
+    response = client.get(reverse("admin:actions_remoteactiontoken_generate_token"), follow=False)
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("admin:actions_remoteactiontoken_add")

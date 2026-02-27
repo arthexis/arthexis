@@ -167,7 +167,12 @@ class RemoteActionTokenAdmin(DjangoObjectActions, EntityModelAdmin):
             % {"token": raw_key},
             level=messages.SUCCESS,
         )
-        return redirect("admin:actions_remoteactiontoken_changelist")
+
+        if self.has_view_or_change_permission(request):
+            return redirect("admin:actions_remoteactiontoken_changelist")
+        if self.has_add_permission(request):
+            return redirect("admin:actions_remoteactiontoken_add")
+        return redirect("admin:index")
 
     def save_model(self, request, obj, form, change):
         """Ensure tokens created in admin always get a valid hashed bearer value."""
