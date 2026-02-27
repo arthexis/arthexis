@@ -16,10 +16,10 @@ class PromptStorageError(RuntimeError):
 
 
 def _staged_files() -> list[Path]:
-    """Return added/modified staged files."""
+    """Return staged files, including adds/modifies/deletes/renames."""
 
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=AM"],
+        ["git", "diff", "--cached", "--name-only"],
         check=True,
         capture_output=True,
         text=True,
@@ -55,13 +55,20 @@ def _validate_fixture(path: Path) -> None:
                 f"{path}: prompts.storedprompt entry must include fields"
             )
         required = ("prompt_text", "initial_plan", "pr_reference", "context")
-        missing = [name for name in required if not fields.get(name)]
-        if missing:
+        missing = [name for name in required if name not in fields]
+        invalid_text = [
+            name
+            for name in ("prompt_text", "initial_plan", "pr_reference")
+            if not isinstance(fields.get(name), str) or not fields[name].strip()
+        ]
+        if not isinstance(fields.get("context"), dict) or not fields["context"]:
+            invalid_text.append("context")
+
+        invalid = sorted(set(missing + invalid_text))
+        if invalid:
             raise PromptStorageError(
-                f"{path}: prompts.storedprompt missing required values: {', '.join(missing)}"
+                f"{path}: prompts.storedprompt missing required values: {', '.join(invalid)}"
             )
-        if not isinstance(fields["context"], dict):
-            raise PromptStorageError(f"{path}: fields.context must be a JSON object")
         return
 
     raise PromptStorageError(f"{path}: no prompts.storedprompt entry found")

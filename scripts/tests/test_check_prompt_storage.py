@@ -17,7 +17,6 @@ def fixture_payload() -> list[dict]:
     return [
         {
             "model": "prompts.storedprompt",
-            "pk": 1,
             "fields": {
                 "prompt_text": "original prompt",
                 "initial_plan": "refined plan",
@@ -33,6 +32,18 @@ def test_main_fails_without_prompt_fixture(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(
         check_prompt_storage, "_staged_files", lambda: [Path("apps/core/models.py")]
+    )
+
+    assert check_prompt_storage.main() == 1
+
+
+def test_main_requires_fixture_for_deleted_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: deleted/renamed code still requires prompt fixture updates."""
+
+    monkeypatch.setattr(
+        check_prompt_storage, "_staged_files", lambda: [Path("apps/core/obsolete.py")]
     )
 
     assert check_prompt_storage.main() == 1
@@ -60,12 +71,23 @@ def test_main_accepts_when_fixture_present(
     assert check_prompt_storage.main() == 0
 
 
-def test_validate_fixture_rejects_missing_plan(
-    tmp_path: Path, fixture_payload: list[dict]
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("initial_plan", ""),
+        ("initial_plan", "   "),
+        ("prompt_text", ""),
+        ("pr_reference", ""),
+        ("context", {}),
+        ("context", "not-an-object"),
+    ],
+)
+def test_validate_fixture_rejects_invalid_required_values(
+    tmp_path: Path, fixture_payload: list[dict], field: str, value: object
 ) -> None:
-    """Regression: prompt fixtures must include non-empty initial plans."""
+    """Regression: required values must be present and non-empty."""
 
-    fixture_payload[0]["fields"]["initial_plan"] = ""
+    fixture_payload[0]["fields"][field] = value
     path = tmp_path / "prompts.json"
     path.write_text(json.dumps(fixture_payload), encoding="utf-8")
 
