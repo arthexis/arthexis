@@ -50,3 +50,42 @@ def test_alexa_admin_test_credentials_updates_last_check_fields():
     assert invalid.last_credentials_check_at is not None
     assert "look valid" in valid.last_credentials_check_message.lower()
     assert "missing" in invalid.last_credentials_check_message.lower()
+
+
+@pytest.mark.django_db
+def test_alexa_account_admin_places_owner_fields_in_last_section():
+    """Regression: Alexa account admin should render ownable fields in the last fieldset."""
+
+    user = get_user_model().objects.create_user(
+        username="alexa-admin-layout-owner",
+        is_staff=True,
+        is_superuser=True,
+    )
+    model_admin = AlexaAccountAdmin(AlexaAccount, AdminSite())
+    request = RequestFactory().get("/admin/alexa/alexaaccount/add/")
+    request.user = user
+
+    fieldsets = model_admin.get_fieldsets(request)
+
+    assert fieldsets[-1][0] == "Owner"
+    assert fieldsets[-1][1]["fields"] == ("user", "group")
+
+
+@pytest.mark.django_db
+def test_alexa_account_admin_masks_credential_fields_in_form():
+    """Credential fields should be hidden until explicitly revealed in the UI."""
+
+    user = get_user_model().objects.create_user(
+        username="alexa-admin-masked-owner",
+        is_staff=True,
+        is_superuser=True,
+    )
+    model_admin = AlexaAccountAdmin(AlexaAccount, AdminSite())
+    request = RequestFactory().get("/admin/alexa/alexaaccount/add/")
+    request.user = user
+
+    form_class = model_admin.get_form(request)
+    form = form_class()
+
+    for field_name in ("client_id", "client_secret", "refresh_token"):
+        assert form.fields[field_name].widget.input_type == "password"
