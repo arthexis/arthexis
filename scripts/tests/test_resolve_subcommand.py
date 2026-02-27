@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -11,9 +12,13 @@ from pathlib import Path
 import pytest
 
 
+BASH = shutil.which("bash")
+
+
 pytestmark = [
     pytest.mark.regression,
     pytest.mark.pr("PR-5652", "2026-02-26T00:00:00Z"),
+    pytest.mark.skipif(BASH is None, reason="bash not found in PATH"),
 ]
 
 
