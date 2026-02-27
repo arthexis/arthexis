@@ -11,7 +11,7 @@ class EvergoPhaseSubmissionError(EvergoAPIError):
     def __init__(self, phase_name: str, status_code: int, completed_steps: int) -> None:
         """Build a detailed error with step progress metadata."""
         super().__init__(
-            f"{phase_name} failed with status {status_code}. Completed {completed_steps}/3 steps."
+            f"{phase_name} failed with status {status_code}. Completed {completed_steps}/4 steps."
         )
         self.phase_name = phase_name
         self.status_code = status_code

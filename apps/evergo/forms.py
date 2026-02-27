@@ -66,6 +66,16 @@ class EvergoOrderTrackingForm(forms.Form):
     marca_cargador = forms.ChoiceField(choices=(), required=False)
     numero_serie = forms.CharField(max_length=128, label="Número de Serie")
 
+    prueba_carga = forms.ChoiceField(
+        choices=(
+            ("Vehículo Eléctrico", "Vehículo Eléctrico"),
+            ("Vehículo Hibrido", "Vehículo Hibrido"),
+            ("Sin prueba", "Sin prueba"),
+        ),
+        initial="Sin prueba",
+        label="Prueba de carga",
+    )
+
     foto_tablero = forms.ImageField(required=False)
     foto_medidor = forms.ImageField(required=False)
     foto_tierra = forms.ImageField(required=False)
@@ -78,6 +88,13 @@ class EvergoOrderTrackingForm(forms.Form):
     foto_voltaje_neutro_tierra = forms.ImageField(required=False)
     foto_hoja_visita = forms.ImageField(required=False)
     foto_interruptor_principal = forms.ImageField(required=False)
+
+    foto_panoramica_estacion = forms.ImageField(required=False, label="Panorámica de la estación")
+    foto_numero_serie_cargador = forms.ImageField(required=False, label="Foto número de serie cargador")
+    foto_interruptor_instalado = forms.ImageField(required=False, label="Interruptor instalado")
+    foto_conexion_cargador = forms.ImageField(required=False, label="Conexión a cargador")
+    foto_preparacion_cfe = forms.ImageField(required=False, label="Preparación CFE")
+    foto_hoja_reporte_instalacion = forms.ImageField(required=False, label="Hoja del reporte de instalación")
 
     tipo_visita = forms.CharField(initial="Presencial", required=False)
     requiere_instalacion = forms.CharField(initial="Si", required=False)

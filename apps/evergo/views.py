@@ -74,22 +74,22 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
                 files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
-                messages.info(request, "Inicio de envío: 0/3 pasos completados.")
+                messages.info(request, "Inicio de envío: 0/4 pasos completados.")
                 try:
                     result = profile.submit_tracking_phase_one(order_id=order_id, payload=payload, files=files)
                 except EvergoPhaseSubmissionError as exc:
                     messages.warning(
                         request,
-                        f"Proceso parcial: {exc.completed_steps}/3 pasos completados.",
+                        f"Proceso parcial: {exc.completed_steps}/4 pasos completados.",
                     )
                     form.add_error(None, str(exc))
                 except EvergoAPIError as exc:
                     form.add_error(None, str(exc))
                 else:
-                    completed_steps = int(result.get("completed_steps") or 3)
+                    completed_steps = int(result.get("completed_steps") or 4)
                     messages.success(
                         request,
-                        f"Orden enviada correctamente. {completed_steps}/3 pasos completados.",
+                        f"Orden enviada correctamente. {completed_steps}/4 pasos completados.",
                     )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
     else:
@@ -125,6 +125,12 @@ IMAGE_FIELD_NAMES = [
     "foto_voltaje_neutro_tierra",
     "foto_hoja_visita",
     "foto_interruptor_principal",
+    "foto_panoramica_estacion",
+    "foto_numero_serie_cargador",
+    "foto_interruptor_instalado",
+    "foto_conexion_cargador",
+    "foto_preparacion_cfe",
+    "foto_hoja_reporte_instalacion",
 ]
 
 COLLAPSED_DEFAULT_FIELDS = [

@@ -114,7 +114,7 @@ def test_order_tracking_public_renders_defaults(client):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 3})
+@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 4})
 def test_order_tracking_public_submits_with_missing_images_after_confirmation(mock_submit, client):
     """Regression: tracking view should allow missing images after operator confirmation."""
     User = get_user_model()
@@ -137,6 +137,7 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
             "fecha_visita": "2026-02-26T13:00",
             "marca_cargador": "",
             "numero_serie": "SER-1",
+            "prueba_carga": "Sin prueba",
             "confirm_missing_images": "1",
         },
         follow=True,
@@ -144,4 +145,4 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
 
     assert response.status_code == 200
     assert mock_submit.called
-    assert "3/3 pasos completados" in response.content.decode()
+    assert "4/4 pasos completados" in response.content.decode()
