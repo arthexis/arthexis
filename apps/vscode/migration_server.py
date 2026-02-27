@@ -189,9 +189,7 @@ def _should_skip_dir(parts: Iterable[str]) -> bool:
 def _should_watch_file(filename: str) -> bool:
     """Return ``True`` when *filename* represents a watched file."""
 
-    if filename in WATCH_FILENAMES:
-        return True
-    return Path(filename).suffix.lower() in WATCH_EXTENSIONS
+    return filename in WATCH_FILENAMES or os.path.splitext(filename)[1].lower() in WATCH_EXTENSIONS
 
 
 def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
