@@ -1,10 +1,10 @@
 # Suite service
 
 ## What it is
-The Suite service is the primary systemd unit that runs the Arthexis web application (Django/ASGI). It is the anchor service that other companion units (Celery, LCD, RFID) can depend on.
+The Suite service is the primary systemd unit that runs the Arthexis software suite web application (Django/ASGI) on a node. It is the anchor service that other node-scoped companion units (Celery, LCD, RFID) can depend on.
 
 ## What it does
-- Starts the main application server for the node.
+- Starts the main application server for the Arthexis suite on that node.
 - Provides the base unit name used by companion services (for example, `celery-{service-name}.service`).
 
 ## Enable

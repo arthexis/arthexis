@@ -13,6 +13,27 @@ from django.utils import timezone
 from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
+@pytest.fixture
+def evergo_customer_export_record(db):
+    user_model = get_user_model()
+
+    def _create(*, username, email, remote_id, name):
+        owner = user_model.objects.create_user(username=username, email=email)
+        profile = EvergoUser.objects.create(
+            user=owner,
+            evergo_email=email,
+            evergo_password="secret",  # noqa: S106
+        )
+        return EvergoCustomer.objects.create(
+            user=profile,
+            remote_id=remote_id,
+            name=name,
+            email=email,
+        )
+
+    return _create
+
+
 @pytest.mark.django_db
 def test_evergo_admin_app_and_changelist_are_accessible(admin_client):
     """Ensure Evergo appears in admin and the model changelist renders."""
@@ -278,6 +299,75 @@ def test_evergo_customer_admin_change_form_shows_view_on_site_and_artifacts_inli
 
 
 @pytest.mark.django_db
+def test_evergo_customer_export_view_renders_selectable_columns_and_tsv(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: export view should offer selectable columns and TSV output."""
+
+    evergo_customer_export_record(
+        username="suite-admin-export-columns",
+        email="suite-admin-export-columns@example.com",
+        remote_id=7001,
+        name="Export User",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.get(export_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'type="checkbox" name="export_columns" value="remote_id" checked' in content
+    assert "Import ID" in content
+    assert '<option value="tsv">TSV</option>' in content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_honors_column_selection_for_tsv(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: TSV export should include only selected columns in requested order."""
+
+    evergo_customer_export_record(
+        username="suite-admin-export-tsv",
+        email="suite-admin-export-tsv@example.com",
+        remote_id=7002,
+        name="TSV Export User",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        export_url,
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/tab-separated-values")
+    rows = response.content.decode("utf-8").strip().splitlines()
+    assert rows[0] == "remote_id	name"
+    assert rows[1].startswith("7002	TSV Export User")
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_rejects_empty_column_selection(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: exporting with no selected columns should fail fast."""
+
+    evergo_customer_export_record(
+        username="suite-admin-export-empty",
+        email="suite-admin-export-empty@example.com",
+        remote_id=7003,
+        name="No Columns",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(export_url, {"format": "tsv"})
+
+    assert response.status_code == 400
+    assert "Select at least one column" in response.content.decode("utf-8")
 def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_client):
     """Regression: changelist should show last SO status and trim +52/52 phone prefixes."""
 
