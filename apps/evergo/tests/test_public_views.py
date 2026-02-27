@@ -183,3 +183,49 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
     assert response.status_code == 200
     assert mock_submit.called
     assert "4/4 pasos completados" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):
+    """Regression: dashboard token page should render readonly username and order table rows."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-owner", email="dash@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="dash@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=28690,
+        order_number="GM01162",
+        client_name="Jane Doe",
+        status_name="Asignada",
+        address_street="Av Reforma",
+        address_num_ext="10",
+        address_municipality="Monterrey",
+        phone_primary="+52 555 9999",
+        site_name="Tesla",
+    )
+
+    response = client.post(
+        reverse("evergo:my-dashboard", kwargs={"token": profile.dashboard_token}),
+        data={"raw_queries": "GM01162"},
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "My Evergo Dashboard" in content
+    assert "evergo-dashboard-owner" in content
+    assert "read only" in content
+    assert "GM01162" in content
+    assert "Jane Doe" in content
+    assert "Monterrey" in content
+    assert "https://portal-mex.evergo.com/ordenes/28690" in content
+    assert "Copy / Paste table" in content
+
+
+@pytest.mark.django_db
+def test_my_evergo_dashboard_404_for_invalid_token(client):
+    """Security: dashboard should not be accessible with an unknown token."""
+    response = client.get(reverse("evergo:my-dashboard", kwargs={"token": "00000000-0000-0000-0000-000000000000"}))
+
+    assert response.status_code == 404

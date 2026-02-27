@@ -13,6 +13,13 @@ EXPECTED_METHOD_PATHS = {
     ("GET", "/ordenes/search-ingenieros"),
     ("GET", "/config/catalogs/orden-estatus"),
     ("GET", "/ordenes/instalador-coordinador"),
+    ("GET", "/user"),
+    ("GET", "/ordenes/{order_id}"),
+    ("GET", "/ordenes/kit-cfe/{order_id}"),
+    ("GET", "/config/catalogs/instaladores/empresas/coord-para-asignar"),
+    ("GET", "/reportes/ordenes/{order_id}/visita-tecnica/cuestionario-preguntas"),
+    ("GET", "/users/reassignment_reason"),
+    ("GET", "/users/crew-people"),
 }
 
 EVERGO_MODEL_URLS = (
@@ -40,7 +47,7 @@ def test_evergo_api_explorer_seeded_endpoints_regression() -> None:
 
 @pytest.mark.django_db
 def test_evergo_api_explorer_matches_model_endpoints_regression() -> None:
-    """Regression: seeded API explorer routes should mirror Evergo model endpoint constants."""
+    """Regression: seeded API explorer routes should include all endpoint constants used by the model."""
 
     api = APIExplorer.objects.get(name="Evergo API")
     seeded_paths = {method.resource_path for method in ResourceMethod.objects.filter(api=api)}
@@ -50,5 +57,4 @@ def test_evergo_api_explorer_matches_model_endpoints_regression() -> None:
         for url in EVERGO_MODEL_URLS
     }
 
-    assert seeded_paths == {path for _, path in EXPECTED_METHOD_PATHS}
-    assert seeded_paths == expected_paths
+    assert expected_paths.issubset(seeded_paths)

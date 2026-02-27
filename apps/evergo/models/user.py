@@ -6,11 +6,13 @@ from dataclasses import dataclass
 import re
 from typing import Any
 from urllib.parse import unquote, urlsplit
+import uuid
 
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
 
@@ -109,6 +111,7 @@ class EvergoUser(Profile):
 
     evergo_email = models.EmailField(blank=True)
     evergo_password = EncryptedCharField(max_length=255, blank=True)
+    dashboard_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     evergo_user_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     name = models.CharField(max_length=255, blank=True)
@@ -139,6 +142,10 @@ class EvergoUser(Profile):
     def __str__(self) -> str:
         """Return a readable identifier for admin lists."""
         return self.name or self.email or self.evergo_email or f"EvergoUser#{self.pk}"
+
+    def get_dashboard_url(self) -> str:
+        """Return the secure public dashboard URL for this Evergo profile."""
+        return reverse("evergo:my-dashboard", kwargs={"token": self.dashboard_token})
 
     def clean(self) -> None:
         """Validate credentials when one value is provided without the other."""

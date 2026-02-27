@@ -115,3 +115,20 @@ class EvergoOrderTrackingForm(forms.Form):
         ]
         if not self.is_bound:
             self.initial.setdefault("fecha_visita", timezone.localtime().strftime("%Y-%m-%dT%H:%M"))
+
+
+class EvergoDashboardLookupForm(forms.Form):
+    """Collect free-form SO/customer queries for dashboard table generation."""
+
+    raw_queries = forms.CharField(
+        label="SO numbers and/or customer names",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 6,
+                "placeholder": "GM01162, GM01163\nJuan Perez",
+            }
+        ),
+        help_text=(
+            "Use one or many values separated by commas, spaces, semicolons, tabs, or line breaks."
+        ),
+    )
