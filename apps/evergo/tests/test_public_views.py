@@ -103,6 +103,8 @@ def test_order_tracking_public_renders_defaults(client):
 
     order = EvergoOrder.objects.create(user=profile, remote_id=28690, order_number="GM01162")
 
+    client.force_login(owner)
+
     response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
 
     assert response.status_code == 200
@@ -111,6 +113,39 @@ def test_order_tracking_public_renders_defaults(client):
     assert "Enviar Visita + Asignar + Instalación" in content
     assert "Programacion cargador" in content
     assert "https://portal-mex.evergo.com/ordenes/28690" in content
+
+
+@pytest.mark.django_db
+def test_order_tracking_public_requires_login(client):
+    """Security: anonymous users should be redirected to login for tracking form access."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-6", email="owner6@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="owner6@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28692, order_number="GM01164")
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 302
+    assert "login" in response["Location"]
+
+
+@pytest.mark.django_db
+def test_order_tracking_public_rejects_non_owner_access(client):
+    """Security: authenticated users cannot access tracking forms for other users' orders."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-7", email="owner7@example.com")
+    intruder = User.objects.create_user(username="evergo-owner-8", email="owner8@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="owner7@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28693, order_number="GM01165")
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db
@@ -123,6 +158,8 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
     from apps.evergo.models import EvergoOrder
 
     order = EvergoOrder.objects.create(user=profile, remote_id=28691, order_number="GM01163")
+
+    client.force_login(owner)
 
     response = client.post(
         reverse("evergo:order-tracking-public", args=[order.remote_id]),

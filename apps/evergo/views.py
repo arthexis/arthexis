@@ -7,6 +7,7 @@ from urllib.parse import quote_plus
 from django.conf import settings
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -59,9 +60,14 @@ def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpRespon
     return response
 
 
+@login_required
 def order_tracking_public(request, order_id: int) -> HttpResponse:
-    """Render and submit the public order tracking phase-one helper form."""
-    order = get_object_or_404(EvergoOrder.objects.select_related("user"), remote_id=order_id)
+    """Render and submit the order tracking phase-one helper form for authorized owners only."""
+    order = get_object_or_404(
+        EvergoOrder.objects.select_related("user"),
+        remote_id=order_id,
+        user__user=request.user,
+    )
     profile = order.user
     brands = profile.fetch_charger_brand_options()
 

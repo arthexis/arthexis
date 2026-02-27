@@ -381,7 +381,7 @@ class EvergoUser(Profile):
     def fetch_charger_brand_options(self, *, timeout: int = 20) -> list[str]:
         """Build charger-brand options from the user's currently assigned orders."""
         seen: set[str] = set()
-        for payload in EvergoOrder.objects.filter(user=self).values_list("raw_payload", flat=True)[:100]:
+        for payload in EvergoOrder.objects.filter(user=self).values_list("raw_payload", flat=True):
             if not isinstance(payload, dict):
                 continue
             for charger in payload.get("cargadores") or []:
