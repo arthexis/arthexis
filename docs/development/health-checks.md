@@ -36,26 +36,24 @@ python manage.py health --list-targets
 - Group names use app labels (for example `core`, `ocpp`, `release`).
 - Reusable implementations live in service modules:
   - `apps/<app_label>/services/health_checks.py`
-- Management-command wrappers remain as `check_*` commands for compatibility and should:
-  - emit a deprecation warning
-  - delegate to `manage.py health --target <app_label>.<check_name>`
+- Deprecated `check_*` compatibility wrappers were removed; invoke `manage.py health` targets directly.
 
 ## Current inventory
 
 ### Core
 
-- `check_admin` → `core.admin`
-- `check_lcd_send` → `core.lcd_send`
-- `check_lcd_service` → `core.lcd_service`
-- `check_next_upgrade` → `core.next_upgrade`
-- `check_rfid` → `core.rfid`
-- `check_system_user` → `core.system_user`
-- `check_time` → `core.time`
+- `core.admin`
+- `core.lcd_send`
+- `core.lcd_service`
+- `core.next_upgrade`
+- `core.rfid`
+- `core.system_user`
+- `core.time`
 
 ### OCPP
 
-- `check_forwarders` → `ocpp.forwarders`
+- `ocpp.forwarders`
 
 ### Release
 
-- `check_pypi` → `release.pypi`
+- `release.pypi`

@@ -25,17 +25,20 @@ def test_ocpp_coverage_201_matches_fixture(tmp_path):
     assert generated["coverage"] == expected["coverage"]
 
 
-@pytest.mark.filterwarnings("default")
-def test_legacy_coverage_command_routes_to_ocpp():
-    with pytest.warns(UserWarning, match="coverage_ocpp16"):
-        with patch("django.core.management.call_command") as mocked:
-            call_command("coverage_ocpp16")
+def test_ocpp_coverage_16_routes_through_unified_command(tmp_path):
+    """Regression: ``ocpp coverage`` should support the 1.6 coverage workflow."""
 
-    mocked.assert_called_once_with(
+    output_path = tmp_path / "ocpp16_coverage.json"
+    badge_path = tmp_path / "ocpp16_coverage.svg"
+
+    call_command(
         "ocpp",
         "coverage",
         "--version",
         "1.6",
-        stdout=ANY,
-        stderr=ANY,
+        json_path=output_path,
+        badge_path=badge_path,
     )
+
+    assert output_path.exists()
+    assert badge_path.exists()

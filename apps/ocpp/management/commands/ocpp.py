@@ -11,12 +11,12 @@ from apps.ocpp.management.commands._ocpp_command_helpers import (
     add_transactions_export_arguments,
     add_transactions_import_arguments,
 )
-from apps.ocpp.management.commands.coverage_ocpp16 import run_coverage_ocpp16
-from apps.ocpp.management.commands.coverage_ocpp201 import run_coverage_ocpp201
-from apps.ocpp.management.commands.coverage_ocpp21 import run_coverage_ocpp21
-from apps.ocpp.management.commands.export_transactions import run_export_transactions
-from apps.ocpp.management.commands.import_transactions import run_import_transactions
-from apps.ocpp.management.commands.ocpp_replay import run_replay_extract
+from apps.ocpp.management.coverage_ocpp16_impl import run_coverage_ocpp16
+from apps.ocpp.management.coverage_ocpp201_impl import run_coverage_ocpp201
+from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
+from apps.ocpp.management.export_transactions_impl import run_export_transactions
+from apps.ocpp.management.import_transactions_impl import run_import_transactions
+from apps.ocpp.management.ocpp_replay_impl import run_replay_extract
 from apps.ocpp.management.commands._trace_extract_impl import run_trace_extract
 
 

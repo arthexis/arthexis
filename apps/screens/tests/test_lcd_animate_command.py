@@ -20,7 +20,7 @@ def test_lists_available_animations(capsys):
         slug="stars", name="Stars", source_path="/tmp/stars.txt", is_active=False
     )
 
-    call_command("lcd_animate")
+    call_command("lcd", "animate")
 
     out = capsys.readouterr().out
     assert "Available animations:" in out
@@ -31,7 +31,7 @@ def test_lists_available_animations(capsys):
 @pytest.mark.django_db
 def test_reports_missing_animation():
     with pytest.raises(CommandError, match="LCD animation 'missing' not found"):
-        call_command("lcd_animate", "missing")
+        call_command("lcd", "animate", "missing")
 
 
 @pytest.mark.django_db
@@ -55,7 +55,7 @@ def test_plays_animation_to_work_file(monkeypatch, tmp_path: Path):
     )
 
     with override_settings(BASE_DIR=tmp_path):
-        call_command("lcd_animate", "demo", loops=1, interval=0)
+        call_command("lcd", "animate", "demo", loops=1, interval=0)
 
     output_file = tmp_path / "work" / "lcd-animate.txt"
     assert output_file.exists()

@@ -87,10 +87,5 @@ def test_release_clean_logs_without_targets_raises_command_error() -> None:
         call_command("release", "clean-logs")
 
 
-def test_clean_release_logs_wrapper_preserves_command_error() -> None:
-    """Regression: legacy ``clean_release_logs`` should still raise command errors."""
-
-    with pytest.raises(CommandError, match="Specify --all"):
-        call_command("clean_release_logs")
 
 

@@ -49,7 +49,7 @@ def test_calibrate_saves_lock_file(temp_base_dir: Path):
         mock_run.return_value = subprocess.CompletedProcess(
             ["systemctl", "stop", "lcd-demo"], returncode=0, stdout="", stderr=""
         )
-        call_command("lcd_calibrate")
+        call_command("lcd", "calibrate")
 
     lock_file = temp_base_dir / ".locks" / "lcd-timings"
     assert lock_file.exists()
@@ -67,7 +67,7 @@ def test_calibrate_can_skip_save(temp_base_dir: Path):
             return_value=FakeLCD(),
         ),
     ):
-        call_command("lcd_calibrate")
+        call_command("lcd", "calibrate")
 
     lock_file = temp_base_dir / ".locks" / "lcd-timings"
     assert not lock_file.exists()
@@ -84,4 +84,4 @@ def test_restart_requires_service_name(temp_base_dir: Path):
         ),
         pytest.raises(CommandError, match="Service name is required"),
     ):
-        call_command("lcd_calibrate", restart=True)
+        call_command("lcd", "calibrate", restart=True)

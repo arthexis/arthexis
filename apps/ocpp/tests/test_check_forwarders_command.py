@@ -36,7 +36,7 @@ def test_check_forwarders_reports_external_websockets(monkeypatch):
     )
 
     stream = io.StringIO()
-    call_command("check_forwarders", stdout=stream)
+    call_command("health", target=["ocpp.forwarders"], stdout=stream)
     output = stream.getvalue()
 
     assert "External websockets enabled: True" in output
