@@ -2,7 +2,7 @@
 
 {% if model_export_url %}
     <li>
-        <a href="{{ model_export_url }}{% if export_querystring %}?{{ export_querystring }}{% endif %}" class="historylink" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}">
+        <a href="{{ model_export_url }}{% if export_querystring %}?{{ export_querystring }}{% endif %}" class="historylink" title="{% trans 'Export' %}" aria-label="{% trans 'Export' %}" data-admin-export-link="true">
             <span aria-hidden="true">{% trans "Export" %}</span>
             <span class="visually-hidden">{% trans "Export" %}</span>
         </a>
@@ -16,3 +16,44 @@
         </a>
     </li>
 {% endif %}
+
+<script>
+  (function () {
+    "use strict";
+
+    function collectSelectedRowIds() {
+      var selectedInputs = document.querySelectorAll(
+        "#changelist-form input.action-select:checked"
+      );
+      return Array.prototype.map.call(selectedInputs, function (input) {
+        return input.value;
+      });
+    }
+
+    function wireExportLinkSelectionState() {
+      var exportLink = document.querySelector("a[data-admin-export-link='true']");
+      if (!exportLink) {
+        return;
+      }
+      exportLink.addEventListener("click", function (event) {
+        var selectedIds = collectSelectedRowIds();
+        if (!selectedIds.length) {
+          return;
+        }
+        var exportUrl = new URL(exportLink.href, window.location.origin);
+        exportUrl.searchParams.delete("selected");
+        exportUrl.searchParams.set("export_scope", "selected");
+        selectedIds.forEach(function (value) {
+          exportUrl.searchParams.append("selected", value);
+        });
+        exportLink.href = exportUrl.toString();
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", wireExportLinkSelectionState);
+      return;
+    }
+    wireExportLinkSelectionState();
+  })();
+</script>
