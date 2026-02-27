@@ -82,3 +82,31 @@ def test_admin_dashboard_hides_upgrade_quick_action_for_non_superusers(client, d
     content = response.content.decode()
     assert ">Upgrade<" not in content
     assert reverse("admin:system-upgrade-report") not in content
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_admin_log_viewer_displays_operational_dashboard(admin_client, settings, tmp_path):
+    """The log viewer should include an aggregated operations dashboard snapshot."""
+
+    settings.BASE_DIR = tmp_path
+    logs_dir = Path(tmp_path) / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    (logs_dir / "system.log").write_text(
+        "2026-01-01 00:00:00 [INFO] apps.system: boot\n"
+        "2026-01-01 00:00:01 [WARNING] apps.system: latency high\n"
+        "2026-01-01 00:00:02 [ERROR] apps.system: worker failed\n",
+        encoding="utf-8",
+    )
+
+    response = admin_client.get(reverse("admin:log_viewer"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Operational logs dashboard" in content
+    assert "Recent severity totals (last 500 lines per file)" in content
+    assert "Per-file health snapshot" in content
+    assert "Grafana Loki + Promtail" in content
+    assert ">WARNING<" in content
+    assert ">ERROR<" in content
+    assert "system.log" in content

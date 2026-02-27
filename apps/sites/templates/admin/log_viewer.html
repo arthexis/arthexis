@@ -82,6 +82,60 @@
       max-width: 100%;
       font-family: var(--font-monospace, monospace);
     }
+
+    .log-viewer-dashboard {
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: var(--darkened-bg);
+    }
+    .log-viewer-dashboard-kpis {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .log-viewer-kpi {
+      min-width: 180px;
+      padding: 8px 12px;
+      border: 1px solid var(--hairline-color);
+      border-radius: 4px;
+      background: var(--body-bg);
+    }
+    .log-viewer-kpi-label {
+      display: block;
+      font-size: 0.875rem;
+      margin-bottom: 4px;
+    }
+
+    .log-viewer-recommendation {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px dashed var(--hairline-color);
+      border-radius: 4px;
+      background: var(--body-bg);
+    }
+    .log-viewer-recommendation p {
+      margin: 0 0 8px;
+    }
+    .log-viewer-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      background: var(--body-bg);
+    }
+    .log-viewer-table caption {
+      text-align: left;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .log-viewer-table th,
+    .log-viewer-table td {
+      border: 1px solid var(--hairline-color);
+      padding: 6px 8px;
+      text-align: left;
+    }
   </style>
 {% endblock %}
 
@@ -109,6 +163,77 @@
     {% if log_notice %}
       <p class="help">{{ log_notice }}</p>
     {% endif %}
+
+
+    <div class="log-viewer-dashboard" aria-label="{% translate 'Operational logs dashboard' %}">
+      <h2>{% translate "Operational logs dashboard" %}</h2>
+      <div class="log-viewer-dashboard-kpis">
+        <div class="log-viewer-kpi">
+          <span class="log-viewer-kpi-label">{% translate "Tracked files" %}</span>
+          <strong>{{ log_dashboard.total_files }}</strong>
+        </div>
+        <div class="log-viewer-kpi">
+          <span class="log-viewer-kpi-label">{% translate "Total lines" %}</span>
+          <strong>{{ log_dashboard.total_lines }}</strong>
+        </div>
+      </div>
+      <div class="log-viewer-recommendation">
+        <p>
+          <strong>{% translate "Recommended aggregator" %}:</strong>
+          {{ recommended_stack.name }} — {{ recommended_stack.summary }}
+        </p>
+        <p>
+          <a class="button button-secondary" href="{{ recommended_stack.url }}" target="_blank" rel="noopener noreferrer">{% translate "Evaluate integration" %}</a>
+        </p>
+      </div>
+
+      {% if log_dashboard.level_rows %}
+        <table class="log-viewer-table">
+          <caption>{% translate "Recent severity totals (last 500 lines per file)" %}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{% translate "Level" %}</th>
+              <th scope="col">{% translate "Count" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in log_dashboard.level_rows %}
+              <tr>
+                <th scope="row">{{ row.level }}</th>
+                <td>{{ row.count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+      {% if log_dashboard.file_rows %}
+        <table class="log-viewer-table">
+          <caption>{% translate "Per-file health snapshot" %}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{% translate "File" %}</th>
+              <th scope="col">{% translate "Lines" %}</th>
+              <th scope="col">{% translate "Warnings" %}</th>
+              <th scope="col">{% translate "Errors" %}</th>
+              <th scope="col">{% translate "Critical" %}</th>
+              <th scope="col">{% translate "Last updated" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in log_dashboard.file_rows %}
+              <tr>
+                <th scope="row">{{ row.name }}</th>
+                <td>{{ row.line_count }}</td>
+                <td>{{ row.recent_warning }}</td>
+                <td>{{ row.recent_error }}</td>
+                <td>{{ row.recent_critical }}</td>
+                <td>{{ row.last_updated|default:'-' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
 
     {% if log_error %}
       <p class="errornote">{{ log_error }}</p>
