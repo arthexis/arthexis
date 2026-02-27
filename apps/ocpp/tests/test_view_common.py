@@ -150,3 +150,46 @@ def test_connector_overview_uses_active_transaction_fallback(monkeypatch):
 
     assert overview[0]["status"] == STATUS_BADGE_MAP["charging"][0]
     assert overview[0]["color"] == STATUS_BADGE_MAP["charging"][1]
+
+
+@pytest.mark.django_db
+def test_active_transaction_ignores_open_row_when_newer_session_exists():
+    """Regression: stale open sessions should not force a charging badge."""
+
+    charger = common.Charger.objects.create(
+        charger_id="CP-STUCK",
+        connector_id=2,
+        last_status="Charging",
+        last_error_code="NoError",
+    )
+    stale_open = common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(hours=9),
+    )
+    common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(hours=3),
+        stop_time=timezone.now() - datetime.timedelta(hours=2, minutes=50),
+    )
+
+    assert common._is_superseded_open_transaction(charger, stale_open) is True
+    assert common._active_transaction_for_charger(charger) is None
+
+
+@pytest.mark.django_db
+def test_active_transaction_keeps_open_row_when_it_is_latest():
+    """Open sessions remain active when no newer transaction exists."""
+
+    charger = common.Charger.objects.create(
+        charger_id="CP-LIVE",
+        connector_id=1,
+        last_status="Charging",
+        last_error_code="NoError",
+    )
+    active_tx = common.Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.now() - datetime.timedelta(minutes=10),
+    )
+
+    assert common._is_superseded_open_transaction(charger, active_tx) is False
+    assert common._active_transaction_for_charger(charger) == active_tx
