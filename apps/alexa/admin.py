@@ -27,6 +27,18 @@ class AlexaReminderDeliveryInline(admin.TabularInline):
 class AlexaAccountAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Admin for Alexa account credentials with a credential test action."""
 
+    fieldsets = (
+        (None, {"fields": ("name", "is_active")}),
+        (
+            _("Credentials"),
+            {"fields": ("client_id", "client_secret", "refresh_token", "api_base_url")},
+        ),
+        (
+            _("Credential health"),
+            {"fields": ("last_credentials_check_at", "last_credentials_check_message")},
+        ),
+        (OwnableAdminMixin.ownable_fieldset[0], OwnableAdminMixin.ownable_fieldset[1]),
+    )
     list_display = (
         "name",
         "owner_display",
@@ -37,6 +49,7 @@ class AlexaAccountAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("name", "user__username", "group__name")
     autocomplete_fields = ("user", "group")
+    readonly_fields = ("last_credentials_check_at", "last_credentials_check_message")
     actions = ("test_credentials",)
 
     @admin.action(description=_("Test selected credentials"))
