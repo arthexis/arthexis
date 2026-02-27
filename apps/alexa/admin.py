@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django import forms
 from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -23,9 +24,24 @@ class AlexaReminderDeliveryInline(admin.TabularInline):
     readonly_fields = ("updated_at",)
 
 
+class AlexaAccountAdminForm(forms.ModelForm):
+    """Mask credential values by default and allow explicit reveal in the browser."""
+
+    class Meta:
+        model = AlexaAccount
+        fields = "__all__"
+        widgets = {
+            "client_id": forms.PasswordInput(render_value=True),
+            "client_secret": forms.PasswordInput(render_value=True),
+            "refresh_token": forms.PasswordInput(render_value=True),
+        }
+
+
 @admin.register(AlexaAccount)
 class AlexaAccountAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Admin for Alexa account credentials with a credential test action."""
+
+    form = AlexaAccountAdminForm
 
     fieldsets = (
         (None, {"fields": ("name", "is_active")}),
