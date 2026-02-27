@@ -16,7 +16,7 @@ from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
 
 from apps.users.models import Profile
 
-from apps.evergo.exceptions import EvergoAPIError
+from apps.evergo.exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .customer import EvergoCustomer
 from .order import EvergoOrder, EvergoOrderFieldValue
 from .parsing import (
@@ -87,7 +87,7 @@ class EvergoUser(Profile):
     API_ASSIGN_URL_TEMPLATE = getattr(
         settings,
         "EVERGO_API_ASSIGN_URL_TEMPLATE",
-        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/asignar",
+        "https://portal-backend.evergo.com/api/mex/v1/ordenes/{order_id}/asignar-tecnico",
     )
     API_REPORT_INSTALL_URL_TEMPLATE = getattr(
         settings,
@@ -407,15 +407,31 @@ class EvergoUser(Profile):
                 timeout=timeout,
             )
             if visita_response.status_code >= 400:
-                raise EvergoAPIError(f"Visita Tecnica failed with status {visita_response.status_code}.")
+                raise EvergoPhaseSubmissionError("Visita Tecnica", visita_response.status_code, 0)
 
+            order_installer = order_payload.get("orden_instalador") if isinstance(order_payload, dict) else {}
             assign_response = session.post(
                 self.API_ASSIGN_URL_TEMPLATE.format(order_id=order_id),
-                json={"order_id": order_id, "fecha_visita": payload.get("fecha_visita")},
+                json={
+                    "user_tecnico_id": order_payload.get("user_tecnico_id") or self.evergo_user_id,
+                    "fecha_programada": payload.get("fecha_visita"),
+                    "crew": (order_installer or {}).get("idSubempresa") or 20,
+                    "type": "Installation",
+                    "crewPeople": [
+                        (order_installer or {}).get("idIngeniero") or self.evergo_user_id
+                    ],
+                    "reassignment_reason_id": None,
+                    "reason_comment": "",
+                    "tag_requiered": False,
+                },
                 timeout=timeout,
             )
             if assign_response.status_code >= 400:
-                raise EvergoAPIError(f"Asignar failed with status {assign_response.status_code}.")
+                raise EvergoPhaseSubmissionError(
+                    "Asignar técnico",
+                    assign_response.status_code,
+                    1,
+                )
 
             install_response = session.post(
                 self.API_REPORT_INSTALL_URL_TEMPLATE.format(order_id=order_id),
@@ -424,8 +440,10 @@ class EvergoUser(Profile):
                 timeout=timeout,
             )
             if install_response.status_code >= 400:
-                raise EvergoAPIError(
-                    f"Reporte de Instalacion failed with status {install_response.status_code}."
+                raise EvergoPhaseSubmissionError(
+                    "Reporte de Instalacion",
+                    install_response.status_code,
+                    2,
                 )
 
             return {
@@ -436,6 +454,7 @@ class EvergoUser(Profile):
                 "assign_payload": assign_response.json() if assign_response.content else {},
                 "install_status": install_response.status_code,
                 "install_payload": install_response.json() if install_response.content else {},
+                "completed_steps": 3,
             }
 
     @classmethod

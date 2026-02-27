@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from urllib.parse import quote_plus
 
+from django.conf import settings
+
 from django.contrib import messages
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .exceptions import EvergoAPIError
+from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoOrderTrackingForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder
 from .services import ensure_image_payload
+
+
+EVERGO_PORTAL_ORDER_URL_TEMPLATE = getattr(
+    settings,
+    "EVERGO_PORTAL_ORDER_URL_TEMPLATE",
+    "https://portal-mex.evergo.com/ordenes/{order_id}",
+)
 
 
 def customer_public_detail(request, pk: int) -> HttpResponse:
@@ -65,12 +74,23 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
                 files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
+                messages.info(request, "Inicio de envío: 0/3 pasos completados.")
                 try:
-                    profile.submit_tracking_phase_one(order_id=order_id, payload=payload, files=files)
+                    result = profile.submit_tracking_phase_one(order_id=order_id, payload=payload, files=files)
+                except EvergoPhaseSubmissionError as exc:
+                    messages.warning(
+                        request,
+                        f"Proceso parcial: {exc.completed_steps}/3 pasos completados.",
+                    )
+                    form.add_error(None, str(exc))
                 except EvergoAPIError as exc:
                     form.add_error(None, str(exc))
                 else:
-                    messages.success(request, "Orden enviada correctamente en las tres fases de API.")
+                    completed_steps = int(result.get("completed_steps") or 3)
+                    messages.success(
+                        request,
+                        f"Orden enviada correctamente. {completed_steps}/3 pasos completados.",
+                    )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
     else:
         form = EvergoOrderTrackingForm(charger_brands=brands)
@@ -87,6 +107,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             "image_fields": [form[name] for name in IMAGE_FIELD_NAMES],
             "collapsed_defaults": COLLAPSED_DEFAULT_FIELDS,
             "collapsed_fields": [form[name] for name in COLLAPSED_DEFAULT_FIELDS],
+            "evergo_so_url": EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id),
         },
     )
 

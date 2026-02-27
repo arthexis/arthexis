@@ -16,11 +16,12 @@
         .actions { margin-top: 1rem; }
         button { padding: .7rem 1rem; border: 0; border-radius: 8px; background:#0b5ed7; color:#fff; }
         .messages { color: #0a7f39; }
+        .messages .warning { color:#a86100; }
         .errorlist { color: #a30000; }
     </style>
 </head>
 <body>
-    <h1>Order Tracking · {{ order.order_number|default:order.remote_id }}</h1>
+    <h1>Order Tracking · <a href="{{ evergo_so_url }}" target="_blank" rel="noopener noreferrer">{{ order.order_number|default:order.remote_id }}</a></h1>
     <p>Estatus: {{ order.status_name|default:"-" }} · Cliente: {{ order.client_name|default:"-" }}</p>
 
     {% if messages %}

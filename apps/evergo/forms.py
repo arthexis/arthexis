@@ -48,6 +48,12 @@ class EvergoOrderTrackingForm(forms.Form):
     """Collect phase-one data for the public Evergo order tracking flow."""
 
     metraje_visita_tecnica = forms.IntegerField(min_value=0, label="Metraje visita técnica")
+    programacion_cargador = forms.ChoiceField(choices=(("16A", "16A"), ("32A", "32A")))
+    capacidad_itm_principal = forms.IntegerField(min_value=1, initial=60)
+    fecha_visita = forms.DateTimeField(
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"],
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
+    )
     voltaje_fase_fase = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Fase")
     voltaje_fase_tierra = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Tierra")
     voltaje_fase_neutro = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Neutro")
@@ -57,14 +63,8 @@ class EvergoOrderTrackingForm(forms.Form):
         decimal_places=2,
         label="Neutro-Tierra",
     )
-    capacidad_itm_principal = forms.IntegerField(min_value=1, initial=60)
-    programacion_cargador = forms.ChoiceField(choices=(("16A", "16A"), ("32A", "32A")))
-    fecha_visita = forms.DateTimeField(
-        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"],
-        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
-    )
     marca_cargador = forms.ChoiceField(choices=(), required=False)
-    numero_serie = forms.CharField(max_length=128)
+    numero_serie = forms.CharField(max_length=128, label="Número de Serie")
 
     foto_tablero = forms.ImageField(required=False)
     foto_medidor = forms.ImageField(required=False)
