@@ -7,6 +7,7 @@ from . import views
 app_name = "evergo"
 
 urlpatterns = [
+    path("dashboard/<str:token>/", views.my_dashboard, name="my-dashboard"),
     path("customers/<int:pk>/", views.customer_public_detail, name="customer-public-detail"),
     path(
         "customers/<int:pk>/artifacts/<int:artifact_id>/download/",

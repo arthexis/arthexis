@@ -1,0 +1,146 @@
+[
+  {
+    "model": "apis.apiexplorer",
+    "pk": 9001,
+    "fields": {
+      "name": "Evergo Portal Backend (MEX)",
+      "base_url": "https://portal-backend.evergo.com/api/mex/v1",
+      "description": "Captured Evergo portal endpoints for operator and order flows.",
+      "is_active": true,
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900101,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Current authenticated user",
+      "resource_path": "/user",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {},
+      "notes": "Fetches the current user profile from Evergo backend.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900102,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Order detail by remote id",
+      "resource_path": "/ordenes/{id}",
+      "http_method": "GET",
+      "request_structure": {
+        "path": {
+          "id": "integer"
+        }
+      },
+      "response_structure": {},
+      "notes": "Primary order payload endpoint.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900103,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Order CFE kit by remote id",
+      "resource_path": "/ordenes/kit-cfe/{id}",
+      "http_method": "GET",
+      "request_structure": {
+        "path": {
+          "id": "integer"
+        }
+      },
+      "response_structure": {},
+      "notes": "CFE kit details for one order.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900104,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Order status catalog",
+      "resource_path": "/config/catalogs/orden-estatus",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {},
+      "notes": "Returns order status options.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900105,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Coordinators available for assignment",
+      "resource_path": "/config/catalogs/instaladores/empresas/coord-para-asignar",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {},
+      "notes": "Installer company coordinators to assign.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900106,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Technical visit questionnaire questions",
+      "resource_path": "/reportes/ordenes/{id}/visita-tecnica/cuestionario-preguntas",
+      "http_method": "GET",
+      "request_structure": {
+        "path": {
+          "id": "integer"
+        }
+      },
+      "response_structure": {},
+      "notes": "Questionnaire question set for technical visit report.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900107,
+    "fields": {
+      "api": 9001,
+      "operation_name": "User reassignment reasons",
+      "resource_path": "/users/reassignment_reason",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {},
+      "notes": "Reasons catalog used when reassigning a user.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  },
+  {
+    "model": "apis.resourcemethod",
+    "pk": 900108,
+    "fields": {
+      "api": 9001,
+      "operation_name": "Crew people",
+      "resource_path": "/users/crew-people",
+      "http_method": "GET",
+      "request_structure": {},
+      "response_structure": {},
+      "notes": "Crew members listing endpoint.",
+      "created_at": "2026-02-26T00:00:00Z",
+      "updated_at": "2026-02-26T00:00:00Z"
+    }
+  }
+]
