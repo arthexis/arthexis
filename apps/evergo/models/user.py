@@ -16,7 +16,7 @@ from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
 
 from apps.users.models import Profile
 
-from apps.evergo.exceptions import EvergoAPIError
+from apps.evergo.exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .customer import EvergoCustomer
 from .order import EvergoOrder, EvergoOrderFieldValue
 from .parsing import (
@@ -73,6 +73,37 @@ class EvergoUser(Profile):
     )
     CUSTOMER_QUERY_DELIMITERS = re.compile(r"[,;\|\n\r\t]+")
     SALES_ORDER_PATTERN = re.compile(r"\b[A-Za-z]{1,4}\d{3,8}\b")
+
+    API_ORDER_DETAIL_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_ORDER_DETAIL_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/ordenes/{order_id}",
+    )
+    API_SAVE_VISITA_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_SAVE_VISITA_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/save-visita-tecnica",
+    )
+    API_ASSIGN_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_ASSIGN_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/ordenes/{order_id}/asignar-tecnico",
+    )
+    API_REPORT_INSTALL_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_REPORT_INSTALL_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/save-reporte-instalacion",
+    )
+    API_MONTAJE_QUESTIONS_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_MONTAJE_QUESTIONS_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/montaje-conexion/cuestionario-preguntas",
+    )
+    API_SAVE_MONTAJE_URL_TEMPLATE = getattr(
+        settings,
+        "EVERGO_API_SAVE_MONTAJE_URL_TEMPLATE",
+        "https://portal-backend.evergo.com/api/mex/v1/reportes/ordenes/{order_id}/save-montaje-conexion",
+    )
 
     profile_fields = ("evergo_email", "evergo_password")
 
@@ -334,6 +365,224 @@ class EvergoUser(Profile):
             "placeholders_created": placeholders_created,
             "unresolved": unresolved,
         }
+
+
+    def fetch_order_detail(self, *, order_id: int, timeout: int = 20) -> dict[str, Any]:
+        """Fetch the latest order payload for a public tracking session."""
+        with requests.Session() as session:
+            self._login_session(session=session, timeout=timeout)
+            return self._request_json(
+                session=session,
+                timeout=timeout,
+                method="GET",
+                url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
+            )
+
+    def fetch_charger_brand_options(self, *, timeout: int = 20) -> list[str]:
+        """Build charger-brand options from the user's currently assigned orders."""
+        seen: set[str] = set()
+        for payload in EvergoOrder.objects.filter(user=self).values_list("raw_payload", flat=True):
+            if not isinstance(payload, dict):
+                continue
+            for charger in payload.get("cargadores") or []:
+                if not isinstance(charger, dict):
+                    continue
+                brand = str(charger.get("nombre") or charger.get("modelo") or "").strip()
+                if brand:
+                    seen.add(brand)
+        return sorted(seen)
+
+    def submit_tracking_phase_one(
+        self,
+        *,
+        order_id: int,
+        payload: dict[str, Any],
+        files: dict[str, Any],
+        timeout: int = 30,
+    ) -> dict[str, Any]:
+        """Submit phase-one tracking data across Visita, Asignar, Instalación, and Montaje calls."""
+        with requests.Session() as session:
+            self._login_session(session=session, timeout=timeout)
+            order_payload = self._request_json(
+                session=session,
+                timeout=timeout,
+                method="GET",
+                url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
+            )
+
+            self._rewind_uploads(files.values())
+            visita_response = session.post(
+                self.API_SAVE_VISITA_URL_TEMPLATE.format(order_id=order_id),
+                data=payload,
+                files=files,
+                timeout=timeout,
+            )
+            if visita_response.status_code >= 400:
+                raise EvergoPhaseSubmissionError("Visita Tecnica", visita_response.status_code, 0)
+
+            order_installer = order_payload.get("orden_instalador") if isinstance(order_payload, dict) else {}
+            assign_response = session.post(
+                self.API_ASSIGN_URL_TEMPLATE.format(order_id=order_id),
+                json={
+                    "user_tecnico_id": order_payload.get("user_tecnico_id") or self.evergo_user_id,
+                    "fecha_programada": payload.get("fecha_visita"),
+                    "crew": (order_installer or {}).get("idSubempresa") or 20,
+                    "type": "Installation",
+                    "crewPeople": [(order_installer or {}).get("idIngeniero") or self.evergo_user_id],
+                    "reassignment_reason_id": None,
+                    "reason_comment": "",
+                    "tag_requiered": False,
+                },
+                timeout=timeout,
+            )
+            if assign_response.status_code >= 400:
+                raise EvergoPhaseSubmissionError("Asignar técnico", assign_response.status_code, 1)
+
+            self._rewind_uploads(files.values())
+            install_response = session.post(
+                self.API_REPORT_INSTALL_URL_TEMPLATE.format(order_id=order_id),
+                data=payload,
+                files=files,
+                timeout=timeout,
+            )
+            if install_response.status_code >= 400:
+                raise EvergoPhaseSubmissionError("Reporte de Instalacion", install_response.status_code, 2)
+
+            montage_questions_payload = self._request_json(
+                session=session,
+                timeout=timeout,
+                method="GET",
+                url=self.API_MONTAJE_QUESTIONS_URL_TEMPLATE.format(order_id=order_id),
+            )
+            montaje_data, montaje_files = self._build_montaje_submission(
+                questionnaire_payload=montage_questions_payload,
+                payload=payload,
+                files=files,
+            )
+            self._rewind_uploads([file_obj for _, file_obj in montaje_files])
+            montage_response = session.post(
+                self.API_SAVE_MONTAJE_URL_TEMPLATE.format(order_id=order_id),
+                data=montaje_data,
+                files=montaje_files,
+                timeout=timeout,
+            )
+            if montage_response.status_code >= 400:
+                raise EvergoPhaseSubmissionError("Montaje-Conexión", montage_response.status_code, 3)
+
+            return {
+                "order_payload": order_payload,
+                "phase_1_status": visita_response.status_code,
+                "phase_1_payload": visita_response.json() if visita_response.content else {},
+                "assign_status": assign_response.status_code,
+                "assign_payload": assign_response.json() if assign_response.content else {},
+                "install_status": install_response.status_code,
+                "install_payload": install_response.json() if install_response.content else {},
+                "montage_status": montage_response.status_code,
+                "montage_payload": montage_response.json() if montage_response.content else {},
+                "completed_steps": 4,
+            }
+
+    def _build_montaje_submission(
+        self,
+        *,
+        questionnaire_payload: dict[str, Any],
+        payload: dict[str, Any],
+        files: dict[str, Any],
+    ) -> tuple[dict[str, Any], list[tuple[str, Any]]]:
+        """Build dynamic montaje payload from questionnaire metadata and tracked values."""
+        preguntas = questionnaire_payload.get("preguntas") if isinstance(questionnaire_payload, dict) else []
+        if not isinstance(preguntas, list):
+            raise EvergoAPIError("Montaje questionnaire payload is invalid.")
+
+        montaje_data: dict[str, Any] = {"reporte": questionnaire_payload.get("reporte")}
+        montaje_files: list[tuple[str, Any]] = []
+
+        value_map = {
+            20: payload.get("programacion_cargador_instalacion") or payload.get("programacion_cargador"),
+            1: payload.get("kit_cfe"),
+            28: payload.get("metraje_visita_tecnica"),
+            21: payload.get("prueba_carga"),
+            16: payload.get("voltaje_fase_fase"),
+            17: payload.get("voltaje_fase_tierra"),
+            18: payload.get("voltaje_fase_neutro"),
+            19: payload.get("voltaje_neutro_tierra"),
+            11: payload.get("capacidad_itm_principal"),
+            9: payload.get("obra_civil"),
+        }
+        file_map = {
+            26: files.get("foto_panoramica_estacion"),
+            27: files.get("foto_numero_serie_cargador"),
+            4: files.get("foto_voltaje_fase_fase"),
+            5: files.get("foto_voltaje_fase_neutro"),
+            6: files.get("foto_voltaje_fase_tierra"),
+            7: files.get("foto_voltaje_neutro_tierra"),
+            12: files.get("foto_interruptor_principal"),
+            23: files.get("foto_interruptor_instalado"),
+            25: files.get("foto_conexion_cargador"),
+            22: files.get("foto_preparacion_cfe"),
+            24: files.get("foto_hoja_reporte_instalacion"),
+        }
+
+        for index, pregunta_layout in enumerate(preguntas):
+            if not isinstance(pregunta_layout, dict):
+                continue
+            pregunta_id = to_int(pregunta_layout.get("pregunta_id"))
+            prefix = f"preguntas[{index}]"
+            for key in (
+                "id",
+                "reporte_layout_id",
+                "pregunta_id",
+                "descripcion",
+                "seccion",
+                "web_only",
+                "requerido",
+                "orden",
+                "created_by",
+                "created_at",
+                "updated_at",
+                "deleted_at",
+            ):
+                if key in pregunta_layout:
+                    montaje_data[f"{prefix}[{key}]"] = pregunta_layout.get(key)
+
+            pregunta_meta = pregunta_layout.get("pregunta")
+            if isinstance(pregunta_meta, dict):
+                for key, value in pregunta_meta.items():
+                    if key == "opciones" and isinstance(value, list):
+                        for op_idx, option in enumerate(value):
+                            if not isinstance(option, dict):
+                                continue
+                            for option_key, option_value in option.items():
+                                montaje_data[
+                                    f"{prefix}[pregunta][opciones][{op_idx}][{option_key}]"
+                                ] = option_value
+                    else:
+                        montaje_data[f"{prefix}[pregunta][{key}]"] = value
+
+            tipo = ""
+            if isinstance(pregunta_meta, dict):
+                tipo = str(pregunta_meta.get("tipo") or "")
+
+            if tipo == "archivo":
+                file_value = file_map.get(pregunta_id)
+                if file_value is None:
+                    continue
+                montaje_files.append((f"{prefix}[respuesta][0]", file_value))
+            else:
+                montage_value = value_map.get(pregunta_id)
+                montaje_data[f"{prefix}[respuesta]"] = "" if montage_value is None else montage_value
+
+        montaje_data["close_reporte"] = "true"
+        return montaje_data, montaje_files
+
+    @staticmethod
+    def _rewind_uploads(file_objects: Any) -> None:
+        """Reset uploaded file pointers so each API call sends complete file contents."""
+        for file_obj in file_objects:
+            seek = getattr(file_obj, "seek", None)
+            if callable(seek):
+                seek(0)
+
 
     @classmethod
     def parse_customer_queries(cls, *, raw_queries: str) -> tuple[list[str], list[str]]:

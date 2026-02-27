@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Tracking {{ order.order_number|default:order.remote_id }}</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: Inter, Arial, sans-serif; margin: 1.2rem auto; max-width: 960px; padding: 0 1rem; }
+        .card { border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+        .grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); }
+        label { display: block; font-size: .92rem; margin-bottom: .2rem; }
+        input, select { width: 100%; padding: .45rem; border-radius: 6px; border: 1px solid #777; }
+        .images { display:grid; gap:.8rem; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); }
+        .preview { width:100%; height:120px; object-fit:cover; border-radius:8px; border:1px dashed #666; margin-top:.4rem; }
+        .actions { margin-top: 1rem; }
+        button { padding: .7rem 1rem; border: 0; border-radius: 8px; background:#0b5ed7; color:#fff; }
+        .messages { color: #0a7f39; }
+        .messages .warning { color:#a86100; }
+        .errorlist { color: #a30000; }
+    </style>
+</head>
+<body>
+    <h1>Order Tracking · <a href="{{ evergo_so_url }}" target="_blank" rel="noopener noreferrer">{{ order.order_number|default:order.remote_id }}</a></h1>
+    <p>Estatus: {{ order.status_name|default:"-" }} · Cliente: {{ order.client_name|default:"-" }}</p>
+
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" id="tracking-form">
+        {% csrf_token %}
+        <div class="card">
+            <h2>Datos principales</h2>
+            {{ form.non_field_errors }}
+            <div class="grid">
+                {% for field in form %}
+                    {% if field.name not in image_field_names and field.name not in collapsed_defaults %}
+                        <div>
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                            {{ field.errors }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <details>
+                <summary>Valores auto-completados (editar si es necesario)</summary>
+                <div class="grid" style="margin-top:.8rem;">
+                    {% for field in collapsed_fields %}
+                        <div>
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </details>
+        </div>
+
+        <div class="card">
+            <h2>Evidencias fotográficas</h2>
+            <p>Si no subes una imagen se enviará una imagen N/A.</p>
+            <div class="images">
+                {% for field in image_fields %}
+                    <div>
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        <img class="preview" id="preview-{{ field.name }}" alt="Preview {{ field.name }}">
+                    </div>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="confirm_missing_images" id="confirm_missing_images" value="0">
+        </div>
+
+        <div class="actions">
+            <button type="submit">Enviar Visita + Asignar + Instalación</button>
+        </div>
+    </form>
+
+    <script>
+      document.querySelectorAll('input[type="file"]').forEach((input) => {
+        input.addEventListener('change', () => {
+          const preview = document.getElementById(`preview-${input.name}`);
+          const file = input.files?.[0];
+          if (!preview || !file) return;
+          preview.src = URL.createObjectURL(file);
+        });
+      });
+
+      document.getElementById('tracking-form')?.addEventListener('submit', (event) => {
+        const missing = Array.from(document.querySelectorAll('input[type="file"]')).filter((f) => !f.files?.length);
+        if (missing.length && !window.confirm(`Faltan ${missing.length} imágenes. ¿Deseas continuar con N/A?`)) {
+          event.preventDefault();
+          return;
+        }
+        if (missing.length) {
+          document.getElementById('confirm_missing_images').value = '1';
+        }
+      });
+    </script>
+</body>
+</html>
