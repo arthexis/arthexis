@@ -514,6 +514,7 @@ LOCAL_APPS = [
     "apps.totp",
     "apps.terms",
     "apps.evergo",
+    "apps.fitbit",
 ]
 
 INSTALLED_APPS = [
