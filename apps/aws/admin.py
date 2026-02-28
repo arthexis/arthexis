@@ -47,6 +47,17 @@ class LightsailActionMixin(DjangoObjectActions):
     def get_dashboard_actions(self, request) -> Iterable[str]:
         return getattr(self, "dashboard_actions", [])
 
+    def _default_credentials(self) -> AWSCredentials | None:
+        """Return the first configured credential entry when present."""
+
+        return AWSCredentials.objects.order_by("name", "pk").first()
+
+    def _ensure_load_instances_allowed(self, request: HttpRequest) -> None:
+        if request.method != "POST":
+            raise PermissionDenied
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
     def resolve_credentials(self, form):
         """Resolve selected or inline credential values from a fetch form."""
 
@@ -76,9 +87,10 @@ class LightsailActionMixin(DjangoObjectActions):
         created_total = 0
         updated_total = 0
         loaded_regions = 0
+        consolidated_items: list[tuple[LightsailInstance, bool]] = []
         for region in list_lightsail_regions():
             details = list_lightsail_instances(region=region, credentials=credentials)
-            created_count, updated_count = consolidate_lightsail_instances(
+            created_count, updated_count, processed_instances = consolidate_lightsail_instances(
                 region=region,
                 details=details,
                 credentials=credentials,
@@ -86,6 +98,7 @@ class LightsailActionMixin(DjangoObjectActions):
             created_total += created_count
             updated_total += updated_count
             loaded_regions += 1
+            consolidated_items.extend(processed_instances)
 
         discovery = start_discovery(
             _("Load Instances"),
@@ -94,13 +107,13 @@ class LightsailActionMixin(DjangoObjectActions):
             metadata={"action": "aws_lightsail_instances_load", "source": source_label},
         )
         if discovery:
-            for instance in LightsailInstance.objects.filter(credentials=credentials):
+            for instance, created in consolidated_items:
                 record_discovery_item(
                     discovery,
                     obj=instance,
                     label=instance.name,
-                    created=False,
-                    overwritten=True,
+                    created=created,
+                    overwritten=not created,
                     data={"region": instance.region},
                 )
 
@@ -129,13 +142,10 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
     search_fields = ("name", "access_key_id")
     readonly_fields = ("created_at",)
 
-    def _default_credentials(self) -> AWSCredentials | None:
-        """Return the first configured credential entry when present."""
-
-        return AWSCredentials.objects.order_by("name", "pk").first()
-
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
         """Tool action that loads instances with the first credential set."""
+
+        self._ensure_load_instances_allowed(request)
 
         credentials = self._default_credentials()
         if credentials is None:
@@ -234,7 +244,9 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
         """Load and consolidate Lightsail instances for configured credentials."""
 
-        credentials = AWSCredentials.objects.order_by("name", "pk").first()
+        self._ensure_load_instances_allowed(request)
+
+        credentials = self._default_credentials()
         if credentials is None:
             self.message_user(request, _("Create AWS credentials before loading instances."), messages.ERROR)
             return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
@@ -254,7 +266,7 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     load_instances.requires_queryset = False
 
     def fetch_view(self, request):
-        if not self.has_view_or_change_permission(request):
+        if not self.has_change_permission(request):
             raise PermissionDenied
 
         opts = self.model._meta

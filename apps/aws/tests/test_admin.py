@@ -6,6 +6,7 @@ import pytest
 from django.urls import reverse
 
 from apps.aws.models import AWSCredentials, LightsailInstance
+from apps.aws.services import LightsailFetchError
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.regression]
@@ -44,12 +45,21 @@ def test_credentials_tool_action_load_instances_redirects(admin_client, monkeypa
     )
 
     url = reverse("admin:aws_awscredentials_actions", args=["load_instances"])
-    response = admin_client.get(url)
+    response = admin_client.post(url)
 
     assert response.status_code == 302
     assert response["Location"] == reverse("admin:aws_lightsailinstance_changelist")
     instance = LightsailInstance.objects.get(name="app-1", region="us-east-1")
     assert instance.credentials_id == credentials.pk
+
+
+def test_credentials_tool_action_rejects_get(admin_client):
+    """State-changing tool action should reject GET requests."""
+
+    url = reverse("admin:aws_awscredentials_actions", args=["load_instances"])
+    response = admin_client.get(url)
+
+    assert response.status_code == 403
 
 
 def test_credentials_selected_action_loads_instances_for_each_selection(admin_client, monkeypatch):
@@ -96,8 +106,70 @@ def test_instance_tool_action_is_registered_and_redirects(admin_client, monkeypa
     )
 
     url = reverse("admin:aws_lightsailinstance_actions", args=["load_instances"])
-    response = admin_client.get(url)
+    response = admin_client.post(url)
 
     assert response.status_code == 302
     assert response["Location"] == reverse("admin:aws_lightsailinstance_changelist")
     assert LightsailInstance.objects.filter(name="node-1", region="us-east-1").exists()
+
+
+def test_instance_tool_action_rejects_get(admin_client):
+    """Instance load tool action should reject GET requests."""
+
+    url = reverse("admin:aws_lightsailinstance_actions", args=["load_instances"])
+    response = admin_client.get(url)
+
+    assert response.status_code == 403
+
+
+def test_credentials_load_records_discovery_for_loaded_items_only(admin_client, monkeypatch):
+    """Discovery records should reflect only rows processed in current run."""
+
+    credential = AWSCredentials.objects.create(
+        name="loaded",
+        access_key_id="AKIALOADED",
+        secret_access_key="secret",  # noqa: S106
+    )
+    stale = LightsailInstance.objects.create(name="stale", region="us-east-2", credentials=credential)
+    monkeypatch.setattr("apps.aws.admin.list_lightsail_regions", lambda: ["us-east-1"])
+    monkeypatch.setattr(
+        "apps.aws.admin.list_lightsail_instances",
+        lambda **kwargs: [_fake_instance_payload("fresh", ip="4.4.4.4")],
+    )
+
+    recorded: list[tuple[str, bool, bool]] = []
+
+    def _record(*args, **kwargs):
+        obj = kwargs["obj"]
+        recorded.append((obj.name, kwargs["created"], kwargs["overwritten"]))
+
+    monkeypatch.setattr("apps.aws.admin.record_discovery_item", _record)
+
+    url = reverse("admin:aws_awscredentials_actions", args=["load_instances"])
+    response = admin_client.post(url)
+
+    assert response.status_code == 302
+    assert stale.name not in [name for name, *_ in recorded]
+    assert ("fresh", True, False) in recorded
+
+
+def test_credentials_load_handles_region_listing_failure(admin_client, monkeypatch):
+    """Region listing failures should surface as admin error messages, not 500s."""
+
+    AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIAPRIMARY2",
+        secret_access_key="secret",  # noqa: S106
+    )
+
+    def _boom():
+        raise LightsailFetchError("boto3 is missing")
+
+    monkeypatch.setattr("apps.aws.admin.list_lightsail_regions", _boom)
+
+    url = reverse("admin:aws_awscredentials_actions", args=["load_instances"])
+    response = admin_client.post(url, follow=True)
+
+    assert response.status_code == 200
+    messages = [str(message) for message in response.context["messages"]]
+    assert any("boto3 is missing" in message for message in messages)

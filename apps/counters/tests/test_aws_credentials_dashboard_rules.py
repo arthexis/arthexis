@@ -40,3 +40,15 @@ def test_watchtower_rule_succeeds_when_credentials_exist(monkeypatch):
     result = evaluate_aws_credentials_rules()
 
     assert result["success"] is True
+
+
+def test_non_watchtower_node_rule_succeeds(monkeypatch):
+    """Non-Watchtower nodes should always pass the AWS credentials rule."""
+
+    role = NodeRole.objects.create(name="Edge")
+    local_node = Node.objects.create(hostname="local-edge", role=role)
+    monkeypatch.setattr(Node, "get_local", staticmethod(lambda: local_node))
+
+    result = evaluate_aws_credentials_rules()
+
+    assert result["success"] is True

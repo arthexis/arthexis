@@ -58,10 +58,13 @@ def _lightsail_client(
 def list_lightsail_regions() -> list[str]:
     """Return available Lightsail regions from boto3 metadata."""
 
-    module = _require_boto3()
+    try:
+        module = _require_boto3()
+    except ImportError as exc:
+        raise LightsailFetchError(str(exc)) from exc
     session = module.session.Session()
     regions: list[str] = session.get_available_regions("lightsail") or []
-    return sorted({code for code in regions}) or ["us-east-1"]
+    return sorted({code for code in regions})
 
 
 def fetch_lightsail_instance(
@@ -162,27 +165,29 @@ def consolidate_lightsail_instances(
     region: str,
     details: list[dict[str, Any]],
     credentials: AWSCredentials | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[tuple[LightsailInstance, bool]]]:
     """Create or update LightsailInstance rows from API payloads."""
 
     created_count = 0
     updated_count = 0
+    processed_instances: list[tuple[LightsailInstance, bool]] = []
     for item in details:
         name = item.get("name")
         if not name:
             continue
         defaults = parse_instance_details(item)
         defaults.update({"region": region, "credentials": credentials})
-        _, created = LightsailInstance.objects.update_or_create(
+        instance, created = LightsailInstance.objects.update_or_create(
             name=name,
             region=region,
             defaults=defaults,
         )
+        processed_instances.append((instance, created))
         if created:
             created_count += 1
         else:
             updated_count += 1
-    return created_count, updated_count
+    return created_count, updated_count, processed_instances
 
 
 def parse_database_details(data: dict[str, Any]) -> dict[str, Any]:
