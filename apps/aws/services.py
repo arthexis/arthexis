@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, Optional
 
+from django.db import IntegrityError
+
 try:
     import boto3
     from botocore.exceptions import BotoCoreError, ClientError
@@ -236,10 +238,14 @@ def sync_lightsail_instances(
                 if conflicting_instance is not None:
                     conflicts += 1
                     continue
-            instance, was_created = LightsailInstance.objects.update_or_create(
-                **lookup,
-                defaults=defaults,
-            )
+            try:
+                instance, was_created = LightsailInstance.objects.update_or_create(
+                    **lookup,
+                    defaults=defaults,
+                )
+            except IntegrityError:
+                conflicts += 1
+                continue
             instances.append(instance)
             if was_created:
                 created += 1
