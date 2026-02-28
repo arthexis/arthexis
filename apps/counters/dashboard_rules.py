@@ -263,6 +263,25 @@ def evaluate_cp_simulator_default_rules() -> dict[str, object] | None:
 
 
 
+def evaluate_aws_credentials_rules() -> dict[str, object] | None:
+    """Require at least one AWS credential when running as Watchtower."""
+
+    local_node = Node.get_local()
+    if local_node is None or not getattr(local_node, "role_id", None):
+        return rule_success()
+
+    is_watchtower = (local_node.role.name or "").lower() == "watchtower"
+    if not is_watchtower:
+        return rule_success()
+
+    from apps.aws.models import AWSCredentials
+
+    if AWSCredentials.objects.exists():
+        return rule_success()
+
+    return rule_failure(_("Configure at least one AWS credential."))
+
+
 def evaluate_required_operations_rules() -> dict[str, object] | None:
     """Evaluate required operation completion status for dashboard health."""
 

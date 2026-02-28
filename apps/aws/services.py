@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, Optional
 
 try:
@@ -128,4 +129,112 @@ def parse_database_details(data: dict[str, Any]) -> dict[str, Any]:
         "endpoint_port": endpoint.get("port"),
         "created_at": data.get("createdAt"),
         "raw_details": LightsailDatabase.serialize_details(data),
+    }
+
+
+def _lightsail_regions(credentials: Optional[AWSCredentials] = None) -> list[str]:
+    """Return available Lightsail regions for the provided credential context."""
+
+    module = _require_boto3()
+    session_kwargs: dict[str, Any] = {}
+    if credentials is not None:
+        session_kwargs.update(
+            {
+                "aws_access_key_id": credentials.access_key_id,
+                "aws_secret_access_key": credentials.secret_access_key,
+            }
+        )
+    session = module.session.Session(**session_kwargs)
+    regions = sorted(set(session.get_available_regions("lightsail") or []))
+    return regions or ["us-east-1"]
+
+
+def fetch_lightsail_instances(
+    *,
+    region: str,
+    credentials: Optional[AWSCredentials] = None,
+    access_key_id: str | None = None,
+    secret_access_key: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch all Lightsail instances for the selected region."""
+
+    client = _lightsail_client(
+        region,
+        credentials,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+    )
+    instances: list[dict[str, Any]] = []
+    token: str | None = None
+    try:
+        while True:
+            kwargs: dict[str, Any] = {}
+            if token:
+                kwargs["pageToken"] = token
+            response = client.get_instances(**kwargs)
+            instances.extend(response.get("instances", []))
+            token = response.get("nextPageToken")
+            if not token:
+                break
+    except (BotoCoreError, ClientError) as exc:  # pragma: no cover - runtime safety
+        raise LightsailFetchError(str(exc)) from exc
+
+    return instances
+
+
+def sync_lightsail_instances(
+    *,
+    credentials: Optional[AWSCredentials] = None,
+    regions: Iterable[str] | None = None,
+    access_key_id: str | None = None,
+    secret_access_key: str | None = None,
+) -> dict[str, Any]:
+    """Load Lightsail instances and upsert them into local storage."""
+
+    region_list = list(regions or _lightsail_regions(credentials))
+    created = 0
+    updated = 0
+    instances: list[LightsailInstance] = []
+    created_ids: set[int] = set()
+    updated_ids: set[int] = set()
+
+    for region in region_list:
+        remote_instances = fetch_lightsail_instances(
+            region=region,
+            credentials=credentials,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+        )
+        for item in remote_instances:
+            name = item.get("name")
+            if not name:
+                continue
+            location = item.get("location") or {}
+            instance_region = location.get("regionName") or region
+            defaults = parse_instance_details(item)
+            defaults.update(
+                {
+                    "region": instance_region,
+                    "credentials": credentials,
+                }
+            )
+            instance, was_created = LightsailInstance.objects.update_or_create(
+                name=name,
+                region=instance_region,
+                defaults=defaults,
+            )
+            instances.append(instance)
+            if was_created:
+                created += 1
+                created_ids.add(instance.pk)
+            else:
+                updated += 1
+                updated_ids.add(instance.pk)
+
+    return {
+        "created": created,
+        "updated": updated,
+        "instances": instances,
+        "created_ids": created_ids,
+        "updated_ids": updated_ids,
     }
