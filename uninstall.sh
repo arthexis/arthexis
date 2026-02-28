@@ -179,18 +179,6 @@ if [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
     done
 fi
 
-# Remove wlan1 refresh service if present (legacy and current names)
-for svc in wlan1-refresh wlan1-device-refresh; do
-    if systemctl list-unit-files | grep -Fq "${svc}.service"; then
-        sudo systemctl stop "$svc" || true
-        sudo systemctl disable "$svc" || true
-        if [ -f "/etc/systemd/system/${svc}.service" ]; then
-            sudo rm "/etc/systemd/system/${svc}.service"
-            sudo systemctl daemon-reload
-        fi
-    fi
-done
-
 # Ensure any Celery workers or beats are also stopped
 pkill -f "celery -A config" || true
 
