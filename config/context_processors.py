@@ -2,6 +2,7 @@ import logging
 import ipaddress
 import re
 import socket
+from importlib import import_module
 
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
@@ -11,7 +12,6 @@ from django.conf import settings
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
-CAMERA_BADGE_COLOR = DEFAULT_BADGE_COLOR
 
 
 logger = logging.getLogger(__name__)
@@ -114,31 +114,12 @@ def site_and_node(request: HttpRequest):
     role = getattr(request, "badge_role", None) or getattr(node, "role", None)
     request.badge_role = role
 
-    video_device = getattr(request, "badge_video_device", None)
-    if video_device is None and node is not None:
-        try:
-            from apps.video.models import VideoDevice
-
-            video_device = (
-                VideoDevice.objects.filter(node=node, is_default=True)
-                .order_by("identifier")
-                .first()
-            )
-        except (OperationalError, ProgrammingError):
-            video_device = None
-        except Exception:
-            logger.exception(
-                "Unexpected error resolving default video device for node %s", node
-            )
-            video_device = None
-    request.badge_video_device = video_device
-
     role = getattr(node, "role", None)
 
     site_color = DEFAULT_BADGE_COLOR if site else UNKNOWN_BADGE_COLOR
     node_color = DEFAULT_BADGE_COLOR if node else UNKNOWN_BADGE_COLOR
     role_color = DEFAULT_BADGE_COLOR if role else UNKNOWN_BADGE_COLOR
-    video_device_color = CAMERA_BADGE_COLOR if video_device else UNKNOWN_BADGE_COLOR
+    admin_badges = _build_admin_badges(request=request, site=site, node=node, role=role)
 
     site_name = site.name if site else ""
     node_role_name = role.name if role else ""
@@ -146,7 +127,6 @@ def site_and_node(request: HttpRequest):
         "badge_site": site,
         "badge_node": node,
         "badge_role": role,
-        "badge_video_device": video_device,
         # Public views fall back to the node role when the site name is blank.
         "badge_site_name": site_name or node_role_name,
         # Admin site badge uses the site display name if set, otherwise the domain.
@@ -154,7 +134,67 @@ def site_and_node(request: HttpRequest):
         "badge_site_color": site_color,
         "badge_node_color": node_color,
         "badge_role_color": role_color,
-        "badge_video_device_color": video_device_color,
+        "admin_badges": admin_badges,
         "current_site_domain": site.domain if site else host,
         "TIME_ZONE": settings.TIME_ZONE,
     }
+
+
+def _resolve_admin_badge_callable(path: str):
+    """Resolve a badge query callable from a dotted path."""
+
+    module_path, _, attr_name = path.rpartition(".")
+    if not module_path or not attr_name:
+        raise ValueError(f"Invalid badge query path: {path}")
+    module = import_module(module_path)
+    return getattr(module, attr_name)
+
+
+def _visible_badges_for_user(*, user):
+    """Return enabled badges visible to the current staff user."""
+
+    from apps.sites.models import AdminBadge
+
+    try:
+        queryset = AdminBadge.objects.filter(is_enabled=True, is_deleted=False)
+    except (OperationalError, ProgrammingError):
+        return []
+    if not user or not getattr(user, "is_authenticated", False):
+        return []
+    group_ids = list(user.groups.values_list("id", flat=True))
+    visible = (
+        queryset.filter(user__isnull=True, group__isnull=True)
+        | queryset.filter(user=user)
+        | queryset.filter(group_id__in=group_ids)
+    )
+    return list(visible.distinct().order_by("priority", "pk"))
+
+
+def _build_admin_badges(*, request, site, node, role):
+    """Build configured badge payloads for admin templates."""
+
+    badges = []
+    for badge in _visible_badges_for_user(user=getattr(request, "user", None)):
+        try:
+            query_callable = _resolve_admin_badge_callable(badge.value_query_path)
+            payload = query_callable(request=request, site=site, node=node, role=role)
+        except Exception:
+            logger.exception("Failed rendering admin badge %s", badge.slug)
+            payload = {"value": "Unknown", "url": None, "present": False}
+
+        value = payload.get("value", "Unknown")
+        value_url = payload.get("url")
+        is_present = bool(payload.get("present"))
+        order = [badge.first_part, badge.second_part]
+        badges.append(
+            {
+                "badge": badge,
+                "label": badge.label,
+                "value": value,
+                "value_url": value_url,
+                "is_present": is_present,
+                "color": badge.filled_color if is_present else badge.missing_color,
+                "order": order,
+            }
+        )
+    return badges

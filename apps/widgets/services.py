@@ -60,6 +60,11 @@ def sync_registered_widgets() -> None:
                     "template_name": definition.template_name,
                     "renderer_path": definition.renderer_path,
                     "priority": definition.order,
+                    "required_feature": (
+                        None
+                        if not definition.required_feature_slug
+                        else _resolve_feature(definition.required_feature_slug)
+                    ),
                 }.items():
                     if getattr(widget, field) != value:
                         setattr(widget, field, value)
@@ -102,7 +107,7 @@ def _visible(widget: Widget, user) -> bool:
 
 def _zone_widgets_queryset(zone_slug: str):
     return (
-        Widget.objects.select_related("zone")
+        Widget.objects.select_related("zone", "required_feature")
         .prefetch_related("profiles__user", "profiles__group")
         .filter(
             zone__slug=zone_slug,
@@ -112,6 +117,27 @@ def _zone_widgets_queryset(zone_slug: str):
         )
         .order_by("priority", "pk")
     )
+
+
+def _resolve_feature(feature_slug: str):
+    """Resolve a node feature by slug when available."""
+
+    from apps.nodes.models import NodeFeature
+
+    return NodeFeature.objects.filter(slug=feature_slug).first()
+
+
+def _has_required_feature(widget: Widget, request) -> bool:
+    """Return whether a widget's required node feature is enabled."""
+
+    if not widget.required_feature_id:
+        return True
+    node = getattr(request, "badge_node", None) or getattr(request, "node", None)
+    if node is None:
+        from apps.nodes.models import Node
+
+        node = Node.get_local()
+    return bool(node and node.features.filter(pk=widget.required_feature_id).exists())
 
 
 def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> list[RenderedWidget]:
@@ -133,6 +159,8 @@ def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any
             logger.debug("No registered widget definition for %s", widget.slug)
             continue
         if definition.permission and not definition.permission(request=request, widget=widget, **extra_context):
+            continue
+        if not _has_required_feature(widget, request):
             continue
         if not _visible(widget, getattr(request, "user", None)):
             continue
