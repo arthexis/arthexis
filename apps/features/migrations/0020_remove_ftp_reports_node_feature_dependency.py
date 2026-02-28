@@ -9,7 +9,10 @@ def detach_ftp_reports_feature_from_node_feature(apps, schema_editor):
     """Drop the FTP suite feature dependency on the removed node feature."""
 
     Feature = apps.get_model("features", "Feature")
-    Feature.objects.filter(slug=FTP_REPORTS_FEATURE_SLUG).update(node_feature=None)
+    db_alias = schema_editor.connection.alias
+    Feature.objects.using(db_alias).filter(slug=FTP_REPORTS_FEATURE_SLUG).update(
+        node_feature=None
+    )
 
 
 def restore_ftp_reports_feature_node_feature(apps, schema_editor):

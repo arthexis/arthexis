@@ -10,7 +10,8 @@ def remove_ftp_server_node_feature(apps, schema_editor):
     """Remove the legacy FTP node feature now covered by a suite feature."""
 
     NodeFeature = apps.get_model("nodes", "NodeFeature")
-    NodeFeature.objects.filter(slug=FTP_SERVER_SLUG).delete()
+    db_alias = schema_editor.connection.alias
+    NodeFeature.objects.using(db_alias).filter(slug=FTP_SERVER_SLUG).delete()
 
 
 def restore_ftp_server_node_feature(apps, schema_editor):
