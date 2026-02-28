@@ -9,9 +9,7 @@
       "main_app": [
         "ocpp"
       ],
-      "node_feature": [
-        "ftp-server"
-      ],
+      "node_feature": null,
       "admin_requirements": "Offer a quick action to configure and link the OCPP-aware local FTP server for charge points uploading diagnostics.",
       "public_requirements": "",
       "service_requirements": "Expose an embedded OCPP-aware FTP server for report uploads and keep charge points linked to local FTP configuration.",
