@@ -78,18 +78,24 @@ class ConnectionFlowMixin:
                 getattr(self, "ocpp_version", ""),
                 CHARGER_CREATION_FEATURE_SLUG,
             )
-            feature = Feature.objects.filter(slug=requested_feature_slug).first()
-            if not feature and requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
-                feature = Feature.objects.filter(
-                    slug=CHARGER_CREATION_FEATURE_SLUG
-                ).first()
+            candidate_slugs = [requested_feature_slug]
+            if requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
+                candidate_slugs.append(CHARGER_CREATION_FEATURE_SLUG)
+
+            features_by_slug = {
+                feature.slug: feature
+                for feature in Feature.objects.filter(slug__in=candidate_slugs)
+            }
+            feature = features_by_slug.get(requested_feature_slug) or features_by_slug.get(
+                CHARGER_CREATION_FEATURE_SLUG
+            )
             if not feature:
                 logger.warning(
                     "Charge point creation feature %s missing; allowing websocket admission.",
                     requested_feature_slug,
                 )
                 return "creation-feature-missing"
-            if not feature.is_enabled:
+            if not feature.is_enabled_for_node(node=node):
                 logger.info(
                     "Charge point creation feature %s disabled; allowing websocket admission.",
                     feature.slug,

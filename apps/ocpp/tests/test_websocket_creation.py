@@ -99,6 +99,7 @@ def charge_point_features(local_node):
 
 
 @pytest.mark.critical
+@pytest.mark.regression
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_charge_point_created_for_new_websocket_path():
@@ -145,6 +146,7 @@ def test_charge_point_created_for_new_websocket_path():
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.regression
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_ocpp_connection_allowed_without_legacy_charge_point_node_feature(
@@ -163,6 +165,7 @@ def test_ocpp_connection_allowed_without_legacy_charge_point_node_feature(
     async_to_sync(run_scenario)()
 
 
+@pytest.mark.regression
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_new_charge_point_allowed_when_creation_feature_disabled(
