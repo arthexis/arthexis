@@ -222,7 +222,7 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
             continue
         dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_parts, d))]
         for name in files:
-            rel_path = "/".join((*rel_parts, name)) if rel_parts else name
+            rel_path = "/".join((*rel_parts, name))
             if not _should_watch_file(rel_path):
                 continue
             candidate_paths = [Path(root, name)]
