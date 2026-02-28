@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
@@ -261,14 +261,9 @@ def nav_links(request):
     except (OperationalError, ProgrammingError):
         header_references = []
 
-    try:
-        chat_feature = NodeFeature.objects.filter(slug="chat-bridge").first()
-    except (OperationalError, ProgrammingError):
-        chat_feature = None
     chat_enabled = bool(
         getattr(settings, "PAGES_CHAT_ENABLED", False)
-        and chat_feature
-        and chat_feature.is_enabled
+        and is_suite_feature_enabled("staff-chat-bridge", default=False)
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
