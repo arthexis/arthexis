@@ -83,7 +83,16 @@ def test_nav_links_hides_landings_with_disabled_required_features(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_nav_links_chat_enabled_uses_staff_chat_bridge_suite_feature(monkeypatch, settings):
+@pytest.mark.parametrize(
+    ("is_enabled", "expected_chat_enabled"),
+    [
+        (False, False),
+        (True, True),
+    ],
+)
+def test_nav_links_chat_enabled_uses_staff_chat_bridge_suite_feature(
+    monkeypatch, settings, is_enabled, expected_chat_enabled
+):
     """Regression: chat enablement should follow Staff Chat Bridge suite feature state."""
 
     cache.clear()
@@ -94,17 +103,17 @@ def test_nav_links_chat_enabled_uses_staff_chat_bridge_suite_feature(monkeypatch
 
     Feature.objects.update_or_create(
         slug="staff-chat-bridge",
-        defaults={"display": "Staff Chat Bridge", "is_enabled": False},
+        defaults={"display": "Staff Chat Bridge", "is_enabled": is_enabled},
     )
 
     context = context_processors.nav_links(request)
 
-    assert context["chat_enabled"] is False
+    assert context["chat_enabled"] is expected_chat_enabled
 
 
 @pytest.mark.django_db
-def test_nav_links_chat_enabled_true_when_staff_chat_bridge_enabled(monkeypatch, settings):
-    """Regression: chat should render when global setting and suite feature are enabled."""
+def test_nav_links_chat_disabled_when_staff_chat_bridge_missing(monkeypatch, settings):
+    """Chat should be disabled when staff-chat-bridge suite feature is absent."""
 
     cache.clear()
     request = RequestFactory().get("/")
@@ -112,11 +121,8 @@ def test_nav_links_chat_enabled_true_when_staff_chat_bridge_enabled(monkeypatch,
 
     monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
 
-    Feature.objects.update_or_create(
-        slug="staff-chat-bridge",
-        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
-    )
+    Feature.objects.filter(slug="staff-chat-bridge").delete()
 
     context = context_processors.nav_links(request)
 
-    assert context["chat_enabled"] is True
+    assert context["chat_enabled"] is False
