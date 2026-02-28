@@ -462,7 +462,30 @@ def enable_selected_features(modeladmin, request, queryset):
             "slug", flat=True
         )
     )
-    desired_manual = current_manual | {feature.slug for feature in manual_features}
+    eligible_manual_features = []
+    for feature in manual_features:
+        result = feature_checks.run(feature, node=node)
+        if result is None:
+            modeladmin.message_user(
+                request,
+                f"{feature.display} cannot be enabled manually because no eligibility check is configured.",
+                level=messages.WARNING,
+            )
+            continue
+        if not result.success:
+            modeladmin.message_user(request, result.message, level=result.level)
+            continue
+        eligible_manual_features.append(feature)
+
+    if not eligible_manual_features:
+        modeladmin.message_user(
+            request,
+            "Selected manual features are not currently eligible for enablement.",
+            level=messages.WARNING,
+        )
+        return None
+
+    desired_manual = current_manual | {feature.slug for feature in eligible_manual_features}
     newly_enabled = desired_manual - current_manual
     if not newly_enabled:
         modeladmin.message_user(
@@ -473,7 +496,7 @@ def enable_selected_features(modeladmin, request, queryset):
         return None
 
     node.update_manual_features(desired_manual)
-    display_map = {feature.slug: feature.display for feature in manual_features}
+    display_map = {feature.slug: feature.display for feature in eligible_manual_features}
     newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
     modeladmin.message_user(
         request,

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
+import shutil
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from django.contrib import messages
@@ -237,6 +239,79 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         success,
         f"{feature.display} prerequisites checked: " + "; ".join(details),
         level,
+    )
+
+
+@feature_checks.register("screenshot-poll")
+def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
+    """Validate Playwright runtime prerequisites for screenshot capture."""
+
+    from .models import Node
+
+    target: Optional["Node"] = node or Node.get_local()
+    if target is None:
+        return FeatureCheckResult(
+            False,
+            f"No local node is registered; cannot verify {feature.display}.",
+            messages.WARNING,
+        )
+
+    playwright_cli = shutil.which("playwright")
+    try:
+        import_module("playwright.sync_api")
+    except ImportError as exc:
+        return FeatureCheckResult(
+            False,
+            (
+                f"{feature.display} prerequisites missing on {target.hostname}: "
+                "Playwright is not importable. Install it in this runtime environment. "
+                f"Details: {exc}"
+            ),
+            messages.WARNING,
+        )
+
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        return FeatureCheckResult(
+            False,
+            f"{feature.display} prerequisites missing on {target.hostname}: {exc}",
+            messages.WARNING,
+        )
+
+    try:
+        with sync_playwright() as playwright:
+            executable = Path(playwright.chromium.executable_path)
+    except PlaywrightError as exc:
+        return FeatureCheckResult(
+            False,
+            (
+                f"{feature.display} runtime is not ready on {target.hostname}: {exc}. "
+                "Install browser binaries with `python -m playwright install chromium`."
+            ),
+            messages.WARNING,
+        )
+
+    if not executable.exists():
+        return FeatureCheckResult(
+            False,
+            (
+                f"{feature.display} browser executable is missing on {target.hostname}: "
+                f"{executable}. Install Playwright browser binaries."
+            ),
+            messages.WARNING,
+        )
+
+    cli_status = playwright_cli if playwright_cli else "not found"
+    return FeatureCheckResult(
+        True,
+        (
+            f"{feature.display} is eligible on {target.hostname}; "
+            f"Playwright import succeeded and Chromium executable is available at {executable}. "
+            f"playwright CLI: {cli_status}."
+        ),
+        messages.SUCCESS,
     )
 
 

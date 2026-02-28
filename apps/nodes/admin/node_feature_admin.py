@@ -11,6 +11,7 @@ import logging
 
 from apps.locals.user_data import EntityModelAdmin
 from apps.discovery.services import record_discovery_item, start_discovery
+from apps.features.models import Feature
 
 from ..models import Node, NodeFeature, NodeFeatureAssignment
 from apps.content.utils import capture_screenshot, save_screenshot
@@ -179,19 +180,61 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return None
         return feature
 
+    def _screenshot_runtime_eligible(self, request, *, node):
+        """Return whether screenshot runtime prerequisites are currently satisfied."""
+
+        try:
+            feature = NodeFeature.objects.get(slug="screenshot-poll")
+        except NodeFeature.DoesNotExist:
+            self.message_user(
+                request,
+                "Take Screenshot is unavailable because the screenshot node feature is not configured.",
+                level=messages.ERROR,
+            )
+            return False
+
+        from ..feature_checks import feature_checks
+
+        result = feature_checks.run(feature, node=node)
+        if result is None:
+            self.message_user(
+                request,
+                "Take Screenshot is unavailable because no screenshot eligibility check is configured.",
+                level=messages.ERROR,
+            )
+            return False
+        if not result.success:
+            self.message_user(request, result.message, level=result.level)
+            return False
+        return True
+
     def take_screenshot(self, request):
-        feature = self._ensure_feature_enabled(
-            request, "screenshot-poll", "Take Screenshot"
-        )
-        if not feature:
+        suite_feature = Feature.objects.filter(slug="screenshot-capture").first()
+        if suite_feature is None:
+            self.message_user(
+                request,
+                "Take Screenshot is unavailable because the screenshot suite feature is not configured.",
+                level=messages.ERROR,
+            )
             return redirect("..")
+        if not suite_feature.is_enabled:
+            self.message_user(
+                request,
+                f"{suite_feature.display} is disabled.",
+                level=messages.WARNING,
+            )
+            return redirect("..")
+
+        node = Node.get_local()
+        if not self._screenshot_runtime_eligible(request, node=node):
+            return redirect("..")
+
         url = request.build_absolute_uri("/")
         try:
             path = capture_screenshot(url)
         except Exception as exc:  # pragma: no cover - depends on selenium setup
             self.message_user(request, str(exc), level=messages.ERROR)
             return redirect("..")
-        node = Node.get_local()
         sample = save_screenshot(path, node=node, method="DEFAULT_ACTION")
         if not sample:
             self.message_user(
@@ -396,6 +439,23 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return JsonResponse({"detail": "Local node not found"}, status=404)
 
         if should_enable:
+            from ..feature_checks import feature_checks
+
+            result = feature_checks.run(feature, node=node)
+            if result is None:
+                return JsonResponse(
+                    {"detail": "Feature eligibility check is not configured"},
+                    status=400,
+                )
+            if not result.success:
+                return JsonResponse(
+                    {
+                        "detail": "Feature is not eligible for enablement",
+                        "message": result.message,
+                    },
+                    status=400,
+                )
+
             _, created = NodeFeatureAssignment.objects.update_or_create(
                 node=node,
                 feature=feature,
