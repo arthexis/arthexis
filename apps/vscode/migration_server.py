@@ -225,12 +225,17 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
             rel_path = "/".join((*rel_parts, name)) if rel_parts else name
             if not _should_watch_file(rel_path):
                 continue
-            normalized_fs_root = root.replace("\\", os.sep).replace("/", os.sep)
-            full_path = Path(normalized_fs_root, name)
-            try:
-                snapshot[rel_path] = full_path.stat().st_mtime_ns
-            except FileNotFoundError:
-                continue
+            candidate_paths = [Path(root, name)]
+            if ("\\" in root or "/" in root) and os.sep not in root:
+                normalized_fs_root = root.replace("\\", os.sep).replace("/", os.sep)
+                candidate_paths.append(Path(normalized_fs_root, name))
+
+            for full_path in candidate_paths:
+                try:
+                    snapshot[rel_path] = full_path.stat().st_mtime_ns
+                    break
+                except FileNotFoundError:
+                    continue
     return snapshot
 
 
