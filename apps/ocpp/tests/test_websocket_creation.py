@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.features.models import Feature
-from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.models import Node
 from apps.ocpp import store
 from apps.ocpp.consumers import (
     CSMSConsumer,
@@ -87,18 +87,15 @@ def local_node(monkeypatch):
 
 @pytest.fixture
 def charge_point_features(local_node):
-    node_feature, _ = NodeFeature.objects.get_or_create(
-        slug="charge-points",
-        defaults={"display": "Charge Points"},
-    )
+    """Return local node plus suite feature used for OCPP admission tests."""
+
     suite_feature, _ = Feature.objects.get_or_create(
         slug="ocpp-16-charge-point",
         defaults={"display": "OCPP 1.6 Charge Point"},
     )
-    suite_feature.node_feature = node_feature
     suite_feature.is_enabled = True
-    suite_feature.save(update_fields=["node_feature", "is_enabled"])
-    return local_node, node_feature, suite_feature
+    suite_feature.save(update_fields=["is_enabled"])
+    return local_node, suite_feature
 
 
 @pytest.mark.critical
@@ -129,16 +126,18 @@ def test_charge_point_created_for_new_websocket_path():
 
         async def fetch_charger():
             for _ in range(20):
-                charger = await database_sync_to_async(Charger.objects.filter(
-                    charger_id=serial, connector_id=None
-                ).first)()
+                charger = await database_sync_to_async(
+                    Charger.objects.filter(charger_id=serial, connector_id=None).first
+                )()
                 if charger is not None:
                     return charger
                 await asyncio.sleep(0.1)
             return None
 
         charger = await fetch_charger()
-        assert charger is not None, "Expected a charger to be created after websocket connect"
+        assert (
+            charger is not None
+        ), "Expected a charger to be created after websocket connect"
         assert charger.last_path == path
 
         await _finalize_communicator(communicator)
@@ -148,15 +147,17 @@ def test_charge_point_created_for_new_websocket_path():
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
+def test_ocpp_connection_allowed_without_legacy_charge_point_node_feature(
     charge_point_features,
 ):
-    _local_node, _node_feature, _ = charge_point_features
+    """Regression: websocket admission no longer depends on node feature toggles."""
+
+    _local_node, _suite_feature = charge_point_features
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/CP-NODE-FEATURE-OFF")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
-        assert connected is False
+        assert connected is True
         await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
@@ -164,22 +165,19 @@ def test_ocpp_connection_blocked_when_charge_point_node_feature_disabled(
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_new_charge_point_blocked_when_creation_feature_disabled(
+def test_new_charge_point_allowed_when_creation_feature_disabled(
     charge_point_features,
 ):
-    local_node, node_feature, suite_feature = charge_point_features
-    NodeFeatureAssignment.objects.update_or_create(
-        node=local_node, feature=node_feature
-    )
+    """Regression: suite feature state must not block websocket admission."""
+
+    _local_node, suite_feature = charge_point_features
     suite_feature.is_enabled = False
     suite_feature.save(update_fields=["is_enabled"])
 
     async def run_scenario():
-        communicator = WebsocketCommunicator(
-            application, "/CP-CREATION-FEATURE-OFF"
-        )
+        communicator = WebsocketCommunicator(application, "/CP-CREATION-FEATURE-OFF")
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
-        assert connected is False
+        assert connected is True
         await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
@@ -190,10 +188,7 @@ def test_new_charge_point_blocked_when_creation_feature_disabled(
 def test_known_charge_point_allowed_when_creation_feature_disabled(
     charge_point_features,
 ):
-    local_node, node_feature, suite_feature = charge_point_features
-    NodeFeatureAssignment.objects.update_or_create(
-        node=local_node, feature=node_feature
-    )
+    _local_node, suite_feature = charge_point_features
     suite_feature.is_enabled = False
     suite_feature.save(update_fields=["is_enabled"])
     Charger.objects.create(charger_id="CP-KNOWN", connector_id=None)
@@ -301,6 +296,7 @@ def test_connect_maps_ocpp16j_subprotocol_to_ocpp16_version():
 
     async_to_sync(run_scenario)()
 
+
 def test_ocpp_websocket_rate_limit_enforced():
     async def run_scenario():
         serial = "CP-RATE-LIMIT"
@@ -380,9 +376,7 @@ def test_pending_connection_replaced_on_reconnect():
         close_event = await first.receive_output(1)
         assert close_event["type"] == "websocket.close"
 
-        assert (
-            store.connections[store.pending_key(serial)] is not existing_consumer
-        )
+        assert store.connections[store.pending_key(serial)] is not existing_consumer
 
         await second.disconnect()
         await first.wait()
@@ -531,9 +525,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
 
     @pytest.mark.slow
     def test_cp_simulator_connects_with_default_fixture(self):
-        call_command(
-            "loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json"
-        )
+        call_command("loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json")
         simulator = Simulator.objects.get(name="Local CP 2")
         config = simulator.as_config()
         config.pre_charge_delay = 0
@@ -547,7 +539,9 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         async_to_sync(cp_simulator._run_session)()
 
         if cp_simulator._last_close_code is None:
-            pytest.skip("Live websocket handshake did not complete in this environment.")
+            pytest.skip(
+                "Live websocket handshake did not complete in this environment."
+            )
 
         assert cp_simulator._last_ws_subprotocol == "ocpp1.6"
         assert cp_simulator._last_close_code == 1000
@@ -572,7 +566,8 @@ def test_rejects_invalid_serial_from_path_logs_reason():
     store_key = store.pending_key("<charger_id>")
     entries = list(store.logs.get("charger", {}).get(store_key, []))
     assert any(
-        "Serial Number placeholder values such as <charger_id> are not allowed." in entry
+        "Serial Number placeholder values such as <charger_id> are not allowed."
+        in entry
         for entry in entries
     )
 
@@ -603,8 +598,12 @@ def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_when_missing_header():
-    user = get_user_model().objects.create_user(username="auth-missing", password="secret")
-    charger = Charger.objects.create(charger_id="AUTH-MISSING", connector_id=None, ws_auth_user=user)
+    user = get_user_model().objects.create_user(
+        username="auth-missing", password="secret"
+    )
+    charger = Charger.objects.create(
+        charger_id="AUTH-MISSING", connector_id=None, ws_auth_user=user
+    )
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
@@ -626,8 +625,12 @@ def test_basic_auth_rejects_when_missing_header():
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_header_format():
-    user = get_user_model().objects.create_user(username="auth-invalid", password="secret")
-    charger = Charger.objects.create(charger_id="AUTH-INVALID", connector_id=None, ws_auth_user=user)
+    user = get_user_model().objects.create_user(
+        username="auth-invalid", password="secret"
+    )
+    charger = Charger.objects.create(
+        charger_id="AUTH-INVALID", connector_id=None, ws_auth_user=user
+    )
 
     async def run_scenario():
         communicator = WebsocketCommunicator(
@@ -644,14 +647,18 @@ def test_basic_auth_rejects_invalid_header_format():
 
     store_key = store.pending_key(charger.charger_id)
     entries = list(store.logs.get("charger", {}).get(store_key, []))
-    assert any("HTTP Basic authentication header is invalid" in entry for entry in entries)
+    assert any(
+        "HTTP Basic authentication header is invalid" in entry for entry in entries
+    )
 
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_credentials():
     user = get_user_model().objects.create_user(username="auth-fail", password="secret")
-    charger = Charger.objects.create(charger_id="AUTH-FAIL", connector_id=None, ws_auth_user=user)
+    charger = Charger.objects.create(
+        charger_id="AUTH-FAIL", connector_id=None, ws_auth_user=user
+    )
 
     async def run_scenario():
         communicator = WebsocketCommunicator(
@@ -674,8 +681,12 @@ def test_basic_auth_rejects_invalid_credentials():
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_unauthorized_user():
-    authorized = get_user_model().objects.create_user(username="authorized", password="secret")
-    unauthorized = get_user_model().objects.create_user(username="unauthorized", password="secret")
+    authorized = get_user_model().objects.create_user(
+        username="authorized", password="secret"
+    )
+    unauthorized = get_user_model().objects.create_user(
+        username="unauthorized", password="secret"
+    )
     charger = Charger.objects.create(
         charger_id="AUTH-UNAUTH", connector_id=None, ws_auth_user=authorized
     )
@@ -709,7 +720,9 @@ def test_basic_auth_rejects_unauthorized_user():
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_authorized_user():
     user = get_user_model().objects.create_user(username="auth-ok", password="secret")
-    charger = Charger.objects.create(charger_id="AUTH-OK", connector_id=None, ws_auth_user=user)
+    charger = Charger.objects.create(
+        charger_id="AUTH-OK", connector_id=None, ws_auth_user=user
+    )
 
     connection_result: dict[str, object] = {}
 
