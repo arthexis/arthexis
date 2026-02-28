@@ -20,6 +20,7 @@ class CoreConfig(AppConfig):
         _configure_urlfield_assume_scheme()
         _connect_sqlite_wal()
         _enable_usage_analytics()
+        _register_social_auth_checks()
 
 
 def _setup_celery_beat_integrations():
@@ -460,3 +461,11 @@ def _enable_usage_analytics():
 
 
 _configure_urlfield_assume_scheme()
+
+
+def _register_social_auth_checks() -> None:
+    """Load social-auth checks and enforce startup validation."""
+
+    from apps.core.social_auth_checks import validate_reddit_oauth_settings
+
+    validate_reddit_oauth_settings()

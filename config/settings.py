@@ -532,6 +532,10 @@ INSTALLED_APPS = [
     "import_export",
     "django_object_actions",
     "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.reddit",
     "channels",
     "graphene_django",
     "apps.celery.beat_app.CeleryBeatConfig",
@@ -585,6 +589,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "apps.ops.middleware.ActiveOperationMiddleware",
     "config.middleware.UsageAnalyticsMiddleware",
     "apps.sigils.middleware.SigilContextMiddleware",
@@ -729,7 +734,34 @@ AUTHENTICATION_BACKENDS = [
     "apps.users.backends.PasswordOrOTPBackend",
     "apps.users.backends.TempPasswordBackend",
     "apps.users.backends.RFIDBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
+
+REDDIT_AUTH_ENABLED = env_bool("REDDIT_AUTH_ENABLED", False)
+REDDIT_OAUTH_CLIENT_ID = os.environ.get("REDDIT_OAUTH_CLIENT_ID", "").strip()
+REDDIT_OAUTH_CLIENT_SECRET = os.environ.get("REDDIT_OAUTH_CLIENT_SECRET", "").strip()
+REDDIT_OAUTH_REDIRECT_URI = os.environ.get("REDDIT_OAUTH_REDIRECT_URI", "").strip()
+_reddit_scope_env = os.environ.get("REDDIT_OAUTH_SCOPES", "identity")
+REDDIT_OAUTH_SCOPES = [
+    scope.strip() for scope in _reddit_scope_env.split(",") if scope.strip()
+] or ["identity"]
+
+SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_STORE_TOKENS = True
+SOCIALACCOUNT_PROVIDERS = {
+    "reddit": {
+        "SCOPE": REDDIT_OAUTH_SCOPES,
+        "AUTH_PARAMS": {"duration": "permanent"},
+        "APPS": [
+            {
+                "client_id": REDDIT_OAUTH_CLIENT_ID,
+                "secret": REDDIT_OAUTH_CLIENT_SECRET,
+                "key": "",
+                "redirect_uri": REDDIT_OAUTH_REDIRECT_URI,
+            }
+        ],
+    }
+}
 
 # Use the custom login view for all authentication redirects.
 LOGIN_URL = "pages:login"

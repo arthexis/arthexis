@@ -36,6 +36,7 @@ django-mermaid==0.1.0
 django-import-export==4.4.0
 django-object-actions==5.0.0
 django-otp==1.7.0
+django-allauth==65.11.2
 django-parler==2.3
 django-timezone-field==7.2.1
 dnspython==2.7.0
