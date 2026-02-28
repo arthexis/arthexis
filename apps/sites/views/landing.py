@@ -67,7 +67,9 @@ def index(request):
     """Render the public home page or interface fallback when configured."""
 
     site = get_site(request)
-    interface_enabled = is_suite_feature_enabled("operator-site-interface", default=True)
+    interface_enabled = is_suite_feature_enabled(
+        "operator-site-interface", default=True
+    )
     if not interface_enabled:
         interface_landing = getattr(site, "interface_landing", None) if site else None
         if (
@@ -248,6 +250,15 @@ def changelog_report_data(request):
 
 @require_POST
 def submit_user_story(request):
+    if not is_suite_feature_enabled("feedback-ingestion", default=True):
+        return JsonResponse(
+            {
+                "success": False,
+                "errors": {"__all__": [_("Feedback ingestion is disabled.")]},
+            },
+            status=404,
+        )
+
     throttle_seconds = getattr(settings, "USER_STORY_THROTTLE_SECONDS", 300)
     client_ip = _get_client_ip(request)
     cache_key = None
