@@ -57,7 +57,7 @@ class ConnectionFlowMixin:
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
     async def _allow_charge_point_connection_legacy(
-        self, existing_charger: Charger | None
+        self, _existing_charger: Charger | None
     ) -> bool:
         """Always accept OCPP websocket connections.
 
@@ -67,7 +67,6 @@ class ConnectionFlowMixin:
         """
 
         def _resolve_feature_reason() -> str | None:
-            del existing_charger
             node = Node.get_local()
             if not node:
                 logger.warning(

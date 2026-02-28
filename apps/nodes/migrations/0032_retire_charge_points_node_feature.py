@@ -22,8 +22,6 @@ def restore_legacy_charge_point_node_feature(apps, schema_editor):
         slug=LEGACY_CHARGE_POINTS_SLUG,
         defaults={
             "display": "Charge Points",
-            "is_enabled": True,
-            "control": "manual",
         },
     )
 
