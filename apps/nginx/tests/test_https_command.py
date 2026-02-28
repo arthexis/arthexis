@@ -738,6 +738,42 @@ def test_https_renew_refreshes_expiration_before_due_check(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_renew_keeps_missing_certificate_files_due(monkeypatch):
+    """`--renew` should still renew due certs when their on-disk certificate file is missing."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="missing-file-example-com-certbot",
+        domain="missing-file.example.com",
+        certificate_path="/definitely/missing/fullchain.pem",
+        certificate_key_path="/definitely/missing/privkey.pem",
+        expiration_date=timezone.now() - timedelta(days=1),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+
+    def fake_update_expiration_date(self, *, sudo: str = "sudo"):
+        self.expiration_date = None
+        return None
+
+    renewed_ids: list[int] = []
+
+    def fake_renew(self, *, sudo: str = "sudo"):
+        renewed_ids.append(self.pk)
+        return "renewed"
+
+    monkeypatch.setattr(CertificateBase, "update_expiration_date", fake_update_expiration_date)
+    monkeypatch.setattr(CertificateBase, "renew", fake_renew)
+
+    out = StringIO()
+    call_command("https", "--renew", "--godaddy", "missing-file.example.com", "--no-sudo", stdout=out)
+
+    assert renewed_ids == [cert.pk]
+    assert "Renewed 1 certificate(s)." in out.getvalue()
+
+
+@pytest.mark.django_db
 def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
     """`--renew --godaddy <domain>` should emit a domain-scoped no-op message when nothing is due."""
 

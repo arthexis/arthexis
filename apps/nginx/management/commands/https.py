@@ -696,24 +696,19 @@ class Command(BaseCommand):
         if domain_filter:
             candidate_certificates = candidate_certificates.filter(domain=domain_filter)
 
+        if require_godaddy:
+            candidate_certificates = candidate_certificates.filter(
+                certbotcertificate__challenge_type=CertbotCertificate.ChallengeType.GODADDY
+            )
+        elif require_local:
+            candidate_certificates = candidate_certificates.filter(selfsignedcertificate__isnull=False)
+
         candidate_list = list(candidate_certificates)
 
-        if require_godaddy:
-            candidate_list = [
-                certificate
-                for certificate in candidate_list
-                if isinstance(certificate._specific_certificate, CertbotCertificate)
-                and certificate._specific_certificate.challenge_type
-                == CertbotCertificate.ChallengeType.GODADDY
-            ]
-        elif require_local:
-            candidate_list = [
-                certificate
-                for certificate in candidate_list
-                if isinstance(certificate._specific_certificate, SelfSignedCertificate)
-            ]
+        due_certificates: list[CertificateBase] = []
 
         for certificate in candidate_list:
+            stored_expiration = certificate.expiration_date
             try:
                 certificate.update_expiration_date(sudo=sudo)
             except RuntimeError as exc:
@@ -722,12 +717,23 @@ class Command(BaseCommand):
                         f"Could not refresh expiration for {certificate.domain}: {exc}"
                     )
                 )
+            refreshed_expiration = certificate.expiration_date
 
-        due_certificates = [
-            certificate
-            for certificate in candidate_list
-            if certificate.expiration_date and certificate.expiration_date <= now
-        ]
+            if refreshed_expiration and refreshed_expiration <= now:
+                due_certificates.append(certificate)
+                continue
+
+            # If the cert file went missing, update_expiration_date clears expiration_date.
+            # Keep these certificates due so renewal can recover filesystem drift.
+            certificate_file_missing = (
+                bool(certificate.certificate_path)
+                and not Path(certificate.certificate_path).exists()
+            )
+            if refreshed_expiration is None and (
+                certificate_file_missing
+                or (stored_expiration is not None and stored_expiration <= now)
+            ):
+                due_certificates.append(certificate)
 
         if not due_certificates:
             if candidate_list:
