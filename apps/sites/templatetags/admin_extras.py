@@ -429,6 +429,37 @@ def model_admin_actions(context, app_label, model_name):
                         url = reverse(base + "changelist") + f"?action={action_name}"
             add_action(action_name, func, label, url)
 
+    dashboard_getter = getattr(model_admin, "get_dashboard_actions", None)
+    if callable(dashboard_getter):
+        try:
+            dashboard_actions = dashboard_getter(request)
+        except TypeError:
+            dashboard_actions = dashboard_getter()
+        for action_name in dashboard_actions or []:
+            if action_name in seen:
+                continue
+            func = getattr(model_admin, action_name, None)
+            if func is None:
+                continue
+            label = getattr(
+                func,
+                "label",
+                getattr(
+                    func,
+                    "short_description",
+                    action_name.replace("_", " "),
+                ),
+            )
+            dashboard_url = getattr(func, "dashboard_url", None)
+            if isinstance(dashboard_url, str):
+                try:
+                    url = reverse(dashboard_url)
+                except NoReverseMatch:
+                    url = dashboard_url
+            else:
+                url = ""
+            add_action(action_name, func, label, url)
+
     if request is not None:
         action_cache[cache_key] = actions
     return actions
