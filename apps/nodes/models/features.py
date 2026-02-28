@@ -20,6 +20,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.audio.utils import has_audio_capture_device
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
+from apps.clocks.utils import has_clock_device
 from apps.emails import mailer
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
@@ -194,10 +195,11 @@ class NodeFeatureMixin:
     AP_ROUTER_SSID = "gelectriic-ap"
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "ap-router",
+        "gpio-rtc",
         "lcd-screen",
         "gui-toast",
         "video-cam",
-        "ap-router",
         "llm-summary",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
@@ -381,6 +383,8 @@ class NodeFeatureMixin:
             return self._has_rpi_camera()
         if slug == "ap-router":
             return self._hosts_gelectriic_ap()
+        if slug == "gpio-rtc":
+            return has_clock_device()
         if slug == "llm-summary":
             from django.db.utils import OperationalError
 
