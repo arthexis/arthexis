@@ -33,11 +33,11 @@ class _LinkParser(HTMLParser):
         self.links.append(dict(attrs))
 
 
-def test_remote_action_token_admin_add_defaults_to_request_user(admin_client):
+def test_remote_action_token_admin_add_defaults_to_request_user(admin_client, admin_user):
     """Regression: add form defaults the owner to the logged-in admin user."""
 
     request = RequestFactory().get(reverse("admin:actions_remoteactiontoken_add"))
-    request.user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    request.user = admin_user
 
     model_admin = admin.site._registry[RemoteActionToken]
     initial = model_admin.get_changeform_initial_data(request)
@@ -45,11 +45,11 @@ def test_remote_action_token_admin_add_defaults_to_request_user(admin_client):
     assert initial["user"] == request.user.pk
 
 
-def test_remote_action_token_admin_add_defaults_expiration_to_24h(admin_client):
+def test_remote_action_token_admin_add_defaults_expiration_to_24h(admin_client, admin_user):
     """Regression: add form defaults expiration around 24 hours into the future."""
 
     request = RequestFactory().get(reverse("admin:actions_remoteactiontoken_add"))
-    request.user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    request.user = admin_user
 
     model_admin = admin.site._registry[RemoteActionToken]
     before = timezone.localtime(timezone.now() + datetime.timedelta(hours=24))
@@ -59,10 +59,10 @@ def test_remote_action_token_admin_add_defaults_expiration_to_24h(admin_client):
     assert before <= initial["expires_at"] <= after
 
 
-def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_client):
+def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_client, admin_user):
     """Regression: one-click generate tool issues a token for current user and redirects."""
 
-    user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    user = admin_user
 
     response = admin_client.get(reverse("admin:actions_remoteactiontoken_generate_token"), follow=True)
 
