@@ -24,15 +24,34 @@ class FavoriteToggleViewTests(TestCase):
         )
         self.client.force_login(self.user)
         self.content_type = ContentType.objects.get_for_model(Favorite)
+        self.user_content_type = ContentType.objects.get_for_model(get_user_model())
 
-    def test_get_renders_confirmation_for_new_favorite(self):
+    def test_get_new_favorite_creates_defaults_and_redirects_to_model_changelist(self):
+        """Regression: first toggle click should add with defaults and skip config UI."""
+
+        url = reverse("admin:favorite_toggle", args=[self.user_content_type.pk])
+
+        response = self.client.get(url, {"next": "/admin/"})
+
+        expected_url = reverse("admin:users_user_changelist")
+        self.assertRedirects(response, expected_url)
+
+        favorite = Favorite.objects.get(user=self.user, content_type=self.user_content_type)
+        self.assertEqual(favorite.custom_label, "")
+        self.assertEqual(favorite.priority, 0)
+        self.assertTrue(favorite.user_data)
+
+    def test_get_existing_favorite_renders_configuration_form(self):
+        """Regression: clicking a favorited star should open configuration."""
+
+        Favorite.objects.create(user=self.user, content_type=self.content_type)
         url = reverse("admin:favorite_toggle", args=[self.content_type.pk])
 
         response = self.client.get(url, {"next": "/admin/"})
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "admin/favorite_confirm.html")
-        self.assertContains(response, "Add Favorite")
+        self.assertContains(response, "Update Favorite")
 
     def test_duplicate_add_falls_back_to_existing_favorite(self):
         url = reverse("admin:favorite_toggle", args=[self.content_type.pk])

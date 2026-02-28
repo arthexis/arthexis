@@ -5,7 +5,9 @@ from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import NoReverseMatch
 from django.urls import path
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from config.request_utils import is_https_request
@@ -39,10 +41,40 @@ def _get_safe_next_url(request):
     return None
 
 
+def _get_model_changelist_url(content_type: ContentType) -> str:
+    """Return the admin changelist URL for the model behind ``content_type``."""
+
+    model = content_type.model_class()
+    if model is None:
+        return reverse("admin:index")
+
+    try:
+        return reverse(f"admin:{content_type.app_label}_{content_type.model}_changelist")
+    except NoReverseMatch:
+        return reverse("admin:index")
+
+
 def favorite_toggle(request, ct_id):
+    """Toggle or configure a favorite entry for a given content type."""
+
     ct = get_object_or_404(ContentType, pk=ct_id)
     fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
     next_url = _get_safe_next_url(request)
+    model_changelist_url = _get_model_changelist_url(ct)
+
+    if request.method == "GET" and not fav:
+        Favorite.objects.get_or_create(
+            user=request.user,
+            content_type=ct,
+            defaults={
+                "custom_label": "",
+                "user_data": True,
+                "priority": 0,
+            },
+        )
+        clear_user_favorites_cache(request.user)
+        return redirect(model_changelist_url)
+
     if request.method == "POST":
         ContentType.objects.clear_cache()
         if fav and request.POST.get("remove"):
