@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.contrib.admin.sites import site
 
 import pytest
 
@@ -24,3 +25,22 @@ def test_update_selected_progress_skips_downstream(admin_client):
     assert payload["status"] == "skipped"
     assert payload["local"]["message"] == "Downstream Skipped"
     assert payload["remote"]["message"] == "Downstream Skipped"
+
+
+@pytest.mark.django_db
+def test_relation_column_displays_icon_for_each_relation():
+    """The relation changelist column includes a relation-specific icon."""
+
+    model_admin = site._registry[Node]
+    icon_expectations = {
+        Node.Relation.UPSTREAM: "⬆️",
+        Node.Relation.DOWNSTREAM: "⬇️",
+        Node.Relation.PEER: "↔️",
+        Node.Relation.SELF: "🏠",
+    }
+
+    for relation, icon in icon_expectations.items():
+        node = Node(hostname=f"node-{relation}", current_relation=relation)
+        html = str(model_admin.relation(node))
+        assert icon in html
+        assert node.get_current_relation_display() in html
