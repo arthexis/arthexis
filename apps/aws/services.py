@@ -191,7 +191,10 @@ def sync_lightsail_instances(
 ) -> dict[str, Any]:
     """Load Lightsail instances and upsert them into local storage."""
 
-    region_list = list(regions or _lightsail_regions(credentials))
+    if regions is None:
+        region_list = list(_lightsail_regions(credentials))
+    else:
+        region_list = list(regions)
     created = 0
     updated = 0
     instances: list[LightsailInstance] = []

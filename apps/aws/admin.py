@@ -196,9 +196,14 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
         return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
 
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
+        credentials = (
+            queryset.order_by("name")
+            if queryset is not None and queryset.exists()
+            else AWSCredentials.objects.order_by("name")
+        )
         self._sync_credentials(
             request,
-            AWSCredentials.objects.order_by("name"),
+            credentials,
             discovery_label=_("Load Instances"),
         )
         return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
