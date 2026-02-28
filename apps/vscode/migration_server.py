@@ -8,6 +8,7 @@ import hashlib
 import json
 import multiprocessing
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -205,17 +206,27 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
     """Return a snapshot of watched files under *base_dir*."""
 
     snapshot: Dict[str, int] = {}
+    base_dir_str = os.fspath(base_dir)
+    normalized_base = re.sub(r"[\\/]+", "/", base_dir_str).rstrip("/")
     for root, dirs, files in os.walk(base_dir):
-        rel_root = Path(root).relative_to(base_dir)
-        if _should_skip_dir(rel_root.parts):
+        normalized_root = re.sub(r"[\\/]+", "/", root).rstrip("/")
+        if normalized_root == normalized_base:
+            rel_parts: tuple[str, ...] = ()
+        elif normalized_root.startswith(f"{normalized_base}/"):
+            rel_parts = tuple(part for part in normalized_root[len(normalized_base) + 1 :].split("/") if part)
+        else:
+            rel_root = os.path.relpath(root, base_dir_str)
+            rel_parts = tuple(part for part in re.split(r"[\\/]", rel_root) if part and part != ".")
+        if _should_skip_dir(rel_parts):
             dirs[:] = []
             continue
-        dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_root.parts, d))]
+        dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_parts, d))]
         for name in files:
-            rel_path = (rel_root / name).as_posix()
+            rel_path = "/".join((*rel_parts, name)) if rel_parts else name
             if not _should_watch_file(rel_path):
                 continue
-            full_path = Path(root, name)
+            normalized_fs_root = root.replace("\\", os.sep).replace("/", os.sep)
+            full_path = Path(normalized_fs_root, name)
             try:
                 snapshot[rel_path] = full_path.stat().st_mtime_ns
             except FileNotFoundError:
