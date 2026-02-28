@@ -18,8 +18,12 @@ def restore_ftp_server_node_feature(apps, schema_editor):
 
     NodeFeature = apps.get_model("nodes", "NodeFeature")
     NodeRole = apps.get_model("nodes", "NodeRole")
+    db_alias = schema_editor.connection.alias
+    feature_manager = getattr(NodeFeature, "all_objects", NodeFeature._base_manager).using(
+        db_alias
+    )
 
-    feature, _ = NodeFeature.objects.get_or_create(
+    feature, created = feature_manager.get_or_create(
         slug=FTP_SERVER_SLUG,
         defaults={
             "display": FTP_SERVER_DISPLAY,
@@ -27,15 +31,21 @@ def restore_ftp_server_node_feature(apps, schema_editor):
             "is_deleted": False,
         },
     )
-    if feature.display != FTP_SERVER_DISPLAY:
-        feature.display = FTP_SERVER_DISPLAY
-    if not feature.is_seed_data:
-        feature.is_seed_data = True
-    if feature.is_deleted:
-        feature.is_deleted = False
-    feature.save(update_fields=["display", "is_seed_data", "is_deleted"])
+    if not created:
+        update_fields = []
+        if feature.display != FTP_SERVER_DISPLAY:
+            feature.display = FTP_SERVER_DISPLAY
+            update_fields.append("display")
+        if not feature.is_seed_data:
+            feature.is_seed_data = True
+            update_fields.append("is_seed_data")
+        if feature.is_deleted:
+            feature.is_deleted = False
+            update_fields.append("is_deleted")
+        if update_fields:
+            feature.save(update_fields=update_fields)
 
-    roles = list(NodeRole.objects.filter(name__in=FTP_SERVER_ROLE_NAMES))
+    roles = list(NodeRole.objects.using(db_alias).filter(name__in=FTP_SERVER_ROLE_NAMES))
     if roles:
         feature.roles.add(*roles)
 
