@@ -30,13 +30,13 @@
   <p>
     <label><input type="checkbox" name="user_data"{% if is_checked %} checked{% endif %}> {% translate "Mark as User Data" %}</label>
   </p>
-  <div class="submit-row">
-    <input type="submit" value="{% translate 'Save' %}" class="default">
+  <div class="submit-row admin-ui-actions">
+    <button type="submit" class="admin-ui-button admin-ui-button--primary">{% translate 'Save' %}</button>
     {% if favorite %}
-      <button type="submit" name="remove" value="1" class="button favorite-action favorite-action--danger">{% translate 'Remove' %}</button>
+      <button type="submit" name="remove" value="1" class="admin-ui-button admin-ui-button--secondary">{% translate 'Remove' %}</button>
     {% endif %}
     {% url 'admin:index' as admin_index %}
-    <a href="{{ next|default:admin_index }}">{% translate "Cancel" %}</a>
+    <a href="{{ next|default:admin_index }}" class="admin-ui-button admin-ui-button--secondary">{% translate "Cancel" %}</a>
   </div>
 </form>
 {% endblock %}

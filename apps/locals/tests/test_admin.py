@@ -52,6 +52,7 @@ class FavoriteToggleViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "admin/favorite_confirm.html")
         self.assertContains(response, "Update Favorite")
+        self.assertContains(response, "admin-ui-button admin-ui-button--primary")
 
     def test_duplicate_add_falls_back_to_existing_favorite(self):
         url = reverse("admin:favorite_toggle", args=[self.content_type.pk])
