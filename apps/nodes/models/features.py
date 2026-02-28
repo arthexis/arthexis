@@ -464,7 +464,9 @@ class NodeFeatureMixin:
         """Synchronize periodic tasks based on active features."""
         from apps.features.utils import is_suite_feature_enabled
 
-        screenshot_enabled = is_suite_feature_enabled("screenshot-capture", default=True)
+        screenshot_enabled = self.is_local and is_suite_feature_enabled(
+            "screenshot-capture", default=True
+        )
         if screenshot_enabled:
             from apps.nodes.feature_checks import feature_checks
 
@@ -472,6 +474,8 @@ class NodeFeatureMixin:
             if screenshot_feature is not None:
                 screenshot_result = feature_checks.run(screenshot_feature, node=self)
                 screenshot_enabled = bool(screenshot_result and screenshot_result.success)
+            else:
+                screenshot_enabled = False
         celery_enabled = self.is_local and self.has_feature("celery-queue")
         llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
         self._sync_screenshot_task(screenshot_enabled)

@@ -270,12 +270,19 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
     try:
         with sync_playwright() as playwright:
             executable_path = Path(playwright.chromium.executable_path)
+            browser = None
+            try:
+                browser = playwright.chromium.launch(headless=True)
+            finally:
+                if browser is not None:
+                    browser.close()
     except Exception as exc:
         return FeatureCheckResult(
             False,
             (
-                f"{feature.display} prerequisites failed: unable to inspect Chromium runtime "
-                f"({exc}). Install Playwright browsers with `python -m playwright install chromium`."
+                f"{feature.display} prerequisites failed: Chromium could not be launched "
+                f"({exc}). Install Playwright browsers with `python -m playwright install chromium` "
+                "and verify runtime dependencies are present."
             ),
             messages.ERROR,
         )
@@ -290,6 +297,7 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
         )
 
     details.append(f"Chromium executable: {executable_path}")
+    details.append("Chromium launch: ok")
     if not executable_path.exists():
         return FeatureCheckResult(
             False,
