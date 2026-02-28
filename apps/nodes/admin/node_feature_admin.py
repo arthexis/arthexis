@@ -396,6 +396,18 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return JsonResponse({"detail": "Local node not found"}, status=404)
 
         if should_enable:
+            from ..feature_checks import feature_checks
+
+            result = feature_checks.run(feature, node=node)
+            if result is not None and not result.success:
+                return JsonResponse(
+                    {
+                        "detail": result.message,
+                        "eligible": False,
+                        "manual_enablement": self._manual_enablement_data(feature, node),
+                    },
+                    status=400,
+                )
             _, created = NodeFeatureAssignment.objects.update_or_create(
                 node=node,
                 feature=feature,

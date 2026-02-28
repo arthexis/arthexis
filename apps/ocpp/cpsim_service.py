@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
+
+from apps.features.models import Feature
+from apps.features.utils import is_suite_feature_enabled
 
 
 CPSIM_FEATURE_SLUG = "cpsim-service"
@@ -69,17 +73,15 @@ def queue_cpsim_service_toggle(
 
 
 def cpsim_service_enabled() -> bool:
-    try:
-        from apps.nodes.models import NodeFeature
-    except Exception:
-        return False
-    feature = NodeFeature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()
-    return bool(feature and feature.is_enabled)
+    """Return whether the OCPP Simulator suite feature is enabled."""
+
+    return is_suite_feature_enabled(CPSIM_FEATURE_SLUG, default=False)
 
 
 def get_cpsim_feature():
+    """Return the persisted OCPP Simulator suite feature, if available."""
+
     try:
-        from apps.nodes.models import NodeFeature
-    except Exception:
+        return Feature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()
+    except (OperationalError, ProgrammingError):
         return None
-    return NodeFeature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()

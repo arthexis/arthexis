@@ -46,6 +46,19 @@ def test_discover_manual_toggle_enables_and_disables_manual_features(admin_clien
     feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "Eligible for manual enablement.",
+            messages.SUCCESS,
+        ),
+    )
+
     enable_response = admin_client.post(
         reverse("admin:nodes_nodefeature_discover_manual_toggle"),
         {"feature_id": feature.pk, "enabled": "true"},
@@ -110,4 +123,37 @@ def test_discover_progress_does_not_auto_enable_manual_features(admin_client, mo
     payload = response.json()
     assert payload["eligible"] is True
     assert payload["enablement"]["status"] == "manual"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_manual_toggle_blocks_enablement_when_feature_not_eligible(admin_client, monkeypatch):
+    """Manual toggles should refuse enablement when eligibility checks fail."""
+
+    node = Node.objects.create(hostname="manual-blocked", public_endpoint="manual-blocked")
+    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            False,
+            "Audio input device not found.",
+            messages.WARNING,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
+        {"feature_id": feature.pk, "enabled": "true"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["eligible"] is False
+    assert payload["detail"] == "Audio input device not found."
     assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
