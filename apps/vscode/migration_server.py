@@ -226,9 +226,10 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
             if not _should_watch_file(rel_path):
                 continue
             candidate_paths = [Path(root, name)]
-            if ("\\" in root or "/" in root) and os.sep not in root:
-                normalized_fs_root = root.replace("\\", os.sep).replace("/", os.sep)
-                candidate_paths.append(Path(normalized_fs_root, name))
+            normalized_fs_root = root.replace("\\", os.sep).replace("/", os.sep)
+            normalized_candidate = Path(normalized_fs_root, name)
+            if normalized_fs_root != root and normalized_candidate not in candidate_paths:
+                candidate_paths.append(normalized_candidate)
 
             for full_path in candidate_paths:
                 try:
