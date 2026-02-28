@@ -197,12 +197,12 @@ class NodeFeatureMixin:
     AP_ROUTER_SSID = "gelectriic-ap"
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "ap-router",
+        "gpio-rtc",
         "lcd-screen",
         "gui-toast",
         "video-cam",
-        "ap-router",
         "llm-summary",
-        "gpio-rtc",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
     ROLE_AUTO_FEATURE_SLUGS = {"charge-points"}
