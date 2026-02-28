@@ -69,7 +69,10 @@ def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(clie
     response = client.get(reverse("pages:index"))
 
     assert response.status_code == 200
-    assert 'id="user-story-toggle"' not in response.content.decode()
+    content = response.content.decode()
+    assert 'id="user-story-toggle"' not in content
+    assert 'id="footer-placeholder"' in content
+    assert 'pages/js/base.js' in content
 
 
 @pytest.mark.django_db

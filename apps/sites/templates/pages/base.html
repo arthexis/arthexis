@@ -467,6 +467,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
     {% url 'pages:footer-fragment' as footer_fragment_url %}
     {% if not hide_default_footer and footer_fragment_url %}
       <div
@@ -495,6 +496,7 @@
     <script src="{% static 'pages/js/chat.js' %}" defer></script>
     {% endif %}
     <script src="{% static 'pages/js/base.js' %}" defer></script>
+    {% if feedback_ingestion_enabled %}
     <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>
     {% endif %}
     <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
