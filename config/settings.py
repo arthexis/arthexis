@@ -740,7 +740,7 @@ AUTHENTICATION_BACKENDS = [
 REDDIT_AUTH_ENABLED = env_bool("REDDIT_AUTH_ENABLED", False)
 REDDIT_OAUTH_CLIENT_ID = os.environ.get("REDDIT_OAUTH_CLIENT_ID", "").strip()
 REDDIT_OAUTH_CLIENT_SECRET = os.environ.get("REDDIT_OAUTH_CLIENT_SECRET", "").strip()
-REDDIT_OAUTH_REDIRECT_URI = os.environ.get("REDDIT_OAUTH_REDIRECT_URI", "").strip()
+REDDIT_OAUTH_USER_AGENT = os.environ.get("REDDIT_OAUTH_USER_AGENT", "").strip()
 _reddit_scope_env = os.environ.get("REDDIT_OAUTH_SCOPES", "identity")
 REDDIT_OAUTH_SCOPES = [
     scope.strip() for scope in _reddit_scope_env.split(",") if scope.strip()
@@ -752,16 +752,20 @@ SOCIALACCOUNT_PROVIDERS = {
     "reddit": {
         "SCOPE": REDDIT_OAUTH_SCOPES,
         "AUTH_PARAMS": {"duration": "permanent"},
+        "USER_AGENT": REDDIT_OAUTH_USER_AGENT,
         "APPS": [
             {
                 "client_id": REDDIT_OAUTH_CLIENT_ID,
                 "secret": REDDIT_OAUTH_CLIENT_SECRET,
                 "key": "",
-                "redirect_uri": REDDIT_OAUTH_REDIRECT_URI,
             }
         ],
     }
 }
+if not REDDIT_AUTH_ENABLED:
+    SOCIALACCOUNT_PROVIDERS.pop("reddit", None)
+
+ACCOUNT_ADAPTER = "apps.core.allauth_adapter.ClosedSignupAccountAdapter"
 
 # Use the custom login view for all authentication redirects.
 LOGIN_URL = "pages:login"

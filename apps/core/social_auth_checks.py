@@ -19,19 +19,19 @@ class RedditOAuthConfig:
 
     client_id: str
     client_secret: str
-    redirect_uri: str
 
     @property
     def missing(self) -> list[str]:
         """Return a list of required Reddit OAuth settings that are not configured."""
 
-        missing: list[str] = []
-        if not self.client_id:
-            missing.append("REDDIT_OAUTH_CLIENT_ID")
-        if not self.client_secret:
-            missing.append("REDDIT_OAUTH_CLIENT_SECRET")
-        if not self.redirect_uri:
-            missing.append("REDDIT_OAUTH_REDIRECT_URI")
+        required_settings = {
+            "client_id": "REDDIT_OAUTH_CLIENT_ID",
+            "client_secret": "REDDIT_OAUTH_CLIENT_SECRET",
+        }
+        missing = []
+        for field, setting_name in required_settings.items():
+            if not getattr(self, field):
+                missing.append(setting_name)
         return missing
 
 
@@ -41,7 +41,6 @@ def _reddit_oauth_config() -> RedditOAuthConfig:
     return RedditOAuthConfig(
         client_id=getattr(settings, "REDDIT_OAUTH_CLIENT_ID", "").strip(),
         client_secret=getattr(settings, "REDDIT_OAUTH_CLIENT_SECRET", "").strip(),
-        redirect_uri=getattr(settings, "REDDIT_OAUTH_REDIRECT_URI", "").strip(),
     )
 
 
