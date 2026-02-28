@@ -1,0 +1,38 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "staff-chat-bridge",
+      "display": "Staff Chat Bridge",
+      "summary": "Gates staff-facing chat bridge UI wiring for site and admin chat widgets.",
+      "is_enabled": true,
+      "main_app": [
+        "sites"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Admin base template should only render the chat widget when this suite feature is enabled.",
+      "public_requirements": "Public base template should only render the chat widget when this suite feature is enabled.",
+      "service_requirements": "No additional backend services beyond configured pages chat socket path.",
+      "admin_views": [
+        "admin:index"
+      ],
+      "public_views": [
+        "pages:index"
+      ],
+      "service_views": [
+        "settings:PAGES_CHAT_SOCKET_PATH"
+      ],
+      "code_locations": [
+        "apps/sites/context_processors.py",
+        "apps/sites/templates/pages/base.html",
+        "apps/sites/templates/admin/base_site.html"
+      ],
+      "protocol_coverage": {},
+      "created_at": "2026-02-28T00:00:00Z",
+      "updated_at": "2026-02-28T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]
