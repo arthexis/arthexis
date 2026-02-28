@@ -15,6 +15,7 @@ CUSTOM_CSS_SNIPPETS = ("<style", 'rel="stylesheet"', "rel='stylesheet'")
 # shared framework primitives. New templates should not be added to this set;
 # instead, add the override marker with rationale in-template when truly needed.
 LEGACY_CUSTOM_ADMIN_CSS_TEMPLATES = {
+    "apps/base/templates/admin/base/model_export.html",
     "apps/core/templates/admin/change_list.html",
     "apps/core/templates/admin/core/clientreport/generate.html",
     "apps/core/templates/admin/core/product/search_orders_for_selected.html",
