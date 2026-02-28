@@ -25,6 +25,8 @@ class PyxelViewportAdmin(admin.ModelAdmin):
     def get_dashboard_actions(self, request):
         """Expose dashboard-only quick actions for the model row."""
 
+        if not self.has_view_or_change_permission(request):
+            return []
         return list(self.dashboard_actions)
 
     def open_viewport_dashboard(self, request):
