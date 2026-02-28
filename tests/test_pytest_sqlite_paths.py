@@ -8,7 +8,6 @@ import pytest
 import conftest
 
 
-@pytest.mark.regression
 def test_set_writable_sqlite_env_replaces_unwritable_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Fallback SQLite paths should replace caller config when directory is not writable."""
 
@@ -21,7 +20,6 @@ def test_set_writable_sqlite_env_replaces_unwritable_config(monkeypatch: pytest.
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == str(fallback)
 
 
-@pytest.mark.regression
 def test_set_writable_sqlite_env_preserves_writable_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Writable caller-provided SQLite paths should remain unchanged."""
 
@@ -33,7 +31,6 @@ def test_set_writable_sqlite_env_preserves_writable_override(monkeypatch: pytest
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == str(configured)
 
 
-@pytest.mark.regression
 @pytest.mark.parametrize("configured", [":memory:", "file:memdb1?mode=memory&cache=shared"])
 def test_set_writable_sqlite_env_preserves_special_sqlite_names(
     monkeypatch: pytest.MonkeyPatch,
