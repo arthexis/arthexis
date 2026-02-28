@@ -1,0 +1,46 @@
+"""Regression coverage for non-interactive upgrade safety checks.
+
+These tests intentionally validate script text rather than executing ``upgrade.sh``.
+The goal is to lock in two historical fixes that protect unattended workflows:
+
+* ``upgrade.sh --check`` must not attempt to prime sudo credentials.
+* generated merge migrations are cleaned before dirty-tree checks.
+"""
+
+from pathlib import Path
+
+import pytest
+
+
+pytestmark = [pytest.mark.critical, pytest.mark.regression]
+
+
+def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
+    """Keep ``--check`` read-only so CI/automation does not block on sudo prompts."""
+
+    script_text = Path("upgrade.sh").read_text(encoding="utf-8")
+
+    assert '. "$BASE_DIR/scripts/helpers/common.sh"' in script_text
+
+    parse_start = script_text.index("while [[ $# -gt 0 ]]; do\n")
+    parse_done = script_text.index("done\n", parse_start)
+    gate = (
+        "if [[ $CHECK_ONLY -ne 1 ]]; then\n"
+        "  arthexis_prime_sudo_credentials >/dev/null 2>&1 || true\n"
+        "fi"
+    )
+
+    assert gate in script_text
+    assert script_text.index(gate) > parse_done
+
+
+def test_upgrade_script_cleans_generated_merge_migrations() -> None:
+    """Regression: remove generated merge migrations before dirty-tree checks."""
+
+    script_text = Path("upgrade.sh").read_text(encoding="utf-8")
+
+    assert "Removing generated migration" in script_text
+    assert (
+        "^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\\.py$"
+        in script_text
+    )
