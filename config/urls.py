@@ -132,6 +132,16 @@ urlpatterns = [
         admin.site.admin_view(pyxel_admin_views.open_live_stats_view),
         name="admin-pyxel-live-stats",
     ),
+    path(
+        "admin/pyxel/open-viewport/",
+        admin.site.admin_view(pyxel_admin_views.open_viewport_view),
+        name="admin-pyxel-open-viewport",
+    ),
+    path(
+        "admin/pyxel/open-viewport/<int:pk>/",
+        admin.site.admin_view(pyxel_admin_views.open_viewport_view),
+        name="admin-pyxel-open-viewport-specific",
+    ),
     path("version/", core_views.version_info, name="version-info"),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
