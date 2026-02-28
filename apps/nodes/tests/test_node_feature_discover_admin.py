@@ -10,7 +10,7 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
     """Discover progress should expose manual toggle state for manual features."""
 
     node = Node.objects.create(hostname="local-node", public_endpoint="local-node")
-    feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
+    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -45,6 +45,19 @@ def test_discover_manual_toggle_enables_and_disables_manual_features(admin_clien
     node = Node.objects.create(hostname="manual-node", public_endpoint="manual-node")
     feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "Eligible for manual enablement.",
+            messages.SUCCESS,
+        ),
+    )
 
     enable_response = admin_client.post(
         reverse("admin:nodes_nodefeature_discover_manual_toggle"),
@@ -110,4 +123,68 @@ def test_discover_progress_does_not_auto_enable_manual_features(admin_client, mo
     payload = response.json()
     assert payload["eligible"] is True
     assert payload["enablement"]["status"] == "manual"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_progress_screenshot_feature_reports_suite_control(admin_client, monkeypatch):
+    """Screenshot discover should report suite-controlled enablement when eligible."""
+
+    node = Node.objects.create(hostname="shot-node", public_endpoint="shot-node")
+    feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "Screenshot runtime is healthy.",
+            messages.SUCCESS,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["eligible"] is True
+    assert payload["enablement"]["status"] == "suite"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_manual_toggle_rejects_ineligible_feature(admin_client, monkeypatch):
+    """Manual toggle should reject enable requests when eligibility fails."""
+
+    node = Node.objects.create(hostname="manual-ineligible", public_endpoint="manual-ineligible")
+    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            False,
+            "No input device detected.",
+            messages.WARNING,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
+        {"feature_id": feature.pk, "enabled": "true"},
+    )
+
+    assert response.status_code == 400
+    assert "not eligible" in response.json()["detail"].lower()
     assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
