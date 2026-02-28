@@ -3,6 +3,7 @@ from django.contrib.admin.sites import site
 
 import pytest
 
+from apps.nodes.admin import NodeAdmin
 from apps.nodes.models import Node
 
 pytestmark = pytest.mark.critical
@@ -32,12 +33,7 @@ def test_relation_column_displays_icon_for_each_relation():
     """The relation changelist column includes a relation-specific icon."""
 
     model_admin = site._registry[Node]
-    icon_expectations = {
-        Node.Relation.UPSTREAM: "⬆️",
-        Node.Relation.DOWNSTREAM: "⬇️",
-        Node.Relation.PEER: "↔️",
-        Node.Relation.SELF: "🏠",
-    }
+    icon_expectations = NodeAdmin.RELATION_ICONS
 
     for relation, icon in icon_expectations.items():
         node = Node(hostname=f"node-{relation}", current_relation=relation)
