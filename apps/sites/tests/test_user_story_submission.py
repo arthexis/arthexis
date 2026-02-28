@@ -10,6 +10,7 @@ from django.utils.datastructures import MultiValueDict
 
 from apps.sites.forms import UserStoryForm
 from apps.sites.models import UserStory, UserStoryAttachment
+from apps.features.models import Feature
 
 
 @pytest.mark.django_db
@@ -35,6 +36,26 @@ def test_anonymous_user_cannot_upload_feedback_files(client, settings):
 
 @pytest.mark.django_db
 @pytest.mark.regression
+def test_submission_rejected_when_feedback_ingestion_feature_disabled(client, settings):
+    """Regression: submissions should be rejected when feedback ingestion is disabled."""
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+    Feature.objects.update_or_create(
+        slug="feedback-ingestion",
+        defaults={"display": "Feedback Ingestion", "is_enabled": False},
+    )
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={"rating": 4, "comments": "Disabled", "path": "/"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["success"] is False
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
 def test_authenticated_non_staff_feedback_limits_files(settings):
     """Non-staff authenticated users should be limited to configured attachment count."""
 
@@ -46,7 +67,13 @@ def test_authenticated_non_staff_feedback_limits_files(settings):
     )
 
     form = UserStoryForm(
-        data={"name": "member", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        data={
+            "name": "member",
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
         files=MultiValueDict(
             {
                 "attachments": [
@@ -76,7 +103,13 @@ def test_staff_feedback_supports_unlimited_text_and_files(settings):
     )
 
     form = UserStoryForm(
-        data={"name": "staff", "rating": 2, "comments": "x" * 1000, "path": "/admin", "messages": ""},
+        data={
+            "name": "staff",
+            "rating": 2,
+            "comments": "x" * 1000,
+            "path": "/admin",
+            "messages": "",
+        },
         files=MultiValueDict(
             {
                 "attachments": [
@@ -106,7 +139,13 @@ def test_form_enforces_comment_limit_for_non_staff():
         password="secret",
     )
     form = UserStoryForm(
-        data={"name": "commenter", "rating": 4, "comments": "x" * 401, "path": "/", "messages": ""},
+        data={
+            "name": "commenter",
+            "rating": 4,
+            "comments": "x" * 401,
+            "path": "/",
+            "messages": "",
+        },
         user=user,
     )
 
@@ -127,7 +166,13 @@ def test_form_save_attachments_after_manual_instance_save(settings):
     )
 
     form = UserStoryForm(
-        data={"name": "manualsave", "rating": 5, "comments": "Looks good", "path": "/manual", "messages": ""},
+        data={
+            "name": "manualsave",
+            "rating": 5,
+            "comments": "Looks good",
+            "path": "/manual",
+            "messages": "",
+        },
         files=MultiValueDict(
             {
                 "attachments": [
@@ -160,7 +205,13 @@ def test_attachment_limit_validation_message_uses_singular_for_one(settings):
     )
 
     form = UserStoryForm(
-        data={"name": "onefile", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        data={
+            "name": "onefile",
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
         files=MultiValueDict(
             {
                 "attachments": [
@@ -190,7 +241,13 @@ def test_form_rejects_disallowed_attachment_extension(settings):
     )
 
     form = UserStoryForm(
-        data={"name": "extcheck", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        data={
+            "name": "extcheck",
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
         files=MultiValueDict(
             {
                 "attachments": [
@@ -219,7 +276,13 @@ def test_form_rejects_oversized_attachments(settings):
     )
 
     form = UserStoryForm(
-        data={"name": "sizecheck", "rating": 4, "comments": "Member feedback", "path": "/member", "messages": ""},
+        data={
+            "name": "sizecheck",
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
         files=MultiValueDict(
             {
                 "attachments": [
