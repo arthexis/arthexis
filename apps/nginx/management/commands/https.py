@@ -172,7 +172,12 @@ class Command(BaseCommand):
             return
 
         if renew:
-            self._renew_due_certificates(sudo=sudo)
+            self._renew_due_certificates(
+                sudo=sudo,
+                domain_filter=godaddy_domain or certbot_domain,
+                require_godaddy=bool(godaddy_domain),
+                require_local=bool(options["local"]),
+            )
             return
 
         certificate = self._enable_https(
@@ -673,15 +678,69 @@ class Command(BaseCommand):
         summary = result.summary
         return f"Certificate status: {status}. {summary}"
 
-    def _renew_due_certificates(self, *, sudo: str) -> None:
-        now = timezone.now()
-        due_certificates = CertificateBase.objects.filter(
-            expiration_date__lte=now
-        ).select_related("certbotcertificate", "selfsignedcertificate")
+    def _renew_due_certificates(
+        self,
+        *,
+        sudo: str,
+        domain_filter: str | None = None,
+        require_godaddy: bool = False,
+        require_local: bool = False,
+    ) -> None:
+        """Renew certificates due for rotation after refreshing on-disk expiration metadata."""
 
-        if not due_certificates.exists():
-            if CertificateBase.objects.filter(expiration_date__isnull=False).exists():
-                self.stdout.write("No certificates were due for renewal.")
+        now = timezone.now()
+        candidate_certificates = CertificateBase.objects.all().select_related(
+            "certbotcertificate", "selfsignedcertificate"
+        )
+
+        if domain_filter:
+            candidate_certificates = candidate_certificates.filter(domain=domain_filter)
+
+        candidate_list = list(candidate_certificates)
+
+        if require_godaddy:
+            candidate_list = [
+                certificate
+                for certificate in candidate_list
+                if isinstance(certificate._specific_certificate, CertbotCertificate)
+                and certificate._specific_certificate.challenge_type
+                == CertbotCertificate.ChallengeType.GODADDY
+            ]
+        elif require_local:
+            candidate_list = [
+                certificate
+                for certificate in candidate_list
+                if isinstance(certificate._specific_certificate, SelfSignedCertificate)
+            ]
+
+        for certificate in candidate_list:
+            try:
+                certificate.update_expiration_date(sudo=sudo)
+            except RuntimeError as exc:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Could not refresh expiration for {certificate.domain}: {exc}"
+                    )
+                )
+
+        due_certificates = [
+            certificate
+            for certificate in candidate_list
+            if certificate.expiration_date and certificate.expiration_date <= now
+        ]
+
+        if not due_certificates:
+            if candidate_list:
+                if domain_filter:
+                    self.stdout.write(f"No certificates were due for renewal for {domain_filter}.")
+                    quoted_domain = shlex.quote(domain_filter)
+                    self.stdout.write(
+                        "To force immediate certbot reissuance, run: "
+                        f"./command.sh https --enable --force-renewal --certbot {quoted_domain} "
+                        f"(or --godaddy {quoted_domain})."
+                    )
+                else:
+                    self.stdout.write("No certificates were due for renewal.")
             else:
                 self.stdout.write("No certificates are tracked for renewal.")
             return

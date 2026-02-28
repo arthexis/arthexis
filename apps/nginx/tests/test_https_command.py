@@ -8,7 +8,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from apps.certs.models import CertbotCertificate
+from apps.certs.models import CertificateBase, CertbotCertificate
 from apps.certs.services import CertbotChallengeError
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
@@ -695,3 +695,73 @@ def test_https_enable_rejects_option_like_domain_for_godaddy():
 
     with pytest.raises(CommandError, match="valid hostname"):
         call_command("https", "--enable", "--godaddy=--help")
+
+
+@pytest.mark.django_db
+def test_https_renew_refreshes_expiration_before_due_check(monkeypatch):
+    """Regression: `--renew` should refresh expiration metadata before deciding due certificates."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="example.com-example-com-certbot",
+        domain="example.com",
+        certificate_path="/etc/letsencrypt/live/example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/example.com/privkey.pem",
+        expiration_date=timezone.now() + timedelta(days=30),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+
+    def fake_update_expiration_date(self, *, sudo: str = "sudo"):
+        self.expiration_date = timezone.now() - timedelta(hours=1)
+        return self.expiration_date
+
+    renewed_ids: list[int] = []
+
+    def fake_renew(self, *, sudo: str = "sudo"):
+        renewed_ids.append(self.pk)
+        return "renewed"
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        fake_update_expiration_date,
+    )
+    monkeypatch.setattr(CertificateBase, "renew", fake_renew)
+
+    out = StringIO()
+    call_command("https", "--renew", "--godaddy", "example.com", "--no-sudo", stdout=out)
+
+    assert renewed_ids == [cert.pk]
+    assert "Renewed 1 certificate(s)." in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
+    """`--renew --godaddy <domain>` should emit a domain-scoped no-op message when nothing is due."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    CertbotCertificate.objects.create(
+        name="example.com-example-com-certbot",
+        domain="example.com",
+        certificate_path="/etc/letsencrypt/live/example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/example.com/privkey.pem",
+        expiration_date=timezone.now() + timedelta(days=30),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+
+    out = StringIO()
+    call_command("https", "--renew", "--godaddy", "example.com", "--no-sudo", stdout=out)
+
+    rendered = out.getvalue()
+    assert "No certificates were due for renewal for example.com." in rendered
+    assert "--force-renewal --certbot example.com" in rendered
