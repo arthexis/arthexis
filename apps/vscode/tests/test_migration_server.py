@@ -157,6 +157,37 @@ def test_should_watch_file(path: str, expected: bool) -> None:
 
     assert migration_server._should_watch_file(path) is expected
 
+
+
+def test_collect_source_mtimes_handles_windows_style_walk_paths(tmp_path: Path) -> None:
+    """Regression: snapshots should not crash when os.walk yields Windows separators."""
+
+    base_dir = tmp_path / "repo"
+    source_dir = base_dir / "apps" / "vscode"
+    source_dir.mkdir(parents=True)
+    target = source_dir / "migration_server.py"
+    target.write_text("print('ok')\n", encoding="utf-8")
+
+    windows_root = str(source_dir).replace("/", "\\")
+
+    with mock.patch.object(migration_server.os, "walk", return_value=[(windows_root, [], ["migration_server.py"]) ]):
+        snapshot = migration_server.collect_source_mtimes(base_dir)
+
+    assert set(snapshot) == {"apps/vscode/migration_server.py"}
+
+def test_collect_source_mtimes_preserves_literal_backslashes_on_posix(tmp_path: Path) -> None:
+    """Regression: literal backslashes in POSIX filenames should not be rewritten."""
+
+    base_dir = tmp_path / r"repo\name"
+    source_dir = base_dir / "apps" / "vscode"
+    source_dir.mkdir(parents=True)
+    target = source_dir / "migration_server.py"
+    target.write_text("print('ok')\n", encoding="utf-8")
+
+    snapshot = migration_server.collect_source_mtimes(base_dir)
+
+    assert set(snapshot) == {"apps/vscode/migration_server.py"}
+
 def test_run_env_refresh_prefers_sqlite_backend(tmp_path: Path) -> None:
     """Ensure migration-server refresh forces SQLite fallback for responsiveness."""
 
