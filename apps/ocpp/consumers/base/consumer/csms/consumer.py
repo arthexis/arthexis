@@ -13,8 +13,7 @@ from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.core.notifications import LcdChannel
-from apps.features.models import Feature
-from apps.nodes.models import NetMessage, Node, NodeFeature
+from apps.nodes.models import NetMessage
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -94,14 +93,13 @@ from ..rfid import RfidMixin
 from ..connection import ConnectionHandler
 from ..forwarding import ForwardingHandler
 from .handlers.metering import MeteringHandlersMixin
-from .handlers.notifications import NotificationHandlersMixin as CsmsNotificationHandlersMixin
+from .handlers.notifications import (
+    NotificationHandlersMixin as CsmsNotificationHandlersMixin,
+)
 from .handlers.status import StatusHandlersMixin
 from .transport import CSMSTransportMixin
 
 logger = logging.getLogger(__name__)
-
-CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
-CHARGE_POINT_FEATURE_SLUG = "charge-points"
 
 
 class SinkConsumer(AsyncWebsocketConsumer):
@@ -236,9 +234,7 @@ class CSMSConsumer(
             not self.aggregate_charger
             or self.aggregate_charger.connector_id is not None
         ):
-            aggregate, _ = await database_sync_to_async(
-                Charger.objects.get_or_create
-            )(
+            aggregate, _ = await database_sync_to_async(Charger.objects.get_or_create)(
                 charger_id=self.charger_id,
                 connector_id=None,
                 defaults={"last_path": self.scope.get("path", "")},
@@ -320,9 +316,7 @@ class CSMSConsumer(
         if tx_obj.ocpp_transaction_id:
             return
         tx_obj.ocpp_transaction_id = str(tx_obj.pk)
-        await database_sync_to_async(tx_obj.save)(
-            update_fields=["ocpp_transaction_id"]
-        )
+        await database_sync_to_async(tx_obj.save)(update_fields=["ocpp_transaction_id"])
 
     async def _clear_cached_status_fields(self) -> None:
         """Reset cached status fields for the current charger identity."""
@@ -404,7 +398,9 @@ class CSMSConsumer(
         else:
             tx_obj = store.transactions.get(self.store_key)
 
-        await self._ensure_ocpp_transaction_identifier(tx_obj, str(tx_id) if tx_id else None)
+        await self._ensure_ocpp_transaction_identifier(
+            tx_obj, str(tx_id) if tx_id else None
+        )
         await self._process_meter_value_entries(
             payload.get("meterValue"), connector_value, tx_obj
         )
@@ -541,7 +537,9 @@ class CSMSConsumer(
                     response=payload,
                 )
 
-        await database_sync_to_async(_update_deployments)([target.pk for target in targets])
+        await database_sync_to_async(_update_deployments)(
+            [target.pk for target in targets]
+        )
 
     async def _cancel_consumption_message(self) -> None:
         """Stop any scheduled consumption message updates."""
@@ -553,6 +551,7 @@ class CSMSConsumer(
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         if message_uuid:
+
             def _expire() -> None:
                 msg = NetMessage.objects.filter(uuid=message_uuid).first()
                 if not msg:
@@ -584,11 +583,7 @@ class CSMSConsumer(
             return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
         def _persist() -> str | None:
-            tx = (
-                Transaction.objects.select_related("charger")
-                .filter(pk=tx_id)
-                .first()
-            )
+            tx = Transaction.objects.select_related("charger").filter(pk=tx_id).first()
             if not tx:
                 return None
             charger = tx.charger or self.charger
@@ -605,9 +600,7 @@ class CSMSConsumer(
             subject_suffix = f" CP{connector_value}" if connector_value else ""
             if not subject_label:
                 subject_label = (
-                    getattr(charger, "charger_id", "")
-                    or self.charger_id
-                    or ""
+                    getattr(charger, "charger_id", "") or self.charger_id or ""
                 )
             subject_value = f"{subject_label}{subject_suffix}".strip()[:64]
             if not subject_value:
@@ -846,7 +839,9 @@ class CSMSConsumer(
         raw_payload["configurationKey"] = payload_entries
         configuration.raw_payload = raw_payload
         configuration.evcs_snapshot_at = timezone.now()
-        configuration.save(update_fields=["raw_payload", "evcs_snapshot_at", "updated_at"])
+        configuration.save(
+            update_fields=["raw_payload", "evcs_snapshot_at", "updated_at"]
+        )
         Charger.objects.filter(charger_id=self.charger_id).update(
             configuration=configuration
         )
@@ -964,7 +959,9 @@ class CSMSConsumer(
             if not charger_identifier and getattr(self, "charger", None):
                 charger_identifier = getattr(self.charger, "charger_id", None) or ""
             if not charger_identifier and getattr(self, "aggregate_charger", None):
-                charger_identifier = getattr(self.aggregate_charger, "charger_id", None) or ""
+                charger_identifier = (
+                    getattr(self.aggregate_charger, "charger_id", None) or ""
+                )
             if not charger_identifier:
                 return
             charger_identifier = str(charger_identifier)
@@ -1021,7 +1018,9 @@ class CSMSConsumer(
             if (
                 aggregate
                 and getattr(aggregate, "pk", None)
-                and not any(target.pk == aggregate.pk for target in targets if target.pk)
+                and not any(
+                    target.pk == aggregate.pk for target in targets if target.pk
+                )
             ):
                 targets.append(aggregate)
 
@@ -1098,9 +1097,9 @@ class CSMSConsumer(
             tag = None
             tag_created = False
             if id_tag:
-                tag, tag_created = await database_sync_to_async(
-                    CoreRFID.register_scan
-                )(id_tag)
+                tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
+                    id_tag
+                )
             if account:
                 if await database_sync_to_async(account.can_authorize)():
                     status = "Accepted"
@@ -1231,8 +1230,16 @@ class CSMSConsumer(
             for entry in report_data:
                 if not isinstance(entry, dict):
                     continue
-                component_data = entry.get("component") if isinstance(entry.get("component"), dict) else {}
-                variable_data = entry.get("variable") if isinstance(entry.get("variable"), dict) else {}
+                component_data = (
+                    entry.get("component")
+                    if isinstance(entry.get("component"), dict)
+                    else {}
+                )
+                variable_data = (
+                    entry.get("variable")
+                    if isinstance(entry.get("variable"), dict)
+                    else {}
+                )
 
                 component_name = str(component_data.get("name") or "").strip()
                 variable_name = str(variable_data.get("name") or "").strip()
@@ -1398,7 +1405,9 @@ class CSMSConsumer(
         payload_data = payload if isinstance(payload, dict) else {}
         reservation_value = payload_data.get("reservationId")
         try:
-            reservation_pk = int(reservation_value) if reservation_value is not None else None
+            reservation_pk = (
+                int(reservation_value) if reservation_value is not None else None
+            )
         except (TypeError, ValueError):
             reservation_pk = None
 
@@ -1411,9 +1420,9 @@ class CSMSConsumer(
                     getattr(self, "charger", None), "charger_id", None
                 )
                 connector_hint = getattr(self, "connector_value", None)
-                reservation_query = CPReservation.objects.select_related("connector").filter(
-                    pk=reservation_pk
-                )
+                reservation_query = CPReservation.objects.select_related(
+                    "connector"
+                ).filter(pk=reservation_pk)
                 if charger_id_hint:
                     reservation_query = reservation_query.filter(
                         connector__charger_id=charger_id_hint
@@ -1658,7 +1667,9 @@ class CSMSConsumer(
             identifier_bits.append(str(request_id))
         if charger.connector_id is not None:
             identifier_bits.append(str(charger.connector_id))
-        workflow_identifier = ":".join([bit for bit in identifier_bits if bit]) or "unknown"
+        workflow_identifier = (
+            ":".join([bit for bit in identifier_bits if bit]) or "unknown"
+        )
 
         try:
             from apps.flows.models import Transition
@@ -1710,11 +1721,15 @@ class CSMSConsumer(
 
             notification = None
             if request_id is not None:
-                notification = DisplayMessageNotification.objects.filter(
-                    charger=charger,
-                    request_id=request_id,
-                    completed_at__isnull=True,
-                ).order_by("-received_at").first()
+                notification = (
+                    DisplayMessageNotification.objects.filter(
+                        charger=charger,
+                        request_id=request_id,
+                        completed_at__isnull=True,
+                    )
+                    .order_by("-received_at")
+                    .first()
+                )
             if notification is None:
                 notification = DisplayMessageNotification.objects.create(
                     charger=charger,
@@ -1738,9 +1753,7 @@ class CSMSConsumer(
                 message_id_value = entry.get("messageId")
                 try:
                     message_id = (
-                        int(message_id_value)
-                        if message_id_value is not None
-                        else None
+                        int(message_id_value) if message_id_value is not None else None
                     )
                 except (TypeError, ValueError):
                     message_id = None
@@ -1836,7 +1849,9 @@ class CSMSConsumer(
 
         requested_energy = _parse_energy(ac_params.get("energyAmount"))
         if requested_energy is None:
-            requested_energy = _parse_energy(dc_params.get("maxEnergyAtChargingStation"))
+            requested_energy = _parse_energy(
+                dc_params.get("maxEnergyAtChargingStation")
+            )
 
         departure_time = _parse_ocpp_timestamp(charging_needs.get("departureTime"))
         received_at = timezone.now()
@@ -1848,7 +1863,8 @@ class CSMSConsumer(
             log_parts.append(f"departure={departure_time.isoformat()}")
         store.add_log(
             self.store_key,
-            "NotifyEVChargingNeeds" + (": " + ", ".join(log_parts) if log_parts else ""),
+            "NotifyEVChargingNeeds"
+            + (": " + ", ".join(log_parts) if log_parts else ""),
             log_type="charger",
         )
 
@@ -1893,7 +1909,9 @@ class CSMSConsumer(
 
         duration_seconds = _parse_int(charging_schedule.get("duration"))
         schedule_id = _parse_int(charging_schedule.get("id"))
-        charging_rate_unit = str(charging_schedule.get("chargingRateUnit") or "").strip()
+        charging_rate_unit = str(
+            charging_schedule.get("chargingRateUnit") or ""
+        ).strip()
         start_schedule = _parse_ocpp_timestamp(charging_schedule.get("startSchedule"))
 
         periods_data = charging_schedule.get("chargingSchedulePeriod")
@@ -2021,7 +2039,9 @@ class CSMSConsumer(
                     continue
                 component_data = entry.get("component")
                 variable_data = entry.get("variable")
-                if not isinstance(component_data, dict) or not isinstance(variable_data, dict):
+                if not isinstance(component_data, dict) or not isinstance(
+                    variable_data, dict
+                ):
                     continue
                 component_name = str(component_data.get("name") or "").strip()
                 variable_name = str(variable_data.get("name") or "").strip()
@@ -2053,7 +2073,9 @@ class CSMSConsumer(
                 for monitor in variable_monitoring:
                     if not isinstance(monitor, dict):
                         continue
-                    monitoring_id_value = monitor.get("id") or monitor.get("monitoringId")
+                    monitoring_id_value = monitor.get("id") or monitor.get(
+                        "monitoringId"
+                    )
                     try:
                         monitoring_id = (
                             int(monitoring_id_value)
@@ -2077,7 +2099,11 @@ class CSMSConsumer(
                     )
                     monitor_type = str(monitor.get("type") or "").strip()
                     transaction_value = monitor.get("transaction")
-                    is_transaction = bool(transaction_value) if transaction_value is not None else False
+                    is_transaction = (
+                        bool(transaction_value)
+                        if transaction_value is not None
+                        else False
+                    )
                     MonitoringRule.objects.update_or_create(
                         charger=charger,
                         monitoring_id=monitoring_id,
@@ -2173,7 +2199,9 @@ class CSMSConsumer(
             except (TypeError, ValueError, OverflowError):
                 deployment_pk = None
             if deployment_pk:
-                deployment = CPFirmwareDeployment.objects.filter(pk=deployment_pk).first()
+                deployment = CPFirmwareDeployment.objects.filter(
+                    pk=deployment_pk
+                ).first()
             if deployment is None and self.charger:
                 deployment = (
                     CPFirmwareDeployment.objects.filter(
@@ -2205,7 +2233,11 @@ class CSMSConsumer(
         request_id_value = payload_data.get("requestId")
         evse_value = payload_data.get("evseId")
         charging_profile = payload_data.get("chargingProfile")
-        tbc = bool(payload_data.get("tbc")) if payload_data.get("tbc") is not None else False
+        tbc = (
+            bool(payload_data.get("tbc"))
+            if payload_data.get("tbc") is not None
+            else False
+        )
 
         def _parse_int(value: object | None) -> int | None:
             try:
@@ -2289,9 +2321,7 @@ class CSMSConsumer(
         def _normalize_profile(data: dict[str, object]) -> dict[str, object]:
             normalized: dict[str, object] = {}
 
-            profile_id = _parse_int(
-                data.get("chargingProfileId") or data.get("id")
-            )
+            profile_id = _parse_int(data.get("chargingProfileId") or data.get("id"))
             if profile_id is not None:
                 normalized["id"] = profile_id
 
@@ -2323,9 +2353,7 @@ class CSMSConsumer(
             if valid_to is not None:
                 normalized["validTo"] = valid_to.isoformat()
 
-            normalized["schedule"] = _normalize_schedule(
-                data.get("chargingSchedule")
-            )
+            normalized["schedule"] = _normalize_schedule(data.get("chargingSchedule"))
 
             return normalized
 
@@ -2426,8 +2454,7 @@ class CSMSConsumer(
                 return
 
             profile_id = _parse_int(
-                charging_profile.get("chargingProfileId")
-                or charging_profile.get("id")
+                charging_profile.get("chargingProfileId") or charging_profile.get("id")
             )
 
             evse_label = store.connector_slug(evse_id)
@@ -2462,7 +2489,9 @@ class CSMSConsumer(
                         f"unexpected profile {profile_id} reported for evse {evse_label}"
                     )
                 else:
-                    mismatches.extend(_diff_profiles(expected_profile, charging_profile))
+                    mismatches.extend(
+                        _diff_profiles(expected_profile, charging_profile)
+                    )
 
             if mismatches:
                 prefix = "ReportChargingProfiles mismatch"
@@ -2514,11 +2543,7 @@ class CSMSConsumer(
     async def _handle_security_event_notification_action_legacy(
         self, payload, msg_id, raw, text_data
     ):
-        event_type = str(
-            payload.get("type")
-            or payload.get("eventType")
-            or ""
-        ).strip()
+        event_type = str(payload.get("type") or payload.get("eventType") or "").strip()
         trigger_value = str(payload.get("trigger") or "").strip()
         timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
         if timestamp_value is None:
@@ -2616,9 +2641,8 @@ class CSMSConsumer(
             if self.charger:
                 targets.append(self.charger)
             aggregate = self.aggregate_charger
-            if (
-                aggregate
-                and not any(target.pk == aggregate.pk for target in targets if target.pk)
+            if aggregate and not any(
+                target.pk == aggregate.pk for target in targets if target.pk
             ):
                 targets.append(aggregate)
             for target in targets:
@@ -2630,9 +2654,7 @@ class CSMSConsumer(
         await database_sync_to_async(_persist_diagnostics)()
 
         status_label = updates["diagnostics_status"] or "unknown"
-        log_message = "DiagnosticsStatusNotification: status=%s" % (
-            status_label,
-        )
+        log_message = "DiagnosticsStatusNotification: status=%s" % (status_label,)
         if updates["diagnostics_timestamp"]:
             log_message += ", timestamp=%s" % (
                 updates["diagnostics_timestamp"].isoformat()
@@ -2657,16 +2679,12 @@ class CSMSConsumer(
         if timestamp_value is None:
             timestamp_value = timezone.now()
         location_value = str(
-            payload.get("location")
-            or payload.get("remoteLocation")
-            or ""
+            payload.get("location") or payload.get("remoteLocation") or ""
         ).strip()
         filename_value = str(payload.get("filename") or "").strip()
 
         def _persist_log_status() -> str:
-            qs = ChargerLogRequest.objects.filter(
-                charger__charger_id=self.charger_id
-            )
+            qs = ChargerLogRequest.objects.filter(charger__charger_id=self.charger_id)
             request = None
             if request_identifier is not None:
                 request = qs.filter(request_id=request_identifier).first()
@@ -2755,8 +2773,7 @@ class CSMSConsumer(
         await self._update_firmware_state(status, status_info, timestamp_value)
         store.add_log(
             self.store_key,
-            "FirmwareStatusNotification: "
-            + json.dumps(payload, separators=(",", ":")),
+            "FirmwareStatusNotification: " + json.dumps(payload, separators=(",", ":")),
             log_type="charger",
         )
         if self.aggregate_charger and self.aggregate_charger.connector_id is None:

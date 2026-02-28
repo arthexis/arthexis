@@ -8,7 +8,7 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 
 from apps.features.models import Feature
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node
 
 from .... import store
 from ....forwarder import forwarder
@@ -25,7 +25,6 @@ OCPP_VERSION_FEATURE_SLUGS = {
     "ocpp2.0.1": "ocpp-201-charge-point",
     "ocpp2.1": "ocpp-21-charge-point",
 }
-CHARGE_POINT_FEATURE_SLUG = "charge-points"
 
 
 class ConnectionFlowMixin:
@@ -60,72 +59,49 @@ class ConnectionFlowMixin:
     async def _allow_charge_point_connection_legacy(
         self, existing_charger: Charger | None
     ) -> bool:
-        """Return whether the charge point connection should be accepted."""
+        """Always accept OCPP websocket connections.
 
-        def _resolve_feature_state() -> tuple[bool, str | None]:
+        The legacy ``charge-points`` node feature has been retired and must no
+        longer gate websocket admission. We still inspect suite feature state for
+        telemetry and operational visibility, but we do not block the connection.
+        """
+
+        def _resolve_feature_reason() -> str | None:
+            del existing_charger
             node = Node.get_local()
             if not node:
                 logger.warning(
                     "Charge point connection allowed because no local node is registered."
                 )
-                return True, "node-missing"
+                return "node-missing"
 
             requested_feature_slug = OCPP_VERSION_FEATURE_SLUGS.get(
                 getattr(self, "ocpp_version", ""),
                 CHARGER_CREATION_FEATURE_SLUG,
             )
-            feature = (
-                Feature.objects.select_related("node_feature")
-                .filter(slug=requested_feature_slug)
-                .first()
-            )
+            feature = Feature.objects.filter(slug=requested_feature_slug).first()
             if not feature and requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
-                feature = (
-                    Feature.objects.select_related("node_feature")
-                    .filter(slug=CHARGER_CREATION_FEATURE_SLUG)
-                    .first()
-                )
+                feature = Feature.objects.filter(
+                    slug=CHARGER_CREATION_FEATURE_SLUG
+                ).first()
             if not feature:
                 logger.warning(
-                    "Charge point creation feature %s missing; treating as enabled.",
+                    "Charge point creation feature %s missing; allowing websocket admission.",
                     requested_feature_slug,
                 )
-            node_feature = feature.node_feature if feature else None
-            if not node_feature:
-                node_feature = NodeFeature.objects.filter(
-                    slug=CHARGE_POINT_FEATURE_SLUG
-                ).first()
-
-            if not node_feature:
-                logger.warning(
-                    "Charge point node feature %s missing; treating as enabled.",
-                    CHARGE_POINT_FEATURE_SLUG,
-                )
-            elif not node_feature.is_enabled:
+                return "creation-feature-missing"
+            if not feature.is_enabled:
                 logger.info(
-                    "Charge point connection blocked: node feature %s disabled.",
-                    node_feature.slug,
+                    "Charge point creation feature %s disabled; allowing websocket admission.",
+                    feature.slug,
                 )
-                return False, "node-feature-disabled"
+                return "creation-feature-disabled"
+            return None
 
-            if feature and not feature.is_enabled:
-                if existing_charger:
-                    logger.info(
-                        "Charge point creation disabled; allowing known charger %s.",
-                        existing_charger.charger_id,
-                    )
-                    return True, "creation-disabled-known"
-                logger.info(
-                    "Charge point creation disabled; blocking unknown charger %s.",
-                    getattr(self, "charger_id", "unknown"),
-                )
-                return False, "creation-disabled-unknown"
-
-            return True, None
-
-        allowed, reason = await database_sync_to_async(_resolve_feature_state)()
-        self._charge_point_connection_reason = reason
-        return allowed
+        self._charge_point_connection_reason = await database_sync_to_async(
+            _resolve_feature_reason
+        )()
+        return True
 
     async def _allow_charge_point_connection(
         self, existing_charger: Charger | None

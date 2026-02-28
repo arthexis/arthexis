@@ -58,9 +58,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
             NodeFeatureDefaultAction(
                 label=_("Admin Scanner"), url_name="admin:cards_rfid_scan"
             ),
-            NodeFeatureDefaultAction(
-                label=_("Public Scanner"), url_name="rfid-reader"
-            ),
+            NodeFeatureDefaultAction(label=_("Public Scanner"), url_name="rfid-reader"),
             NodeFeatureDefaultAction(
                 label=_("Public Login"), url_name="pages:rfid-login"
             ),
@@ -203,7 +201,7 @@ class NodeFeatureMixin:
         "llm-summary",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
-    ROLE_AUTO_FEATURE_SLUGS = {"charge-points"}
+    ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
 
     def has_feature(self, slug: str) -> bool:
         """Return whether the node has the requested feature slug."""
@@ -230,9 +228,7 @@ class NodeFeatureMixin:
             return
 
         for feature in NodeFeature.objects.filter(slug__in=missing):
-            NodeFeatureAssignment.objects.update_or_create(
-                node=self, feature=feature
-            )
+            NodeFeatureAssignment.objects.update_or_create(node=self, feature=feature)
 
     def _apply_role_auto_features(self) -> None:
         """Enable role features that should always be auto-enabled."""
@@ -255,9 +251,7 @@ class NodeFeatureMixin:
             return
 
         for feature in NodeFeature.objects.filter(slug__in=missing):
-            NodeFeatureAssignment.objects.update_or_create(
-                node=self, feature=feature
-            )
+            NodeFeatureAssignment.objects.update_or_create(node=self, feature=feature)
 
     @classmethod
     def _has_rpi_camera(cls) -> bool:
@@ -402,9 +396,7 @@ class NodeFeatureMixin:
                     base_dir=base_dir,
                     base_path=base_path,
                 )
-                if not (
-                    prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")
-                ):
+                if not (prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")):
                     return False
                 config = get_summary_config()
             except OperationalError:
@@ -429,7 +421,9 @@ class NodeFeatureMixin:
         base_dir = Path(settings.BASE_DIR)
         for slug in self.AUTO_MANAGED_FEATURES:
             try:
-                if self._detect_auto_feature(slug, base_dir=base_dir, base_path=base_path):
+                if self._detect_auto_feature(
+                    slug, base_dir=base_dir, base_path=base_path
+                ):
                     detected_slugs.add(slug)
             except Exception:
                 logger.exception("Automatic detection failed for feature %s", slug)
@@ -451,9 +445,7 @@ class NodeFeatureMixin:
             ).delete()
         self.sync_feature_tasks()
 
-    def update_manual_features(
-        self, slugs: Iterable[str]
-    ):
+    def update_manual_features(self, slugs: Iterable[str]):
         """Apply manual feature assignments for the provided slugs."""
         desired = {slug for slug in slugs if slug in self.MANUAL_FEATURE_SLUGS}
         remove_slugs = self.MANUAL_FEATURE_SLUGS - desired
@@ -521,9 +513,7 @@ class NodeFeatureMixin:
         from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
         raw_task_name = "purge_leads"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
         if enabled:
             schedule, _ = CrontabSchedule.objects.get_or_create(
                 minute="0",
@@ -552,9 +542,7 @@ class NodeFeatureMixin:
         from django.db.utils import OperationalError, ProgrammingError
 
         raw_task_name = "ocpp_send_daily_session_report"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
 
         if not self.is_local:
             return
@@ -593,9 +581,7 @@ class NodeFeatureMixin:
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = "poll_upstream"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
         if celery_enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=5, period=IntervalSchedule.MINUTES
@@ -621,9 +607,7 @@ class NodeFeatureMixin:
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = "purge_net_messages"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
 
         if celery_enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
@@ -650,9 +634,7 @@ class NodeFeatureMixin:
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = "poll_peers"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
 
         if celery_enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
@@ -687,9 +669,7 @@ class NodeFeatureMixin:
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = "monitor_nmcli"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
 
         role_name = getattr(getattr(self, "role", None), "name", None)
         if celery_enabled and role_name in self.CONNECTIVITY_MONITOR_ROLES:
@@ -717,9 +697,7 @@ class NodeFeatureMixin:
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = "llm_summary_lcd"
-        task_name = normalize_periodic_task_name(
-            PeriodicTask.objects, raw_task_name
-        )
+        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
         if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=5, period=IntervalSchedule.MINUTES
