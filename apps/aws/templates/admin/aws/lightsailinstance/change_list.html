@@ -4,6 +4,9 @@
 {% block object-tools-items %}
   {{ block.super }}
   <li>
-    <a href="{% url 'admin:aws_lightsailinstance_load_instances' %}" class="addlink">{% translate "Load Instances" %}</a>
+    <form action="{% url 'admin:aws_lightsailinstance_load_instances' %}" method="post">
+      {% csrf_token %}
+      <button type="submit" class="button">{% translate "Load Instances" %}</button>
+    </form>
   </li>
 {% endblock %}

@@ -5,7 +5,7 @@ from typing import Iterable
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
@@ -31,6 +31,7 @@ class InstanceSyncResult:
 
     created: int = 0
     updated: int = 0
+    conflicts: int = 0
 
     @property
     def total(self) -> int:
@@ -103,11 +104,6 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
         ]
         return custom + urls
 
-    def _load_instances_url(self) -> str:
-        """Return URL for the no-queryset load instances action."""
-
-        return reverse("admin:aws_awscredentials_load_instances")
-
     def _sync_credentials(
         self,
         request,
@@ -148,6 +144,7 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
 
             result.created += summary["created"]
             result.updated += summary["updated"]
+            result.conflicts += summary.get("conflicts", 0)
 
             if discovery:
                 for instance in summary["instances"]:
@@ -173,13 +170,24 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
                 },
                 messages.SUCCESS,
             )
+        if result.conflicts:
+            self.message_user(
+                request,
+                _(
+                    "Skipped %(count)s instances due to credential conflicts on existing rows."
+                )
+                % {"count": result.conflicts},
+                messages.WARNING,
+            )
         return result
 
     def load_instances_view(self, request):
         """Execute non-queryset credential action from changelist/dashboard tools."""
 
-        if not self.has_view_or_change_permission(request):
+        if not self.has_change_permission(request):
             raise PermissionDenied
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
         self._sync_credentials(
             request,
             AWSCredentials.objects.order_by("name"),
@@ -188,7 +196,12 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
         return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
 
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
-        return HttpResponseRedirect(self._load_instances_url())
+        self._sync_credentials(
+            request,
+            AWSCredentials.objects.order_by("name"),
+            discovery_label=_("Load Instances"),
+        )
+        return HttpResponseRedirect(reverse("admin:aws_awscredentials_changelist"))
 
     load_instances.label = _("Load Instances")
     load_instances.short_description = _("Load Instances")
@@ -279,8 +292,10 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     def load_instances_view(self, request):
         """Synchronize instances using stored credentials or environment credentials."""
 
-        if not self.has_view_or_change_permission(request):
+        if not self.has_change_permission(request):
             raise PermissionDenied
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
 
         credentials = list(AWSCredentials.objects.order_by("name"))
         discovery = start_discovery(
@@ -312,6 +327,16 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
 
             created_count += summary["created"]
             updated_count += summary["updated"]
+            conflict_count = summary.get("conflicts", 0)
+            if conflict_count:
+                self.message_user(
+                    request,
+                    _(
+                        "Skipped %(count)s instances due to credential conflicts on existing rows."
+                    )
+                    % {"count": conflict_count},
+                    messages.WARNING,
+                )
             if discovery:
                 for instance in summary["instances"]:
                     record_discovery_item(
@@ -342,7 +367,7 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
         return HttpResponseRedirect(reverse("admin:aws_lightsailinstance_changelist"))
 
     def fetch_view(self, request):
-        if not self.has_view_or_change_permission(request):
+        if not self.has_change_permission(request):
             raise PermissionDenied
 
         opts = self.model._meta
@@ -480,7 +505,7 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
     fetch.is_discover_action = True
 
     def fetch_view(self, request):
-        if not self.has_view_or_change_permission(request):
+        if not self.has_change_permission(request):
             raise PermissionDenied
 
         opts = self.model._meta

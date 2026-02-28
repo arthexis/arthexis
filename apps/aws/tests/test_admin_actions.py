@@ -41,7 +41,7 @@ def test_credentials_changelist_load_instances_action(client, monkeypatch, db) -
 
     monkeypatch.setattr("apps.aws.admin.sync_lightsail_instances", fake_sync)
 
-    response = client.get(reverse("admin:aws_awscredentials_load_instances"))
+    response = client.post(reverse("admin:aws_awscredentials_load_instances"))
 
     assert response.status_code == 302
     credential.refresh_from_db()
@@ -113,7 +113,7 @@ def test_credentials_changelist_shows_load_instances_object_tool(client, db) -> 
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert f'href="{reverse("admin:aws_awscredentials_load_instances")}"' in content
+    assert f'action="{reverse("admin:aws_awscredentials_load_instances")}"' in content
     assert "Load Instances" in content
 
 
@@ -131,5 +131,35 @@ def test_instances_changelist_shows_load_instances_object_tool(client, db) -> No
 
     content = response.content.decode()
     assert response.status_code == 200
-    assert f'href="{reverse("admin:aws_lightsailinstance_load_instances")}"' in content
+    assert f'action="{reverse("admin:aws_lightsailinstance_load_instances")}"' in content
     assert "Load Instances" in content
+
+
+def test_credentials_load_instances_requires_post(client, db) -> None:
+    """Direct credentials load endpoint should reject GET requests."""
+
+    get_user_model().objects.create_superuser(
+        username="admin5",
+        email="admin5@example.com",
+        password="admin123",
+    )
+    assert client.login(username="admin5", password="admin123")
+
+    response = client.get(reverse("admin:aws_awscredentials_load_instances"))
+
+    assert response.status_code == 405
+
+
+def test_instances_load_instances_requires_post(client, db) -> None:
+    """Direct instance load endpoint should reject GET requests."""
+
+    get_user_model().objects.create_superuser(
+        username="admin6",
+        email="admin6@example.com",
+        password="admin123",
+    )
+    assert client.login(username="admin6", password="admin123")
+
+    response = client.get(reverse("admin:aws_lightsailinstance_load_instances"))
+
+    assert response.status_code == 405

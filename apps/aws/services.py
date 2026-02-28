@@ -197,6 +197,7 @@ def sync_lightsail_instances(
     instances: list[LightsailInstance] = []
     created_ids: set[int] = set()
     updated_ids: set[int] = set()
+    conflicts = 0
 
     for region in region_list:
         remote_instances = fetch_lightsail_instances(
@@ -218,9 +219,22 @@ def sync_lightsail_instances(
                     "credentials": credentials,
                 }
             )
+            lookup = {
+                "name": name,
+                "region": instance_region,
+                "credentials": credentials,
+            }
+            instance = LightsailInstance.objects.filter(**lookup).first()
+            if instance is None and credentials is not None:
+                conflicting_instance = LightsailInstance.objects.filter(
+                    name=name,
+                    region=instance_region,
+                ).exclude(credentials=credentials).first()
+                if conflicting_instance is not None:
+                    conflicts += 1
+                    continue
             instance, was_created = LightsailInstance.objects.update_or_create(
-                name=name,
-                region=instance_region,
+                **lookup,
                 defaults=defaults,
             )
             instances.append(instance)
@@ -237,4 +251,5 @@ def sync_lightsail_instances(
         "instances": instances,
         "created_ids": created_ids,
         "updated_ids": updated_ids,
+        "conflicts": conflicts,
     }
