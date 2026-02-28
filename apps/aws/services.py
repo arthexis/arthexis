@@ -228,7 +228,7 @@ def sync_lightsail_instances(
                 "credentials": credentials,
             }
             instance = LightsailInstance.objects.filter(**lookup).first()
-            if instance is None and credentials is not None:
+            if instance is None:
                 conflicting_instance = LightsailInstance.objects.filter(
                     name=name,
                     region=instance_region,

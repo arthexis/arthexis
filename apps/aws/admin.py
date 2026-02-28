@@ -288,7 +288,7 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     fetch.is_discover_action = True
 
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
-        return HttpResponseRedirect(reverse("admin:aws_lightsailinstance_load_instances"))
+        return self.load_instances_view(request)
 
     load_instances.label = _("Load Instances")
     load_instances.short_description = _("Load Instances")
