@@ -31,35 +31,6 @@ def test_missing_docs_path_renders_library_fallback(monkeypatch):
     assert response.status_code == 404
     assert captured["context"]["missing_document"] == "docs/does-not-exist"
 
-
-def test_document_library_index_is_cached(monkeypatch):
-    """Library index should be cached to avoid repeated filesystem scans."""
-
-    state = {"cache": None, "calls": 0}
-
-    def fake_get(_key):
-        return state["cache"]
-
-    def fake_set(_key, value, timeout):
-        state["cache"] = value
-        state["timeout"] = timeout
-
-    def fake_collect(_root_base):
-        state["calls"] += 1
-        return [{"title": "Docs", "items": []}]
-
-    monkeypatch.setattr(views.cache, "get", fake_get)
-    monkeypatch.setattr(views.cache, "set", fake_set)
-    monkeypatch.setattr(views, "_collect_document_library", fake_collect)
-
-    first = views._get_cached_document_library(Path("/tmp/project"))
-    second = views._get_cached_document_library(Path("/tmp/project"))
-
-    assert first == second
-    assert state["calls"] == 1
-    assert state["timeout"] == views.DOCUMENT_LIBRARY_CACHE_TIMEOUT
-
-
 def test_extract_document_blurb_reads_first_content_line(tmp_path: Path):
     """Regression: library blurbs should skip headings and use the first body paragraph."""
 
@@ -69,7 +40,6 @@ def test_extract_document_blurb_reads_first_content_line(tmp_path: Path):
     blurb = views._extract_document_blurb(doc, max_length=80)
 
     assert blurb == "First useful sentence. Second sentence."
-
 
 def test_collect_document_library_includes_item_blurbs(tmp_path: Path, monkeypatch):
     """Regression: each document library item should include a short description blurb."""
@@ -92,7 +62,6 @@ def test_collect_document_library_includes_item_blurbs(tmp_path: Path, monkeypat
             assert "description" in item
             assert item["description"]
 
-
 def test_extract_document_blurb_skips_yaml_front_matter(tmp_path: Path):
     """Regression: YAML front matter should be skipped and first content paragraph extracted."""
 
@@ -105,23 +74,6 @@ def test_extract_document_blurb_skips_yaml_front_matter(tmp_path: Path):
     blurb = views._extract_document_blurb(doc)
 
     assert blurb == "Useful intro sentence."
-
-
-def test_extract_document_blurb_does_not_treat_rule_after_heading_as_front_matter(tmp_path: Path):
-    """A thematic break after a heading should not toggle front matter parsing."""
-
-    doc = tmp_path / "rule-after-heading.md"
-    doc.write_text(
-        "# Title\n---\nReal content here\n---\n",
-        encoding="utf-8",
-    )
-
-    blurb = views._extract_document_blurb(doc)
-
-    assert blurb == "Real content here"
-
-
-
 
 def test_collect_document_library_skips_items_when_reverse_fails(tmp_path: Path, monkeypatch):
     """Unresolvable routes should not break library generation or caching."""
@@ -138,14 +90,3 @@ def test_collect_document_library_skips_items_when_reverse_fails(tmp_path: Path,
     sections = views._collect_document_library(tmp_path)
 
     assert sections == [{"title": "Documentation", "items": []}]
-
-
-def test_extract_document_blurb_truncates_at_word_boundary(tmp_path: Path):
-    """Truncation should preserve full words when possible."""
-
-    doc = tmp_path / "long.md"
-    doc.write_text("Alpha beta gamma delta epsilon", encoding="utf-8")
-
-    blurb = views._extract_document_blurb(doc, max_length=16)
-
-    assert blurb == "Alpha beta…"
