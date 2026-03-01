@@ -81,6 +81,10 @@ def nav_links(request):
     feedback_ingestion_enabled = is_suite_feature_enabled(
         "feedback-ingestion", default=True
     )
+    staff_chat_bridge_enabled = is_suite_feature_enabled(
+        "staff-chat-bridge", default=False
+    )
+    pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
 
     if not user_is_authenticated:
         template_id = getattr(getattr(site, "template", None), "id", "none")
@@ -88,7 +92,9 @@ def nav_links(request):
             f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
             f"interface:{int(operator_interface_mode)}:"
             f"feedback:{int(feedback_ingestion_enabled)}:"
-            f"public_chat:{int(bool(getattr(site, 'enable_public_chat', False)))}"
+            f"public_chat:{int(bool(getattr(site, 'enable_public_chat', False)))}:"
+            f"staff_chat_bridge:{int(staff_chat_bridge_enabled)}:"
+            f"pages_chat:{int(pages_chat_enabled)}"
         )
         cached = cache.get(cache_key)
         if cached:
@@ -273,15 +279,15 @@ def nav_links(request):
     if user_is_authenticated:
         try:
             profile = user.get_profile(apps.get_model("users", "ChatProfile"))
-        except (ObjectDoesNotExist, AttributeError):
+        except (LookupError, ObjectDoesNotExist, AttributeError):
             profile = None
         user_chat_opt_in = bool(profile and profile.contact_via_chat)
 
     staff_chat_bridge_allowed = user_is_authenticated and (user_is_staff or user_is_superuser)
 
     chat_enabled = bool(
-        getattr(settings, "PAGES_CHAT_ENABLED", False)
-        and is_suite_feature_enabled("staff-chat-bridge", default=False)
+        pages_chat_enabled
+        and staff_chat_bridge_enabled
         and (site_public_chat_enabled or user_chat_opt_in or staff_chat_bridge_allowed)
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")

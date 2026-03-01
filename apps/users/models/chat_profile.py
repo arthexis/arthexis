@@ -27,6 +27,31 @@ class ChatProfile(Profile):
     class Meta(Profile.Meta):
         verbose_name = _("Chat Profile")
         verbose_name_plural = _("Chat Profiles")
+        constraints = [
+            models.CheckConstraint(
+                name="chat_profile_exactly_one_owner",
+                condition=(
+                    models.Q(user__isnull=False, group__isnull=True, avatar__isnull=True)
+                    | models.Q(user__isnull=True, group__isnull=False, avatar__isnull=True)
+                    | models.Q(user__isnull=True, group__isnull=True, avatar__isnull=False)
+                ),
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(user__isnull=False),
+                name="chat_profile_unique_user",
+            ),
+            models.UniqueConstraint(
+                fields=["group"],
+                condition=models.Q(group__isnull=False),
+                name="chat_profile_unique_group",
+            ),
+            models.UniqueConstraint(
+                fields=["avatar"],
+                condition=models.Q(avatar__isnull=False),
+                name="chat_profile_unique_avatar",
+            ),
+        ]
 
     def __str__(self) -> str:
         """Return a concise label for admin listings."""

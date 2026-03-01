@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from django import forms
+from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -257,7 +258,7 @@ class UserStoryForm(forms.ModelForm):
             "contact_via_chat": bool(contact_via_chat),
             "is_enabled": True,
         }
-        if hasattr(owner, "get_username"):
+        if isinstance(owner, get_user_model()) and owner.is_authenticated:
             ChatProfile.objects.update_or_create(user=owner, defaults=defaults)
             return
         if isinstance(owner, SecurityGroup):
