@@ -30,7 +30,7 @@ def seed_ocpp_simulator_suite_feature(apps, schema_editor):
                 node=local_node,
             ).exists()
 
-    feature, _ = Feature.objects.using(db_alias).update_or_create(
+    Feature.objects.using(db_alias).update_or_create(
         slug=OCPP_SIMULATOR_FEATURE_SLUG,
         defaults={
             "display": "OCPP Simulator",
@@ -51,10 +51,6 @@ def seed_ocpp_simulator_suite_feature(apps, schema_editor):
             "protocol_coverage": {},
         },
     )
-    # Ensure suite feature is not bound to legacy node feature dependency.
-    if feature.node_feature_id is not None:
-        feature.node_feature = None
-        feature.save(update_fields=["node_feature"])
 
 
 def unseed_ocpp_simulator_suite_feature(apps, schema_editor):
@@ -80,15 +76,21 @@ def unseed_ocpp_simulator_suite_feature(apps, schema_editor):
             "is_deleted": False,
         },
     )
-    if suite_feature is not None and suite_feature.is_enabled:
-        local_node = Node.objects.using(db_alias).filter(current_relation="SELF").first()
-        if local_node is None:
-            local_node = Node.objects.using(db_alias).order_by("pk").first()
-        if local_node is not None:
-            NodeFeatureAssignment.objects.using(db_alias).get_or_create(
-                node=local_node,
-                feature=legacy_feature,
-            )
+    assignment_qs = NodeFeatureAssignment.objects.using(db_alias).filter(
+        feature=legacy_feature
+    )
+    if suite_feature is not None:
+        if suite_feature.is_enabled:
+            local_node = Node.objects.using(db_alias).filter(current_relation="SELF").first()
+            if local_node is None:
+                local_node = Node.objects.using(db_alias).order_by("pk").first()
+            if local_node is not None:
+                NodeFeatureAssignment.objects.using(db_alias).get_or_create(
+                    node=local_node,
+                    feature=legacy_feature,
+                )
+        else:
+            assignment_qs.delete()
 
     Feature.objects.using(db_alias).filter(slug=OCPP_SIMULATOR_FEATURE_SLUG).delete()
 

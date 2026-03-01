@@ -117,9 +117,15 @@ class SimulatorAdmin(
             return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
 
         service_enabled = not bool(feature.is_enabled)
-        feature.is_enabled = service_enabled
-        feature.save(update_fields=["is_enabled", "updated_at"])
-        queue_cpsim_service_toggle(enabled=service_enabled, source="admin")
+        with transaction.atomic():
+            feature.is_enabled = service_enabled
+            feature.save(update_fields=["is_enabled", "updated_at"])
+            transaction.on_commit(
+                lambda: queue_cpsim_service_toggle(
+                    enabled=service_enabled,
+                    source="admin",
+                )
+            )
 
         action = "enabled" if service_enabled else "disabled"
         self.message_user(
