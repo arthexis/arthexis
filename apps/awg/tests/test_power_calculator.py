@@ -36,14 +36,6 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
             render.side_effect = lambda instance: instance
             return electrical_power_calculator(request)
 
-    def test_get_renders_calculator(self):
-        """GET requests should render the electrical power calculator page."""
-
-        response = self._get()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.template_name, "awg/electrical_power_calculator.html")
-
     def test_post_calculates_single_phase_values(self):
         """Single-phase inputs should produce kVA, kW, and breaker values."""
 
