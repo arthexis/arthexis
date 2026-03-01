@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Compatibility shim for the VS Code test server entrypoint."""
+"""Compatibility shim for the VS Code test launcher entrypoint."""
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 from apps.vscode.test_server import main
 

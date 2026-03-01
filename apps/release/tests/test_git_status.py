@@ -7,7 +7,6 @@ from apps.release import release
 from apps.release.release import builder
 from apps.release.domain import release_tasks
 
-pytestmark = pytest.mark.critical
 
 def _mock_git_status(monkeypatch: pytest.MonkeyPatch, output: str) -> None:
     def fake_run(cmd, capture_output=False, text=False, cwd=None):  # noqa: ANN001

@@ -51,31 +51,33 @@ class _ChargerStub:
         self.last_heartbeat = last_heartbeat
 
 
-def test_charger_last_seen_prefers_status_timestamp(monkeypatch):
-    timestamp = timezone.now() - datetime.timedelta(minutes=5)
-    charger = _ChargerWithoutHelper(status_ts=timestamp)
+@pytest.mark.parametrize(
+    ("status_minutes", "heartbeat_minutes", "raise_attr", "expected_source"),
+    [
+        (5, 10, False, "status"),
+        (None, 10, False, "heartbeat"),
+        (None, 0, True, "heartbeat"),
+    ],
+)
+def test_charger_last_seen_fallbacks(status_minutes, heartbeat_minutes, raise_attr, expected_source):
+    """Resolve charger last-seen values using status timestamp, then heartbeat fallback."""
 
-    assert common._charger_last_seen(charger) == timestamp
+    now = timezone.now()
+    status_ts = None if status_minutes is None else now - datetime.timedelta(minutes=status_minutes)
+    heartbeat = now - datetime.timedelta(minutes=heartbeat_minutes)
+    charger = _ChargerWithoutHelper(status_ts=status_ts, heartbeat=heartbeat, raise_attr=raise_attr)
+
+    expected = status_ts if expected_source == "status" else heartbeat
+    assert common._charger_last_seen(charger) == expected
 
 
-def test_charger_last_seen_falls_back_to_heartbeat(monkeypatch):
-    heartbeat = timezone.now() - datetime.timedelta(minutes=10)
-    charger = _ChargerWithoutHelper(status_ts=None, heartbeat=heartbeat)
+@pytest.mark.parametrize(("minutes_ago", "expected"), [(1, False), (10, True)])
+def test_is_untracked_origin_uses_last_updated(minutes_ago, expected):
+    """Classify untracked origins as stale based on the configured activity window."""
 
-    assert common._charger_last_seen(charger) == heartbeat
-
-
-def test_charger_last_seen_handles_attribute_error(monkeypatch):
-    heartbeat = timezone.now()
-    charger = _ChargerWithoutHelper(status_ts=None, heartbeat=heartbeat, raise_attr=True)
-
-    assert common._charger_last_seen(charger) == heartbeat
-
-
-def test_is_untracked_origin_uses_last_updated():
     reference_time = timezone.now()
     active_delta = datetime.timedelta(minutes=5)
-    origin = _NodeStub(last_updated=reference_time - datetime.timedelta(minutes=1))
+    origin = _NodeStub(last_updated=reference_time - datetime.timedelta(minutes=minutes_ago))
     connector = _ConnectorStub(node_origin=origin)
 
     assert (
@@ -85,48 +87,32 @@ def test_is_untracked_origin_uses_last_updated():
             reference_time=reference_time,
             active_delta=active_delta,
         )
-        is False
+        is expected
     )
 
 
-def test_is_untracked_origin_flags_stale_last_updated():
-    reference_time = timezone.now()
-    active_delta = datetime.timedelta(minutes=5)
-    origin = _NodeStub(last_updated=reference_time - datetime.timedelta(minutes=10))
-    connector = _ConnectorStub(node_origin=origin)
+@pytest.mark.parametrize(
+    ("minutes_ago", "expected_label", "expected_color"),
+    [(1, STATUS_BADGE_MAP["available"][0], STATUS_BADGE_MAP["available"][1]), (10, "Offline", "grey")],
+)
+def test_charger_state_disconnected_heartbeat_recency(
+    monkeypatch,
+    settings,
+    minutes_ago,
+    expected_label,
+    expected_color,
+):
+    """Map disconnected chargers to available/offline badges based on heartbeat freshness."""
 
-    assert (
-        common._is_untracked_origin(
-            connector,
-            local_node=None,
-            reference_time=reference_time,
-            active_delta=active_delta,
-        )
-        is True
-    )
-
-
-def test_charger_state_uses_recent_heartbeat_when_disconnected(monkeypatch, settings):
     settings.NODE_LAST_SEEN_ACTIVE_DELTA = datetime.timedelta(minutes=5)
-    recent = timezone.now() - datetime.timedelta(minutes=1)
-    charger = _ChargerStub(last_heartbeat=recent)
+    heartbeat = timezone.now() - datetime.timedelta(minutes=minutes_ago)
+    charger = _ChargerStub(last_heartbeat=heartbeat)
     monkeypatch.setattr(common.store, "is_connected", lambda *_args, **_kwargs: False)
 
     label, color = common._charger_state(charger, tx_obj=None)
 
-    assert (label, color) == STATUS_BADGE_MAP["available"]
-
-
-def test_charger_state_offline_when_heartbeat_stale(monkeypatch, settings):
-    settings.NODE_LAST_SEEN_ACTIVE_DELTA = datetime.timedelta(minutes=5)
-    stale = timezone.now() - datetime.timedelta(minutes=10)
-    charger = _ChargerStub(last_heartbeat=stale)
-    monkeypatch.setattr(common.store, "is_connected", lambda *_args, **_kwargs: False)
-
-    label, color = common._charger_state(charger, tx_obj=None)
-
-    assert str(label) == "Offline"
-    assert color == "grey"
+    assert str(label) == str(expected_label)
+    assert color == expected_color
 
 
 @pytest.mark.django_db

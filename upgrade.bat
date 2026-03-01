@@ -20,6 +20,26 @@ if "%~1"=="--branch" (
     goto parse_args
 )
 
+if "%~1"=="--latest" (
+    shift
+    goto parse_args
+)
+
+if "%~1"=="-t" (
+    shift
+    goto parse_args
+)
+
+if "%~1"=="--force" (
+    shift
+    goto parse_args
+)
+
+if "%~1"=="-f" (
+    shift
+    goto parse_args
+)
+
 if "%~1"=="--main" (
     set "BRANCH=main"
     shift

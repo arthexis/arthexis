@@ -9,7 +9,7 @@ from apps.aws.models import AWSCredentials, LightsailInstance
 from apps.aws.services import LightsailFetchError
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
 
 def _fake_instance_payload(name: str, *, ip: str) -> dict[str, object]:

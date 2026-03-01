@@ -33,112 +33,14 @@ arthexis_refresh_desktop_shortcuts() {
         return
     fi
 
-    local user_home="/home/$username"
-    if [ ! -d "$user_home" ]; then
-        return
+    local python_exec="$base_dir/.venv/bin/python"
+    if [ ! -x "$python_exec" ]; then
+        python_exec="python3"
     fi
 
-    local desktop_dir=""
-    if command -v xdg-user-dir >/dev/null 2>&1; then
-        if [ "$(id -un 2>/dev/null)" = "$username" ]; then
-            desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
-        else
-            if command -v sudo >/dev/null 2>&1; then
-                desktop_dir="$(sudo -H -u "$username" xdg-user-dir DESKTOP 2>/dev/null || true)"
-            elif command -v runuser >/dev/null 2>&1; then
-                desktop_dir="$(runuser -u "$username" -- xdg-user-dir DESKTOP 2>/dev/null || true)"
-            fi
-        fi
-    fi
-
-    if [ -z "$desktop_dir" ]; then
-        desktop_dir="$user_home/Desktop"
-    fi
-
-    if [ ! -d "$desktop_dir" ]; then
-        mkdir -p "$desktop_dir" || return
-        if [ "$(id -un 2>/dev/null)" != "$username" ]; then
-            local user_group
-            if ! user_group="$(id -gn "$username" 2>/dev/null)"; then
-                user_group="$username"
-            fi
-            chown "$username":"$user_group" "$desktop_dir" 2>/dev/null || true
-        fi
-    fi
-
-    local public_shortcut="$desktop_dir/Arthexis Public Site.desktop"
-    local admin_shortcut="$desktop_dir/Arthexis Admin Console.desktop"
-
-    local script_base_dir
-    script_base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-    local launcher_path="$script_base_dir/scripts/helpers/desktop_shortcuts.sh"
-    local public_exec
-    local admin_exec
-    printf -v public_exec '%q %q %q' "$launcher_path" launch public
-    printf -v admin_exec '%q %q %q' "$launcher_path" launch admin
-
-    arthexis_write_shortcut() {
-        local target="$1"
-
-        local tmpfile
-        tmpfile="$(mktemp "${desktop_dir}/.arthexis_shortcut.XXXXXX" 2>/dev/null)" || return 1
-
-        if ! cat > "$tmpfile"; then
-            rm -f "$tmpfile"
-            return 1
-        fi
-
-        if [ -L "$target" ]; then
-            rm -f "$target" || true
-        elif [ -e "$target" ] && [ ! -f "$target" ]; then
-            rm -f "$tmpfile"
-            return 1
-        fi
-
-        chmod 755 "$tmpfile" 2>/dev/null || true
-
-        if mv -f "$tmpfile" "$target"; then
-            return 0
-        fi
-
-        rm -f "$tmpfile"
-        return 1
-    }
-
-    arthexis_write_shortcut "$public_shortcut" <<SHORTCUT
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Arthexis Public Site
-Comment=Open the Arthexis public site
-Exec=$public_exec
-Icon=web-browser
-Terminal=false
-Categories=Network;WebBrowser;
-StartupNotify=true
-SHORTCUT
-
-    arthexis_write_shortcut "$admin_shortcut" <<SHORTCUT
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Arthexis Admin Console
-Comment=Open the Arthexis admin console
-Exec=$admin_exec
-Icon=applications-system
-Terminal=false
-Categories=Office;System;
-StartupNotify=true
-SHORTCUT
-
-    if [ "$(id -un 2>/dev/null)" != "$username" ]; then
-        local user_group
-        if ! user_group="$(id -gn "$username" 2>/dev/null)"; then
-            user_group="$username"
-        fi
-        chown "$username":"$user_group" "$public_shortcut" "$admin_shortcut" 2>/dev/null || true
-    fi
+    "$python_exec" "$base_dir/manage.py" sync_desktop_shortcuts --base-dir "$base_dir" --username "$username" || true
 }
+
 
 arthexis_desktop_shortcut_start_unit() {
     local unit="$1"

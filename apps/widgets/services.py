@@ -53,6 +53,10 @@ def sync_registered_widgets() -> None:
                     },
                 )
                 updated = False
+                required_feature = _required_feature_for_definition(
+                    widget=widget,
+                    definition=definition,
+                )
                 for field, value in {
                     "name": definition.name,
                     "description": definition.description,
@@ -60,6 +64,7 @@ def sync_registered_widgets() -> None:
                     "template_name": definition.template_name,
                     "renderer_path": definition.renderer_path,
                     "priority": definition.order,
+                    "required_feature": required_feature,
                 }.items():
                     if getattr(widget, field) != value:
                         setattr(widget, field, value)
@@ -71,6 +76,30 @@ def sync_registered_widgets() -> None:
                     widget.save()
     except (OperationalError, ProgrammingError):  # pragma: no cover - database not ready
         logger.debug("Widgets tables unavailable; skipping sync", exc_info=True)
+
+
+def _required_feature_for_definition(
+    *, widget: Widget, definition: WidgetDefinition
+):
+    """Resolve the configured feature while preserving existing gated state on lookup misses."""
+
+    if not definition.required_feature_slug:
+        return None
+
+    feature = _resolve_feature(definition.required_feature_slug)
+    if feature is not None:
+        return feature
+
+    existing_feature = getattr(widget, "required_feature", None)
+    if existing_feature and existing_feature.slug == definition.required_feature_slug:
+        return existing_feature
+
+    logger.warning(
+        "Could not resolve required feature '%s' for widget '%s'; preserving current configuration",
+        definition.required_feature_slug,
+        definition.slug,
+    )
+    return existing_feature
 
 
 def _build_context(definition: WidgetDefinition, widget: Widget, **kwargs) -> dict[str, Any] | None:
@@ -102,7 +131,7 @@ def _visible(widget: Widget, user) -> bool:
 
 def _zone_widgets_queryset(zone_slug: str):
     return (
-        Widget.objects.select_related("zone")
+        Widget.objects.select_related("zone", "required_feature")
         .prefetch_related("profiles__user", "profiles__group")
         .filter(
             zone__slug=zone_slug,
@@ -114,7 +143,30 @@ def _zone_widgets_queryset(zone_slug: str):
     )
 
 
-def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> list[RenderedWidget]:
+def _resolve_feature(feature_slug: str):
+    """Resolve a node feature by slug when available."""
+
+    from apps.nodes.models import NodeFeature
+
+    return NodeFeature.objects.filter(slug=feature_slug).first()
+
+
+def _has_required_feature(widget: Widget, request) -> bool:
+    """Return whether a widget's required node feature is enabled."""
+
+    if not widget.required_feature_id:
+        return True
+    node = getattr(request, "badge_node", None) or getattr(request, "node", None)
+    if node is None:
+        from apps.nodes.models import Node
+
+        node = Node.get_local()
+    return bool(node and node.features.filter(pk=widget.required_feature_id).exists())
+
+
+def render_zone_widgets(
+    *, request, zone_slug: str, extra_context: dict[str, Any] | None = None
+) -> list[RenderedWidget]:
     extra_context = extra_context or {}
 
     try:
@@ -134,6 +186,8 @@ def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any
             continue
         if definition.permission and not definition.permission(request=request, widget=widget, **extra_context):
             continue
+        if not _has_required_feature(widget, request):
+            continue
         if not _visible(widget, getattr(request, "user", None)):
             continue
 
@@ -146,7 +200,9 @@ def render_zone_widgets(*, request, zone_slug: str, extra_context: dict[str, Any
     return rendered
 
 
-def render_zone_html(*, request, zone_slug: str, extra_context: dict[str, Any] | None = None) -> str:
+def render_zone_html(
+    *, request, zone_slug: str, extra_context: dict[str, Any] | None = None
+) -> str:
     extra_context = extra_context or {}
     identity = _cache_identity(getattr(request, "user", None))
     context_key = _cache_context(extra_context)

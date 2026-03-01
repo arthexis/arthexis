@@ -159,8 +159,7 @@ The script always asks for confirmation before proceeding because the server wil
 During removal the script:
 
 1. Stops and disables any recorded systemd service, along with linked LCD, RFID, and Celery units, then clears the associated lock files.
-2. Stops historical Wi-Fi watchdog services (`wlan1-refresh`, `wlan1-device-refresh`, `wifi-watchdog`) when they exist so nothing keeps touching network interfaces after the uninstall.
-3. Terminates any remaining `manage.py runserver` or Celery processes.
-4. Deletes `db.sqlite3`, removes the entire `.locks/` directory, and clears the cached requirements hash so future installs start cleanly.
+2. Terminates any remaining `manage.py runserver` or Celery processes.
+3. Deletes `db.sqlite3`, removes the entire `.locks/` directory, and clears the cached requirements hash so future installs start cleanly.
 
 Afterwards the script prints “Uninstall complete.” so you can safely remove the project directory or clone a fresh copy before reinstalling.

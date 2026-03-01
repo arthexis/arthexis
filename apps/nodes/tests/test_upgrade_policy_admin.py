@@ -4,7 +4,6 @@ import pytest
 
 from apps.nodes.models import UpgradePolicy
 
-pytestmark = pytest.mark.critical
 
 
 @pytest.mark.parametrize(

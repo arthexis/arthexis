@@ -13,7 +13,6 @@ from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
 from django.contrib.sites.models import Site
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
