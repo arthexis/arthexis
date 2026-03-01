@@ -16,7 +16,8 @@
         [
           "Watchtower"
         ]
-      ]
+      ],
+      "footprint": "heavy"
     }
   }
 ]
