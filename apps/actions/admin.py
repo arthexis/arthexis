@@ -23,6 +23,8 @@ from apps.locals.user_data import EntityModelAdmin
 class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
     """Manage remote actions and export OpenAPI specs from the changelist."""
 
+    OPENAPI_EXPORT_FILENAME = "my-actions-openapi.yaml"
+
     list_display = ("display", "slug", "operation_id", "recipe", "owner", "is_active")
     list_filter = ("is_active",)
     search_fields = ("display", "slug", "operation_id")
@@ -55,11 +57,16 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
     def my_openapi_spec_view(self, request):
         """Preview the current user's OpenAPI YAML and optionally download it."""
 
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+
         spec = build_openapi_spec(user=request.user, request=request)
         payload = yaml.safe_dump(spec, sort_keys=False)
         if request.GET.get("download") == "1":
             response = HttpResponse(payload, content_type="application/yaml")
-            response["Content-Disposition"] = 'attachment; filename="my-actions-openapi.yaml"'
+            response["Content-Disposition"] = (
+                f'attachment; filename="{self.OPENAPI_EXPORT_FILENAME}"'
+            )
             return response
 
         context = {
