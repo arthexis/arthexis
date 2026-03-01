@@ -62,3 +62,15 @@ def test_upgrade_bat_supports_short_flag_aliases() -> None:
 
     assert 'if "%~1"=="-t" (' in script_text
     assert 'if "%~1"=="-f" (' in script_text
+
+
+def test_upgrade_script_auto_reruns_after_self_update() -> None:
+    """Regression: upgraded script should re-exec once instead of requiring manual rerun."""
+
+    script_text = Path("upgrade.sh").read_text(encoding="utf-8")
+
+    assert "rerun_with_updated_script()" in script_text
+    assert "ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH" in script_text
+    assert "restarting upgrade automatically with the new script" in script_text
+    assert "if rerun_with_updated_script; then" in script_text
+    assert "please run the upgrade again to use the new script" in script_text
