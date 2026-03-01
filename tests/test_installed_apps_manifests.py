@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pytest
 
 from config import settings
@@ -9,104 +12,58 @@ from config import settings
 pytestmark = pytest.mark.critical
 
 
-EXPECTED_LOCAL_APPS = [
-    "apps.base",
-    "apps.blog",
-    "apps.credentials",
-    "apps.actions",
-    "apps.celery",
-    "apps.nodes",
-    "apps.discovery",
-    "apps.ftp",
-    "apps.dns",
-    "apps.screens",
-    "apps.sensors",
-    "apps.pyxel",
-    "apps.counters",
-    "apps.energy",
-    "apps.groups",
-    "apps.core",
-    "apps.graphql",
-    "apps.mcp",
-    "apps.users",
-    "apps.leads",
-    "apps.embeds",
-    "apps.flows",
-    "apps.release",
-    "apps.emails",
-    "apps.extensions",
-    "apps.desktop",
-    "apps.payments",
-    "apps.sponsors",
-    "apps.links",
-    "apps.docs",
-    "apps.gdrive",
-    "apps.calendars",
-    "apps.maps",
-    "apps.locals",
-    "apps.locale",
-    "apps.content",
-    "apps.clocks",
-    "apps.audio",
-    "apps.bluetooth",
-    "apps.video",
-    "apps.media",
-    "apps.mermaid",
-    "apps.odoo",
-    "apps.sigils",
-    "apps.selenium",
-    "apps.repos",
-    "apps.reports",
-    "apps.app",
-    "apps.rates",
-    "apps.vehicle",
-    "apps.protocols",
-    "apps.ocpp",
-    "apps.ocpp.forwarder",
-    "apps.simulators",
-    "apps.meta",
-    "apps.awg",
-    "apps.chats",
-    "apps.aws",
-    "apps.alexa",
-    "apps.socials",
-    "apps.ops",
-    "apps.survey",
-    "apps.modules",
-    "apps.features",
-    "apps.prompts",
-    "apps.widgets",
-    "apps.apis",
-    "apps.sites",
-    "apps.smb",
-    "apps.summary",
-    "apps.services",
-    "apps.certs",
-    "apps.nginx",
-    "apps.cards",
-    "apps.nfts",
-    "apps.tasks",
-    "apps.recipes",
-    "apps.tests",
-    "apps.teams",
-    "apps.logbook",
-    "apps.nmcli",
-    "apps.wikis",
-    "apps.totp",
-    "apps.terms",
-    "apps.evergo",
-    "apps.fitbit",
-]
+def _extract_manifest_apps(manifest_path: Path) -> list[str]:
+    """Return DJANGO_APPS from a manifest file using static AST evaluation."""
+
+    module_ast = ast.parse(manifest_path.read_text(encoding="utf-8"))
+    for statement in module_ast.body:
+        if not isinstance(statement, ast.Assign):
+            continue
+
+        if len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+            continue
+
+        if statement.targets[0].id != "DJANGO_APPS":
+            continue
+
+        try:
+            parsed_value = ast.literal_eval(statement.value)
+        except (ValueError, SyntaxError) as exc:
+            raise AssertionError(
+                f"{manifest_path} must declare DJANGO_APPS as a literal list of strings"
+            ) from exc
+
+        if not isinstance(parsed_value, list):
+            raise AssertionError(f"{manifest_path} DJANGO_APPS must be a list")
+
+        if not all(isinstance(entry, str) and entry.strip() for entry in parsed_value):
+            raise AssertionError(
+                f"{manifest_path} DJANGO_APPS must contain non-empty string entries"
+            )
+
+        return [entry.strip() for entry in parsed_value]
+
+    raise AssertionError(f"{manifest_path} must declare DJANGO_APPS")
+
+
+def _expected_local_apps_from_manifest_files() -> list[str]:
+    """Build expected local apps from manifest files to avoid brittle hard-coded lists."""
+
+    app_entries: list[str] = []
+    manifests = sorted((settings.BASE_DIR / "apps").rglob("manifest.py"))
+    for manifest_path in manifests:
+        app_entries.extend(_extract_manifest_apps(manifest_path))
+    return app_entries
 
 
 def test_local_apps_manifest_loading_is_complete_and_deterministic() -> None:
-    """Manifest loading should reproduce the project app list deterministically."""
+    """Regression: manifest loading should reproduce the project app list deterministically."""
 
+    expected_local_apps = _expected_local_apps_from_manifest_files()
     first_load = settings._load_local_apps_from_manifests()
     second_load = settings._load_local_apps_from_manifests()
 
-    assert set(first_load) == set(EXPECTED_LOCAL_APPS)
-    assert set(second_load) == set(EXPECTED_LOCAL_APPS)
+    assert first_load == expected_local_apps
     assert first_load == second_load
     assert len(first_load) == len(set(first_load))
 
