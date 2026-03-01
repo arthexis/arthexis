@@ -9,6 +9,7 @@ env:
   NODE_OPTIONS: '--no-deprecation'
   ARTHEXIS_DB_BACKEND: sqlite
   PYTEST_WORKERS: '2'
+  CI_ENABLE_DOCS_ADMIN_SETUP: 'false'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -76,7 +77,93 @@ jobs:
           python scripts/check_migration_conflicts.py
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
+      - name: Decide whether to create docs admin user
+        id: docs_admin_gate
+        uses: actions/github-script@v8
+        env:
+          CI_ENABLE_DOCS_ADMIN_SETUP: ${{ env.CI_ENABLE_DOCS_ADMIN_SETUP }}
+        with:
+          script: |
+            const eventName = context.eventName;
+            const defaultFlag = String(process.env.CI_ENABLE_DOCS_ADMIN_SETUP || 'false').toLowerCase();
+            const manualEnabled = ['1', 'true', 'yes', 'on'].includes(defaultFlag);
+            const pathMatchers = [
+              'apps/content/**',
+              'apps/**/templates/admin/**',
+              'apps/**/admin.py',
+              'apps/**/admin/*.py',
+              'apps/**/tests/**/test_*admin*.py',
+              'apps/**/tests/**/test_*screenshot*.py',
+              'tests/**/test_*admin*.py',
+              'tests/**/test_*screenshot*.py',
+              'apps/users/management/commands/create_docs_admin.py',
+              'apps/users/tests/test_create_docs_admin_command.py',
+              '.github/workflows/ci.yml'
+            ];
+
+            if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
+              core.setOutput('run_docs_admin_setup', manualEnabled ? 'true' : 'false');
+              core.setOutput(
+                'reason',
+                manualEnabled
+                  ? `enabled by CI_ENABLE_DOCS_ADMIN_SETUP=${process.env.CI_ENABLE_DOCS_ADMIN_SETUP}`
+                  : `disabled by CI_ENABLE_DOCS_ADMIN_SETUP=${process.env.CI_ENABLE_DOCS_ADMIN_SETUP}`
+              );
+              return;
+            }
+
+            if (eventName !== 'pull_request') {
+              core.setOutput('run_docs_admin_setup', 'false');
+              core.setOutput('reason', `event ${eventName} does not require docs admin setup`);
+              return;
+            }
+
+            const wildcardToRegex = (pattern) => {
+              const escaped = pattern
+                .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*\*/g, '::DOUBLE_STAR::')
+                .replace(/\*/g, '[^/]*')
+                .replace(/::DOUBLE_STAR::/g, '.*');
+              return new RegExp(`^${escaped}$`);
+            };
+
+            const regexMatchers = pathMatchers.map(pattern => ({ pattern, regex: wildcardToRegex(pattern) }));
+            const changedFiles = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                per_page: 100
+              },
+              response => response.data.map(file => file.filename)
+            );
+
+            const matchedPatterns = new Set();
+            for (const file of changedFiles) {
+              for (const matcher of regexMatchers) {
+                if (matcher.regex.test(file)) {
+                  matchedPatterns.add(matcher.pattern);
+                  break;
+                }
+              }
+            }
+
+            if (matchedPatterns.size > 0) {
+              core.setOutput('run_docs_admin_setup', 'true');
+              core.setOutput(
+                'reason',
+                `PR touches docs/admin screenshot-related paths (${Array.from(matchedPatterns).join(', ')})`
+              );
+              return;
+            }
+
+            core.setOutput('run_docs_admin_setup', 'false');
+            core.setOutput('reason', 'PR does not touch docs/admin screenshot-related paths or tests');
+      # Keep docs-admin account creation scoped to screenshot/admin docs changes (or explicit CI_ENABLE_DOCS_ADMIN_SETUP=true)
+      # so generic installs/upgrades do not mutate auth state globally; tests needing this account should create it in fixtures.
       - name: Create docs admin user
+        if: ${{ steps.docs_admin_gate.outputs.run_docs_admin_setup == 'true' }}
         env:
           DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
         run: |
@@ -87,6 +174,10 @@ jobs:
           fi
           echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
           python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+      - name: Report docs admin setup skip
+        if: ${{ steps.docs_admin_gate.outputs.run_docs_admin_setup != 'true' }}
+        run: |
+          echo "Skipping docs admin setup: ${{ steps.docs_admin_gate.outputs.reason }}"
       - name: Check import resolution
         run: |
           source .venv/bin/activate
@@ -106,8 +197,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s
-' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -121,8 +211,7 @@ jobs:
           echo "mode=changed" >> "${GITHUB_OUTPUT}"
           {
             echo "paths<<EOF"
-            printf '%s
-' "${CHANGED_FIXTURES}"
+            printf '%s\n' "${CHANGED_FIXTURES}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
@@ -224,7 +313,93 @@ jobs:
           python scripts/check_migration_conflicts.py
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
+      - name: Decide whether to create docs admin user
+        id: docs_admin_gate
+        uses: actions/github-script@v8
+        env:
+          CI_ENABLE_DOCS_ADMIN_SETUP: ${{ env.CI_ENABLE_DOCS_ADMIN_SETUP }}
+        with:
+          script: |
+            const eventName = context.eventName;
+            const defaultFlag = String(process.env.CI_ENABLE_DOCS_ADMIN_SETUP || 'false').toLowerCase();
+            const manualEnabled = ['1', 'true', 'yes', 'on'].includes(defaultFlag);
+            const pathMatchers = [
+              'apps/content/**',
+              'apps/**/templates/admin/**',
+              'apps/**/admin.py',
+              'apps/**/admin/*.py',
+              'apps/**/tests/**/test_*admin*.py',
+              'apps/**/tests/**/test_*screenshot*.py',
+              'tests/**/test_*admin*.py',
+              'tests/**/test_*screenshot*.py',
+              'apps/users/management/commands/create_docs_admin.py',
+              'apps/users/tests/test_create_docs_admin_command.py',
+              '.github/workflows/ci.yml'
+            ];
+
+            if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
+              core.setOutput('run_docs_admin_setup', manualEnabled ? 'true' : 'false');
+              core.setOutput(
+                'reason',
+                manualEnabled
+                  ? `enabled by CI_ENABLE_DOCS_ADMIN_SETUP=${process.env.CI_ENABLE_DOCS_ADMIN_SETUP}`
+                  : `disabled by CI_ENABLE_DOCS_ADMIN_SETUP=${process.env.CI_ENABLE_DOCS_ADMIN_SETUP}`
+              );
+              return;
+            }
+
+            if (eventName !== 'pull_request') {
+              core.setOutput('run_docs_admin_setup', 'false');
+              core.setOutput('reason', `event ${eventName} does not require docs admin setup`);
+              return;
+            }
+
+            const wildcardToRegex = (pattern) => {
+              const escaped = pattern
+                .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*\*/g, '::DOUBLE_STAR::')
+                .replace(/\*/g, '[^/]*')
+                .replace(/::DOUBLE_STAR::/g, '.*');
+              return new RegExp(`^${escaped}$`);
+            };
+
+            const regexMatchers = pathMatchers.map(pattern => ({ pattern, regex: wildcardToRegex(pattern) }));
+            const changedFiles = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                per_page: 100
+              },
+              response => response.data.map(file => file.filename)
+            );
+
+            const matchedPatterns = new Set();
+            for (const file of changedFiles) {
+              for (const matcher of regexMatchers) {
+                if (matcher.regex.test(file)) {
+                  matchedPatterns.add(matcher.pattern);
+                  break;
+                }
+              }
+            }
+
+            if (matchedPatterns.size > 0) {
+              core.setOutput('run_docs_admin_setup', 'true');
+              core.setOutput(
+                'reason',
+                `PR touches docs/admin screenshot-related paths (${Array.from(matchedPatterns).join(', ')})`
+              );
+              return;
+            }
+
+            core.setOutput('run_docs_admin_setup', 'false');
+            core.setOutput('reason', 'PR does not touch docs/admin screenshot-related paths or tests');
+      # Keep docs-admin account creation scoped to screenshot/admin docs changes (or explicit CI_ENABLE_DOCS_ADMIN_SETUP=true)
+      # so generic installs/upgrades do not mutate auth state globally; tests needing this account should create it in fixtures.
       - name: Create docs admin user
+        if: ${{ steps.docs_admin_gate.outputs.run_docs_admin_setup == 'true' }}
         env:
           DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
         run: |
@@ -235,6 +410,10 @@ jobs:
           fi
           echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
           python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+      - name: Report docs admin setup skip
+        if: ${{ steps.docs_admin_gate.outputs.run_docs_admin_setup != 'true' }}
+        run: |
+          echo "Skipping docs admin setup: ${{ steps.docs_admin_gate.outputs.reason }}"
 
       - name: Run Ruff on upgraded install
         run: |
