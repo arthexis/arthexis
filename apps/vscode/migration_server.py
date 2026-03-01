@@ -8,6 +8,7 @@ import hashlib
 import json
 import multiprocessing
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -72,6 +73,7 @@ def _terminate_process_without_psutil(pid: int) -> None:
 
     getpgid = getattr(os, "getpgid", None)
     getpgrp = getattr(os, "getpgrp", None)
+    killpg = getattr(os, "killpg", None)
 
     try:
         if getpgid is None or getpgrp is None:
@@ -83,8 +85,12 @@ def _terminate_process_without_psutil(pid: int) -> None:
         current_group_id = None
 
     try:
-        if process_group_id is not None and process_group_id != current_group_id:
-            os.killpg(process_group_id, signal.SIGTERM)
+        if (
+            process_group_id is not None
+            and process_group_id != current_group_id
+            and killpg is not None
+        ):
+            killpg(process_group_id, signal.SIGTERM)
         else:
             os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -102,6 +108,9 @@ def resolve_base_dir(
 
 BASE_DIR = resolve_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
+MIGRATION_SERVER_LOCK_FILE = "migration_server.json"
+MIGRATION_STATUS_IDLE = "idle"
+MIGRATION_STATUS_PROCESSING = "processing"
 REQUIREMENTS_FILE = Path("requirements.txt")
 REQUIREMENTS_HASH_FILE = Path(".locks") / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
@@ -205,21 +214,37 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
     """Return a snapshot of watched files under *base_dir*."""
 
     snapshot: Dict[str, int] = {}
+    base_dir_str = os.fspath(base_dir)
+    normalized_base = re.sub(r"[\\/]+", "/", base_dir_str).rstrip("/")
     for root, dirs, files in os.walk(base_dir):
-        rel_root = Path(root).relative_to(base_dir)
-        if _should_skip_dir(rel_root.parts):
+        normalized_root = re.sub(r"[\\/]+", "/", root).rstrip("/")
+        if normalized_root == normalized_base:
+            rel_parts: tuple[str, ...] = ()
+        elif normalized_root.startswith(f"{normalized_base}/"):
+            rel_parts = tuple(part for part in normalized_root[len(normalized_base) + 1 :].split("/") if part)
+        else:
+            rel_root = os.path.relpath(root, base_dir_str)
+            rel_parts = tuple(part for part in re.split(r"[\\/]", rel_root) if part and part != ".")
+        if _should_skip_dir(rel_parts):
             dirs[:] = []
             continue
-        dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_root.parts, d))]
+        dirs[:] = [d for d in dirs if not _should_skip_dir((*rel_parts, d))]
         for name in files:
-            rel_path = (rel_root / name).as_posix()
+            rel_path = "/".join((*rel_parts, name))
             if not _should_watch_file(rel_path):
                 continue
-            full_path = Path(root, name)
-            try:
-                snapshot[rel_path] = full_path.stat().st_mtime_ns
-            except FileNotFoundError:
-                continue
+            candidate_paths = [Path(root, name)]
+            normalized_fs_root = root.replace("\\", os.sep).replace("/", os.sep)
+            normalized_candidate = Path(normalized_fs_root, name)
+            if normalized_fs_root != root and normalized_candidate not in candidate_paths:
+                candidate_paths.append(normalized_candidate)
+
+            for full_path in candidate_paths:
+                try:
+                    snapshot[rel_path] = full_path.stat().st_mtime_ns
+                    break
+                except FileNotFoundError:
+                    continue
     return snapshot
 
 
@@ -648,17 +673,97 @@ def _is_process_alive(pid: int) -> bool:
     return True
 
 
+def read_migration_server_state(lock_dir: Path) -> dict[str, Any] | None:
+    """Return migration server lock details when the recorded process is live.
+
+    Stale lock files are removed automatically once their PID is no longer
+    running, which keeps cooperating helper processes from waiting forever.
+    """
+
+    state_path = lock_dir / MIGRATION_SERVER_LOCK_FILE
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    pid = payload.get("pid")
+    if isinstance(pid, str) and pid.isdigit():
+        pid = int(pid)
+    if not isinstance(pid, int) or not _is_process_alive(pid):
+        try:
+            state_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        return None
+
+    status = payload.get("status")
+    if status not in {MIGRATION_STATUS_IDLE, MIGRATION_STATUS_PROCESSING}:
+        status = MIGRATION_STATUS_IDLE
+
+    return {
+        "pid": pid,
+        "status": status,
+        "timestamp": payload.get("timestamp"),
+    }
+
+
+def write_migration_server_state(lock_dir: Path, *, pid: int, status: str) -> Path:
+    """Persist migration server lock details for cooperating VS Code services."""
+
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    state_path = lock_dir / MIGRATION_SERVER_LOCK_FILE
+    payload = {
+        "pid": pid,
+        "status": status,
+        "timestamp": time.time(),
+    }
+    state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return state_path
+
+
+def update_migration_server_status(lock_dir: Path, status: str) -> None:
+    """Update the current migration server status if its lock is still valid."""
+
+    state = read_migration_server_state(lock_dir)
+    if state is None:
+        return
+    try:
+        write_migration_server_state(lock_dir, pid=state["pid"], status=status)
+    except OSError:
+        return
+
+
+def _run_refresh_with_status(base_dir: Path, *, latest: bool) -> bool:
+    """Run env-refresh while reflecting processing/idle lock state."""
+
+    update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_PROCESSING)
+    success = False
+    try:
+        success = run_env_refresh_with_report(base_dir, latest=latest)
+        return success
+    finally:
+        if success:
+            update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
+
+
 def migration_server_state(lock_dir: Path):
     """Context manager that records the migration server PID."""
 
     lock_dir.mkdir(parents=True, exist_ok=True)
-    state_path = lock_dir / "migration_server.json"
+    state_path = lock_dir / MIGRATION_SERVER_LOCK_FILE
 
     @contextmanager
     def _manager():
-        payload = {"pid": os.getpid(), "timestamp": time.time()}
         try:
-            state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            write_migration_server_state(
+                lock_dir,
+                pid=os.getpid(),
+                status=MIGRATION_STATUS_IDLE,
+            )
         except OSError:
             pass
         try:
@@ -764,7 +869,7 @@ def main(argv: list[str] | None = None) -> int:
         while True:
             try:
                 if is_first_run:
-                    run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                    _run_refresh_with_status(BASE_DIR, latest=args.latest)
                     snapshot = collect_source_mtimes(BASE_DIR)
                     is_first_run = False
 
@@ -790,9 +895,10 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"[Migration Server] Changes detected: {display}")
-                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                _run_refresh_with_status(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
             except KeyboardInterrupt:
+                update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
                 if remaining_interrupt_retries > 0:
                     remaining_interrupt_retries -= 1
                     print(

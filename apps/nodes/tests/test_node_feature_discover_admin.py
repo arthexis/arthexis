@@ -127,11 +127,45 @@ def test_discover_progress_does_not_auto_enable_manual_features(admin_client, mo
 
 
 @pytest.mark.django_db
-def test_discover_manual_toggle_blocks_enablement_when_feature_not_eligible(admin_client, monkeypatch):
-    """Manual toggles should refuse enablement when eligibility checks fail."""
+def test_discover_progress_auto_enables_gpio_rtc_when_eligible(admin_client, monkeypatch):
+    """Auto-managed gpio-rtc should be assigned during discovery when eligible."""
 
-    node = Node.objects.create(hostname="manual-blocked", public_endpoint="manual-blocked")
-    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    node = Node.objects.create(hostname="auto-progress", public_endpoint="auto-progress")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "RTC detected and feature eligible.",
+            messages.SUCCESS,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["manual_enablement"]["status"] == "auto"
+    assert payload["manual_enablement"]["can_toggle"] is False
+    assert payload["enablement"]["status"] == "enabled"
+    assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_progress_does_not_auto_enable_gpio_rtc_when_ineligible(admin_client, monkeypatch):
+    """Auto-managed gpio-rtc should stay unassigned during discovery when ineligible."""
+
+    node = Node.objects.create(hostname="auto-progress", public_endpoint="auto-progress")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -142,18 +176,20 @@ def test_discover_manual_toggle_blocks_enablement_when_feature_not_eligible(admi
         "apps.nodes.feature_checks.feature_checks.run",
         lambda _feature, node=None: FeatureCheckResult(
             False,
-            "Audio input device not found.",
+            "RTC not detected.",
             messages.WARNING,
         ),
     )
 
     response = admin_client.post(
-        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
-        {"feature_id": feature.pk, "enabled": "true"},
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
     payload = response.json()
     assert payload["eligible"] is False
-    assert payload["detail"] == "Audio input device not found."
+    assert payload["manual_enablement"]["status"] == "auto"
+    assert payload["manual_enablement"]["can_toggle"] is False
+    assert payload["enablement"]["status"] == "skipped"
     assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()

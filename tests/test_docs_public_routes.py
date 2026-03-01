@@ -13,7 +13,6 @@ from django.urls import resolve, reverse
 
 from apps.docs import views
 
-pytestmark = pytest.mark.critical
 
 
 @pytest.fixture

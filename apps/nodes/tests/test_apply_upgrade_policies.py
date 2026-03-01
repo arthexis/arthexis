@@ -3,7 +3,6 @@ import pytest
 from apps.nodes.models import Node, NodeUpgradePolicyAssignment, UpgradePolicy
 from apps.nodes.tasks import apply_upgrade_policies
 
-pytestmark = pytest.mark.critical
 
 
 @pytest.mark.django_db

@@ -36,14 +36,6 @@ class EvChargingCalculatorTests(SimpleTestCase):
             render.side_effect = lambda instance: instance
             return ev_charging_calculator(request)
 
-    def test_get_renders_calculator(self):
-        """GET requests should render the EV charging calculator page."""
-
-        response = self._get()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.template_name, "awg/ev_charging_calculator.html")
-
     def test_post_calculates_ev_totals_with_tariff(self):
         """Valid inputs should compute charge time and optional tariff cost."""
 

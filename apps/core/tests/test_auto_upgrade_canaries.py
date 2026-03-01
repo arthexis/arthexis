@@ -8,7 +8,7 @@ from apps.core import tasks
 from apps.nodes.models import Node
 
 
-pytestmark = [pytest.mark.regression]
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.mark.django_db

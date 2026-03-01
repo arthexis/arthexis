@@ -3,8 +3,6 @@ from __future__ import annotations
 import pytest
 
 from apps.docs import rendering
-
-@pytest.mark.critical
 def test_render_plain_text_document_escapes_html():
     """Plain-text rendering must escape HTML to prevent script injection."""
 

@@ -68,26 +68,34 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
                 level=messages.ERROR,
             )
             return None
-        if not feature.is_enabled:
-            if auto_enable and node:
-                auto_enabled = NodeFeatureAssignment.objects.update_or_create(
-                    node=node, feature=feature
-                )[1]
-                node.sync_feature_tasks()
+        assignment_exists = bool(
+            node
+            and NodeFeatureAssignment.objects.filter(
+                node=node,
+                feature=feature,
+            ).exists()
+        )
+        if auto_enable and node and not assignment_exists:
+            auto_enabled = NodeFeatureAssignment.objects.update_or_create(
+                node=node,
+                feature=feature,
+            )[1]
+            node.sync_feature_tasks()
+            if auto_enabled:
                 self.message_user(
                     request,
                     _("%(feature)s feature was automatically enabled.")
                     % {"feature": feature.display},
                     level=messages.SUCCESS,
                 )
-            else:
-                self.message_user(
-                    request,
-                    _("%(feature)s feature is not enabled on this node.")
-                    % {"feature": feature.display},
-                    level=messages.WARNING,
-                )
-                return None
+        elif not feature.is_enabled:
+            self.message_user(
+                request,
+                _("%(feature)s feature is not enabled on this node.")
+                % {"feature": feature.display},
+                level=messages.WARNING,
+            )
+            return None
         return feature, auto_enabled
 
     def _get_local_node(self, request):

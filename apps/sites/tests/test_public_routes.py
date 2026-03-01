@@ -52,9 +52,26 @@ def test_public_pages_render_for_anonymous(client):
     client_report_response = client.get(reverse("pages:client-report"))
     assert client_report_response.status_code == 200
     assert any(
-        t.name == "pages/client_report.html"
-        for t in client_report_response.templates
+        t.name == "pages/client_report.html" for t in client_report_response.templates
     )
+
+
+@pytest.mark.django_db
+def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
+    """Regression: public home should hide feedback UI when ingestion feature is disabled."""
+
+    Feature.objects.update_or_create(
+        slug="feedback-ingestion",
+        defaults={"display": "Feedback Ingestion", "is_enabled": False},
+    )
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="user-story-toggle"' not in content
+    assert 'id="footer-placeholder"' in content
+    assert 'pages/js/base.js' in content
 
 
 @pytest.mark.django_db
@@ -236,7 +253,6 @@ def test_operator_site_interface_redirects_to_configured_interface_landing(clien
     assert response["Location"] == "/operator/?operator_interface=1"
 
 
-
 @pytest.mark.django_db
 @pytest.mark.regression
 def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client):
@@ -295,6 +311,7 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
 
     assert response.status_code == 200
     assert b"<body" in response.content
+
 
 @pytest.mark.django_db
 @pytest.mark.regression

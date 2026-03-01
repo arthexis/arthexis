@@ -56,6 +56,11 @@ Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
+> [!WARNING]
+> Operators should avoid installing any node role other than **Terminal** unless they are familiar with the system-level changes those roles can introduce.
+> Non-Terminal roles can enable **heavy** node features that are allowed to modify host environment configuration (networking, background services, and related runtime settings).
+> **Terminal** is the default role and keeps these environment-changing capabilities disabled by default.
+
 <table border="1" cellpadding="8" cellspacing="0">
   <thead>
     <tr>
