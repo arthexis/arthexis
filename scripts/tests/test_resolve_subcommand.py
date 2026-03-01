@@ -87,5 +87,75 @@ def _run_command(
     )
 
 
+@pytest.mark.parametrize(
+    ("legacy_args", "new_args", "stdin_text"),
+    [
+        (["--file", "template.txt"], ["--file", "template.txt"], ""),
+        (["--text", "Hello [SYS.version]"], ["--text", "Hello [SYS.version]"], ""),
+        (["hello", "world"], ["hello", "world"], ""),
+        ([], [], "raw [SYS.version] stdin"),
+    ],
+)
+def test_resolve_entrypoints_are_argument_equivalent(
+    fake_python: Path,
+    tmp_path: Path,
+    legacy_args: list[str],
+    new_args: list[str],
+    stdin_text: str,
+) -> None:
+    """Legacy and new resolve commands should forward identical resolver invocations."""
+    legacy_result = _run_command([*_legacy_command(), *legacy_args], fake_python, tmp_path, stdin_text=stdin_text)
+    new_result = _run_command([*NEW_ENTRYPOINT, *new_args], fake_python, tmp_path, stdin_text=stdin_text)
+
+    assert legacy_result.returncode == 0
+    assert new_result.returncode == 0
+    assert legacy_result.stdout == new_result.stdout
+    assert legacy_result.stderr == new_result.stderr
 
 
+@pytest.mark.parametrize(
+    "bad_args",
+    [
+        ["--file"],
+        ["--text"],
+        ["--text", "one", "--text", "two"],
+        ["--file", "a.txt", "extra"],
+    ],
+)
+def test_resolve_entrypoints_preserve_error_messages(fake_python: Path, tmp_path: Path, bad_args: list[str]) -> None:
+    """Both entrypoints should preserve resolve.sh validation errors exactly."""
+    legacy_result = _run_command([*_legacy_command(), *bad_args], fake_python, tmp_path)
+    new_result = _run_command([*NEW_ENTRYPOINT, *bad_args], fake_python, tmp_path)
+
+    assert legacy_result.returncode == 1
+    assert new_result.returncode == 1
+    assert legacy_result.stdout == new_result.stdout
+    assert legacy_result.stderr == new_result.stderr
+
+
+def test_resolve_help_text_is_equivalent(fake_python: Path, tmp_path: Path) -> None:
+    """The compatibility shim should preserve the legacy help output."""
+    legacy_result = _run_command([*_legacy_command(), "--help"], fake_python, tmp_path)
+    new_result = _run_command([*NEW_ENTRYPOINT, "--help"], fake_python, tmp_path)
+
+    assert legacy_result.returncode == 0
+    assert new_result.returncode == 0
+    assert legacy_result.stdout == new_result.stdout
+    assert legacy_result.stderr == new_result.stderr
+
+
+def test_resolve_shim_works_from_any_working_directory(fake_python: Path, tmp_path: Path) -> None:
+    """The compatibility shim should work via absolute path outside the repo cwd."""
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir()
+
+    result = _run_command(
+        [*_legacy_command(), "--text", "hello"],
+        fake_python,
+        tmp_path,
+        cwd=outside_cwd,
+        include_fake_arthexis=False,
+    )
+
+    assert result.returncode == 0
+    assert "ARGV:-m arthexis resolve --text hello" in result.stdout
