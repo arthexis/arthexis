@@ -8,8 +8,10 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
+from apps.features.utils import is_suite_feature_enabled
 
-CPSIM_FEATURE_SLUG = "cpsim-service"
+
+CPSIM_FEATURE_SLUG = "ocpp-simulator"
 CPSIM_REQUEST_LOCK_NAME = "cpsim-service.lck"
 
 
@@ -69,17 +71,16 @@ def queue_cpsim_service_toggle(
 
 
 def cpsim_service_enabled() -> bool:
-    try:
-        from apps.nodes.models import NodeFeature
-    except Exception:
-        return False
-    feature = NodeFeature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()
-    return bool(feature and feature.is_enabled)
+    """Return whether the OCPP Simulator suite feature is enabled."""
+
+    return is_suite_feature_enabled(CPSIM_FEATURE_SLUG, default=False)
 
 
 def get_cpsim_feature():
+    """Return the OCPP Simulator suite feature definition if configured."""
+
     try:
-        from apps.nodes.models import NodeFeature
+        from apps.features.models import Feature
     except Exception:
         return None
-    return NodeFeature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()
+    return Feature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()

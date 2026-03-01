@@ -223,7 +223,7 @@ class NodeFeatureMixin:
         "video-cam",
         "llm-summary",
     }
-    MANUAL_FEATURE_SLUGS = {"audio-capture", "cpsim-service"}
+    MANUAL_FEATURE_SLUGS = {"audio-capture"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
     AUTO_ENABLE_FOOTPRINT = NodeFeature.Footprint.LIGHT
 
