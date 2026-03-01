@@ -7,7 +7,7 @@ from django.urls import reverse
 from apps.ocpp.models import Charger
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db]
 
 
 def _login_user(client):
