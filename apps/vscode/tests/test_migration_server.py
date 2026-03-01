@@ -27,7 +27,10 @@ def test_run_migrations_returns_subprocess_exit_code() -> None:
     """Run result should mirror the subprocess return code."""
 
     completed = mock.Mock(returncode=3)
-    with mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run:
+    with (
+        mock.patch.object(migration_server.sys, "platform", "linux"),
+        mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run,
+    ):
         assert migration_server.run_migrations([]) == 3
 
     run.assert_called_once_with(
