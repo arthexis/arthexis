@@ -25,8 +25,24 @@ def run_migrations(extra_args: list[str] | None = None) -> int:
     """Run ``manage.py migrate`` and return the subprocess exit code."""
 
     command = build_migration_command(extra_args)
+    run_kwargs = {"cwd": BASE_DIR, "check": False}
+
+    creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", None)
+    if sys.platform == "win32" and creationflags is not None:
+        # Keep migration subprocess in its own process group so debugger-level
+        # Ctrl+C signals do not interrupt import-time startup unexpectedly.
+        run_kwargs["creationflags"] = creationflags
+
     print(f"{PREFIX} Running: {' '.join(command)}")
-    completed = subprocess.run(command, cwd=BASE_DIR, check=False)
+    try:
+        completed = subprocess.run(command, **run_kwargs)
+    except KeyboardInterrupt:
+        print(
+            f"{PREFIX} Migration run interrupted by a console signal "
+            "(for example debugger Ctrl+C propagation)."
+        )
+        return 130
+
     if completed.returncode == 0:
         print(f"{PREFIX} Migrations completed successfully.")
     else:
