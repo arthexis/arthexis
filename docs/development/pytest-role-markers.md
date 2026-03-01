@@ -45,12 +45,15 @@ When running the local segmented test runner (`apps/vscode/test_server.py`),
 marker groups are intentionally mutually exclusive to prevent duplicate test
 execution across segments:
 
-- `slow`: `slow`
-- `integration`: `integration and not slow`
-- `unmarked`: `not integration and not slow`
+- `critical`: `critical`
+- `slow`: `slow and not critical`
+- `integration`: `integration and not critical and not slow`
+- `unmarked`: `not critical and not integration and not slow`
 
-This means integration tests that are also marked slow are executed in the
-slow group, and unmarked tests run only in the final fallback segment.
+This means critical tests are isolated into the first segment, slow tests only
+run in the slow segment when they are not already critical, and integration
+tests that are also marked slow are executed in the slow group. Unmarked tests
+run only in the final fallback segment.
 
 ## Local filtering
 
