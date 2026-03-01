@@ -73,6 +73,7 @@ def _terminate_process_without_psutil(pid: int) -> None:
 
     getpgid = getattr(os, "getpgid", None)
     getpgrp = getattr(os, "getpgrp", None)
+    killpg = getattr(os, "killpg", None)
 
     try:
         if getpgid is None or getpgrp is None:
@@ -84,8 +85,12 @@ def _terminate_process_without_psutil(pid: int) -> None:
         current_group_id = None
 
     try:
-        if process_group_id is not None and process_group_id != current_group_id:
-            os.killpg(process_group_id, signal.SIGTERM)
+        if (
+            process_group_id is not None
+            and process_group_id != current_group_id
+            and killpg is not None
+        ):
+            killpg(process_group_id, signal.SIGTERM)
         else:
             os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
