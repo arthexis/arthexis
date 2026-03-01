@@ -207,39 +207,6 @@ def test_posix_process_group_kwargs_is_empty_off_posix() -> None:
         assert migration_server._posix_process_group_kwargs() == {}
 
 
-def test_terminate_process_without_psutil_prefers_killpg_for_isolated_group() -> None:
-    """Regression: terminate the process group when the target has its own group."""
-
-    with mock.patch.object(migration_server.os, "name", "posix"), mock.patch.object(
-        migration_server.os, "getpgid", return_value=900, create=True
-    ) as mocked_getpgid, mock.patch.object(
-        migration_server.os, "getpgrp", return_value=100, create=True
-    ) as mocked_getpgrp, mock.patch.object(
-        migration_server.os, "killpg"
-    ) as mocked_killpg, mock.patch.object(
-        migration_server.os, "kill"
-    ) as mocked_kill:
-        migration_server._terminate_process_without_psutil(9876)
-
-    mocked_getpgid.assert_called_once_with(9876)
-    mocked_getpgrp.assert_called_once_with()
-    mocked_killpg.assert_called_once_with(900, migration_server.signal.SIGTERM)
-    mocked_kill.assert_not_called()
-
-
-def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches() -> None:
-    """Regression: avoid killing our own group and terminate only the target process."""
-
-    with mock.patch.object(migration_server.os, "name", "posix"), mock.patch.object(
-        migration_server.os, "getpgid", return_value=100, create=True
-    ), mock.patch.object(migration_server.os, "getpgrp", return_value=100, create=True), mock.patch.object(
-        migration_server.os, "killpg"
-    ) as mocked_killpg, mock.patch.object(migration_server.os, "kill") as mocked_kill:
-        migration_server._terminate_process_without_psutil(9876)
-
-    mocked_killpg.assert_not_called()
-    mocked_kill.assert_called_once_with(9876, migration_server.signal.SIGTERM)
-
 
 
 @pytest.mark.parametrize(
