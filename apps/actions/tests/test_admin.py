@@ -17,7 +17,7 @@ from apps.actions.models import RemoteActionToken
 from apps.sites.templatetags.admin_extras import model_admin_actions
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.integration, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
 
 class _LinkParser(HTMLParser):
@@ -33,6 +33,7 @@ class _LinkParser(HTMLParser):
         self.links.append(dict(attrs))
 
 
+@pytest.mark.regression
 def test_remote_action_token_admin_add_defaults_to_request_user(admin_client, admin_user):
     """Regression: add form defaults the owner to the logged-in admin user."""
 
@@ -45,6 +46,7 @@ def test_remote_action_token_admin_add_defaults_to_request_user(admin_client, ad
     assert initial["user"] == request.user.pk
 
 
+@pytest.mark.regression
 def test_remote_action_token_admin_add_defaults_expiration_to_24h(admin_client, admin_user):
     """Regression: add form defaults expiration around 24 hours into the future."""
 
@@ -113,6 +115,7 @@ def test_remote_action_token_dashboard_shows_generate_link_for_add_only_admin(cl
     assert any(link.get("href") == action_url for link in parser.links)
 
 
+@pytest.mark.regression
 def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessible(client):
     """Regression: quick generator redirects to add page when changelist is not viewable."""
 
@@ -143,6 +146,7 @@ def test_remote_action_dashboard_button_opens_preview_page(admin_client):
     assert "Download YAML" in content
 
 
+@pytest.mark.regression
 def test_remote_action_openapi_download_requires_explicit_query_param(admin_client):
     """Regression: OpenAPI endpoint only downloads when explicitly requested."""
 
@@ -156,6 +160,7 @@ def test_remote_action_openapi_download_requires_explicit_query_param(admin_clie
     assert response.headers["Content-Disposition"] == 'attachment; filename="my-actions-openapi.yaml"'
 
 
+@pytest.mark.regression
 def test_remote_action_openapi_forbidden_for_unprivileged_staff(client):
     """Regression: OpenAPI preview and download require RemoteAction view/change rights."""
 
