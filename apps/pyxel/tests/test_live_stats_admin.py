@@ -171,6 +171,28 @@ def test_pyxel_changelist_exposes_open_viewport_action(client, django_user_model
     assert reverse("admin-pyxel-open-viewport") in response.content.decode()
 
 
+
+
+def test_admin_dashboard_model_row_includes_open_viewport_link(
+    client, django_user_model, monkeypatch
+):
+    """Regression: admin dashboard should show Open Viewport in the Pyxel model row."""
+
+    admin_user = django_user_model.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="admin123",
+    )
+    client.force_login(admin_user)
+    monkeypatch.setattr(live_stats, "local_ip_addresses", lambda include_loopback=True: {"127.0.0.1"})
+
+    response = client.get(reverse("admin:index"), REMOTE_ADDR="127.0.0.1")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert reverse("admin:pyxel_pyxelviewport_changelist") in content
+    assert "Open Viewport" in content
+
 def test_open_viewport_view_uses_default_when_multiple(client, django_user_model, monkeypatch):
     """Open Viewport launches the default viewport when more than one exists."""
 
