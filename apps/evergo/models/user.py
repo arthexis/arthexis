@@ -597,6 +597,8 @@ class EvergoUser(Profile):
         source = (raw_queries or "").strip()
         if not source:
             return [], []
+        if source == "*":
+            return [], ["*"]
 
         sales_orders: list[str] = []
         seen_sales_orders: set[str] = set()
@@ -614,7 +616,7 @@ class EvergoUser(Profile):
         seen_names: set[str] = set()
         for chunk in cls.CUSTOMER_QUERY_DELIMITERS.split(names_blob):
             normalized = " ".join(chunk.split())
-            if len(normalized) < 2:
+            if len(normalized) < 2 and normalized != "*":
                 continue
             if normalized.lower() in seen_names:
                 continue
@@ -645,7 +647,7 @@ class EvergoUser(Profile):
                     "ingenieroAsignadoId": self.evergo_user_id or "",
                     "numero": so_number or "",
                     "conCargador": "",
-                    "cliente": customer_name or "",
+                    "cliente": "" if customer_name == "*" else (customer_name or ""),
                     "from": "",
                     "to": "",
                 },

@@ -398,3 +398,62 @@ def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
     customer = EvergoCustomer.objects.get(user=profile, remote_id=11001)
     assert "Apodaca" in customer.address
     assert "Ciudad Apodaca" not in customer.address
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.requests.Session")
+def test_load_customers_from_queries_all_customers_wildcard_uses_access_scope(mock_session_cls):
+    """Regression: wildcard query should request all accessible customers for the engineer profile."""
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(username="suite-wildcard", email="suite-wildcard@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="wildcard@evergo.example.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+
+    mock_session = mock_session_cls.return_value.__enter__.return_value
+    mock_prime_response = Mock()
+    mock_prime_response.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_prime_response
+    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+
+    def _response(payload):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = payload
+        return response
+
+    def request_side_effect(*, method, url, params=None, **kwargs):
+        if url.endswith("/login"):
+            return _response({"id": 58642, "name": "Wildcard User", "email": "wildcard@evergo.example.com"})
+        if "ordenes/instalador-coordinador" in url:
+            assert params is not None
+            assert params.get("numero") == ""
+            assert params.get("cliente") == ""
+            return _response(
+                {
+                    "current_page": 1,
+                    "last_page": 1,
+                    "data": [
+                        {
+                            "id": 501,
+                            "numero_orden": "AA501",
+                            "idCliente": 9001,
+                            "user_tecnico_id": 58642,
+                            "cliente": {"id": 9001, "name": "All Scope Customer", "email": "all@example.com"},
+                        }
+                    ],
+                }
+            )
+        raise AssertionError(f"Unexpected URL {url} params={params}")
+
+    mock_session.request.side_effect = request_side_effect
+
+    summary = profile.load_customers_from_queries(raw_queries="*")
+
+    assert summary["customer_names"] == ["*"]
+    assert summary["customers_loaded"] == 1
+    assert summary["unresolved"] == []
+    assert profile.customers.filter(remote_id=9001, name="All Scope Customer").exists()

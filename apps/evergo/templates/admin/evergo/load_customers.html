@@ -60,6 +60,7 @@
           {{ form.raw_queries }}
           <p class="help form-line-copy">
             Values can be separated in any manner (spaces, commas, semicolons, pipes, tabs, or new lines).
+            Enter <code>*</code> by itself to load all customers available to the selected profile.
           </p>
           {% if form.raw_queries.help_text %}
             <div class="help">{{ form.raw_queries.help_text }}</div>

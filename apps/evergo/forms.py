@@ -26,7 +26,8 @@ class EvergoLoadCustomersForm(forms.Form):
         ),
         help_text=(
             "Paste values separated by spaces, commas, semicolons, pipes, tabs, or new lines. "
-            "SO patterns like J00830 are detected automatically."
+            "SO patterns like J00830 are detected automatically. Enter * to load every accessible "
+            "customer for the selected profile."
         ),
     )
 
@@ -45,6 +46,19 @@ class EvergoLoadCustomersForm(forms.Form):
         owned_profile = owned_profiles.first()
         if owned_profile:
             self.fields["profile"].initial = owned_profile.pk
+
+    def clean_raw_queries(self) -> str:
+        """Validate free-form lookup input and reserve `*` as an explicit load-all signal."""
+        raw_queries = (self.cleaned_data.get("raw_queries") or "").strip()
+        if not raw_queries:
+            return raw_queries
+
+        tokens = [chunk for chunk in re.split(r"[,;|\s]+", raw_queries) if chunk]
+        if "*" in tokens and len(tokens) > 1:
+            raise ValidationError(
+                "Use * by itself to load all customers you can access, or remove it to run a filtered lookup."
+            )
+        return raw_queries
 
 
 class EvergoOrderTrackingForm(forms.Form):

@@ -711,3 +711,55 @@ def test_evergo_customer_admin_date_filters_local_and_remote(admin_client):
         remote_updated_content = remote_updated_response.content.decode("utf-8")
         assert recent.name in remote_updated_content
         assert old.name not in remote_updated_content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_supports_wildcard_all_customers(mock_load_customers, admin_client):
+    """Regression: wizard should allow '*' to load all accessible customers for selected profile."""
+    mock_load_customers.return_value = {
+        "customers_loaded": 2,
+        "orders_created": 2,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="wildcard-admin@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(wizard_url, {"profile": profile.pk, "raw_queries": "*"})
+
+    assert response.status_code == 302
+    mock_load_customers.assert_called_once_with(raw_queries="*")
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_rejects_mixed_wildcard_query(admin_client):
+    """Regression: '*' must be used alone to avoid ambiguous filtering semantics."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="wildcard-validation@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(wizard_url, {"profile": profile.pk, "raw_queries": "*, J00830"})
+
+    assert response.status_code == 200
+    assert b"Use * by itself" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_shows_wildcard_operator_note(admin_client):
+    """Regression: wizard helper text should document wildcard behavior for operators."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    assert b"Enter <code>*</code> by itself to load all customers" in response.content
