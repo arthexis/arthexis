@@ -465,7 +465,15 @@ def enable_selected_features(modeladmin, request, queryset):
         if check is None:
             eligible_manual_features.append(feature)
             continue
-        result = feature_checks.run(feature, node=node)
+        try:
+            result = feature_checks.run(feature, node=node)
+        except Exception as exc:  # pragma: no cover - defensive
+            modeladmin.message_user(
+                request,
+                f"{feature.display} eligibility check failed: {exc}",
+                level=messages.ERROR,
+            )
+            continue
         if not result.success:
             modeladmin.message_user(request, result.message, level=result.level)
             continue
