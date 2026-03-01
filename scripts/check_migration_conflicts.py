@@ -256,7 +256,20 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             break
 
     if diff_base is None:
-        raise MigrationCheckError("Unable to determine git diff base for migration conflict pre-check.")
+        # Some CI checkouts (notably staged upgrade jobs) do not keep enough git
+        # history/refs to resolve a merge-base. Fail open by scanning all local
+        # app migration directories rather than failing the entire validation job.
+        labels: set[str] = set()
+        apps_dir = repo_root / "apps"
+        if not apps_dir.exists():
+            return labels
+        for app_dir in apps_dir.iterdir():
+            if not app_dir.is_dir():
+                continue
+            migrations_dir = app_dir / "migrations"
+            if migrations_dir.exists() and any(migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py")):
+                labels.add(app_dir.name)
+        return labels
 
     diff = _run_git(
         "diff",

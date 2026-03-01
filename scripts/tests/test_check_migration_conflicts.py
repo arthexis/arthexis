@@ -120,10 +120,10 @@ def test_parse_assignment_tuples_rejects_non_literal_entries(tmp_path: Path) -> 
         check_migration_conflicts._parse_dependencies(migration_path)
 
 
-def test_git_changed_app_labels_fails_closed_when_merge_base_missing(
+def test_git_changed_app_labels_falls_back_to_local_migrations_when_merge_base_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Git discovery failures should fail pre-check rather than silently skip."""
+    """When merge-base cannot be determined, discover labels from local migrations."""
 
     class Result:
         def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
@@ -131,10 +131,19 @@ def test_git_changed_app_labels_fails_closed_when_merge_base_missing(
             self.stdout = stdout
             self.stderr = stderr
 
+    apps_dir = tmp_path / "apps"
+    widgets_migrations = apps_dir / "widgets" / "migrations"
+    widgets_migrations.mkdir(parents=True)
+    (widgets_migrations / "__init__.py").write_text("", encoding="utf-8")
+    _write_migration(widgets_migrations / "0001_initial.py")
+
+    metrics_migrations = apps_dir / "metrics" / "migrations"
+    metrics_migrations.mkdir(parents=True)
+    (metrics_migrations / "__init__.py").write_text("", encoding="utf-8")
+
     def fake_run(*_args: object, **_kwargs: object) -> Result:
         return Result(returncode=1, stderr="no merge base")
 
     monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
 
-    with pytest.raises(check_migration_conflicts.MigrationCheckError):
-        check_migration_conflicts._git_changed_app_labels(tmp_path)
+    assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"widgets"}
