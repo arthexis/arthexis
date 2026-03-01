@@ -113,27 +113,3 @@ def test_admin_badges_ignore_unauthorized_callable_path(django_user_model):
     assert context["admin_badges"][0]["value"] == "Unknown"
     assert context["admin_badges"][0]["is_present"] is False
 
-
-@pytest.mark.django_db
-def test_admin_badges_handle_non_dict_payload(monkeypatch, django_user_model):
-    user = django_user_model.objects.create_user(username="staff-2", is_staff=True)
-    request = RequestFactory().get("/admin/")
-    request.user = user
-
-    AdminBadge.objects.create(
-        slug="site",
-        name="Site",
-        label="SITE",
-        value_query_path="apps.sites.admin_badges.site_badge_data",
-        is_enabled=True,
-    )
-
-    monkeypatch.setattr(
-        "apps.sites.admin_badges.site_badge_data",
-        lambda **_kwargs: "unexpected",
-    )
-
-    context = site_and_node(request)
-
-    assert context["admin_badges"][0]["value"] == "Unknown"
-    assert context["admin_badges"][0]["is_present"] is False

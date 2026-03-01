@@ -242,6 +242,7 @@ def test_terminate_process_without_psutil_falls_back_to_kill_when_group_matches(
 
 
 
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
