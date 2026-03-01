@@ -30,9 +30,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  install:
-    name: Install test
+  capture-dashboard:
+    name: Capture admin dashboard
     runs-on: ubuntu-latest
+    concurrency:
+      group: screenshot-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Ensure workspace is writable
         run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
@@ -60,34 +63,6 @@ jobs:
           key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             venv-${{ runner.os }}-
-
-      - name: Install suite from repository
-        run: |
-          ./install.sh --clean --no-start
-
-  capture-dashboard:
-    name: Capture admin dashboard
-    needs: install
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ensure workspace is writable
-        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
-
-      - uses: actions/checkout@v6
-        with:
-          clean: false
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
 
       - name: Install suite from repository
         run: |
@@ -263,6 +238,7 @@ jobs:
           path: artifacts/admin-dashboard.png
 
       - name: Capture public screenshot
+        if: ${{ github.event_name != 'pull_request' }}
         env:
           BASE_URL: http://localhost:8888/
         run: |
@@ -290,12 +266,14 @@ jobs:
           node artifacts/capture-public.js
 
       - name: Upload public screenshot
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v6
         with:
           name: public-site
           path: artifacts/public-site.png
 
       - name: Capture OCPP dashboard screenshot
+        if: ${{ github.event_name != 'pull_request' }}
         env:
           BASE_URL: http://localhost:8888
           ADMIN_USERNAME: admin
@@ -338,12 +316,14 @@ jobs:
           node artifacts/capture-ocpp.js
 
       - name: Upload OCPP dashboard screenshot
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v6
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-dashboard.png
 
       - name: Capture EVCS public screenshot
+        if: ${{ github.event_name != 'pull_request' }}
         env:
           BASE_URL: http://localhost:8888
         run: |
@@ -373,6 +353,7 @@ jobs:
           node artifacts/capture-evcs.js
 
       - name: Upload EVCS public screenshot
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v6
         with:
           name: evcs-public
