@@ -6,7 +6,7 @@ from apps.simulators.evcs import _start_simulator, get_simulator_state
 from apps.ocpp.views import simulator as simulator_view
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db, pytest.mark.slow]
 
 
 @pytest.fixture(autouse=True)
