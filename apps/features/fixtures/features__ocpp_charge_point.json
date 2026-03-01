@@ -6,9 +6,7 @@
       "main_app": [
         "ocpp"
       ],
-      "node_feature": [
-        "charge-points"
-      ],
+      "node_feature": null,
       "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
       "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
       "service_requirements": "Create charger records for supported OCPP 1.6 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
@@ -117,9 +115,7 @@
       "main_app": [
         "ocpp"
       ],
-      "node_feature": [
-        "charge-points"
-      ],
+      "node_feature": null,
       "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
       "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
       "service_requirements": "Create charger records for supported OCPP 2.0.1 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
@@ -320,9 +316,7 @@
       "main_app": [
         "ocpp"
       ],
-      "node_feature": [
-        "charge-points"
-      ],
+      "node_feature": null,
       "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
       "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
       "service_requirements": "Create charger records for supported OCPP 2.1 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
