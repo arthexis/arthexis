@@ -6,9 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from django.contrib import admin
 from django.contrib.auth.models import Permission
 from django.urls import reverse
 
+from apps.features.admin import SourceAppListFilter
 from apps.features.models import Feature
 
 
@@ -92,3 +94,93 @@ def test_feature_admin_reload_base_requires_delete_permission(admin_client, djan
     response = admin_client.post(action_url)
 
     assert response.status_code == 403
+
+
+
+
+@pytest.mark.django_db
+def test_feature_admin_from_app_filter_shows_only_referenced_apps(rf):
+    """Regression: from-app filter should only include apps referenced by suite features."""
+
+    from apps.app.models import Application
+
+    app_with_feature = Application.objects.create(name="app-with-feature")
+    Application.objects.create(name="unused-app")
+    Feature.objects.create(
+        slug="feature-with-main-app",
+        display="Feature With Main App",
+        source=Feature.Source.CUSTOM,
+        main_app=app_with_feature,
+    )
+
+    request = rf.get("/admin/features/feature/")
+    feature_admin = admin.site._registry[Feature]
+    list_filter = SourceAppListFilter(request, {}, Feature, feature_admin)
+
+    lookup_values = {label for _, label in list_filter.lookups(request, feature_admin)}
+    assert "app-with-feature" in lookup_values
+    assert "unused-app" not in lookup_values
+
+
+@pytest.mark.django_db
+def test_feature_admin_from_app_filter_limits_results(rf):
+    """Regression: from-app filter should limit changelist rows to selected app."""
+
+    from apps.app.models import Application
+
+    target_app = Application.objects.create(name="target-app")
+    other_app = Application.objects.create(name="other-app")
+    matching = Feature.objects.create(
+        slug="matching-feature",
+        display="Matching Feature",
+        source=Feature.Source.CUSTOM,
+        main_app=target_app,
+    )
+    Feature.objects.create(
+        slug="non-matching-feature",
+        display="Non Matching Feature",
+        source=Feature.Source.CUSTOM,
+        main_app=other_app,
+    )
+
+    request = rf.get("/admin/features/feature/", {"main_app": str(target_app.pk)})
+    feature_admin = admin.site._registry[Feature]
+    list_filter = SourceAppListFilter(request, {"main_app": str(target_app.pk)}, Feature, feature_admin)
+
+    filtered = list_filter.queryset(request, Feature.objects.all())
+    assert set(filtered.values_list("pk", flat=True)) == {matching.pk}
+
+
+@pytest.mark.django_db
+def test_feature_admin_from_app_filter_uses_admin_queryset_scope(rf):
+    """Regression: from-app filter should respect admin queryset scope (e.g., deleted view)."""
+
+    from apps.app.models import Application
+
+    deleted_app = Application.objects.create(name="deleted-app")
+    active_app = Application.objects.create(name="active-app")
+
+    deleted_feature = Feature.objects.create(
+        slug="deleted-seed-feature",
+        display="Deleted Seed Feature",
+        source=Feature.Source.MAINSTREAM,
+        main_app=deleted_app,
+        is_seed_data=True,
+    )
+    Feature.objects.create(
+        slug="active-feature",
+        display="Active Feature",
+        source=Feature.Source.CUSTOM,
+        main_app=active_app,
+    )
+    deleted_feature.delete()
+
+    request = rf.get("/admin/features/feature/deleted/")
+    request._soft_deleted_only = True
+    feature_admin = admin.site._registry[Feature]
+
+    list_filter = SourceAppListFilter(request, {}, Feature, feature_admin)
+
+    lookup_values = {label for _, label in list_filter.lookups(request, feature_admin)}
+    assert "deleted-app" in lookup_values
+    assert "active-app" not in lookup_values
