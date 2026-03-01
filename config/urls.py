@@ -18,12 +18,12 @@ admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
 ]
 
 urlpatterns += autodiscovered_route_patterns()
 urlpatterns += [
+    path("admin/", admin.site.urls),
     path("admindocs/", include("django.contrib.admindocs.urls")),
 ]
 

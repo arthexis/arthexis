@@ -52,7 +52,7 @@ def test_config_urls_only_declares_framework_level_routes():
     source = Path("config/urls.py").read_text(encoding="utf-8")
     direct_prefixes = _path_literals_from_urlpatterns_assignment(source)
 
-    assert direct_prefixes == ["admin/", "i18n/setlang/", "admindocs/"]
+    assert direct_prefixes == ["i18n/setlang/", "admin/", "admindocs/"]
     assert "include(\"apps." not in source
     assert "from apps." not in source
 
