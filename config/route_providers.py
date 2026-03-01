@@ -40,12 +40,36 @@ def _include_if_exists(app_config, module_suffix: str, prefix: str):
     return path(prefix, include(module_name))
 
 
-def _patterns_include_module(patterns: Iterable[URLPattern | URLResolver], module_name: str) -> bool:
-    """Return whether ``patterns`` already include ``module_name`` as a URLConf."""
+def _patterns_include_module(
+    patterns: Iterable[URLPattern | URLResolver], module_name: str
+) -> bool:
+    """Return whether ``patterns`` already include ``module_name``.
+
+    ``django.urls.include`` may store the imported URLConf in ``urlconf_name``
+    either as:
+
+    * a dotted module path string, or
+    * a tuple of ``(module, app_name, namespace)``.
+
+    We normalize both forms so route-provider fallback includes do not mount the
+    same app URLConf more than once.
+    """
 
     for pattern in patterns:
-        if getattr(pattern, "urlconf_name", None) == module_name:
+        urlconf = getattr(pattern, "urlconf_name", None)
+        if urlconf == module_name:
             return True
+
+        if hasattr(urlconf, "__name__") and urlconf.__name__ == module_name:
+            return True
+
+        if isinstance(urlconf, tuple) and urlconf:
+            included = urlconf[0]
+            if included == module_name:
+                return True
+
+            if hasattr(included, "__name__") and included.__name__ == module_name:
+                return True
     return False
 
 
