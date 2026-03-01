@@ -62,3 +62,52 @@ def test_resolve_repository_token_uses_latest_release_when_available(monkeypatch
     token = github.resolve_repository_token(package=None)
 
     assert token == "release-token"
+
+
+def test_create_pull_request_comment_posts_to_issue_comments_for_open_pr(monkeypatch):
+    calls: dict[str, dict[str, Any]] = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        calls["get"] = {"url": url, "headers": headers, "timeout": timeout}
+        return DummyResponse({"state": "open"})
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["post"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse({"id": 1}, status_code=201)
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+    monkeypatch.setattr(github.requests, "post", fake_post)
+
+    response = github.create_pull_request_comment(
+        "octo",
+        "demo",
+        pull_number=12,
+        token="tok",
+        body="Looks good",
+    )
+
+    assert response.status_code == 201
+    assert calls["get"]["url"].endswith("/repos/octo/demo/pulls/12")
+    assert calls["post"]["url"].endswith("/repos/octo/demo/issues/12/comments")
+    assert calls["post"]["json"] == {"body": "Looks good"}
+
+
+def test_create_pull_request_comment_rejects_closed_pr(monkeypatch):
+    def fake_get(url, headers=None, timeout=None):
+        return DummyResponse({"state": "closed"})
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+
+    with pytest.raises(github.GitHubRepositoryError, match="not open"):
+        github.create_pull_request_comment(
+            "octo",
+            "demo",
+            pull_number=12,
+            token="tok",
+            body="Please merge",
+        )
