@@ -47,3 +47,21 @@ def test_set_writable_sqlite_env_preserves_special_sqlite_names(
     sqlite_paths.set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", tmp_path / "fallback.sqlite3")
 
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == configured
+
+
+@pytest.mark.regression
+def test_pytest_worker_suffix_defaults_to_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker suffix should default to ``main`` outside pytest-xdist workers."""
+
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+
+    assert sqlite_paths.pytest_worker_suffix() == "main"
+
+
+@pytest.mark.regression
+def test_pytest_worker_suffix_uses_xdist_worker_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker suffix should match pytest-xdist worker id when available."""
+
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw3")
+
+    assert sqlite_paths.pytest_worker_suffix() == "gw3"

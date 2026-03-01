@@ -9,6 +9,10 @@ from pathlib import Path
 
 _PYTEST_SQLITE_TMP_DIR: tempfile.TemporaryDirectory[str] | None = None
 
+def pytest_worker_suffix() -> str:
+    """Return a worker-specific suffix for SQLite file names under xdist."""
+
+    return os.path.basename(os.environ.get("PYTEST_XDIST_WORKER") or "main")
 
 
 def sqlite_path_is_writable(path_value: str) -> bool:
@@ -48,8 +52,9 @@ def configure_ephemeral_sqlite_paths() -> None:
     _PYTEST_SQLITE_TMP_DIR = tempfile.TemporaryDirectory(prefix=f"arthexis-pytest-{os.getpid()}-")
     atexit.register(_PYTEST_SQLITE_TMP_DIR.cleanup)
     db_root = Path(_PYTEST_SQLITE_TMP_DIR.name)
-    set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", db_root / "default.sqlite3")
-    set_writable_sqlite_env("ARTHEXIS_SQLITE_TEST_PATH", db_root / "test.sqlite3")
+    worker_suffix = pytest_worker_suffix()
+    set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", db_root / f"default-{worker_suffix}.sqlite3")
+    set_writable_sqlite_env("ARTHEXIS_SQLITE_TEST_PATH", db_root / f"test-{worker_suffix}.sqlite3")
 
 
 def ensure_clean_test_databases(base_dir: Path) -> None:
