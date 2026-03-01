@@ -180,8 +180,10 @@ def pytest_configure(config: pytest.Config) -> None:
     markexpr = getattr(config.option, "markexpr", "")
     if markexpr and "critical" in markexpr:
         expanded = markexpr
+        # When selecting critical tests, include regression tests by default.
         if "regression" not in expanded:
             expanded = f"({expanded}) or regression"
+        # Keep explicitly noncritical regressions out unless they are requested.
         if "noncritical_regression" not in expanded:
             expanded = f"({expanded}) and not noncritical_regression"
         config.option.markexpr = expanded
