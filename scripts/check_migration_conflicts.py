@@ -346,6 +346,7 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
         # touched by the change under test.
         head_diff = _run_git(
             "diff-tree",
+            "-m",
             "--name-only",
             "--diff-filter=ACMR",
             "-r",

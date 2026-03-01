@@ -184,7 +184,7 @@ def test_git_changed_app_labels_uses_head_diff_when_merge_base_missing(
     def fake_run(args: list[str], **_kwargs: object) -> Result:
         if args[:3] == ["git", "merge-base", "HEAD"]:
             return Result(returncode=1, stderr="no merge base")
-        if args[:3] == ["git", "diff-tree", "--name-only"]:
+        if args[:3] == ["git", "diff-tree", "-m"]:
             return Result(
                 returncode=0,
                 stdout=(
