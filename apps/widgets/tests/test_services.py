@@ -81,7 +81,9 @@ def test_render_zone_widgets_respects_required_node_feature(monkeypatch):
     assert rendered and "feature-visible" in rendered[0].html
 
 
-def test_sync_registered_widgets_preserves_existing_required_feature_when_slug_missing():
+@pytest.mark.regression
+def test_sync_registered_widgets_preserves_existing_required_feature_when_slug_missing(monkeypatch):
+    """Regression: sync keeps feature linkage when slug lookup temporarily fails."""
     feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
 
     @register_widget(
@@ -98,7 +100,7 @@ def test_sync_registered_widgets_preserves_existing_required_feature_when_slug_m
     widget = Widget.objects.get(slug="camera-widget")
     assert widget.required_feature == feature
 
-    feature.delete()
+    monkeypatch.setattr("apps.widgets.services._resolve_feature", lambda _slug: None)
     sync_registered_widgets()
     widget.refresh_from_db()
-    assert widget.required_feature_id is not None
+    assert widget.required_feature_id == feature.id

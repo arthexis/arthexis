@@ -90,7 +90,7 @@ def _required_feature_for_definition(
     if feature is not None:
         return feature
 
-    existing_feature = getattr(widget, "required_feature", None)
+    existing_feature = _resolve_feature_by_id(widget.required_feature_id)
     if existing_feature and existing_feature.slug == definition.required_feature_slug:
         return existing_feature
 
@@ -149,6 +149,17 @@ def _resolve_feature(feature_slug: str):
     from apps.nodes.models import NodeFeature
 
     return NodeFeature.objects.filter(slug=feature_slug).first()
+
+
+def _resolve_feature_by_id(feature_id: int | None):
+    """Resolve a node feature by id, including soft-deleted rows for sync stability."""
+
+    if feature_id is None:
+        return None
+
+    from apps.nodes.models import NodeFeature
+
+    return NodeFeature.all_objects.filter(pk=feature_id).first()
 
 
 def _has_required_feature(widget: Widget, request) -> bool:
