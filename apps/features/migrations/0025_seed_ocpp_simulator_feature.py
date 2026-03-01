@@ -10,6 +10,7 @@ def seed_ocpp_simulator_suite_feature(apps, schema_editor):
 
     Feature = apps.get_model("features", "Feature")
     NodeFeature = apps.get_model("nodes", "NodeFeature")
+    Node = apps.get_model("nodes", "Node")
     NodeFeatureAssignment = apps.get_model("nodes", "NodeFeatureAssignment")
     db_alias = schema_editor.connection.alias
 
@@ -20,9 +21,14 @@ def seed_ocpp_simulator_suite_feature(apps, schema_editor):
     )
     was_enabled = False
     if legacy_feature is not None:
-        was_enabled = NodeFeatureAssignment.objects.using(db_alias).filter(
-            feature=legacy_feature
-        ).exists()
+        local_node = (
+            Node.objects.using(db_alias).filter(current_relation="SELF").first()
+        )
+        if local_node is not None:
+            was_enabled = NodeFeatureAssignment.objects.using(db_alias).filter(
+                feature=legacy_feature,
+                node=local_node,
+            ).exists()
 
     feature, _ = Feature.objects.using(db_alias).update_or_create(
         slug=OCPP_SIMULATOR_FEATURE_SLUG,
@@ -75,7 +81,9 @@ def unseed_ocpp_simulator_suite_feature(apps, schema_editor):
         },
     )
     if suite_feature is not None and suite_feature.is_enabled:
-        local_node = Node.objects.using(db_alias).order_by("pk").first()
+        local_node = Node.objects.using(db_alias).filter(current_relation="SELF").first()
+        if local_node is None:
+            local_node = Node.objects.using(db_alias).order_by("pk").first()
         if local_node is not None:
             NodeFeatureAssignment.objects.using(db_alias).get_or_create(
                 node=local_node,

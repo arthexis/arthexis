@@ -81,6 +81,6 @@ def get_cpsim_feature():
 
     try:
         from apps.features.models import Feature
-    except Exception:
+    except (ImportError, RuntimeError):
         return None
     return Feature.objects.filter(slug=CPSIM_FEATURE_SLUG).first()
