@@ -76,6 +76,61 @@ def test_notify_async_is_a_noop() -> None:
     mocked_print.assert_not_called()
 
 
+def test_read_migration_server_state_cleans_stale_lock(tmp_path: Path) -> None:
+    """Regression: stale migration lock files should be removed automatically."""
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True)
+    lock_path = lock_dir / migration_server.MIGRATION_SERVER_LOCK_FILE
+    lock_path.write_text('{"pid": 12345, "status": "processing"}', encoding="utf-8")
+
+    with mock.patch.object(migration_server, "_is_process_alive", return_value=False):
+        state = migration_server.read_migration_server_state(lock_dir)
+
+    assert state is None
+    assert lock_path.exists() is False
+
+
+def test_read_migration_server_state_normalizes_status(tmp_path: Path) -> None:
+    """Regression: unknown migration statuses should be treated as idle."""
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True)
+    lock_path = lock_dir / migration_server.MIGRATION_SERVER_LOCK_FILE
+    lock_path.write_text('{"pid": 12345, "status": "unknown"}', encoding="utf-8")
+
+    with mock.patch.object(migration_server, "_is_process_alive", return_value=True):
+        state = migration_server.read_migration_server_state(lock_dir)
+
+    assert state is not None
+    assert state["pid"] == 12345
+    assert state["status"] == migration_server.MIGRATION_STATUS_IDLE
+
+
+def test_update_migration_server_status_updates_existing_lock(tmp_path: Path) -> None:
+    """Ensure migration status transitions rewrite the existing lock payload."""
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True)
+
+    migration_server.write_migration_server_state(
+        lock_dir,
+        pid=321,
+        status=migration_server.MIGRATION_STATUS_IDLE,
+    )
+
+    with mock.patch.object(migration_server, "_is_process_alive", return_value=True):
+        migration_server.update_migration_server_status(
+            lock_dir,
+            migration_server.MIGRATION_STATUS_PROCESSING,
+        )
+        updated = migration_server.read_migration_server_state(lock_dir)
+
+    assert updated is not None
+    assert updated["pid"] == 321
+    assert updated["status"] == migration_server.MIGRATION_STATUS_PROCESSING
+
+
 
 
 def test_windows_process_group_kwargs_uses_creation_flags() -> None:

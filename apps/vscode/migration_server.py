@@ -103,6 +103,9 @@ def resolve_base_dir(
 
 BASE_DIR = resolve_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
+MIGRATION_SERVER_LOCK_FILE = "migration_server.json"
+MIGRATION_STATUS_IDLE = "idle"
+MIGRATION_STATUS_PROCESSING = "processing"
 REQUIREMENTS_FILE = Path("requirements.txt")
 REQUIREMENTS_HASH_FILE = Path(".locks") / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
@@ -665,17 +668,84 @@ def _is_process_alive(pid: int) -> bool:
     return True
 
 
+def read_migration_server_state(lock_dir: Path) -> dict[str, Any] | None:
+    """Return migration server lock details when the recorded process is live.
+
+    Stale lock files are removed automatically once their PID is no longer
+    running, which keeps cooperating helper processes from waiting forever.
+    """
+
+    state_path = lock_dir / MIGRATION_SERVER_LOCK_FILE
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    pid = payload.get("pid")
+    if isinstance(pid, str) and pid.isdigit():
+        pid = int(pid)
+    if not isinstance(pid, int) or not _is_process_alive(pid):
+        try:
+            state_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        return None
+
+    status = payload.get("status")
+    if status not in {MIGRATION_STATUS_IDLE, MIGRATION_STATUS_PROCESSING}:
+        status = MIGRATION_STATUS_IDLE
+
+    return {
+        "pid": pid,
+        "status": status,
+        "timestamp": payload.get("timestamp", time.time()),
+    }
+
+
+def write_migration_server_state(lock_dir: Path, *, pid: int, status: str) -> Path:
+    """Persist migration server lock details for cooperating VS Code services."""
+
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    state_path = lock_dir / MIGRATION_SERVER_LOCK_FILE
+    payload = {
+        "pid": pid,
+        "status": status,
+        "timestamp": time.time(),
+    }
+    state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return state_path
+
+
+def update_migration_server_status(lock_dir: Path, status: str) -> None:
+    """Update the current migration server status if its lock is still valid."""
+
+    state = read_migration_server_state(lock_dir)
+    if state is None:
+        return
+    try:
+        write_migration_server_state(lock_dir, pid=state["pid"], status=status)
+    except OSError:
+        return
+
+
 def migration_server_state(lock_dir: Path):
     """Context manager that records the migration server PID."""
 
     lock_dir.mkdir(parents=True, exist_ok=True)
-    state_path = lock_dir / "migration_server.json"
+    state_path = lock_dir / MIGRATION_SERVER_LOCK_FILE
 
     @contextmanager
     def _manager():
-        payload = {"pid": os.getpid(), "timestamp": time.time()}
         try:
-            state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            write_migration_server_state(
+                lock_dir,
+                pid=os.getpid(),
+                status=MIGRATION_STATUS_IDLE,
+            )
         except OSError:
             pass
         try:
@@ -781,7 +851,9 @@ def main(argv: list[str] | None = None) -> int:
         while True:
             try:
                 if is_first_run:
+                    update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_PROCESSING)
                     run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                    update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
                     snapshot = collect_source_mtimes(BASE_DIR)
                     is_first_run = False
 
@@ -807,9 +879,12 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"[Migration Server] Changes detected: {display}")
+                update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_PROCESSING)
                 run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
                 snapshot = collect_source_mtimes(BASE_DIR)
             except KeyboardInterrupt:
+                update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
                 if remaining_interrupt_retries > 0:
                     remaining_interrupt_retries -= 1
                     print(

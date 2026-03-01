@@ -105,6 +105,37 @@ def server_state(lock_dir: Path):
             pass
 
 
+def _wait_for_migration_server_idle(
+    lock_dir: Path,
+    *,
+    interval: float,
+    timeout_seconds: float = 300.0,
+) -> bool:
+    """Wait until the migration server reports an idle state.
+
+    Returns ``True`` when the migration server is idle (or not running) and
+    ``False`` when the wait reaches *timeout_seconds*.
+    """
+
+    started_at = time.monotonic()
+    while True:
+        state = migration.read_migration_server_state(lock_dir)
+        if state is None:
+            return True
+        if state.get("status") != migration.MIGRATION_STATUS_PROCESSING:
+            return True
+        if (time.monotonic() - started_at) >= timeout_seconds:
+            print(
+                f"{PREFIX} Timed out waiting for migration server to become idle. Stopping."
+            )
+            NOTIFY(
+                "Migration server busy",
+                "Migration server did not become idle before timeout.",
+            )
+            return False
+        time.sleep(max(0.1, interval))
+
+
 @pytest.fixture(name="test_server_state") if pytest is not None else (lambda function: function)
 def test_server_state_fixture(lock_dir: Path):
     """Fixture wrapper to align with existing test usage."""
@@ -124,6 +155,40 @@ def test_server_state_creates_and_cleans(lock_dir: Path):
         assert "timestamp" in payload
 
     assert not state_path.exists()
+
+
+def test_wait_for_migration_server_idle_returns_when_idle(monkeypatch):
+    """Regression: idle migration state should return immediately."""
+
+    monkeypatch.setattr(
+        migration,
+        "read_migration_server_state",
+        lambda _lock_dir: {"pid": 1234, "status": migration.MIGRATION_STATUS_IDLE},
+    )
+
+    assert _wait_for_migration_server_idle(Path("."), interval=0.01, timeout_seconds=0.05)
+
+
+def test_wait_for_migration_server_idle_times_out(monkeypatch):
+    """Regression: persistent processing state should eventually time out."""
+
+    monkeypatch.setattr(
+        migration,
+        "read_migration_server_state",
+        lambda _lock_dir: {
+            "pid": 1234,
+            "status": migration.MIGRATION_STATUS_PROCESSING,
+        },
+    )
+
+    assert (
+        _wait_for_migration_server_idle(
+            Path("."),
+            interval=0.01,
+            timeout_seconds=0.02,
+        )
+        is False
+    )
 
 
 
@@ -811,6 +876,23 @@ def run_env_refresh_with_tests(
 ) -> bool:
     """Run env-refresh and then execute the full test suite."""
 
+    state = migration.read_migration_server_state(LOCK_DIR)
+    if state is not None:
+        status = state.get("status")
+        pid = state.get("pid")
+        print(
+            f"{PREFIX} Detected migration server PID {pid} with status '{status}'."
+        )
+        if status == migration.MIGRATION_STATUS_PROCESSING:
+            print(f"{PREFIX} Waiting for migration server to become idle...")
+            if not _wait_for_migration_server_idle(LOCK_DIR, interval=1.0):
+                return False
+        print(
+            f"{PREFIX} Migration server is active; skipping local env-refresh and running tests."
+        )
+        run_tests(base_dir, durations_count=durations_count)
+        return True
+
     if _migration_merge_required(base_dir):
         return False
     if run_env_refresh(base_dir, latest=latest):
@@ -820,6 +902,53 @@ def run_env_refresh_with_tests(
     else:
         print(f"{PREFIX} env-refresh failed. Awaiting further changes.")
     return True
+
+
+def test_run_env_refresh_with_tests_skips_local_migrations_when_server_idle(monkeypatch):
+    """Regression: active migration server should prevent duplicate env-refresh runs."""
+
+    monkeypatch.setattr(
+        migration,
+        "read_migration_server_state",
+        lambda _lock_dir: {"pid": 100, "status": migration.MIGRATION_STATUS_IDLE},
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_migration_merge_required", lambda _base_dir: True)
+
+    calls = {"tests": 0}
+
+    def fake_run_tests(_base_dir: Path, *, durations_count: int) -> bool:
+        assert durations_count == 7
+        calls["tests"] += 1
+        return True
+
+    monkeypatch.setattr(sys.modules[__name__], "run_tests", fake_run_tests)
+
+    assert run_env_refresh_with_tests(Path("."), latest=True, durations_count=7) is True
+    assert calls["tests"] == 1
+
+
+def test_run_env_refresh_with_tests_waits_for_processing_server(monkeypatch):
+    """Regression: test server should wait for migration server processing to finish."""
+
+    monkeypatch.setattr(
+        migration,
+        "read_migration_server_state",
+        lambda _lock_dir: {
+            "pid": 100,
+            "status": migration.MIGRATION_STATUS_PROCESSING,
+        },
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_wait_for_migration_server_idle", lambda *_args, **_kwargs: True)
+
+    calls = {"tests": 0}
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "run_tests",
+        lambda *_args, **_kwargs: calls.update(tests=calls["tests"] + 1) or True,
+    )
+
+    assert run_env_refresh_with_tests(Path("."), latest=False, durations_count=3) is True
+    assert calls["tests"] == 1
 
 
 def main(argv: list[str] | None = None) -> int:
