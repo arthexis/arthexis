@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import ast
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,84 @@ from django.contrib.auth.models import AbstractBaseUser
 
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.nodes.models import Node
+
+
+class _ConditionExpressionEvaluator(ast.NodeVisitor):
+    """Safely evaluate boolean shortcut expressions against a constrained context."""
+
+    _ALLOWED_COMPARE_OPS = (ast.Eq, ast.NotEq, ast.In, ast.NotIn)
+
+    def __init__(self, context: dict[str, object]) -> None:
+        self._context = context
+
+    def evaluate(self, expression: str) -> bool:
+        """Parse and evaluate a condition expression."""
+
+        parsed = ast.parse(expression, mode="eval")
+        return bool(self.visit(parsed.body))
+
+    def visit_Name(self, node: ast.Name) -> object:  # noqa: N802
+        if node.id not in self._context:
+            raise ValueError(f"Unknown variable: {node.id}")
+        return self._context[node.id]
+
+    def visit_Constant(self, node: ast.Constant) -> object:  # noqa: N802
+        return node.value
+
+    def visit_Set(self, node: ast.Set) -> set[object]:  # noqa: N802
+        return {self.visit(element) for element in node.elts}
+
+    def visit_Tuple(self, node: ast.Tuple) -> tuple[object, ...]:  # noqa: N802
+        return tuple(self.visit(element) for element in node.elts)
+
+    def visit_List(self, node: ast.List) -> list[object]:  # noqa: N802
+        return [self.visit(element) for element in node.elts]
+
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> bool:  # noqa: N802
+        if isinstance(node.op, ast.Not):
+            return not bool(self.visit(node.operand))
+        raise ValueError("Unsupported unary operator in expression")
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> bool:  # noqa: N802
+        values = [bool(self.visit(value)) for value in node.values]
+        if isinstance(node.op, ast.And):
+            return all(values)
+        if isinstance(node.op, ast.Or):
+            return any(values)
+        raise ValueError("Unsupported boolean operator in expression")
+
+    def visit_Compare(self, node: ast.Compare) -> bool:  # noqa: N802
+        left = self.visit(node.left)
+        for operation, comparator in zip(node.ops, node.comparators, strict=True):
+            if not isinstance(operation, self._ALLOWED_COMPARE_OPS):
+                raise ValueError("Unsupported comparison operator in expression")
+            right = self.visit(comparator)
+            if isinstance(operation, ast.Eq) and left != right:
+                return False
+            if isinstance(operation, ast.NotEq) and left == right:
+                return False
+            if isinstance(operation, ast.In) and left not in right:
+                return False
+            if isinstance(operation, ast.NotIn) and left in right:
+                return False
+            left = right
+        return True
+
+    def visit_Call(self, node: ast.Call) -> bool:  # noqa: N802
+        if not isinstance(node.func, ast.Name) or node.func.id != "has_feature":
+            raise ValueError("Only has_feature(...) calls are allowed")
+        if len(node.args) != 1 or node.keywords:
+            raise ValueError("has_feature(...) expects exactly one positional argument")
+        feature_slug = self.visit(node.args[0])
+        if not isinstance(feature_slug, str):
+            raise ValueError("has_feature(...) argument must be a string")
+        has_feature = self._context.get("has_feature")
+        if not callable(has_feature):
+            raise ValueError("has_feature is not callable")
+        return bool(has_feature(feature_slug))
+
+    def generic_visit(self, node: ast.AST) -> object:
+        raise ValueError(f"Unsupported expression element: {type(node).__name__}")
 
 
 @dataclass(slots=True)
@@ -161,8 +240,9 @@ def _evaluate_expression(expression: str, context: dict[str, object]) -> bool:
     if not expression:
         return True
     try:
-        return bool(eval(expression, {"__builtins__": {}}, context))
-    except (NameError, SyntaxError, TypeError, ValueError):
+        evaluator = _ConditionExpressionEvaluator(context)
+        return evaluator.evaluate(expression)
+    except (SyntaxError, TypeError, ValueError):
         return False
 
 
@@ -240,11 +320,15 @@ def should_install_shortcut(
         return False
 
     if shortcut.condition_command:
+        command_parts = shlex.split(shortcut.condition_command)
+        if not command_parts:
+            return False
         result = subprocess.run(
-            shortcut.condition_command,
-            shell=True,
+            command_parts,
             check=False,
             cwd=base_dir,
+            text=True,
+            capture_output=True,
             env={**os.environ, "ARTHEXIS_SHORTCUT_SLUG": shortcut.slug, "ARTHEXIS_USERNAME": username},
         )
         if result.returncode != 0:
@@ -256,21 +340,28 @@ def should_install_shortcut(
 def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str, icon_value: str) -> str:
     """Render the .desktop file body for ``shortcut``."""
 
+    def _sanitize_value(value: object) -> str:
+        return str(value).replace("\n", " ").replace("\r", " ")
+
     categories = shortcut.categories or "Utility;"
     lines = [
         "[Desktop Entry]",
         "Version=1.0",
         "Type=Application",
-        f"Name={shortcut.name}",
-        f"Comment={shortcut.comment}",
-        f"Exec={exec_value}",
-        f"Icon={icon_value}",
+        "X-Arthexis-Managed=true",
+        f"Name={_sanitize_value(shortcut.name)}",
+        f"Comment={_sanitize_value(shortcut.comment)}",
+        f"Exec={_sanitize_value(exec_value)}",
+        f"Icon={_sanitize_value(icon_value)}",
         f"Terminal={'true' if shortcut.terminal else 'false'}",
-        f"Categories={categories}",
+        f"Categories={_sanitize_value(categories)}",
         f"StartupNotify={'true' if shortcut.startup_notify else 'false'}",
     ]
     for key, value in sorted(shortcut.extra_entries.items()):
-        lines.append(f"{key}={value}")
+        sanitized_key = _sanitize_value(key)
+        if any(char in sanitized_key for char in ("=", "[", "]")):
+            continue
+        lines.append(f"{sanitized_key}={_sanitize_value(value)}")
     return "\n".join(lines) + "\n"
 
 
@@ -303,11 +394,17 @@ def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_s
         result.installed += 1
 
     if remove_stale:
-        for stale in desktop_dir.glob("Arthexis*.desktop"):
-            if stale not in installed_files and not DesktopShortcut.objects.filter(
-                desktop_filename=stale.stem
-            ).exists():
-                stale.unlink(missing_ok=True)
-                result.removed += 1
+        managed_filenames = set(DesktopShortcut.objects.values_list("desktop_filename", flat=True))
+        for stale in desktop_dir.glob("*.desktop"):
+            if stale in installed_files or stale.stem in managed_filenames:
+                continue
+            try:
+                stale_content = stale.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if "X-Arthexis-Managed=true" not in stale_content and not stale.name.startswith("Arthexis"):
+                continue
+            stale.unlink(missing_ok=True)
+            result.removed += 1
 
     return result

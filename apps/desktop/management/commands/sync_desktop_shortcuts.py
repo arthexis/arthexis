@@ -8,7 +8,19 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.desktop.services import sync_desktop_shortcuts
-from apps.screens.startup_notifications import read_port_from_lock
+
+
+def _read_port_from_lock(base_dir: Path, *, fallback: int = 8888) -> int:
+    """Read backend port from lock file with a validated fallback."""
+
+    lock_file = base_dir / ".locks" / "backend_port.lck"
+    try:
+        value = int(lock_file.read_text(encoding="utf-8").strip())
+    except (OSError, TypeError, ValueError):
+        return fallback
+    if 1 <= value <= 65535:
+        return value
+    return fallback
 
 
 class Command(BaseCommand):
@@ -37,7 +49,7 @@ class Command(BaseCommand):
 
         port = options["port"]
         if port <= 0:
-            port = read_port_from_lock(str(base_dir))
+            port = _read_port_from_lock(base_dir)
 
         result = sync_desktop_shortcuts(
             base_dir=base_dir,
