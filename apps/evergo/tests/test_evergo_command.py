@@ -13,7 +13,7 @@ from django.core.management.base import CommandError
 from apps.evergo.models import EvergoUser
 
 @pytest.mark.django_db
-@pytest.mark.regression
+@pytest.mark.integration
 @patch("apps.evergo.models.user.EvergoUser._prime_session", return_value="xsrf-token")
 @patch("apps.evergo.models.user.requests.Session")
 def test_evergo_command_saves_credentials_and_tests_login(
@@ -101,7 +101,7 @@ def test_evergo_command_raises_for_ambiguous_user_identifier():
         )
 
 @pytest.mark.django_db
-@pytest.mark.regression
+@pytest.mark.integration
 def test_evergo_command_load_customers_with_inline_queries():
     """Command should execute admin-equivalent customer load when requested."""
     User = get_user_model()
@@ -139,7 +139,7 @@ def test_evergo_command_load_customers_with_inline_queries():
     assert profile.evergo_email == "ops@example.com"
 
 @pytest.mark.django_db
-@pytest.mark.regression
+@pytest.mark.integration
 def test_evergo_command_load_customers_requires_query_source():
     """Command should reject load-customer runs that do not provide any queries."""
     User = get_user_model()
@@ -166,7 +166,7 @@ def test_evergo_command_load_customers_requires_existing_evergo_email():
         )
 
 @pytest.mark.django_db
-@pytest.mark.regression
+@pytest.mark.integration
 def test_evergo_command_load_customers_rejects_conflicting_query_sources(tmp_path):
     """Command should reject passing both inline and file query sources at once."""
     User = get_user_model()
@@ -186,7 +186,7 @@ def test_evergo_command_load_customers_rejects_conflicting_query_sources(tmp_pat
         )
 
 @pytest.mark.django_db
-@pytest.mark.regression
+@pytest.mark.integration
 def test_evergo_command_load_customers_supports_queries_file(tmp_path):
     """Command should read raw queries from a UTF-8 file and execute sync."""
     User = get_user_model()

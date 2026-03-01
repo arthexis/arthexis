@@ -4,7 +4,6 @@ import pytest
 
 from apps.nginx import services
 
-pytestmark = pytest.mark.critical
 
 def test_ensure_site_enabled_creates_symlink(monkeypatch, tmp_path: Path):
     sites_available = tmp_path / "sites-available"

@@ -57,7 +57,6 @@ def test_public_pages_render_for_anonymous(client):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
     """Regression: public home should hide feedback UI when ingestion feature is disabled."""
 

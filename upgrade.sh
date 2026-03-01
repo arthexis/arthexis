@@ -1002,7 +1002,7 @@ FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --latest|--unstable|-l)
+    --latest|--unstable|-l|-t)
       CHANNEL="unstable"
       FORWARDED_ARGS+=("--latest")
       shift
@@ -1122,6 +1122,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+rerun_with_updated_script() {
+  local depth="${ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH:-0}"
+
+  if [[ ! "$depth" =~ ^[0-9]+$ ]]; then
+    depth=0
+  fi
+
+  if (( depth >= 1 )); then
+    echo "upgrade.sh was updated again during self-update rerun; run ./upgrade.sh manually to continue." >&2
+    return 1
+  fi
+
+  local -a rerun_cmd=("$UPGRADE_SCRIPT_PATH")
+  if [ ${#FORWARDED_ARGS[@]} -gt 0 ]; then
+    rerun_cmd+=("${FORWARDED_ARGS[@]}")
+  fi
+
+  echo "upgrade.sh was updated during git pull; restarting upgrade automatically with the new script..."
+  export ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH=$((depth + 1))
+  "${rerun_cmd[@]}"
+}
+
 run_detached_upgrade() {
   local delegated_script="$BASE_DIR/scripts/delegated-upgrade.sh"
 
@@ -1176,6 +1198,12 @@ if [ -f "$UPGRADE_RERUN_LOCK" ]; then
         ;;
       LCD_WAS_ACTIVE=*)
         RERUN_LCD_WAS_ACTIVE="${rerun_line#LCD_WAS_ACTIVE=}"
+        ;;
+      UPGRADE_STASH_REF=*)
+        UPGRADE_STASH_REF="${rerun_line#UPGRADE_STASH_REF=}"
+        ;;
+      UPGRADE_STASH_CREATED=*)
+        UPGRADE_STASH_CREATED="${rerun_line#UPGRADE_STASH_CREATED=}"
         ;;
       *)
         if [ -z "$RERUN_TARGET_VERSION" ]; then
@@ -1922,11 +1950,17 @@ else
       printf 'REMOTE_VERSION=%s\n' "$REMOTE_VERSION"
       printf 'SERVICE_WAS_ACTIVE=%s\n' "$SERVICE_WAS_ACTIVE"
       printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
+      printf 'UPGRADE_STASH_REF=%s\n' "$UPGRADE_STASH_REF"
+      printf 'UPGRADE_STASH_CREATED=%s\n' "$UPGRADE_STASH_CREATED"
     } > "$UPGRADE_RERUN_LOCK"
     notify_lcd_manual_upgrade_required
     start_lcd_upgrade_helper_service
-    echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
-    exit "$UPGRADE_RERUN_EXIT_CODE"
+    if rerun_with_updated_script; then
+      exit 0
+    else
+      echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
+      exit "$UPGRADE_RERUN_EXIT_CODE"
+    fi
   fi
 
   if [[ $CHECK_ONLY -eq 1 ]]; then

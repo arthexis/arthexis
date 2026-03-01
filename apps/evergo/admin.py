@@ -38,6 +38,9 @@ def _load_customers_admin_view(admin_instance, request):
         if form.is_valid():
             profile = form.cleaned_data["profile"]
             raw_queries = form.cleaned_data["raw_queries"]
+            load_mode = (request.POST.get("load_mode") or "filtered").strip().lower()
+            if load_mode == "all":
+                raw_queries = ""
             try:
                 summary = profile.load_customers_from_queries(raw_queries=raw_queries)
             except EvergoAPIError as exc:

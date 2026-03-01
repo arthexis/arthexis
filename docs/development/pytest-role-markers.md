@@ -33,18 +33,10 @@ Because CI leaves `NODE_FEATURES` unset, feature-marked tests always run in the
 default pipeline. Locally you can constrain them to a specific set of features
 by exporting `NODE_FEATURES`.
 
-## Critical markers
-
-Use `@pytest.mark.critical` for tests that must always run in CI install/upgrade
-pipelines, even when local filtering or marker-based selection is applied.
-These tests should cover high-risk flows (for example, security checks or
-upgrade blockers) where skipped coverage would be unacceptable.
-
 ## Regression markers
 
 Use `@pytest.mark.regression` for tests that guard against reported regressions.
-Regression tests should run whenever critical tests are selected, so the
-regression marker is treated as a critical marker in test collection.
+Regression tests should run in standard CI pipelines and whenever regression-focused local filtering is applied.
 
 
 ## Segmented marker groups in `apps/vscode/test_server.py`
@@ -58,9 +50,10 @@ execution across segments:
 - `integration`: `integration and not critical and not slow`
 - `unmarked`: `not critical and not integration and not slow`
 
-This means slow tests that are also marked critical are executed in the
-critical group, and integration tests that are also marked slow or critical
-are executed in the higher-priority segment only.
+This means critical tests are isolated into the first segment, slow tests only
+run in the slow segment when they are not already critical, and integration
+tests that are also marked slow are executed in the slow group. Unmarked tests
+run only in the final fallback segment.
 
 ## Local filtering
 

@@ -12,7 +12,6 @@ import pytest
 from apps.links.models.reference import Reference
 from apps.links.reference_utils import filter_visible_references
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_is_link_valid_allows_redirect_status_codes():

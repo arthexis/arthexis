@@ -1,11 +1,11 @@
-"""Admin registration for desktop assistant extension models."""
+"""Admin registration for desktop assistant models."""
 
 from __future__ import annotations
 
 from django.contrib import admin, messages
 from django.http import HttpRequest
 
-from apps.desktop.models import RegisteredExtension
+from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.desktop.services import register_extension_with_os
 
 
@@ -66,3 +66,90 @@ class RegisteredExtensionAdmin(admin.ModelAdmin):
                 f"{registered_extension.extension}: {result.message}",
                 level=level,
             )
+
+
+@admin.register(DesktopShortcut)
+class DesktopShortcutAdmin(admin.ModelAdmin):
+    """Admin configuration for model-driven desktop shortcuts."""
+
+    list_display = (
+        "name",
+        "slug",
+        "desktop_filename",
+        "launch_mode",
+        "is_enabled",
+        "require_desktop_ui",
+        "sort_order",
+    )
+    list_filter = (
+        "launch_mode",
+        "is_enabled",
+        "require_desktop_ui",
+        "only_staff",
+        "only_superuser",
+    )
+    search_fields = ("name", "slug", "desktop_filename", "comment", "target_url", "command")
+    filter_horizontal = ("required_features", "required_groups")
+
+    fieldsets = (
+        (
+            "Identity",
+            {
+                "fields": (
+                    "name",
+                    "slug",
+                    "desktop_filename",
+                    "comment",
+                    "sort_order",
+                    "is_enabled",
+                )
+            },
+        ),
+        (
+            "Launch",
+            {
+                "fields": (
+                    "launch_mode",
+                    "target_url",
+                    "command",
+                    "terminal",
+                    "categories",
+                    "startup_notify",
+                )
+            },
+        ),
+        (
+            "Icon",
+            {
+                "fields": (
+                    "icon_name",
+                    "icon_base64",
+                    "icon_extension",
+                )
+            },
+        ),
+        (
+            "Conditions",
+            {
+                "description": (
+                    "Shortcuts install only when all selected conditions pass for "
+                    "the target user."
+                ),
+                "fields": (
+                    "require_desktop_ui",
+                    "required_features",
+                    "required_groups",
+                    "only_staff",
+                    "only_superuser",
+                    "condition_expression",
+                    "condition_command",
+                ),
+            },
+        ),
+        (
+            "Extended desktop entry",
+            {
+                "fields": ("extra_entries",),
+            },
+        ),
+    )
