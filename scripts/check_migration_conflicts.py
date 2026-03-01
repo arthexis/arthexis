@@ -341,12 +341,28 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
 
     if diff_base is None:
         # Some CI checkouts (notably staged upgrade jobs) do not keep enough git
-        # history/refs to resolve a merge-base. In that case, fall back to the
-        # current commit's migration diff first so we still limit checks to apps
-        # touched by the change under test.
+        # history/refs to resolve a merge-base. In that case, first diff against
+        # HEAD's first parent. GitHub Actions PR merge commits have parent[0]
+        # pointing at the base branch, so this limits checks to PR-introduced
+        # migration changes instead of aggregating both parents.
+        head_diff = _run_git(
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            "HEAD^1..HEAD",
+            "--",
+            "apps/*/migrations/*.py",
+        )
+        if head_diff.returncode == 0:
+            head_labels = _labels_from_diff_paths(head_diff.stdout)
+            if head_labels:
+                return head_labels
+
+        # For non-merge commits (or very shallow clones where HEAD^1 is missing),
+        # try commit-level file discovery as a second narrow fallback.
         head_diff = _run_git(
             "diff-tree",
-            "-m",
+            "--no-commit-id",
             "--name-only",
             "--diff-filter=ACMR",
             "-r",

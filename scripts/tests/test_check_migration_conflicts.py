@@ -181,10 +181,13 @@ def test_git_changed_app_labels_uses_head_diff_when_merge_base_missing(
             self.stdout = stdout
             self.stderr = stderr
 
+    calls: list[list[str]] = []
+
     def fake_run(args: list[str], **_kwargs: object) -> Result:
+        calls.append(args)
         if args[:3] == ["git", "merge-base", "HEAD"]:
             return Result(returncode=1, stderr="no merge base")
-        if args[:3] == ["git", "diff-tree", "-m"]:
+        if args[:3] == ["git", "diff", "--name-only"]:
             return Result(
                 returncode=0,
                 stdout=(
@@ -197,6 +200,35 @@ def test_git_changed_app_labels_uses_head_diff_when_merge_base_missing(
     monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
 
     assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"features", "nodes"}
+    assert ["git", "diff-tree", "--no-commit-id"] not in [call[:3] for call in calls]
+
+
+def test_git_changed_app_labels_uses_diff_tree_when_first_parent_diff_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When HEAD^1 is unavailable, fall back to commit-level file discovery."""
+
+    class Result:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run(args: list[str], **_kwargs: object) -> Result:
+        if args[:3] == ["git", "merge-base", "HEAD"]:
+            return Result(returncode=1, stderr="no merge base")
+        if args[:3] == ["git", "diff", "--name-only"]:
+            return Result(returncode=128, stderr="ambiguous argument 'HEAD^1..HEAD'")
+        if args[:3] == ["git", "diff-tree", "--no-commit-id"]:
+            return Result(
+                returncode=0,
+                stdout="apps/links/migrations/0010_merge_20260201_2246.py\n",
+            )
+        raise AssertionError(f"Unexpected git invocation: {args}")
+
+    monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
+
+    assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"links"}
 
 
 def test_git_changed_app_labels_handles_non_directory_apps_path(
