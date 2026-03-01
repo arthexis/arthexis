@@ -1,4 +1,4 @@
-{% load i18n admin_extras %}
+{% load i18n admin_utils admin_urls %}
 {% with show_user_data=cl.model_admin|supports_user_datum %}
 {% if result_hidden_fields %}
 <div class="hiddenfields">{# DIV for HTML validation #}

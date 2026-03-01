@@ -1,4 +1,4 @@
-{% load i18n admin_extras favorites %}
+{% load i18n admin_dashboard favorites %}
 
 <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
   <th scope="row" id="{{ row_dom_id }}">
