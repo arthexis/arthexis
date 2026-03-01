@@ -115,6 +115,7 @@ REQUIREMENTS_FILE = Path("requirements.txt")
 REQUIREMENTS_HASH_FILE = Path(".locks") / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 DEBUGGER_INTERRUPT_RETRY_LIMIT = 1
+DEBUGGER_INTERRUPT_GRACE_SECONDS = 5.0
 
 
 def _safe_print(*values: object, sep: str = " ", end: str = "\n", file=None, flush: bool = False) -> None:
@@ -836,6 +837,8 @@ def _is_debugger_session(env: dict[str, str] | None = None) -> bool:
     return bool(
         resolved_env.get("DEBUGPY_LAUNCHER_PORT")
         or resolved_env.get("PYDEVD_LOAD_VALUES_ASYNC")
+        or resolved_env.get("VSCODE_PID")
+        or resolved_env.get("TERM_PROGRAM") == "vscode"
     )
 
 
@@ -885,9 +888,9 @@ def main(argv: list[str] | None = None) -> int:
     _safe_print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     _safe_print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
-    remaining_interrupt_retries = (
-        DEBUGGER_INTERRUPT_RETRY_LIMIT if _is_debugger_session() else 0
-    )
+    debugger_session = _is_debugger_session()
+    remaining_interrupt_retries = DEBUGGER_INTERRUPT_RETRY_LIMIT if debugger_session else 0
+    server_started_at = time.monotonic()
     with migration_server_state(LOCK_DIR):
         is_first_run = True
         while True:
@@ -923,6 +926,18 @@ def main(argv: list[str] | None = None) -> int:
                 snapshot = collect_source_mtimes(BASE_DIR)
             except KeyboardInterrupt:
                 update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
+                within_grace_period = (
+                    debugger_session
+                    and (time.monotonic() - server_started_at)
+                    <= DEBUGGER_INTERRUPT_GRACE_SECONDS
+                )
+                if within_grace_period:
+                    _safe_print(
+                        "[Migration Server] Ignoring transient startup interrupt from "
+                        "the IDE/debugger session."
+                    )
+                    snapshot = collect_source_mtimes(BASE_DIR)
+                    continue
                 if remaining_interrupt_retries > 0:
                     remaining_interrupt_retries -= 1
                     _safe_print(

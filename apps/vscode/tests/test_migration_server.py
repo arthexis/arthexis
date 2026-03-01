@@ -455,6 +455,34 @@ def test_main_swallows_interrupt_raised_while_reporting_shutdown(monkeypatch) ->
         assert migration_server.main([]) == 0
 
 
+def test_is_debugger_session_detects_vscode_environment() -> None:
+    """Regression: VS Code terminals should enable debugger interrupt mitigation."""
+
+    assert migration_server._is_debugger_session({"VSCODE_PID": "1234"}) is True
+
+
+def test_main_ignores_transient_startup_interrupt_in_vscode_sessions(monkeypatch) -> None:
+    """Regression: startup debug handshake interrupts should not stop the server."""
+
+    monkeypatch.setattr(migration_server, "DEBUGGER_INTERRUPT_RETRY_LIMIT", 0)
+    monkeypatch.setattr(migration_server, "update_requirements", mock.Mock(return_value=False))
+    monkeypatch.setattr(migration_server, "collect_source_mtimes", mock.Mock(return_value={}))
+    monkeypatch.setattr(
+        migration_server,
+        "_run_refresh_with_status",
+        mock.Mock(return_value=True),
+    )
+    monkeypatch.setattr(
+        migration_server,
+        "wait_for_changes",
+        mock.Mock(side_effect=[KeyboardInterrupt, KeyboardInterrupt]),
+    )
+    monkeypatch.setattr(migration_server, "_is_debugger_session", mock.Mock(return_value=True))
+    monotonic_values = iter([100.0, 102.0, 107.0])
+    monkeypatch.setattr(migration_server.time, "monotonic", lambda: next(monotonic_values))
+
+    assert migration_server.main([]) == 0
+
 def test_is_debugger_session_detects_debugpy_variable() -> None:
     """Regression: debugpy launch variables should enable interrupt retry mode."""
 
