@@ -12,13 +12,39 @@
 
 {% block content %}
 <div id="content-main">
-  <h1>{% trans "My OpenAPI Spec" %}</h1>
   <p>
     {% trans "Preview the generated OpenAPI file before downloading it." %}
   </p>
+  <p>
+    {% trans "Configure which actions are available in" %}
+    <a href="{{ actions_changelist_url }}">{% trans "Remote Actions" %}</a>.
+  </p>
   <p class="submit-row">
     <a class="button default" href="{{ download_url }}">{% trans "Download YAML" %}</a>
+    <button class="button" type="button" id="copy-yaml-button">{% trans "Copy YAML" %}</button>
   </p>
-  <pre><code>{{ payload }}</code></pre>
+  <pre><code id="openapi-yaml-content">{{ payload }}</code></pre>
 </div>
+<script>
+  (function() {
+    const copyButton = document.getElementById("copy-yaml-button");
+    const yamlCode = document.getElementById("openapi-yaml-content");
+    if (!copyButton || !yamlCode || !navigator.clipboard) {
+      return;
+    }
+
+    copyButton.addEventListener("click", async function() {
+      const originalText = copyButton.textContent;
+      try {
+        await navigator.clipboard.writeText(yamlCode.textContent || "");
+        copyButton.textContent = "{% trans 'Copied' %}";
+      } catch (error) {
+        copyButton.textContent = "{% trans 'Copy failed' %}";
+      }
+      window.setTimeout(function() {
+        copyButton.textContent = originalText;
+      }, 1000);
+    });
+  })();
+</script>
 {% endblock %}

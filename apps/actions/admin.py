@@ -75,6 +75,7 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
             "title": _("My OpenAPI Spec"),
             "payload": payload,
             "download_url": f"{request.path}?download=1",
+            "actions_changelist_url": reverse("admin:actions_remoteaction_changelist"),
         }
         return TemplateResponse(request, "admin/actions/remoteaction/openapi_preview.html", context)
 
