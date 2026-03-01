@@ -107,6 +107,14 @@ class Recipe(Ownable):
         resolved = resolve_sigils(self.script or "", current=self)
         return resolve_arg_sigils(resolved, args, kwargs)
 
+    def _resolve_script_without_args(self) -> str:
+        """Resolve non-argument sigils while preserving ``[ARG.*]`` tokens."""
+
+        # Local import to avoid circular dependency with the sigils app.
+        from apps.sigils.sigil_resolver import resolve_sigils
+
+        return resolve_sigils(self.script or "", current=self)
+
     def _resolve_bash_script(self, *args: Any, **kwargs: Any) -> str:
         """Resolve bash script content with safely shell-quoted argument sigils."""
 
@@ -123,7 +131,7 @@ class Recipe(Ownable):
         recipe_format = self.detect_format()
 
         if recipe_format == self.RecipeFormat.MARKDOWN:
-            resolved_script = self.resolve_script(*args, **kwargs)
+            resolved_script = self._resolve_script_without_args()
             execution = self._execute_markdown(
                 resolved_script=resolved_script,
                 result_variable=result_key,
@@ -357,7 +365,8 @@ class Recipe(Ownable):
         parts: list[str] = []
         cursor = 0
         for match in code_block_pattern.finditer(resolved_script):
-            parts.append(resolved_script[cursor:match.start()])
+            prose_segment = resolved_script[cursor:match.start()]
+            parts.append(resolve_arg_sigils(prose_segment, args, kwargs))
             language = (match.group("language") or "python").strip().lower()
             block_code = match.group("code")
             block_output = self._execute_language_block(
@@ -369,7 +378,8 @@ class Recipe(Ownable):
             )
             parts.append(serialize_recipe_result(block_output))
             cursor = match.end()
-        parts.append(resolved_script[cursor:])
+        tail_segment = resolved_script[cursor:]
+        parts.append(resolve_arg_sigils(tail_segment, args, kwargs))
         rendered_markdown = "".join(parts)
 
         return RecipeExecutionResult(
@@ -395,8 +405,9 @@ class Recipe(Ownable):
         """
 
         if language in {"", "python", "py"}:
+            resolved_code = resolve_arg_sigils(code, args, kwargs)
             execution = self._execute_python(
-                resolved_script=code,
+                resolved_script=resolved_code,
                 result_variable=result_variable,
                 args=args,
                 kwargs=kwargs,
@@ -404,15 +415,21 @@ class Recipe(Ownable):
             return execution.result
 
         if language in {"bash", "sh", "shell"}:
+            quoted_args = tuple(shlex.quote(str(value)) for value in args)
+            quoted_kwargs = {
+                key: shlex.quote(str(value)) for key, value in kwargs.items()
+            }
+            resolved_code = resolve_arg_sigils(code, quoted_args, quoted_kwargs)
             execution = self._execute_bash(
-                resolved_script=code,
+                resolved_script=resolved_code,
                 result_variable=result_variable,
                 args=args,
                 kwargs=kwargs,
             )
             return execution.result
 
-        return self._execute_external_language(language=language, code=code)
+        resolved_code = resolve_arg_sigils(code, args, kwargs)
+        return self._execute_external_language(language=language, code=resolved_code)
 
     def _execute_external_language(self, *, language: str, code: str) -> str:
         """Execute an external interpreter command and return captured stdout."""

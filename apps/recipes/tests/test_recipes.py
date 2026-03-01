@@ -5,8 +5,11 @@ import uuid
 from unittest import mock
 
 import pytest
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory
 
+from apps.recipes.admin import RecipeProductAdmin
 from apps.recipes.models import Recipe, RecipeFormatDetectionError, RecipeProduct
 from apps.recipes.utils import parse_recipe_arguments
 
@@ -423,6 +426,42 @@ def test_execute_markdown_recipe_replaces_code_blocks(monkeypatch):
     assert "hello" in execution.result
     assert "done" in execution.result
     assert "```" not in execution.result
+
+
+@pytest.mark.django_db
+def test_execute_markdown_bash_blocks_quote_arg_sigils(monkeypatch):
+    """Markdown bash fences shell-escape arg sigils before execution."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"guide-bash-{uuid.uuid4()}.md",
+        display="Guide Bash",
+        script="""```bash\necho [ARG.0]\n```""",
+    )
+
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.append(command[2])
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello; cat /etc/passwd")
+
+    assert execution.result == "ok"
+    assert captured[0] == "echo 'hello; cat /etc/passwd'"
+
+
+def test_recipe_product_admin_disables_delete_permission():
+    """Recipe product admin remains read-only by denying delete permissions."""
+
+    request = RequestFactory().get("/")
+    admin_site = AdminSite()
+    admin_instance = RecipeProductAdmin(RecipeProduct, admin_site)
+
+    assert admin_instance.has_delete_permission(request) is False
 
 
 @pytest.mark.django_db
