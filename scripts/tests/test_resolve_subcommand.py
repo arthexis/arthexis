@@ -75,7 +75,7 @@ def _run_command(
         )
         fake_arthexis.chmod(fake_arthexis.stat().st_mode | stat.S_IEXEC)
 
-    env["PATH"] = f"{path_prefix}:{env['PATH']}"
+    env["PATH"] = os.pathsep.join(filter(None, [path_prefix, env.get("PATH")]))
     return subprocess.run(
         command,
         cwd=cwd,
