@@ -323,6 +323,14 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             capture_output=True,
         )
 
+    def _labels_from_diff_paths(paths: str) -> set[str]:
+        labels: set[str] = set()
+        for line in paths.splitlines():
+            parts = Path(line).parts
+            if len(parts) >= 4 and parts[0] == "apps" and parts[2] == "migrations":
+                labels.add(parts[1])
+        return labels
+
     base_ref_candidates = ["origin/HEAD", "origin/main", "origin/master", "HEAD~1"]
     diff_base: str | None = None
     for candidate in base_ref_candidates:
@@ -333,7 +341,24 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
 
     if diff_base is None:
         # Some CI checkouts (notably staged upgrade jobs) do not keep enough git
-        # history/refs to resolve a merge-base. Fail open by scanning all local
+        # history/refs to resolve a merge-base. In that case, fall back to the
+        # current commit's migration diff first so we still limit checks to apps
+        # touched by the change under test.
+        head_diff = _run_git(
+            "diff-tree",
+            "--name-only",
+            "--diff-filter=ACMR",
+            "-r",
+            "HEAD",
+            "--",
+            "apps/*/migrations/*.py",
+        )
+        if head_diff.returncode == 0:
+            head_labels = _labels_from_diff_paths(head_diff.stdout)
+            if head_labels:
+                return head_labels
+
+        # If no commit-level diff is available, fail open by scanning all local
         # app migration directories rather than failing the entire validation job.
         labels: set[str] = set()
         apps_dir = repo_root / "apps"
@@ -362,12 +387,7 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             f"{stderr or 'unknown error'}"
         )
 
-    labels: set[str] = set()
-    for line in diff.stdout.splitlines():
-        parts = Path(line).parts
-        if len(parts) >= 4 and parts[0] == "apps" and parts[2] == "migrations":
-            labels.add(parts[1])
-    return labels
+    return _labels_from_diff_paths(diff.stdout)
 
 def _local_installed_app_labels(repo_root: Path) -> list[str]:
     """Return installed local app labels when Django settings are available."""

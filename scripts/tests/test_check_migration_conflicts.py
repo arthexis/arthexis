@@ -170,6 +170,35 @@ def test_git_changed_app_labels_falls_back_to_local_migrations_when_merge_base_m
     assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"widgets"}
 
 
+def test_git_changed_app_labels_uses_head_diff_when_merge_base_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When merge-base is unavailable, prefer commit-level changed migration paths."""
+
+    class Result:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run(args: list[str], **_kwargs: object) -> Result:
+        if args[:3] == ["git", "merge-base", "HEAD"]:
+            return Result(returncode=1, stderr="no merge base")
+        if args[:3] == ["git", "diff-tree", "--name-only"]:
+            return Result(
+                returncode=0,
+                stdout=(
+                    "apps/features/migrations/0024_merge_20260228_1838.py\n"
+                    "apps/nodes/migrations/0035_nodefeature_footprint.py\n"
+                ),
+            )
+        raise AssertionError(f"Unexpected git invocation: {args}")
+
+    monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
+
+    assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"features", "nodes"}
+
+
 def test_git_changed_app_labels_handles_non_directory_apps_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
