@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import re
 import sys
 import tempfile
 from contextlib import nullcontext
@@ -177,14 +178,17 @@ def _requires_db(item: pytest.Item) -> bool:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    def _has_marker(expr: str, marker: str) -> bool:
+        return re.search(rf"(?<!\\w){re.escape(marker)}(?!\\w)", expr) is not None
+
     markexpr = getattr(config.option, "markexpr", "")
-    if markexpr and "critical" in markexpr:
+    if markexpr and _has_marker(markexpr, "critical"):
         expanded = markexpr
         # When selecting critical tests, include regression tests by default.
-        if "regression" not in expanded:
+        if not _has_marker(expanded, "regression"):
             expanded = f"({expanded}) or regression"
         # Keep explicitly noncritical regressions out unless they are requested.
-        if "noncritical_regression" not in expanded:
+        if not _has_marker(expanded, "noncritical_regression"):
             expanded = f"({expanded}) and not noncritical_regression"
         config.option.markexpr = expanded
     config.addinivalue_line(
