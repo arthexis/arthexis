@@ -147,3 +147,49 @@ def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
 def test_upsert_site_configuration_returns_false_when_name_missing(env_refresh_module):
     result = env_refresh_module._upsert_site_configuration({"enabled": True})
     assert result is False
+
+
+def test_load_fixtures_with_deferred_retry_retries_once(monkeypatch, env_refresh_module, capsys):
+    """Regression: deferred fixtures should be retried after initial dependency loads."""
+
+    calls: list[str] = []
+
+    real_error = env_refresh_module.DeserializationError
+
+    def _fake_loader(fixture: str, *, using_sqlite: bool) -> None:
+        calls.append(fixture)
+        if fixture == "b.json" and calls.count("b.json") == 1:
+            raise real_error("dependency missing")
+
+    monkeypatch.setattr(env_refresh_module, "_load_fixture_with_retry", _fake_loader)
+
+    env_refresh_module._load_fixtures_with_deferred_retry(
+        {1: ["a.json"], 2: ["b.json"]},
+        using_sqlite=True,
+    )
+
+    assert calls == ["a.json", "b.json", "b.json"]
+    assert capsys.readouterr().out == ".."
+
+
+def test_load_fixtures_with_deferred_retry_reports_second_failure(
+    monkeypatch, env_refresh_module, capsys
+):
+    """Regression: fixtures that fail twice should still be reported as skipped."""
+
+    real_error = env_refresh_module.DeserializationError
+
+    def _always_fail(fixture: str, *, using_sqlite: bool) -> None:
+        if fixture == "bad.json":
+            raise real_error("still missing")
+
+    monkeypatch.setattr(env_refresh_module, "_load_fixture_with_retry", _always_fail)
+
+    env_refresh_module._load_fixtures_with_deferred_retry(
+        {1: ["good.json"], 2: ["bad.json"]},
+        using_sqlite=False,
+    )
+
+    output = capsys.readouterr().out
+    assert output.startswith(".")
+    assert "Skipping fixture bad.json due to: still missing" in output

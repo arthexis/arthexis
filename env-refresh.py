@@ -323,6 +323,50 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
     return (priority, filename)
 
 
+def _load_fixtures_with_deferred_retry(
+    patched: dict[int, list[str]],
+    *,
+    using_sqlite: bool,
+) -> None:
+    """Load fixture files by priority and retry deserialization failures once.
+
+    The first pass preserves the existing load order. Any fixture that fails due
+    to unresolved model references is retried after all other fixtures have had a
+    chance to populate dependencies.
+    """
+
+    deferred_fixtures: list[tuple[str, DeserializationError]] = []
+    for priority in sorted(patched):
+        for fixture in patched[priority]:
+            try:
+                _load_fixture_with_retry(
+                    fixture,
+                    using_sqlite=using_sqlite,
+                )
+            except DeserializationError as exc:
+                deferred_fixtures.append((fixture, exc))
+            else:
+                print(".", end="", flush=True)
+
+    if not deferred_fixtures:
+        return
+
+    retried: list[tuple[str, DeserializationError]] = []
+    for fixture, _ in deferred_fixtures:
+        try:
+            _load_fixture_with_retry(
+                fixture,
+                using_sqlite=using_sqlite,
+            )
+        except DeserializationError as exc:
+            retried.append((fixture, exc))
+        else:
+            print(".", end="", flush=True)
+
+    for fixture, exc in retried:
+        print(f"Skipping fixture {fixture} due to: {exc}")
+
+
 def _sigilroot_skip_reason(fields: dict) -> str | None:
     """Return a human readable reason to skip a SigilRoot entry."""
 
@@ -820,17 +864,10 @@ def run_database_tasks(
                     target = str(source)
                 if patched_data:
                     patched.setdefault(priority, []).append(target)
-            for priority in sorted(patched):
-                for fixture in patched[priority]:
-                    try:
-                        _load_fixture_with_retry(
-                            fixture,
-                            using_sqlite=using_sqlite,
-                        )
-                    except DeserializationError as exc:
-                        print(f"Skipping fixture {fixture} due to: {exc}")
-                    else:
-                        print(".", end="", flush=True)
+            _load_fixtures_with_deferred_retry(
+                patched,
+                using_sqlite=using_sqlite,
+            )
             if pending_user_m2m:
                 for user_pk, assignments in pending_user_m2m.items():
                     user = get_user_model().objects.filter(pk=user_pk).first()
