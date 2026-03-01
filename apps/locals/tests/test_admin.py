@@ -1,12 +1,12 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import IntegrityError
 from django.test import RequestFactory
 from django.test import TestCase
 from django.urls import reverse
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib.sessions.middleware import SessionMiddleware
 from unittest import mock
 
 from apps.locals.models import Favorite
@@ -25,16 +25,34 @@ class FavoriteToggleViewTests(TestCase):
         self.client.force_login(self.user)
         self.content_type = ContentType.objects.get_for_model(Favorite)
 
-    def test_get_renders_confirmation_for_new_favorite(self):
+    def test_get_creates_default_favorite_and_redirects_to_changelist(self):
+        """Regression: new favorites should be created with defaults from blue stars."""
+
+        url = reverse("admin:favorite_toggle", args=[self.content_type.pk])
+
+        response = self.client.get(url, {"next": "/admin/"})
+
+        self.assertRedirects(response, "/admin/")
+        favorite = Favorite.objects.get(user=self.user, content_type=self.content_type)
+        self.assertEqual(favorite.custom_label, "")
+        self.assertEqual(favorite.priority, 0)
+        self.assertFalse(favorite.user_data)
+
+    def test_get_existing_favorite_renders_configuration(self):
+        """Regression: existing favorites should still open the configuration screen."""
+
+        Favorite.objects.create(user=self.user, content_type=self.content_type)
         url = reverse("admin:favorite_toggle", args=[self.content_type.pk])
 
         response = self.client.get(url, {"next": "/admin/"})
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "admin/favorite_confirm.html")
-        self.assertContains(response, "Add Favorite")
+        self.assertContains(response, "Update Favorite")
 
     def test_duplicate_add_falls_back_to_existing_favorite(self):
+        """Regression: race-condition duplicate add should update existing favorite."""
+
         url = reverse("admin:favorite_toggle", args=[self.content_type.pk])
         existing = Favorite.objects.create(
             user=self.user,
@@ -73,6 +91,94 @@ class FavoriteToggleViewTests(TestCase):
         self.assertEqual(existing.custom_label, "Updated")
         self.assertEqual(existing.priority, 3)
         self.assertTrue(existing.user_data)
+
+
+class FavoriteListViewTests(TestCase):
+    """Regression tests for favorite list bulk edits."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="favlistuser",
+            email="favlist@example.com",
+            password="password",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client.force_login(self.user)
+        self.content_type = ContentType.objects.get_for_model(Favorite)
+
+    def test_post_updates_custom_label_and_user_data(self):
+        """Regression: favorites list saves label and user-data fields."""
+
+        favorite = Favorite.objects.create(
+            user=self.user,
+            content_type=self.content_type,
+            custom_label="Before",
+            priority=1,
+            user_data=False,
+        )
+
+        response = self.client.post(
+            reverse("admin:favorite_list"),
+            {
+                f"custom_label_{favorite.pk}": "After",
+                "user_data": [str(favorite.pk)],
+            },
+        )
+
+        self.assertRedirects(response, reverse("admin:favorite_list"))
+        favorite.refresh_from_db()
+        self.assertEqual(favorite.custom_label, "After")
+        self.assertEqual(favorite.priority, 1)
+        self.assertTrue(favorite.user_data)
+
+    def test_post_move_up_reorders_favorites(self):
+        """Regression: move controls should reorder favorites deterministically."""
+
+        first = Favorite.objects.create(
+            user=self.user,
+            content_type=self.content_type,
+            custom_label="First",
+            priority=0,
+        )
+        second = Favorite.objects.create(
+            user=self.user,
+            content_type=ContentType.objects.get_for_model(get_user_model()),
+            custom_label="Second",
+            priority=1,
+        )
+
+        response = self.client.post(
+            reverse("admin:favorite_list"),
+            {
+                "move": f"up:{second.pk}",
+            },
+        )
+
+        self.assertRedirects(response, reverse("admin:favorite_list"))
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(second.priority, 0)
+        self.assertEqual(first.priority, 1)
+
+    def test_get_renders_app_and_seed_data_columns(self):
+        """Regression: favorites list should expose app and seed data columns."""
+
+        Favorite.objects.create(
+            user=self.user,
+            content_type=self.content_type,
+            custom_label="Seeded",
+            priority=0,
+            is_seed_data=True,
+        )
+
+        response = self.client.get(reverse("admin:favorite_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Seed Data")
+        self.assertContains(response, "App")
+        self.assertContains(response, "locals")
+        self.assertContains(response, "Yes")
 
 
 class RecoverSelectedActionTests(TestCase):
