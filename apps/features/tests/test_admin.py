@@ -8,13 +8,23 @@ from unittest.mock import patch
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
+from django.contrib.messages import get_messages
+from django.test import override_settings
 from django.urls import reverse
 
+from apps.features.admin import FeatureAdmin
 from apps.features.admin import SourceAppListFilter
 from apps.features.models import Feature
 
 
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
 @pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_change_form_renders_source_as_readonly(admin_client):
     """Regression: source must be displayed as read-only on the change form."""
 
@@ -33,6 +43,7 @@ def test_feature_admin_change_form_renders_source_as_readonly(admin_client):
 
 
 @pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_change_form_uses_single_line_autogrow_textareas(admin_client):
     """Regression: feature admin textareas should default to one row and autogrow."""
 
@@ -51,8 +62,89 @@ def test_feature_admin_change_form_uses_single_line_autogrow_textareas(admin_cli
 
 
 @pytest.mark.django_db
-def test_feature_admin_reload_base_tool_drops_all_and_loads_fixtures(admin_client):
-    """Regression: reload-base tool should clear features and load all mainstream fixtures."""
+def test_feature_admin_toggle_selected_feature_action_flips_enabled_state(admin_client):
+    """Regression: changelist action must invert enabled state for selected features."""
+
+    feature_enabled = Feature.objects.create(
+        slug="toggle-enabled",
+        display="Toggle Enabled",
+        source=Feature.Source.CUSTOM,
+        is_enabled=True,
+    )
+    feature_disabled = Feature.objects.create(
+        slug="toggle-disabled",
+        display="Toggle Disabled",
+        source=Feature.Source.CUSTOM,
+        is_enabled=False,
+    )
+
+    changelist_url = reverse("admin:features_feature_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {
+            "action": "toggle_selected_feature",
+            "_selected_action": [str(feature_enabled.pk), str(feature_disabled.pk)],
+        },
+    )
+
+    assert response.status_code == 302
+
+    feature_enabled.refresh_from_db()
+    feature_disabled.refresh_from_db()
+
+    assert feature_enabled.is_enabled is False
+    assert feature_disabled.is_enabled is True
+
+
+@pytest.mark.django_db
+def test_feature_admin_toggle_selected_feature_action_reports_counts(admin_client):
+    """Regression: changelist action should report enabled/disabled totals after toggling."""
+
+    feature_a = Feature.objects.create(slug="toggle-a", display="Toggle A", is_enabled=True)
+    feature_b = Feature.objects.create(slug="toggle-b", display="Toggle B", is_enabled=False)
+
+    changelist_url = reverse("admin:features_feature_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {
+            "action": "toggle_selected_feature",
+            "_selected_action": [str(feature_a.pk), str(feature_b.pk)],
+        },
+    )
+
+    assert response.status_code == 302
+    action_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("Toggled 2 suite features (1 enabled, 1 disabled)." in message for message in action_messages)
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_reload_all_preview_renders_expected_change_summary(admin_client):
+    """Regression: reload-all tool should first render a change summary confirmation view."""
+
+    Feature.objects.create(slug="custom-a", display="Custom A")
+    Feature.objects.create(slug="custom-b", display="Custom B")
+
+    action_url = reverse("admin:features_feature_actions", args=["reload_base"])
+    fixture_paths = [
+        Path("apps/features/fixtures/features__ocpp_charge_point.json"),
+        Path("apps/features/fixtures/features__evergo_api_client.json"),
+    ]
+
+    with patch("apps.features.admin.FeatureAdmin._mainstream_fixture_paths", return_value=fixture_paths):
+        response = admin_client.get(action_url)
+
+    assert response.status_code == 200
+    assert b"Reload all suite features" in response.content
+    assert b"This will delete" in response.content
+    assert b"existing suite feature" in response.content
+    assert b"2 fixtures will be loaded" in response.content
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_reload_all_tool_drops_all_and_loads_fixtures(admin_client):
+    """Regression: confirmed reload-all must clear features and load all mainstream fixtures."""
 
     Feature.objects.create(slug="custom-a", display="Custom A")
     Feature.objects.create(slug="custom-b", display="Custom B")
@@ -65,7 +157,7 @@ def test_feature_admin_reload_base_tool_drops_all_and_loads_fixtures(admin_clien
 
     with patch("apps.features.admin.FeatureAdmin._mainstream_fixture_paths", return_value=fixture_paths):
         with patch("apps.features.admin.call_command") as mock_call_command:
-            response = admin_client.post(action_url, follow=True)
+            response = admin_client.post(action_url, {"confirm": "yes"}, follow=True)
 
     assert response.status_code == 200
     assert Feature.objects.count() == 0
@@ -74,9 +166,50 @@ def test_feature_admin_reload_base_tool_drops_all_and_loads_fixtures(admin_clien
     )
 
 
+def test_feature_admin_reload_all_action_label_is_updated():
+    """Regression: suite feature object action metadata should use the Reload All label."""
+
+    assert str(FeatureAdmin.reload_base.label) == "Reload All"
+    assert str(FeatureAdmin.reload_base.short_description) == "Reload All"
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_toggle_selected_feature_requires_change_permission(admin_client, django_user_model):
+    """Regression: bulk toggle action must not execute for view-only admins."""
+
+    feature = Feature.objects.create(slug="view-only-target", display="View Only Target", is_enabled=True)
+
+    user = django_user_model.objects.create_user(
+        username="view-only-admin",
+        email="view-only@example.com",
+        password="pass",
+        is_staff=True,
+    )
+    view_perm = Permission.objects.get(codename="view_feature", content_type__app_label="features")
+    user.user_permissions.set([view_perm])
+    admin_client.force_login(user)
+
+    changelist_url = reverse("admin:features_feature_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {
+            "action": "toggle_selected_feature",
+            "_selected_action": [str(feature.pk)],
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    feature.refresh_from_db()
+    assert feature.is_enabled is True
+    action_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("No action selected." in message for message in action_messages)
+
+
 @pytest.mark.django_db
 def test_feature_admin_reload_base_requires_delete_permission(admin_client, django_user_model):
-    """Regression: reload-base must enforce model delete permission."""
+    """Regression: reload-all must enforce model delete permission."""
 
     user = django_user_model.objects.create_user(
         username="limited-admin",
