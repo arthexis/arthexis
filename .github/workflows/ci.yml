@@ -194,6 +194,116 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           ruff check --select E9,F823 .
+      - name: Decide whether to run integration tests
+        id: integration_gate
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const eventName = context.eventName;
+            const integrationLabel = 'ci:run-integration';
+            const pathMatchers = [
+              'apps/ocpp/**',
+              'apps/protocols/**',
+              'apps/core/**',
+              'apps/services/**',
+              'apps/tasks/**',
+              'apps/**/tests/**',
+              'config/**',
+              'scripts/**',
+              'manage.py',
+              'pyproject.toml',
+              'requirements*.txt',
+              'tests/test_*.py',
+              'tests/**/test_*.py',
+              'tests/integration/**',
+              '.github/workflows/ci.yml'
+            ];
+
+            if (eventName === 'schedule') {
+              core.setOutput('run_integration', 'true');
+              core.setOutput('reason', 'scheduled run');
+              core.info('Integration tests enabled: scheduled run.');
+              return;
+            }
+
+            if (eventName === 'workflow_dispatch') {
+              core.setOutput('run_integration', 'true');
+              core.setOutput('reason', 'manual workflow_dispatch run');
+              core.info('Integration tests enabled: workflow_dispatch run.');
+              return;
+            }
+
+            if (eventName !== 'pull_request') {
+              core.setOutput('run_integration', 'false');
+              core.setOutput('reason', `event ${eventName} is not configured for integration tests`);
+              core.info(`Integration tests skipped: event ${eventName} is not configured for integration tests.`);
+              return;
+            }
+
+            const pr = context.payload.pull_request;
+            const labels = (pr?.labels || []).map(label => label.name);
+            if (labels.includes(integrationLabel)) {
+              core.setOutput('run_integration', 'true');
+              core.setOutput('reason', `PR label ${integrationLabel} is present`);
+              core.info(`Integration tests enabled: PR label ${integrationLabel} is present.`);
+              return;
+            }
+
+            const changedFiles = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100
+              },
+              response => response.data.map(file => file.filename)
+            );
+
+            const wildcardToRegex = (pattern) => {
+              const escaped = pattern
+                .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*\*/g, '::DOUBLE_STAR::')
+                .replace(/\*/g, '[^/]*')
+                .replace(/::DOUBLE_STAR::/g, '.*');
+              return new RegExp(`^${escaped}$`);
+            };
+
+            const regexMatchers = pathMatchers.map(pattern => ({
+              pattern,
+              regex: wildcardToRegex(pattern)
+            }));
+
+            const matchedPatterns = new Set();
+            const matchedFiles = [];
+
+            for (const file of changedFiles) {
+              for (const matcher of regexMatchers) {
+                if (matcher.regex.test(file)) {
+                  matchedPatterns.add(matcher.pattern);
+                  matchedFiles.push(file);
+                  break;
+                }
+              }
+            }
+
+            if (matchedFiles.length > 0) {
+              const filesSummary = matchedFiles.slice(0, 10).join(', ');
+              core.setOutput('run_integration', 'true');
+              core.setOutput(
+                'reason',
+                `PR modifies integration-sensitive paths (${Array.from(matchedPatterns).join(', ')})`
+              );
+              core.info(`Integration tests enabled: matched files ${filesSummary}.`);
+              return;
+            }
+
+            core.setOutput('run_integration', 'false');
+            core.setOutput(
+              'reason',
+              `PR does not include label ${integrationLabel} or integration-sensitive file changes`
+            );
+            core.info('Integration tests skipped: no label and no integration-sensitive file changes.');
       - name: Run tests on upgraded install
         run: |
           set -Eeuo pipefail
@@ -201,8 +311,34 @@ jobs:
           : > pytest.log
           echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
           pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
+      - name: Run integration tests on upgraded install
+        if: ${{ steps.integration_gate.outputs.run_integration == 'true' }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
           echo "=== Integration tests ===" | tee -a pytest.log
           pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
+      - name: Report integration test skip
+        if: ${{ steps.integration_gate.outputs.run_integration != 'true' }}
+        run: |
+          set -Eeuo pipefail
+          echo "=== Integration tests skipped ===" | tee -a pytest.log
+          echo "Reason: ${{ steps.integration_gate.outputs.reason }}" | tee -a pytest.log
+      - name: Summarize upgrade test coverage
+        if: always()
+        run: |
+          {
+            echo "## Upgrade test coverage";
+            echo "- Critical tests (excluding integration): executed";
+            if [ "${{ steps.integration_gate.outputs.run_integration }}" = "true" ]; then
+              echo "- Integration tests: executed";
+              echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
+            else
+              echo "- Integration tests: skipped";
+              echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
+              echo "- Branch protection note: keep requiring the **upgrade** job so critical tests remain mandatory while integration executes conditionally.";
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6
