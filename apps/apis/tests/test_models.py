@@ -1,7 +1,10 @@
 """Regression tests for API explorer models."""
 
+import json
+
 import pytest
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import IntegrityError
 
 from apps.apis.models import APIExplorer, ResourceMethod
@@ -87,3 +90,53 @@ def test_apiexplorer_natural_key_roundtrip_regression() -> None:
 
     assert api.natural_key() == ("Evergo API Regression",)
     assert APIExplorer.objects.get_by_natural_key("Evergo API Regression") == api
+
+
+@pytest.mark.django_db
+def test_resource_method_natural_key_roundtrip_regression() -> None:
+    """Regression: resource methods should resolve from fixture natural keys."""
+
+    api = APIExplorer.objects.create(name="Natural Key API", base_url="https://example.com")
+    method = ResourceMethod.objects.create(
+        api=api,
+        operation_name="Fetch",
+        resource_path="/fetch",
+        http_method=ResourceMethod.HttpMethod.GET,
+    )
+
+    assert method.natural_key() == ("Natural Key API", "/fetch", "GET", "Fetch")
+    assert ResourceMethod.objects.get_by_natural_key("Natural Key API", "/fetch", "GET", "Fetch") == method
+
+
+@pytest.mark.django_db
+def test_resource_method_fixture_reload_is_idempotent_regression(tmp_path) -> None:
+    """Regression: loading a natural-key fixture twice should not violate uniqueness."""
+
+    api = APIExplorer.objects.create(name="Fixture API", base_url="https://fixture.example.com")
+    fixture = tmp_path / "apis_fixture.json"
+    fixture.write_text(
+        json.dumps(
+            [
+                {
+                    "model": "apis.resourcemethod",
+                    "fields": {
+                        "api": ["Fixture API"],
+                        "operation_name": "Load once",
+                        "resource_path": "/fixture",
+                        "http_method": "GET",
+                        "request_structure": {},
+                        "response_structure": {},
+                        "notes": "",
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "updated_at": "2025-01-01T00:00:00Z",
+                    },
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    call_command("loaddata", str(fixture), verbosity=0)
+    call_command("loaddata", str(fixture), verbosity=0)
+
+    assert ResourceMethod.objects.filter(api=api).count() == 1

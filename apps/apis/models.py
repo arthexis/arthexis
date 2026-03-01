@@ -44,6 +44,26 @@ class APIExplorer(models.Model):
         return (self.name,)
 
 
+class ResourceMethodManager(models.Manager):
+    """Manager that supports natural key lookups for fixture loading."""
+
+    def get_by_natural_key(
+        self,
+        api_name: str,
+        resource_path: str,
+        http_method: str,
+        operation_name: str,
+    ):  # pragma: no cover - fixture hook
+        """Resolve a resource method from its unique natural key fields."""
+
+        return self.get(
+            api__name=api_name,
+            resource_path=resource_path,
+            http_method=http_method,
+            operation_name=operation_name,
+        )
+
+
 class ResourceMethod(models.Model):
     """Defines a resource+method operation for an API explorer entry point."""
 
@@ -65,6 +85,8 @@ class ResourceMethod(models.Model):
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ResourceMethodManager()
 
     class Meta:
         ordering = ("api__name", "resource_path", "http_method", "operation_name")
@@ -95,3 +117,8 @@ class ResourceMethod(models.Model):
                 setattr(self, field_name, dict())
             elif not isinstance(payload, (dict, list)):
                 raise ValidationError({field_name: "Structure must be a JSON object or array."})
+
+    def natural_key(self) -> tuple[str, str, str, str]:  # pragma: no cover - fixture hook
+        """Expose a unique natural key to make fixture loading idempotent."""
+
+        return (self.api.name, self.resource_path, self.http_method, self.operation_name)
