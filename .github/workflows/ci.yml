@@ -1,9 +1,5 @@
 name: CI
 
-permissions:
-  contents: read
-  pull-requests: write
-
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
@@ -29,6 +25,8 @@ jobs:
   # Branch-protection policy: require both `upgrade` and `lint-fast` checks.
   lint-fast:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
@@ -74,6 +72,8 @@ jobs:
   install:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
     needs: upgrade
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     services:
       redis:
@@ -207,6 +207,9 @@ jobs:
           if-no-files-found: warn
   upgrade:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     services:
       redis:
