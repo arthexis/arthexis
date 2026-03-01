@@ -1,4 +1,11 @@
-"""Regression tests for WSL sudo priming in the upgrade script."""
+"""Regression coverage for non-interactive upgrade safety checks.
+
+These tests intentionally validate script text rather than executing ``upgrade.sh``.
+The goal is to lock in two historical fixes that protect unattended workflows:
+
+* ``upgrade.sh --check`` must not attempt to prime sudo credentials.
+* generated merge migrations are cleaned before dirty-tree checks.
+"""
 
 from pathlib import Path
 
@@ -9,7 +16,7 @@ pytestmark = [pytest.mark.critical, pytest.mark.regression]
 
 
 def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
-    """The sudo prompt should be gated so read-only --check does not block."""
+    """Keep ``--check`` read-only so CI/automation does not block on sudo prompts."""
 
     script_text = Path("upgrade.sh").read_text(encoding="utf-8")
 
@@ -17,14 +24,18 @@ def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
 
     parse_start = script_text.index("while [[ $# -gt 0 ]]; do\n")
     parse_done = script_text.index("done\n", parse_start)
-    gate = "if [[ $CHECK_ONLY -ne 1 ]]; then\n  arthexis_prime_sudo_credentials >/dev/null 2>&1 || true\nfi"
+    gate = (
+        "if [[ $CHECK_ONLY -ne 1 ]]; then\n"
+        "  arthexis_prime_sudo_credentials >/dev/null 2>&1 || true\n"
+        "fi"
+    )
 
     assert gate in script_text
     assert script_text.index(gate) > parse_done
 
 
 def test_upgrade_script_cleans_generated_merge_migrations() -> None:
-    """Regression: generated merge migrations should be removed before dirty check."""
+    """Regression: remove generated merge migrations before dirty-tree checks."""
 
     script_text = Path("upgrade.sh").read_text(encoding="utf-8")
 
