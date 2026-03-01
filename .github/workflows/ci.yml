@@ -26,6 +26,51 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Branch-protection policy: require both `upgrade` and `lint-fast` checks.
+  lint-fast:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install from default branch
+        run: |
+          ./install.sh --no-start
+      - name: Checkout PR changes
+        uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Apply upgrade
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          ./upgrade.sh --local --no-restart
+      - name: Run Ruff on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          ruff check --select E9,F823 .
+
   install:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
     needs: upgrade
@@ -106,8 +151,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s
-' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -121,8 +165,7 @@ jobs:
           echo "mode=changed" >> "${GITHUB_OUTPUT}"
           {
             echo "paths<<EOF"
-            printf '%s
-' "${CHANGED_FIXTURES}"
+            printf '%s\n' "${CHANGED_FIXTURES}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
@@ -236,11 +279,6 @@ jobs:
           echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
           python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
 
-      - name: Run Ruff on upgraded install
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          ruff check --select E9,F823 .
       - name: Decide whether to run integration tests
         id: integration_gate
         uses: actions/github-script@v8
