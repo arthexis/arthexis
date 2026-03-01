@@ -8,7 +8,6 @@ import pytest
 from tests.plugins import sqlite_paths
 
 
-@pytest.mark.regression
 def test_set_writable_sqlite_env_replaces_unwritable_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Fallback SQLite paths should replace caller config when directory is not writable."""
 
@@ -21,7 +20,6 @@ def test_set_writable_sqlite_env_replaces_unwritable_config(monkeypatch: pytest.
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == str(fallback)
 
 
-@pytest.mark.regression
 def test_set_writable_sqlite_env_preserves_writable_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Writable caller-provided SQLite paths should remain unchanged."""
 
@@ -33,7 +31,6 @@ def test_set_writable_sqlite_env_preserves_writable_override(monkeypatch: pytest
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == str(configured)
 
 
-@pytest.mark.regression
 @pytest.mark.parametrize("configured", [":memory:", "file:memdb1?mode=memory&cache=shared"])
 def test_set_writable_sqlite_env_preserves_special_sqlite_names(
     monkeypatch: pytest.MonkeyPatch,
@@ -47,3 +44,21 @@ def test_set_writable_sqlite_env_preserves_special_sqlite_names(
     sqlite_paths.set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", tmp_path / "fallback.sqlite3")
 
     assert os.environ["ARTHEXIS_SQLITE_PATH"] == configured
+
+
+@pytest.mark.regression
+def test_pytest_worker_suffix_defaults_to_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker suffix should default to ``main`` outside pytest-xdist workers."""
+
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+
+    assert sqlite_paths.pytest_worker_suffix() == "main"
+
+
+@pytest.mark.regression
+def test_pytest_worker_suffix_uses_xdist_worker_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker suffix should match pytest-xdist worker id when available."""
+
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw3")
+
+    assert sqlite_paths.pytest_worker_suffix() == "gw3"

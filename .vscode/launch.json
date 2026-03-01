@@ -41,7 +41,7 @@
             "subProcess": true
         },
         {
-            "name": "Migration Server",
+            "name": "Run Migrations",
             "type": "python",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/bin/python",
@@ -55,7 +55,7 @@
             "subProcess": true
         },
         {
-            "name": "Test Server",
+            "name": "Run Tests",
             "type": "python",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/bin/python",
