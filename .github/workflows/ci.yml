@@ -207,11 +207,14 @@ jobs:
               'apps/core/**',
               'apps/services/**',
               'apps/tasks/**',
+              'apps/**/tests/**',
               'config/**',
               'scripts/**',
               'manage.py',
               'pyproject.toml',
               'requirements*.txt',
+              'tests/test_*.py',
+              'tests/**/test_*.py',
               'tests/integration/**',
               '.github/workflows/ci.yml'
             ];
