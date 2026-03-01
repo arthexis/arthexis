@@ -151,6 +151,44 @@ def test_evergo_admin_changelist_shows_evergo_email_instead_of_internal_ids(admi
 
 
 @pytest.mark.django_db
+def test_evergo_admin_changelist_uses_evergo_email_as_primary_column(admin_client):
+    """Regression: the changelist primary column should be Evergo email for quick identity scanning."""
+
+    user_model = get_user_model()
+    suite_user = user_model.objects.create_user(
+        username="suite-admin-primary-column",
+        email="suite-admin-primary-column@example.com",
+    )
+    EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="primary-column@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    changelist_url = reverse("admin:evergo_evergouser_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    content = response.content.lower()
+
+    table_start = content.find(b"<table id=\"result_list\"")
+    assert table_start != -1
+    table_content = content[table_start:]
+
+    thead_start = table_content.find(b"<thead")
+    thead_end = table_content.find(b"</thead>")
+    assert thead_start != -1 and thead_end != -1
+    thead = table_content[thead_start:thead_end]
+
+    email_column_index = thead.find(b"column-evergo_email")
+    id_column_index = thead.find(b"column-id")
+
+    assert email_column_index != -1
+    assert id_column_index != -1
+    assert email_column_index < id_column_index
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
     """Regression: customer load wizard should call profile sync method and redirect."""

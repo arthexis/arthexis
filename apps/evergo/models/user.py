@@ -109,7 +109,7 @@ class EvergoUser(Profile):
 
     profile_fields = ("evergo_email", "evergo_password")
 
-    evergo_email = models.EmailField(blank=True)
+    evergo_email = models.EmailField()
     evergo_password = EncryptedCharField(max_length=255, blank=True)
     dashboard_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
