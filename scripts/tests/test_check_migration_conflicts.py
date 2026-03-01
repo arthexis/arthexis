@@ -89,3 +89,36 @@ def test_find_naming_issues_requires_ticket_or_pr_suffix(
     assert issues[0].app_label == "blog"
     assert "ticket/PR suffix" in issues[0].message
     assert issues[0].files == ("apps/blog/migrations/0004_add_index.py",)
+
+
+def test_changed_migration_files_raises_when_git_diff_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed git diff should hard-fail so CI cannot silently pass."""
+
+    class Result:
+        returncode = 128
+        stdout = ""
+        stderr = "fatal: bad revision 'base...HEAD'"
+
+    monkeypatch.setattr(check_migration_conflicts, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_migration_conflicts.subprocess, "run", lambda *a, **k: Result())
+
+    with pytest.raises(RuntimeError, match="Unable to determine changed migrations"):
+        check_migration_conflicts._changed_migration_files("base", filter_codes="AR")
+
+
+def test_main_returns_nonzero_when_changed_migrations_cannot_be_computed(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The CLI should fail closed when changed migrations cannot be determined."""
+
+    monkeypatch.setattr(check_migration_conflicts, "_resolve_base_ref", lambda ref: "base")
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("Unable to determine changed migrations from 'base...HEAD'")
+
+    monkeypatch.setattr(check_migration_conflicts, "_changed_migration_files", _raise)
+
+    assert check_migration_conflicts.main(["base"]) == 1
+    assert "Unable to determine changed migrations" in capsys.readouterr().err

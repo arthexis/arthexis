@@ -221,7 +221,11 @@ def _changed_migration_files(base_ref: str | None, *, filter_codes: str) -> list
         capture_output=True,
     )
     if diff.returncode != 0:
-        return []
+        stderr = diff.stderr.strip() or "git diff failed"
+        raise RuntimeError(
+            "Unable to determine changed migrations from "
+            f"'{base_ref}...HEAD' ({stderr})."
+        )
 
     changed_paths: list[Path] = []
     for line in diff.stdout.splitlines():
@@ -308,7 +312,15 @@ def main(argv: list[str] | None = None) -> int:
     base_ref_arg = args[0] if args else None
     resolved_base_ref = _resolve_base_ref(base_ref_arg)
 
-    changed_for_graph = _changed_migration_files(resolved_base_ref, filter_codes="AMR")
+    try:
+        changed_for_graph = _changed_migration_files(resolved_base_ref, filter_codes="AMR")
+        changed_added_or_renamed = _changed_migration_files(
+            resolved_base_ref, filter_codes="AR"
+        )
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
     app_labels = {_app_label_for_path(path) for path in changed_for_graph}
     infos = _load_migration_infos(app_labels if app_labels else None)
 
@@ -317,9 +329,6 @@ def main(argv: list[str] | None = None) -> int:
         issues.extend(_find_leaf_conflicts(infos))
         issues.extend(_find_parallel_merge_chains(infos))
 
-    changed_added_or_renamed = _changed_migration_files(
-        resolved_base_ref, filter_codes="AR"
-    )
     issues.extend(_find_naming_issues(changed_added_or_renamed))
 
     if issues:
