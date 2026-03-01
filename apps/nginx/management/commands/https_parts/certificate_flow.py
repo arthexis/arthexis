@@ -215,7 +215,7 @@ def _prompt_for_godaddy_credential(service, domain: str) -> DNSProviderCredentia
     if should_continue not in {"y", "yes"}:
         return None
 
-    api_key = input("GoDaddy API key: ").strip()
+    api_key = getpass("GoDaddy API key: ").strip()
     api_secret = getpass("GoDaddy API secret: ").strip()
     customer_id = input("GoDaddy customer ID (optional): ").strip()
     use_sandbox = input("Use GoDaddy OTE sandbox environment? [y/N]: ").strip().lower()
@@ -268,8 +268,8 @@ def _provision_certificate(
 
     try:
         if not use_godaddy:
-            _prepare_http01_challenge_site(service, domain, reload=reload)
             http01_bootstrapped = True
+            _prepare_http01_challenge_site(service, domain, reload=reload)
         if use_godaddy:
             _validate_godaddy_setup(service, certificate)
         certificate.provision(
@@ -277,16 +277,18 @@ def _provision_certificate(
             dns_use_sandbox=sandbox_override,
             force_renewal=force_renewal,
         )
-    except CertbotChallengeError as exc:
+    except Exception as exc:  # noqa: BLE001
         if http01_bootstrapped:
             _restore_https_config_after_http01_bootstrap(service, config, reload=reload)
-        raise CommandError(
-            _build_certbot_challenge_command_error(
-                domain=domain,
-                challenge_type=certificate.challenge_type,
-                reason=str(exc),
-            )
-        ) from exc
+        if isinstance(exc, CertbotChallengeError):
+            raise CommandError(
+                _build_certbot_challenge_command_error(
+                    domain=domain,
+                    challenge_type=certificate.challenge_type,
+                    reason=str(exc),
+                )
+            ) from exc
+        raise
 
     if force_renewal:
         _warn_if_certificate_paths_changed(

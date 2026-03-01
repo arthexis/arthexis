@@ -86,7 +86,7 @@ def _renew_due_certificates(
     for certificate in due_certificates:
         try:
             certificate.renew(sudo=sudo)
-        except Exception as exc:  # noqa: BLE001
+        except RuntimeError as exc:
             errors.append(f"{certificate}: {exc}")
             continue
         renewed += 1

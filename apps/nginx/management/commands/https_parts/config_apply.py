@@ -23,26 +23,32 @@ def _get_existing_config(domain: str) -> SiteConfiguration | None:
 def _get_or_create_config(domain: str, *, protocol: str) -> SiteConfiguration:
     """Return a site configuration for ``domain`` and enforce enabled/protocol fields."""
 
-    defaults_source = SiteConfiguration.get_default()
     name = "localhost" if domain == "localhost" else domain
-    config, created = SiteConfiguration.objects.get_or_create(name=name)
-    if created:
-        config.enabled = True
+
+    try:
+        config = SiteConfiguration.objects.get(name=name)
+        created = False
+    except SiteConfiguration.DoesNotExist:
+        defaults_source = SiteConfiguration.get_default()
+        config = SiteConfiguration.objects.create(
+            name=name,
+            enabled=True,
+            protocol=protocol,
+            mode=defaults_source.mode,
+            role=defaults_source.role,
+            port=defaults_source.port,
+            include_ipv6=defaults_source.include_ipv6,
+            external_websockets=defaults_source.external_websockets,
+            site_entries_path=defaults_source.site_entries_path,
+            site_destination=defaults_source.site_destination,
+            expected_path=defaults_source.expected_path,
+        )
+        created = True
+
+    if not created and (config.protocol != protocol or not config.enabled):
         config.protocol = protocol
-        config.mode = defaults_source.mode
-        config.role = defaults_source.role
-        config.port = defaults_source.port
-        config.include_ipv6 = defaults_source.include_ipv6
-        config.external_websockets = defaults_source.external_websockets
-        config.site_entries_path = defaults_source.site_entries_path
-        config.site_destination = defaults_source.site_destination
-        config.expected_path = defaults_source.expected_path
-        config.save()
-    else:
-        if config.protocol != protocol or not config.enabled:
-            config.protocol = protocol
-            config.enabled = True
-            config.save(update_fields=["protocol", "enabled"])
+        config.enabled = True
+        config.save(update_fields=["protocol", "enabled"])
     return config
 
 
