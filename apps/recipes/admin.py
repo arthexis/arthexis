@@ -4,7 +4,7 @@ from django.db import models
 
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
-from apps.recipes.models import Recipe
+from apps.recipes.models import Recipe, RecipeProduct
 
 
 @admin.register(Recipe)
@@ -54,3 +54,28 @@ class RecipeAdmin(OwnableAdminMixin, EntityModelAdmin):
             {"fields": ("created_at", "updated_at")},
         ),
     )
+
+
+@admin.register(RecipeProduct)
+class RecipeProductAdmin(admin.ModelAdmin):
+    """Read-only admin view for persisted recipe execution artifacts."""
+
+    list_display = ("recipe", "format_detected", "executed_at")
+    search_fields = ("recipe__slug", "recipe__display", "format_detected", "result")
+    list_filter = ("format_detected", "executed_at")
+    readonly_fields = (
+        "recipe",
+        "format_detected",
+        "input_args",
+        "input_kwargs",
+        "result",
+        "result_variable",
+        "resolved_script",
+        "executed_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

@@ -7,12 +7,14 @@ from unittest import mock
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.recipes.models import Recipe
+from apps.recipes.models import Recipe, RecipeFormatDetectionError, RecipeProduct
 from apps.recipes.utils import parse_recipe_arguments
 
 
 @pytest.mark.django_db
 def test_execute_resolves_arg_sigils():
+    """Recipe execution resolves positional and keyword argument sigils."""
+
     user = get_user_model().objects.create(username="chef")
     recipe = Recipe.objects.create(
         user=user,
@@ -77,6 +79,8 @@ def test_execute_raises_for_invalid_scripts(script):
 
 
 def test_parse_recipe_arguments_splits_kwargs():
+    """Parser maps key-value tokens to keyword arguments."""
+
     token = str(uuid.uuid4())
     args, kwargs = parse_recipe_arguments(["alpha", "count=3", "--mode=fast", token])
 
@@ -217,8 +221,6 @@ def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkey
     assert Recipe._is_windows_bash_launcher_failure(bash_failure, shell="bash")
 
 
-
-
 @pytest.mark.django_db
 @pytest.mark.regression
 def test_execute_supports_windows_git_bash_fallback(monkeypatch):
@@ -283,7 +285,6 @@ def test_shell_basename_handles_windows_paths_on_posix():
     assert Recipe._shell_basename("C:/msys64/usr/bin/sh.exe") == "sh.exe"
 
 
-
 @pytest.mark.django_db
 def test_execute_escapes_bash_arg_sigils(monkeypatch):
     """Bash arg sigils are shell-escaped to avoid command injection."""
@@ -340,7 +341,7 @@ def test_execute_resolves_sigils_before_arg_substitution_for_bash(monkeypatch):
 
 @pytest.mark.django_db
 def test_execute_raises_for_unknown_body_type():
-    """Unknown body types raise a runtime error instead of silently falling back."""
+    """Unknown body types raise a format detection error."""
 
     user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
     recipe = Recipe.objects.create(
@@ -354,7 +355,7 @@ def test_execute_raises_for_unknown_body_type():
     Recipe.objects.filter(pk=recipe.pk).update(body_type="unknown")
     recipe.refresh_from_db()
 
-    with pytest.raises(RuntimeError, match="Unsupported recipe body type"):
+    with pytest.raises(RecipeFormatDetectionError, match="Unable to detect recipe format"):
         recipe.execute()
 
 
@@ -376,3 +377,73 @@ def test_execute_raises_runtime_error_for_bash_os_failures():
         pytest.raises(RuntimeError, match="bash missing"),
     ):
         recipe.execute()
+
+
+@pytest.mark.django_db
+def test_execute_creates_recipe_product():
+    """Every execution creates a persistent recipe product record."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"product-{uuid.uuid4()}",
+        display="Product Recipe",
+        script="result = {'ok': True}",
+    )
+
+    execution = recipe.execute("alpha", mode="fast")
+
+    product = RecipeProduct.objects.get(recipe=recipe)
+    assert execution.result == {"ok": True}
+    assert product.input_args == ["alpha"]
+    assert product.input_kwargs == {"mode": "fast"}
+    assert product.result == '{"ok": true}'
+    assert product.format_detected == Recipe.RecipeFormat.PYTHON
+
+
+@pytest.mark.django_db
+def test_execute_markdown_recipe_replaces_code_blocks(monkeypatch):
+    """Markdown recipes render fenced block outputs inline."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"guide-{uuid.uuid4()}.md",
+        display="Guide",
+        script="""# Demo\n\n```python\nresult = \"hello\"\n```\n\n```bash\necho done\n```\n""",
+    )
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 0, stdout="done\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute()
+
+    assert "hello" in execution.result
+    assert "done" in execution.result
+    assert "```" not in execution.result
+
+
+@pytest.mark.django_db
+def test_detect_format_infers_by_slug_extension():
+    """Format detection uses slug extensions for single-language recipes."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    python_recipe = Recipe.objects.create(
+        user=user,
+        slug=f"script-{uuid.uuid4()}.py",
+        display="Python Script",
+        body_type=Recipe.BodyType.BASH,
+        script="result = 1",
+    )
+    bash_recipe = Recipe.objects.create(
+        user=user,
+        slug=f"script-{uuid.uuid4()}.sh",
+        display="Bash Script",
+        body_type=Recipe.BodyType.PYTHON,
+        script='echo "ok"',
+    )
+
+    assert python_recipe.detect_format() == Recipe.RecipeFormat.PYTHON
+    assert bash_recipe.detect_format() == Recipe.RecipeFormat.BASH
