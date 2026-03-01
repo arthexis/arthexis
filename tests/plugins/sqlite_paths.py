@@ -12,10 +12,7 @@ _PYTEST_SQLITE_TMP_DIR: tempfile.TemporaryDirectory[str] | None = None
 def pytest_worker_suffix() -> str:
     """Return a worker-specific suffix for SQLite file names under xdist."""
 
-    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "")
-    if not worker_id:
-        return "main"
-    return worker_id
+    return os.path.basename(os.environ.get("PYTEST_XDIST_WORKER") or "main")
 
 
 def sqlite_path_is_writable(path_value: str) -> bool:
