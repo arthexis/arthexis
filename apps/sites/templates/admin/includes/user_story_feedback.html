@@ -132,6 +132,19 @@
             {% endif %}
           {% endif %}
         </div>
+        <div class="user-story-field">
+          <label class="user-story-checkbox-label user-story-chat-optin" for="user-story-contact-via-chat">
+            <input
+              class="form-check-input"
+              id="user-story-contact-via-chat"
+              name="contact_via_chat"
+              type="checkbox"
+              value="1"
+              {% if chat_opt_in_checked %}checked{% endif %}
+            >
+            {% trans 'I would like to be contacted via chat' %}
+          </label>
+        </div>
         <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
         </button>

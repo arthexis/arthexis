@@ -96,6 +96,7 @@ class SiteAdmin(DjangoSiteAdmin):
         "interface_landing",
         "managed",
         "require_https",
+        "enable_public_chat",
     )
     list_display = (
         "domain",
@@ -105,6 +106,7 @@ class SiteAdmin(DjangoSiteAdmin):
         "interface_landing",
         "managed",
         "require_https",
+        "enable_public_chat",
     )
     list_select_related = ()
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)

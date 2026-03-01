@@ -1,8 +1,10 @@
 from utils.sites import get_site
 from django.urls import Resolver404, resolve
+from django.apps import apps
 from django.shortcuts import resolve_url
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node
@@ -79,13 +81,20 @@ def nav_links(request):
     feedback_ingestion_enabled = is_suite_feature_enabled(
         "feedback-ingestion", default=True
     )
+    staff_chat_bridge_enabled = is_suite_feature_enabled(
+        "staff-chat-bridge", default=False
+    )
+    pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
 
     if not user_is_authenticated:
         template_id = getattr(getattr(site, "template", None), "id", "none")
         cache_key = (
             f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
             f"interface:{int(operator_interface_mode)}:"
-            f"feedback:{int(feedback_ingestion_enabled)}"
+            f"feedback:{int(feedback_ingestion_enabled)}:"
+            f"public_chat:{int(bool(getattr(site, 'enable_public_chat', False)))}:"
+            f"staff_chat_bridge:{int(staff_chat_bridge_enabled)}:"
+            f"pages_chat:{int(pages_chat_enabled)}"
         )
         cached = cache.get(cache_key)
         if cached:
@@ -265,9 +274,21 @@ def nav_links(request):
     except (OperationalError, ProgrammingError):
         header_references = []
 
+    site_public_chat_enabled = bool(getattr(site, "enable_public_chat", False))
+    user_chat_opt_in = False
+    if user_is_authenticated:
+        try:
+            profile = user.get_profile(apps.get_model("users", "ChatProfile"))
+        except (LookupError, ObjectDoesNotExist, AttributeError):
+            profile = None
+        user_chat_opt_in = bool(profile and profile.contact_via_chat)
+
+    staff_chat_bridge_allowed = user_is_authenticated and (user_is_staff or user_is_superuser)
+
     chat_enabled = bool(
-        getattr(settings, "PAGES_CHAT_ENABLED", False)
-        and is_suite_feature_enabled("staff-chat-bridge", default=False)
+        pages_chat_enabled
+        and staff_chat_bridge_enabled
+        and (site_public_chat_enabled or user_chat_opt_in or staff_chat_bridge_allowed)
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
@@ -310,6 +331,7 @@ def nav_links(request):
         "site_template": site_template,
         "operator_interface_mode": operator_interface_mode,
         "feedback_ingestion_enabled": feedback_ingestion_enabled,
+        "chat_opt_in_checked": user_chat_opt_in,
         "user_story_attachment_limit": int(
             getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
         ),

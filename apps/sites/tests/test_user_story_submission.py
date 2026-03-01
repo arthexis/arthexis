@@ -296,3 +296,92 @@ def test_form_rejects_oversized_attachments(settings):
     assert not form.is_valid()
     assert "attachments" in form.errors
     assert "MB or smaller" in form.errors["attachments"][0]
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_feedback_submission_updates_chat_profile_preference(client, settings):
+    """Regression: feedback submissions should persist chat preference for authenticated users."""
+
+    from apps.users.models import ChatProfile
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+    user = get_user_model().objects.create_user(
+        username="chat-opt-in",
+        email="chat-opt-in@example.com",
+        password="secret",
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={
+            "rating": 5,
+            "comments": "Great page",
+            "path": "/",
+            "contact_via_chat": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    profile = ChatProfile.objects.get(user=user)
+    assert profile.contact_via_chat is True
+    story = UserStory.objects.get(user=user)
+    assert story.contact_via_chat is True
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_user_story_form_prefills_chat_opt_in_for_authenticated_user():
+    """Regression: feedback form should pre-check chat preference from chat profile."""
+
+    from apps.users.models import ChatProfile
+
+    user = get_user_model().objects.create_user(
+        username="chat-profile-user",
+        email="chat-profile-user@example.com",
+        password="secret",
+    )
+    ChatProfile.objects.create(user=user, contact_via_chat=True)
+
+    form = UserStoryForm(
+        data={
+            "name": user.username,
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
+        files=MultiValueDict(),
+        user=user,
+    )
+
+    assert form.fields["contact_via_chat"].initial is True
+
+
+@pytest.mark.regression
+def test_user_story_form_prefill_chat_opt_in_handles_missing_profile_method():
+    """Form prefill should gracefully handle users without profile helper support."""
+
+    class MissingProfileUser:
+        is_authenticated = True
+
+        @staticmethod
+        def get_username():
+            return "no-profile-helper"
+
+    user = MissingProfileUser()
+
+    form = UserStoryForm(
+        data={
+            "name": user.get_username(),
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
+        files=MultiValueDict(),
+        user=user,
+    )
+
+    assert form.fields["contact_via_chat"].initial is False
