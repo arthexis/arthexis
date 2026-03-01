@@ -82,9 +82,13 @@ def _reorder_favorites(user, favorite_pk: int, direction: str) -> None:
         favorites[target_index],
         favorites[current_index],
     )
+    favorites_to_update = []
     for index, favorite in enumerate(favorites):
         if favorite.priority != index:
-            Favorite.objects.filter(pk=favorite.pk, user=user).update(priority=index)
+            favorite.priority = index
+            favorites_to_update.append(favorite)
+    if favorites_to_update:
+        Favorite.objects.bulk_update(favorites_to_update, ["priority"])
 
 
 def favorite_toggle(request, ct_id):
