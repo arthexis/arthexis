@@ -36,6 +36,7 @@ jobs:
         with:
           python-version: '3.13'
           cache-suffix: ci-install
+          dependency-hash: ${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
       - name: Validate pyproject dependency ordering
         run: |
           python scripts/sort_pyproject_deps.py --check

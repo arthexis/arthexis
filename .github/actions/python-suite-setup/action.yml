@@ -9,6 +9,10 @@ inputs:
     description: Optional cache key suffix to isolate caches between workflows.
     required: false
     default: ''
+  dependency-hash:
+    description: Hash of dependency definition files, provided by the caller workflow.
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -19,14 +23,14 @@ runs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) || '' }}
+        key: pip-${{ runner.os }}-${{ inputs.dependency-hash || 'no-dependency-hash' }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) || '' }}
         restore-keys: |
           pip-${{ runner.os }}-
     - name: Cache virtualenv
       uses: actions/cache@v5
       with:
         path: .venv
-        key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) || '' }}
+        key: venv-${{ runner.os }}-${{ inputs.dependency-hash || 'no-dependency-hash' }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) || '' }}
         restore-keys: |
           venv-${{ runner.os }}-
     - name: Bootstrap virtualenv
