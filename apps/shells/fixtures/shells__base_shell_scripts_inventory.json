@@ -1,0 +1,112 @@
+[
+  {
+    "model": "shells.baseshellscript",
+    "pk": 1,
+    "fields": {
+      "name": "command.sh",
+      "path": "command.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 2,
+    "fields": {
+      "name": "configure.sh",
+      "path": "configure.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 3,
+    "fields": {
+      "name": "env-refresh.sh",
+      "path": "env-refresh.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 4,
+    "fields": {
+      "name": "install.sh",
+      "path": "install.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 5,
+    "fields": {
+      "name": "resolve.sh",
+      "path": "resolve.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 6,
+    "fields": {
+      "name": "start.sh",
+      "path": "start.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 7,
+    "fields": {
+      "name": "status.sh",
+      "path": "status.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 8,
+    "fields": {
+      "name": "stop.sh",
+      "path": "stop.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 9,
+    "fields": {
+      "name": "uninstall.sh",
+      "path": "uninstall.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "shells.baseshellscript",
+    "pk": 10,
+    "fields": {
+      "name": "upgrade.sh",
+      "path": "upgrade.sh",
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false
+    }
+  }
+]
