@@ -116,6 +116,20 @@ REQUIREMENTS_HASH_FILE = Path(".locks") / "requirements.sha256"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 DEBUGGER_INTERRUPT_RETRY_LIMIT = 1
 
+
+def _safe_print(*values: object, sep: str = " ", end: str = "\n") -> None:
+    """Best-effort ``print`` that ignores interrupts while reporting status.
+
+    The migration server can receive a debugger-triggered ``KeyboardInterrupt``
+    while it is already inside interrupt handling. Raising a second interrupt
+    from a status ``print`` causes an unnecessary traceback in VS Code output.
+    """
+
+    try:
+        print(*values, sep=sep, end=end)
+    except (KeyboardInterrupt, BrokenPipeError, OSError):
+        return
+
 def notify_async(subject: str, body: str = "") -> None:
     """No-op notifier for optional VS Code migration-server notifications."""
 
@@ -287,7 +301,7 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     # PostgreSQL is not running. env-refresh only needs to validate migration
     # state, and SQLite is the expected local fallback backend.
     env.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
-    print("[Migration Server] Running:", " ".join(command))
+    _safe_print("[Migration Server] Running:", " ".join(command))
     result = subprocess.run(
         command,
         cwd=base_dir,
@@ -310,10 +324,10 @@ def run_env_refresh_with_report(base_dir: Path, *, latest: bool) -> bool:
     success = run_env_refresh(base_dir, latest=latest)
     elapsed = _format_elapsed(time.monotonic() - started_at)
     if success:
-        print(f"[Migration Server] env-refresh completed successfully in {elapsed}.")
+        _safe_print(f"[Migration Server] env-refresh completed successfully in {elapsed}.")
         request_runserver_restart(LOCK_DIR)
     else:
-        print(
+        _safe_print(
             f"[Migration Server] env-refresh failed after {elapsed}."
             " Awaiting further changes."
         )
@@ -812,7 +826,7 @@ def request_runserver_restart(lock_dir: Path) -> None:
         restart_path.write_text(str(time.time()), encoding="utf-8")
     except OSError:
         return
-    print("[Migration Server] Signalled VS Code run/debug tasks to restart.")
+    _safe_print("[Migration Server] Signalled VS Code run/debug tasks to restart.")
 
 
 def _is_debugger_session(env: dict[str, str] | None = None) -> bool:
@@ -861,16 +875,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         update_requirements(BASE_DIR)
     except KeyboardInterrupt:
-        print(
+        _safe_print(
             "[Migration Server] Stopped after receiving an interrupt signal. "
             "If you did not press Ctrl+C, this likely came from your IDE/debugger "
             "stopping or restarting the session."
         )
         return 0
 
-    print("[Migration Server] Starting in", BASE_DIR)
+    _safe_print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
-    print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
+    _safe_print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
     remaining_interrupt_retries = (
         DEBUGGER_INTERRUPT_RETRY_LIMIT if _is_debugger_session() else 0
     )
@@ -894,7 +908,7 @@ def main(argv: list[str] | None = None) -> int:
                         "New Python requirements installed",
                         "The migration server stopped after installing new dependencies.",
                     )
-                    print(
+                    _safe_print(
                         "[Migration Server] New Python requirements installed."
                         " Stopping."
                     )
@@ -904,20 +918,20 @@ def main(argv: list[str] | None = None) -> int:
                     display = "; ".join(change_summary[:5])
                     if len(change_summary) > 5:
                         display += "; ..."
-                    print(f"[Migration Server] Changes detected: {display}")
+                    _safe_print(f"[Migration Server] Changes detected: {display}")
                 _run_refresh_with_status(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
             except KeyboardInterrupt:
                 update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
                 if remaining_interrupt_retries > 0:
                     remaining_interrupt_retries -= 1
-                    print(
+                    _safe_print(
                         "[Migration Server] Ignoring one transient interrupt from "
                         "the IDE/debugger auto-restart handshake."
                     )
                     snapshot = collect_source_mtimes(BASE_DIR)
                     continue
-                print(
+                _safe_print(
                     "[Migration Server] Stopped after receiving an interrupt signal. "
                     "If you did not press Ctrl+C, this likely came from your IDE/debugger "
                     "stopping or restarting the session."
