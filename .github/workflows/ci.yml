@@ -153,7 +153,7 @@ jobs:
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Install from default branch
         run: |
-          ./install.sh --no-start
+          ./install.sh --no-start --ci-minimal
       - name: Checkout PR changes
         uses: actions/checkout@v6
         with:

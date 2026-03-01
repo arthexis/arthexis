@@ -59,9 +59,10 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
+CI_MINIMAL=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--clean] [--start|--no-start] [--repair] [--ci-minimal]" >&2
     exit 1
 }
 
@@ -298,6 +299,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --repair)
             REPAIR=true
+            shift
+            ;;
+        --ci-minimal)
+            CI_MINIMAL=true
             shift
             ;;
         --satellite)
@@ -629,7 +634,7 @@ run_env_refresh "${env_refresh_args[@]}"
 arthexis_timing_end "requirements_install" "refreshed"
 
 
-if [ "$ENABLE_CONTROL" = true ]; then
+if [ "$CI_MINIMAL" = false ] && [ "$ENABLE_CONTROL" = true ]; then
     echo "Checking for RFID scanner hardware..."
 if python -m apps.cards.detect; then
         touch "$RFID_LOCK"
@@ -640,50 +645,56 @@ if python -m apps.cards.detect; then
     fi
 fi
 
-# Apply database migrations for a ready-to-run schema.
-arthexis_timing_start "django_migrate"
-run_migration=false
-if ! python manage.py migrate --check; then
-    if migration_plan=$(python manage.py showmigrations --plan); then
-        if grep -q '^[[:space:]]*\\[ \\]' <<< "$migration_plan"; then
-            run_migration=true
+if [ "$CI_MINIMAL" = true ]; then
+    arthexis_timing_record "django_migrate" 0 "skipped(ci-minimal)"
+    arthexis_timing_record "load_user_data" 0 "skipped(ci-minimal)"
+    arthexis_timing_record "env_refresh" 0 "skipped(ci-minimal)"
+else
+    # Apply database migrations for a ready-to-run schema.
+    arthexis_timing_start "django_migrate"
+    run_migration=false
+    if ! python manage.py migrate --check; then
+        if migration_plan=$(python manage.py showmigrations --plan); then
+            if grep -q '^[[:space:]]*\\[ \\]' <<< "$migration_plan"; then
+                run_migration=true
+            fi
+        else
+            echo "Failed to inspect migrations" >&2
+            exit 1
         fi
-    else
-        echo "Failed to inspect migrations" >&2
-        exit 1
     fi
-fi
 
-if [ "$run_migration" = true ]; then
-    python manage.py migrate --noinput
-    arthexis_timing_end "django_migrate"
-else
-    arthexis_timing_record "django_migrate" 0 "skipped"
-fi
+    if [ "$run_migration" = true ]; then
+        python manage.py migrate --noinput
+        arthexis_timing_end "django_migrate"
+    else
+        arthexis_timing_record "django_migrate" 0 "skipped"
+    fi
 
-# Load personal user data fixtures if present
-if ls data/*.json >/dev/null 2>&1; then
-    arthexis_timing_start "load_user_data"
-    python manage.py load_user_data data/*.json
-    arthexis_timing_end "load_user_data"
-else
-    arthexis_timing_record "load_user_data" 0 "skipped"
-fi
+    # Load personal user data fixtures if present
+    if ls data/*.json >/dev/null 2>&1; then
+        arthexis_timing_start "load_user_data"
+        python manage.py load_user_data data/*.json
+        arthexis_timing_end "load_user_data"
+    else
+        arthexis_timing_record "load_user_data" 0 "skipped"
+    fi
 
-# Refresh environment data and register this node
-arthexis_timing_start "env_refresh"
-if [ "$CHANNEL" = "unstable" ]; then
-    run_env_refresh --latest
-else
-    run_env_refresh
+    # Refresh environment data and register this node
+    arthexis_timing_start "env_refresh"
+    if [ "$CHANNEL" = "unstable" ]; then
+        run_env_refresh --latest
+    else
+        run_env_refresh
+    fi
+    arthexis_timing_end "env_refresh"
 fi
-arthexis_timing_end "env_refresh"
 
 deactivate
 
 
 # If a service name was provided, install a systemd unit and persist its name
-if [ -n "$SERVICE" ]; then
+if [ "$CI_MINIMAL" = false ] && [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
@@ -692,7 +703,7 @@ if [ -n "$SERVICE" ]; then
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE"
 fi
 
-if [ -n "$SERVICE" ]; then
+if [ "$CI_MINIMAL" = false ] && [ -n "$SERVICE" ]; then
     LCD_SERVICE="lcd-$SERVICE"
     RFID_SERVICE="rfid-$SERVICE"
     CAMERA_SERVICE="camera-$SERVICE"
@@ -755,7 +766,7 @@ if [ -n "$SERVICE" ]; then
 fi
 
 
-if [ "$AUTO_UPGRADE" = true ]; then
+if [ "$CI_MINIMAL" = false ] && [ "$AUTO_UPGRADE" = true ]; then
     rm -f AUTO_UPGRADE
     echo "$CHANNEL" > "$LOCK_DIR/auto_upgrade.lck"
     if [ "$UPGRADE" = true ]; then
@@ -772,15 +783,15 @@ from apps.core.auto_upgrade import ensure_auto_upgrade_periodic_task
 ensure_auto_upgrade_periodic_task()
 PYCODE
     deactivate
-elif [ "$UPGRADE" = true ]; then
+elif [ "$CI_MINIMAL" = false ] && [ "$UPGRADE" = true ]; then
     if [ "$CHANNEL" = "unstable" ]; then
         ./upgrade.sh --latest
     else
         ./upgrade.sh --stable
     fi
-elif [ "$AUTO_UPGRADE" = false ]; then
+elif [ "$CI_MINIMAL" = false ] && [ "$AUTO_UPGRADE" = false ]; then
     rm -f "$LOCK_DIR/auto_upgrade.lck"
-elif [ -n "$SERVICE" ]; then
+elif [ "$CI_MINIMAL" = false ] && [ -n "$SERVICE" ]; then
     sudo systemctl restart "$SERVICE"
     if [ "$ENABLE_CELERY" = true ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         sudo systemctl restart "celery-$SERVICE"
@@ -788,7 +799,7 @@ elif [ -n "$SERVICE" ]; then
     fi
 fi
 
-if [ "$START_SERVICES" = true ]; then
+if [ "$CI_MINIMAL" = false ] && [ "$START_SERVICES" = true ]; then
     "$BASE_DIR/start.sh"
 fi
 
