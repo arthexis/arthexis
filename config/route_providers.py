@@ -47,8 +47,9 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
     - ``apps/<app>/routes.py`` exporting ``ROOT_URLPATTERNS``.
 
     Compatibility fallback:
-    - Also include legacy ``urls`` under ``/<app_label>/`` and optional
-      ``api.urls`` under ``/<app_label>/api/`` when present.
+    - Include legacy ``urls`` under ``/<app_label>/`` only when the app does
+      not provide ``routes.py``.
+    - Include optional ``api.urls`` under ``/<app_label>/api/`` when present.
     """
 
     patterns: list[URLPattern] = []
@@ -59,7 +60,8 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
         except ModuleNotFoundError:
             routes_module = None
 
-        if routes_module is not None:
+        has_routes_module = routes_module is not None
+        if has_routes_module:
             root_patterns = getattr(routes_module, "ROOT_URLPATTERNS", None)
             if root_patterns is None:
                 raise AttributeError(
@@ -67,9 +69,14 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
                 )
             patterns.extend(root_patterns)
 
-        urls_pattern = _include_if_exists(app_config, "urls", f"{app_config.label}/")
-        if urls_pattern:
-            patterns.append(urls_pattern)
+        if not has_routes_module:
+            urls_pattern = _include_if_exists(
+                app_config,
+                "urls",
+                f"{app_config.label}/",
+            )
+            if urls_pattern:
+                patterns.append(urls_pattern)
 
         api_pattern = _include_if_exists(app_config, "api.urls", f"{app_config.label}/api/")
         if api_pattern:
