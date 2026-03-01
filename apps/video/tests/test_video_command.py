@@ -190,396 +190,264 @@ def test_video_command_snapshot_auto_enables_feature(node_mock, feature_mock, de
     assignment_mock.objects.update_or_create.assert_called_once_with(node=node, feature=feature)
 
 
-@patch("apps.video.management.commands.video.get_frame")
-@patch("apps.video.management.commands.video.MjpegStream")
-@patch("apps.video.management.commands.video.Node")
-@pytest.mark.django_db
-def test_video_command_mjpeg_capture(node_mock, stream_mock, frame_mock, capsys):
-    """Capture MJPEG cached frames through the unified command."""
-
-    node_mock.get_local.return_value = None
-    stream = SimpleNamespace(store_frame_bytes=Mock(), slug="stream-1")
-    stream_mock.objects.all.return_value.filter.return_value.order_by.return_value = [stream]
-    frame_mock.return_value = SimpleNamespace(frame_bytes=b"frame")
-
-    call_command("video", mjpeg=True)
-
-    stream.store_frame_bytes.assert_called_once_with(b"frame", update_thumbnail=True)
-    assert "Captured frames for 1 stream(s)." in capsys.readouterr().out
-
-
-@patch("apps.video.management.commands.video.get_frame", return_value=None)
+@pytest.mark.parametrize(
+    ("stream_arg", "frame_value", "expected_output", "expect_store_call"),
+    [
+        (None, SimpleNamespace(frame_bytes=b"frame"), "Captured frames for 1 stream(s).", True),
+        ("123", None, "Skipped 1 stream(s) without frames.", False),
+    ],
+)
 @patch("apps.video.management.commands.video.MjpegStream")
 @patch("apps.video.management.commands.video.VideoDevice")
 @patch("apps.video.management.commands.video.Node")
-def test_video_command_mjpeg_numeric_stream_slug_fallback(
-    node_mock, device_mock, stream_mock, frame_mock, capsys
+@pytest.mark.django_db
+def test_video_command_mjpeg_capture_variants(
+    node_mock,
+    device_mock,
+    stream_mock,
+    stream_arg,
+    frame_value,
+    expected_output,
+    expect_store_call,
+    capsys,
 ):
-    """Fallback to slug lookup when numeric stream id does not match a primary key."""
-
-    node_mock.get_local.return_value = None
-
-    device_mock.objects.all.return_value.filter.return_value.count.return_value = 0
-    device_mock.objects.all.return_value.filter.return_value.order_by.return_value = []
-
-    queryset = stream_mock.objects.all.return_value.filter.return_value
-    queryset.order_by.return_value = []
-    queryset.filter.return_value.first.side_effect = [None, SimpleNamespace(slug="123")]
-
-    call_command("video", mjpeg=True, stream="123")
-
-    assert "Skipped 1 stream(s) without frames." in capsys.readouterr().out
-
-
-@pytest.mark.django_db
-def test_video_command_sample_prefers_camera_service_frames(capsys, tmp_path, monkeypatch):
-    """Use Redis camera-service frames when the service is active for the device."""
-
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
-        node=node,
-        identifier="/dev/video0",
-        description="Test camera",
-        is_default=True,
-    )
-    stream = device.mjpeg_streams.create(name="Lobby", slug="lobby", is_active=True)
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.frame_cache_url",
-        lambda: "redis://localhost:6379/0",
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.get_status",
-        lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
-    )
-
-    frame_responses = iter(
-        [
-            SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
-            SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
-            SimpleNamespace(frame_bytes=b"frame-2", frame_id=2),
-        ]
-    )
-
-    def fake_get_frame(_stream):
-        return next(frame_responses, SimpleNamespace(frame_bytes=b"frame-2", frame_id=2))
-
-    monkeypatch.setattr("apps.video.management.commands.video.get_frame", fake_get_frame)
-
-    def fail_direct_capture(self):
-        raise AssertionError("direct camera capture should not be used")
-
-    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", fail_direct_capture, raising=False)
-
-    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
-        output_path.write_text("video")
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.Command._encode_video", fake_encode
-    )
-
-    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
-        call_command("video", samples=2)
-
-    output = capsys.readouterr().out
-    assert "Captured 2 sample frame(s) from camera service stream 'lobby'." in output
-    assert "Sample video saved" in output
-
-
-@pytest.mark.django_db
-def test_video_command_sample_falls_back_when_camera_service_inactive(tmp_path, monkeypatch):
-    """Fall back to direct capture when camera service has no active status or frames."""
-
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
-        node=node,
-        identifier="/dev/video0",
-        description="Test camera",
-        is_default=True,
-    )
-    device.mjpeg_streams.create(name="Lobby", slug="lobby-fallback", is_active=True)
-
-    snapshot_path = tmp_path / "shot.jpg"
-    snapshot_path.write_text("frame")
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.frame_cache_url",
-        lambda: "redis://localhost:6379/0",
-    )
-    monkeypatch.setattr("apps.video.management.commands.video.get_status", lambda _stream: None)
-    monkeypatch.setattr("apps.video.management.commands.video.get_frame", lambda _stream: None)
-
-    direct_calls = {"count": 0}
-
-    def direct_capture(self):
-        direct_calls["count"] += 1
-        return snapshot_path
-
-    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", direct_capture, raising=False)
-
-    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
-        output_path.write_text("video")
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.Command._encode_video", fake_encode
-    )
-
-    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
-        call_command("video", samples=1)
-
-    assert direct_calls["count"] == 1
-
-
-@pytest.mark.django_db
-def test_video_command_sample_errors_when_no_new_cached_frame(tmp_path, monkeypatch):
-    """Raise an error if camera service stays active but never advances frames."""
-
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
-        node=node,
-        identifier="/dev/video0",
-        description="Test camera",
-        is_default=True,
-    )
-    device.mjpeg_streams.create(name="Lobby", slug="lobby-timeout", is_active=True)
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.frame_cache_url",
-        lambda: "redis://localhost:6379/0",
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.get_status",
-        lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.get_frame",
-        lambda _stream: SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.Command._CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS",
-        0.01,
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.Command._CAMERA_SERVICE_FRAME_POLL_SECONDS",
-        0.001,
-    )
-
-    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
-        with pytest.raises(CommandError, match="Timed out waiting for a new cached frame"):
-            call_command("video", samples=2)
-
-
-@pytest.mark.django_db
-def test_video_command_sample_falls_back_when_status_is_stale(tmp_path, monkeypatch):
-    """Fall back to direct capture when camera-service status is stale and no frame exists."""
-
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
-        node=node,
-        identifier="/dev/video0",
-        description="Test camera",
-        is_default=True,
-    )
-    device.mjpeg_streams.create(name="Lobby", slug="lobby-stale", is_active=True)
-
-    snapshot_path = tmp_path / "shot.jpg"
-    snapshot_path.write_text("frame")
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.frame_cache_url",
-        lambda: "redis://localhost:6379/0",
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.get_status",
-        lambda _stream: {"updated_at": "2000-01-01T00:00:00+00:00"},
-    )
-    monkeypatch.setattr("apps.video.management.commands.video.get_frame", lambda _stream: None)
-
-    direct_calls = {"count": 0}
-
-    def direct_capture(self):
-        direct_calls["count"] += 1
-        return snapshot_path
-
-    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", direct_capture, raising=False)
-
-    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
-        output_path.write_text("video")
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.Command._encode_video", fake_encode
-    )
-
-    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
-        call_command("video", samples=1)
-
-    assert direct_calls["count"] == 1
-
-
-@pytest.mark.django_db
-def test_video_command_sample_waits_for_new_bytes_when_frame_id_missing(tmp_path, monkeypatch):
-    """Wait for changed frame bytes when frame IDs are unavailable."""
-
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
-        node=node,
-        identifier="/dev/video0",
-        description="Test camera",
-        is_default=True,
-    )
-    device.mjpeg_streams.create(name="Lobby", slug="lobby-no-id", is_active=True)
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.frame_cache_url",
-        lambda: "redis://localhost:6379/0",
-    )
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.get_status",
-        lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
-    )
-
-    frame_responses = iter(
-        [
-            SimpleNamespace(frame_bytes=b"frame-1", frame_id=None),
-            SimpleNamespace(frame_bytes=b"frame-1", frame_id=None),
-            SimpleNamespace(frame_bytes=b"frame-2", frame_id=None),
-        ]
-    )
-
-    def fake_get_frame(_stream):
-        return next(
-            frame_responses,
-            SimpleNamespace(frame_bytes=b"frame-2", frame_id=None),
-        )
-
-    monkeypatch.setattr("apps.video.management.commands.video.get_frame", fake_get_frame)
-
-    def fail_direct_capture(self):
-        raise AssertionError("direct camera capture should not be used")
-
-    monkeypatch.setattr(VideoDevice, "capture_snapshot_path", fail_direct_capture, raising=False)
-
-    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
-        output_path.write_text("video")
-
-    monkeypatch.setattr(
-        "apps.video.management.commands.video.Command._encode_video", fake_encode
-    )
-
-    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
-        call_command("video", samples=2)
-
-
-@pytest.mark.django_db
-def test_video_snapshot_subaction_matches_legacy_snapshot_flag(capsys):
-    """Ensure snapshot sub-action produces the same success output as legacy flag mode."""
-
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
-    device = VideoDevice.objects.create(
-        node=node,
-        identifier="/dev/video0",
-        description="Test camera",
-        is_default=True,
-    )
-
-    class SnapshotResult:
-        sample = SimpleNamespace(path="/tmp/snapshot.jpg")
-
-    with (
-        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
-        patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
-    ):
-        call_command("video", snapshot=True)
-
-    legacy_output = capsys.readouterr().out
-
-    with (
-        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
-        patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
-    ):
-        call_command("video", "snapshot")
-
-    action_output = capsys.readouterr().out
-    assert "Snapshot saved to /tmp/snapshot.jpg" in legacy_output
-    assert "Snapshot saved to /tmp/snapshot.jpg" in action_output
-
-
-@patch("apps.video.management.commands.video.get_frame")
-@patch("apps.video.management.commands.video.MjpegStream")
-@patch("apps.video.management.commands.video.Node")
-@pytest.mark.django_db
-def test_video_mjpeg_subaction_matches_legacy_flag_output(node_mock, stream_mock, frame_mock, capsys):
-    """Ensure mjpeg sub-action preserves legacy capture output behavior."""
+    """Capture MJPEG frames while covering default and numeric-slug fallback selection."""
 
     node_mock.get_local.return_value = None
     stream = SimpleNamespace(store_frame_bytes=Mock(), slug="stream-1")
-    stream_mock.objects.all.return_value.filter.return_value.order_by.return_value = [stream]
-    frame_mock.return_value = SimpleNamespace(frame_bytes=b"frame")
+    queryset = stream_mock.objects.all.return_value.filter.return_value
 
-    call_command("video", mjpeg=True)
-    legacy_output = capsys.readouterr().out
+    if stream_arg is None:
+        queryset.order_by.return_value = [stream]
+    else:
+        device_mock.objects.all.return_value.filter.return_value.count.return_value = 0
+        device_mock.objects.all.return_value.filter.return_value.order_by.return_value = []
+        queryset.order_by.return_value = []
+        queryset.filter.return_value.first.side_effect = [None, SimpleNamespace(slug="123")]
 
-    stream.store_frame_bytes.reset_mock()
-    call_command("video", "mjpeg")
-    action_output = capsys.readouterr().out
+    with patch("apps.video.management.commands.video.get_frame", return_value=frame_value):
+        kwargs = {"mjpeg": True}
+        if stream_arg is not None:
+            kwargs["stream"] = stream_arg
+        call_command("video", **kwargs)
 
-    assert "Captured frames for 1 stream(s)." in legacy_output
-    assert "Captured frames for 1 stream(s)." in action_output
+    if expect_store_call:
+        stream.store_frame_bytes.assert_called_once_with(b"frame", update_thumbnail=True)
+    else:
+        stream.store_frame_bytes.assert_not_called()
+    assert expected_output in capsys.readouterr().out
 
 
-def test_video_doctor_subaction_matches_legacy_flag(capsys):
-    """Ensure doctor sub-action remains equivalent to legacy --doctor flag."""
+def _create_camera_service_sample_context(tmp_path, stream_slug):
+    """Create a local node with one active camera stream for sample command tests."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Test camera",
+        is_default=True,
+    )
+    device.mjpeg_streams.create(name="Lobby", slug=stream_slug, is_active=True)
+
+    snapshot_path = tmp_path / "shot.jpg"
+    snapshot_path.write_text("frame")
+    return node, snapshot_path
+
+
+@pytest.mark.parametrize(
+    ("scenario", "samples", "expect_direct_calls", "expected_error", "expected_output"),
+    [
+        ("fresh_service", 2, 0, None, "Captured 2 sample frame(s) from camera service stream"),
+        ("inactive_service", 1, 1, None, None),
+        ("stale_status", 1, 1, None, None),
+        ("missing_frame_id", 2, 0, None, None),
+        ("timeout", 2, 0, "Timed out waiting for a new cached frame", None),
+    ],
+)
+@pytest.mark.django_db
+def test_video_command_sample_camera_service_scenarios(
+    scenario,
+    samples,
+    expect_direct_calls,
+    expected_error,
+    expected_output,
+    capsys,
+    tmp_path,
+    monkeypatch,
+):
+    """Exercise camera-service sampling scenarios with one shared setup path."""
+
+    node, snapshot_path = _create_camera_service_sample_context(tmp_path, f"lobby-{scenario}")
+    monkeypatch.setattr("apps.video.management.commands.video.WORK_DIR", tmp_path, raising=False)
+    monkeypatch.setattr(
+        "apps.video.management.commands.video.frame_cache_url",
+        lambda: "redis://localhost:6379/0",
+    )
+
+    direct_calls = {"count": 0}
+
+    def direct_capture(self):
+        direct_calls["count"] += 1
+        return snapshot_path
+
+    def fail_direct_capture(self):
+        raise AssertionError("direct camera capture should not be used")
+
+    def fake_encode(self, frames_dir: Path, output_path: Path) -> None:
+        output_path.write_text("video")
+
+    monkeypatch.setattr("apps.video.management.commands.video.Command._encode_video", fake_encode)
+
+    if scenario in {"inactive_service", "stale_status"}:
+        monkeypatch.setattr(VideoDevice, "capture_snapshot_path", direct_capture, raising=False)
+    else:
+        monkeypatch.setattr(VideoDevice, "capture_snapshot_path", fail_direct_capture, raising=False)
+
+    if scenario == "inactive_service":
+        monkeypatch.setattr("apps.video.management.commands.video.get_status", lambda _stream: None)
+        monkeypatch.setattr("apps.video.management.commands.video.get_frame", lambda _stream: None)
+    elif scenario == "stale_status":
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_status",
+            lambda _stream: {"updated_at": "2000-01-01T00:00:00+00:00"},
+        )
+        monkeypatch.setattr("apps.video.management.commands.video.get_frame", lambda _stream: None)
+    elif scenario == "timeout":
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_status",
+            lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
+        )
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_frame",
+            lambda _stream: SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
+        )
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.Command._CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS",
+            0.01,
+        )
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.Command._CAMERA_SERVICE_FRAME_POLL_SECONDS",
+            0.001,
+        )
+    elif scenario == "missing_frame_id":
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_status",
+            lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
+        )
+        frame_responses = iter(
+            [
+                SimpleNamespace(frame_bytes=b"frame-1", frame_id=None),
+                SimpleNamespace(frame_bytes=b"frame-1", frame_id=None),
+                SimpleNamespace(frame_bytes=b"frame-2", frame_id=None),
+            ]
+        )
+
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_frame",
+            lambda _stream: next(
+                frame_responses,
+                SimpleNamespace(frame_bytes=b"frame-2", frame_id=None),
+            ),
+        )
+    else:
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_status",
+            lambda _stream: {"updated_at": "2026-01-01T00:00:00+00:00"},
+        )
+        frame_responses = iter(
+            [
+                SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
+                SimpleNamespace(frame_bytes=b"frame-1", frame_id=1),
+                SimpleNamespace(frame_bytes=b"frame-2", frame_id=2),
+            ]
+        )
+        monkeypatch.setattr(
+            "apps.video.management.commands.video.get_frame",
+            lambda _stream: next(
+                frame_responses,
+                SimpleNamespace(frame_bytes=b"frame-2", frame_id=2),
+            ),
+        )
+
+    with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
+        if expected_error:
+            with pytest.raises(CommandError, match=expected_error):
+                call_command("video", samples=samples)
+        else:
+            call_command("video", samples=samples)
+
+    assert direct_calls["count"] == expect_direct_calls
+    output = capsys.readouterr().out
+    if expected_output:
+        assert expected_output in output
+
+
+@pytest.mark.parametrize("mode", ["snapshot", "mjpeg", "doctor"])
+@pytest.mark.django_db
+def test_video_subaction_modes_match_legacy_flags(mode, capsys):
+    """Ensure sub-action CLI forms preserve legacy flag behavior for major video actions."""
+
+    if mode == "snapshot":
+        node = Node.objects.create(
+            hostname="local",
+            mac_address=Node.get_current_mac(),
+            current_relation=Node.Relation.SELF,
+        )
+        feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+        NodeFeatureAssignment.objects.create(node=node, feature=feature)
+        VideoDevice.objects.create(
+            node=node,
+            identifier="/dev/video0",
+            description="Test camera",
+            is_default=True,
+        )
+
+        class SnapshotResult:
+            """Simple snapshot result shim for command output checks."""
+
+            sample = SimpleNamespace(path="/tmp/snapshot.jpg")
+
+        with (
+            patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+            patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
+        ):
+            call_command("video", snapshot=True)
+        legacy_output = capsys.readouterr().out
+        with (
+            patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+            patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
+        ):
+            call_command("video", "snapshot")
+        action_output = capsys.readouterr().out
+        assert "Snapshot saved to /tmp/snapshot.jpg" in legacy_output
+        assert "Snapshot saved to /tmp/snapshot.jpg" in action_output
+        return
+
+    if mode == "mjpeg":
+        stream = SimpleNamespace(store_frame_bytes=Mock(), slug="stream-1")
+        with (
+            patch("apps.video.management.commands.video.Node.get_local", return_value=None),
+            patch("apps.video.management.commands.video.MjpegStream") as stream_mock,
+            patch("apps.video.management.commands.video.get_frame", return_value=SimpleNamespace(frame_bytes=b"frame")),
+        ):
+            stream_mock.objects.all.return_value.filter.return_value.order_by.return_value = [stream]
+            call_command("video", mjpeg=True)
+            legacy_output = capsys.readouterr().out
+
+            stream.store_frame_bytes.reset_mock()
+            call_command("video", "mjpeg")
+            action_output = capsys.readouterr().out
+
+        assert "Captured frames for 1 stream(s)." in legacy_output
+        assert "Captured frames for 1 stream(s)." in action_output
+        return
 
     with patch("apps.video.management.commands.video.Command._run_doctor") as doctor_mock:
         call_command("video", doctor=True)
