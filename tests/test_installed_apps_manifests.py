@@ -28,7 +28,7 @@ def _extract_manifest_apps(manifest_path: Path) -> list[str]:
 
         try:
             parsed_value = ast.literal_eval(statement.value)
-        except ValueError as exc:
+        except (ValueError, SyntaxError) as exc:
             raise AssertionError(
                 f"{manifest_path} must declare DJANGO_APPS as a literal list of strings"
             ) from exc
@@ -43,7 +43,7 @@ def _extract_manifest_apps(manifest_path: Path) -> list[str]:
 
         return [entry.strip() for entry in parsed_value]
 
-    return []
+    raise AssertionError(f"{manifest_path} must declare DJANGO_APPS")
 
 
 def _expected_local_apps_from_manifest_files() -> list[str]:
@@ -63,8 +63,7 @@ def test_local_apps_manifest_loading_is_complete_and_deterministic() -> None:
     first_load = settings._load_local_apps_from_manifests()
     second_load = settings._load_local_apps_from_manifests()
 
-    assert set(first_load) == set(expected_local_apps)
-    assert set(second_load) == set(expected_local_apps)
+    assert first_load == expected_local_apps
     assert first_load == second_load
     assert len(first_load) == len(set(first_load))
 
