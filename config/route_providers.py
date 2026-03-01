@@ -57,18 +57,15 @@ def _patterns_include_module(
 
     for pattern in patterns:
         urlconf = getattr(pattern, "urlconf_name", None)
-        if urlconf == module_name:
-            return True
-
-        if hasattr(urlconf, "__name__") and urlconf.__name__ == module_name:
-            return True
-
+        candidates = [urlconf]
         if isinstance(urlconf, tuple) and urlconf:
-            included = urlconf[0]
-            if included == module_name:
+            candidates.append(urlconf[0])
+
+        for candidate in candidates:
+            if candidate == module_name:
                 return True
 
-            if hasattr(included, "__name__") and included.__name__ == module_name:
+            if hasattr(candidate, "__name__") and candidate.__name__ == module_name:
                 return True
     return False
 
@@ -117,7 +114,11 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
             if urls_pattern:
                 patterns.append(urls_pattern)
 
-        api_pattern = _include_if_exists(app_config, "api.urls", f"{app_config.label}/api/")
+        api_pattern = _include_if_exists(
+            app_config,
+            "api.urls",
+            f"{app_config.label}/api/",
+        )
         if api_pattern:
             patterns.append(api_pattern)
 
