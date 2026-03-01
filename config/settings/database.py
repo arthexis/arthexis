@@ -19,7 +19,11 @@ if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
 
 
 def _postgres_available() -> bool:
-    """Return whether the configured PostgreSQL endpoint is reachable quickly."""
+    """Return whether the configured PostgreSQL endpoint is reachable quickly.
+
+    Startup probes should fail fast so local tooling (for example the VS Code
+    migration watcher) can fall back to SQLite when PostgreSQL is unavailable.
+    """
 
     if FORCED_DB_BACKEND == "sqlite":
         return False

@@ -108,6 +108,9 @@ SITE_ID = 1
 
 MIGRATION_MODULES = {
     "sites": "apps.core.sites_migrations",
+    # Pin django_celery_beat migrations to a local copy so we can override
+    # upstream changes that introduce optional dependencies (e.g. Google
+    # Calendar profile) and avoid InvalidBases errors during migrate.
     "django_celery_beat": "apps.celery.beat_migrations",
 }
 

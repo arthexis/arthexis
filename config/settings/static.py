@@ -9,12 +9,18 @@ STATIC_ROOT = BASE_DIR / "static"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_headers
 
+# Shared admin CSS pipeline: load a framework base first, then global app-shell
+# styles, then optional active app stylesheets discovered per admin request.
 ADMIN_BASE_STYLESHEET = "core/admin_ui_framework.css"
 ADMIN_GLOBAL_STYLESHEETS = (
     "sites/css/admin/base_site.css",
 )
 ADMIN_APP_STYLESHEETS: dict[str, str] = {}
 
+# Allow development and freshly-updated environments to serve assets which have
+# not yet been collected into ``STATIC_ROOT``. Without this setting WhiteNoise
+# only looks for files inside ``STATIC_ROOT`` and dashboards like the public
+# traffic chart fail to load their JavaScript dependencies.
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
 
