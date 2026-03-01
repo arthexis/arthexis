@@ -1122,6 +1122,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+rerun_with_updated_script() {
+  local depth="${ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH:-0}"
+
+  if [[ ! "$depth" =~ ^[0-9]+$ ]]; then
+    depth=0
+  fi
+
+  if (( depth >= 1 )); then
+    echo "upgrade.sh was updated again during self-update rerun; run ./upgrade.sh manually to continue." >&2
+    return 1
+  fi
+
+  local -a rerun_cmd=("$UPGRADE_SCRIPT_PATH")
+  if [ ${#FORWARDED_ARGS[@]} -gt 0 ]; then
+    rerun_cmd+=("${FORWARDED_ARGS[@]}")
+  fi
+
+  echo "upgrade.sh was updated during git pull; restarting upgrade automatically with the new script..."
+  export ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH=$((depth + 1))
+  exec "${rerun_cmd[@]}"
+}
+
 run_detached_upgrade() {
   local delegated_script="$BASE_DIR/scripts/delegated-upgrade.sh"
 
@@ -1925,8 +1947,10 @@ else
     } > "$UPGRADE_RERUN_LOCK"
     notify_lcd_manual_upgrade_required
     start_lcd_upgrade_helper_service
-    echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
-    exit "$UPGRADE_RERUN_EXIT_CODE"
+    if ! rerun_with_updated_script; then
+      echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
+      exit "$UPGRADE_RERUN_EXIT_CODE"
+    fi
   fi
 
   if [[ $CHECK_ONLY -eq 1 ]]; then
