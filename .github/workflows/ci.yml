@@ -98,7 +98,7 @@ jobs:
             exit 0
           fi
 
-          if ! CHANGED_FILES="$(git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
             echo "Fixture path detection failed; falling back to full scan."
             echo "mode=full" >> "${GITHUB_OUTPUT}"
             exit 0
