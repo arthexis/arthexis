@@ -13,7 +13,7 @@ from typing import Iterable
 from django.apps import apps
 from django.conf import settings
 from django.urls import include, path
-from django.urls.resolvers import URLPattern
+from django.urls.resolvers import URLPattern, URLResolver
 
 
 def _iter_project_apps() -> Iterable:
@@ -40,6 +40,15 @@ def _include_if_exists(app_config, module_suffix: str, prefix: str):
     return path(prefix, include(module_name))
 
 
+def _patterns_include_module(patterns: Iterable[URLPattern | URLResolver], module_name: str) -> bool:
+    """Return whether ``patterns`` already include ``module_name`` as a URLConf."""
+
+    for pattern in patterns:
+        if getattr(pattern, "urlconf_name", None) == module_name:
+            return True
+    return False
+
+
 def autodiscovered_route_patterns() -> list[URLPattern]:
     """Collect root route providers from project apps.
 
@@ -47,8 +56,9 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
     - ``apps/<app>/routes.py`` exporting ``ROOT_URLPATTERNS``.
 
     Compatibility fallback:
-    - Include legacy ``urls`` under ``/<app_label>/`` only when the app does
-      not provide ``routes.py``.
+    - Include legacy ``urls`` under ``/<app_label>/`` when ``routes.py`` is
+      absent, or when ``routes.py`` does not already mount that app's
+      ``urls`` module.
     - Include optional ``api.urls`` under ``/<app_label>/api/`` when present.
     """
 
@@ -61,6 +71,7 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
             routes_module = None
 
         has_routes_module = routes_module is not None
+        root_patterns: list[URLPattern | URLResolver] = []
         if has_routes_module:
             root_patterns = getattr(routes_module, "ROOT_URLPATTERNS", None)
             if root_patterns is None:
@@ -69,7 +80,11 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
                 )
             patterns.extend(root_patterns)
 
-        if not has_routes_module:
+        app_urls_module = f"{app_config.name}.urls"
+        routes_already_include_app_urls = _patterns_include_module(
+            root_patterns, app_urls_module
+        )
+        if not routes_already_include_app_urls:
             urls_pattern = _include_if_exists(
                 app_config,
                 "urls",
