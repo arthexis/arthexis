@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import ast
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -156,13 +157,49 @@ def _resolve_user(username: str) -> AbstractBaseUser | None:
 
 
 def _evaluate_expression(expression: str, context: dict[str, object]) -> bool:
-    """Evaluate a restricted expression for install conditions."""
+    """Evaluate a constrained boolean expression for install conditions."""
 
     if not expression:
         return True
     try:
-        return bool(eval(expression, {"__builtins__": {}}, context))
-    except (NameError, SyntaxError, TypeError, ValueError):
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError:
+        return False
+
+    allowed_nodes = (
+        ast.Expression,
+        ast.BoolOp,
+        ast.UnaryOp,
+        ast.Compare,
+        ast.Call,
+        ast.Name,
+        ast.Load,
+        ast.Constant,
+        ast.And,
+        ast.Or,
+        ast.Not,
+        ast.Eq,
+        ast.NotEq,
+        ast.In,
+        ast.NotIn,
+        ast.Gt,
+        ast.GtE,
+        ast.Lt,
+        ast.LtE,
+        ast.Set,
+        ast.Tuple,
+        ast.List,
+    )
+    for node in ast.walk(tree):
+        if not isinstance(node, allowed_nodes):
+            return False
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name) or node.func.id != "has_feature":
+                return False
+
+    try:
+        return bool(eval(compile(tree, "<shortcut-condition>", "eval"), {"__builtins__": {}}, context))
+    except (NameError, TypeError, ValueError):
         return False
 
 
@@ -240,9 +277,15 @@ def should_install_shortcut(
         return False
 
     if shortcut.condition_command:
+        try:
+            command_parts = shlex.split(shortcut.condition_command)
+        except ValueError:
+            return False
+        if not command_parts:
+            return False
+
         result = subprocess.run(
-            shortcut.condition_command,
-            shell=True,
+            command_parts,
             check=False,
             cwd=base_dir,
             env={**os.environ, "ARTHEXIS_SHORTCUT_SLUG": shortcut.slug, "ARTHEXIS_USERNAME": username},
@@ -256,21 +299,25 @@ def should_install_shortcut(
 def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str, icon_value: str) -> str:
     """Render the .desktop file body for ``shortcut``."""
 
+    def _sanitize_desktop_value(value: object) -> str:
+        return str(value).replace("\r", " ").replace("\n", " ")
+
     categories = shortcut.categories or "Utility;"
     lines = [
         "[Desktop Entry]",
         "Version=1.0",
         "Type=Application",
-        f"Name={shortcut.name}",
-        f"Comment={shortcut.comment}",
-        f"Exec={exec_value}",
-        f"Icon={icon_value}",
+        f"Name={_sanitize_desktop_value(shortcut.name)}",
+        f"Comment={_sanitize_desktop_value(shortcut.comment)}",
+        f"Exec={_sanitize_desktop_value(exec_value)}",
+        f"Icon={_sanitize_desktop_value(icon_value)}",
         f"Terminal={'true' if shortcut.terminal else 'false'}",
-        f"Categories={categories}",
+        f"Categories={_sanitize_desktop_value(categories)}",
         f"StartupNotify={'true' if shortcut.startup_notify else 'false'}",
+        "X-Arthexis-Managed=true",
     ]
     for key, value in sorted(shortcut.extra_entries.items()):
-        lines.append(f"{key}={value}")
+        lines.append(f"{_sanitize_desktop_value(key)}={_sanitize_desktop_value(value)}")
     return "\n".join(lines) + "\n"
 
 
@@ -303,7 +350,13 @@ def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_s
         result.installed += 1
 
     if remove_stale:
-        for stale in desktop_dir.glob("Arthexis*.desktop"):
+        for stale in desktop_dir.glob("*.desktop"):
+            try:
+                is_managed = "X-Arthexis-Managed=true" in stale.read_text(encoding="utf-8")
+            except OSError:
+                is_managed = False
+            if not is_managed:
+                continue
             if stale not in installed_files and not DesktopShortcut.objects.filter(
                 desktop_filename=stale.stem
             ).exists():

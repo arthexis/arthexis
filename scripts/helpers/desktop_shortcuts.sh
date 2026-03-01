@@ -38,7 +38,7 @@ arthexis_refresh_desktop_shortcuts() {
         python_exec="python3"
     fi
 
-    "$python_exec" "$base_dir/manage.py" sync_desktop_shortcuts --base-dir "$base_dir" --username "$username" >/dev/null 2>&1 || true
+    "$python_exec" "$base_dir/manage.py" sync_desktop_shortcuts --base-dir "$base_dir" --username "$username" || true
 }
 
 
