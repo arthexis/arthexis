@@ -91,10 +91,61 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/check_import_resolution.py
+      - name: Detect changed fixture files
+        id: seed-fixtures
+        run: |
+          set -Eeuo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "mode=full" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+            echo "Fixture path detection failed; falling back to full scan."
+            echo "mode=full" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          CHANGED_FIXTURES="$(printf '%s
+' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          if [ -z "${CHANGED_FIXTURES}" ]; then
+            echo "mode=changed" >> "${GITHUB_OUTPUT}"
+            {
+              echo "paths<<EOF"
+              echo ""
+              echo "EOF"
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "mode=changed" >> "${GITHUB_OUTPUT}"
+          {
+            echo "paths<<EOF"
+            printf '%s
+' "${CHANGED_FIXTURES}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
         run: |
+          set -Eeuo pipefail
           source .venv/bin/activate
-          python scripts/lint_seed_fixtures.py
+
+          if [ "${{ steps.seed-fixtures.outputs.mode }}" = "full" ]; then
+            python scripts/lint_seed_fixtures.py
+            exit 0
+          fi
+
+          fixture_paths=()
+          while IFS= read -r fixture_path; do
+            [ -n "${fixture_path}" ] && fixture_paths+=("${fixture_path}")
+          done <<< "${{ steps.seed-fixtures.outputs.paths }}"
+
+          if [ "${#fixture_paths[@]}" -eq 0 ]; then
+            echo "No fixture JSON files changed; skipping seed fixture lint."
+            exit 0
+          fi
+
+          python scripts/lint_seed_fixtures.py "${fixture_paths[@]}"
       - name: Run Ruff
         run: |
           source .venv/bin/activate
