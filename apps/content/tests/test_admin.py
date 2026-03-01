@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+from unittest.mock import ANY, Mock
+
 import pytest
 from django.contrib.messages import get_messages
 from django.urls import reverse
 
 from apps.content.models import ContentSample
-from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.models import Node, NodeFeature
+
+
+@pytest.mark.django_db
+def test_take_snapshot_rejects_get_requests(admin_client):
+    """Snapshot action must be POST-only to avoid unsafe state changes on GET."""
+
+    Node._local_cache.clear()
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    sample = ContentSample.objects.create(kind=ContentSample.IMAGE, path="snap.jpg", node=node)
+
+    response = admin_client.get(
+        reverse("admin:content_contentsample_take_snapshot", args=[sample.pk])
+    )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db
@@ -23,7 +44,7 @@ def test_take_snapshot_requires_video_feature(admin_client):
     NodeFeature.objects.create(slug="video-cam", display="Video Camera")
     sample = ContentSample.objects.create(kind=ContentSample.IMAGE, path="snap.jpg", node=node)
 
-    response = admin_client.get(
+    response = admin_client.post(
         reverse("admin:content_contentsample_take_snapshot", args=[sample.pk]),
         follow=True,
     )
@@ -34,8 +55,8 @@ def test_take_snapshot_requires_video_feature(admin_client):
 
 
 @pytest.mark.django_db
-def test_take_snapshot_uses_feature_state_for_enabled_node(admin_client, monkeypatch, tmp_path):
-    """The content snapshot action should proceed when the node feature is enabled."""
+def test_take_snapshot_uses_resolved_feature_state(admin_client, monkeypatch, tmp_path):
+    """The content snapshot action should proceed when feature resolution reports enabled."""
 
     Node._local_cache.clear()
     node = Node.objects.create(
@@ -43,8 +64,7 @@ def test_take_snapshot_uses_feature_state_for_enabled_node(admin_client, monkeyp
         mac_address=Node.get_current_mac(),
         current_relation=Node.Relation.SELF,
     )
-    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
 
     sample = ContentSample.objects.create(kind=ContentSample.IMAGE, path="snap.jpg", node=node)
 
@@ -52,18 +72,21 @@ def test_take_snapshot_uses_feature_state_for_enabled_node(admin_client, monkeyp
     snapshot_path.write_bytes(b"snapshot")
 
     monkeypatch.setattr("apps.content.admin.capture_rpi_snapshot", lambda **_kwargs: snapshot_path)
+    monkeypatch.setattr(NodeFeature, "is_enabled", property(lambda self: True))
 
-    saved = {"called": False}
+    new_sample = ContentSample(pk=sample.pk + 1)
+    save_screenshot_mock = Mock(return_value=new_sample)
+    monkeypatch.setattr("apps.content.admin.save_screenshot", save_screenshot_mock)
 
-    def _fake_save_screenshot(path, **kwargs):
-        saved["called"] = True
-        return ContentSample.objects.create(kind=ContentSample.IMAGE, path=str(path), node=node)
-
-    monkeypatch.setattr("apps.content.admin.save_screenshot", _fake_save_screenshot)
-
-    response = admin_client.get(
+    response = admin_client.post(
         reverse("admin:content_contentsample_take_snapshot", args=[sample.pk])
     )
 
     assert response.status_code == 302
-    assert saved["called"] is True
+    save_screenshot_mock.assert_called_once_with(
+        snapshot_path,
+        node=node,
+        method="RPI_CAMERA",
+        user=ANY,
+        link_duplicates=True,
+    )

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
@@ -22,7 +23,7 @@ from apps.content.models import (
 )
 from apps.locals.user_data import EntityModelAdmin
 from apps.core.admin import OwnableAdminMixin
-from apps.nodes.models import Node
+from apps.nodes.models import Node, NodeFeature
 from apps.content.utils import capture_screenshot, save_screenshot
 from apps.video.models import VideoDevice
 from apps.video.utils import (
@@ -110,6 +111,13 @@ class ContentSampleAdmin(EntityModelAdmin):
         return redirect("..")
 
     def take_snapshot(self, request, object_id):
+        del object_id
+        if request.method != "POST":
+            raise PermissionDenied
+
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
         node = Node.get_local()
         if node is None:
             self.message_user(
@@ -119,7 +127,8 @@ class ContentSampleAdmin(EntityModelAdmin):
             )
             return redirect("..")
 
-        if not node.has_feature("video-cam"):
+        video_feature = NodeFeature.objects.filter(slug="video-cam").first()
+        if not video_feature or not video_feature.is_enabled:
             self.message_user(
                 request,
                 _("Video Camera feature is not enabled on this node."),
