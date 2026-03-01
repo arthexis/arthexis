@@ -79,16 +79,16 @@ def _contains_collectable_tests(module_path: Path) -> bool:
     return False
 
 
-def _iter_test_modules() -> list[Path]:
+def _get_test_modules() -> set[Path]:
     """Collect Python test module paths using the repository naming conventions."""
 
     candidates = [
-        *REPO_ROOT.glob("tests/test_*.py"),
-        *REPO_ROOT.glob("apps/**/tests/test_*.py"),
+        *REPO_ROOT.glob("tests/**/test_*.py"),
+        *REPO_ROOT.glob("apps/**/tests/**/test_*.py"),
         *REPO_ROOT.glob("apps/**/management/commands/test*.py"),
-        *REPO_ROOT.glob("scripts/test*.py"),
+        *REPO_ROOT.glob("scripts/**/test*.py"),
     ]
-    return sorted({path for path in candidates if path.name != "__init__.py"})
+    return {path for path in candidates if path.name != "__init__.py"}
 
 
 @pytest.mark.regression
@@ -97,7 +97,7 @@ def test_no_new_empty_test_files_are_introduced() -> None:
 
     empty_modules = {
         path.relative_to(REPO_ROOT).as_posix()
-        for path in _iter_test_modules()
+        for path in _get_test_modules()
         if not _contains_collectable_tests(path)
     }
 
