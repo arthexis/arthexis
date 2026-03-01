@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+
 from apps.vscode import migration_server
 
 
@@ -132,6 +134,62 @@ def test_run_migrations_auto_merges_conflicts() -> None:
         text=True,
         start_new_session=True,
     )
+
+
+@pytest.mark.parametrize(
+    ("side_effects", "expected_return_code", "expected_call_count"),
+    [
+        pytest.param(
+            [
+                mock.Mock(
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "CommandError: Conflicting migrations detected; "
+                        "multiple leaf nodes in the migration graph"
+                    ),
+                ),
+                mock.Mock(returncode=2, stdout="", stderr="Merge failed"),
+            ],
+            2,
+            2,
+            id="merge-fails",
+        ),
+        pytest.param(
+            [
+                mock.Mock(
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "CommandError: Conflicting migrations detected; "
+                        "multiple leaf nodes in the migration graph"
+                    ),
+                ),
+                mock.Mock(returncode=0, stdout="", stderr=""),
+                mock.Mock(returncode=3, stdout="", stderr="Another error"),
+            ],
+            3,
+            3,
+            id="post-merge-migrate-fails",
+        ),
+    ],
+)
+def test_run_migrations_handles_conflict_resolution_failures(
+    side_effects: list[mock.Mock], expected_return_code: int, expected_call_count: int
+) -> None:
+    """Auto-merge conflict flows should surface merge/retry failures."""
+
+    with (
+        mock.patch.object(migration_server.sys, "platform", "linux"),
+        mock.patch.object(
+            migration_server.subprocess,
+            "run",
+            side_effect=side_effects,
+        ) as run,
+    ):
+        assert migration_server.run_migrations([]) == expected_return_code
+
+    assert run.call_count == expected_call_count
 
 
 def test_parse_args_accepts_legacy_watcher_flags() -> None:
