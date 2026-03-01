@@ -183,7 +183,7 @@ class SimulatorAdmin(
         if node is None:
             self.message_user(
                 request,
-                "No local node is registered; unable to toggle the CP simulator service.",
+                "No local node is registered; unable to toggle the OCPP Simulator feature.",
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
@@ -191,27 +191,20 @@ class SimulatorAdmin(
         if not feature:
             self.message_user(
                 request,
-                "CP simulator service feature is not configured.",
+                "OCPP Simulator suite feature is not configured.",
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
-        current = set(
-            node.features.filter(slug__in=Node.MANUAL_FEATURE_SLUGS).values_list(
-                "slug", flat=True
-            )
-        )
-        service_enabled = not feature.is_enabled
-        if service_enabled:
-            current.add(feature.slug)
-            action = "enabled"
-        else:
-            current.discard(feature.slug)
-            action = "disabled"
-        node.update_manual_features(current)
+
+        service_enabled = not bool(feature.is_enabled)
+        feature.is_enabled = service_enabled
+        feature.save(update_fields=["is_enabled", "updated_at"])
         queue_cpsim_service_toggle(enabled=service_enabled, source="admin")
+
+        action = "enabled" if service_enabled else "disabled"
         self.message_user(
             request,
-            f"{feature.display} {action} for this node.",
+            f"{feature.display} {action}.",
             level=messages.SUCCESS,
         )
         return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
