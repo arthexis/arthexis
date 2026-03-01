@@ -15,6 +15,7 @@ from scripts.build_migration_baseline import (
     DEFAULT_THRESHOLD,
     evaluate_app_baseline,
 )
+from scripts.check_migration_conflicts import run_checks as run_migration_conflict_checks
 
 
 def _local_app_labels(apps_module, settings_module) -> list[str]:
@@ -145,6 +146,10 @@ def _check_baseline_depths(
 
 
 def main() -> int:
+    conflict_check = run_migration_conflict_checks(REPO_ROOT)
+    if conflict_check != 0:
+        return conflict_check
+
     try:
         import django
         from django.apps import apps
