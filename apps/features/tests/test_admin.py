@@ -15,8 +15,14 @@ from apps.features.admin import FeatureAdmin
 from apps.features.models import Feature
 
 
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
 @pytest.mark.django_db
-@override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_change_form_renders_source_as_readonly(admin_client):
     """Regression: source must be displayed as read-only on the change form."""
 
@@ -35,7 +41,7 @@ def test_feature_admin_change_form_renders_source_as_readonly(admin_client):
 
 
 @pytest.mark.django_db
-@override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_change_form_uses_single_line_autogrow_textareas(admin_client):
     """Regression: feature admin textareas should default to one row and autogrow."""
 
@@ -110,7 +116,7 @@ def test_feature_admin_toggle_selected_feature_action_reports_counts(admin_clien
 
 
 @pytest.mark.django_db
-@override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_reload_all_preview_renders_expected_change_summary(admin_client):
     """Regression: reload-all tool should first render a change summary confirmation view."""
 
@@ -134,7 +140,7 @@ def test_feature_admin_reload_all_preview_renders_expected_change_summary(admin_
 
 
 @pytest.mark.django_db
-@override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_reload_all_tool_drops_all_and_loads_fixtures(admin_client):
     """Regression: confirmed reload-all must clear features and load all mainstream fixtures."""
 
@@ -163,6 +169,40 @@ def test_feature_admin_reload_all_action_label_is_updated():
 
     assert str(FeatureAdmin.reload_base.label) == "Reload All"
     assert str(FeatureAdmin.reload_base.short_description) == "Reload All"
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_toggle_selected_feature_requires_change_permission(admin_client, django_user_model):
+    """Regression: bulk toggle action must not execute for view-only admins."""
+
+    feature = Feature.objects.create(slug="view-only-target", display="View Only Target", is_enabled=True)
+
+    user = django_user_model.objects.create_user(
+        username="view-only-admin",
+        email="view-only@example.com",
+        password="pass",
+        is_staff=True,
+    )
+    view_perm = Permission.objects.get(codename="view_feature", content_type__app_label="features")
+    user.user_permissions.set([view_perm])
+    admin_client.force_login(user)
+
+    changelist_url = reverse("admin:features_feature_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {
+            "action": "toggle_selected_feature",
+            "_selected_action": [str(feature.pk)],
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    feature.refresh_from_db()
+    assert feature.is_enabled is True
+    action_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("No action selected." in message for message in action_messages)
 
 
 @pytest.mark.django_db

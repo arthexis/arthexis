@@ -202,7 +202,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     reload_base.requires_queryset = False
     reload_base.methods = ("GET", "POST")
 
-    @admin.action(description=_("Toggle selected feature"))
+    @admin.action(description=_("Toggle selected feature"), permissions=["change"])
     def toggle_selected_feature(self, request, queryset):
         """Flip the enabled state for each selected suite feature."""
 
@@ -211,7 +211,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         disabled_total = 0
 
         with transaction.atomic():
-            for feature in queryset.only("pk", "is_enabled"):
+            for feature in queryset.select_for_update().only("pk", "is_enabled"):
                 feature.is_enabled = not feature.is_enabled
                 feature.save(update_fields=["is_enabled", "updated_at"])
                 toggled_total += 1
