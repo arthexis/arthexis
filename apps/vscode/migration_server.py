@@ -32,6 +32,10 @@ def run_migrations(extra_args: list[str] | None = None) -> int:
         # Keep migration subprocess in its own process group so debugger-level
         # Ctrl+C signals do not interrupt import-time startup unexpectedly.
         run_kwargs["creationflags"] = creationflags
+    elif sys.platform != "win32":
+        # On POSIX, start a new session to avoid debugger-level Ctrl+C signals
+        # propagating into this subprocess during startup.
+        run_kwargs["start_new_session"] = True
 
     print(f"{PREFIX} Running: {' '.join(command)}")
     try:
