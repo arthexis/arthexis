@@ -692,12 +692,7 @@ def read_migration_server_state(lock_dir: Path) -> dict[str, Any] | None:
     if isinstance(pid, str) and pid.isdigit():
         pid = int(pid)
     if not isinstance(pid, int) or not _is_process_alive(pid):
-        try:
-            state_path.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError:
-            pass
+        _safe_unlink(state_path)
         return None
 
     status = payload.get("status")
@@ -723,6 +718,26 @@ def write_migration_server_state(lock_dir: Path, *, pid: int, status: str) -> Pa
     }
     state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return state_path
+
+
+def _safe_unlink(path: Path) -> bool:
+    """Best-effort file removal that tolerates debugger interrupts.
+
+    During VS Code debugger stop/restart flows on Python 3.13, path string
+    coercion can receive a transient ``KeyboardInterrupt`` while shutdown
+    handlers run. Cleanup should stay best-effort and never mask the original
+    shutdown reason.
+    """
+
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    except KeyboardInterrupt:
+        return False
+    except OSError:
+        return False
+    return True
 
 
 def update_migration_server_status(lock_dir: Path, status: str) -> None:
@@ -769,12 +784,7 @@ def migration_server_state(lock_dir: Path):
         try:
             yield state_path
         finally:
-            try:
-                state_path.unlink()
-            except FileNotFoundError:
-                pass
-            except OSError:
-                pass
+            _safe_unlink(state_path)
 
     return _manager()
 
