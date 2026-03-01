@@ -223,7 +223,7 @@ class NodeFeatureMixin:
         "video-cam",
         "llm-summary",
     }
-    MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
+    MANUAL_FEATURE_SLUGS = {"audio-capture", "cpsim-service"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
     AUTO_ENABLE_FOOTPRINT = NodeFeature.Footprint.LIGHT
 
@@ -493,7 +493,20 @@ class NodeFeatureMixin:
 
     def sync_feature_tasks(self):
         """Synchronize periodic tasks based on active features."""
-        screenshot_enabled = self.has_feature("screenshot-poll")
+        from apps.features.utils import is_suite_feature_enabled
+
+        screenshot_enabled = self.is_local and is_suite_feature_enabled(
+            "screenshot-capture", default=True
+        )
+        if screenshot_enabled:
+            from apps.nodes.feature_checks import feature_checks
+
+            screenshot_feature = NodeFeature.objects.filter(slug="screenshot-poll").first()
+            if screenshot_feature is not None:
+                screenshot_result = feature_checks.run(screenshot_feature, node=self)
+                screenshot_enabled = bool(screenshot_result and screenshot_result.success)
+            else:
+                screenshot_enabled = False
         celery_enabled = self.is_local and self.has_feature("celery-queue")
         llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
         self._sync_screenshot_task(screenshot_enabled)
