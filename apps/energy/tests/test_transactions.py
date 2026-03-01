@@ -4,7 +4,6 @@ import pytest
 
 from apps.energy.models.transactions import generate_missing_reports
 
-pytestmark = pytest.mark.critical
 
 class _DummySchedule:
     def __init__(self):

@@ -97,9 +97,6 @@ def _reset_pending_calls() -> None:
         except Exception:
             pass
     store._pending_call_handles.clear()
-
-
-@pytest.mark.critical
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration

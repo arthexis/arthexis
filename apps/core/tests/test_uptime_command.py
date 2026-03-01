@@ -12,7 +12,6 @@ from django.utils import timezone
 from apps.core.uptime_constants import SUITE_UPTIME_LOCK_MAX_AGE
 from apps.core.management.commands import uptime as uptime_command
 
-pytestmark = pytest.mark.critical
 
 def _write_lock(lock_dir: Path, started_at: datetime) -> Path:
     lock_dir.mkdir(parents=True, exist_ok=True)

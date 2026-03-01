@@ -15,9 +15,6 @@ from apps.sensors.scheduling import (
 )
 from apps.sensors import tasks as sensor_tasks
 from apps.sensors.tasks import sample_thermometers
-
-
-@pytest.mark.critical
 @pytest.mark.django_db
 def test_sample_thermometers_records_reading(monkeypatch, tmp_path: Path):
     """Record a reading by sampling the real temperature file on disk."""

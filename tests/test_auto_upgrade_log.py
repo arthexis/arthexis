@@ -9,7 +9,6 @@ from apps.core.tasks import auto_upgrade as tasks
 from apps.core.system import upgrade
 from apps.core.tasks.auto_upgrade import _project_base_dir
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_project_base_dir_prefers_environment(monkeypatch, settings, tmp_path):

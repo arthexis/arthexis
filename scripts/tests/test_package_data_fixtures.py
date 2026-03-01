@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 import toml
 
-pytestmark = pytest.mark.critical
 
 
 def test_fixture_directories_are_in_package_data() -> None:

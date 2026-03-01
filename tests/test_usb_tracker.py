@@ -15,9 +15,6 @@ from apps.sensors.scheduling import (
     ensure_usb_tracker_poll_task,
 )
 from apps.sensors.tasks import scan_usb_trackers
-
-
-@pytest.mark.critical
 @pytest.mark.django_db
 def test_scan_usb_trackers_triggers_recipe(tmp_path, monkeypatch):
     mount_root = tmp_path / "media"
