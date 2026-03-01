@@ -380,6 +380,95 @@ def create_issue(
     return response
 
 
+def _pull_request_is_open(
+    owner: str,
+    repository: str,
+    *,
+    pull_number: int,
+    headers: Mapping[str, str],
+    timeout: int,
+) -> bool:
+    """Return whether a pull request currently has ``open`` state."""
+
+    url = f"{API_ROOT}/repos/{owner}/{repository}/pulls/{pull_number}"
+    response = None
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    try:
+        if not (200 <= response.status_code < 300):
+            raise GitHubRepositoryError(_extract_error_message(response))
+
+        data = _safe_json(response)
+        if not isinstance(data, Mapping):
+            return False
+        return str(data.get("state") or "").lower() == "open"
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            with contextlib.suppress(Exception):
+                close()
+
+
+def create_pull_request_comment(
+    owner: str,
+    repository: str,
+    *,
+    pull_number: int,
+    token: str,
+    body: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Post a comment on a specific open pull request and return the API response."""
+
+    cleaned_body = body.strip()
+    if not cleaned_body:
+        raise ValueError("Pull request comment body must not be empty")
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    if not _pull_request_is_open(
+        owner,
+        repository,
+        pull_number=pull_number,
+        headers=headers,
+        timeout=timeout,
+    ):
+        raise GitHubRepositoryError(
+            f"Cannot comment on PR #{pull_number} because it is not open"
+        )
+
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{pull_number}/comments"
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json={"body": cleaned_body},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub pull request comment created for %s/%s#%s with status %s",
+        owner,
+        repository,
+        pull_number,
+        response.status_code,
+    )
+    return response
+
+
 @dataclass(slots=True)
 class GitHubIssue:
     """Represents a GitHub issue creation request."""
