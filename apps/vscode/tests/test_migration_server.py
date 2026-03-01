@@ -131,6 +131,31 @@ def test_update_migration_server_status_updates_existing_lock(tmp_path: Path) ->
     assert updated["status"] == migration_server.MIGRATION_STATUS_PROCESSING
 
 
+def test_safe_unlink_handles_keyboard_interrupt(tmp_path: Path) -> None:
+    """Regression: lock cleanup should ignore debugger interrupt races."""
+
+    lock_path = tmp_path / "migration_server.json"
+    lock_path.write_text("{}", encoding="utf-8")
+
+    with mock.patch.object(
+        Path,
+        "unlink",
+        autospec=True,
+        side_effect=KeyboardInterrupt,
+    ):
+        assert migration_server._safe_unlink(lock_path) is False
+
+
+def test_migration_server_state_ignores_unlink_interrupt(tmp_path: Path) -> None:
+    """Regression: context cleanup should not raise on debugger interrupts."""
+
+    lock_dir = tmp_path / ".locks"
+
+    with mock.patch.object(migration_server, "_safe_unlink", return_value=False):
+        with migration_server.migration_server_state(lock_dir):
+            pass
+
+
 
 
 
