@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+
 from apps.vscode import migration_server
 
 
@@ -26,7 +28,7 @@ def test_main_strips_remainder_separator() -> None:
 def test_run_migrations_returns_subprocess_exit_code() -> None:
     """Run result should mirror the subprocess return code."""
 
-    completed = mock.Mock(returncode=3)
+    completed = mock.Mock(returncode=3, stdout="", stderr="")
     with (
         mock.patch.object(migration_server.sys, "platform", "linux"),
         mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run,
@@ -37,6 +39,8 @@ def test_run_migrations_returns_subprocess_exit_code() -> None:
         [migration_server.sys.executable, "manage.py", "migrate"],
         cwd=migration_server.BASE_DIR,
         check=False,
+        capture_output=True,
+        text=True,
         start_new_session=True,
     )
 
@@ -55,7 +59,7 @@ def test_run_migrations_handles_keyboard_interrupt() -> None:
 def test_run_migrations_uses_new_process_group_on_windows() -> None:
     """Windows launches should isolate Ctrl+C signals in a child process group."""
 
-    completed = mock.Mock(returncode=0)
+    completed = mock.Mock(returncode=0, stdout="", stderr="")
     with (
         mock.patch.object(migration_server.sys, "platform", "win32"),
         mock.patch.object(
@@ -72,6 +76,8 @@ def test_run_migrations_uses_new_process_group_on_windows() -> None:
         [migration_server.sys.executable, "manage.py", "migrate"],
         cwd=migration_server.BASE_DIR,
         check=False,
+        capture_output=True,
+        text=True,
         creationflags=0x00000200,
     )
 
@@ -79,7 +85,7 @@ def test_run_migrations_uses_new_process_group_on_windows() -> None:
 def test_run_migrations_starts_new_session_on_posix() -> None:
     """POSIX launches should isolate Ctrl+C signals in a new session."""
 
-    completed = mock.Mock(returncode=0)
+    completed = mock.Mock(returncode=0, stdout="", stderr="")
     with (
         mock.patch.object(migration_server.sys, "platform", "linux"),
         mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run,
@@ -90,8 +96,100 @@ def test_run_migrations_starts_new_session_on_posix() -> None:
         [migration_server.sys.executable, "manage.py", "migrate"],
         cwd=migration_server.BASE_DIR,
         check=False,
+        capture_output=True,
+        text=True,
         start_new_session=True,
     )
+
+
+def test_run_migrations_auto_merges_conflicts() -> None:
+    """Regression: migration runner should merge graph conflicts automatically."""
+
+    conflict = mock.Mock(
+        returncode=1,
+        stdout="",
+        stderr=(
+            "CommandError: Conflicting migrations detected; "
+            "multiple leaf nodes in the migration graph"
+        ),
+    )
+    merged = mock.Mock(returncode=0, stdout="", stderr="")
+    migrated = mock.Mock(returncode=0, stdout="", stderr="")
+    with (
+        mock.patch.object(migration_server.sys, "platform", "linux"),
+        mock.patch.object(
+            migration_server.subprocess,
+            "run",
+            side_effect=[conflict, merged, migrated],
+        ) as run,
+    ):
+        assert migration_server.run_migrations([]) == 0
+
+    assert run.call_count == 3
+    run.assert_any_call(
+        [migration_server.sys.executable, "manage.py", "makemigrations", "--merge", "--noinput"],
+        cwd=migration_server.BASE_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+        start_new_session=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("side_effects", "expected_return_code", "expected_call_count"),
+    [
+        pytest.param(
+            [
+                mock.Mock(
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "CommandError: Conflicting migrations detected; "
+                        "multiple leaf nodes in the migration graph"
+                    ),
+                ),
+                mock.Mock(returncode=2, stdout="", stderr="Merge failed"),
+            ],
+            2,
+            2,
+            id="merge-fails",
+        ),
+        pytest.param(
+            [
+                mock.Mock(
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "CommandError: Conflicting migrations detected; "
+                        "multiple leaf nodes in the migration graph"
+                    ),
+                ),
+                mock.Mock(returncode=0, stdout="", stderr=""),
+                mock.Mock(returncode=3, stdout="", stderr="Another error"),
+            ],
+            3,
+            3,
+            id="post-merge-migrate-fails",
+        ),
+    ],
+)
+def test_run_migrations_handles_conflict_resolution_failures(
+    side_effects: list[mock.Mock], expected_return_code: int, expected_call_count: int
+) -> None:
+    """Auto-merge conflict flows should surface merge/retry failures."""
+
+    with (
+        mock.patch.object(migration_server.sys, "platform", "linux"),
+        mock.patch.object(
+            migration_server.subprocess,
+            "run",
+            side_effect=side_effects,
+        ) as run,
+    ):
+        assert migration_server.run_migrations([]) == expected_return_code
+
+    assert run.call_count == expected_call_count
 
 
 def test_parse_args_accepts_legacy_watcher_flags() -> None:
