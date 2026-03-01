@@ -120,6 +120,27 @@ def test_parse_assignment_tuples_rejects_non_literal_entries(tmp_path: Path) -> 
         check_migration_conflicts._parse_dependencies(migration_path)
 
 
+def test_parse_dependencies_allows_swappable_dependency(tmp_path: Path) -> None:
+    """Django swappable dependencies should be accepted and ignored for local graph checks."""
+
+    migration_path = tmp_path / "migration_with_swappable.py"
+    migration_path.write_text(
+        "from django.conf import settings\n"
+        "from django.db import migrations\n\n"
+        "class Migration(migrations.Migration):\n"
+        "    dependencies = [\n"
+        "        migrations.swappable_dependency(settings.AUTH_USER_MODEL),\n"
+        "        ('widgets', '0001_initial'),\n"
+        "    ]\n"
+        "    operations = []\n",
+        encoding="utf-8",
+    )
+
+    assert check_migration_conflicts._parse_dependencies(migration_path) == [
+        ("widgets", "0001_initial")
+    ]
+
+
 def test_git_changed_app_labels_falls_back_to_local_migrations_when_merge_base_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -147,3 +168,24 @@ def test_git_changed_app_labels_falls_back_to_local_migrations_when_merge_base_m
     monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
 
     assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"widgets"}
+
+
+def test_git_changed_app_labels_handles_non_directory_apps_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fallback scan should fail open when ``apps`` exists but is not a directory."""
+
+    class Result:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    (tmp_path / "apps").write_text("not a directory", encoding="utf-8")
+
+    def fake_run(*_args: object, **_kwargs: object) -> Result:
+        return Result(returncode=1, stderr="no merge base")
+
+    monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
+
+    assert check_migration_conflicts._git_changed_app_labels(tmp_path) == set()

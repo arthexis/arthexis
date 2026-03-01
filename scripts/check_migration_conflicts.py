@@ -95,7 +95,83 @@ def _parse_assignment_tuples(path: Path, attribute_name: str) -> list[tuple[str,
 def _parse_dependencies(path: Path) -> list[tuple[str, str]]:
     """Return literal ``Migration.dependencies`` values from ``path``."""
 
-    return _parse_assignment_tuples(path, "dependencies")
+    try:
+        module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except OSError as exc:
+        raise MigrationParseError(f"Unable to read migration file {path}.") from exc
+    except SyntaxError as exc:
+        raise MigrationParseError(f"Unable to parse migration file {path}: {exc.msg}") from exc
+
+    for node in module.body:
+        if not isinstance(node, ast.ClassDef) or node.name != "Migration":
+            continue
+        for statement in node.body:
+            if not isinstance(statement, ast.Assign):
+                continue
+            for target in statement.targets:
+                if not isinstance(target, ast.Name) or target.id != "dependencies":
+                    continue
+                if not isinstance(statement.value, ast.List):
+                    raise MigrationParseError(
+                        f"{path}: Migration.dependencies must be a literal list of dependencies."
+                    )
+
+                parsed: list[tuple[str, str]] = []
+                for element in statement.value.elts:
+                    if isinstance(element, ast.Tuple) and len(element.elts) == 2:
+                        app_node, name_node = element.elts
+                        if not (
+                            isinstance(app_node, ast.Constant)
+                            and isinstance(app_node.value, str)
+                            and isinstance(name_node, ast.Constant)
+                            and isinstance(name_node.value, str)
+                        ):
+                            raise MigrationParseError(
+                                f"{path}: Migration.dependencies has non-literal entry {ast.dump(element)}; "
+                                "expected (str, str)."
+                            )
+                        parsed.append((app_node.value, name_node.value))
+                        continue
+
+                    if _is_swappable_dependency(element):
+                        # Django-generated migrations often include
+                        # migrations.swappable_dependency(settings.AUTH_USER_MODEL).
+                        # It is dynamic by design and never points to a local
+                        # app migration node by name, so we skip it for static
+                        # graph checks.
+                        continue
+
+                    raise MigrationParseError(
+                        f"{path}: Migration.dependencies has invalid entry {ast.dump(element)}; "
+                        "expected a 2-item tuple of string literals or "
+                        "migrations.swappable_dependency(settings.AUTH_USER_MODEL)."
+                    )
+                return parsed
+
+    return []
+
+
+def _is_swappable_dependency(node: ast.expr) -> bool:
+    """Return whether ``node`` is ``migrations.swappable_dependency(settings.AUTH_USER_MODEL)``."""
+
+    if not isinstance(node, ast.Call) or len(node.args) != 1 or node.keywords:
+        return False
+
+    if not (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "swappable_dependency"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "migrations"
+    ):
+        return False
+
+    arg = node.args[0]
+    return (
+        isinstance(arg, ast.Attribute)
+        and arg.attr == "AUTH_USER_MODEL"
+        and isinstance(arg.value, ast.Name)
+        and arg.value.id == "settings"
+    )
 
 
 def _parse_replaces(path: Path) -> list[tuple[str, str]]:
@@ -261,7 +337,7 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
         # app migration directories rather than failing the entire validation job.
         labels: set[str] = set()
         apps_dir = repo_root / "apps"
-        if not apps_dir.exists():
+        if not apps_dir.exists() or not apps_dir.is_dir():
             return labels
         for app_dir in apps_dir.iterdir():
             if not app_dir.is_dir():
