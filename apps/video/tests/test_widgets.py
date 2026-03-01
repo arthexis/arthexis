@@ -10,7 +10,6 @@ from apps.video.widgets import camera_sidebar_widget
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_camera_sidebar_widget_returns_stream_link_when_feature_enabled(monkeypatch):
     """Camera widget should expose a stream link for the default camera."""
 

@@ -185,7 +185,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "critical" | tee pytest.log
+          : > pytest.log
+          echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
+          echo "=== Integration tests ===" | tee -a pytest.log
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6

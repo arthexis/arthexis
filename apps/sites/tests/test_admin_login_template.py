@@ -39,7 +39,6 @@ def test_admin_index_keeps_branding_badges_and_feedback_button(admin_client):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_admin_index_hides_feedback_button_when_feedback_ingestion_disabled(
     admin_client,
 ):
