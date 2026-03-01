@@ -41,12 +41,9 @@ def ensure_admin_favorites(user) -> None:
         return
 
     model_targets = (
-        ("nodes", "Node"),
-        ("cards", "RFID"),
-        ("ocpp", "Simulator"),
-        ("nginx", "SiteConfiguration"),
         ("ocpp", "Charger"),
-        ("release", "PackageRelease"),
+        ("cards", "RFID"),
+        ("links", "Reference"),
     )
     content_types = []
     for app_label, model_name in model_targets:
