@@ -56,7 +56,10 @@ class Command(BaseCommand):
             rel_path = script_path.relative_to(base_path).as_posix()
             _, was_created = BaseShellScript.all_objects.update_or_create(
                 path=rel_path,
-                defaults={"name": script_path.name},
+                defaults={
+                    "name": script_path.name,
+                    "is_deleted": False,
+                },
             )
             created += int(was_created)
             updated += int(not was_created)
@@ -66,7 +69,11 @@ class Command(BaseCommand):
             rel_path = script_path.relative_to(base_path).as_posix()
             _, was_created = AppShellScript.all_objects.update_or_create(
                 path=rel_path,
-                defaults={"name": script_path.name, "managed_by": manager_app},
+                defaults={
+                    "name": script_path.name,
+                    "managed_by": manager_app,
+                    "is_deleted": False,
+                },
             )
             created += int(was_created)
             updated += int(not was_created)

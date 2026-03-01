@@ -50,6 +50,29 @@ class InventoryShellScriptsCommandTests(TestCase):
         with self.assertRaisesMessage(CommandError, "manager app name cannot be blank"):
             call_command("inventory_shell_scripts", base_path=str(repo_root), manager_app="")
 
+    def test_command_restores_soft_deleted_script_when_rediscovered(self):
+        """Inventory command should undelete records that reappear on disk."""
+
+        repo_root = Path(__file__).resolve().parents[2]
+        app_script = AppShellScript.objects.create(
+            name="common.sh",
+            path="scripts/helpers/common.sh",
+            managed_by=Application.objects.create(name="ops"),
+            is_deleted=True,
+        )
+        base_script = BaseShellScript.objects.create(
+            name="start.sh",
+            path="start.sh",
+            is_deleted=True,
+        )
+
+        call_command("inventory_shell_scripts", base_path=str(repo_root), manager_app="ops")
+
+        app_script.refresh_from_db()
+        base_script.refresh_from_db()
+        self.assertFalse(app_script.is_deleted)
+        self.assertFalse(base_script.is_deleted)
+
 
 class ShellScriptsFixtureCoverageTests(TestCase):
     """Ensure fixture-backed records include representative repository scripts."""

@@ -1,7 +1,6 @@
 [
   {
     "model": "shells.shellscript",
-    "pk": 1,
     "fields": {
       "name": "command.sh",
       "path": "command.sh",
@@ -14,7 +13,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 2,
     "fields": {
       "name": "configure.sh",
       "path": "configure.sh",
@@ -27,7 +25,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 3,
     "fields": {
       "name": "env-refresh.sh",
       "path": "env-refresh.sh",
@@ -40,7 +37,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 4,
     "fields": {
       "name": "install.sh",
       "path": "install.sh",
@@ -53,7 +49,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 5,
     "fields": {
       "name": "resolve.sh",
       "path": "resolve.sh",
@@ -66,7 +61,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 6,
     "fields": {
       "name": "start.sh",
       "path": "start.sh",
@@ -79,7 +73,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 7,
     "fields": {
       "name": "status.sh",
       "path": "status.sh",
@@ -92,7 +85,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 8,
     "fields": {
       "name": "stop.sh",
       "path": "stop.sh",
@@ -105,7 +97,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 9,
     "fields": {
       "name": "uninstall.sh",
       "path": "uninstall.sh",
@@ -118,7 +109,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 10,
     "fields": {
       "name": "upgrade.sh",
       "path": "upgrade.sh",
@@ -131,7 +121,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 11,
     "fields": {
       "name": "benchmark-suite.sh",
       "path": "scripts/benchmark-suite.sh",
@@ -146,7 +135,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 12,
     "fields": {
       "name": "delegated-upgrade.sh",
       "path": "scripts/delegated-upgrade.sh",
@@ -161,7 +149,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 13,
     "fields": {
       "name": "pre-commit-prompt-storage.sh",
       "path": "scripts/git-hooks/pre-commit-prompt-storage.sh",
@@ -176,7 +163,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 14,
     "fields": {
       "name": "pre-commit-test-pr-mark.sh",
       "path": "scripts/git-hooks/pre-commit-test-pr-mark.sh",
@@ -191,7 +177,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 15,
     "fields": {
       "name": "github-canary-deploy.sh",
       "path": "scripts/github-canary-deploy.sh",
@@ -206,7 +191,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 16,
     "fields": {
       "name": "auto-upgrade-service.sh",
       "path": "scripts/helpers/auto-upgrade-service.sh",
@@ -221,7 +205,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 17,
     "fields": {
       "name": "common.sh",
       "path": "scripts/helpers/common.sh",
@@ -236,7 +219,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 18,
     "fields": {
       "name": "desktop_shortcuts.sh",
       "path": "scripts/helpers/desktop_shortcuts.sh",
@@ -251,7 +233,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 19,
     "fields": {
       "name": "env.sh",
       "path": "scripts/helpers/env.sh",
@@ -266,7 +247,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 20,
     "fields": {
       "name": "git_remote.sh",
       "path": "scripts/helpers/git_remote.sh",
@@ -281,7 +261,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 21,
     "fields": {
       "name": "logging.sh",
       "path": "scripts/helpers/logging.sh",
@@ -296,7 +275,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 22,
     "fields": {
       "name": "nginx_maintenance.sh",
       "path": "scripts/helpers/nginx_maintenance.sh",
@@ -311,7 +289,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 23,
     "fields": {
       "name": "ocpp_ops.sh",
       "path": "scripts/helpers/ocpp_ops.sh",
@@ -326,7 +303,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 24,
     "fields": {
       "name": "ports.sh",
       "path": "scripts/helpers/ports.sh",
@@ -341,7 +317,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 25,
     "fields": {
       "name": "predeploy-migrate-orchestrator.sh",
       "path": "scripts/helpers/predeploy-migrate-orchestrator.sh",
@@ -356,7 +331,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 26,
     "fields": {
       "name": "runserver_preflight.sh",
       "path": "scripts/helpers/runserver_preflight.sh",
@@ -371,7 +345,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 27,
     "fields": {
       "name": "service_manager.sh",
       "path": "scripts/helpers/service_manager.sh",
@@ -386,7 +359,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 28,
     "fields": {
       "name": "staticfiles.sh",
       "path": "scripts/helpers/staticfiles.sh",
@@ -401,7 +373,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 29,
     "fields": {
       "name": "suite-uptime-lock.sh",
       "path": "scripts/helpers/suite-uptime-lock.sh",
@@ -416,7 +387,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 30,
     "fields": {
       "name": "systemd_locks.sh",
       "path": "scripts/helpers/systemd_locks.sh",
@@ -431,7 +401,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 31,
     "fields": {
       "name": "timing.sh",
       "path": "scripts/helpers/timing.sh",
@@ -446,7 +415,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 32,
     "fields": {
       "name": "version_marker.sh",
       "path": "scripts/helpers/version_marker.sh",
@@ -461,7 +429,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 33,
     "fields": {
       "name": "watch-upgrade.sh",
       "path": "scripts/helpers/watch-upgrade.sh",
@@ -476,7 +443,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 34,
     "fields": {
       "name": "instrument-nginx.sh",
       "path": "scripts/instrument-nginx.sh",
@@ -491,7 +457,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 35,
     "fields": {
       "name": "ubuntu.sh",
       "path": "scripts/launch/ubuntu.sh",
@@ -506,7 +471,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 36,
     "fields": {
       "name": "ubuntu22.sh",
       "path": "scripts/launch/ubuntu22.sh",
@@ -521,7 +485,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 37,
     "fields": {
       "name": "ubuntu24.sh",
       "path": "scripts/launch/ubuntu24.sh",
@@ -536,7 +499,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 38,
     "fields": {
       "name": "live-server-update.sh",
       "path": "scripts/live-server-update.sh",
@@ -551,7 +513,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 39,
     "fields": {
       "name": "migration-service-start.sh",
       "path": "scripts/migration-service-start.sh",
@@ -566,7 +527,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 40,
     "fields": {
       "name": "nginx-perms.sh",
       "path": "scripts/nginx-perms.sh",
@@ -581,7 +541,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 41,
     "fields": {
       "name": "nmcli-setup.sh",
       "path": "scripts/nmcli-setup.sh",
@@ -596,7 +555,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 42,
     "fields": {
       "name": "resolve_cli.sh",
       "path": "scripts/resolve_cli.sh",
@@ -611,7 +569,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 43,
     "fields": {
       "name": "service-start.sh",
       "path": "scripts/service-start.sh",
@@ -626,7 +583,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 44,
     "fields": {
       "name": "setup-github-runner-canary.sh",
       "path": "scripts/setup-github-runner-canary.sh",
@@ -641,7 +597,6 @@
   },
   {
     "model": "shells.shellscript",
-    "pk": 45,
     "fields": {
       "name": "switch-role.sh",
       "path": "scripts/switch-role.sh",

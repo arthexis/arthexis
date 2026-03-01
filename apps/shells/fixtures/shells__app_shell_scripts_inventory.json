@@ -1,7 +1,6 @@
 [
   {
     "model": "shells.appshellscript",
-    "pk": 1,
     "fields": {
       "name": "benchmark-suite.sh",
       "path": "scripts/benchmark-suite.sh",
@@ -15,7 +14,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 2,
     "fields": {
       "name": "delegated-upgrade.sh",
       "path": "scripts/delegated-upgrade.sh",
@@ -29,7 +27,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 3,
     "fields": {
       "name": "pre-commit-prompt-storage.sh",
       "path": "scripts/git-hooks/pre-commit-prompt-storage.sh",
@@ -43,7 +40,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 4,
     "fields": {
       "name": "pre-commit-test-pr-mark.sh",
       "path": "scripts/git-hooks/pre-commit-test-pr-mark.sh",
@@ -57,7 +53,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 5,
     "fields": {
       "name": "github-canary-deploy.sh",
       "path": "scripts/github-canary-deploy.sh",
@@ -71,7 +66,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 6,
     "fields": {
       "name": "auto-upgrade-service.sh",
       "path": "scripts/helpers/auto-upgrade-service.sh",
@@ -85,7 +79,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 7,
     "fields": {
       "name": "common.sh",
       "path": "scripts/helpers/common.sh",
@@ -99,7 +92,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 8,
     "fields": {
       "name": "desktop_shortcuts.sh",
       "path": "scripts/helpers/desktop_shortcuts.sh",
@@ -113,7 +105,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 9,
     "fields": {
       "name": "env.sh",
       "path": "scripts/helpers/env.sh",
@@ -127,7 +118,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 10,
     "fields": {
       "name": "git_remote.sh",
       "path": "scripts/helpers/git_remote.sh",
@@ -141,7 +131,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 11,
     "fields": {
       "name": "logging.sh",
       "path": "scripts/helpers/logging.sh",
@@ -155,7 +144,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 12,
     "fields": {
       "name": "nginx_maintenance.sh",
       "path": "scripts/helpers/nginx_maintenance.sh",
@@ -169,7 +157,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 13,
     "fields": {
       "name": "ocpp_ops.sh",
       "path": "scripts/helpers/ocpp_ops.sh",
@@ -183,7 +170,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 14,
     "fields": {
       "name": "ports.sh",
       "path": "scripts/helpers/ports.sh",
@@ -197,7 +183,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 15,
     "fields": {
       "name": "predeploy-migrate-orchestrator.sh",
       "path": "scripts/helpers/predeploy-migrate-orchestrator.sh",
@@ -211,7 +196,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 16,
     "fields": {
       "name": "runserver_preflight.sh",
       "path": "scripts/helpers/runserver_preflight.sh",
@@ -225,7 +209,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 17,
     "fields": {
       "name": "service_manager.sh",
       "path": "scripts/helpers/service_manager.sh",
@@ -239,7 +222,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 18,
     "fields": {
       "name": "staticfiles.sh",
       "path": "scripts/helpers/staticfiles.sh",
@@ -253,7 +235,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 19,
     "fields": {
       "name": "suite-uptime-lock.sh",
       "path": "scripts/helpers/suite-uptime-lock.sh",
@@ -267,7 +248,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 20,
     "fields": {
       "name": "systemd_locks.sh",
       "path": "scripts/helpers/systemd_locks.sh",
@@ -281,7 +261,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 21,
     "fields": {
       "name": "timing.sh",
       "path": "scripts/helpers/timing.sh",
@@ -295,7 +274,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 22,
     "fields": {
       "name": "version_marker.sh",
       "path": "scripts/helpers/version_marker.sh",
@@ -309,7 +287,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 23,
     "fields": {
       "name": "watch-upgrade.sh",
       "path": "scripts/helpers/watch-upgrade.sh",
@@ -323,7 +300,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 24,
     "fields": {
       "name": "instrument-nginx.sh",
       "path": "scripts/instrument-nginx.sh",
@@ -337,7 +313,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 25,
     "fields": {
       "name": "ubuntu.sh",
       "path": "scripts/launch/ubuntu.sh",
@@ -351,7 +326,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 26,
     "fields": {
       "name": "ubuntu22.sh",
       "path": "scripts/launch/ubuntu22.sh",
@@ -365,7 +339,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 27,
     "fields": {
       "name": "ubuntu24.sh",
       "path": "scripts/launch/ubuntu24.sh",
@@ -379,7 +352,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 28,
     "fields": {
       "name": "live-server-update.sh",
       "path": "scripts/live-server-update.sh",
@@ -393,7 +365,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 29,
     "fields": {
       "name": "migration-service-start.sh",
       "path": "scripts/migration-service-start.sh",
@@ -407,7 +378,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 30,
     "fields": {
       "name": "nginx-perms.sh",
       "path": "scripts/nginx-perms.sh",
@@ -421,7 +391,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 31,
     "fields": {
       "name": "nmcli-setup.sh",
       "path": "scripts/nmcli-setup.sh",
@@ -435,7 +404,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 32,
     "fields": {
       "name": "resolve_cli.sh",
       "path": "scripts/resolve_cli.sh",
@@ -449,7 +417,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 33,
     "fields": {
       "name": "service-start.sh",
       "path": "scripts/service-start.sh",
@@ -463,7 +430,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 34,
     "fields": {
       "name": "setup-github-runner-canary.sh",
       "path": "scripts/setup-github-runner-canary.sh",
@@ -477,7 +443,6 @@
   },
   {
     "model": "shells.appshellscript",
-    "pk": 35,
     "fields": {
       "name": "switch-role.sh",
       "path": "scripts/switch-role.sh",
