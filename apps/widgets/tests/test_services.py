@@ -79,3 +79,26 @@ def test_render_zone_widgets_respects_required_node_feature(monkeypatch):
     NodeFeatureAssignment.objects.create(node=node, feature=feature)
     rendered = render_zone_widgets(request=request, zone_slug=WidgetZone.ZONE_SIDEBAR)
     assert rendered and "feature-visible" in rendered[0].html
+
+
+def test_sync_registered_widgets_preserves_existing_required_feature_when_slug_missing():
+    feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+
+    @register_widget(
+        slug="camera-widget",
+        name="Camera Widget",
+        zone=WidgetZone.ZONE_SIDEBAR,
+        template_name="widgets/tests/sample.html",
+        required_feature_slug="video-cam",
+    )
+    def _render_camera_widget(**_kwargs):
+        return {"message": "camera"}
+
+    sync_registered_widgets()
+    widget = Widget.objects.get(slug="camera-widget")
+    assert widget.required_feature == feature
+
+    feature.delete()
+    sync_registered_widgets()
+    widget.refresh_from_db()
+    assert widget.required_feature_id is not None

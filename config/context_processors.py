@@ -12,6 +12,11 @@ from django.conf import settings
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
+ALLOWED_ADMIN_BADGE_CALLABLE_PATHS = {
+    "apps.sites.admin_badges.site_badge_data",
+    "apps.sites.admin_badges.node_badge_data",
+    "apps.sites.admin_badges.role_badge_data",
+}
 
 
 logger = logging.getLogger(__name__)
@@ -143,6 +148,9 @@ def site_and_node(request: HttpRequest):
 def _resolve_admin_badge_callable(path: str):
     """Resolve a badge query callable from a dotted path."""
 
+    if path not in ALLOWED_ADMIN_BADGE_CALLABLE_PATHS:
+        raise ValueError(f"Unauthorized badge query path: {path}")
+
     module_path, _, attr_name = path.rpartition(".")
     if not module_path or not attr_name:
         raise ValueError(f"Invalid badge query path: {path}")
@@ -180,6 +188,9 @@ def _build_admin_badges(*, request, site, node, role):
             payload = query_callable(request=request, site=site, node=node, role=role)
         except Exception:
             logger.exception("Failed rendering admin badge %s", badge.slug)
+            payload = {"value": "Unknown", "url": None, "present": False}
+        if not isinstance(payload, dict):
+            logger.warning("Admin badge %s returned a non-dict payload", badge.slug)
             payload = {"value": "Unknown", "url": None, "present": False}
 
         value = payload.get("value", "Unknown")
