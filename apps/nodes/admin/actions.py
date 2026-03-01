@@ -149,9 +149,7 @@ def download_evcs_firmware(modeladmin, request, queryset):
     if "apply" in request.POST:
         form = DownloadFirmwareForm(node, request.POST)
         if form.is_valid():
-            if modeladmin._process_firmware_download(
-                request, node, form.cleaned_data
-            ):
+            if modeladmin._process_firmware_download(request, node, form.cleaned_data):
                 return None
     else:
         form = DownloadFirmwareForm(node)
@@ -184,9 +182,7 @@ def download_evcs_firmware(modeladmin, request, queryset):
         "form": form,
         "media": modeladmin.media + form.media,
     }
-    return TemplateResponse(
-        request, "admin/nodes/node/download_firmware.html", context
-    )
+    return TemplateResponse(request, "admin/nodes/node/download_firmware.html", context)
 
 
 @admin.action(description="Run task")
@@ -226,9 +222,7 @@ def take_screenshots(modeladmin, request, queryset):
         for source in sources:
             try:
                 contact_host = node.get_primary_contact()
-                url = source.format(
-                    node=node, address=contact_host, port=node.port
-                )
+                url = source.format(node=node, address=contact_host, port=node.port)
             except Exception:
                 url = source
             if not url.startswith("http"):
@@ -464,6 +458,11 @@ def enable_selected_features(modeladmin, request, queryset):
     )
     eligible_manual_features = []
     for feature in manual_features:
+        check = feature_checks.get(feature.slug)
+        if check is None:
+            eligible_manual_features.append(feature)
+            continue
+
         result = feature_checks.run(feature, node=node)
         if result is None:
             modeladmin.message_user(
@@ -485,7 +484,9 @@ def enable_selected_features(modeladmin, request, queryset):
         )
         return None
 
-    desired_manual = current_manual | {feature.slug for feature in eligible_manual_features}
+    desired_manual = current_manual | {
+        feature.slug for feature in eligible_manual_features
+    }
     newly_enabled = desired_manual - current_manual
     if not newly_enabled:
         modeladmin.message_user(
@@ -496,7 +497,9 @@ def enable_selected_features(modeladmin, request, queryset):
         return None
 
     node.update_manual_features(desired_manual)
-    display_map = {feature.slug: feature.display for feature in eligible_manual_features}
+    display_map = {
+        feature.slug: feature.display for feature in eligible_manual_features
+    }
     newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
     modeladmin.message_user(
         request,

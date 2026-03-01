@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import import_module
 from pathlib import Path
 import shutil
 from typing import Any, Callable, Dict, Iterable, Optional
@@ -79,19 +78,15 @@ class FeatureCheckRegistry:
             )
         if isinstance(result, tuple) and len(result) >= 2:
             success, message, *rest = result
-            level = rest[0] if rest else (
-                messages.SUCCESS if success else messages.ERROR
+            level = (
+                rest[0] if rest else (messages.SUCCESS if success else messages.ERROR)
             )
             return FeatureCheckResult(bool(success), str(message), int(level))
         if isinstance(result, bool):
-            message = (
-                f"{feature.display} check {'passed' if result else 'failed'}."
-            )
+            message = f"{feature.display} check {'passed' if result else 'failed'}."
             level = messages.SUCCESS if result else messages.ERROR
             return FeatureCheckResult(result, message, level)
-        raise TypeError(
-            f"Unsupported feature check result type: {type(result)!r}"
-        )
+        raise TypeError(f"Unsupported feature check result type: {type(result)!r}")
 
 
 feature_checks = FeatureCheckRegistry()
@@ -207,16 +202,12 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
 
     base_dir = Path(settings.BASE_DIR)
     base_path = target.get_base_path()
-    prereqs = get_llm_summary_prereq_state(
-        base_dir=base_dir, base_path=base_path
-    )
+    prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
     config = get_summary_config()
     model_path = resolve_model_path(config)
     model_path_exists = model_path.exists()
     model_command = (
-        config.model_command
-        or getattr(settings, "LLM_SUMMARY_COMMAND", "")
-        or None
+        config.model_command or getattr(settings, "LLM_SUMMARY_COMMAND", "") or None
     )
 
     details = [
@@ -228,9 +219,7 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         + (model_command if model_command else "unset (fallback summarizer)"),
     ]
 
-    success = (
-        prereqs["lcd_enabled"] and prereqs["celery_enabled"] and config.is_active
-    )
+    success = prereqs["lcd_enabled"] and prereqs["celery_enabled"] and config.is_active
     if success and model_path_exists:
         level = messages.SUCCESS
     else:
@@ -258,7 +247,8 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
 
     playwright_cli = shutil.which("playwright")
     try:
-        import_module("playwright.sync_api")
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
     except ImportError as exc:
         return FeatureCheckResult(
             False,
@@ -267,16 +257,6 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
                 "Playwright is not importable. Install it in this runtime environment. "
                 f"Details: {exc}"
             ),
-            messages.WARNING,
-        )
-
-    try:
-        from playwright.sync_api import Error as PlaywrightError
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:
-        return FeatureCheckResult(
-            False,
-            f"{feature.display} prerequisites missing on {target.hostname}: {exc}",
             messages.WARNING,
         )
 

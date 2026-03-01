@@ -108,7 +108,9 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                     status,
                 )
             )
-        return format_html("<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items)))
+        return format_html(
+            "<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items))
+        )
 
     def _manual_enablement_data(self, feature, node):
         """Return manual toggle metadata for a feature on the given node."""
@@ -245,9 +247,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             request, f"Screenshot saved to {sample.path}", level=messages.SUCCESS
         )
         try:
-            change_url = reverse(
-                "admin:content_contentsample_change", args=[sample.pk]
-            )
+            change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
         except NoReverseMatch:  # pragma: no cover - admin URL always registered
             self.message_user(
                 request,
@@ -310,7 +310,9 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
 
             result = feature_checks.run(feature, node=node)
         except Exception:  # pragma: no cover - defensive
-            logging.exception("Error while running feature check for %s", feature.display)
+            logging.exception(
+                "Error while running feature check for %s", feature.display
+            )
             status = "error"
             message = (
                 f"An error occurred while checking eligibility for {feature.display}."
@@ -441,20 +443,22 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         if should_enable:
             from ..feature_checks import feature_checks
 
-            result = feature_checks.run(feature, node=node)
-            if result is None:
-                return JsonResponse(
-                    {"detail": "Feature eligibility check is not configured"},
-                    status=400,
-                )
-            if not result.success:
-                return JsonResponse(
-                    {
-                        "detail": "Feature is not eligible for enablement",
-                        "message": result.message,
-                    },
-                    status=400,
-                )
+            check = feature_checks.get(feature.slug)
+            if check is not None:
+                result = feature_checks.run(feature, node=node)
+                if result is None:
+                    return JsonResponse(
+                        {"detail": "Feature eligibility check is not configured"},
+                        status=400,
+                    )
+                if not result.success:
+                    return JsonResponse(
+                        {
+                            "detail": "Feature is not eligible for enablement",
+                            "message": result.message,
+                        },
+                        status=400,
+                    )
 
             _, created = NodeFeatureAssignment.objects.update_or_create(
                 node=node,

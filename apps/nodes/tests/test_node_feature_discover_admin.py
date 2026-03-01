@@ -39,7 +39,9 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
 
 
 @pytest.mark.django_db
-def test_discover_manual_toggle_enables_and_disables_manual_features(admin_client, monkeypatch):
+def test_discover_manual_toggle_enables_and_disables_manual_features(
+    admin_client, monkeypatch
+):
     """Manual toggle endpoint should create and remove node-feature assignments."""
 
     node = Node.objects.create(hostname="manual-node", public_endpoint="manual-node")
@@ -94,10 +96,14 @@ def test_discover_manual_toggle_rejects_non_manual_feature(admin_client, monkeyp
 
 
 @pytest.mark.django_db
-def test_discover_progress_does_not_auto_enable_manual_features(admin_client, monkeypatch):
+def test_discover_progress_does_not_auto_enable_manual_features(
+    admin_client, monkeypatch
+):
     """Manual features should remain unassigned after eligible discovery checks."""
 
-    node = Node.objects.create(hostname="manual-progress", public_endpoint="manual-progress")
+    node = Node.objects.create(
+        hostname="manual-progress", public_endpoint="manual-progress"
+    )
     feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
@@ -130,7 +136,9 @@ def test_discover_progress_does_not_auto_enable_manual_features(admin_client, mo
 def test_discover_manual_toggle_rejects_ineligible_feature(admin_client, monkeypatch):
     """Manual toggle endpoint should reject enablement when eligibility fails."""
 
-    node = Node.objects.create(hostname="manual-ineligible", public_endpoint="manual-ineligible")
+    node = Node.objects.create(
+        hostname="manual-ineligible", public_endpoint="manual-ineligible"
+    )
     feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
@@ -163,7 +171,9 @@ def test_discover_manual_toggle_rejects_ineligible_feature(admin_client, monkeyp
 def test_discover_manual_toggle_enables_eligible_feature(admin_client, monkeypatch):
     """Manual toggle endpoint should allow enablement when eligibility succeeds."""
 
-    node = Node.objects.create(hostname="manual-eligible", public_endpoint="manual-eligible")
+    node = Node.objects.create(
+        hostname="manual-eligible", public_endpoint="manual-eligible"
+    )
     feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
@@ -179,6 +189,27 @@ def test_discover_manual_toggle_enables_eligible_feature(admin_client, monkeypat
             messages.SUCCESS,
         ),
     )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
+        {"feature_id": feature.pk, "enabled": "true"},
+    )
+
+    assert response.status_code == 200
+    assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_manual_toggle_allows_manual_feature_without_explicit_check(
+    admin_client, monkeypatch
+):
+    """Manual toggle should allow manual features that do not define explicit eligibility checks."""
+
+    node = Node.objects.create(
+        hostname="manual-default", public_endpoint="manual-default"
+    )
+    feature = NodeFeature.objects.create(slug="cpsim-service", display="CPSIM Service")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     response = admin_client.post(
         reverse("admin:nodes_nodefeature_discover_manual_toggle"),
