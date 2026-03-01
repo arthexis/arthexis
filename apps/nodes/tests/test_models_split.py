@@ -202,3 +202,39 @@ def test_iter_remote_urls_prefers_https_port_443_when_required():
 
     assert "https://arthexis.example/nodes/info/" in urls
     assert "https://arthexis.example:8888/nodes/info/" in urls
+
+
+@pytest.mark.django_db
+def test_detect_auto_feature_enables_taskbar_display_on_windows(monkeypatch, tmp_path):
+    """taskbar-display should auto-enable on Windows platforms."""
+
+    node = Node(
+        hostname="taskbar-node",
+        base_path=str(tmp_path),
+        public_endpoint="taskbar-node",
+    )
+    monkeypatch.setattr("apps.nodes.models.features.platform.system", lambda: "Windows")
+
+    result = node._detect_auto_feature(
+        "taskbar-display", base_dir=tmp_path, base_path=tmp_path
+    )
+
+    assert result is True
+
+
+@pytest.mark.django_db
+def test_detect_auto_feature_disables_taskbar_display_off_windows(monkeypatch, tmp_path):
+    """taskbar-display should remain disabled on non-Windows platforms."""
+
+    node = Node(
+        hostname="taskbar-node",
+        base_path=str(tmp_path),
+        public_endpoint="taskbar-node",
+    )
+    monkeypatch.setattr("apps.nodes.models.features.platform.system", lambda: "Linux")
+
+    result = node._detect_auto_feature(
+        "taskbar-display", base_dir=tmp_path, base_path=tmp_path
+    )
+
+    assert result is False

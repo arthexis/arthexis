@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 import json
 import logging
+import platform
 from pathlib import Path
 import shutil
 import subprocess
@@ -106,6 +107,16 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:video_videodevice_take_snapshot",
             ),
         ),
+        "taskbar-display": (
+            NodeFeatureDefaultAction(
+                label="Taskbar Menus",
+                url_name="admin:taskbar_taskbarmenu_changelist",
+            ),
+            NodeFeatureDefaultAction(
+                label="Taskbar Icons",
+                url_name="admin:taskbar_taskbaricon_changelist",
+            ),
+        ),
     }
 
     class Meta:
@@ -201,6 +212,7 @@ class NodeFeatureMixin:
         "gui-toast",
         "video-cam",
         "llm-summary",
+        "taskbar-display",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
@@ -411,6 +423,8 @@ class NodeFeatureMixin:
                 return False
 
             return bool(config.is_active)
+        if slug == "taskbar-display":
+            return platform.system().lower().startswith("win")
         return False
 
     def refresh_features(self):

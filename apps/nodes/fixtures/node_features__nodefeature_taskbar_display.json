@@ -1,0 +1,19 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "taskbar-display",
+      "display": "Taskbar Display",
+      "roles": [
+        [
+          "Terminal"
+        ],
+        [
+          "Control"
+        ]
+      ]
+    }
+  }
+]

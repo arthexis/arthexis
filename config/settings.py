@@ -455,6 +455,7 @@ LOCAL_APPS = [
     "apps.emails",
     "apps.extensions",
     "apps.desktop",
+    "apps.taskbar",
     "apps.payments",
     "apps.sponsors",
     "apps.links",
