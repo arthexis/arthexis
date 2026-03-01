@@ -7,9 +7,9 @@ from .passkey_credential import PasskeyCredential
 from .user_phone_number import UserPhoneNumber
 
 __all__ = [
+    "ChatProfile",
     "PasskeyCredential",
     "Profile",
-    "ChatProfile",
     "User",
     "UserPhoneNumber",
 ]

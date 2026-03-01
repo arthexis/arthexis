@@ -357,3 +357,31 @@ def test_user_story_form_prefills_chat_opt_in_for_authenticated_user():
     )
 
     assert form.fields["contact_via_chat"].initial is True
+
+
+@pytest.mark.regression
+def test_user_story_form_prefill_chat_opt_in_handles_missing_profile_method():
+    """Form prefill should gracefully handle users without profile helper support."""
+
+    class MissingProfileUser:
+        is_authenticated = True
+
+        @staticmethod
+        def get_username():
+            return "no-profile-helper"
+
+    user = MissingProfileUser()
+
+    form = UserStoryForm(
+        data={
+            "name": user.get_username(),
+            "rating": 4,
+            "comments": "Member feedback",
+            "path": "/member",
+            "messages": "",
+        },
+        files=MultiValueDict(),
+        user=user,
+    )
+
+    assert form.fields["contact_via_chat"].initial is False

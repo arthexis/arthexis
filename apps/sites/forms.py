@@ -7,11 +7,13 @@ from pathlib import Path
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext
 from django.views.decorators.debug import sensitive_variables
 
+from apps.chats.models import ChatAvatar
+from apps.groups.models import SecurityGroup
 from apps.users.models import ChatProfile
 
 from .models import UserStory, UserStoryAttachment
@@ -145,7 +147,10 @@ class UserStoryForm(forms.ModelForm):
 
         if self.user is None or not self.user.is_authenticated:
             return False
-        profile = self.user.get_profile(ChatProfile)
+        try:
+            profile = self.user.get_profile(ChatProfile)
+        except (ObjectDoesNotExist, AttributeError):
+            profile = None
         if profile is None:
             return False
         return bool(profile.contact_via_chat)
@@ -255,11 +260,11 @@ class UserStoryForm(forms.ModelForm):
         if hasattr(owner, "get_username"):
             ChatProfile.objects.update_or_create(user=owner, defaults=defaults)
             return
-        group_name = owner.__class__.__name__.lower()
-        if "group" in group_name:
+        if isinstance(owner, SecurityGroup):
             ChatProfile.objects.update_or_create(group=owner, defaults=defaults)
             return
-        ChatProfile.objects.update_or_create(avatar=owner, defaults=defaults)
+        if isinstance(owner, ChatAvatar):
+            ChatProfile.objects.update_or_create(avatar=owner, defaults=defaults)
 
     def save(self, commit=True):
         """Persist feedback and any uploaded attachments."""

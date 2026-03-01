@@ -3,6 +3,7 @@ import types
 import pytest
 from django.core.cache import cache
 from django.db.utils import OperationalError
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
 from apps.features.models import Feature
@@ -137,3 +138,34 @@ def test_nav_links_chat_disabled_when_staff_chat_bridge_missing(monkeypatch, set
     context = context_processors.nav_links(request)
 
     assert context["chat_enabled"] is False
+
+
+@pytest.mark.django_db
+def test_nav_links_chat_enabled_for_staff_without_site_public_chat(monkeypatch, settings):
+    """Staff should retain admin chat bridge access without requiring visitor opt-in."""
+
+    cache.clear()
+    request = RequestFactory().get("/admin/")
+    request.user = get_user_model().objects.create_user(
+        username="staff-nav",
+        email="staff-nav@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    settings.PAGES_CHAT_ENABLED = True
+
+    monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=False),
+    )
+
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
+
+    context = context_processors.nav_links(request)
+
+    assert context["chat_enabled"] is True

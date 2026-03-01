@@ -4,6 +4,7 @@ from django.apps import apps
 from django.shortcuts import resolve_url
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node
@@ -272,14 +273,16 @@ def nav_links(request):
     if user_is_authenticated:
         try:
             profile = user.get_profile(apps.get_model("users", "ChatProfile"))
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
             profile = None
         user_chat_opt_in = bool(profile and profile.contact_via_chat)
+
+    staff_chat_bridge_allowed = user_is_authenticated and (user_is_staff or user_is_superuser)
 
     chat_enabled = bool(
         getattr(settings, "PAGES_CHAT_ENABLED", False)
         and is_suite_feature_enabled("staff-chat-bridge", default=False)
-        and (site_public_chat_enabled or user_chat_opt_in)
+        and (site_public_chat_enabled or user_chat_opt_in or staff_chat_bridge_allowed)
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
