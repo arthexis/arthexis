@@ -178,8 +178,13 @@ def _requires_db(item: pytest.Item) -> bool:
 
 def pytest_configure(config: pytest.Config) -> None:
     markexpr = getattr(config.option, "markexpr", "")
-    if markexpr and "critical" in markexpr and "regression" not in markexpr:
-        config.option.markexpr = f"({markexpr}) or regression"
+    if markexpr and "critical" in markexpr:
+        expanded = markexpr
+        if "regression" not in expanded:
+            expanded = f"({expanded}) or regression"
+        if "noncritical_regression" not in expanded:
+            expanded = f"({expanded}) and not noncritical_regression"
+        config.option.markexpr = expanded
     config.addinivalue_line(
         "markers",
         "pr_current: dynamically applied to tests whose pytest.mark.pr reference matches --current-pr",
@@ -195,7 +200,11 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
     selected_pr = _normalize_pr_reference(config.getoption("--current-pr"))
     should_extend_markexpr = bool(selected_pr)
     for item in items:
-        if item.get_closest_marker("regression") and not item.get_closest_marker("critical"):
+        if (
+            item.get_closest_marker("regression")
+            and not item.get_closest_marker("critical")
+            and not item.get_closest_marker("noncritical_regression")
+        ):
             item.add_marker("critical")
 
         if selected_pr:

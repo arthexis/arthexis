@@ -10,6 +10,7 @@ from django.urls import reverse
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_log_viewer_displays_full_log_without_slider(admin_client, settings, tmp_path):
     """The admin log viewer should render complete log content without a range slider."""
 
@@ -36,6 +37,7 @@ def test_admin_log_viewer_displays_full_log_without_slider(admin_client, setting
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_uses_short_logs_label(admin_client):
     """The admin dashboard quick action should label the log viewer button as Logs."""
 
@@ -50,6 +52,7 @@ def test_admin_dashboard_uses_short_logs_label(admin_client):
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_has_upgrade_quick_action(admin_client):
     """The admin dashboard quick actions should expose a direct Upgrade button."""
 
@@ -65,6 +68,7 @@ def test_admin_dashboard_has_upgrade_quick_action(admin_client):
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_hides_upgrade_quick_action_for_non_superusers(client, django_user_model):
     """The admin dashboard quick actions should hide the Upgrade button from non-superusers."""
 

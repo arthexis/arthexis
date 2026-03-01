@@ -56,6 +56,7 @@ def test_submission_rejected_when_feedback_ingestion_feature_disabled(client, se
 
 @pytest.mark.django_db
 @pytest.mark.regression
+@pytest.mark.noncritical_regression
 def test_authenticated_non_staff_feedback_limits_files(settings):
     """Non-staff authenticated users should be limited to configured attachment count."""
 
@@ -92,6 +93,7 @@ def test_authenticated_non_staff_feedback_limits_files(settings):
 
 @pytest.mark.django_db
 @pytest.mark.regression
+@pytest.mark.noncritical_regression
 def test_staff_feedback_supports_unlimited_text_and_files(settings):
     """Staff feedback should allow long comments and multiple attachments."""
 
@@ -194,6 +196,7 @@ def test_form_save_attachments_after_manual_instance_save(settings):
 
 @pytest.mark.django_db
 @pytest.mark.regression
+@pytest.mark.noncritical_regression
 def test_attachment_limit_validation_message_uses_singular_for_one(settings):
     """Attachment count validation should use singular noun when the limit is one."""
 

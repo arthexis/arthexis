@@ -33,6 +33,7 @@ class _LinkParser(HTMLParser):
         self.links.append(dict(attrs))
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_token_admin_add_defaults_to_request_user(admin_client, admin_user):
     """Regression: add form defaults the owner to the logged-in admin user."""
 
@@ -59,6 +60,7 @@ def test_remote_action_token_admin_add_defaults_expiration_to_24h(admin_client, 
     assert before <= initial["expires_at"] <= after
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_client, admin_user):
     """Regression: one-click generate tool issues a token for current user and redirects."""
 
@@ -70,6 +72,7 @@ def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_
     assert RemoteActionToken.objects.filter(user=user).exists()
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_token_dashboard_includes_generate_action_link(admin_client):
     """Regression: token model exposes Generate Token as a row action, not a top button."""
 
@@ -90,6 +93,7 @@ def test_remote_action_token_dashboard_includes_generate_action_link(admin_clien
     )
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_token_dashboard_shows_generate_link_for_add_only_admin(client):
     """Regression: dashboard keeps Generate Token visible for add-only users."""
 
@@ -113,6 +117,7 @@ def test_remote_action_token_dashboard_shows_generate_link_for_add_only_admin(cl
     assert any(link.get("href") == action_url for link in parser.links)
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessible(client):
     """Regression: quick generator redirects to add page when changelist is not viewable."""
 
@@ -132,6 +137,7 @@ def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessib
     assert response.headers["Location"] == reverse("admin:actions_remoteactiontoken_add")
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_dashboard_button_opens_preview_page(admin_client):
     """Regression: dashboard Actions button opens an OpenAPI preview page first."""
 
@@ -143,6 +149,7 @@ def test_remote_action_dashboard_button_opens_preview_page(admin_client):
     assert "Download YAML" in content
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_openapi_download_requires_explicit_query_param(admin_client):
     """Regression: OpenAPI endpoint only downloads when explicitly requested."""
 
@@ -156,6 +163,7 @@ def test_remote_action_openapi_download_requires_explicit_query_param(admin_clie
     assert response.headers["Content-Disposition"] == 'attachment; filename="my-actions-openapi.yaml"'
 
 
+@pytest.mark.noncritical_regression
 def test_remote_action_openapi_forbidden_for_unprivileged_staff(client):
     """Regression: OpenAPI preview and download require RemoteAction view/change rights."""
 

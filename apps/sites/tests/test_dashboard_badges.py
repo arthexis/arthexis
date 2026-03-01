@@ -10,6 +10,7 @@ from apps.counters.models import DashboardRule
 
 pytestmark = pytest.mark.critical
 
+@pytest.mark.noncritical_regression
 class DashboardBadgeTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()

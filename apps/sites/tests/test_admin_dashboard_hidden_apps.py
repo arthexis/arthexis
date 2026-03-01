@@ -7,6 +7,7 @@ from django.urls import reverse
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_renders_hide_controls(admin_client):
     """Admin dashboard app headers should expose per-app hide controls."""
 
@@ -21,6 +22,7 @@ def test_admin_dashboard_renders_hide_controls(admin_client):
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_bootstraps_client_side_hidden_app_filter(admin_client):
     """Dashboard should include client bootstrap logic for hidden app filtering."""
 
@@ -36,6 +38,7 @@ def test_admin_dashboard_bootstraps_client_side_hidden_app_filter(admin_client):
 @pytest.mark.django_db
 @pytest.mark.regression
 @pytest.mark.integration
+@pytest.mark.noncritical_regression
 def test_admin_app_index_does_not_render_hide_controls(admin_client):
     """Per-app index should not render hide controls without dashboard visibility JS."""
 

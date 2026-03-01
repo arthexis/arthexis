@@ -42,6 +42,7 @@ def test_is_local_request_ignores_forwarded_for_header(monkeypatch, rf):
     assert live_stats.is_local_request(request) is False
 
 
+@pytest.mark.noncritical_regression
 def test_admin_index_omits_pyxel_button(client, django_user_model, monkeypatch):
     """Dashboard no longer renders the old top-row Pyxel button."""
 
@@ -59,6 +60,7 @@ def test_admin_index_omits_pyxel_button(client, django_user_model, monkeypatch):
     assert b"value=\"Pyxel\"" not in response.content
 
 
+@pytest.mark.noncritical_regression
 def test_open_live_stats_view_launches_subprocess_for_local_request(
     client,
     django_user_model,
@@ -88,6 +90,7 @@ def test_open_live_stats_view_launches_subprocess_for_local_request(
     assert called["value"] is True
 
 
+@pytest.mark.noncritical_regression
 def test_open_live_stats_view_blocks_remote_request(client, django_user_model, monkeypatch):
     """The launcher endpoint returns forbidden for remote client addresses."""
 
@@ -143,6 +146,7 @@ def test_launch_live_stats_subprocess_returns_running_process(monkeypatch):
     assert returned_process is process
 
 
+@pytest.mark.noncritical_regression
 def test_pyxel_changelist_exposes_open_viewport_action(client, django_user_model, monkeypatch):
     """Pyxel changelist should render the Open Viewport action in object tools."""
 
@@ -173,6 +177,7 @@ def test_pyxel_changelist_exposes_open_viewport_action(client, django_user_model
 
 
 
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_model_row_includes_open_viewport_link(
     client, django_user_model, monkeypatch
 ):
@@ -193,6 +198,7 @@ def test_admin_dashboard_model_row_includes_open_viewport_link(
     assert reverse("admin:pyxel_pyxelviewport_changelist") in content
     assert "Open Viewport" in content
 
+@pytest.mark.noncritical_regression
 def test_open_viewport_view_uses_default_when_multiple(client, django_user_model, monkeypatch):
     """Open Viewport launches the default viewport when more than one exists."""
 
@@ -241,6 +247,7 @@ def test_open_viewport_view_uses_default_when_multiple(client, django_user_model
     assert called["slug"] == default_viewport.slug
 
 
+@pytest.mark.noncritical_regression
 def test_open_viewport_view_by_pk_launches_requested_viewport(client, django_user_model, monkeypatch):
     """Object-level action should launch the specific viewport represented by the change form."""
 

@@ -19,6 +19,7 @@ def test_admin_user_tools_omits_actions_spec_link(admin_client):
     assert "My Actions Spec" not in content
 
 
+@pytest.mark.noncritical_regression
 def test_admin_user_tools_password_label_is_shortened(admin_client):
     """Top user-tools row should show the shortened Password link label."""
 
@@ -30,6 +31,7 @@ def test_admin_user_tools_password_label_is_shortened(admin_client):
     assert 'Change password' not in content
 
 
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_actions_row_includes_actions_button(admin_client):
     """Second-row dashboard actions should include an Actions button."""
 
@@ -41,6 +43,7 @@ def test_admin_dashboard_actions_row_includes_actions_button(admin_client):
     assert expected_button in response.content.decode()
 
 
+@pytest.mark.noncritical_regression
 def test_admin_dashboard_actions_row_omits_pyxel_button(admin_client, monkeypatch):
     """Dashboard action row should no longer show the legacy Pyxel top-row button."""
 
