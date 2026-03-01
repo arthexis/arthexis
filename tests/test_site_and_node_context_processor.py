@@ -11,7 +11,6 @@ def _raise_disallowed_host():
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_site_and_node_recovers_from_disallowed_host(monkeypatch):
     """Ensure badge context generation does not fail when host validation fails."""
     request = RequestFactory().get("/admin/", HTTP_HOST="invalid.example:8888")
@@ -24,7 +23,6 @@ def test_site_and_node_recovers_from_disallowed_host(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_site_and_node_disallowed_host_uses_ipv6_literal(monkeypatch):
     """Bare IPv6 fallback should preserve the literal instead of truncating it."""
     request = RequestFactory().get("/admin/", HTTP_HOST="::1")
@@ -37,7 +35,6 @@ def test_site_and_node_disallowed_host_uses_ipv6_literal(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_site_and_node_disallowed_host_strips_ipv6_port(monkeypatch):
     """Bare IPv6 fallback with :port strips a trailing numeric segment as a port.
 
@@ -54,7 +51,6 @@ def test_site_and_node_disallowed_host_strips_ipv6_port(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_site_and_node_disallowed_host_strips_bracketed_ipv6_port(monkeypatch):
     """Canonical bracketed IPv6 host with :port should normalize to the bare IPv6."""
     request = RequestFactory().get("/admin/", HTTP_HOST="[::1]:8080")
@@ -67,7 +63,6 @@ def test_site_and_node_disallowed_host_strips_bracketed_ipv6_port(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_site_and_node_disallowed_host_rejects_unsafe_header(monkeypatch):
     """Unsafe host characters should not be returned into the template context."""
     request = RequestFactory().get("/admin/", HTTP_HOST='bad"><script>alert(1)</script>')
@@ -80,7 +75,6 @@ def test_site_and_node_disallowed_host_rejects_unsafe_header(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_site_and_node_disallowed_host_falls_back_to_server_name(monkeypatch):
     """SERVER_NAME is used when HTTP_HOST is absent and get_host raises."""
     request = RequestFactory().get("/admin/")
