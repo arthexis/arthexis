@@ -77,7 +77,7 @@ def test_search_orders_for_selected_action_renders_matching_orders(
     assert "Odoo line" in follow_response.rendered_content
 
 
-@pytest.mark.regression
+@pytest.mark.integration
 @pytest.mark.django_db
 def test_search_orders_for_selected_action_requires_odoo_link(admin_client, admin_user):
     """The action shows an error when selected products have no linked Odoo IDs."""
@@ -118,7 +118,7 @@ def test_search_orders_for_selected_action_requires_odoo_link(admin_client, admi
     )
 
 
-@pytest.mark.regression
+@pytest.mark.integration
 @pytest.mark.django_db
 def test_search_orders_view_accepts_post_selected_action(admin_client, admin_user, monkeypatch):
     """The dedicated view accepts POSTed admin selections for preview compatibility."""
@@ -176,7 +176,7 @@ def test_search_orders_view_accepts_post_selected_action(admin_client, admin_use
     assert "S0001" in response.rendered_content
 
 
-@pytest.mark.regression
+@pytest.mark.integration
 @pytest.mark.django_db
 def test_load_employees_changelist_action_posts_to_import_endpoint(admin_client, admin_user):
     """The changelist object action endpoint redirects to the import view."""
@@ -198,7 +198,7 @@ def test_load_employees_changelist_action_posts_to_import_endpoint(admin_client,
     assert response.status_code == 302
     assert response.url == reverse("admin:odoo_odooemployee_load_employees")
 
-@pytest.mark.regression
+@pytest.mark.integration
 @pytest.mark.django_db
 def test_load_employees_action_creates_missing_odoo_profiles(admin_client, admin_user, monkeypatch):
     """The Odoo employee tool action creates missing local users and profiles."""
@@ -260,7 +260,7 @@ def test_load_employees_action_creates_missing_odoo_profiles(admin_client, admin
     assert OdooEmployee.objects.filter(host=profile.host, database=profile.database).count() == 3
 
 
-@pytest.mark.regression
+@pytest.mark.integration
 @pytest.mark.django_db
 def test_load_employees_action_requires_verified_profile(admin_client, admin_user, monkeypatch):
     """The tool action redirects without syncing when Odoo credentials are not verified."""
@@ -283,7 +283,7 @@ def test_load_employees_action_requires_verified_profile(admin_client, admin_use
     assert OdooEmployee.objects.count() == 1
 
 
-@pytest.mark.regression
+@pytest.mark.integration
 @pytest.mark.django_db
 def test_load_employees_action_rejects_get_requests(admin_client, admin_user, monkeypatch):
     """The import endpoint only performs sync when called with POST."""
