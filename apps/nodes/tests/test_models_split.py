@@ -225,6 +225,10 @@ def test_refresh_features_does_not_auto_assign_heavy_feature(tmp_path):
     locks_dir.mkdir()
     (locks_dir / "celery.lck").write_text("1")
 
+    assert node._detect_auto_feature(
+        "celery-queue", base_dir=tmp_path, base_path=tmp_path
+    ) is True
+
     node.refresh_features()
 
     assert not node.features.filter(pk=feature.pk).exists()
