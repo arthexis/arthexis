@@ -181,19 +181,6 @@ def favorite_list(request):
         .order_by("priority", "pk")
     )
     if request.method == "POST":
-        move_value = request.POST.get("move", "")
-        move_direction, _, move_pk = move_value.partition(":")
-        if move_direction in {"up", "down"} and move_pk:
-            try:
-                parsed_move_pk = int(move_pk)
-            except (TypeError, ValueError):
-                parsed_move_pk = None
-            if parsed_move_pk is not None:
-                with transaction.atomic():
-                    _reorder_favorites(request.user, parsed_move_pk, move_direction)
-                clear_user_favorites_cache(request.user)
-                return redirect("admin:favorite_list")
-
         ContentType.objects.clear_cache()
         selected = set(request.POST.getlist("user_data"))
         for fav in favorites:
@@ -210,6 +197,18 @@ def favorite_list(request):
 
             if update_fields:
                 fav.save(update_fields=update_fields)
+
+        move_value = request.POST.get("move", "")
+        move_direction, _, move_pk = move_value.partition(":")
+        if move_direction in {"up", "down"} and move_pk:
+            try:
+                parsed_move_pk = int(move_pk)
+            except (TypeError, ValueError):
+                parsed_move_pk = None
+            if parsed_move_pk is not None:
+                with transaction.atomic():
+                    _reorder_favorites(request.user, parsed_move_pk, move_direction)
+
         clear_user_favorites_cache(request.user)
         return redirect("admin:favorite_list")
     return render(request, "admin/favorite_list.html", {"favorites": favorites})

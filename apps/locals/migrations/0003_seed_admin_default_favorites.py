@@ -1,9 +1,8 @@
-from django.apps import apps
 from django.conf import settings
 from django.db import migrations
 
 
-def _get_content_types(content_type_model):
+def _get_content_types(content_type_model, using_alias):
     """Return content types for default admin favorites when models exist."""
 
     targets = (
@@ -13,7 +12,7 @@ def _get_content_types(content_type_model):
     )
     content_types = []
     for app_label, model in targets:
-        content_type = content_type_model.objects.filter(
+        content_type = content_type_model.objects.using(using_alias).filter(
             app_label=app_label,
             model=model,
         ).first()
@@ -25,18 +24,18 @@ def _get_content_types(content_type_model):
 def seed_admin_default_favorites(apps_registry, schema_editor):
     """Seed admin favorites for Charge Points, RFIDs, and References."""
 
-    del schema_editor
+    using_alias = schema_editor.connection.alias
     user_model = apps_registry.get_model(settings.AUTH_USER_MODEL)
     favorite_model = apps_registry.get_model("locals", "Favorite")
     content_type_model = apps_registry.get_model("contenttypes", "ContentType")
 
-    admin_user = user_model.objects.filter(username="admin").first()
+    admin_user = user_model.objects.using(using_alias).filter(username="admin").first()
     if admin_user is None:
         return
 
-    content_types = _get_content_types(content_type_model)
+    content_types = _get_content_types(content_type_model, using_alias)
     for priority, content_type in enumerate(content_types):
-        favorite_model.objects.get_or_create(
+        favorite_model.objects.using(using_alias).get_or_create(
             user_id=admin_user.pk,
             content_type_id=content_type.pk,
             defaults={
@@ -50,21 +49,21 @@ def seed_admin_default_favorites(apps_registry, schema_editor):
 def unseed_admin_default_favorites(apps_registry, schema_editor):
     """Remove seeded default admin favorites created by this migration."""
 
-    del schema_editor
+    using_alias = schema_editor.connection.alias
     user_model = apps_registry.get_model(settings.AUTH_USER_MODEL)
     favorite_model = apps_registry.get_model("locals", "Favorite")
     content_type_model = apps_registry.get_model("contenttypes", "ContentType")
 
-    admin_user = user_model.objects.filter(username="admin").first()
+    admin_user = user_model.objects.using(using_alias).filter(username="admin").first()
     if admin_user is None:
         return
 
-    content_types = _get_content_types(content_type_model)
+    content_types = _get_content_types(content_type_model, using_alias)
     content_type_ids = [content_type.pk for content_type in content_types]
     if not content_type_ids:
         return
 
-    favorite_model.objects.filter(
+    favorite_model.objects.using(using_alias).filter(
         user_id=admin_user.pk,
         content_type_id__in=content_type_ids,
         is_seed_data=True,

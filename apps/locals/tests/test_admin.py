@@ -161,6 +161,41 @@ class FavoriteListViewTests(TestCase):
         self.assertEqual(second.priority, 0)
         self.assertEqual(first.priority, 1)
 
+    def test_post_move_submits_inline_edits_before_reorder(self):
+        """Regression: moving should not discard label/user-data edits in same submit."""
+
+        first = Favorite.objects.create(
+            user=self.user,
+            content_type=self.content_type,
+            custom_label="First",
+            priority=0,
+            user_data=False,
+        )
+        second = Favorite.objects.create(
+            user=self.user,
+            content_type=ContentType.objects.get_for_model(get_user_model()),
+            custom_label="Second",
+            priority=1,
+            user_data=False,
+        )
+
+        response = self.client.post(
+            reverse("admin:favorite_list"),
+            {
+                "move": f"up:{second.pk}",
+                f"custom_label_{second.pk}": "Renamed",
+                "user_data": [str(second.pk)],
+            },
+        )
+
+        self.assertRedirects(response, reverse("admin:favorite_list"))
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(second.priority, 0)
+        self.assertEqual(first.priority, 1)
+        self.assertEqual(second.custom_label, "Renamed")
+        self.assertTrue(second.user_data)
+
     def test_get_renders_app_and_seed_data_columns(self):
         """Regression: favorites list should expose app and seed data columns."""
 
