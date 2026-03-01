@@ -72,6 +72,7 @@ jobs:
       - name: Validate migrations
         run: |
           source .venv/bin/activate
+          python scripts/check_migration_conflicts.py "${{ github.event.pull_request.base.sha }}"
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
       - name: Create docs admin user
@@ -171,6 +172,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
+          python scripts/check_migration_conflicts.py "${{ github.event.pull_request.base.sha }}"
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
       - name: Create docs admin user
