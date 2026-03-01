@@ -117,7 +117,7 @@ PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 DEBUGGER_INTERRUPT_RETRY_LIMIT = 1
 
 
-def _safe_print(*values: object, sep: str = " ", end: str = "\n") -> None:
+def _safe_print(*values: object, sep: str = " ", end: str = "\n", file=None, flush: bool = False) -> None:
     """Best-effort ``print`` that ignores interrupts while reporting status.
 
     The migration server can receive a debugger-triggered ``KeyboardInterrupt``
@@ -126,7 +126,7 @@ def _safe_print(*values: object, sep: str = " ", end: str = "\n") -> None:
     """
 
     try:
-        print(*values, sep=sep, end=end)
+        print(*values, sep=sep, end=end, file=file, flush=flush)
     except (KeyboardInterrupt, BrokenPipeError, OSError):
         return
 
