@@ -16,6 +16,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
+from apps.app.models import Application
 
 from .models import Feature, FeatureNote, FeatureTest
 
@@ -45,6 +46,39 @@ class FeatureNoteInline(admin.TabularInline):
     }
 
 
+class SourceAppListFilter(admin.SimpleListFilter):
+    """Filter suite features by source app values that are currently in use."""
+
+    title = _("From app")
+    parameter_name = "main_app"
+
+    def lookups(self, request, model_admin):
+        """Return app choices that are referenced by at least one suite feature."""
+
+        del request, model_admin
+
+        source_app_ids = (
+            Feature.objects.exclude(main_app__isnull=True)
+            .values_list("main_app_id", flat=True)
+            .distinct()
+        )
+        apps = Application.objects.filter(pk__in=source_app_ids).order_by("name")
+        return [(str(app.pk), app.display_name) for app in apps]
+
+    def queryset(self, request, queryset):
+        """Constrain changelist rows to the selected source app id."""
+
+        del request
+        value = self.value()
+        if not value:
+            return queryset
+        try:
+            app_id = int(value)
+        except ValueError:
+            return queryset.none()
+        return queryset.filter(main_app_id=app_id)
+
+
 @admin.register(Feature)
 class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     change_list_template = "django_object_actions/change_list.html"
@@ -59,7 +93,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         "node_feature",
         "owner_label",
     )
-    list_filter = ("source", "is_enabled", "main_app", "node_feature")
+    list_filter = ("source", "is_enabled", SourceAppListFilter, "node_feature")
     search_fields = ("display", "slug", "summary")
     readonly_fields = ("source",)
     fieldsets = (
