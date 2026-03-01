@@ -65,7 +65,7 @@ jobs:
             venv-${{ runner.os }}-
       - name: Validate pyproject dependency ordering
         run: |
-          python scripts/sort_pyproject_deps.py --check
+          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
@@ -150,7 +150,7 @@ jobs:
             venv-${{ runner.os }}-
       - name: Validate pyproject dependency ordering
         run: |
-          python scripts/sort_pyproject_deps.py --check
+          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Install from default branch
         run: |
           ./install.sh --no-start
@@ -160,7 +160,7 @@ jobs:
           clean: false
       - name: Validate pyproject dependency ordering (PR)
         run: |
-          python scripts/sort_pyproject_deps.py --check
+          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Apply upgrade
         run: |
           set -Eeuo pipefail
