@@ -12,6 +12,8 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext
 from django.views.decorators.debug import sensitive_variables
 
+from apps.users.models import ChatProfile
+
 from .models import UserStory, UserStoryAttachment
 
 
@@ -88,10 +90,14 @@ class UserStoryForm(forms.ModelForm):
     """Feedback form used on public and admin pages."""
 
     attachments = MultipleFileField(required=False)
+    contact_via_chat = forms.BooleanField(
+        required=False,
+        label=_("I would like to be contacted via chat"),
+    )
 
     class Meta:
         model = UserStory
-        fields = ("name", "rating", "comments", "path", "messages")
+        fields = ("name", "rating", "comments", "path", "messages", "contact_via_chat")
         widgets = {
             "path": forms.HiddenInput(),
             "comments": forms.Textarea(attrs={"rows": 4}),
@@ -132,6 +138,17 @@ class UserStoryForm(forms.ModelForm):
             choices=[(i, str(i)) for i in range(1, 6)]
         )
         self.fields["attachments"].label = _("Attachments")
+        self.fields["contact_via_chat"].initial = self.get_initial_chat_preference()
+
+    def get_initial_chat_preference(self) -> bool:
+        """Return stored chat preference for the current authenticated user."""
+
+        if self.user is None or not self.user.is_authenticated:
+            return False
+        profile = self.user.get_profile(ChatProfile)
+        if profile is None:
+            return False
+        return bool(profile.contact_via_chat)
 
     def get_comment_limit(self) -> int | None:
         """Return comment length limit for the current user, or None when unlimited."""
@@ -226,12 +243,31 @@ class UserStoryForm(forms.ModelForm):
     def clean_messages(self):
         return (self.cleaned_data.get("messages") or "").strip()
 
+    def update_chat_preference(self, *, owner, contact_via_chat: bool) -> None:
+        """Persist chat preference for an owner using a Chat Profile record."""
+
+        if owner is None:
+            return
+        defaults = {
+            "contact_via_chat": bool(contact_via_chat),
+            "is_enabled": True,
+        }
+        if hasattr(owner, "get_username"):
+            ChatProfile.objects.update_or_create(user=owner, defaults=defaults)
+            return
+        group_name = owner.__class__.__name__.lower()
+        if "group" in group_name:
+            ChatProfile.objects.update_or_create(group=owner, defaults=defaults)
+            return
+        ChatProfile.objects.update_or_create(avatar=owner, defaults=defaults)
+
     def save(self, commit=True):
         """Persist feedback and any uploaded attachments."""
 
         instance = super().save(commit=False)
         if self.user is not None and self.user.is_authenticated:
             instance.user = self.user
+        instance.contact_via_chat = bool(self.cleaned_data.get("contact_via_chat"))
         if commit:
             instance.save()
             self.save_attachments()

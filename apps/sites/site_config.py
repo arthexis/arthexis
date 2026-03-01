@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 
 _FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
     (
+        "enable_public_chat",
+        lambda: models.BooleanField(
+            default=False,
+            db_default=False,
+            verbose_name=_("Enable public chat"),
+            help_text=_(
+                "Allow the chat button for all visitors on this site, including guests."
+            ),
+        ),
+    ),
+    (
         "managed",
         lambda: models.BooleanField(
             default=False,

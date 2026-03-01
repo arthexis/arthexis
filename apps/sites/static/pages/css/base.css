@@ -455,6 +455,15 @@ body.user-story-open {
   color: var(--bs-secondary-color);
 }
 
+
+.user-story-chat-optin {
+  padding-inline: 0.35rem;
+}
+
+.user-story-chat-optin .form-check-input {
+  margin-inline: 0.2rem;
+}
+
 .user-story-rating input {
   position: absolute;
   opacity: 0;

@@ -1,5 +1,6 @@
 from utils.sites import get_site
 from django.urls import Resolver404, resolve
+from django.apps import apps
 from django.shortcuts import resolve_url
 from django.conf import settings
 from django.core.cache import cache
@@ -85,7 +86,8 @@ def nav_links(request):
         cache_key = (
             f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
             f"interface:{int(operator_interface_mode)}:"
-            f"feedback:{int(feedback_ingestion_enabled)}"
+            f"feedback:{int(feedback_ingestion_enabled)}:"
+            f"public_chat:{int(bool(getattr(site, 'enable_public_chat', False)))}"
         )
         cached = cache.get(cache_key)
         if cached:
@@ -265,9 +267,19 @@ def nav_links(request):
     except (OperationalError, ProgrammingError):
         header_references = []
 
+    site_public_chat_enabled = bool(getattr(site, "enable_public_chat", False))
+    user_chat_opt_in = False
+    if user_is_authenticated:
+        try:
+            profile = user.get_profile(apps.get_model("users", "ChatProfile"))
+        except Exception:
+            profile = None
+        user_chat_opt_in = bool(profile and profile.contact_via_chat)
+
     chat_enabled = bool(
         getattr(settings, "PAGES_CHAT_ENABLED", False)
         and is_suite_feature_enabled("staff-chat-bridge", default=False)
+        and (site_public_chat_enabled or user_chat_opt_in)
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
@@ -310,6 +322,7 @@ def nav_links(request):
         "site_template": site_template,
         "operator_interface_mode": operator_interface_mode,
         "feedback_ingestion_enabled": feedback_ingestion_enabled,
+        "chat_opt_in_checked": user_chat_opt_in,
         "user_story_attachment_limit": int(
             getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
         ),

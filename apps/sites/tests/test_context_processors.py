@@ -84,22 +84,28 @@ def test_nav_links_hides_landings_with_disabled_required_features(monkeypatch):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("is_enabled", "expected_chat_enabled"),
+    ("is_enabled", "enable_public_chat", "expected_chat_enabled"),
     [
-        (False, False),
-        (True, True),
+        (False, True, False),
+        (True, False, False),
+        (True, True, True),
     ],
 )
-def test_nav_links_chat_enabled_uses_staff_chat_bridge_suite_feature(
-    monkeypatch, settings, is_enabled, expected_chat_enabled
+def test_nav_links_chat_enabled_requires_feature_and_site_or_profile(
+    monkeypatch, settings, is_enabled, enable_public_chat, expected_chat_enabled
 ):
-    """Regression: chat enablement should follow Staff Chat Bridge suite feature state."""
+    """Regression: chat enablement requires suite feature and a site/user opt-in signal."""
 
     cache.clear()
     request = RequestFactory().get("/")
     settings.PAGES_CHAT_ENABLED = True
 
     monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=enable_public_chat),
+    )
 
     Feature.objects.update_or_create(
         slug="staff-chat-bridge",
@@ -120,6 +126,11 @@ def test_nav_links_chat_disabled_when_staff_chat_bridge_missing(monkeypatch, set
     settings.PAGES_CHAT_ENABLED = True
 
     monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=True),
+    )
 
     Feature.objects.filter(slug="staff-chat-bridge").delete()
 

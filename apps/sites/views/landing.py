@@ -313,6 +313,11 @@ def submit_user_story(request):
             story.language_code = language_code
         story.save()
         form.save_attachments()
+        if request.user.is_authenticated:
+            form.update_chat_preference(
+                owner=request.user,
+                contact_via_chat=bool(form.cleaned_data.get("contact_via_chat")),
+            )
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)
