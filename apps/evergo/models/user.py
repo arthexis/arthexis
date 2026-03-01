@@ -109,7 +109,7 @@ class EvergoUser(Profile):
 
     profile_fields = ("evergo_email", "evergo_password")
 
-    evergo_email = models.EmailField(blank=True)
+    evergo_email = models.EmailField()
     evergo_password = EncryptedCharField(max_length=255, blank=True)
     dashboard_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
@@ -138,6 +138,12 @@ class EvergoUser(Profile):
     class Meta:
         verbose_name = "Evergo Contractor"
         verbose_name_plural = "Evergo Contractors"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(evergo_email=""),
+                name="evergo_evergouser_email_non_empty",
+            ),
+        ]
 
     def __str__(self) -> str:
         """Return a readable identifier for admin lists."""
