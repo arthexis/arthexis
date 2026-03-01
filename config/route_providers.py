@@ -13,7 +13,7 @@ from typing import Iterable
 from django.apps import apps
 from django.conf import settings
 from django.urls import include, path
-from django.urls.resolvers import URLPattern
+from django.urls.resolvers import URLPattern, URLResolver
 
 
 def _iter_project_apps() -> Iterable:
@@ -40,6 +40,36 @@ def _include_if_exists(app_config, module_suffix: str, prefix: str):
     return path(prefix, include(module_name))
 
 
+def _patterns_include_module(
+    patterns: Iterable[URLPattern | URLResolver], module_name: str
+) -> bool:
+    """Return whether ``patterns`` already include ``module_name``.
+
+    ``django.urls.include`` may store the imported URLConf in ``urlconf_name``
+    either as:
+
+    * a dotted module path string, or
+    * a tuple of ``(module, app_name, namespace)``.
+
+    We normalize both forms so route-provider fallback includes do not mount the
+    same app URLConf more than once.
+    """
+
+    for pattern in patterns:
+        urlconf = getattr(pattern, "urlconf_name", None)
+        candidates = [urlconf]
+        if isinstance(urlconf, tuple) and urlconf:
+            candidates.append(urlconf[0])
+
+        for candidate in candidates:
+            if candidate == module_name:
+                return True
+
+            if hasattr(candidate, "__name__") and candidate.__name__ == module_name:
+                return True
+    return False
+
+
 def autodiscovered_route_patterns() -> list[URLPattern]:
     """Collect root route providers from project apps.
 
@@ -47,8 +77,10 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
     - ``apps/<app>/routes.py`` exporting ``ROOT_URLPATTERNS``.
 
     Compatibility fallback:
-    - Also include legacy ``urls`` under ``/<app_label>/`` and optional
-      ``api.urls`` under ``/<app_label>/api/`` when present.
+    - Include legacy ``urls`` under ``/<app_label>/`` when ``routes.py`` is
+      absent, or when ``routes.py`` does not already mount that app's
+      ``urls`` module.
+    - Include optional ``api.urls`` under ``/<app_label>/api/`` when present.
     """
 
     patterns: list[URLPattern] = []
@@ -59,7 +91,9 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
         except ModuleNotFoundError:
             routes_module = None
 
-        if routes_module is not None:
+        has_routes_module = routes_module is not None
+        root_patterns: list[URLPattern | URLResolver] = []
+        if has_routes_module:
             root_patterns = getattr(routes_module, "ROOT_URLPATTERNS", None)
             if root_patterns is None:
                 raise AttributeError(
@@ -67,11 +101,24 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
                 )
             patterns.extend(root_patterns)
 
-        urls_pattern = _include_if_exists(app_config, "urls", f"{app_config.label}/")
-        if urls_pattern:
-            patterns.append(urls_pattern)
+        app_urls_module = f"{app_config.name}.urls"
+        routes_already_include_app_urls = _patterns_include_module(
+            root_patterns, app_urls_module
+        )
+        if not routes_already_include_app_urls:
+            urls_pattern = _include_if_exists(
+                app_config,
+                "urls",
+                f"{app_config.label}/",
+            )
+            if urls_pattern:
+                patterns.append(urls_pattern)
 
-        api_pattern = _include_if_exists(app_config, "api.urls", f"{app_config.label}/api/")
+        api_pattern = _include_if_exists(
+            app_config,
+            "api.urls",
+            f"{app_config.label}/api/",
+        )
         if api_pattern:
             patterns.append(api_pattern)
 

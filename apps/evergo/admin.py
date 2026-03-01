@@ -96,9 +96,9 @@ class EvergoUserAdmin(
     change_form_template = "django_object_actions/change_form.html"
 
     list_display = (
+        "evergo_email",
         "id",
         "owner_display",
-        "evergo_email",
         "name",
         "email",
         "two_fa_enabled",
