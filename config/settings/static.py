@@ -6,7 +6,12 @@ from .base import BASE_DIR, DEBUG
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_headers
 
 # Shared admin CSS pipeline: load a framework base first, then global app-shell

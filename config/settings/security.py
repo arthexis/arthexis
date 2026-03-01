@@ -254,7 +254,11 @@ def _origin_in_candidates(
     for candidate in _candidate_origin_tuples(request, allowed_hosts):
         if candidate == origin:
             return True
-        if _hosts_share_allowed_subnet(candidate[1], origin[1], allowed_hosts):
+        if (
+            candidate[0] == origin[0]
+            and candidate[2] == origin[2]
+            and _hosts_share_allowed_subnet(candidate[1], origin[1], allowed_hosts)
+        ):
             return True
     return False
 

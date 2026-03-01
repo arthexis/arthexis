@@ -99,10 +99,10 @@ INSTALLED_APPS = [
     "apps.celery.beat_app.CeleryBeatConfig",
 ] + LOCAL_APPS
 
-INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
-
 if HAS_DEBUG_TOOLBAR:
-    INSTALLED_APPS += ["debug_toolbar"]
+    INSTALLED_APPS.append("debug_toolbar")
+
+INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 
 SITE_ID = 1
 
@@ -120,15 +120,13 @@ _original_get_current_site = sites_shortcuts.get_current_site
 def _get_current_site_with_request_fallback(request=None):
     """Fallback to RequestSite during startup when Site records are unavailable."""
 
+    from django.contrib.sites.models import Site
+    from django.db.utils import OperationalError, ProgrammingError
+
     try:
         return _original_get_current_site(request)
-    except Exception as exc:
-        from django.contrib.sites.models import Site
-        from django.db.utils import OperationalError, ProgrammingError
-
-        recoverable_exceptions = (Site.DoesNotExist, OperationalError, ProgrammingError)
-
-        if request is not None and isinstance(exc, recoverable_exceptions):
+    except (Site.DoesNotExist, OperationalError, ProgrammingError):
+        if request is not None:
             return RequestSite(request)
         raise
 
