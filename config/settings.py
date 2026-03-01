@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import base64
 import contextlib
+import importlib
 import json
 import importlib.util
 import hashlib
@@ -124,6 +125,59 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
         deduped.append(normalized)
 
     return deduped
+
+
+def _iter_app_manifest_modules() -> list[str]:
+    """Return sorted manifest module names discovered under the apps package."""
+
+    manifest_modules: list[str] = []
+    for manifest_path in sorted(APPS_DIR.rglob("manifest.py")):
+        module_path = manifest_path.relative_to(BASE_DIR).with_suffix("")
+        manifest_modules.append(".".join(module_path.parts))
+
+    return manifest_modules
+
+
+def _validate_manifest_app_entry(app_entry: str) -> None:
+    """Ensure a manifest app entry can be resolved as a Django app module/config."""
+
+    from django.apps import AppConfig
+
+    try:
+        AppConfig.create(app_entry)
+    except (ImportError, ImproperlyConfigured, ModuleNotFoundError) as exc:
+        raise ImproperlyConfigured(
+            f"Manifest app entry '{app_entry}' is not importable."
+        ) from exc
+
+
+def _load_local_apps_from_manifests() -> list[str]:
+    """Collect Django app entries from app manifest modules."""
+
+    app_entries: list[str] = []
+    for manifest_module in _iter_app_manifest_modules():
+        module = importlib.import_module(manifest_module)
+        manifest_entries = getattr(module, "DJANGO_APPS", None)
+
+        if manifest_entries is None:
+            continue
+
+        if not isinstance(manifest_entries, list):
+            raise ImproperlyConfigured(
+                f"{manifest_module}.DJANGO_APPS must be defined as a list."
+            )
+
+        for manifest_entry in manifest_entries:
+            if not isinstance(manifest_entry, str) or not manifest_entry.strip():
+                raise ImproperlyConfigured(
+                    f"{manifest_module}.DJANGO_APPS contains an invalid entry: {manifest_entry!r}."
+                )
+
+            normalized_entry = manifest_entry.strip()
+            _validate_manifest_app_entry(normalized_entry)
+            app_entries.append(normalized_entry)
+
+    return app_entries
 
 
 # Disable NetMessage propagation when running maintenance commands that should
@@ -428,94 +482,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 # Application definition
 
-LOCAL_APPS = [
-    "apps.base",
-    "apps.blog",
-    "apps.credentials",
-    "apps.actions",
-    "apps.celery",
-    "apps.nodes",
-    "apps.discovery",
-    "apps.ftp",
-    "apps.dns",
-    "apps.screens",
-    "apps.sensors",
-    "apps.pyxel",
-    "apps.counters",
-    "apps.energy",
-    "apps.groups",
-    "apps.core",
-    "apps.graphql",
-    "apps.mcp",
-    "apps.users",
-    "apps.leads",
-    "apps.embeds",
-    "apps.flows",
-    "apps.release",
-    "apps.emails",
-    "apps.extensions",
-    "apps.desktop",
-    "apps.payments",
-    "apps.sponsors",
-    "apps.links",
-    "apps.docs",
-    "apps.gdrive",
-    "apps.calendars",
-    "apps.maps",
-    "apps.locals",
-    "apps.locale",
-    "apps.content",
-    "apps.clocks",
-    "apps.audio",
-    "apps.bluetooth",
-    "apps.video",
-    "apps.media",
-    "apps.mermaid",
-    "apps.odoo",
-    "apps.sigils",
-    "apps.selenium",
-    "apps.repos",
-    "apps.reports",
-    "apps.app",
-    "apps.rates",
-    "apps.vehicle",
-    "apps.protocols",
-    "apps.ocpp",
-    "apps.ocpp.forwarder",
-    "apps.simulators",
-    "apps.meta",
-    "apps.awg",
-    "apps.chats",
-    "apps.aws",
-    "apps.alexa",
-    "apps.socials",
-    "apps.ops",
-    "apps.survey",
-    "apps.modules",
-    "apps.features",
-    "apps.prompts",
-    "apps.widgets",
-    "apps.apis",
-    "apps.sites",
-    "apps.smb",
-    "apps.summary",
-    "apps.services",
-    "apps.certs",
-    "apps.nginx",
-    "apps.cards",
-    "apps.nfts",
-    "apps.tasks",
-    "apps.recipes",
-    "apps.tests",
-    "apps.teams",
-    "apps.logbook",
-    "apps.nmcli",
-    "apps.wikis",
-    "apps.totp",
-    "apps.terms",
-    "apps.evergo",
-    "apps.fitbit",
-]
+LOCAL_APPS = _load_local_apps_from_manifests()
 
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
