@@ -1282,7 +1282,56 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
     assert result == {"idTokenInfo": {"status": "Invalid"}}
     assert store.transaction_requests["msg-req-rfid"]["status"] == "accepted"
     assert store.transaction_requests["msg-req-rfid"].get("transaction_id") in (None, "")
+    rejected_tx = await database_sync_to_async(Transaction.objects.get)(
+        charger=charger, ocpp_transaction_id="TX-RFID"
+    )
+    assert (
+        rejected_tx.authorization_status
+        == Transaction.AuthorizationStatus.REJECTED
+    )
+    assert rejected_tx.authorization_reason == "Invalid"
+    assert rejected_tx.rejected_at is not None
 
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_start_transaction_rejection_creates_transaction_record():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-START-REJECT", require_rfid=True
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._start_consumption_updates = AsyncMock()
+    consumer._record_rfid_attempt = AsyncMock()
+
+    payload = {
+        "idTag": "unknown-tag",
+        "connectorId": 1,
+        "meterStart": 0,
+        "timestamp": "2024-01-01T00:00:00Z",
+    }
+
+    result = await consumer._handle_start_transaction_action(payload, "msg-start-invalid", "", "")
+
+    assert result == {"idTagInfo": {"status": "Invalid"}}
+    rejected_tx = await database_sync_to_async(Transaction.objects.get)(
+        charger=charger, connector_id=1
+    )
+    assert (
+        rejected_tx.authorization_status
+        == Transaction.AuthorizationStatus.REJECTED
+    )
+    assert rejected_tx.authorization_reason == "Invalid"
+    assert rejected_tx.rejected_at is not None
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_started_notifies_and_persists():
