@@ -357,14 +357,26 @@ jobs:
           source .venv/bin/activate
           : > pytest.log
           echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
-          pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
+          if pytest --help | rg -q -- '--dist'; then
+            xdist_args=("-n" "auto" "--dist" "loadfile")
+          else
+            xdist_args=()
+            echo "pytest-xdist is unavailable; running upgraded critical tests serially." | tee -a pytest.log
+          fi
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
       - name: Run integration tests on upgraded install
         if: ${{ steps.integration_gate.outputs.run_integration == 'true' }}
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           echo "=== Integration tests ===" | tee -a pytest.log
-          pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
+          if pytest --help | rg -q -- '--dist'; then
+            xdist_args=("-n" "auto" "--dist" "loadfile")
+          else
+            xdist_args=()
+            echo "pytest-xdist is unavailable; running upgraded integration tests serially." | tee -a pytest.log
+          fi
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
       - name: Report integration test skip
         if: ${{ steps.integration_gate.outputs.run_integration != 'true' }}
         run: |
