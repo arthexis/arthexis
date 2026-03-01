@@ -14,6 +14,7 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
 from apps.sites.models import Landing
+from apps.sites.views.landing import SUPPORTED_OCPP_VERSIONS
 
 
 @pytest.fixture
@@ -83,7 +84,7 @@ def test_operator_interface_notice_page_renders_supported_versions(client):
     assert response.status_code == 200
     content = response.content.decode()
     assert "wss://testserver/&lt;charge_point_id&gt;/" in content
-    for version in ("1.0", "1.0.6", "1.2", "1.5", "1.6", "2.0", "2.0.1", "2.1"):
+    for version in SUPPORTED_OCPP_VERSIONS:
         assert f"OCPP {version}" in content
 
 
