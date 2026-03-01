@@ -711,3 +711,83 @@ def test_evergo_customer_admin_date_filters_local_and_remote(admin_client):
         remote_updated_content = remote_updated_response.content.decode("utf-8")
         assert recent.name in remote_updated_content
         assert old.name not in remote_updated_content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_load_all_button_submits_without_queries(mock_load_customers, admin_client):
+    """Regression: explicit load-all button should submit with empty query payload."""
+    mock_load_customers.return_value = {
+        "customers_loaded": 2,
+        "orders_created": 2,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="wildcard-admin@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": "", "load_mode": "all"},
+    )
+
+    assert response.status_code == 302
+    mock_load_customers.assert_called_once_with(raw_queries="")
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_requires_queries_for_filtered_mode(admin_client):
+    """Regression: filtered load should require at least one query token."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="wildcard-validation@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": "", "load_mode": "filtered"},
+    )
+
+    assert response.status_code == 200
+    assert b"Enter at least one SO number or customer name." in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_limits_query_count(admin_client):
+    """Regression: filtered load must reject excessive token counts to cap request fan-out."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="query-limit@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    oversized = " ".join(f"SO{i:04d}" for i in range(101))
+    response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": oversized, "load_mode": "filtered"},
+    )
+
+    assert response.status_code == 200
+    assert b"Submit at most 100 values" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_shows_explicit_load_mode_buttons(admin_client):
+    """Regression: wizard should expose separate actions for filtered vs full loads."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    assert b"Load all customers" in response.content
+    assert b"Load filtered customers" in response.content

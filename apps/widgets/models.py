@@ -45,6 +45,14 @@ class Widget(Entity):
     renderer_path = models.CharField(max_length=255)
     is_enabled = models.BooleanField(default=True)
     priority = models.IntegerField(default=0)
+    required_feature = models.ForeignKey(
+        "nodes.NodeFeature",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="widgets",
+        help_text=_("Optional node feature required for this widget to render."),
+    )
 
     class Meta:
         verbose_name = _("Widget")

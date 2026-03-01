@@ -20,6 +20,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.audio.utils import has_audio_capture_device
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
+from apps.clocks.utils import has_clock_device
 from apps.emails import mailer
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
@@ -45,8 +46,23 @@ class NodeFeatureDefaultAction:
 class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
     """Feature that may be enabled on nodes and roles."""
 
+    class Footprint(models.TextChoices):
+        """Classify how intrusive a node feature is for auto-enable decisions."""
+
+        LIGHT = "light", "Light"
+        HEAVY = "heavy", "Heavy"
+
     slug = models.SlugField(max_length=50, unique=True)
     display = models.CharField(max_length=50)
+    footprint = models.CharField(
+        max_length=10,
+        choices=Footprint.choices,
+        default=Footprint.LIGHT,
+        help_text=(
+            "Classifies whether the feature is lightweight or may modify host "
+            "environment configuration."
+        ),
+    )
     roles = models.ManyToManyField(
         "nodes.NodeRole", blank=True, related_name="features"
     )
@@ -103,6 +119,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
             NodeFeatureDefaultAction(
                 label="Take Snapshot",
                 url_name="admin:video_videodevice_take_snapshot",
+            ),
+        ),
+        "user-desktop": (
+            NodeFeatureDefaultAction(
+                label=_("Desktop shortcuts"),
+                url_name="admin:desktop_desktopshortcut_changelist",
             ),
         ),
     }
@@ -194,14 +216,16 @@ class NodeFeatureMixin:
     AP_ROUTER_SSID = "gelectriic-ap"
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "ap-router",
+        "gpio-rtc",
         "lcd-screen",
         "gui-toast",
         "video-cam",
-        "ap-router",
         "llm-summary",
     }
     MANUAL_FEATURE_SLUGS = {"audio-capture", "cpsim-service"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
+    AUTO_ENABLE_FOOTPRINT = NodeFeature.Footprint.LIGHT
 
     def has_feature(self, slug: str) -> bool:
         """Return whether the node has the requested feature slug."""
@@ -237,7 +261,8 @@ class NodeFeatureMixin:
             return
 
         role_features = self.role.features.filter(
-            slug__in=self.ROLE_AUTO_FEATURE_SLUGS
+            slug__in=self.ROLE_AUTO_FEATURE_SLUGS,
+            footprint=self.AUTO_ENABLE_FOOTPRINT,
         ).values_list("slug", flat=True)
         desired = set(role_features)
         if not desired:
@@ -381,6 +406,8 @@ class NodeFeatureMixin:
             return self._has_rpi_camera()
         if slug == "ap-router":
             return self._hosts_gelectriic_ap()
+        if slug == "gpio-rtc":
+            return has_clock_device()
         if slug == "llm-summary":
             from django.db.utils import OperationalError
 
@@ -428,13 +455,17 @@ class NodeFeatureMixin:
             except Exception:
                 logger.exception("Automatic detection failed for feature %s", slug)
         current_slugs = set(
-            self.features.filter(slug__in=self.AUTO_MANAGED_FEATURES).values_list(
-                "slug", flat=True
-            )
+            self.features.filter(
+                slug__in=self.AUTO_MANAGED_FEATURES,
+                footprint=self.AUTO_ENABLE_FOOTPRINT,
+            ).values_list("slug", flat=True)
         )
         add_slugs = detected_slugs - current_slugs
         if add_slugs:
-            for feature in NodeFeature.objects.filter(slug__in=add_slugs):
+            for feature in NodeFeature.objects.filter(
+                slug__in=add_slugs,
+                footprint=self.AUTO_ENABLE_FOOTPRINT,
+            ):
                 NodeFeatureAssignment.objects.update_or_create(
                     node=self, feature=feature
                 )

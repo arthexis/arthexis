@@ -127,11 +127,11 @@ def test_discover_progress_does_not_auto_enable_manual_features(admin_client, mo
 
 
 @pytest.mark.django_db
-def test_discover_progress_screenshot_feature_reports_suite_control(admin_client, monkeypatch):
-    """Screenshot discover should report suite-controlled enablement when eligible."""
+def test_discover_progress_auto_enables_gpio_rtc_when_eligible(admin_client, monkeypatch):
+    """Auto-managed gpio-rtc should be assigned during discovery when eligible."""
 
-    node = Node.objects.create(hostname="shot-node", public_endpoint="shot-node")
-    feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
+    node = Node.objects.create(hostname="auto-progress", public_endpoint="auto-progress")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -142,7 +142,7 @@ def test_discover_progress_screenshot_feature_reports_suite_control(admin_client
         "apps.nodes.feature_checks.feature_checks.run",
         lambda _feature, node=None: FeatureCheckResult(
             True,
-            "Screenshot runtime is healthy.",
+            "RTC detected and feature eligible.",
             messages.SUCCESS,
         ),
     )
@@ -154,17 +154,18 @@ def test_discover_progress_screenshot_feature_reports_suite_control(admin_client
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["eligible"] is True
-    assert payload["enablement"]["status"] == "suite"
-    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+    assert payload["manual_enablement"]["status"] == "auto"
+    assert payload["manual_enablement"]["can_toggle"] is False
+    assert payload["enablement"]["status"] == "enabled"
+    assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
 
 
 @pytest.mark.django_db
-def test_discover_manual_toggle_rejects_ineligible_feature(admin_client, monkeypatch):
-    """Manual toggle should reject enable requests when eligibility fails."""
+def test_discover_progress_does_not_auto_enable_gpio_rtc_when_ineligible(admin_client, monkeypatch):
+    """Auto-managed gpio-rtc should stay unassigned during discovery when ineligible."""
 
-    node = Node.objects.create(hostname="manual-ineligible", public_endpoint="manual-ineligible")
-    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    node = Node.objects.create(hostname="auto-progress", public_endpoint="auto-progress")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -175,16 +176,20 @@ def test_discover_manual_toggle_rejects_ineligible_feature(admin_client, monkeyp
         "apps.nodes.feature_checks.feature_checks.run",
         lambda _feature, node=None: FeatureCheckResult(
             False,
-            "No input device detected.",
+            "RTC not detected.",
             messages.WARNING,
         ),
     )
 
     response = admin_client.post(
-        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
-        {"feature_id": feature.pk, "enabled": "true"},
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
     )
 
-    assert response.status_code == 400
-    assert "not eligible" in response.json()["detail"].lower()
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["eligible"] is False
+    assert payload["manual_enablement"]["status"] == "auto"
+    assert payload["manual_enablement"]["can_toggle"] is False
+    assert payload["enablement"]["status"] == "skipped"
     assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()

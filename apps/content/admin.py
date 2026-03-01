@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
@@ -22,13 +23,12 @@ from apps.content.models import (
 )
 from apps.locals.user_data import EntityModelAdmin
 from apps.core.admin import OwnableAdminMixin
-from apps.nodes.models import Node
+from apps.nodes.models import Node, NodeFeature
 from apps.content.utils import capture_screenshot, save_screenshot
 from apps.video.models import VideoDevice
 from apps.video.utils import (
     DEFAULT_CAMERA_RESOLUTION,
     capture_rpi_snapshot,
-    has_rpi_camera_stack,
 )
 from .web_sampling import execute_sampler
 
@@ -110,16 +110,32 @@ class ContentSampleAdmin(EntityModelAdmin):
             self.message_user(request, "Duplicate screenshot; not saved", messages.INFO)
         return redirect("..")
 
-    def take_snapshot(self, request, _object_id):
-        if not has_rpi_camera_stack():
+    def take_snapshot(self, request, object_id):
+        del object_id
+        if request.method != "POST":
+            raise PermissionDenied
+
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
+        node = Node.get_local()
+        if node is None:
             self.message_user(
                 request,
-                _("Camera stack not available."),
+                _("No local node is registered; cannot perform camera actions."),
                 level=messages.ERROR,
             )
             return redirect("..")
 
-        node = Node.get_local()
+        video_feature = NodeFeature.objects.filter(slug="video-cam").first()
+        if not video_feature or not video_feature.is_enabled:
+            self.message_user(
+                request,
+                _("Video Camera feature is not enabled on this node."),
+                level=messages.WARNING,
+            )
+            return redirect("..")
+
         device = VideoDevice.objects.filter(node=node, is_default=True).first()
         width = getattr(device, "capture_width", None)
         height = getattr(device, "capture_height", None)

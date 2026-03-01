@@ -96,9 +96,6 @@ def charge_point_features(local_node):
     suite_feature.is_enabled = True
     suite_feature.save(update_fields=["is_enabled"])
     return local_node, suite_feature
-
-
-@pytest.mark.critical
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_charge_point_created_for_new_websocket_path():

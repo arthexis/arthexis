@@ -6,6 +6,27 @@ env:
   NODE_OPTIONS: '--no-deprecation'
 
 on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - 'apps/**/templates/**'
+      - 'apps/**/static/**'
+      - 'templates/**'
+      - 'static/**'
+      - '.github/workflows/dashboard-screenshot.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/**/templates/**'
+      - 'apps/**/static/**'
+      - 'templates/**'
+      - 'static/**'
+      - '.github/workflows/dashboard-screenshot.yml'
   workflow_dispatch:
 
 jobs:

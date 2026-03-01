@@ -76,6 +76,13 @@ registration_logger = get_register_visitor_logger()
 
 @admin.register(Node)
 class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+    RELATION_ICONS = {
+        Node.Relation.UPSTREAM: "⬆️",
+        Node.Relation.DOWNSTREAM: "⬇️",
+        Node.Relation.PEER: "↔️",
+        Node.Relation.SELF: "🏠",
+    }
+
     list_display = (
         "hostname",
         "primary_ip",
@@ -186,7 +193,12 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
-        return obj.get_current_relation_display()
+        """Render the node relation with a relation-specific icon in admin lists."""
+
+        relation = getattr(obj, "current_relation", "")
+        label = obj.get_current_relation_display()
+        icon = self.RELATION_ICONS.get(relation, "❔")
+        return format_html('<span title="{}">{} {}</span>', label, icon, label)
 
     @admin.display(description=_("MAC address"), ordering="mac_address")
     def mac_address_display(self, obj):

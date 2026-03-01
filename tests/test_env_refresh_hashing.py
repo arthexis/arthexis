@@ -8,7 +8,6 @@ import pytest
 from django.conf import settings
 from django.utils import timezone
 
-pytestmark = pytest.mark.critical
 
 @pytest.fixture(scope="session")
 def env_refresh_module():

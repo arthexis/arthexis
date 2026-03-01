@@ -248,6 +248,10 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
         if path.exists():
             candidate_files.append(path)
 
+    tasks_pkg = app_dir / "tasks"
+    if tasks_pkg.is_dir():
+        candidate_files.extend(tasks_pkg.glob("*.py"))
+
     admin_pkg = app_dir / "admin"
     if admin_pkg.is_dir():
         candidate_files.extend(admin_pkg.glob("*.py"))

@@ -12,12 +12,15 @@ from .models import EvergoUser
 class EvergoLoadCustomersForm(forms.Form):
     """Collect profile and free-form SO/name input for customer sync."""
 
+    max_queries = 100
+
     profile = forms.ModelChoiceField(
         queryset=EvergoUser.objects.all().order_by("evergo_email", "id"),
         help_text="Profile used to authenticate against Evergo.",
     )
     raw_queries = forms.CharField(
         label="SO numbers and/or customer names",
+        required=False,
         widget=forms.Textarea(
             attrs={
                 "rows": 8,
@@ -45,6 +48,33 @@ class EvergoLoadCustomersForm(forms.Form):
         owned_profile = owned_profiles.first()
         if owned_profile:
             self.fields["profile"].initial = owned_profile.pk
+
+    def clean_raw_queries(self) -> str:
+        """Validate and bound free-form lookup input for filtered mode."""
+        raw_queries = (self.cleaned_data.get("raw_queries") or "").strip()
+        if not raw_queries:
+            return raw_queries
+
+        tokens = [chunk for chunk in re.split(r"[,;|\s]+", raw_queries) if chunk]
+        if len(tokens) > self.max_queries:
+            raise ValidationError(
+                f"Too many values in raw_queries. Submit at most {self.max_queries} values."
+            )
+        return raw_queries
+
+    def clean(self):
+        """Require lookup input only for filtered mode while allowing empty all-customers mode."""
+        cleaned_data = super().clean()
+        mode = (self.data.get("load_mode") or "filtered").strip().lower()
+        raw_queries = (cleaned_data.get("raw_queries") or "").strip()
+
+        if mode == "all":
+            cleaned_data["raw_queries"] = ""
+            return cleaned_data
+
+        if not raw_queries:
+            self.add_error("raw_queries", "Enter at least one SO number or customer name.")
+        return cleaned_data
 
 
 class EvergoOrderTrackingForm(forms.Form):
