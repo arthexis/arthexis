@@ -306,6 +306,24 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
     try:
         with sync_playwright() as playwright:
             executable_path = Path(playwright.chromium.executable_path)
+            if not executable_path.exists():
+                return FeatureCheckResult(
+                    False,
+                    (
+                        f"{feature.display} prerequisites failed: Chromium executable is missing at "
+                        f"{executable_path}. Run `python -m playwright install chromium`."
+                    ),
+                    messages.ERROR,
+                )
+            if not os.access(executable_path, os.X_OK):
+                return FeatureCheckResult(
+                    False,
+                    (
+                        f"{feature.display} prerequisites failed: Chromium executable is not executable at "
+                        f"{executable_path}."
+                    ),
+                    messages.ERROR,
+                )
             browser = None
             try:
                 browser = playwright.chromium.launch(headless=True)
@@ -334,24 +352,6 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
 
     details.append(f"Chromium executable: {executable_path}")
     details.append("Chromium launch: ok")
-    if not executable_path.exists():
-        return FeatureCheckResult(
-            False,
-            (
-                f"{feature.display} prerequisites failed: Chromium executable is missing at "
-                f"{executable_path}. Run `python -m playwright install chromium`."
-            ),
-            messages.ERROR,
-        )
-    if not os.access(executable_path, os.X_OK):
-        return FeatureCheckResult(
-            False,
-            (
-                f"{feature.display} prerequisites failed: Chromium executable is not executable at "
-                f"{executable_path}."
-            ),
-            messages.ERROR,
-        )
 
     ffmpeg_path = shutil.which("ffmpeg")
     details.append(f"ffmpeg: {ffmpeg_path or 'not found (optional)'}")

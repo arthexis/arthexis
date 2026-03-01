@@ -461,14 +461,11 @@ def enable_selected_features(modeladmin, request, queryset):
 
     eligible_manual_features = []
     for feature in manual_features:
-        result = feature_checks.run(feature, node=node)
-        if result is None:
-            modeladmin.message_user(
-                request,
-                f"{feature.display} cannot be enabled manually because no eligibility check is configured.",
-                level=messages.WARNING,
-            )
+        check = feature_checks.get(feature.slug)
+        if check is None:
+            eligible_manual_features.append(feature)
             continue
+        result = feature_checks.run(feature, node=node)
         if not result.success:
             modeladmin.message_user(request, result.message, level=result.level)
             continue

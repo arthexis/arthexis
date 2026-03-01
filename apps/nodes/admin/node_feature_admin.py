@@ -208,7 +208,14 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return redirect("..")
 
         feature = NodeFeature.objects.filter(slug="screenshot-poll").first()
-        if feature and not self._require_feature_eligible(
+        if feature is None:
+            self.message_user(
+                request,
+                "Take Screenshot is unavailable because the screenshot-poll feature is not configured.",
+                level=messages.WARNING,
+            )
+            return redirect("..")
+        if not self._require_feature_eligible(
             request,
             feature,
             node=Node.get_local(),

@@ -1,9 +1,13 @@
 """Drop screenshot-poll node assignments now that control is suite-scoped."""
 
+import logging
+
 from django.db import migrations
 
 
 FEATURE_SLUG = "screenshot-poll"
+
+logger = logging.getLogger(__name__)
 
 
 def remove_screenshot_assignments(apps, schema_editor):
@@ -15,7 +19,14 @@ def remove_screenshot_assignments(apps, schema_editor):
     feature = NodeFeature.objects.filter(slug=FEATURE_SLUG).first()
     if feature is None:
         return
-    NodeFeatureAssignment.objects.filter(feature=feature).delete()
+    queryset = NodeFeatureAssignment.objects.filter(feature=feature)
+    deleted_count = queryset.count()
+    queryset.delete()
+    logger.info(
+        "Removed %s legacy %s assignment(s).",
+        deleted_count,
+        FEATURE_SLUG,
+    )
 
 
 def restore_screenshot_assignments(apps, schema_editor):
