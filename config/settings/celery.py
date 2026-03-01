@@ -20,7 +20,7 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_WORKER_LOG_FORMAT = LOGGING["formatters"]["standard"]["format"]
 CELERY_WORKER_TASK_LOG_FORMAT = LOGGING["formatters"]["standard"]["format"]
 CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
-CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
+CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT  # Legacy alias retained for fixture references and admin guidance.
 
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {"task": "apps.core.tasks.heartbeat", "schedule": crontab(minute="*/5")},

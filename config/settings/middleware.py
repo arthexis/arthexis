@@ -33,7 +33,13 @@ if HAS_DEBUG_TOOLBAR:
     INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0"]
 
     def _show_toolbar(_: HttpRequest) -> bool:
-        """Always show the toolbar when running in DEBUG mode."""
+        """Always show the toolbar when running in DEBUG mode.
+
+        Docker and remote development environments can present requests from
+        gateway addresses that fall outside ``INTERNAL_IPS``. Returning
+        ``True`` here ensures the toolbar is available whenever the debug
+        flag is enabled.
+        """
         return True
 
     DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": _show_toolbar}

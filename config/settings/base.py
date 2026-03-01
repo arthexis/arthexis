@@ -54,7 +54,8 @@ if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatib
     encoding.force_text = force_str
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+# NOTE: this module lives under config/settings/, so project root is 3 levels up.
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 APPS_DIR = BASE_DIR / "apps"
 
 # Quick-start development settings - unsuitable for production
@@ -252,6 +253,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # GitHub issue reporting
 GITHUB_ISSUE_REPORTING_ENABLED = True
 GITHUB_ISSUE_REPORTING_COOLDOWN = 3600  # seconds
-
 
 
