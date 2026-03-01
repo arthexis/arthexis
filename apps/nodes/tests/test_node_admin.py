@@ -6,7 +6,6 @@ import pytest
 from apps.nodes.admin import NodeAdmin
 from apps.nodes.models import Node
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_update_selected_progress_skips_downstream(admin_client):

@@ -12,7 +12,6 @@ from django.conf import settings
 
 from config.urls import autodiscovered_urlpatterns
 
-pytestmark = pytest.mark.critical
 
 def _pattern_routes():
     return {pattern.pattern._route for pattern in autodiscovered_urlpatterns()}

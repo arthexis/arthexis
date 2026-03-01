@@ -8,7 +8,6 @@ from apps.counters.models import DashboardRule
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_site_configuration_apply_records_state(monkeypatch):

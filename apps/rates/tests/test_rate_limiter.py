@@ -7,7 +7,7 @@ from apps.rates.models import RateLimit
 from apps.rates.services import RateLimiter
 from apps.ocpp.models import Charger
 
-pytestmark = [pytest.mark.critical, pytest.mark.django_db]
+pytestmark = pytest.mark.django_db
 
 @pytest.fixture(autouse=True)
 def clear_rate_cache():

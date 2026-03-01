@@ -10,7 +10,6 @@ from apps.core.auto_upgrade import (
     ensure_auto_upgrade_periodic_task,
 )
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 

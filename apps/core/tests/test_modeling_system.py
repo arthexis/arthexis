@@ -14,7 +14,6 @@ from apps.core.modeling import (
 )
 from apps.core.modeling.transformers import BaseTransformer
 
-pytestmark = pytest.mark.critical
 
 @dataclass(frozen=True)
 class PrefixTransformer(BaseTransformer):

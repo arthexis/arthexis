@@ -7,7 +7,6 @@ from django.core.management import call_command
 from apps.core.management.commands import health as health_command
 from apps.core.services.health import HealthCheckDefinition
 
-pytestmark = pytest.mark.critical
 
 
 @pytest.mark.django_db

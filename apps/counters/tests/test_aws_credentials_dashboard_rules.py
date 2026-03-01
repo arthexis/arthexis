@@ -9,7 +9,7 @@ from apps.counters.dashboard_rules import evaluate_aws_credentials_rules
 from apps.nodes.models import Node, NodeRole
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
 
 def test_watchtower_rule_requires_at_least_one_credential(monkeypatch):

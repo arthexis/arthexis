@@ -91,7 +91,6 @@ def _get_test_modules() -> set[Path]:
     return {path for path in candidates if path.name != "__init__.py"}
 
 
-@pytest.mark.regression
 def test_no_new_empty_test_files_are_introduced() -> None:
     """Prevent adding new test files that do not define any tests yet."""
 

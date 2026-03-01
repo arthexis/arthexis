@@ -7,7 +7,6 @@ from django.test.utils import isolate_apps
 
 from apps.base.models import Entity
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db(transaction=True)
 def test_seed_soft_delete_skipped_for_constrained_model(caplog):

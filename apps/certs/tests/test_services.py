@@ -8,7 +8,6 @@ import pytest
 
 from apps.certs import services
 
-pytestmark = pytest.mark.critical
 
 def test_verify_certificate_success(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"

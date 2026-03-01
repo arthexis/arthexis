@@ -11,7 +11,6 @@ import pytest
 from apps.nodes.models import Node, NodeRole
 from apps.nodes.views import node_info, register_node
 
-pytestmark = pytest.mark.critical
 
 @pytest.fixture
 def admin_user(db):
