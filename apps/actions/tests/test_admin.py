@@ -130,3 +130,48 @@ def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessib
 
     assert response.status_code == 302
     assert response.headers["Location"] == reverse("admin:actions_remoteactiontoken_add")
+
+
+def test_remote_action_dashboard_button_opens_preview_page(admin_client):
+    """Regression: dashboard Actions button opens an OpenAPI preview page first."""
+
+    response = admin_client.get(reverse("admin:actions_remoteaction_my_openapi_spec"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Preview the generated OpenAPI file before downloading it." in content
+    assert "Download YAML" in content
+
+
+def test_remote_action_openapi_download_requires_explicit_query_param(admin_client):
+    """Regression: OpenAPI endpoint only downloads when explicitly requested."""
+
+    response = admin_client.get(
+        reverse("admin:actions_remoteaction_my_openapi_spec"),
+        data={"download": "1"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"].startswith("application/yaml")
+    assert response.headers["Content-Disposition"] == 'attachment; filename="my-actions-openapi.yaml"'
+
+
+def test_remote_action_openapi_forbidden_for_unprivileged_staff(client):
+    """Regression: OpenAPI preview and download require RemoteAction view/change rights."""
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="openapi_staff_no_remoteaction_perm",
+        password="test-password",
+        is_staff=True,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("admin:actions_remoteaction_my_openapi_spec"))
+    assert response.status_code == 403
+
+    response = client.get(
+        reverse("admin:actions_remoteaction_my_openapi_spec"),
+        data={"download": "1"},
+    )
+    assert response.status_code == 403
