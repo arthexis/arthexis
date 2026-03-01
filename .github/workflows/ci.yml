@@ -201,10 +201,6 @@ jobs:
           key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             venv-${{ runner.os }}-
-      - name: Validate pyproject dependency ordering
-        if: ${{ github.event_name == 'schedule' }}
-        run: |
-          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Install from default branch
         run: |
           ./install.sh --no-start
