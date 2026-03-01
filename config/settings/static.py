@@ -30,7 +30,7 @@ WHITENOISE_USE_FINDERS = True
 # Some CI and freshly-upgraded environments may render templates before
 # collectstatic has been executed for newly-added assets. Fall back to the
 # unhashed path instead of raising ValueError for missing manifest entries.
-WHITENOISE_MANIFEST_STRICT = False
+WHITENOISE_MANIFEST_STRICT = not (DEBUG or RUNNING_TESTS)
 WHITENOISE_AUTOREFRESH = DEBUG
 
 # Django's admin static files live in site-packages and are not copied to

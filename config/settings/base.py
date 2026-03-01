@@ -62,7 +62,16 @@ PRODUCTION_ROLES = {
 
 _debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
 DEBUG = env_bool("DEBUG", _debugpy_attached)
-RUNNING_TESTS = any("pytest" in arg for arg in sys.argv)
+
+
+def _running_tests() -> bool:
+    """Detect pytest/manage.py test execution across local and CI entrypoints."""
+    if "PYTEST_CURRENT_TEST" in os.environ or "PYTEST_VERSION" in os.environ:
+        return True
+    return any("pytest" in arg or arg == "test" for arg in sys.argv)
+
+
+RUNNING_TESTS = _running_tests()
 HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 # Disable NetMessage propagation when running maintenance commands that should
