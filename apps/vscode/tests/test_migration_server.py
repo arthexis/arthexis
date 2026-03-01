@@ -40,7 +40,8 @@ def test_run_migrations_returns_subprocess_exit_code() -> None:
 def test_parse_args_accepts_legacy_watcher_flags() -> None:
     """Legacy server flags should parse for compatibility."""
 
-    args = migration_server.parse_args(["--interval", "2", "--no-latest", "--", "--plan"])
+    args = migration_server.parse_args(["--interval", "2", "--debounce", "0.5", "--no-latest", "--", "--plan"])
     assert args.interval == 2
+    assert args.debounce == 0.5
     assert args.latest is False
     assert args.extra_args == ["--", "--plan"]

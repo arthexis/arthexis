@@ -47,6 +47,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Compatibility flag from legacy watcher mode (ignored).",
     )
     parser.add_argument(
+        "--debounce",
+        type=float,
+        default=1.0,
+        help="Compatibility flag from legacy watcher mode (ignored).",
+    )
+    parser.add_argument(
         "--latest",
         dest="latest",
         action="store_true",
