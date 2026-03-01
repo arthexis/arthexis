@@ -8,9 +8,10 @@ import pytest
 from apps.pyxel import admin_views, live_stats
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db]
 
 
+@pytest.mark.regression
 def test_is_local_request_matches_local_interface(monkeypatch, rf):
     """Local requests should be accepted when REMOTE_ADDR matches a local IP."""
 
@@ -20,6 +21,7 @@ def test_is_local_request_matches_local_interface(monkeypatch, rf):
     assert live_stats.is_local_request(request) is True
 
 
+@pytest.mark.regression
 def test_is_local_request_rejects_non_local_ip(monkeypatch, rf):
     """Non-local requests should never expose local-only Pyxel controls."""
 
@@ -29,6 +31,7 @@ def test_is_local_request_rejects_non_local_ip(monkeypatch, rf):
     assert live_stats.is_local_request(request) is False
 
 
+@pytest.mark.regression
 def test_is_local_request_ignores_forwarded_for_header(monkeypatch, rf):
     """Forwarded headers must not grant local access for remote socket peers."""
 
@@ -59,6 +62,7 @@ def test_admin_index_omits_pyxel_button(client, django_user_model, monkeypatch):
     assert b"value=\"Pyxel\"" not in response.content
 
 
+@pytest.mark.regression
 def test_open_live_stats_view_launches_subprocess_for_local_request(
     client,
     django_user_model,
@@ -88,6 +92,7 @@ def test_open_live_stats_view_launches_subprocess_for_local_request(
     assert called["value"] is True
 
 
+@pytest.mark.regression
 def test_open_live_stats_view_blocks_remote_request(client, django_user_model, monkeypatch):
     """The launcher endpoint returns forbidden for remote client addresses."""
 
@@ -104,6 +109,7 @@ def test_open_live_stats_view_blocks_remote_request(client, django_user_model, m
     assert response.status_code == 403
 
 
+@pytest.mark.regression
 def test_launch_live_stats_subprocess_raises_when_process_exits(monkeypatch):
     """Launcher should raise a clear error when the viewport process exits immediately."""
 
@@ -120,6 +126,7 @@ def test_launch_live_stats_subprocess_raises_when_process_exits(monkeypatch):
         live_stats.launch_live_stats_subprocess()
 
 
+@pytest.mark.regression
 def test_launch_live_stats_subprocess_returns_running_process(monkeypatch):
     """Launcher should keep the success path when the viewport process remains running."""
 
@@ -193,6 +200,7 @@ def test_admin_dashboard_model_row_includes_open_viewport_link(
     assert reverse("admin:pyxel_pyxelviewport_changelist") in content
     assert "Open Viewport" in content
 
+@pytest.mark.regression
 def test_open_viewport_view_uses_default_when_multiple(client, django_user_model, monkeypatch):
     """Open Viewport launches the default viewport when more than one exists."""
 
@@ -241,6 +249,7 @@ def test_open_viewport_view_uses_default_when_multiple(client, django_user_model
     assert called["slug"] == default_viewport.slug
 
 
+@pytest.mark.regression
 def test_open_viewport_view_by_pk_launches_requested_viewport(client, django_user_model, monkeypatch):
     """Object-level action should launch the specific viewport represented by the change form."""
 
@@ -282,6 +291,7 @@ def test_open_viewport_view_by_pk_launches_requested_viewport(client, django_use
     assert called["slug"] == viewport.slug
 
 
+@pytest.mark.regression
 def test_soft_deleted_seed_default_does_not_block_new_default():
     """Soft-deleting a seeded default should allow promoting another default viewport."""
 
@@ -317,6 +327,7 @@ def test_soft_deleted_seed_default_does_not_block_new_default():
     assert replacement.is_default is True
 
 
+@pytest.mark.regression
 def test_soft_deleted_non_seed_default_does_not_block_new_default():
     """Deleting a non-seeded default should allow promoting a replacement default."""
 
