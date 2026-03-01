@@ -40,6 +40,16 @@ if "%~1"=="-f" (
     goto parse_args
 )
 
+if "%~1"=="--start" (
+    shift
+    goto parse_args
+)
+
+if "%~1"=="-s" (
+    shift
+    goto parse_args
+)
+
 if "%~1"=="--main" (
     set "BRANCH=main"
     shift

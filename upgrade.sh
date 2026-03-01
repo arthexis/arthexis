@@ -1046,10 +1046,10 @@ while [[ $# -gt 0 ]]; do
       FORWARDED_ARGS+=("$1")
       shift
       ;;
-    --start)
+    --start|-s)
       FORCE_START=1
       NO_RESTART=0
-      FORWARDED_ARGS+=("$1")
+      FORWARDED_ARGS+=("--start")
       shift
       ;;
     --no-warn)
