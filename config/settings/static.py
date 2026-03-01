@@ -27,6 +27,10 @@ ADMIN_APP_STYLESHEETS: dict[str, str] = {}
 # only looks for files inside ``STATIC_ROOT`` and dashboards like the public
 # traffic chart fail to load their JavaScript dependencies.
 WHITENOISE_USE_FINDERS = True
+# Some CI and freshly-upgraded environments may render templates before
+# collectstatic has been executed for newly-added assets. Fall back to the
+# unhashed path instead of raising ValueError for missing manifest entries.
+WHITENOISE_MANIFEST_STRICT = False
 WHITENOISE_AUTOREFRESH = DEBUG
 
 MERMAID_USE_CDN = True
