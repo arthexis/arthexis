@@ -47,8 +47,8 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
     - ``apps/<app>/routes.py`` exporting ``ROOT_URLPATTERNS``.
 
     Compatibility fallback:
-    - If an app has no ``routes`` module, include ``urls`` under
-      ``/<app_label>/`` and optional ``api.urls`` under ``/<app_label>/api/``.
+    - Also include legacy ``urls`` under ``/<app_label>/`` and optional
+      ``api.urls`` under ``/<app_label>/api/`` when present.
     """
 
     patterns: list[URLPattern] = []
@@ -66,7 +66,6 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
                     f"{routes_module_name} must define ROOT_URLPATTERNS"
                 )
             patterns.extend(root_patterns)
-            continue
 
         urls_pattern = _include_if_exists(app_config, "urls", f"{app_config.label}/")
         if urls_pattern:

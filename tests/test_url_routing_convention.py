@@ -10,29 +10,40 @@ import pytest
 from config.route_providers import autodiscovered_route_patterns
 
 
+def _extract_path_literals(node: ast.AST) -> list[str]:
+    """Extract literal path prefixes from a list node used in urlpatterns updates."""
+
+    if not isinstance(node, ast.List):
+        return []
+
+    values: list[str] = []
+    for element in node.elts:
+        if (
+            isinstance(element, ast.Call)
+            and isinstance(element.func, ast.Name)
+            and element.func.id == "path"
+            and element.args
+            and isinstance(element.args[0], ast.Constant)
+            and isinstance(element.args[0].value, str)
+        ):
+            values.append(element.args[0].value)
+    return values
+
+
 def _path_literals_from_urlpatterns_assignment(module_source: str) -> list[str]:
-    """Extract literal path prefixes declared directly in ``config.urls.urlpatterns``."""
+    """Extract literal framework path prefixes declared directly in ``config.urls``."""
 
     tree = ast.parse(module_source)
+    values: list[str] = []
     for node in tree.body:
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "urlpatterns":
-                    if not isinstance(node.value, ast.List):
-                        return []
-                    values: list[str] = []
-                    for element in node.value.elts:
-                        if (
-                            isinstance(element, ast.Call)
-                            and isinstance(element.func, ast.Name)
-                            and element.func.id == "path"
-                            and element.args
-                            and isinstance(element.args[0], ast.Constant)
-                            and isinstance(element.args[0].value, str)
-                        ):
-                            values.append(element.args[0].value)
-                    return values
-    return []
+                    values.extend(_extract_path_literals(node.value))
+        elif isinstance(node, ast.AugAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == "urlpatterns":
+                values.extend(_extract_path_literals(node.value))
+    return values
 
 
 def test_config_urls_only_declares_framework_level_routes():
@@ -41,7 +52,7 @@ def test_config_urls_only_declares_framework_level_routes():
     source = Path("config/urls.py").read_text(encoding="utf-8")
     direct_prefixes = _path_literals_from_urlpatterns_assignment(source)
 
-    assert direct_prefixes == ["admin/", "admindocs/", "i18n/setlang/"]
+    assert direct_prefixes == ["admin/", "i18n/setlang/", "admindocs/"]
     assert "include(\"apps." not in source
     assert "from apps." not in source
 

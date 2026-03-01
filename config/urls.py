@@ -19,11 +19,16 @@ admin.site.site_title = _("Constellation")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("admindocs/", include("django.contrib.admindocs.urls")),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
 ]
 
 urlpatterns += autodiscovered_route_patterns()
+urlpatterns += [
+    path("admindocs/", include("django.contrib.admindocs.urls")),
+]
+
+# Backward-compatible alias expected by legacy tests/imports.
+autodiscovered_urlpatterns = autodiscovered_route_patterns
 
 if settings.DEBUG:
     if settings.HAS_DEBUG_TOOLBAR:
