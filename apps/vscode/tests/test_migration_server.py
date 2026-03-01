@@ -426,6 +426,35 @@ def test_update_requirements_passes_windows_process_group_kwargs(tmp_path: Path)
     assert kwargs["creationflags"] == 512
 
 
+
+
+def test_safe_print_ignores_keyboard_interrupt() -> None:
+    """Regression: status output should not raise during interrupt handling."""
+
+    with mock.patch("builtins.print", side_effect=KeyboardInterrupt):
+        migration_server._safe_print("message")
+
+
+def test_main_swallows_interrupt_raised_while_reporting_shutdown(monkeypatch) -> None:
+    """Regression: shutdown logging must not trigger a second traceback."""
+
+    monkeypatch.setattr(migration_server, "update_requirements", mock.Mock(return_value=False))
+    monkeypatch.setattr(migration_server, "collect_source_mtimes", mock.Mock(return_value={}))
+    monkeypatch.setattr(
+        migration_server,
+        "_run_refresh_with_status",
+        mock.Mock(return_value=True),
+    )
+    monkeypatch.setattr(
+        migration_server,
+        "wait_for_changes",
+        mock.Mock(side_effect=KeyboardInterrupt),
+    )
+
+    with mock.patch("builtins.print", side_effect=KeyboardInterrupt):
+        assert migration_server.main([]) == 0
+
+
 def test_is_debugger_session_detects_debugpy_variable() -> None:
     """Regression: debugpy launch variables should enable interrupt retry mode."""
 
