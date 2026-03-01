@@ -6,7 +6,6 @@ import pytest
 
 from scripts import check_migrations
 
-pytestmark = pytest.mark.regression
 
 
 def test_check_baseline_depths_fails_without_recent_squash(monkeypatch: pytest.MonkeyPatch) -> None:

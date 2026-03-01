@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = pytest.mark.regression
 
 
 WATCH_UPGRADE_PATH = Path(__file__).resolve().parents[2] / "scripts/helpers/watch-upgrade.sh"

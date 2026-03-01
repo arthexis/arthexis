@@ -29,11 +29,8 @@ def normalize_pr_reference(value: object) -> str | None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Keep legacy mark-expression behavior and register dynamic PR markers."""
+    """Register dynamic PR markers used for collection-time test selection."""
 
-    markexpr = getattr(config.option, "markexpr", "")
-    if markexpr and "critical" in markexpr and "regression" not in markexpr:
-        config.option.markexpr = f"({markexpr}) or regression"
     config.addinivalue_line(
         "markers",
         "pr_current: dynamically applied to tests whose pytest.mark.pr reference matches --current-pr",
@@ -52,9 +49,6 @@ def pytest_collection_modifyitems(
     should_extend_markexpr = bool(selected_pr)
 
     for item in items:
-        if item.get_closest_marker("regression") and not item.get_closest_marker("critical"):
-            item.add_marker("critical")
-
         if selected_pr:
             for marker in item.iter_markers(name="pr"):
                 marker_reference = normalize_pr_reference(marker.args[0] if marker.args else None)

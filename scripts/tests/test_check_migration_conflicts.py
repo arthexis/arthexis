@@ -8,7 +8,6 @@ import pytest
 
 from scripts import check_migration_conflicts
 
-pytestmark = pytest.mark.regression
 
 
 def _write_migration(path: Path, dependencies: list[tuple[str, str]] | None = None) -> None:
@@ -24,6 +23,7 @@ def _write_migration(path: Path, dependencies: list[tuple[str, str]] | None = No
     )
 
 
+@pytest.mark.regression
 def test_run_checks_reports_duplicate_leaves_and_naming_violations(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -48,6 +48,7 @@ def test_run_checks_reports_duplicate_leaves_and_naming_violations(
     assert "apps/widgets/migrations/0002_add_color_pr100.py" in captured.err
 
 
+@pytest.mark.regression
 def test_run_checks_passes_for_linear_ticketed_chain(tmp_path: Path) -> None:
     """Conflict checks should pass when naming and graph shape follow policy."""
 
@@ -80,6 +81,7 @@ def test_run_checks_ignores_non_target_apps(tmp_path: Path) -> None:
     assert check_migration_conflicts.run_checks(tmp_path, app_labels={"not_widgets"}) == 0
 
 
+@pytest.mark.regression
 def test_run_checks_excludes_replaced_migrations_from_leaf_detection(tmp_path: Path) -> None:
     """Squashed replacements should not be treated as active leaves."""
 
@@ -104,6 +106,7 @@ def test_run_checks_excludes_replaced_migrations_from_leaf_detection(tmp_path: P
     assert check_migration_conflicts.run_checks(tmp_path, app_labels={"orders"}) == 0
 
 
+@pytest.mark.regression
 def test_parse_assignment_tuples_rejects_non_literal_entries(tmp_path: Path) -> None:
     """Non-literal dependencies/replaces should fail parsing instead of being ignored."""
 
@@ -141,6 +144,7 @@ def test_parse_dependencies_allows_swappable_dependency(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.regression
 def test_git_changed_app_labels_falls_back_to_local_migrations_when_merge_base_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -170,6 +174,7 @@ def test_git_changed_app_labels_falls_back_to_local_migrations_when_merge_base_m
     assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"widgets"}
 
 
+@pytest.mark.regression
 def test_git_changed_app_labels_uses_head_diff_when_merge_base_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -237,6 +242,7 @@ def test_git_changed_app_labels_returns_empty_when_head_diff_has_no_migration_pa
     assert check_migration_conflicts._git_changed_app_labels(tmp_path) == set()
     assert ["git", "diff-tree", "--no-commit-id"] not in [call[:3] for call in calls]
 
+@pytest.mark.regression
 def test_git_changed_app_labels_uses_diff_tree_when_first_parent_diff_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -265,6 +271,7 @@ def test_git_changed_app_labels_uses_diff_tree_when_first_parent_diff_missing(
     assert check_migration_conflicts._git_changed_app_labels(tmp_path) == {"links"}
 
 
+@pytest.mark.regression
 def test_git_changed_app_labels_handles_non_directory_apps_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

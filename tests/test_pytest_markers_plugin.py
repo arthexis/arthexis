@@ -30,15 +30,21 @@ class FakeItem:
     added_markers: list[Any] = field(default_factory=list)
 
     def get_closest_marker(self, name: str) -> FakeMarker | None:
+        """Return the most recently attached marker with the provided name."""
+
         for marker in reversed(self.existing_markers):
             if marker.name == name:
                 return marker
         return None
 
     def iter_markers(self, name: str) -> list[FakeMarker]:
+        """Return all markers attached to the fake item matching ``name``."""
+
         return [marker for marker in self.existing_markers if marker.name == name]
 
     def add_marker(self, marker: Any) -> None:
+        """Record a marker that would be dynamically added during collection."""
+
         self.added_markers.append(marker)
 
 
@@ -51,36 +57,40 @@ class FakeConfig:
         self.ini_lines: list[tuple[str, str]] = []
 
     def getoption(self, name: str) -> str | None:
+        """Return fake CLI options used by the marker plugin."""
+
         if name != "--current-pr":  # pragma: no cover - defensive programming
             raise ValueError(name)
         return self._current_pr
 
     def addinivalue_line(self, key: str, value: str) -> None:
+        """Capture marker registration lines configured by the plugin."""
+
         self.ini_lines.append((key, value))
 
 
 @pytest.mark.regression
-def test_pytest_configure_keeps_critical_filter_backward_compatible() -> None:
-    """Legacy ``-m critical`` behavior should still include regression tests."""
+def test_pytest_configure_registers_pr_current_marker() -> None:
+    """Marker plugin should register the dynamic ``pr_current`` marker."""
 
     config = FakeConfig(markexpr="critical")
 
     markers.pytest_configure(config)  # type: ignore[arg-type]
 
-    assert config.option.markexpr == "(critical) or regression"
+    assert config.option.markexpr == "critical"
     assert ("markers", "pr_current: dynamically applied to tests whose pytest.mark.pr reference matches --current-pr") in config.ini_lines
 
 
 @pytest.mark.regression
-def test_collection_promotes_regression_to_critical() -> None:
-    """Regression-marked tests should retain legacy implicit ``critical`` selection."""
+def test_collection_does_not_promote_regression_to_critical() -> None:
+    """Regression-marked tests should no longer receive implicit ``critical`` marks."""
 
     item = FakeItem(nodeid="tests/test_example.py::test_case", existing_markers=[FakeMarker("regression")])
     config = FakeConfig()
 
     markers.pytest_collection_modifyitems(SimpleNamespace(), config, [item])
 
-    assert "critical" in item.added_markers
+    assert "critical" not in item.added_markers
 
 
 @pytest.mark.regression
