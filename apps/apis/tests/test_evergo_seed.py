@@ -3,6 +3,7 @@
 from urllib.parse import urlparse
 
 import pytest
+from django.core.management import call_command
 
 from apps.apis.models import APIExplorer, ResourceMethod
 from apps.evergo.models import EvergoUser
@@ -55,3 +56,15 @@ def test_evergo_api_explorer_matches_model_endpoints_regression() -> None:
     }
 
     assert expected_paths.issubset(seeded_paths)
+
+
+@pytest.mark.django_db
+def test_evergo_fixture_loaddata_is_idempotent_regression() -> None:
+    """Regression: loading Evergo endpoint fixture should update seeded rows without integrity errors."""
+
+    api = APIExplorer.objects.get(name="Evergo API")
+    initial_count = ResourceMethod.objects.filter(api=api).count()
+
+    call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
+
+    assert ResourceMethod.objects.filter(api=api).count() == initial_count

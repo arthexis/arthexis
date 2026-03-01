@@ -4,6 +4,15 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+class APIExplorerManager(models.Manager):
+    """Manager that supports natural key lookups for fixture loading."""
+
+    def get_by_natural_key(self, name: str):  # pragma: no cover - fixture hook
+        """Resolve an API explorer by its unique ``name`` natural key."""
+
+        return self.get(name=name)
+
+
 class APIExplorer(models.Model):
     """Represents a configurable API entry point."""
 
@@ -17,6 +26,8 @@ class APIExplorer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = APIExplorerManager()
+
     class Meta:
         ordering = ("name",)
         verbose_name = "API Explorer"
@@ -26,6 +37,11 @@ class APIExplorer(models.Model):
         """Return a readable label for this API entry point."""
 
         return self.name
+
+    def natural_key(self) -> tuple[str]:  # pragma: no cover - fixture hook
+        """Expose ``name`` as this model's natural key for fixtures."""
+
+        return (self.name,)
 
 
 class ResourceMethod(models.Model):

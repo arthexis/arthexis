@@ -28,7 +28,8 @@
       "notes": "Authenticates contractor credentials and returns profile metadata.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 1
   },
   {
     "model": "apis.resourcemethod",
@@ -49,7 +50,8 @@
       "notes": "Returns available site catalog entries.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 2
   },
   {
     "model": "apis.resourcemethod",
@@ -70,7 +72,8 @@
       "notes": "Returns engineer catalog entries for order assignment.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 3
   },
   {
     "model": "apis.resourcemethod",
@@ -91,7 +94,8 @@
       "notes": "Returns order status catalog entries.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 4
   },
   {
     "model": "apis.resourcemethod",
@@ -119,7 +123,8 @@
       "notes": "Searches orders for the authenticated installer/coordinator.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 5
   },
   {
     "model": "apis.resourcemethod",
@@ -139,7 +144,8 @@
       "notes": "Returns authenticated Evergo user profile.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 6
   },
   {
     "model": "apis.resourcemethod",
@@ -158,7 +164,8 @@
       "notes": "Returns full Evergo order details by remote id.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 7
   },
   {
     "model": "apis.resourcemethod",
@@ -176,7 +183,8 @@
       "notes": "Returns Kit CFE data for a specific order.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 8
   },
   {
     "model": "apis.resourcemethod",
@@ -197,7 +205,8 @@
       "notes": "Lists installer companies/coordinators available for assignment.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 9
   },
   {
     "model": "apis.resourcemethod",
@@ -218,7 +227,8 @@
       "notes": "Returns questionnaire fields for technical visit reports.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 10
   },
   {
     "model": "apis.resourcemethod",
@@ -239,7 +249,8 @@
       "notes": "Lists valid reasons for reassigning an order.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 11
   },
   {
     "model": "apis.resourcemethod",
@@ -260,6 +271,7 @@
       "notes": "Lists crew members for assignment flows.",
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
-    }
+    },
+    "pk": 12
   }
 ]
