@@ -33,11 +33,9 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
-    from apps.nginx.management.commands import https as https_module
+    from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(
-        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
-    )
+    monkeypatch.setattr(certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None)
 
     call_command("https", "--enable", "--godaddy", "example.com", "--no-sudo")
 
@@ -82,11 +80,9 @@ def test_https_godaddy_implies_enable(monkeypatch):
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
-    from apps.nginx.management.commands import https as https_module
+    from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(
-        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
-    )
+    monkeypatch.setattr(certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None)
 
     call_command("https", "--godaddy", "example.net", "--no-sudo")
 
@@ -187,6 +183,13 @@ def test_https_disable_clears_managed_site_require_https(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_site_rejects_invalid_hostname_characters():
+    """`--site` should reject invalid hostnames that could break nginx config rendering."""
+
+    with pytest.raises(CommandError, match="valid hostname or URL"):
+        call_command("https", "--site", "[example.com; return 301 http://evil.com;]")
+
+
 def test_https_site_rejects_loopback_host():
     """`--site` should reject localhost/loopback targets and direct users to --local."""
 
@@ -212,21 +215,27 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     import sys
     from apps.dns.models import DNSProviderCredential
     from apps.nginx.management.commands.https import Command
+    from apps.nginx.management.commands.https_parts.certificate_flow import _prompt_for_godaddy_credential
+    from apps.nginx.management.commands.https_parts.service import HttpsProvisioningService
 
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
 
     prompt_map = {
         "Enter credentials now and save to DNS Credentials? [y/N]: ": "y",
-        "GoDaddy API key: ": "key-123",
         "GoDaddy customer ID (optional): ": "customer-42",
         "Use GoDaddy OTE sandbox environment? [y/N]: ": "n",
     }
     monkeypatch.setattr("builtins.input", lambda prompt="": prompt_map[prompt])
-    monkeypatch.setattr("apps.nginx.management.commands.https.getpass", lambda _prompt='': "secret-456")
+    getpass_values = iter(["key-123", "secret-456"])
+    monkeypatch.setattr(
+        "apps.nginx.management.commands.https_parts.certificate_flow.getpass",
+        lambda _prompt="": next(getpass_values),
+    )
 
     command = Command()
-    credential = command._prompt_for_godaddy_credential("example.edu")
+    service = HttpsProvisioningService(command)
+    credential = _prompt_for_godaddy_credential(service, "example.edu")
 
     assert credential is not None
     assert credential.provider == DNSProviderCredential.Provider.GODADDY
