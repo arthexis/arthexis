@@ -41,6 +41,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Run Django migrations once."
     )
     parser.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="Compatibility flag from legacy watcher mode (ignored).",
+    )
+    parser.add_argument(
+        "--latest",
+        dest="latest",
+        action="store_true",
+        default=True,
+        help="Compatibility flag from legacy watcher mode (ignored).",
+    )
+    parser.add_argument(
+        "--no-latest",
+        dest="latest",
+        action="store_false",
+        help="Compatibility flag from legacy watcher mode (ignored).",
+    )
+    parser.add_argument(
         "extra_args",
         nargs=argparse.REMAINDER,
         help="Additional args passed to `manage.py migrate`.",

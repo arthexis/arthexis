@@ -27,5 +27,21 @@ def test_run_tests_returns_subprocess_exit_code() -> None:
     """Run result should mirror the subprocess return code."""
 
     completed = mock.Mock(returncode=2)
-    with mock.patch.object(test_server.subprocess, "run", return_value=completed):
+    with mock.patch.object(test_server.subprocess, "run", return_value=completed) as run:
         assert test_server.run_tests([]) == 2
+
+    run.assert_called_once_with(
+        [test_server.sys.executable, "-m", "pytest"],
+        cwd=test_server.BASE_DIR,
+        check=False,
+    )
+
+
+def test_parse_args_accepts_legacy_watcher_flags() -> None:
+    """Legacy server flags should parse for compatibility."""
+
+    args = test_server.parse_args(["--interval", "2", "--debounce", "0.5", "--no-latest", "--", "-q"])
+    assert args.interval == 2
+    assert args.debounce == 0.5
+    assert args.latest is False
+    assert args.extra_args == ["--", "-q"]

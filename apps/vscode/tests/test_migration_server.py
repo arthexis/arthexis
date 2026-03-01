@@ -27,5 +27,20 @@ def test_run_migrations_returns_subprocess_exit_code() -> None:
     """Run result should mirror the subprocess return code."""
 
     completed = mock.Mock(returncode=3)
-    with mock.patch.object(migration_server.subprocess, "run", return_value=completed):
+    with mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run:
         assert migration_server.run_migrations([]) == 3
+
+    run.assert_called_once_with(
+        [migration_server.sys.executable, "manage.py", "migrate"],
+        cwd=migration_server.BASE_DIR,
+        check=False,
+    )
+
+
+def test_parse_args_accepts_legacy_watcher_flags() -> None:
+    """Legacy server flags should parse for compatibility."""
+
+    args = migration_server.parse_args(["--interval", "2", "--no-latest", "--", "--plan"])
+    assert args.interval == 2
+    assert args.latest is False
+    assert args.extra_args == ["--", "--plan"]
