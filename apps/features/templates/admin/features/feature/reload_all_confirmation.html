@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+<div id="content-main" class="delete-confirmation">
+  <h1>{% translate "Reload all suite features" %}</h1>
+  <p>
+    {% blocktranslate count active_feature_count=active_feature_count %}
+      This will delete {{ active_feature_count }} existing suite feature before reloading mainstream fixture data.
+    {% plural %}
+      This will delete {{ active_feature_count }} existing suite features before reloading mainstream fixture data.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate count fixture_count=fixture_count %}
+      {{ fixture_count }} fixture will be loaded.
+    {% plural %}
+      {{ fixture_count }} fixtures will be loaded.
+    {% endblocktranslate %}
+  </p>
+
+  <h2>{% translate "Fixtures to load" %}</h2>
+  <ul>
+    {% for fixture_name in fixture_names %}
+      <li><code>{{ fixture_name }}</code></li>
+    {% empty %}
+      <li>{% translate "No mainstream fixture files were found." %}</li>
+    {% endfor %}
+  </ul>
+
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="confirm" value="yes">
+    <div class="submit-row">
+      <button type="submit" class="default">{% translate "Confirm reload all" %}</button>
+      <a class="button cancel-link" href="{% url opts|admin_urlname:'changelist' %}">{% translate "Cancel" %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
