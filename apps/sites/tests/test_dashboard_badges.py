@@ -38,8 +38,6 @@ class DashboardBadgeTests(TestCase):
 
         self.assertContains(response, "dashboard-model-status")
         self.assertContains(response, "Sample failure")
-
-    @pytest.mark.critical
     def test_dashboard_model_status_endpoint_is_unavailable(self):
         with self.assertRaises(NoReverseMatch):
             reverse("admin:dashboard_model_status")

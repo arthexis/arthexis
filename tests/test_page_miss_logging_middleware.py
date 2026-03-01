@@ -8,7 +8,6 @@ from django.test import RequestFactory
 
 from config.middleware import PageMissLoggingMiddleware
 
-pytestmark = pytest.mark.critical
 
 
 @pytest.fixture

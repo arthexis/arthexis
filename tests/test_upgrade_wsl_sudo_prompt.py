@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = [pytest.mark.critical, pytest.mark.regression]
+pytestmark = pytest.mark.regression
 
 
 def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:

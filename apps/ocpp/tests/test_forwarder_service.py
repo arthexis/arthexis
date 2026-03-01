@@ -217,9 +217,6 @@ def test_keepalive_sessions_removes_dead_connections(forwarder_instance):
     assert pinged == 0
     assert forwarder_instance.get_session(1) is None
     connection.close.assert_called_once()
-
-
-@pytest.mark.critical
 @pytest.mark.django_db
 def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
     forwarder = Forwarder()

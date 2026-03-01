@@ -6,8 +6,6 @@ from django.test import RequestFactory
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
 from apps.users.system import collect_system_user_issues, ensure_system_user
-
-@pytest.mark.critical
 @pytest.mark.django_db
 def test_ensure_system_user_creates_and_repairs_account():
     User = get_user_model()
@@ -35,8 +33,6 @@ def test_ensure_system_user_creates_and_repairs_account():
     assert repaired_user.is_active and repaired_user.is_staff and repaired_user.is_superuser
     assert repaired_user.operate_as_id is None
     assert not repaired_user.has_usable_password()
-
-@pytest.mark.critical
 @pytest.mark.django_db
 def test_collect_system_user_issues_reports_expected_problems():
     User = get_user_model()

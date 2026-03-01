@@ -5,7 +5,6 @@ import pytest
 
 from apps.energy.models import CustomerAccount, EnergyTariff
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_customer_account_authorization_with_tariff_and_balance():

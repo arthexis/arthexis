@@ -10,7 +10,6 @@ from django.conf import settings
 
 from apps.loggers import build_logging_settings
 
-pytestmark = pytest.mark.critical
 
 def test_celery_logs_are_routed_to_dedicated_file(tmp_path: Path) -> None:
     """Celery INFO logs should not pollute the shared error log."""

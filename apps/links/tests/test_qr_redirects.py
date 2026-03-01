@@ -5,7 +5,6 @@ import pytest
 from apps.links import models as links_models
 from apps.links.models.redirects import QRRedirect, QRRedirectLead
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_qr_redirect_save_strips_target_and_generates_slug():

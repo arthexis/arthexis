@@ -18,7 +18,6 @@ from apps.mcp.server import (
 )
 from apps.mcp.tools import McpToolDefinition, list_tools
 
-pytestmark = pytest.mark.critical
 
 
 def test_list_tools_includes_graphql_and_whoami() -> None:
