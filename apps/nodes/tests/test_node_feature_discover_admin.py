@@ -193,3 +193,33 @@ def test_discover_progress_does_not_auto_enable_gpio_rtc_when_ineligible(admin_c
     assert payload["manual_enablement"]["can_toggle"] is False
     assert payload["enablement"]["status"] == "skipped"
     assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_manual_toggle_blocks_when_ineligible(admin_client, monkeypatch):
+    """Regression: manual toggle should be blocked when eligibility check fails."""
+
+    node = Node.objects.create(hostname="manual-blocked", public_endpoint="manual-blocked")
+    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            False,
+            "Recording device missing.",
+            messages.WARNING,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
+        {"feature_id": feature.pk, "enabled": "true"},
+    )
+
+    assert response.status_code == 400
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
