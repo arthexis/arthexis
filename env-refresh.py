@@ -328,11 +328,12 @@ def _load_fixtures_with_deferred_retry(
     *,
     using_sqlite: bool,
 ) -> None:
-    """Load fixture files by priority and retry deserialization failures once.
+    """Load fixture files by priority and retry deferred deserialization failures.
 
     The first pass preserves the existing load order. Any fixture that fails due
     to unresolved model references is retried after all other fixtures have had a
-    chance to populate dependencies.
+    chance to populate dependencies. Deferred fixtures keep retrying while each
+    pass makes progress, which handles chained dependencies deterministically.
     """
 
     deferred_fixtures: list[tuple[str, DeserializationError]] = []
@@ -351,20 +352,27 @@ def _load_fixtures_with_deferred_retry(
     if not deferred_fixtures:
         return
 
-    retried: list[tuple[str, DeserializationError]] = []
-    for fixture, _ in deferred_fixtures:
-        try:
-            _load_fixture_with_retry(
-                fixture,
-                using_sqlite=using_sqlite,
-            )
-        except DeserializationError as exc:
-            retried.append((fixture, exc))
-        else:
-            print(".", end="", flush=True)
+    while deferred_fixtures:
+        remaining: list[tuple[str, DeserializationError]] = []
+        progress_made = False
+        for fixture, _ in deferred_fixtures:
+            try:
+                _load_fixture_with_retry(
+                    fixture,
+                    using_sqlite=using_sqlite,
+                )
+            except DeserializationError as exc:
+                remaining.append((fixture, exc))
+            else:
+                progress_made = True
+                print(".", end="", flush=True)
 
-    for fixture, exc in retried:
-        print(f"Skipping fixture {fixture} due to: {exc}")
+        if not progress_made:
+            for fixture, exc in remaining:
+                print(f"Skipping fixture {fixture} due to: {exc}")
+            return
+
+        deferred_fixtures = remaining
 
 
 def _sigilroot_skip_reason(fields: dict) -> str | None:

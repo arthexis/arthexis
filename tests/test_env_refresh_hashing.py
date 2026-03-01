@@ -177,9 +177,11 @@ def test_load_fixtures_with_deferred_retry_reports_second_failure(
 ):
     """Regression: fixtures that fail twice should still be reported as skipped."""
 
+    calls: list[str] = []
     real_error = env_refresh_module.DeserializationError
 
     def _always_fail(fixture: str, *, using_sqlite: bool) -> None:
+        calls.append(fixture)
         if fixture == "bad.json":
             raise real_error("still missing")
 
@@ -193,3 +195,30 @@ def test_load_fixtures_with_deferred_retry_reports_second_failure(
     output = capsys.readouterr().out
     assert output.startswith(".")
     assert "Skipping fixture bad.json due to: still missing" in output
+    assert calls == ["good.json", "bad.json", "bad.json"]
+
+
+def test_load_fixtures_with_deferred_retry_handles_chained_dependencies(
+    monkeypatch, env_refresh_module, capsys
+):
+    """Regression: deferred fixtures should keep retrying while progress is made."""
+
+    calls: list[str] = []
+    real_error = env_refresh_module.DeserializationError
+
+    def _chained_loader(fixture: str, *, using_sqlite: bool) -> None:
+        calls.append(fixture)
+        if fixture == "b.json" and calls.count("b.json") == 1:
+            raise real_error("b depends on a")
+        if fixture == "c.json" and calls.count("c.json") < 3:
+            raise real_error("c depends on b")
+
+    monkeypatch.setattr(env_refresh_module, "_load_fixture_with_retry", _chained_loader)
+
+    env_refresh_module._load_fixtures_with_deferred_retry(
+        {1: ["a.json"], 2: ["b.json"], 3: ["c.json"]},
+        using_sqlite=True,
+    )
+
+    assert calls == ["a.json", "b.json", "c.json", "b.json", "c.json", "c.json"]
+    assert capsys.readouterr().out == "..."
