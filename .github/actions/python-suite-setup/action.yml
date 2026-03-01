@@ -1,0 +1,38 @@
+name: Python suite setup
+description: Set up Python, cache dependencies, and bootstrap virtualenv for CI suites.
+inputs:
+  python-version:
+    description: Python version to use.
+    required: false
+    default: '3.13'
+  cache-suffix:
+    description: Optional cache key suffix to isolate caches between workflows.
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Cache pip
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) || '' }}
+        restore-keys: |
+          pip-${{ runner.os }}-
+    - name: Cache virtualenv
+      uses: actions/cache@v5
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) || '' }}
+        restore-keys: |
+          venv-${{ runner.os }}-
+    - name: Bootstrap virtualenv
+      shell: bash
+      run: |
+        set -Eeuo pipefail
+        if [ ! -d ".venv" ]; then
+          python -m venv .venv
+        fi

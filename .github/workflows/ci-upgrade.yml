@@ -1,0 +1,96 @@
+name: CI Upgrade
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  NODE_OPTIONS: '--no-deprecation'
+  ARTHEXIS_DB_BACKEND: sqlite
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          clean: false
+      - name: Set up Python suite
+        uses: ./.github/actions/python-suite-setup
+        with:
+          python-version: '3.13'
+          cache-suffix: ci-upgrade
+      - name: Validate pyproject dependency ordering
+        run: |
+          python scripts/sort_pyproject_deps.py --check
+      - name: Install from default branch
+        run: |
+          ./install.sh --no-start
+      - name: Checkout PR changes
+        uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Validate pyproject dependency ordering (PR)
+        run: |
+          python scripts/sort_pyproject_deps.py --check
+      - name: Apply upgrade
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          ./upgrade.sh --local --no-restart
+      - name: Validate upgraded migrations
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --database default
+      - name: Create docs admin user
+        env:
+          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
+            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+          fi
+          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
+          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+      - name: Run Ruff on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          ruff check --select E9,F823 .
+      - name: Run tests on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          : > pytest.log
+          echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
+          echo "=== Integration tests ===" | tee -a pytest.log
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: upgrade-pytest-log
+          path: pytest.log
+          if-no-files-found: warn

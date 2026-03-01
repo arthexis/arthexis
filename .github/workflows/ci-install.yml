@@ -1,0 +1,84 @@
+name: CI Install
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  NODE_OPTIONS: '--no-deprecation'
+  ARTHEXIS_DB_BACKEND: sqlite
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Set up Python suite
+        uses: ./.github/actions/python-suite-setup
+        with:
+          python-version: '3.13'
+          cache-suffix: ci-install
+      - name: Validate pyproject dependency ordering
+        run: |
+          python scripts/sort_pyproject_deps.py --check
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+      - name: Validate migrations
+        run: |
+          source .venv/bin/activate
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --database default
+      - name: Create docs admin user
+        env:
+          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
+            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+          fi
+          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
+          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+      - name: Check import resolution
+        run: |
+          source .venv/bin/activate
+          python scripts/check_import_resolution.py
+      - name: Lint seed fixtures
+        run: |
+          source .venv/bin/activate
+          python scripts/lint_seed_fixtures.py
+      - name: Run Ruff
+        run: |
+          source .venv/bin/activate
+          ruff check --select E9,F823 .
+      - name: Run tests
+        run: |
+          set -o pipefail
+          source .venv/bin/activate
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: install-pytest-log
+          path: pytest.log
+          if-no-files-found: warn

@@ -1,0 +1,6 @@
+# CI dispatcher and reusable workflow modules
+/.github/workflows/ci.yml @arthexis/security-maintainers
+/.github/workflows/ci-upgrade.yml @arthexis/security-maintainers
+/.github/workflows/ci-install.yml @arthexis/docs-maintainers
+/.github/workflows/ci-notify.yml @arthexis/docs-maintainers
+/.github/actions/python-suite-setup/** @arthexis/security-maintainers
