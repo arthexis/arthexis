@@ -10,7 +10,7 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
     """Discover progress should expose manual toggle state for manual features."""
 
     node = Node.objects.create(hostname="local-node", public_endpoint="local-node")
-    feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
+    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -45,6 +45,19 @@ def test_discover_manual_toggle_enables_and_disables_manual_features(admin_clien
     node = Node.objects.create(hostname="manual-node", public_endpoint="manual-node")
     feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "Eligible for manual enablement.",
+            messages.SUCCESS,
+        ),
+    )
 
     enable_response = admin_client.post(
         reverse("admin:nodes_nodefeature_discover_manual_toggle"),
