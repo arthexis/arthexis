@@ -322,6 +322,7 @@ class EvergoUser(Profile):
             raise EvergoAPIError("Evergo credentials are incomplete.")
 
         sales_orders, customer_names = self.parse_customer_queries(raw_queries=raw_queries)
+        load_all_customers = not sales_orders and not customer_names
         unresolved: list[str] = []
         customers_loaded = 0
         orders_created = 0
@@ -348,14 +349,16 @@ class EvergoUser(Profile):
                 orders_created += created_inc
                 orders_updated += updated_inc
 
-            for customer_name in customer_names:
+            lookup_names = [""] if load_all_customers else customer_names
+            for customer_name in lookup_names:
                 order_payloads = self._fetch_orders_for_lookup(
                     session=session,
                     timeout=timeout,
                     customer_name=customer_name,
                 )
                 if not order_payloads:
-                    unresolved.append(customer_name)
+                    if customer_name:
+                        unresolved.append(customer_name)
                     continue
 
                 customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
@@ -597,8 +600,6 @@ class EvergoUser(Profile):
         source = (raw_queries or "").strip()
         if not source:
             return [], []
-        if source == "*":
-            return [], ["*"]
 
         sales_orders: list[str] = []
         seen_sales_orders: set[str] = set()
@@ -616,7 +617,7 @@ class EvergoUser(Profile):
         seen_names: set[str] = set()
         for chunk in cls.CUSTOMER_QUERY_DELIMITERS.split(names_blob):
             normalized = " ".join(chunk.split())
-            if len(normalized) < 2 and normalized != "*":
+            if len(normalized) < 2:
                 continue
             if normalized.lower() in seen_names:
                 continue
@@ -647,7 +648,7 @@ class EvergoUser(Profile):
                     "ingenieroAsignadoId": self.evergo_user_id or "",
                     "numero": so_number or "",
                     "conCargador": "",
-                    "cliente": "" if customer_name == "*" else (customer_name or ""),
+                    "cliente": customer_name or "",
                     "from": "",
                     "to": "",
                 },

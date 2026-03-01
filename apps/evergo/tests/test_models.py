@@ -402,13 +402,13 @@ def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
-def test_load_customers_from_queries_all_customers_wildcard_uses_access_scope(mock_session_cls):
-    """Regression: wildcard query should request all accessible customers for the engineer profile."""
+def test_load_customers_from_queries_without_filters_uses_access_scope(mock_session_cls):
+    """Regression: empty query should request all accessible customers for the engineer profile."""
     user_model = get_user_model()
-    suite_user = user_model.objects.create_user(username="suite-wildcard", email="suite-wildcard@example.com")
+    suite_user = user_model.objects.create_user(username="suite-load-all", email="suite-load-all@example.com")
     profile = EvergoUser.objects.create(
         user=suite_user,
-        evergo_email="wildcard@evergo.example.com",
+        evergo_email="load-all@evergo.example.com",
         evergo_password="top-secret",  # noqa: S106
         evergo_user_id=58642,
     )
@@ -427,7 +427,7 @@ def test_load_customers_from_queries_all_customers_wildcard_uses_access_scope(mo
 
     def request_side_effect(*, method, url, params=None, **kwargs):
         if url.endswith("/login"):
-            return _response({"id": 58642, "name": "Wildcard User", "email": "wildcard@evergo.example.com"})
+            return _response({"id": 58642, "name": "Load All User", "email": "load-all@evergo.example.com"})
         if "ordenes/instalador-coordinador" in url:
             assert params is not None
             assert params.get("numero") == ""
@@ -451,9 +451,9 @@ def test_load_customers_from_queries_all_customers_wildcard_uses_access_scope(mo
 
     mock_session.request.side_effect = request_side_effect
 
-    summary = profile.load_customers_from_queries(raw_queries="*")
+    summary = profile.load_customers_from_queries(raw_queries="")
 
-    assert summary["customer_names"] == ["*"]
+    assert summary["customer_names"] == []
     assert summary["customers_loaded"] == 1
     assert summary["unresolved"] == []
     assert profile.customers.filter(remote_id=9001, name="All Scope Customer").exists()
