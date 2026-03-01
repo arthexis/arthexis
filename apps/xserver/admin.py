@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import admin, messages
+from django.http import HttpResponseNotAllowed
 from django.shortcuts import redirect
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
@@ -74,7 +75,28 @@ class XDisplayInstanceAdmin(EntityModelAdmin):
     def discover_view(self, request):
         """Run X display server discovery from the admin changelist."""
 
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+
         node = Node.get_local()
+
+        if not has_x_server():
+            XDisplayInstance.objects.filter(node=node).delete()
+            discovery = start_discovery(
+                _("Discover"),
+                request,
+                model=self.model,
+                metadata={"action": "xserver_discover", "result": "no_server"},
+            )
+            if discovery:
+                discovery.save(update_fields=["metadata"])
+            self.message_user(
+                request,
+                _("No X display server was detected on this node."),
+                level=messages.WARNING,
+            )
+            return redirect("..")
+
         if not self._ensure_feature_enabled(request, node=node):
             return redirect("..")
 
@@ -84,18 +106,6 @@ class XDisplayInstanceAdmin(EntityModelAdmin):
             model=self.model,
             metadata={"action": "xserver_discover"},
         )
-
-        if not has_x_server():
-            XDisplayInstance.objects.filter(node=node).delete()
-            if discovery:
-                discovery.metadata = {"action": "xserver_discover", "result": "no_server"}
-                discovery.save(update_fields=["metadata"])
-            self.message_user(
-                request,
-                _("No X display server was detected on this node."),
-                level=messages.WARNING,
-            )
-            return redirect("..")
 
         created, updated = XDisplayInstance.refresh_from_system(node=node)
         if discovery:

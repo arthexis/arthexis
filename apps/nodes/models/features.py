@@ -418,11 +418,10 @@ class NodeFeatureMixin:
         if slug == "x-display-server":
             try:
                 from apps.xserver.utils import has_x_server
+                return has_x_server()
             except ImportError:
                 logger.exception("X server detection import failed")
                 return False
-            try:
-                return has_x_server()
             except Exception:
                 logger.exception("X server detection failed")
                 return False

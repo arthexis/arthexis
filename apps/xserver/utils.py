@@ -34,7 +34,7 @@ def _run_command(*args: str) -> str:
             check=False,
             timeout=2,
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return ""
     if completed.returncode != 0:
         return ""

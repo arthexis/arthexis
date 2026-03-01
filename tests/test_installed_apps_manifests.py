@@ -96,6 +96,7 @@ EXPECTED_LOCAL_APPS = [
     "apps.terms",
     "apps.evergo",
     "apps.fitbit",
+    "apps.xserver",
 ]
 
 

@@ -13,7 +13,7 @@ def add_x_display_server_feature(apps, schema_editor):
             "is_deleted": False,
         },
     )
-    if not created and feature.display != "X Display Server":
+    if not created and feature.is_seed_data and feature.display != "X Display Server":
         feature.display = "X Display Server"
         feature.save(update_fields=["display"])
 
@@ -22,7 +22,7 @@ def remove_x_display_server_feature(apps, schema_editor):
     """Remove the x-display-server node feature seed entry."""
 
     NodeFeature = apps.get_model("nodes", "NodeFeature")
-    NodeFeature.objects.filter(slug="x-display-server").delete()
+    NodeFeature.objects.filter(slug="x-display-server", is_seed_data=True).delete()
 
 
 class Migration(migrations.Migration):

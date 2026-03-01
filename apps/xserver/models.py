@@ -76,9 +76,10 @@ class XDisplayInstance(Entity):
             "process_name": detected.process_name,
             "raw_data": detected.raw_data,
         }
-        _, created = cls.objects.update_or_create(
+        instance, created = cls.objects.update_or_create(
             node=node,
             display_name=detected.display_name,
             defaults=defaults,
         )
+        cls.objects.filter(node=node).exclude(pk=instance.pk).delete()
         return (1, 0) if created else (0, 1)
