@@ -8,6 +8,7 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
   ARTHEXIS_DB_BACKEND: sqlite
+  PYTEST_WORKERS: '2'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -102,7 +103,7 @@ jobs:
         run: |
           set -o pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+          pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6
@@ -199,9 +200,9 @@ jobs:
           source .venv/bin/activate
           : > pytest.log
           echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
+          pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
           echo "=== Integration tests ===" | tee -a pytest.log
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
+          pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6
