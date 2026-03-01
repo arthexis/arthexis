@@ -27,13 +27,70 @@ def test_run_migrations_returns_subprocess_exit_code() -> None:
     """Run result should mirror the subprocess return code."""
 
     completed = mock.Mock(returncode=3)
-    with mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run:
+    with (
+        mock.patch.object(migration_server.sys, "platform", "linux"),
+        mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run,
+    ):
         assert migration_server.run_migrations([]) == 3
 
     run.assert_called_once_with(
         [migration_server.sys.executable, "manage.py", "migrate"],
         cwd=migration_server.BASE_DIR,
         check=False,
+        start_new_session=True,
+    )
+
+
+def test_run_migrations_handles_keyboard_interrupt() -> None:
+    """Regression: runner should map interrupt signals to a shell-friendly code."""
+
+    with mock.patch.object(
+        migration_server.subprocess,
+        "run",
+        side_effect=KeyboardInterrupt,
+    ):
+        assert migration_server.run_migrations([]) == 130
+
+
+def test_run_migrations_uses_new_process_group_on_windows() -> None:
+    """Windows launches should isolate Ctrl+C signals in a child process group."""
+
+    completed = mock.Mock(returncode=0)
+    with (
+        mock.patch.object(migration_server.sys, "platform", "win32"),
+        mock.patch.object(
+            migration_server.subprocess,
+            "CREATE_NEW_PROCESS_GROUP",
+            0x00000200,
+            create=True,
+        ),
+        mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run,
+    ):
+        assert migration_server.run_migrations([]) == 0
+
+    run.assert_called_once_with(
+        [migration_server.sys.executable, "manage.py", "migrate"],
+        cwd=migration_server.BASE_DIR,
+        check=False,
+        creationflags=0x00000200,
+    )
+
+
+def test_run_migrations_starts_new_session_on_posix() -> None:
+    """POSIX launches should isolate Ctrl+C signals in a new session."""
+
+    completed = mock.Mock(returncode=0)
+    with (
+        mock.patch.object(migration_server.sys, "platform", "linux"),
+        mock.patch.object(migration_server.subprocess, "run", return_value=completed) as run,
+    ):
+        assert migration_server.run_migrations([]) == 0
+
+    run.assert_called_once_with(
+        [migration_server.sys.executable, "manage.py", "migrate"],
+        cwd=migration_server.BASE_DIR,
+        check=False,
+        start_new_session=True,
     )
 
 
