@@ -354,9 +354,7 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             "apps/*/migrations/*.py",
         )
         if head_diff.returncode == 0:
-            head_labels = _labels_from_diff_paths(head_diff.stdout)
-            if head_labels:
-                return head_labels
+            return _labels_from_diff_paths(head_diff.stdout)
 
         # For non-merge commits (or very shallow clones where HEAD^1 is missing),
         # try commit-level file discovery as a second narrow fallback.
@@ -371,11 +369,9 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             "apps/*/migrations/*.py",
         )
         if head_diff.returncode == 0:
-            head_labels = _labels_from_diff_paths(head_diff.stdout)
-            if head_labels:
-                return head_labels
+            return _labels_from_diff_paths(head_diff.stdout)
 
-        # If no commit-level diff is available, fail open by scanning all local
+        # If commit-level diff commands are unavailable, fail open by scanning all local
         # app migration directories rather than failing the entire validation job.
         labels: set[str] = set()
         apps_dir = repo_root / "apps"

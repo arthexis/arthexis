@@ -203,6 +203,40 @@ def test_git_changed_app_labels_uses_head_diff_when_merge_base_missing(
     assert ["git", "diff-tree", "--no-commit-id"] not in [call[:3] for call in calls]
 
 
+
+
+def test_git_changed_app_labels_returns_empty_when_head_diff_has_no_migration_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Successful commit-level diff with no migration paths should return an empty set."""
+
+    class Result:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    calls: list[list[str]] = []
+
+    apps_dir = tmp_path / "apps"
+    widgets_migrations = apps_dir / "widgets" / "migrations"
+    widgets_migrations.mkdir(parents=True)
+    (widgets_migrations / "__init__.py").write_text("", encoding="utf-8")
+    _write_migration(widgets_migrations / "0001_initial.py")
+
+    def fake_run(args: list[str], **_kwargs: object) -> Result:
+        calls.append(args)
+        if args[:3] == ["git", "merge-base", "HEAD"]:
+            return Result(returncode=1, stderr="no merge base")
+        if args[:3] == ["git", "diff", "--name-only"]:
+            return Result(returncode=0, stdout="")
+        raise AssertionError(f"Unexpected git invocation: {args}")
+
+    monkeypatch.setattr(check_migration_conflicts.subprocess, "run", fake_run)
+
+    assert check_migration_conflicts._git_changed_app_labels(tmp_path) == set()
+    assert ["git", "diff-tree", "--no-commit-id"] not in [call[:3] for call in calls]
+
 def test_git_changed_app_labels_uses_diff_tree_when_first_parent_diff_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
