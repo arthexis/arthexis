@@ -162,6 +162,19 @@ def create_issue(
     return issue.create(title, body, labels=labels, fingerprint=fingerprint)
 
 
+def create_pull_request_comment(pull_number: int, body: str):
+    """Create a comment for a specific open pull request."""
+
+    issue = GitHubIssue.from_active_repository()
+    return github_service.create_pull_request_comment(
+        issue.owner,
+        issue.repository,
+        pull_number=pull_number,
+        token=issue.token,
+        body=body,
+    )
+
+
 # Repository helpers
 
 def create_repository(
