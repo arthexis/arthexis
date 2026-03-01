@@ -36,7 +36,7 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
     from apps.nginx.management.commands import https as https_module
 
     monkeypatch.setattr(
-        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
+        https_module.HttpsProvisioningService, "validate_godaddy_setup", lambda self, certificate: None
     )
 
     call_command("https", "--enable", "--godaddy", "example.com", "--no-sudo")
@@ -85,7 +85,7 @@ def test_https_godaddy_implies_enable(monkeypatch):
     from apps.nginx.management.commands import https as https_module
 
     monkeypatch.setattr(
-        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
+        https_module.HttpsProvisioningService, "validate_godaddy_setup", lambda self, certificate: None
     )
 
     call_command("https", "--godaddy", "example.net", "--no-sudo")
@@ -212,6 +212,7 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     import sys
     from apps.dns.models import DNSProviderCredential
     from apps.nginx.management.commands.https import Command
+    from apps.nginx.management.commands.https_parts import HttpsProvisioningService
 
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
@@ -223,10 +224,10 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
         "Use GoDaddy OTE sandbox environment? [y/N]: ": "n",
     }
     monkeypatch.setattr("builtins.input", lambda prompt="": prompt_map[prompt])
-    monkeypatch.setattr("apps.nginx.management.commands.https.getpass", lambda _prompt='': "secret-456")
+    monkeypatch.setattr("apps.nginx.management.commands.https_parts.service.getpass", lambda _prompt='': "secret-456")
 
-    command = Command()
-    credential = command._prompt_for_godaddy_credential("example.edu")
+    service = HttpsProvisioningService(command=Command())
+    credential = service.prompt_for_godaddy_credential("example.edu")
 
     assert credential is not None
     assert credential.provider == DNSProviderCredential.Provider.GODADDY
