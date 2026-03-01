@@ -5,7 +5,9 @@
       "is_seed_data": true,
       "is_deleted": false,
       "roles": [],
-      "application": ["awg"],
+      "application": [
+        "awg"
+      ],
       "path": "/awg/",
       "menu": "Calculators",
       "priority": 0,
@@ -18,7 +20,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["/awg/"],
+      "module": [
+        "/awg/"
+      ],
       "path": "/awg/",
       "label": "AWG Cable Sizing Calculator",
       "enabled": true,
@@ -32,17 +36,14 @@
       "is_seed_data": true,
       "is_deleted": false,
       "roles": [],
-      "application": ["ocpp"],
+      "application": [
+        "ocpp"
+      ],
       "path": "/ocpp/",
       "menu": "Charge Points",
       "priority": 0,
       "is_default": false,
-      "security_mode": "inclusive",
-      "features": [
-        [
-          "charge-points"
-        ]
-      ]
+      "security_mode": "inclusive"
     }
   },
   {
@@ -50,7 +51,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["/ocpp/"],
+      "module": [
+        "/ocpp/"
+      ],
       "path": "/ocpp/cpms/dashboard/",
       "label": "Charging Station Dashboards",
       "enabled": true,
@@ -63,7 +66,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["/ocpp/"],
+      "module": [
+        "/ocpp/"
+      ],
       "path": "/ocpp/charging-map/",
       "label": "Charging Station Map",
       "enabled": true,
@@ -76,7 +81,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["/ocpp/"],
+      "module": [
+        "/ocpp/"
+      ],
       "path": "/ocpp/rfid/validator/",
       "label": "RFID Card Validator",
       "enabled": true,
@@ -89,7 +96,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["/ocpp/"],
+      "module": [
+        "/ocpp/"
+      ],
       "path": "/ocpp/evcs/simulator/",
       "label": "EVCS Online Simulator",
       "enabled": true,

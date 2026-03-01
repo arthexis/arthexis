@@ -77,3 +77,13 @@ def test_resource_method_coerces_empty_json_structures_regression() -> None:
 
     assert method.request_structure == {}
     assert method.response_structure == {}
+
+
+@pytest.mark.django_db
+def test_apiexplorer_natural_key_roundtrip_regression() -> None:
+    """Regression: API explorers should resolve from fixture natural keys."""
+
+    api = APIExplorer.objects.create(name="Evergo API Regression", base_url="https://portal.example.com")
+
+    assert api.natural_key() == ("Evergo API Regression",)
+    assert APIExplorer.objects.get_by_natural_key("Evergo API Regression") == api
