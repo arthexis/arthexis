@@ -106,8 +106,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s
-' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -121,8 +120,7 @@ jobs:
           echo "mode=changed" >> "${GITHUB_OUTPUT}"
           {
             echo "paths<<EOF"
-            printf '%s
-' "${CHANGED_FIXTURES}"
+            printf '%s\n' "${CHANGED_FIXTURES}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
@@ -248,21 +246,27 @@ jobs:
           script: |
             const eventName = context.eventName;
             const integrationLabel = 'ci:run-integration';
+            // Keep these matchers intentionally narrow so integration tests only run for
+            // runtime-critical changes or explicit integration suites, avoiding noisy CI runs.
             const pathMatchers = [
               'apps/ocpp/**',
               'apps/protocols/**',
               'apps/core/**',
               'apps/services/**',
               'apps/tasks/**',
-              'apps/**/tests/**',
-              'config/**',
-              'scripts/**',
+              'config/settings/**',
+              'config/asgi.py',
+              'config/wsgi.py',
+              'config/urls.py',
               'manage.py',
               'pyproject.toml',
               'requirements*.txt',
-              'tests/test_*.py',
-              'tests/**/test_*.py',
               'tests/integration/**',
+              'apps/ocpp/tests/**',
+              'apps/protocols/tests/**',
+              'apps/core/tests/**',
+              'apps/services/tests/**',
+              'apps/tasks/tests/**',
               '.github/workflows/ci.yml'
             ];
 
