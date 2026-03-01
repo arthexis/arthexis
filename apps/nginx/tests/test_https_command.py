@@ -33,11 +33,9 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
-    from apps.nginx.management.commands import https as https_module
+    from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(
-        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
-    )
+    monkeypatch.setattr(certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None)
 
     call_command("https", "--enable", "--godaddy", "example.com", "--no-sudo")
 
@@ -82,11 +80,9 @@ def test_https_godaddy_implies_enable(monkeypatch):
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
-    from apps.nginx.management.commands import https as https_module
+    from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(
-        https_module.Command, "_validate_godaddy_setup", lambda self, certificate: None
-    )
+    monkeypatch.setattr(certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None)
 
     call_command("https", "--godaddy", "example.net", "--no-sudo")
 
@@ -212,6 +208,8 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     import sys
     from apps.dns.models import DNSProviderCredential
     from apps.nginx.management.commands.https import Command
+    from apps.nginx.management.commands.https_parts.certificate_flow import _prompt_for_godaddy_credential
+    from apps.nginx.management.commands.https_parts.service import HttpsProvisioningService
 
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
@@ -223,10 +221,11 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
         "Use GoDaddy OTE sandbox environment? [y/N]: ": "n",
     }
     monkeypatch.setattr("builtins.input", lambda prompt="": prompt_map[prompt])
-    monkeypatch.setattr("apps.nginx.management.commands.https.getpass", lambda _prompt='': "secret-456")
+    monkeypatch.setattr("apps.nginx.management.commands.https_parts.certificate_flow.getpass", lambda _prompt='': "secret-456")
 
     command = Command()
-    credential = command._prompt_for_godaddy_credential("example.edu")
+    service = HttpsProvisioningService(command)
+    credential = _prompt_for_godaddy_credential(service, "example.edu")
 
     assert credential is not None
     assert credential.provider == DNSProviderCredential.Provider.GODADDY
