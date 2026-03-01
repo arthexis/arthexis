@@ -65,16 +65,30 @@ def _parse_assignment_tuples(path: Path, attribute_name: str) -> list[tuple[str,
             for target in statement.targets:
                 if not isinstance(target, ast.Name) or target.id != attribute_name:
                     continue
-                dependencies: list[tuple[str, str]] = []
-                if isinstance(statement.value, ast.List):
-                    for element in statement.value.elts:
-                        if not isinstance(element, ast.Tuple) or len(element.elts) != 2:
-                            continue
-                        app_node, name_node = element.elts
-                        if isinstance(app_node, ast.Constant) and isinstance(name_node, ast.Constant):
-                            if isinstance(app_node.value, str) and isinstance(name_node.value, str):
-                                dependencies.append((app_node.value, name_node.value))
-                return dependencies
+                if not isinstance(statement.value, ast.List):
+                    raise MigrationParseError(
+                        f"{path}: Migration.{attribute_name} must be a literal list of 2-item tuples."
+                    )
+                parsed: list[tuple[str, str]] = []
+                for element in statement.value.elts:
+                    if not isinstance(element, ast.Tuple) or len(element.elts) != 2:
+                        raise MigrationParseError(
+                            f"{path}: Migration.{attribute_name} has invalid entry {ast.dump(element)}; "
+                            "expected a 2-item tuple of string literals."
+                        )
+                    app_node, name_node = element.elts
+                    if not (
+                        isinstance(app_node, ast.Constant)
+                        and isinstance(app_node.value, str)
+                        and isinstance(name_node, ast.Constant)
+                        and isinstance(name_node.value, str)
+                    ):
+                        raise MigrationParseError(
+                            f"{path}: Migration.{attribute_name} has non-literal entry {ast.dump(element)}; "
+                            "expected (str, str)."
+                        )
+                    parsed.append((app_node.value, name_node.value))
+                return parsed
     return []
 
 
@@ -242,7 +256,7 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             break
 
     if diff_base is None:
-        return set()
+        raise MigrationCheckError("Unable to determine git diff base for migration conflict pre-check.")
 
     diff = _run_git(
         "diff",
@@ -253,7 +267,11 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
         "apps/*/migrations/*.py",
     )
     if diff.returncode != 0:
-        return set()
+        stderr = diff.stderr.strip()
+        raise MigrationCheckError(
+            "git diff failed while discovering changed migration files: "
+            f"{stderr or 'unknown error'}"
+        )
 
     labels: set[str] = set()
     for line in diff.stdout.splitlines():

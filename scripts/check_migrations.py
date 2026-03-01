@@ -146,7 +146,11 @@ def _check_baseline_depths(
 
 
 def main() -> int:
-    conflict_check = run_migration_conflict_checks(REPO_ROOT)
+    try:
+        conflict_check = run_migration_conflict_checks(REPO_ROOT)
+    except Exception as exc:
+        print(f"Migration conflict pre-check failed: {exc}", file=sys.stderr)
+        return 1
     if conflict_check != 0:
         return conflict_check
 
