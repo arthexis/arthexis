@@ -5,8 +5,6 @@ from django.test import TestCase
 
 import pytest
 
-pytestmark = pytest.mark.critical
-
 class CreateDocsAdminCommandTests(TestCase):
     def test_requires_confirm_flag(self):
         with self.assertRaisesMessage(

@@ -133,48 +133,11 @@ def test_discover_progress_does_not_auto_enable_manual_features(
 
 
 @pytest.mark.django_db
-def test_discover_manual_toggle_rejects_ineligible_feature(admin_client, monkeypatch):
-    """Manual toggle endpoint should reject enablement when eligibility fails."""
+def test_discover_progress_auto_enables_gpio_rtc_when_eligible(admin_client, monkeypatch):
+    """Auto-managed gpio-rtc should be assigned during discovery when eligible."""
 
-    node = Node.objects.create(
-        hostname="manual-ineligible", public_endpoint="manual-ineligible"
-    )
-    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
-    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
-
-    from django.contrib import messages
-
-    from apps.nodes.feature_checks import FeatureCheckResult
-
-    monkeypatch.setattr(
-        "apps.nodes.feature_checks.feature_checks.run",
-        lambda _feature, node=None: FeatureCheckResult(
-            False,
-            "Audio device not available.",
-            messages.WARNING,
-        ),
-    )
-
-    response = admin_client.post(
-        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
-        {"feature_id": feature.pk, "enabled": "true"},
-    )
-
-    assert response.status_code == 400
-    payload = response.json()
-    assert payload["detail"] == "Feature is not eligible for enablement"
-    assert payload["message"] == "Audio device not available."
-    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
-
-
-@pytest.mark.django_db
-def test_discover_manual_toggle_enables_eligible_feature(admin_client, monkeypatch):
-    """Manual toggle endpoint should allow enablement when eligibility succeeds."""
-
-    node = Node.objects.create(
-        hostname="manual-eligible", public_endpoint="manual-eligible"
-    )
-    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    node = Node.objects.create(hostname="auto-progress", public_endpoint="auto-progress")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -185,36 +148,54 @@ def test_discover_manual_toggle_enables_eligible_feature(admin_client, monkeypat
         "apps.nodes.feature_checks.feature_checks.run",
         lambda _feature, node=None: FeatureCheckResult(
             True,
-            "Audio capture prerequisites met.",
+            "RTC detected and feature eligible.",
             messages.SUCCESS,
         ),
     )
 
     response = admin_client.post(
-        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
-        {"feature_id": feature.pk, "enabled": "true"},
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
     )
 
     assert response.status_code == 200
+    payload = response.json()
+    assert payload["manual_enablement"]["status"] == "auto"
+    assert payload["manual_enablement"]["can_toggle"] is False
+    assert payload["enablement"]["status"] == "enabled"
     assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
 
 
 @pytest.mark.django_db
-def test_discover_manual_toggle_allows_manual_feature_without_explicit_check(
-    admin_client, monkeypatch
-):
-    """Manual toggle should allow manual features that do not define explicit eligibility checks."""
+def test_discover_progress_does_not_auto_enable_gpio_rtc_when_ineligible(admin_client, monkeypatch):
+    """Auto-managed gpio-rtc should stay unassigned during discovery when ineligible."""
 
-    node = Node.objects.create(
-        hostname="manual-default", public_endpoint="manual-default"
-    )
-    feature = NodeFeature.objects.create(slug="cpsim-service", display="CPSIM Service")
+    node = Node.objects.create(hostname="auto-progress", public_endpoint="auto-progress")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            False,
+            "RTC not detected.",
+            messages.WARNING,
+        ),
+    )
+
     response = admin_client.post(
-        reverse("admin:nodes_nodefeature_discover_manual_toggle"),
-        {"feature_id": feature.pk, "enabled": "true"},
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk},
     )
 
     assert response.status_code == 200
-    assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+    payload = response.json()
+    assert payload["eligible"] is False
+    assert payload["manual_enablement"]["status"] == "auto"
+    assert payload["manual_enablement"]["can_toggle"] is False
+    assert payload["enablement"]["status"] == "skipped"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()

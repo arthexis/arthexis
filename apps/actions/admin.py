@@ -6,6 +6,7 @@ import yaml
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
+from django.template.response import TemplateResponse
 from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils import timezone
@@ -21,6 +22,8 @@ from apps.locals.user_data import EntityModelAdmin
 @admin.register(RemoteAction)
 class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
     """Manage remote actions and export OpenAPI specs from the changelist."""
+
+    OPENAPI_EXPORT_FILENAME = "my-actions-openapi.yaml"
 
     list_display = ("display", "slug", "operation_id", "recipe", "owner", "is_active")
     list_filter = ("is_active",)
@@ -52,11 +55,28 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
     my_openapi_spec.changelist = True
 
     def my_openapi_spec_view(self, request):
-        """Render a YAML OpenAPI spec for actions available to the current user."""
+        """Preview the current user's OpenAPI YAML and optionally download it."""
+
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
 
         spec = build_openapi_spec(user=request.user, request=request)
         payload = yaml.safe_dump(spec, sort_keys=False)
-        return HttpResponse(payload, content_type="application/yaml")
+        if request.GET.get("download") == "1":
+            response = HttpResponse(payload, content_type="application/yaml")
+            response["Content-Disposition"] = (
+                f'attachment; filename="{self.OPENAPI_EXPORT_FILENAME}"'
+            )
+            return response
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("My OpenAPI Spec"),
+            "payload": payload,
+            "download_url": f"{request.path}?download=1",
+        }
+        return TemplateResponse(request, "admin/actions/remoteaction/openapi_preview.html", context)
 
     @admin.action(description=_("Generate OpenAPI spec for selected Remote Actions"))
     def generate_openapi_for_selected(self, request, queryset):

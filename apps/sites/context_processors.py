@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
@@ -76,12 +76,16 @@ def nav_links(request):
         and (user_is_staff or user_is_superuser or is_site_operator)
         and not is_suite_feature_enabled("operator-site-interface", default=True)
     )
+    feedback_ingestion_enabled = is_suite_feature_enabled(
+        "feedback-ingestion", default=True
+    )
 
     if not user_is_authenticated:
         template_id = getattr(getattr(site, "template", None), "id", "none")
         cache_key = (
             f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
-            f"interface:{int(operator_interface_mode)}"
+            f"interface:{int(operator_interface_mode)}:"
+            f"feedback:{int(feedback_ingestion_enabled)}"
         )
         cached = cache.get(cache_key)
         if cached:
@@ -166,8 +170,7 @@ def nav_links(request):
             )
             if required_features_any:
                 if not any(
-                    feature_checker.is_enabled(slug)
-                    for slug in required_features_any
+                    feature_checker.is_enabled(slug) for slug in required_features_any
                 ):
                     continue
             seen_paths.add(normalized_path)
@@ -228,7 +231,6 @@ def nav_links(request):
                 ):
                     current_module = module
 
-
     valid_modules.sort(key=lambda m: (m.priority, m.menu_label.lower()))
     request.current_module = current_module
 
@@ -244,7 +246,9 @@ def nav_links(request):
                 pass
         if not favicon_url:
             role_name = getattr(getattr(node, "role", None), "name", "")
-            favicon_url = _ROLE_FAVICONS.get(role_name, _DEFAULT_FAVICON) or _DEFAULT_FAVICON
+            favicon_url = (
+                _ROLE_FAVICONS.get(role_name, _DEFAULT_FAVICON) or _DEFAULT_FAVICON
+            )
 
     try:
         header_refs_qs = (
@@ -261,14 +265,9 @@ def nav_links(request):
     except (OperationalError, ProgrammingError):
         header_references = []
 
-    try:
-        chat_feature = NodeFeature.objects.filter(slug="chat-bridge").first()
-    except (OperationalError, ProgrammingError):
-        chat_feature = None
     chat_enabled = bool(
         getattr(settings, "PAGES_CHAT_ENABLED", False)
-        and chat_feature
-        and chat_feature.is_enabled
+        and is_suite_feature_enabled("staff-chat-bridge", default=False)
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
@@ -281,9 +280,7 @@ def nav_links(request):
         if site_template is None:
             try:
                 group_template = (
-                    SecurityGroup.objects.filter(
-                        site_template__isnull=False, user=user
-                    )
+                    SecurityGroup.objects.filter(site_template__isnull=False, user=user)
                     .select_related("site_template")
                     .order_by("name")
                     .first()
@@ -312,6 +309,7 @@ def nav_links(request):
         "chat_socket_path": chat_socket_path,
         "site_template": site_template,
         "operator_interface_mode": operator_interface_mode,
+        "feedback_ingestion_enabled": feedback_ingestion_enabled,
         "user_story_attachment_limit": int(
             getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
         ),

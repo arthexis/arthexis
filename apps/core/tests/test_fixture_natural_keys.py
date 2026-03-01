@@ -5,7 +5,6 @@ import pytest
 import json
 from pathlib import Path
 
-pytestmark = pytest.mark.critical
 
 def _fixture_files() -> list[Path]:
     project_root = Path(__file__).resolve().parents[3]

@@ -12,7 +12,6 @@ from django.core.management.base import CommandError
 
 from apps.mcp.models import McpApiKey
 
-pytestmark = pytest.mark.critical
 
 
 @pytest.mark.django_db

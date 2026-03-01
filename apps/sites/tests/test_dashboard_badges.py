@@ -8,8 +8,6 @@ import pytest
 from apps.counters import dashboard_rules
 from apps.counters.models import DashboardRule
 
-pytestmark = pytest.mark.critical
-
 class DashboardBadgeTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()
@@ -40,7 +38,6 @@ class DashboardBadgeTests(TestCase):
 
         self.assertContains(response, "dashboard-model-status")
         self.assertContains(response, "Sample failure")
-
     def test_dashboard_model_status_endpoint_is_unavailable(self):
         with self.assertRaises(NoReverseMatch):
             reverse("admin:dashboard_model_status")

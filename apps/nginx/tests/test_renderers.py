@@ -9,7 +9,6 @@ from apps.nginx.renderers import (
     generate_unified_config,
 )
 
-pytestmark = pytest.mark.critical
 
 def test_generate_primary_config_internal_mode():
     config = generate_primary_config("internal", 8080)

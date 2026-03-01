@@ -191,9 +191,6 @@ def test_clear_charging_profile_registers_pending_call(ws):
     assert store.pending_calls[message_id]["charging_profile_id"] == 7
     assert store.pending_calls[message_id]["evse_id"] == 2
     assert message_id in store._pending_call_handles
-
-
-@pytest.mark.critical
 def test_firmware_actions_register_ocpp201_and_ocpp21():
     update_calls = actions._handle_update_firmware.__protocol_calls__
     publish_calls = actions._handle_publish_firmware.__protocol_calls__

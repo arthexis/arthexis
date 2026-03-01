@@ -6,7 +6,7 @@ from importlib import import_module
 from typing import Callable
 
 from django.utils import timezone
-from django.utils.translation import gettext, gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.ocpp.models import Charger, ChargerConfiguration, CPFirmware, Simulator
 from apps.nodes.models import Node
@@ -204,6 +204,28 @@ def evaluate_email_profile_rules() -> dict[str, object]:
 
     if issues:
         return rule_failure(" ".join(str(issue) for issue in issues))
+
+    return rule_success()
+
+
+
+
+def evaluate_aws_credentials_rules() -> dict[str, object] | None:
+    """Require at least one AWS credential record for Watchtower nodes."""
+
+    try:
+        from apps.aws.models import AWSCredentials
+    except ImportError:
+        logger.exception("Unable to import AWS credentials rule models")
+        return rule_failure(_("AWS credentials check failed: import err."))
+
+    local_node = Node.get_local()
+    role_name = ((getattr(local_node, "role", None) and local_node.role.name) or "").strip().lower()
+    if role_name != "watchtower":
+        return rule_success()
+
+    if not AWSCredentials.objects.exists():
+        return rule_failure(_("Configure at least one AWS credential."))
 
     return rule_success()
 

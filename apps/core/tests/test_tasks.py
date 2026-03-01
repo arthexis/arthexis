@@ -5,7 +5,6 @@ import pytest
 
 from apps.core.tasks import migrations as tasks_migrations
 
-pytestmark = pytest.mark.critical
 
 def test_is_migration_server_running_skips_unexpected_pid(monkeypatch, tmp_path):
     state_path = tmp_path / "migration_server.json"

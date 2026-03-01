@@ -27,4 +27,4 @@ for env_file in *.env; do
   set +a
 done
 
-python "$BASE_DIR/scripts/migration_server.py" --latest --debounce 1
+python "$BASE_DIR/scripts/migration_server.py"

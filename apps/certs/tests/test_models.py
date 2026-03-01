@@ -5,7 +5,6 @@ from django.utils import timezone
 from apps.certs import services
 from apps.certs.models import CertbotCertificate, SelfSignedCertificate
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_certbot_certificate_request_updates_state(monkeypatch):
