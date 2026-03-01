@@ -46,8 +46,8 @@ class MigrationCheckError(RuntimeError):
     """Raised when migration checks detect policy violations."""
 
 
-def _parse_dependencies(path: Path) -> list[tuple[str, str]]:
-    """Return literal ``Migration.dependencies`` values from ``path``."""
+def _parse_assignment_tuples(path: Path, attribute_name: str) -> list[tuple[str, str]]:
+    """Return literal ``Migration.<attribute_name>`` tuple values from ``path``."""
 
     try:
         module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -63,7 +63,7 @@ def _parse_dependencies(path: Path) -> list[tuple[str, str]]:
             if not isinstance(statement, ast.Assign):
                 continue
             for target in statement.targets:
-                if not isinstance(target, ast.Name) or target.id != "dependencies":
+                if not isinstance(target, ast.Name) or target.id != attribute_name:
                     continue
                 dependencies: list[tuple[str, str]] = []
                 if isinstance(statement.value, ast.List):
@@ -76,6 +76,18 @@ def _parse_dependencies(path: Path) -> list[tuple[str, str]]:
                                 dependencies.append((app_node.value, name_node.value))
                 return dependencies
     return []
+
+
+def _parse_dependencies(path: Path) -> list[tuple[str, str]]:
+    """Return literal ``Migration.dependencies`` values from ``path``."""
+
+    return _parse_assignment_tuples(path, "dependencies")
+
+
+def _parse_replaces(path: Path) -> list[tuple[str, str]]:
+    """Return literal ``Migration.replaces`` values from ``path``."""
+
+    return _parse_assignment_tuples(path, "replaces")
 
 
 def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
@@ -145,8 +157,20 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
         migration.name: _parse_dependencies(migration.path)
         for migration in files
     }
-    leaves = _leaf_migrations(files, dependencies_by_name)
-    merge_files = [migration for migration in files if _is_merge_migration(migration.name)]
+    replaces_by_name = {
+        migration.name: _parse_replaces(migration.path)
+        for migration in files
+    }
+    replaced_names = {
+        replace_name
+        for replaces in replaces_by_name.values()
+        for replace_app, replace_name in replaces
+        if replace_app == files[0].app_label
+    }
+
+    active_files = [migration for migration in files if migration.name not in replaced_names]
+    leaves = _leaf_migrations(active_files, dependencies_by_name)
+    merge_files = [migration for migration in active_files if _is_merge_migration(migration.name)]
 
     errors: list[str] = []
     if len(leaves) > 1:
@@ -281,7 +305,7 @@ def run_checks(repo_root: Path = REPO_ROOT, *, app_labels: set[str] | None = Non
     for app_dir in sorted((repo_root / "apps").iterdir()):
         if not app_dir.is_dir():
             continue
-        if target_labels and app_dir.name not in target_labels:
+        if app_dir.name not in target_labels:
             continue
         app_files = _migration_files_for_app(app_dir)
         all_errors.extend(_check_app(app_files, repo_root=repo_root))
