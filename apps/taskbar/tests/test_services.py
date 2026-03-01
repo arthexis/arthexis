@@ -53,6 +53,60 @@ def test_get_active_icon_falls_back_to_default_when_lock_missing(tmp_path):
 
 
 @pytest.mark.django_db
+def test_get_active_icon_falls_back_to_default_when_lock_slug_missing_icon(tmp_path):
+    """Unknown lock slugs should fall back to the configured default icon."""
+
+    default_icon = TaskbarIcon.objects.create(
+        name="Default",
+        slug="default",
+        icon_b64="ZGVmYXVsdA==",
+        is_default=True,
+    )
+    selector = TaskbarIconSelector(lock_dir=tmp_path)
+    selector.lock_dir.mkdir(parents=True, exist_ok=True)
+    selector.lock_path.write_text("deleted-or-missing", encoding="utf-8")
+
+    selection = selector.get_active_icon()
+
+    assert selection.icon.pk == default_icon.pk
+    assert selection.source == "default"
+
+
+@pytest.mark.django_db
+def test_get_active_icon_falls_back_to_first_named_when_no_default(tmp_path):
+    """When no default exists, selector should choose the first icon ordered by name."""
+
+    first_icon = TaskbarIcon.objects.create(
+        name="A First",
+        slug="first",
+        icon_b64="Zmlyc3Q=",
+        is_default=False,
+    )
+    TaskbarIcon.objects.create(
+        name="B Second",
+        slug="second",
+        icon_b64="c2Vjb25k",
+        is_default=False,
+    )
+    selector = TaskbarIconSelector(lock_dir=tmp_path)
+
+    selection = selector.get_active_icon()
+
+    assert selection.icon.pk == first_icon.pk
+    assert selection.source == "first"
+
+
+@pytest.mark.django_db
+def test_get_active_icon_raises_when_no_icons_exist(tmp_path):
+    """Selector should raise a specific error when no icons can be resolved."""
+
+    selector = TaskbarIconSelector(lock_dir=tmp_path)
+
+    with pytest.raises(TaskbarIconNotFoundError):
+        selector.get_active_icon()
+
+
+@pytest.mark.django_db
 def test_set_active_icon_raises_specific_error_for_unknown_slug(tmp_path):
     """Selector should raise TaskbarIconNotFoundError for unknown icon slug."""
 

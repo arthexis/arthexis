@@ -7,7 +7,7 @@ def add_taskbar_display_feature(apps, schema_editor):
     NodeFeature = apps.get_model("nodes", "NodeFeature")
     NodeRole = apps.get_model("nodes", "NodeRole")
 
-    feature, _ = NodeFeature.objects.get_or_create(
+    feature, _ = NodeFeature._base_manager.update_or_create(
         slug="taskbar-display",
         defaults={
             "display": "Taskbar Display",
@@ -15,19 +15,6 @@ def add_taskbar_display_feature(apps, schema_editor):
             "is_deleted": False,
         },
     )
-
-    updated_fields = []
-    if feature.display != "Taskbar Display":
-        feature.display = "Taskbar Display"
-        updated_fields.append("display")
-    if not feature.is_seed_data:
-        feature.is_seed_data = True
-        updated_fields.append("is_seed_data")
-    if feature.is_deleted:
-        feature.is_deleted = False
-        updated_fields.append("is_deleted")
-    if updated_fields:
-        feature.save(update_fields=updated_fields)
 
     for role_name in ("Terminal", "Control"):
         role = NodeRole.objects.filter(name=role_name).first()
@@ -39,7 +26,9 @@ def remove_taskbar_display_feature(apps, schema_editor):
     """Remove seeded taskbar display feature during rollback."""
 
     NodeFeature = apps.get_model("nodes", "NodeFeature")
-    NodeFeature.objects.filter(slug="taskbar-display").delete()
+    NodeFeature._base_manager.filter(slug="taskbar-display")._raw_delete(
+        schema_editor.connection.alias
+    )
 
 
 class Migration(migrations.Migration):

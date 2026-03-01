@@ -49,7 +49,7 @@ def seed_default_icon(apps, schema_editor):
     """Create or update the default taskbar icon using admin favicon data."""
 
     TaskbarIcon = apps.get_model("taskbar", "TaskbarIcon")
-    icon, created = TaskbarIcon.objects.get_or_create(
+    TaskbarIcon._base_manager.update_or_create(
         slug="admin-favicon",
         defaults={
             "name": "Admin Favicon",
@@ -59,31 +59,15 @@ def seed_default_icon(apps, schema_editor):
             "is_deleted": False,
         },
     )
-    updated_fields = []
-    if icon.name != "Admin Favicon":
-        icon.name = "Admin Favicon"
-        updated_fields.append("name")
-    if icon.icon_b64 != DEFAULT_ICON_B64:
-        icon.icon_b64 = DEFAULT_ICON_B64
-        updated_fields.append("icon_b64")
-    if not icon.is_default:
-        icon.is_default = True
-        updated_fields.append("is_default")
-    if not icon.is_seed_data:
-        icon.is_seed_data = True
-        updated_fields.append("is_seed_data")
-    if icon.is_deleted:
-        icon.is_deleted = False
-        updated_fields.append("is_deleted")
-    if updated_fields:
-        icon.save(update_fields=updated_fields)
 
 
 def unseed_default_icon(apps, schema_editor):
     """Remove seeded admin favicon icon when migration is reversed."""
 
     TaskbarIcon = apps.get_model("taskbar", "TaskbarIcon")
-    TaskbarIcon.objects.filter(slug="admin-favicon").delete()
+    TaskbarIcon._base_manager.filter(slug="admin-favicon")._raw_delete(
+        schema_editor.connection.alias
+    )
 
 
 class Migration(migrations.Migration):
