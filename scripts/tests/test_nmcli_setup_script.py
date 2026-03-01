@@ -12,7 +12,6 @@ SCRIPT_PATH = Path(__file__).resolve().parent.parent / "nmcli-setup.sh"
 BASH = shutil.which("bash")
 
 
-pytestmark = pytest.mark.regression
 
 
 def _script_path_for_bash(script_path: Path) -> str:

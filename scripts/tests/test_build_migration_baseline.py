@@ -6,7 +6,6 @@ import pytest
 
 from scripts import build_migration_baseline as baseline
 
-pytestmark = pytest.mark.regression
 
 
 def _write_migration(path: Path, body: str) -> None:

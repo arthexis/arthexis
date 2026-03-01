@@ -6,7 +6,6 @@ import re
 import pytest
 
 
-pytestmark = pytest.mark.regression
 
 
 RUNSERVER_PREFLIGHT_PATH = Path(__file__).resolve().parents[2] / "scripts/helpers/runserver_preflight.sh"

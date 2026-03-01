@@ -6,7 +6,6 @@ import subprocess
 import pytest
 from utils import command_api
 
-pytestmark = pytest.mark.regression
 COMMAND_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "command.sh"
 COMMAND_BATCH_PATH = Path(__file__).resolve().parents[2] / "command.bat"
 EXPECTED_LIST_USAGE = "Usage: arthexis cmd list [--deprecated] [--celery|--no-celery]"
