@@ -1,0 +1,89 @@
+{% load i18n %}
+{% get_current_language as LANGUAGE_CODE %}
+<!doctype html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% trans "Charging Station Connection" %}</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #f4f7fb;
+        color: #0f172a;
+        font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+      }
+
+      .notice {
+        width: min(760px, 100%);
+        background: #ffffff;
+        border: 1px solid #dce3ef;
+        border-radius: 14px;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        padding: clamp(1.4rem, 2vw + 1rem, 2.25rem);
+        text-align: center;
+      }
+
+      .notice h1 {
+        margin: 0;
+        font-size: clamp(1.3rem, 2vw + 0.7rem, 1.85rem);
+        font-weight: 650;
+        letter-spacing: 0.01em;
+      }
+
+      .notice p {
+        margin: 1rem 0 0;
+        color: #334155;
+        line-height: 1.55;
+      }
+
+      .endpoint {
+        margin-top: 1rem;
+        display: inline-block;
+        padding: 0.65rem 0.85rem;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        color: #0f172a;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 0.95rem;
+      }
+
+      .versions {
+        margin-top: 1.2rem;
+        font-size: 0.92rem;
+        color: #475569;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="notice" role="main" aria-labelledby="operator-interface-title">
+      <h1 id="operator-interface-title">{% trans "Charging Station Interface Endpoint" %}</h1>
+      <p>
+        {% trans "This endpoint is reserved for charging station communication." %}
+        {% trans "Configure your OCPP station to connect to this address over secure WebSocket (wss)." %}
+      </p>
+      <div class="endpoint">{{ ws_endpoint }}</div>
+      <p class="versions">
+        {% trans "Supported OCPP versions:" %}
+        {% for version in ocpp_versions %}
+          OCPP {{ version }}{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+      </p>
+    </main>
+  </body>
+</html>

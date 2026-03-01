@@ -8,6 +8,7 @@ app_name = "pages"
 urlpatterns = [
     path("", landing.index, name="index"),
     path("footer/", landing.footer_fragment, name="footer-fragment"),
+    path("operator-interface/", landing.operator_interface_notice, name="operator-interface-notice"),
     path("sitemap.xml", landing.sitemap, name="pages-sitemap"),
     path("changelog/", landing.changelog_report, name="changelog"),
     path("changelog/data/", landing.changelog_report_data, name="changelog-data"),
