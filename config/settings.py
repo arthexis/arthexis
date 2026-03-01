@@ -152,7 +152,7 @@ def _validate_manifest_app_entry(app_entry: str) -> None:
 
 
 def _load_local_apps_from_manifests() -> list[str]:
-    """Collect Django app entries from app manifest modules."""
+    """Collect Django app entries from app manifest modules without importing apps."""
 
     app_entries: list[str] = []
     for manifest_module in _iter_app_manifest_modules():
@@ -174,7 +174,6 @@ def _load_local_apps_from_manifests() -> list[str]:
                 )
 
             normalized_entry = manifest_entry.strip()
-            _validate_manifest_app_entry(normalized_entry)
             app_entries.append(normalized_entry)
 
     return app_entries

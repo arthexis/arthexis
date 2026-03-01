@@ -111,6 +111,23 @@ def test_local_apps_manifest_loading_is_complete_and_deterministic() -> None:
     assert len(first_load) == len(set(first_load))
 
 
+def test_local_apps_manifest_loading_does_not_import_app_configs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Loading manifests for LOCAL_APPS should not validate/import app configs eagerly."""
+
+    def _fail_if_called(_app_entry: str) -> None:
+        raise AssertionError(
+            "_validate_manifest_app_entry should not run during manifest loading"
+        )
+
+    monkeypatch.setattr(settings, "_validate_manifest_app_entry", _fail_if_called)
+
+    loaded_apps = settings._load_local_apps_from_manifests()
+
+    assert loaded_apps
+
+
 def test_local_apps_manifests_resolve_to_importable_app_configs() -> None:
     """Every loaded manifest entry should resolve through AppConfig.create."""
 
