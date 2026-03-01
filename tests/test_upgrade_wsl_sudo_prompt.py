@@ -44,3 +44,21 @@ def test_upgrade_script_cleans_generated_merge_migrations() -> None:
         "^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\\.py$"
         in script_text
     )
+
+
+def test_upgrade_script_supports_short_flag_aliases() -> None:
+    """Regression: ``-f`` and ``-t`` should map to force/latest upgrade flows."""
+
+    script_text = Path("upgrade.sh").read_text(encoding="utf-8")
+
+    assert "--latest|--unstable|-l|-t" in script_text
+    assert "--force|-f" in script_text
+
+
+def test_upgrade_bat_supports_short_flag_aliases() -> None:
+    """Regression: batch upgrader should accept the same short aliases."""
+
+    script_text = Path("upgrade.bat").read_text(encoding="utf-8")
+
+    assert 'if "%~1"=="-t" (' in script_text
+    assert 'if "%~1"=="-f" (' in script_text
