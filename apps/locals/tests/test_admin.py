@@ -161,8 +161,8 @@ class ActionChoicesDeduplicationTests(TestCase):
             return_value=[
                 ("", "---------"),
                 ("", "---------"),
-                ("toggle_selected_seed_data", "Toggle selected Seed Data"),
-                ("toggle_selected_seed_data", "Toggle selected Seed Data"),
+                ("recover_selected", "Recover selected entries"),
+                ("recover_selected", "Recover selected entries"),
             ],
         ):
             choices = model_admin.get_action_choices(request)
@@ -171,6 +171,6 @@ class ActionChoicesDeduplicationTests(TestCase):
             choices,
             [
                 ("", "---------"),
-                ("toggle_selected_seed_data", "Toggle selected Seed Data"),
+                ("recover_selected", "Recover selected entries"),
             ],
         )

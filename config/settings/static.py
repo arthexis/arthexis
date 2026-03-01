@@ -6,11 +6,15 @@ from .base import BASE_DIR, DEBUG
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
+STATICFILES_BACKEND = (
+    "django.contrib.staticfiles.storage.StaticFilesStorage"
+    if DEBUG
+    else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+)
+
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
+    "staticfiles": {"BACKEND": STATICFILES_BACKEND},
 }
 WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_headers
 
