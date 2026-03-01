@@ -105,8 +105,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s
-' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -120,8 +119,7 @@ jobs:
           echo "mode=changed" >> "${GITHUB_OUTPUT}"
           {
             echo "paths<<EOF"
-            printf '%s
-' "${CHANGED_FIXTURES}"
+            printf '%s\n' "${CHANGED_FIXTURES}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
@@ -183,6 +181,8 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           clean: false
+      - name: Lint workflow files
+        uses: raven-actions/actionlint@v2
       - id: setup-python
         uses: actions/setup-python@v6
         with:
