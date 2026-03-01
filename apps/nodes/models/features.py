@@ -127,6 +127,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:desktop_desktopshortcut_changelist",
             ),
         ),
+        "x-display-server": (
+            NodeFeatureDefaultAction(
+                label=_("Discover"),
+                url_name="admin:xserver_xdisplayinstance_discover",
+            ),
+        ),
     }
 
     class Meta:
@@ -222,6 +228,7 @@ class NodeFeatureMixin:
         "gui-toast",
         "video-cam",
         "llm-summary",
+        "x-display-server",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture", "cpsim-service"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
@@ -408,6 +415,17 @@ class NodeFeatureMixin:
             return self._hosts_gelectriic_ap()
         if slug == "gpio-rtc":
             return has_clock_device()
+        if slug == "x-display-server":
+            try:
+                from apps.xserver.utils import has_x_server
+            except ImportError:
+                logger.exception("X server detection import failed")
+                return False
+            try:
+                return has_x_server()
+            except Exception:
+                logger.exception("X server detection failed")
+                return False
         if slug == "llm-summary":
             from django.db.utils import OperationalError
 

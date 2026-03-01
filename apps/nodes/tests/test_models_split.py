@@ -232,3 +232,22 @@ def test_refresh_features_does_not_auto_assign_heavy_feature(tmp_path):
     node.refresh_features()
 
     assert not node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
+def test_refresh_features_assigns_x_display_server_when_detected(monkeypatch, tmp_path):
+    """Regression: feature refresh should auto-assign x-display-server when an X server is detected."""
+
+    node = Node.objects.create(
+        hostname="display-refresh-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="display-refresh-node",
+        base_path=str(tmp_path),
+    )
+    feature, _ = NodeFeature.objects.get_or_create(slug="x-display-server", defaults={"display": "X Display Server"})
+    monkeypatch.setattr("apps.xserver.utils.has_x_server", lambda: True)
+
+    node.refresh_features()
+
+    assert node.features.filter(pk=feature.pk).exists()
