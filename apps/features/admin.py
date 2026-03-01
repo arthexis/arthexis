@@ -55,14 +55,13 @@ class SourceAppListFilter(admin.SimpleListFilter):
     def lookups(self, request, model_admin):
         """Return app choices that are referenced by at least one suite feature."""
 
-        del request, model_admin
-
-        source_app_ids = (
-            Feature.objects.exclude(main_app__isnull=True)
-            .values_list("main_app_id", flat=True)
+        apps = (
+            Application.objects.filter(
+                features__in=model_admin.get_queryset(request).exclude(main_app__isnull=True)
+            )
             .distinct()
+            .order_by("name")
         )
-        apps = Application.objects.filter(pk__in=source_app_ids).order_by("name")
         return [(str(app.pk), app.display_name) for app in apps]
 
     def queryset(self, request, queryset):

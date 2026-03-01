@@ -114,9 +114,10 @@ def test_feature_admin_from_app_filter_shows_only_referenced_apps(rf):
     )
 
     request = rf.get("/admin/features/feature/")
-    list_filter = SourceAppListFilter(request, {}, Feature, admin.site)
+    feature_admin = admin.site._registry[Feature]
+    list_filter = SourceAppListFilter(request, {}, Feature, feature_admin)
 
-    lookup_values = {label for _, label in list_filter.lookups(request, admin.site)}
+    lookup_values = {label for _, label in list_filter.lookups(request, feature_admin)}
     assert "app-with-feature" in lookup_values
     assert "unused-app" not in lookup_values
 
@@ -143,7 +144,43 @@ def test_feature_admin_from_app_filter_limits_results(rf):
     )
 
     request = rf.get("/admin/features/feature/", {"main_app": str(target_app.pk)})
-    list_filter = SourceAppListFilter(request, {"main_app": str(target_app.pk)}, Feature, admin.site)
+    feature_admin = admin.site._registry[Feature]
+    list_filter = SourceAppListFilter(request, {"main_app": str(target_app.pk)}, Feature, feature_admin)
 
     filtered = list_filter.queryset(request, Feature.objects.all())
     assert set(filtered.values_list("pk", flat=True)) == {matching.pk}
+
+
+@pytest.mark.django_db
+def test_feature_admin_from_app_filter_uses_admin_queryset_scope(rf):
+    """Regression: from-app filter should respect admin queryset scope (e.g., deleted view)."""
+
+    from apps.app.models import Application
+
+    deleted_app = Application.objects.create(name="deleted-app")
+    active_app = Application.objects.create(name="active-app")
+
+    deleted_feature = Feature.objects.create(
+        slug="deleted-seed-feature",
+        display="Deleted Seed Feature",
+        source=Feature.Source.MAINSTREAM,
+        main_app=deleted_app,
+        is_seed_data=True,
+    )
+    Feature.objects.create(
+        slug="active-feature",
+        display="Active Feature",
+        source=Feature.Source.CUSTOM,
+        main_app=active_app,
+    )
+    deleted_feature.delete()
+
+    request = rf.get("/admin/features/feature/deleted/")
+    request._soft_deleted_only = True
+    feature_admin = admin.site._registry[Feature]
+
+    list_filter = SourceAppListFilter(request, {}, Feature, feature_admin)
+
+    lookup_values = {label for _, label in list_filter.lookups(request, feature_admin)}
+    assert "deleted-app" in lookup_values
+    assert "active-app" not in lookup_values
