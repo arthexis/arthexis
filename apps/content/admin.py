@@ -28,7 +28,6 @@ from apps.video.models import VideoDevice
 from apps.video.utils import (
     DEFAULT_CAMERA_RESOLUTION,
     capture_rpi_snapshot,
-    has_rpi_camera_stack,
 )
 from .web_sampling import execute_sampler
 
@@ -110,16 +109,24 @@ class ContentSampleAdmin(EntityModelAdmin):
             self.message_user(request, "Duplicate screenshot; not saved", messages.INFO)
         return redirect("..")
 
-    def take_snapshot(self, request, _object_id):
-        if not has_rpi_camera_stack():
+    def take_snapshot(self, request, object_id):
+        node = Node.get_local()
+        if node is None:
             self.message_user(
                 request,
-                _("Camera stack not available."),
+                _("No local node is registered; cannot perform camera actions."),
                 level=messages.ERROR,
             )
             return redirect("..")
 
-        node = Node.get_local()
+        if not node.has_feature("video-cam"):
+            self.message_user(
+                request,
+                _("Video Camera feature is not enabled on this node."),
+                level=messages.WARNING,
+            )
+            return redirect("..")
+
         device = VideoDevice.objects.filter(node=node, is_default=True).first()
         width = getattr(device, "capture_width", None)
         height = getattr(device, "capture_height", None)
