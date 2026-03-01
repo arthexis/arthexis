@@ -133,6 +133,50 @@ def test_update_migration_server_status_updates_existing_lock(tmp_path: Path) ->
 
 
 
+
+
+def test_run_refresh_with_status_leaves_processing_on_failure(monkeypatch):
+    """Regression: failed refresh should not advertise an idle migration state."""
+
+    status_updates: list[str] = []
+
+    monkeypatch.setattr(
+        migration_server,
+        "update_migration_server_status",
+        lambda _lock_dir, status: status_updates.append(status),
+    )
+    monkeypatch.setattr(
+        migration_server,
+        "run_env_refresh_with_report",
+        lambda _base_dir, *, latest: False,
+    )
+
+    assert migration_server._run_refresh_with_status(Path('.'), latest=True) is False
+    assert status_updates == [migration_server.MIGRATION_STATUS_PROCESSING]
+
+
+def test_run_refresh_with_status_sets_idle_on_success(monkeypatch):
+    """Regression: successful refresh should return the lock state to idle."""
+
+    status_updates: list[str] = []
+
+    monkeypatch.setattr(
+        migration_server,
+        "update_migration_server_status",
+        lambda _lock_dir, status: status_updates.append(status),
+    )
+    monkeypatch.setattr(
+        migration_server,
+        "run_env_refresh_with_report",
+        lambda _base_dir, *, latest: True,
+    )
+
+    assert migration_server._run_refresh_with_status(Path('.'), latest=False) is True
+    assert status_updates == [
+        migration_server.MIGRATION_STATUS_PROCESSING,
+        migration_server.MIGRATION_STATUS_IDLE,
+    ]
+
 def test_windows_process_group_kwargs_uses_creation_flags() -> None:
     """Use a dedicated process group on Windows to avoid interrupt propagation."""
 

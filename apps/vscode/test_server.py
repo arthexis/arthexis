@@ -887,11 +887,11 @@ def run_env_refresh_with_tests(
             print(f"{PREFIX} Waiting for migration server to become idle...")
             if not _wait_for_migration_server_idle(LOCK_DIR, interval=1.0):
                 return False
-        print(
-            f"{PREFIX} Migration server is active; skipping local env-refresh and running tests."
-        )
-        run_tests(base_dir, durations_count=durations_count)
-        return True
+            print(
+                f"{PREFIX} Migration server completed processing; running tests without local env-refresh."
+            )
+            run_tests(base_dir, durations_count=durations_count)
+            return True
 
     if _migration_merge_required(base_dir):
         return False
@@ -904,27 +904,34 @@ def run_env_refresh_with_tests(
     return True
 
 
-def test_run_env_refresh_with_tests_skips_local_migrations_when_server_idle(monkeypatch):
-    """Regression: active migration server should prevent duplicate env-refresh runs."""
+def test_run_env_refresh_with_tests_runs_local_migrations_when_server_idle(monkeypatch):
+    """Regression: idle migration lock should not skip a local env-refresh run."""
 
     monkeypatch.setattr(
         migration,
         "read_migration_server_state",
         lambda _lock_dir: {"pid": 100, "status": migration.MIGRATION_STATUS_IDLE},
     )
-    monkeypatch.setattr(sys.modules[__name__], "_migration_merge_required", lambda _base_dir: True)
+    monkeypatch.setattr(sys.modules[__name__], "_migration_merge_required", lambda _base_dir: False)
 
-    calls = {"tests": 0}
+    calls = {"refresh": 0, "tests": 0}
+
+    def fake_run_env_refresh(_base_dir: Path, *, latest: bool) -> bool:
+        assert latest is True
+        calls["refresh"] += 1
+        return True
 
     def fake_run_tests(_base_dir: Path, *, durations_count: int) -> bool:
         assert durations_count == 7
         calls["tests"] += 1
         return True
 
+    monkeypatch.setattr(sys.modules[__name__], "run_env_refresh", fake_run_env_refresh)
     monkeypatch.setattr(sys.modules[__name__], "run_tests", fake_run_tests)
+    monkeypatch.setattr(migration, "request_runserver_restart", lambda _lock_dir: None)
 
     assert run_env_refresh_with_tests(Path("."), latest=True, durations_count=7) is True
-    assert calls["tests"] == 1
+    assert calls == {"refresh": 1, "tests": 1}
 
 
 def test_run_env_refresh_with_tests_waits_for_processing_server(monkeypatch):

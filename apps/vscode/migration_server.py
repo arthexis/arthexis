@@ -702,7 +702,7 @@ def read_migration_server_state(lock_dir: Path) -> dict[str, Any] | None:
     return {
         "pid": pid,
         "status": status,
-        "timestamp": payload.get("timestamp", time.time()),
+        "timestamp": payload.get("timestamp"),
     }
 
 
@@ -730,6 +730,19 @@ def update_migration_server_status(lock_dir: Path, status: str) -> None:
         write_migration_server_state(lock_dir, pid=state["pid"], status=status)
     except OSError:
         return
+
+
+def _run_refresh_with_status(base_dir: Path, *, latest: bool) -> bool:
+    """Run env-refresh while reflecting processing/idle lock state."""
+
+    update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_PROCESSING)
+    success = False
+    try:
+        success = run_env_refresh_with_report(base_dir, latest=latest)
+        return success
+    finally:
+        if success:
+            update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
 
 
 def migration_server_state(lock_dir: Path):
@@ -851,9 +864,7 @@ def main(argv: list[str] | None = None) -> int:
         while True:
             try:
                 if is_first_run:
-                    update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_PROCESSING)
-                    run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-                    update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
+                    _run_refresh_with_status(BASE_DIR, latest=args.latest)
                     snapshot = collect_source_mtimes(BASE_DIR)
                     is_first_run = False
 
@@ -879,9 +890,7 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"[Migration Server] Changes detected: {display}")
-                update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_PROCESSING)
-                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-                update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
+                _run_refresh_with_status(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
             except KeyboardInterrupt:
                 update_migration_server_status(LOCK_DIR, MIGRATION_STATUS_IDLE)
