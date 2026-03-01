@@ -10,7 +10,6 @@ from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.users.models import User
 
 
-@pytest.mark.regression
 @pytest.mark.django_db
 def test_search_orders_for_selected_action_renders_matching_orders(
     admin_client, admin_user, monkeypatch
@@ -309,7 +308,6 @@ def test_load_employees_action_rejects_get_requests(admin_client, admin_user, mo
     assert OdooEmployee.objects.count() == 1
 
 
-@pytest.mark.regression
 @pytest.mark.django_db
 def test_load_employees_action_requires_change_permission(client, monkeypatch):
     """Users without change permission cannot trigger the import endpoint."""
