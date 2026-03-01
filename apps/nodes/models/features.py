@@ -121,6 +121,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:video_videodevice_take_snapshot",
             ),
         ),
+        "user-desktop": (
+            NodeFeatureDefaultAction(
+                label=_("Desktop shortcuts"),
+                url_name="admin:desktop_desktopshortcut_changelist",
+            ),
+        ),
     }
 
     class Meta:
