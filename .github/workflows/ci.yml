@@ -151,7 +151,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | grep -E '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -399,7 +399,7 @@ jobs:
           : > pytest.log
           echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
           pytest_help="$(pytest --help)"
-          if rg -q -- '--dist' <<<"$pytest_help"; then
+          if grep -q -- '--dist' <<<"$pytest_help"; then
             xdist_args=("-n" "auto" "--dist" "loadfile")
           else
             xdist_args=()
@@ -413,7 +413,7 @@ jobs:
           source .venv/bin/activate
           echo "=== Integration tests ===" | tee -a pytest.log
           pytest_help="$(pytest --help)"
-          if rg -q -- '--dist' <<<"$pytest_help"; then
+          if grep -q -- '--dist' <<<"$pytest_help"; then
             xdist_args=("-n" "auto" "--dist" "loadfile")
           else
             xdist_args=()
