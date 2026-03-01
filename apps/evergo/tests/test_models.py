@@ -6,10 +6,19 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 
 from apps.evergo.exceptions import EvergoAPIError
 from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
+@pytest.mark.django_db
+def test_evergo_user_rejects_empty_email_at_database_level():
+    """Database constraint should reject direct saves with an empty Evergo email."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-empty", email="suite-empty@example.com")
+
+    with pytest.raises(IntegrityError, match="evergo_evergouser_email_non_empty"):
+        EvergoUser.objects.create(user=suite_user, evergo_email="")
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
@@ -70,7 +79,6 @@ def test_test_login_populates_remote_fields(mock_session_cls):
     assert profile.evergo_updated_at is not None
     assert profile.last_login_test_at is not None
 
-
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
 def test_test_login_raises_specific_error_for_419(mock_session_cls):
@@ -95,7 +103,6 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
 
     with pytest.raises(EvergoAPIError, match="status 419"):
         profile.test_login()
-
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
@@ -211,7 +218,6 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
     assert EvergoOrderFieldValue.objects.filter(field_name="preorden_tipo", remote_id=107).exists()
     assert EvergoOrderFieldValue.objects.filter(field_name="payment_by", remote_name="Brand").exists()
 
-
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
 def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock_session_cls):
@@ -289,7 +295,6 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
     placeholder = EvergoOrder.objects.get(order_number="BAD999")
     assert placeholder.validation_state == EvergoOrder.VALIDATION_STATE_PLACEHOLDER
 
-
 @pytest.mark.django_db
 def test_upsert_order_extracts_contact_and_address_components():
     """Regression: order sync should persist phone and address pieces for admin usage."""
@@ -337,7 +342,6 @@ def test_upsert_order_extracts_contact_and_address_components():
     assert order.address_city == "Ciudad Apodaca"
     assert order.address_postal_code == "66647"
 
-
 @pytest.mark.django_db
 def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
     """Regression: whitespace municipio should not block a valid ciudad fallback in address composition."""
@@ -368,7 +372,6 @@ def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
     assert created is True
     customer = EvergoCustomer.objects.get(user=profile, remote_id=11002)
     assert "Monterrey" in customer.address
-
 
 @pytest.mark.django_db
 def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():

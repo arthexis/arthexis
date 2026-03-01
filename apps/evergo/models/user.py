@@ -138,6 +138,12 @@ class EvergoUser(Profile):
     class Meta:
         verbose_name = "Evergo Contractor"
         verbose_name_plural = "Evergo Contractors"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(evergo_email=""),
+                name="evergo_evergouser_email_non_empty",
+            ),
+        ]
 
     def __str__(self) -> str:
         """Return a readable identifier for admin lists."""

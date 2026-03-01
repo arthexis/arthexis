@@ -68,6 +68,12 @@ class Command(BaseCommand):
         if password is not None:
             profile.evergo_password = password
 
+        is_load_customers = bool(options.get("load_customers"))
+        if is_load_customers and not profile.evergo_email:
+            raise CommandError(
+                "Evergo profile is missing evergo_email. Use --email to set it before loading customers."
+            )
+
         profile.full_clean()
         profile.save()
 

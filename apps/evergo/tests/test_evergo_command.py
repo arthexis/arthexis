@@ -12,7 +12,6 @@ from django.core.management.base import CommandError
 
 from apps.evergo.models import EvergoUser
 
-
 @pytest.mark.django_db
 @pytest.mark.regression
 @patch("apps.evergo.models.user.EvergoUser._prime_session", return_value="xsrf-token")
@@ -61,7 +60,6 @@ def test_evergo_command_saves_credentials_and_tests_login(
     assert profile.evergo_user_id == 100
     assert "Evergo login successful" in stdout.getvalue()
 
-
 @pytest.mark.django_db
 def test_evergo_command_reuses_existing_profile_when_duplicates_exist():
     """Command should update the oldest profile when duplicate rows exist."""
@@ -85,7 +83,6 @@ def test_evergo_command_reuses_existing_profile_when_duplicates_exist():
     assert first.evergo_email == "resolved@example.com"
     assert EvergoUser.objects.filter(user=suite_user).count() == 2
 
-
 @pytest.mark.django_db
 def test_evergo_command_raises_for_ambiguous_user_identifier():
     """Command should reject identifiers that match different users by username/email."""
@@ -102,7 +99,6 @@ def test_evergo_command_raises_for_ambiguous_user_identifier():
             "--password",
             "secret",
         )
-
 
 @pytest.mark.django_db
 @pytest.mark.regression
@@ -142,17 +138,32 @@ def test_evergo_command_load_customers_with_inline_queries():
     profile.refresh_from_db()
     assert profile.evergo_email == "ops@example.com"
 
-
 @pytest.mark.django_db
 @pytest.mark.regression
 def test_evergo_command_load_customers_requires_query_source():
     """Command should reject load-customer runs that do not provide any queries."""
     User = get_user_model()
     suite_user = User.objects.create_user(username="suite-missing", email="suite-missing@example.com")
+    EvergoUser.objects.create(user=suite_user, evergo_email="ops@example.com", evergo_password="secret")
 
     with pytest.raises(CommandError, match="requires --queries or --queries-file"):
         call_command("evergo", suite_user.username, "--load-customers")
 
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_evergo_command_load_customers_requires_existing_evergo_email():
+    """Command should reject load-customer runs when the profile email is missing."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-email", email="suite-email@example.com")
+
+    with pytest.raises(CommandError, match="missing evergo_email"):
+        call_command(
+            "evergo",
+            suite_user.username,
+            "--load-customers",
+            "--queries",
+            "J00123",
+        )
 
 @pytest.mark.django_db
 @pytest.mark.regression
@@ -173,7 +184,6 @@ def test_evergo_command_load_customers_rejects_conflicting_query_sources(tmp_pat
             "--queries-file",
             str(queries_file),
         )
-
 
 @pytest.mark.django_db
 @pytest.mark.regression
