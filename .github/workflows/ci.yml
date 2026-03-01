@@ -9,7 +9,7 @@ env:
   NODE_OPTIONS: '--no-deprecation'
   ARTHEXIS_DB_BACKEND: sqlite
   PYTEST_WORKERS: '2'
-  CI_ENABLE_DOCS_ADMIN_SETUP: 'false'
+  CI_ENABLE_DOCS_ADMIN_SETUP: ${{ vars.CI_ENABLE_DOCS_ADMIN_SETUP || 'false' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -88,6 +88,7 @@ jobs:
             const defaultFlag = String(process.env.CI_ENABLE_DOCS_ADMIN_SETUP || 'false').toLowerCase();
             const manualEnabled = ['1', 'true', 'yes', 'on'].includes(defaultFlag);
             const pathMatchers = [
+              'docs/**',
               'apps/content/**',
               'apps/**/templates/admin/**',
               'apps/**/admin.py',
@@ -121,8 +122,10 @@ jobs:
             const wildcardToRegex = (pattern) => {
               const escaped = pattern
                 .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*\*\//g, '::DOUBLE_STAR_SLASH::')
                 .replace(/\*\*/g, '::DOUBLE_STAR::')
                 .replace(/\*/g, '[^/]*')
+                .replace(/::DOUBLE_STAR_SLASH::/g, '(?:.*/)?')
                 .replace(/::DOUBLE_STAR::/g, '.*');
               return new RegExp(`^${escaped}$`);
             };
@@ -324,6 +327,7 @@ jobs:
             const defaultFlag = String(process.env.CI_ENABLE_DOCS_ADMIN_SETUP || 'false').toLowerCase();
             const manualEnabled = ['1', 'true', 'yes', 'on'].includes(defaultFlag);
             const pathMatchers = [
+              'docs/**',
               'apps/content/**',
               'apps/**/templates/admin/**',
               'apps/**/admin.py',
@@ -357,8 +361,10 @@ jobs:
             const wildcardToRegex = (pattern) => {
               const escaped = pattern
                 .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*\*\//g, '::DOUBLE_STAR_SLASH::')
                 .replace(/\*\*/g, '::DOUBLE_STAR::')
                 .replace(/\*/g, '[^/]*')
+                .replace(/::DOUBLE_STAR_SLASH::/g, '(?:.*/)?')
                 .replace(/::DOUBLE_STAR::/g, '.*');
               return new RegExp(`^${escaped}$`);
             };
