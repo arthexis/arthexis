@@ -96,6 +96,7 @@ def enable_https(
         except CertbotChallengeError as exc:
             if http01_bootstrapped:
                 _restore_https_config_after_http01_bootstrap(service, config, reload=reload)
+                service.ensure_managed_site(domain, require_https=True)
             raise CommandError(
                 _build_certbot_challenge_command_error(
                     domain=domain,

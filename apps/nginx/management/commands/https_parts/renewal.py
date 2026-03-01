@@ -68,11 +68,22 @@ def _renew_due_certificates(
             if domain_filter:
                 service.stdout.write(f"No certificates were due for renewal for {domain_filter}.")
                 quoted_domain = shlex.quote(domain_filter)
-                service.stdout.write(
-                    "To force immediate certbot reissuance, run: "
-                    f"./command.sh https --enable --force-renewal --certbot {quoted_domain} "
-                    f"(or --godaddy {quoted_domain})."
-                )
+                if require_local:
+                    service.stdout.write(
+                        "To force immediate local reissuance, run: "
+                        "./command.sh https --enable --local."
+                    )
+                elif require_godaddy:
+                    service.stdout.write(
+                        "To force immediate GoDaddy DNS-01 reissuance, run: "
+                        f"./command.sh https --enable --force-renewal --godaddy {quoted_domain}."
+                    )
+                else:
+                    service.stdout.write(
+                        "To force immediate certbot reissuance, run: "
+                        f"./command.sh https --enable --force-renewal --certbot {quoted_domain} "
+                        f"(or --godaddy {quoted_domain})."
+                    )
             else:
                 service.stdout.write("No certificates were due for renewal.")
         else:

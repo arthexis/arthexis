@@ -27,7 +27,7 @@ def _parse_site_domain(candidate: str | None) -> str | None:
     except ValueError:
         parsed_ip = None
 
-    if parsed_ip is not None and parsed_ip.is_loopback:
+    if parsed_ip is not None and not parsed_ip.is_global:
         raise CommandError("--site requires a public host. Use --local for local development.")
 
     return normalized

@@ -8,7 +8,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from apps.certs.models import CertificateBase, CertbotCertificate
+from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.certs.services import CertbotChallengeError
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
@@ -199,12 +199,17 @@ def test_https_site_rejects_loopback_host():
     with pytest.raises(CommandError, match="public host"):
         call_command("https", "--site", "http://[::1]")
 
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "192.168.1.10")
+
 @pytest.mark.django_db
 def test_https_site_rejects_local_combination():
     """`--site` and `--local` should fail to avoid contradictory certificate intent."""
 
     with pytest.raises(CommandError, match="cannot be combined"):
         call_command("https", "--enable", "--local", "--site", "example.com")
+
+
 @pytest.mark.django_db
 def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     """Credential prompts should still run when stdout is redirected but stdin is interactive."""
@@ -657,6 +662,11 @@ def test_https_enable_restores_https_when_http01_challenge_fails(monkeypatch):
     assert config.protocol == "https"
     assert apply_protocols == ["http", "https"]
 
+    from django.contrib.sites.models import Site
+
+    site = Site.objects.get(domain="example.com")
+    assert getattr(site, "require_https", False) is True
+
 
 @pytest.mark.django_db
 def test_https_enable_http01_bootstraps_http_site_before_certbot(monkeypatch):
@@ -801,4 +811,33 @@ def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
 
     rendered = out.getvalue()
     assert "No certificates were due for renewal for example.com." in rendered
-    assert "--force-renewal --certbot example.com" in rendered
+    assert "--force-renewal --godaddy example.com" in rendered
+
+
+@pytest.mark.django_db
+def test_https_renew_local_domain_filter_reports_local_noop_guidance(monkeypatch):
+    """`--renew --local <domain>` should suggest local reissuance guidance when nothing is due."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    SelfSignedCertificate.objects.create(
+        name="local-https-localhost",
+        domain="localhost",
+        certificate_path="/tmp/local/fullchain.pem",
+        certificate_key_path="/tmp/local/privkey.pem",
+        expiration_date=timezone.now() + timedelta(days=30),
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+
+    out = StringIO()
+    call_command("https", "--renew", "--local", "--site", "example.com", "--no-sudo", stdout=out)
+
+    rendered = out.getvalue()
+    assert "No certificates were due for renewal for example.com." in rendered
+    assert "./command.sh https --enable --local." in rendered
