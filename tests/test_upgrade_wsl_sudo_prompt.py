@@ -72,4 +72,5 @@ def test_upgrade_script_auto_reruns_after_self_update() -> None:
     assert "rerun_with_updated_script()" in script_text
     assert "ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH" in script_text
     assert "restarting upgrade automatically with the new script" in script_text
-    assert "if ! rerun_with_updated_script; then" in script_text
+    assert "if rerun_with_updated_script; then" in script_text
+    assert "please run the upgrade again to use the new script" in script_text

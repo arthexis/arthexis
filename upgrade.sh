@@ -1141,7 +1141,7 @@ rerun_with_updated_script() {
 
   echo "upgrade.sh was updated during git pull; restarting upgrade automatically with the new script..."
   export ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH=$((depth + 1))
-  exec "${rerun_cmd[@]}"
+  "${rerun_cmd[@]}"
 }
 
 run_detached_upgrade() {
@@ -1198,6 +1198,12 @@ if [ -f "$UPGRADE_RERUN_LOCK" ]; then
         ;;
       LCD_WAS_ACTIVE=*)
         RERUN_LCD_WAS_ACTIVE="${rerun_line#LCD_WAS_ACTIVE=}"
+        ;;
+      UPGRADE_STASH_REF=*)
+        UPGRADE_STASH_REF="${rerun_line#UPGRADE_STASH_REF=}"
+        ;;
+      UPGRADE_STASH_CREATED=*)
+        UPGRADE_STASH_CREATED="${rerun_line#UPGRADE_STASH_CREATED=}"
         ;;
       *)
         if [ -z "$RERUN_TARGET_VERSION" ]; then
@@ -1944,10 +1950,14 @@ else
       printf 'REMOTE_VERSION=%s\n' "$REMOTE_VERSION"
       printf 'SERVICE_WAS_ACTIVE=%s\n' "$SERVICE_WAS_ACTIVE"
       printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
+      printf 'UPGRADE_STASH_REF=%s\n' "$UPGRADE_STASH_REF"
+      printf 'UPGRADE_STASH_CREATED=%s\n' "$UPGRADE_STASH_CREATED"
     } > "$UPGRADE_RERUN_LOCK"
     notify_lcd_manual_upgrade_required
     start_lcd_upgrade_helper_service
-    if ! rerun_with_updated_script; then
+    if rerun_with_updated_script; then
+      exit 0
+    else
       echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
       exit "$UPGRADE_RERUN_EXIT_CODE"
     fi
