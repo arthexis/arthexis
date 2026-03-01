@@ -22,6 +22,12 @@ class Transaction(Entity):
         REMOTE = "Remote", _("Remote")
         SOFT_RESET = "SoftReset", _("Soft reset")
 
+    class AuthorizationStatus(models.TextChoices):
+        """Authorization outcome recorded for transaction start attempts."""
+
+        ACCEPTED = "accepted", _("Accepted")
+        REJECTED = "rejected", _("Rejected")
+
     charger = models.ForeignKey(
         "Charger", on_delete=models.CASCADE, related_name="transactions", null=True
     )
@@ -90,6 +96,25 @@ class Transaction(Entity):
     start_time = models.DateTimeField()
     stop_time = models.DateTimeField(null=True, blank=True)
     stop_reason = models.CharField(max_length=64, blank=True, default="")
+    authorization_status = models.CharField(
+        max_length=16,
+        choices=AuthorizationStatus.choices,
+        default=AuthorizationStatus.ACCEPTED,
+        help_text=_(
+            "Authorization result for the start attempt that created this transaction record."
+        ),
+    )
+    authorization_reason = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=_("Optional reason reported when authorization is rejected."),
+    )
+    rejected_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("Timestamp when the start attempt was rejected."),
+    )
     received_start_time = models.DateTimeField(null=True, blank=True)
     received_stop_time = models.DateTimeField(null=True, blank=True)
 

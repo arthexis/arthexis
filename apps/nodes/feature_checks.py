@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
+import shutil
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from django.contrib import messages
@@ -189,6 +191,42 @@ def _default_feature_check(
     )
 
 
+
+
+@feature_checks.register("user-desktop")
+def _check_user_desktop(feature: "NodeFeature", node: Optional["Node"]):
+    """Validate whether desktop UI access appears available on this node."""
+
+    from .models import Node
+    from apps.desktop.services import is_desktop_ui_available
+
+    target: Optional["Node"] = node or Node.get_local()
+    if target is None:
+        return FeatureCheckResult(
+            False,
+            f"No local node is registered; cannot verify {feature.display}.",
+            messages.WARNING,
+        )
+
+    if not is_desktop_ui_available():
+        return FeatureCheckResult(
+            False,
+            f"Desktop UI access is unavailable on {target.hostname} for {feature.display}.",
+            messages.WARNING,
+        )
+
+    if target.has_feature("user-desktop"):
+        return FeatureCheckResult(
+            True,
+            f"{feature.display} is enabled on {target.hostname} and desktop UI access is available.",
+            messages.SUCCESS,
+        )
+
+    return FeatureCheckResult(
+        True,
+        f"{feature.display} is eligible on {target.hostname}; desktop UI access is available.",
+        messages.INFO,
+    )
 @feature_checks.register("llm-summary")
 def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     from .models import Node
@@ -237,6 +275,91 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         success,
         f"{feature.display} prerequisites checked: " + "; ".join(details),
         level,
+    )
+
+
+@feature_checks.register("screenshot-poll")
+def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
+    """Validate Playwright screenshot runtime prerequisites."""
+
+    del node
+    details: list[str] = []
+    executable_path: Path | None = None
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        return FeatureCheckResult(
+            False,
+            (
+                f"{feature.display} prerequisites failed: Playwright Python package is unavailable "
+                f"({exc}). Install it to enable screenshot capture."
+            ),
+            messages.ERROR,
+        )
+
+    details.append("Playwright package: ok")
+    browser_override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if browser_override:
+        details.append(f"PLAYWRIGHT_BROWSERS_PATH={browser_override}")
+
+    try:
+        with sync_playwright() as playwright:
+            executable_path = Path(playwright.chromium.executable_path)
+            if not executable_path.exists():
+                return FeatureCheckResult(
+                    False,
+                    (
+                        f"{feature.display} prerequisites failed: Chromium executable is missing at "
+                        f"{executable_path}. Run `python -m playwright install chromium`."
+                    ),
+                    messages.ERROR,
+                )
+            if not os.access(executable_path, os.X_OK):
+                return FeatureCheckResult(
+                    False,
+                    (
+                        f"{feature.display} prerequisites failed: Chromium executable is not executable at "
+                        f"{executable_path}."
+                    ),
+                    messages.ERROR,
+                )
+            browser = None
+            try:
+                browser = playwright.chromium.launch(headless=True)
+            finally:
+                if browser is not None:
+                    browser.close()
+    except Exception as exc:
+        return FeatureCheckResult(
+            False,
+            (
+                f"{feature.display} prerequisites failed: Chromium could not be launched "
+                f"({exc}). Install Playwright browsers with `python -m playwright install chromium` "
+                "and verify runtime dependencies are present."
+            ),
+            messages.ERROR,
+        )
+
+    if executable_path is None:
+        return FeatureCheckResult(
+            False,
+            (
+                f"{feature.display} prerequisites failed: Chromium executable path could not be resolved."
+            ),
+            messages.ERROR,
+        )
+
+    details.append(f"Chromium executable: {executable_path}")
+    details.append("Chromium launch: ok")
+
+    ffmpeg_path = shutil.which("ffmpeg")
+    details.append(f"ffmpeg: {ffmpeg_path or 'not found (optional)'}")
+
+    return FeatureCheckResult(
+        True,
+        f"{feature.display} prerequisites checked: " + "; ".join(details),
+        messages.SUCCESS,
     )
 
 

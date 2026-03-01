@@ -23,6 +23,7 @@ class WidgetDefinition:
     order: int = 0
     zone_name: str | None = None
     permission: WidgetPermission | None = None
+    required_feature_slug: str | None = None
 
     @property
     def renderer_path(self) -> str:
@@ -42,6 +43,7 @@ def register_widget(
     order: int = 0,
     zone_name: str | None = None,
     permission: WidgetPermission | None = None,
+    required_feature_slug: str | None = None,
 ):
     """Register a widget renderer for later use.
 
@@ -60,6 +62,7 @@ def register_widget(
             order=order,
             zone_name=zone_name,
             permission=permission,
+            required_feature_slug=required_feature_slug,
         )
         existing = _WIDGET_REGISTRY.get(slug)
         if existing:
@@ -111,6 +114,7 @@ class WidgetMixin:
                 order=getattr(widget_cls, "widget_order", 0),
                 zone_name=getattr(widget_cls, "widget_zone_name", None),
                 permission=getattr(widget_cls, "widget_permission", None),
+                required_feature_slug=getattr(widget_cls, "widget_required_feature_slug", None),
             )(_renderer)
             return widget_cls
 

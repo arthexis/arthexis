@@ -427,6 +427,8 @@ def check_features_for_eligibility(modeladmin, request, queryset):
 
 @admin.action(description="Enable selected action")
 def enable_selected_features(modeladmin, request, queryset):
+    from ..feature_checks import feature_checks
+
     node = Node.get_local()
     if node is None:
         modeladmin.message_user(
@@ -457,12 +459,32 @@ def enable_selected_features(modeladmin, request, queryset):
         )
         return None
 
+    eligible_manual_features = []
+    for feature in manual_features:
+        check = feature_checks.get(feature.slug)
+        if check is None:
+            eligible_manual_features.append(feature)
+            continue
+        result = feature_checks.run(feature, node=node)
+        if not result.success:
+            modeladmin.message_user(request, result.message, level=result.level)
+            continue
+        eligible_manual_features.append(feature)
+
+    if not eligible_manual_features:
+        modeladmin.message_user(
+            request,
+            "No selected manual features passed eligibility checks.",
+            level=messages.WARNING,
+        )
+        return None
+
     current_manual = set(
         node.features.filter(slug__in=Node.MANUAL_FEATURE_SLUGS).values_list(
             "slug", flat=True
         )
     )
-    desired_manual = current_manual | {feature.slug for feature in manual_features}
+    desired_manual = current_manual | {feature.slug for feature in eligible_manual_features}
     newly_enabled = desired_manual - current_manual
     if not newly_enabled:
         modeladmin.message_user(
@@ -473,7 +495,7 @@ def enable_selected_features(modeladmin, request, queryset):
         return None
 
     node.update_manual_features(desired_manual)
-    display_map = {feature.slug: feature.display for feature in manual_features}
+    display_map = {feature.slug: feature.display for feature in eligible_manual_features}
     newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
     modeladmin.message_user(
         request,

@@ -11,6 +11,8 @@ class VideoConfig(AppConfig):
     verbose_name = "Video"
 
     def ready(self):  # pragma: no cover - import for side effects
+        from . import widgets  # noqa: F401
+
         if not is_celery_enabled():
             return
 

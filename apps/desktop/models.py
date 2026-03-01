@@ -1,4 +1,4 @@
-"""Models for desktop assistant extension registration."""
+"""Models for desktop assistant extension registration and desktop shortcuts."""
 
 from __future__ import annotations
 
@@ -93,4 +93,112 @@ class RegisteredExtension(Entity):
         return [self.django_command, *parsed_args], input_data
 
 
-__all__ = ["RegisteredExtension"]
+class DesktopShortcut(Entity):
+    """Represent an OS desktop shortcut that can be synchronized from Django data."""
+
+    class LaunchMode(models.TextChoices):
+        """Available target launch modes for desktop shortcuts."""
+
+        URL = "url", "URL"
+        COMMAND = "command", "Command"
+
+    slug = models.SlugField(max_length=80, unique=True)
+    desktop_filename = models.CharField(
+        max_length=128,
+        unique=True,
+        help_text="Filename used in the desktop folder (without .desktop suffix).",
+    )
+    name = models.CharField(max_length=128)
+    comment = models.CharField(max_length=255, blank=True)
+    launch_mode = models.CharField(
+        max_length=16,
+        choices=LaunchMode.choices,
+        default=LaunchMode.URL,
+    )
+    target_url = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="URL to open. Supports {port} placeholder.",
+    )
+    command = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Command to execute when launch mode is command.",
+    )
+    icon_name = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Existing OS icon name to reference (for example web-browser).",
+    )
+    icon_base64 = models.TextField(
+        blank=True,
+        help_text="Base64 encoded icon payload written to ~/.local/share/icons.",
+    )
+    icon_extension = models.CharField(
+        max_length=8,
+        default="png",
+        help_text="Extension used when persisting base64 icon payloads.",
+    )
+    categories = models.CharField(max_length=255, blank=True, default="")
+    terminal = models.BooleanField(default=False)
+    startup_notify = models.BooleanField(default=True)
+    extra_entries = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional Desktop Entry key/value pairs.",
+    )
+    condition_expression = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=(
+            "Optional Python-like expression evaluated against context keys: "
+            "has_desktop_ui, has_feature, is_staff, is_superuser, group_names."
+        ),
+    )
+    condition_command = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Optional shell command. Exit code 0 installs the shortcut.",
+    )
+    require_desktop_ui = models.BooleanField(default=True)
+    required_features = models.ManyToManyField("nodes.NodeFeature", blank=True)
+    required_groups = models.ManyToManyField("auth.Group", blank=True)
+    only_staff = models.BooleanField(default=False)
+    only_superuser = models.BooleanField(default=False)
+    is_enabled = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=100)
+
+    class Meta:
+        ordering = ("sort_order", "name", "slug")
+        verbose_name = "Desktop Shortcut"
+        verbose_name_plural = "Desktop Shortcuts"
+
+    def __str__(self) -> str:
+        """Return a readable label for admin interfaces."""
+        return self.name
+
+    def clean(self) -> None:
+        """Validate desktop shortcut launch and icon configuration."""
+        super().clean()
+
+        if self.launch_mode == self.LaunchMode.URL and not self.target_url.strip():
+            raise ValidationError({"target_url": "A target URL is required for URL mode."})
+        if self.launch_mode == self.LaunchMode.COMMAND and not self.command.strip():
+            raise ValidationError({"command": "A command is required for command mode."})
+        if self.icon_base64 and self.icon_name:
+            raise ValidationError(
+                {
+                    "icon_base64": (
+                        "Choose either icon base64 payload or icon name, not both."
+                    )
+                }
+            )
+        if not self.desktop_filename.strip():
+            raise ValidationError({"desktop_filename": "Desktop filename is required."})
+        if "/" in self.desktop_filename or "\\" in self.desktop_filename:
+            raise ValidationError(
+                {"desktop_filename": "Desktop filename cannot contain path separators."}
+            )
+
+
+__all__ = ["RegisteredExtension", "DesktopShortcut"]

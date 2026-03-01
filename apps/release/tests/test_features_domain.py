@@ -4,7 +4,6 @@ import pytest
 
 from apps.release.domain import ReleaseFeature, ReleaseFeatures
 
-pytestmark = pytest.mark.critical
 
 def test_release_feature_normalization_and_slug():
     feature = ReleaseFeature(

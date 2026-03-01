@@ -121,6 +121,19 @@ class LegacyTransactionHandlersMixin:
                 )
                 return {"idTokenInfo": {"status": "Accepted"}}
 
+            rejected_time = timezone.now()
+            await database_sync_to_async(Transaction.objects.create)(
+                charger=self.charger,
+                account=account,
+                rfid=(id_tag or ""),
+                connector_id=connector_value,
+                start_time=timestamp_value,
+                received_start_time=rejected_time,
+                ocpp_transaction_id=ocpp_tx_id,
+                authorization_status=Transaction.AuthorizationStatus.REJECTED,
+                authorization_reason="Invalid",
+                rejected_at=rejected_time,
+            )
             await self._record_rfid_attempt(
                 rfid=id_tag or "", status=RFIDAttempt.Status.REJECTED, account=account
             )
@@ -270,6 +283,18 @@ class LegacyTransactionHandlersMixin:
                 transaction=tx_obj,
             )
             return {"transactionId": tx_obj.pk, "idTagInfo": {"status": "Accepted"}}
+        rejected_time = timezone.now()
+        await database_sync_to_async(Transaction.objects.create)(
+            charger=self.charger,
+            account=account,
+            rfid=(id_tag or ""),
+            connector_id=payload.get("connectorId"),
+            start_time=rejected_time,
+            received_start_time=rejected_time,
+            authorization_status=Transaction.AuthorizationStatus.REJECTED,
+            authorization_reason="Invalid",
+            rejected_at=rejected_time,
+        )
         await self._record_rfid_attempt(
             rfid=id_tag or "",
             status=RFIDAttempt.Status.REJECTED,

@@ -14,6 +14,7 @@ from apps.discovery.services import record_discovery_item, start_discovery
 
 from ..models import Node, NodeFeature, NodeFeatureAssignment
 from apps.content.utils import capture_screenshot, save_screenshot
+from apps.features.utils import is_suite_feature_enabled
 from .actions import (
     check_features_for_eligibility,
     discover_node_features,
@@ -160,6 +161,24 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         ]
         return custom + urls
 
+    def _require_feature_eligible(self, request, feature, *, node=None, action_label="Action"):
+        """Return ``True`` when the feature eligibility check succeeds."""
+
+        from ..feature_checks import feature_checks
+
+        result = feature_checks.run(feature, node=node)
+        if result is None:
+            self.message_user(
+                request,
+                f"{action_label} is unavailable because no eligibility check is configured for {feature.display}.",
+                level=messages.WARNING,
+            )
+            return False
+        if not result.success:
+            self.message_user(request, result.message, level=result.level)
+            return False
+        return True
+
     def _ensure_feature_enabled(self, request, slug: str, action_label: str):
         try:
             feature = NodeFeature.objects.get(slug=slug)
@@ -180,11 +199,30 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         return feature
 
     def take_screenshot(self, request):
-        feature = self._ensure_feature_enabled(
-            request, "screenshot-poll", "Take Screenshot"
-        )
-        if not feature:
+        if not is_suite_feature_enabled("screenshot-capture", default=True):
+            self.message_user(
+                request,
+                "Take Screenshot is unavailable because the Screenshot Capture suite feature is disabled.",
+                level=messages.WARNING,
+            )
             return redirect("..")
+
+        feature = NodeFeature.objects.filter(slug="screenshot-poll").first()
+        if feature is None:
+            self.message_user(
+                request,
+                "Take Screenshot is unavailable because the screenshot-poll feature is not configured.",
+                level=messages.WARNING,
+            )
+            return redirect("..")
+        if not self._require_feature_eligible(
+            request,
+            feature,
+            node=Node.get_local(),
+            action_label="Take Screenshot",
+        ):
+            return redirect("..")
+
         url = request.build_absolute_uri("/")
         try:
             path = capture_screenshot(url)
@@ -295,7 +333,14 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         enablement = {"status": "skipped", "message": "Not enabled."}
         assignment_created = False
         is_manual_feature = feature.slug in Node.MANUAL_FEATURE_SLUGS
-        if eligible and node and not is_manual_feature:
+        if eligible and feature.slug == "screenshot-poll":
+            enablement = {
+                "status": "suite",
+                "message": (
+                    f"{feature.display} is runtime-eligible and controlled by the Screenshot Capture suite feature."
+                ),
+            }
+        elif eligible and node and not is_manual_feature:
             assignment, created = NodeFeatureAssignment.objects.update_or_create(
                 node=node, feature=feature
             )
@@ -396,6 +441,16 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return JsonResponse({"detail": "Local node not found"}, status=404)
 
         if should_enable:
+            if not self._require_feature_eligible(
+                request,
+                feature,
+                node=node,
+                action_label="Manual enablement",
+            ):
+                return JsonResponse(
+                    {"detail": f"{feature.display} is not eligible for manual enablement."},
+                    status=400,
+                )
             _, created = NodeFeatureAssignment.objects.update_or_create(
                 node=node,
                 feature=feature,

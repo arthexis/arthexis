@@ -16,7 +16,6 @@ from apps.core.models import (
 from apps.groups.models import SecurityGroup
 from apps.sigils.sigil_resolver import resolve_sigils
 
-pytestmark = pytest.mark.critical
 
 @pytest.mark.django_db
 def test_ownable_clean_requires_owner():

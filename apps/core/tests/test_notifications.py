@@ -9,7 +9,6 @@ from apps.screens.startup_notifications import (
     render_lcd_lock_file,
 )
 
-pytestmark = pytest.mark.critical
 
 def test_nonzero_channel_uses_numbered_lock_file(tmp_path: Path) -> None:
     (tmp_path / LCD_RUNTIME_LOCK_FILE).write_text("", encoding="utf-8")

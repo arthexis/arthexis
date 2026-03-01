@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.models import Ownable
+from apps.recipes.utils import serialize_recipe_result
 from apps.recipes.utils import resolve_arg_sigils
 
 
@@ -28,6 +30,14 @@ class RecipeExecutionResult:
     resolved_script: str
 
 
+class RecipeExecutionError(RuntimeError):
+    """Raised when recipe execution fails for any supported runtime."""
+
+
+class RecipeFormatDetectionError(RecipeExecutionError):
+    """Raised when recipe content cannot be mapped to an executable runtime."""
+
+
 class Recipe(Ownable):
     """Executable recipe definition with selectable script runtime."""
 
@@ -36,6 +46,13 @@ class Recipe(Ownable):
     class BodyType(models.TextChoices):
         """Supported runtimes for a recipe body."""
 
+        PYTHON = "python", _("Python")
+        BASH = "bash", _("Bash")
+
+    class RecipeFormat(models.TextChoices):
+        """Auto-detected recipe formats."""
+
+        MARKDOWN = "markdown", _("Markdown")
         PYTHON = "python", _("Python")
         BASH = "bash", _("Bash")
 
@@ -90,6 +107,14 @@ class Recipe(Ownable):
         resolved = resolve_sigils(self.script or "", current=self)
         return resolve_arg_sigils(resolved, args, kwargs)
 
+    def _resolve_script_without_args(self) -> str:
+        """Resolve non-argument sigils while preserving ``[ARG.*]`` tokens."""
+
+        # Local import to avoid circular dependency with the sigils app.
+        from apps.sigils.sigil_resolver import resolve_sigils
+
+        return resolve_sigils(self.script or "", current=self)
+
     def _resolve_bash_script(self, *args: Any, **kwargs: Any) -> str:
         """Resolve bash script content with safely shell-quoted argument sigils."""
 
@@ -103,29 +128,82 @@ class Recipe(Ownable):
         """Execute a recipe and return the execution metadata and result."""
 
         result_key = (self.result_variable or "result").strip() or "result"
+        recipe_format = self.detect_format()
 
-        if self.body_type == self.BodyType.BASH:
-            resolved_script = self._resolve_bash_script(*args, **kwargs)
-            return self._execute_bash(
+        if recipe_format == self.RecipeFormat.MARKDOWN:
+            resolved_script = self._resolve_script_without_args()
+            execution = self._execute_markdown(
                 resolved_script=resolved_script,
                 result_variable=result_key,
                 args=args,
                 kwargs=kwargs,
             )
+            self._record_product(execution=execution, args=args, kwargs=kwargs)
+            return execution
+
+        if recipe_format == self.RecipeFormat.BASH:
+            resolved_script = self._resolve_bash_script(*args, **kwargs)
+            execution = self._execute_bash(
+                resolved_script=resolved_script,
+                result_variable=result_key,
+                args=args,
+                kwargs=kwargs,
+            )
+            self._record_product(execution=execution, args=args, kwargs=kwargs)
+            return execution
 
         resolved_script = self.resolve_script(*args, **kwargs)
-
-        if self.body_type != self.BodyType.PYTHON:
-            raise RuntimeError(
-                f"Unsupported recipe body type for '{self.slug}': {self.body_type}"
+        if recipe_format != self.RecipeFormat.PYTHON:
+            raise RecipeExecutionError(
+                f"Unsupported recipe format for '{self.slug}': {recipe_format}"
             )
 
-        return self._execute_python(
+        execution = self._execute_python(
             resolved_script=resolved_script,
             result_variable=result_key,
             args=args,
             kwargs=kwargs,
         )
+        self._record_product(execution=execution, args=args, kwargs=kwargs)
+        return execution
+
+    def detect_format(self) -> str:
+        """Auto-detect the runtime format for the recipe body.
+
+        Markdown is detected from ``.md`` slug suffixes or fenced code blocks.
+        Single-language recipes are inferred from slug extensions and finally fall
+        back to the legacy ``body_type`` field for backwards compatibility.
+        """
+
+        lowered_slug = self.slug.lower()
+        script = self.script or ""
+
+        if lowered_slug.endswith(".md") or self._contains_markdown_blocks(script):
+            return self.RecipeFormat.MARKDOWN
+
+        extension_map = {
+            ".py": self.RecipeFormat.PYTHON,
+            ".sh": self.RecipeFormat.BASH,
+            ".bash": self.RecipeFormat.BASH,
+        }
+        for suffix, detected in extension_map.items():
+            if lowered_slug.endswith(suffix):
+                return detected
+
+        if self.body_type == self.BodyType.PYTHON:
+            return self.RecipeFormat.PYTHON
+        if self.body_type == self.BodyType.BASH:
+            return self.RecipeFormat.BASH
+
+        raise RecipeFormatDetectionError(
+            f"Unable to detect recipe format for '{self.slug}' with body type '{self.body_type}'."
+        )
+
+    @staticmethod
+    def _contains_markdown_blocks(text: str) -> bool:
+        """Return True when the provided text contains fenced Markdown code blocks."""
+
+        return bool(re.search(r"```[\w+-]*\n.*?\n```", text, flags=re.DOTALL))
 
     def _execute_python(
         self,
@@ -167,7 +245,7 @@ class Recipe(Ownable):
         try:
             exec(resolved_script, exec_globals, exec_locals)
         except Exception as exc:
-            raise RuntimeError(
+            raise RecipeExecutionError(
                 f"Error executing recipe '{self.slug}': {exc}"
             ) from exc
 
@@ -246,13 +324,13 @@ class Recipe(Ownable):
                 if not self._is_windows_bash_launcher_failure(exc, shell=shell):
                     stderr = (exc.stderr or "").strip()
                     message = stderr or str(exc)
-                    raise RuntimeError(
+                    raise RecipeExecutionError(
                         f"Error executing recipe '{self.slug}': {message}"
                     ) from exc
             except OSError as exc:
                 last_error = exc
                 if not self._is_shell_missing(exc, shell=shell):
-                    raise RuntimeError(
+                    raise RecipeExecutionError(
                         f"Error executing recipe '{self.slug}': {exc}"
                     ) from exc
         else:
@@ -262,12 +340,148 @@ class Recipe(Ownable):
                 message = stderr or stdout or str(last_error)
             else:
                 message = str(last_error) if last_error is not None else "No shell available"
-            raise RuntimeError(f"Error executing recipe '{self.slug}': {message}")
+            raise RecipeExecutionError(f"Error executing recipe '{self.slug}': {message}")
 
         return RecipeExecutionResult(
             result=completed.stdout.rstrip("\n") or None,
             result_variable=result_variable,
             resolved_script=resolved_script,
+        )
+
+    def _execute_markdown(
+        self,
+        *,
+        resolved_script: str,
+        result_variable: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> RecipeExecutionResult:
+        """Execute fenced Markdown code blocks and return rendered Markdown output."""
+
+        code_block_pattern = re.compile(
+            r"```(?P<language>[\w+-]*)\n(?P<code>.*?)\n```",
+            flags=re.DOTALL,
+        )
+        parts: list[str] = []
+        cursor = 0
+        for match in code_block_pattern.finditer(resolved_script):
+            prose_segment = resolved_script[cursor:match.start()]
+            parts.append(resolve_arg_sigils(prose_segment, args, kwargs))
+            language = (match.group("language") or "python").strip().lower()
+            block_code = match.group("code")
+            block_output = self._execute_language_block(
+                language=language,
+                code=block_code,
+                args=args,
+                kwargs=kwargs,
+                result_variable=result_variable,
+            )
+            parts.append(serialize_recipe_result(block_output))
+            cursor = match.end()
+        tail_segment = resolved_script[cursor:]
+        parts.append(resolve_arg_sigils(tail_segment, args, kwargs))
+        rendered_markdown = "".join(parts)
+
+        return RecipeExecutionResult(
+            result=rendered_markdown,
+            result_variable=result_variable,
+            resolved_script=resolved_script,
+        )
+
+    def _execute_language_block(
+        self,
+        *,
+        language: str,
+        code: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        result_variable: str,
+    ) -> Any:
+        """Execute a language block and return its output.
+
+        Python and bash are executed with the same runtime semantics used by
+        standalone recipes. Other languages are run through subprocess using the
+        language token as command name.
+        """
+
+        if language in {"", "python", "py"}:
+            resolved_code = resolve_arg_sigils(code, args, kwargs)
+            execution = self._execute_python(
+                resolved_script=resolved_code,
+                result_variable=result_variable,
+                args=args,
+                kwargs=kwargs,
+            )
+            return execution.result
+
+        if language in {"bash", "sh", "shell"}:
+            quoted_args = tuple(shlex.quote(str(value)) for value in args)
+            quoted_kwargs = {
+                key: shlex.quote(str(value)) for key, value in kwargs.items()
+            }
+            resolved_code = resolve_arg_sigils(code, quoted_args, quoted_kwargs)
+            execution = self._execute_bash(
+                resolved_script=resolved_code,
+                result_variable=result_variable,
+                args=args,
+                kwargs=kwargs,
+            )
+            return execution.result
+
+        resolved_code = resolve_arg_sigils(code, args, kwargs)
+        return self._execute_external_language(language=language, code=resolved_code)
+
+    def _execute_external_language(self, *, language: str, code: str) -> str:
+        """Execute an external interpreter command and return captured stdout."""
+
+        commands_by_language = {
+            "javascript": ["node", "-e", code],
+            "js": ["node", "-e", code],
+            "ruby": ["ruby", "-e", code],
+            "rb": ["ruby", "-e", code],
+            "perl": ["perl", "-e", code],
+            "pwsh": ["pwsh", "-Command", code],
+            "powershell": ["powershell", "-Command", code],
+        }
+        command = commands_by_language.get(language, [language, "-c", code])
+
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except FileNotFoundError as exc:
+            raise RecipeExecutionError(
+                f"Error executing recipe '{self.slug}': interpreter '{language}' is not available"
+            ) from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            message = stderr or str(exc)
+            raise RecipeExecutionError(
+                f"Error executing recipe '{self.slug}': {message}"
+            ) from exc
+
+        return completed.stdout.rstrip("\n")
+
+    def _record_product(
+        self,
+        *,
+        execution: RecipeExecutionResult,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Persist execution outputs and inputs as a RecipeProduct record."""
+
+        RecipeProduct.objects.create(
+            recipe=self,
+            format_detected=self.detect_format(),
+            input_args=[str(value) for value in args],
+            input_kwargs={key: str(value) for key, value in kwargs.items()},
+            result=serialize_recipe_result(execution.result),
+            result_variable=execution.result_variable,
+            resolved_script=execution.resolved_script,
         )
 
     @staticmethod
@@ -352,4 +566,32 @@ class Recipe(Ownable):
         return tuple(dict.fromkeys(candidates))
 
 
-__all__ = ["Recipe", "RecipeExecutionResult"]
+class RecipeProduct(models.Model):
+    """Persistent execution artifact generated each time a recipe runs."""
+
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        related_name="products",
+    )
+    format_detected = models.CharField(max_length=32)
+    input_args = models.JSONField(default=list)
+    input_kwargs = models.JSONField(default=dict)
+    result = models.TextField(blank=True)
+    result_variable = models.CharField(max_length=64)
+    resolved_script = models.TextField()
+    executed_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ("-executed_at",)
+        verbose_name = _("Recipe Product")
+        verbose_name_plural = _("Recipe Products")
+
+
+__all__ = [
+    "Recipe",
+    "RecipeExecutionError",
+    "RecipeExecutionResult",
+    "RecipeFormatDetectionError",
+    "RecipeProduct",
+]

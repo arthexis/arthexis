@@ -374,23 +374,29 @@ def model_admin_actions(context, app_label, model_name):
                     url = reverse(base + "changelist") + f"?action={action_name}"
         add_action(action_name, func, label, url)
 
-    changelist_getter = getattr(model_admin, "get_changelist_actions", None)
-    if callable(changelist_getter):
+    def get_named_actions(getter_name):
+        getter = getattr(model_admin, getter_name, None)
+        if not callable(getter):
+            return []
         try:
-            changelist_actions = changelist_getter(request)
+            action_names = getter(request)
         except TypeError:
-            changelist_actions = changelist_getter()
-        for action_name in changelist_actions or []:
+            action_names = getter()
+        return action_names or []
+
+    def iter_model_admin_named_actions(action_names, *, skip_queryset_actions):
+        for action_name in action_names:
             if action_name in seen:
                 continue
             func = getattr(model_admin, action_name, None)
             if func is None:
                 continue
-            requires_queryset = getattr(func, "requires_queryset", None)
-            if requires_queryset is True:
-                continue
-            if requires_queryset is None and uses_queryset(func):
-                continue
+            if skip_queryset_actions:
+                requires_queryset = getattr(func, "requires_queryset", None)
+                if requires_queryset is True:
+                    continue
+                if requires_queryset is None and uses_queryset(func):
+                    continue
             label = getattr(
                 func,
                 "label",
@@ -400,34 +406,52 @@ def model_admin_actions(context, app_label, model_name):
                     action_name.replace("_", " "),
                 ),
             )
-            url = None
-            tools_view_name = getattr(model_admin, "tools_view_name", None)
-            if not tools_view_name:
-                initializer = getattr(model_admin, "_get_action_urls", None)
-                if callable(initializer):
-                    try:
-                        initializer()
-                    except Exception:  # pragma: no cover - defensive
-                        tools_view_name = None
-                    else:
-                        tools_view_name = getattr(
-                            model_admin, "tools_view_name", None
-                        )
-            if tools_view_name:
+            yield action_name, func, label
+
+    for action_name, func, label in iter_model_admin_named_actions(
+        get_named_actions("get_changelist_actions"),
+        skip_queryset_actions=True,
+    ):
+        url = None
+        tools_view_name = getattr(model_admin, "tools_view_name", None)
+        if not tools_view_name:
+            initializer = getattr(model_admin, "_get_action_urls", None)
+            if callable(initializer):
                 try:
-                    url = reverse(tools_view_name, kwargs={"tool": action_name})
-                except NoReverseMatch:
-                    url = None
-            if not url:
-                base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
+                    initializer()
+                except Exception:  # pragma: no cover - defensive
+                    tools_view_name = None
+                else:
+                    tools_view_name = getattr(model_admin, "tools_view_name", None)
+        if tools_view_name:
+            try:
+                url = reverse(tools_view_name, kwargs={"tool": action_name})
+            except NoReverseMatch:
+                url = None
+        if not url:
+            base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
+            try:
+                url = reverse(base + action_name)
+            except NoReverseMatch:
                 try:
-                    url = reverse(base + action_name)
+                    url = reverse(base + action_name.split("_")[0])
                 except NoReverseMatch:
-                    try:
-                        url = reverse(base + action_name.split("_")[0])
-                    except NoReverseMatch:
-                        url = reverse(base + "changelist") + f"?action={action_name}"
-            add_action(action_name, func, label, url)
+                    url = reverse(base + "changelist") + f"?action={action_name}"
+        add_action(action_name, func, label, url)
+
+    for action_name, func, label in iter_model_admin_named_actions(
+        get_named_actions("get_dashboard_actions"),
+        skip_queryset_actions=False,
+    ):
+        dashboard_url = getattr(func, "dashboard_url", None)
+        if isinstance(dashboard_url, str):
+            try:
+                url = reverse(dashboard_url)
+            except NoReverseMatch:
+                url = dashboard_url
+        else:
+            url = ""
+        add_action(action_name, func, label, url)
 
     if request is not None:
         action_cache[cache_key] = actions

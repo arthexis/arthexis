@@ -10,7 +10,6 @@ import requests
 from apps.release.admin import package_actions
 from apps.release.models import Package, PackageRelease
 
-pytestmark = pytest.mark.critical
 
 class DummyResponse:
     def __init__(
