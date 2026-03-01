@@ -2,7 +2,7 @@
 
 from config.whitenoise import add_headers as whitenoise_add_headers
 
-from .base import BASE_DIR, DEBUG
+from .base import BASE_DIR, DEBUG, RUNNING_TESTS
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
@@ -32,6 +32,14 @@ WHITENOISE_USE_FINDERS = True
 # unhashed path instead of raising ValueError for missing manifest entries.
 WHITENOISE_MANIFEST_STRICT = False
 WHITENOISE_AUTOREFRESH = DEBUG
+
+# Django's admin static files live in site-packages and are not copied to
+# STATIC_ROOT during tests. Manifest storage requires them to exist at hashed
+# locations, so use plain finder-based storage for pytest runs.
+if RUNNING_TESTS:
+    STORAGES["staticfiles"] = {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+    }
 
 MERMAID_USE_CDN = True
 MEDIA_URL = "/media/"

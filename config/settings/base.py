@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 
 import django.utils.encoding as encoding
@@ -61,6 +62,7 @@ PRODUCTION_ROLES = {
 
 _debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
 DEBUG = env_bool("DEBUG", _debugpy_attached)
+RUNNING_TESTS = any("pytest" in arg for arg in sys.argv)
 HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not None
 
 # Disable NetMessage propagation when running maintenance commands that should
