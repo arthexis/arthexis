@@ -14,6 +14,7 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
 from apps.sites.models import Landing
+from apps.sites.views.landing import SUPPORTED_OCPP_VERSIONS
 
 
 @pytest.fixture
@@ -383,3 +384,24 @@ def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(clie
 
     assert response.status_code == 200
     assert b"<nav" in response.content
+
+
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_public_home_shows_chat_when_site_public_chat_enabled(client, settings):
+    """Regression: anonymous users should see chat when the current site enables public chat."""
+
+    settings.PAGES_CHAT_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
+    Site.objects.update_or_create(
+        id=1,
+        defaults={"domain": "testserver", "name": "testserver", "enable_public_chat": True},
+    )
+
+    response = client.get(reverse("pages:index"), HTTP_HOST="testserver")
+
+    assert response.status_code == 200
+    assert 'id="chat-widget"' in response.content.decode()

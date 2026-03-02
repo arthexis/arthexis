@@ -29,6 +29,11 @@ class UserStory(Lead):
         validators=[MaxLengthValidator(2000)],
         help_text=_("Messages displayed to the user when the feedback was submitted."),
     )
+    contact_via_chat = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=_("Whether the submitter opted into chat follow-up during feedback."),
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -99,6 +104,7 @@ class UserStory(Lead):
             f"**Path:** {path}",
             f"**Rating:** {self.rating}/5",
             f"**Name:** {name}",
+            f"**Contact via chat:** {'Yes' if self.contact_via_chat else 'No'}",
         ]
 
         language_code = (self.language_code or "").strip()

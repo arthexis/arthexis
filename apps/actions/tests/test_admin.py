@@ -10,14 +10,20 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import RequestFactory
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.actions.models import RemoteActionToken
+from apps.actions.models import RemoteAction, RemoteActionToken
 from apps.sites.templatetags.admin_extras import model_admin_actions
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
+
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 
 class _LinkParser(HTMLParser):
@@ -66,7 +72,8 @@ def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_
 
     user = admin_user
 
-    response = admin_client.get(reverse("admin:actions_remoteactiontoken_generate_token"), follow=True)
+    with override_settings(STORAGES=TEST_STORAGES):
+        response = admin_client.get(reverse("admin:actions_remoteactiontoken_generate_token"), follow=True)
 
     assert response.status_code == 200
     assert RemoteActionToken.objects.filter(user=user).exists()
@@ -75,7 +82,8 @@ def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_
 def test_remote_action_token_dashboard_includes_generate_action_link(admin_client):
     """Regression: token model exposes Generate Token as a row action, not a top button."""
 
-    response = admin_client.get(reverse("admin:index"))
+    with override_settings(STORAGES=TEST_STORAGES):
+        response = admin_client.get(reverse("admin:index"))
 
     assert response.status_code == 200
     action_url = reverse("admin:actions_remoteactiontoken_generate_token")
@@ -105,7 +113,8 @@ def test_remote_action_token_dashboard_shows_generate_link_for_add_only_admin(cl
     user.user_permissions.add(add_permission)
     client.force_login(user)
 
-    response = client.get(reverse("admin:index"))
+    with override_settings(STORAGES=TEST_STORAGES):
+        response = client.get(reverse("admin:index"))
 
     assert response.status_code == 200
     action_url = reverse("admin:actions_remoteactiontoken_generate_token")
@@ -135,15 +144,20 @@ def test_remote_action_token_generate_tool_redirects_to_add_when_list_inaccessib
     assert response.headers["Location"] == reverse("admin:actions_remoteactiontoken_add")
 
 
-def test_remote_action_dashboard_button_opens_preview_page(admin_client):
+def test_remote_action_dashboard_button_opens_preview_page(admin_user):
     """Regression: dashboard Actions button opens an OpenAPI preview page first."""
 
-    response = admin_client.get(reverse("admin:actions_remoteaction_my_openapi_spec"))
+    request = RequestFactory().get(reverse("admin:actions_remoteaction_my_openapi_spec"))
+    request.user = admin_user
+
+    remote_action_admin = admin.site._registry[RemoteAction]
+
+    response = remote_action_admin.my_openapi_spec_view(request)
 
     assert response.status_code == 200
-    content = response.content.decode()
-    assert "Preview the generated OpenAPI file before downloading it." in content
-    assert "Download YAML" in content
+    assert response.context_data["download_url"].endswith("?download=1")
+    assert response.context_data["actions_changelist_url"] == reverse("admin:actions_remoteaction_changelist")
+    assert "openapi" in response.context_data["payload"].lower()
 
 
 @pytest.mark.integration

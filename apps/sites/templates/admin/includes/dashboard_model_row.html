@@ -7,8 +7,8 @@
         <a
           href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
           class="favorite-star{% if fav %} favorited{% endif %}"
-          title="{% translate 'Toggle favorite' %}"
-          aria-label="{% translate 'Toggle favorite' %}"
+          title="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
+          aria-label="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
         >
           &#9733;
         </a>
@@ -41,9 +41,19 @@
     {% model_admin_actions app_label model.object_name as extra_actions %}
     <td class="actions">
       {% for action in extra_actions %}
-        <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ row_dom_id }}">
-          {{ action.label }}
-        </a>{% if not forloop.last %}&nbsp;{% endif %}
+        {% spaceless %}
+          {% if action.method == "post" %}
+            <form method="post" action="{{ action.url }}" class="inline-form">
+              {% csrf_token %}
+              <button type="submit" class="actionlink" aria-describedby="{{ row_dom_id }}">{{ action.label }}</button>
+            </form>
+          {% else %}
+            <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ row_dom_id }}">
+              {{ action.label }}
+            </a>
+          {% endif %}
+          {% if not forloop.last %}&nbsp;{% endif %}
+        {% endspaceless %}
       {% endfor %}
     </td>
   {% else %}

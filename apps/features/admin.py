@@ -2,13 +2,14 @@ from pathlib import Path
 
 from django import forms
 from django.conf import settings
-from django.db import models
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import models
 from django.db import transaction
-from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
@@ -16,6 +17,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
+from apps.app.models import Application
 
 from .models import Feature, FeatureNote, FeatureTest
 
@@ -45,10 +47,43 @@ class FeatureNoteInline(admin.TabularInline):
     }
 
 
+class SourceAppListFilter(admin.SimpleListFilter):
+    """Filter suite features by source app values that are currently in use."""
+
+    title = _("From app")
+    parameter_name = "main_app"
+
+    def lookups(self, request, model_admin):
+        """Return app choices that are referenced by at least one suite feature."""
+
+        apps = (
+            Application.objects.filter(
+                features__in=model_admin.get_queryset(request).exclude(main_app__isnull=True)
+            )
+            .distinct()
+            .order_by("name")
+        )
+        return [(str(app.pk), app.display_name) for app in apps]
+
+    def queryset(self, request, queryset):
+        """Constrain changelist rows to the selected source app id."""
+
+        del request
+        value = self.value()
+        if not value:
+            return queryset
+        try:
+            app_id = int(value)
+        except ValueError:
+            return queryset.none()
+        return queryset.filter(main_app_id=app_id)
+
+
 @admin.register(Feature)
 class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
+    actions = ("toggle_selected_feature",)
 
     list_display = (
         "display",
@@ -59,7 +94,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         "node_feature",
         "owner_label",
     )
-    list_filter = ("source", "is_enabled", "main_app", "node_feature")
+    list_filter = ("source", "is_enabled", SourceAppListFilter, "node_feature")
     search_fields = ("display", "slug", "summary")
     readonly_fields = ("source",)
     fieldsets = (
@@ -119,24 +154,47 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "features" / "fixtures"
         return sorted(fixtures_dir.glob("features__*.json"))
 
+    def _reload_all_preview_context(self) -> dict[str, object]:
+        """Build the preview context for the reload-all confirmation view."""
+
+        fixture_paths = self._mainstream_fixture_paths()
+        feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
+        active_feature_count = feature_manager.filter(is_deleted=False).count()
+        fixture_names = [path.name for path in fixture_paths]
+        return {
+            "fixture_paths": fixture_paths,
+            "fixture_names": fixture_names,
+            "active_feature_count": active_feature_count,
+            "fixture_count": len(fixture_paths),
+            "opts": self.model._meta,
+            "title": _("Confirm Reload All"),
+        }
+
     def reload_base(self, request, queryset=None):
-        """Drop all suite features and reload only mainstream fixture entries."""
+        """Preview and optionally reload all suite features from mainstream fixtures."""
 
         del queryset
 
-        if request.method != "POST":
-            return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
         if not self.has_delete_permission(request):
             raise PermissionDenied
 
-        fixture_paths = self._mainstream_fixture_paths()
+        preview_context = self._reload_all_preview_context()
+
+        if request.method != "POST" or request.POST.get("confirm") != "yes":
+            return TemplateResponse(
+                request,
+                "admin/features/feature/reload_all_confirmation.html",
+                preview_context,
+            )
+
+        fixture_paths = preview_context["fixture_paths"]
         if not fixture_paths:
             self.message_user(request, _("No feature fixtures found."), level=messages.WARNING)
             return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
-        feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
-        deleted_count = feature_manager.filter(is_deleted=False).count()
+        deleted_count = preview_context["active_feature_count"]
         try:
+            feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
             with transaction.atomic():
                 feature_manager.update(is_seed_data=False)
                 feature_manager.all().delete()
@@ -152,8 +210,8 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         self.message_user(
             request,
             ngettext(
-                "Dropped %(count)d suite feature before base reload.",
-                "Dropped %(count)d suite features before base reload.",
+                "Dropped %(count)d suite feature before full reload.",
+                "Dropped %(count)d suite features before full reload.",
                 deleted_count,
             )
             % {"count": deleted_count},
@@ -172,11 +230,43 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
 
         return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
-    reload_base.label = _("Reload Base")
-    reload_base.short_description = _("Reload Base")
+    reload_base.label = _("Reload All")
+    reload_base.short_description = _("Reload All")
     reload_base.requires_queryset = False
-    reload_base.methods = ("POST",)
-    reload_base.button_type = "form"
+    reload_base.methods = ("GET", "POST")
+
+    @admin.action(description=_("Toggle selected feature"), permissions=["change"])
+    def toggle_selected_feature(self, request, queryset):
+        """Flip the enabled state for each selected suite feature."""
+
+        toggled_total = 0
+        enabled_total = 0
+        disabled_total = 0
+
+        with transaction.atomic():
+            for feature in queryset.select_for_update().only("pk", "is_enabled"):
+                feature.is_enabled = not feature.is_enabled
+                feature.save(update_fields=["is_enabled", "updated_at"])
+                toggled_total += 1
+                if feature.is_enabled:
+                    enabled_total += 1
+                else:
+                    disabled_total += 1
+
+        self.message_user(
+            request,
+            ngettext(
+                "Toggled %(count)d suite feature (%(enabled)d enabled, %(disabled)d disabled).",
+                "Toggled %(count)d suite features (%(enabled)d enabled, %(disabled)d disabled).",
+                toggled_total,
+            )
+            % {
+                "count": toggled_total,
+                "enabled": enabled_total,
+                "disabled": disabled_total,
+            },
+            level=messages.SUCCESS,
+        )
 
     def get_urls(self):
         urls = super().get_urls()

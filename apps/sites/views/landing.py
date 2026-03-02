@@ -22,6 +22,11 @@ from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
+from apps.ocpp.consumers.constants import (
+    OCPP_VERSION_16,
+    OCPP_VERSION_201,
+    OCPP_VERSION_21,
+)
 from utils.decorators import staff_required
 from utils.sites import get_site
 
@@ -357,6 +362,11 @@ def submit_user_story(request):
             story.language_code = language_code
         story.save()
         form.save_attachments()
+        if request.user.is_authenticated:
+            form.update_chat_preference(
+                owner=request.user,
+                contact_via_chat=bool(form.cleaned_data.get("contact_via_chat")),
+            )
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)

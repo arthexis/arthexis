@@ -3,6 +3,7 @@ import types
 import pytest
 from django.core.cache import cache
 from django.db.utils import OperationalError
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
 from apps.features.models import Feature
@@ -84,22 +85,28 @@ def test_nav_links_hides_landings_with_disabled_required_features(monkeypatch):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("is_enabled", "expected_chat_enabled"),
+    ("is_enabled", "enable_public_chat", "expected_chat_enabled"),
     [
-        (False, False),
-        (True, True),
+        (False, True, False),
+        (True, False, False),
+        (True, True, True),
     ],
 )
-def test_nav_links_chat_enabled_uses_staff_chat_bridge_suite_feature(
-    monkeypatch, settings, is_enabled, expected_chat_enabled
+def test_nav_links_chat_enabled_requires_feature_and_site_or_profile(
+    monkeypatch, settings, is_enabled, enable_public_chat, expected_chat_enabled
 ):
-    """Regression: chat enablement should follow Staff Chat Bridge suite feature state."""
+    """Regression: chat enablement requires suite feature and a site/user opt-in signal."""
 
     cache.clear()
     request = RequestFactory().get("/")
     settings.PAGES_CHAT_ENABLED = True
 
     monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=enable_public_chat),
+    )
 
     Feature.objects.update_or_create(
         slug="staff-chat-bridge",
@@ -120,9 +127,45 @@ def test_nav_links_chat_disabled_when_staff_chat_bridge_missing(monkeypatch, set
     settings.PAGES_CHAT_ENABLED = True
 
     monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=True),
+    )
 
     Feature.objects.filter(slug="staff-chat-bridge").delete()
 
     context = context_processors.nav_links(request)
 
     assert context["chat_enabled"] is False
+
+
+@pytest.mark.django_db
+def test_nav_links_chat_enabled_for_staff_without_site_public_chat(monkeypatch, settings):
+    """Staff should retain admin chat bridge access without requiring visitor opt-in."""
+
+    cache.clear()
+    request = RequestFactory().get("/admin/")
+    request.user = get_user_model().objects.create_user(
+        username="staff-nav",
+        email="staff-nav@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    settings.PAGES_CHAT_ENABLED = True
+
+    monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=False),
+    )
+
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
+
+    context = context_processors.nav_links(request)
+
+    assert context["chat_enabled"] is True

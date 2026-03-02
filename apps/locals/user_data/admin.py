@@ -79,69 +79,6 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         )
         return super().render_change_form(request, context, add, change, form_url, obj)
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        if _supports_seed_datum(self.model):
-            action = self.get_action("toggle_selected_seed_data")
-            if action is not None:
-                actions.setdefault("toggle_selected_seed_data", action)
-        return actions
-
-    @admin.action(description=_("Toggle selected Seed Data"))
-    def toggle_selected_seed_data(self, request, queryset):
-        if not _supports_seed_datum(self.model):
-            messages.warning(
-                request,
-                _("Seed data is not available for this model."),
-            )
-            return
-
-        manager = getattr(self.model, "all_objects", self.model._default_manager)
-        toggled = 0
-        skipped = 0
-        fixture_index = _seed_fixture_index()
-
-        for obj in queryset:
-            if _seed_datum_is_default(obj, index=fixture_index):
-                skipped += 1
-                continue
-            if getattr(obj, "is_seed_data", False):
-                manager.filter(pk=obj.pk).update(is_seed_data=False)
-                obj.is_seed_data = False
-            else:
-                manager.filter(pk=obj.pk).update(is_seed_data=True)
-                obj.is_seed_data = True
-            toggled += 1
-
-        if toggled:
-            opts = self.model._meta
-            self.message_user(
-                request,
-                ngettext(
-                    "Toggled seed data for %(count)d %(verbose_name)s.",
-                    "Toggled seed data for %(count)d %(verbose_name_plural)s.",
-                    toggled,
-                )
-                % {
-                    "count": toggled,
-                    "verbose_name": opts.verbose_name,
-                    "verbose_name_plural": opts.verbose_name_plural,
-                },
-                level=messages.SUCCESS,
-            )
-        if skipped:
-            self.message_user(
-                request,
-                ngettext(
-                    "Skipped %(count)d object because it is bundled seed data.",
-                    "Skipped %(count)d objects because they are bundled seed data.",
-                    skipped,
-                )
-                % {"count": skipped},
-                level=messages.WARNING,
-            )
-
-
 class ImportExportAdminMixin:
     """Provide import/export actions for all model admins."""
 

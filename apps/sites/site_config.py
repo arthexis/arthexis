@@ -22,6 +22,45 @@ logger = logging.getLogger(__name__)
 
 _FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
     (
+        "default_landing",
+        lambda: models.ForeignKey(
+            "pages.Landing",
+            on_delete=models.SET_NULL,
+            related_name="default_for_sites",
+            null=True,
+            blank=True,
+            verbose_name=_("Default landing"),
+            help_text=_("Landing visitors should be redirected to by default."),
+            limit_choices_to={"is_deleted": False, "enabled": True},
+        ),
+    ),
+    (
+        "enable_public_chat",
+        lambda: models.BooleanField(
+            default=False,
+            db_default=False,
+            verbose_name=_("Enable public chat"),
+            help_text=_(
+                "Allow the chat button for all visitors on this site, including guests."
+            ),
+        ),
+    ),
+    (
+        "interface_landing",
+        lambda: models.ForeignKey(
+            "pages.Landing",
+            on_delete=models.SET_NULL,
+            related_name="interface_for_sites",
+            null=True,
+            blank=True,
+            verbose_name=_("Interface landing"),
+            help_text=_(
+                "Landing visitors should be redirected to when the Operator Site Interface suite feature is disabled."
+            ),
+            limit_choices_to={"is_deleted": False, "enabled": True},
+        ),
+    ),
+    (
         "managed",
         lambda: models.BooleanField(
             default=False,
@@ -52,34 +91,6 @@ _FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
             null=True,
             blank=True,
             verbose_name=_("Template"),
-        ),
-    ),
-    (
-        "default_landing",
-        lambda: models.ForeignKey(
-            "pages.Landing",
-            on_delete=models.SET_NULL,
-            related_name="default_for_sites",
-            null=True,
-            blank=True,
-            verbose_name=_("Default landing"),
-            help_text=_("Landing visitors should be redirected to by default."),
-            limit_choices_to={"is_deleted": False, "enabled": True},
-        ),
-    ),
-    (
-        "interface_landing",
-        lambda: models.ForeignKey(
-            "pages.Landing",
-            on_delete=models.SET_NULL,
-            related_name="interface_for_sites",
-            null=True,
-            blank=True,
-            verbose_name=_("Interface landing"),
-            help_text=_(
-                "Landing visitors should be redirected to when the Operator Site Interface suite feature is disabled."
-            ),
-            limit_choices_to={"is_deleted": False, "enabled": True},
         ),
     ),
 )
