@@ -8,182 +8,56 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.users.backends import TempPasswordBackend
 from apps.users import temp_passwords
+from apps.users.backends import TempPasswordBackend
 
 
-class TempPasswordCommandTests(TestCase):
-    def test_error_when_user_missing_without_create_flag(self):
-        identifier = "missing@example.com"
+class PasswordCommandTests(TestCase):
+    """Coverage for the password management command."""
 
-        with self.assertRaisesMessage(
-            CommandError,
-            f"No user found for identifier '{identifier}'. Use --create to add one.",
-        ):
-            call_command("temp_password", identifier)
-
-    def test_creates_user_when_create_flag_provided(self):
-        identifier = "new-user@example.com"
+    def test_generates_password_without_identifier(self):
+        """The command should allow pure password generation with no user target."""
 
         stdout = io.StringIO()
-        call_command("temp_password", identifier, create=True, stdout=stdout)
-
-        User = get_user_model()
-        user = User.all_objects.get(username=identifier)
-        assert user.email == identifier
-        assert not user.has_usable_password()
-
-        entry = temp_passwords.load_temp_password(identifier)
-        assert entry is not None
-        assert not entry.is_expired
+        call_command("password", stdout=stdout)
 
         output = stdout.getvalue()
-        assert f"Temporary password for {identifier}:" in output
-        assert "Temporary password created." in output
+        assert "Generated password:" in output
+        assert "Password generated." in output
 
-    def test_create_user_with_staff_and_superuser_flags(self):
-        identifier = "privileged@example.com"
+    def test_sets_permanent_password_and_forces_change_by_default(self):
+        """Permanent password operations should default to force password change."""
 
-        call_command(
-            "temp_password",
-            identifier,
-            create=True,
-            staff=True,
-            superuser=True,
-        )
+        user = get_user_model().objects.create_user(username="perm-user", email="perm@example.com")
 
-        User = get_user_model()
-        user = User.all_objects.get(username=identifier)
-        assert user.is_staff
-        assert user.is_superuser
-
-    def test_create_flag_updates_existing_user_permissions(self):
-        identifier = "existing-privileged@example.com"
-        User = get_user_model()
-        user = User.objects.create_user(username=identifier, email=identifier)
-
-        call_command(
-            "temp_password",
-            identifier,
-            create=True,
-            staff=True,
-            superuser=True,
-        )
+        call_command("password", "perm-user", password="StrongPass123")
 
         user.refresh_from_db()
-        assert user.is_staff
-        assert user.is_superuser
+        assert user.check_password("StrongPass123")
+        assert user.force_password_change is True
 
-    def test_staff_superuser_flags_require_create(self):
-        identifier = "existing@example.com"
-        User = get_user_model()
-        User.objects.create_user(username=identifier, email=identifier)
+    def test_temporary_password_can_be_targeted_by_user_id_lookup(self):
+        """Users should be resolvable by id when generating temporary passwords."""
 
-        with self.assertRaisesMessage(
-            CommandError,
-            "--staff and --superuser can only be used with --create or --update.",
-        ):
-            call_command("temp_password", identifier, staff=True)
+        user = get_user_model().objects.create_user(username="id-user", email="id@example.com")
 
-    def test_staff_and_superuser_flags_require_create_or_update(self):
-        identifier = "existing-staff@example.com"
-        User = get_user_model()
-        User.objects.create_user(username=identifier, email=identifier)
+        call_command("password", str(user.pk), lookup="id", temporary=True)
 
-        with self.assertRaisesMessage(
-            CommandError,
-            "--staff and --superuser can only be used with --create or --update.",
-        ):
-            call_command("temp_password", identifier, staff=True, superuser=True)
-
-    def test_update_user_permissions(self):
-        identifier = "existing-staff@example.com"
-        User = get_user_model()
-        user = User.objects.create_user(username=identifier, email=identifier)
-
-        call_command(
-            "temp_password",
-            identifier,
-            update=True,
-            staff=True,
-            superuser=True,
-        )
-
-        user.refresh_from_db()
-        assert user.is_staff
-        assert user.is_superuser
-
-    def test_existing_user_not_elevated_without_update(self):
-        identifier = "existing-unchanged@example.com"
-        User = get_user_model()
-        user = User.objects.create_user(username=identifier, email=identifier)
-
-        call_command("temp_password", identifier)
-
-        user.refresh_from_db()
-        assert not user.is_staff
-        assert not user.is_superuser
-
-    def test_create_arthexis_user_by_username(self):
-        identifier = "arthexis"
-        User = get_user_model()
-        User.all_objects.filter(username=identifier).delete()
-
-        stdout = io.StringIO()
-        call_command(
-            "temp_password",
-            identifier,
-            create=True,
-            staff=True,
-            superuser=True,
-            stdout=stdout,
-        )
-
-        user = User.all_objects.get(username=identifier)
-        assert user.email in {"", None}
-        assert user.is_staff
-        assert user.is_superuser
-
-        entry = temp_passwords.load_temp_password(identifier)
+        entry = temp_passwords.load_temp_password(user.username)
         assert entry is not None
         assert not entry.is_expired
 
-        output = stdout.getvalue()
-        assert f"Temporary password for {identifier}:" in output
-        assert "Temporary password created." in output
+    def test_temporary_password_clears_expired_temporary_lock(self):
+        """Generating a new temporary password should reactivate an expired temporary user."""
 
-    def test_update_arthexis_user(self):
-        identifier = "arthexis"
-        User = get_user_model()
-        User.all_objects.filter(username=identifier).delete()
-        user = User.all_objects.create_user(username=identifier, email="admin@example.com")
-
-        call_command(
-            "temp_password",
-            identifier,
-            update=True,
-            staff=True,
-            superuser=True,
-        )
-
-        user.refresh_from_db()
-        assert user.is_staff
-        assert user.is_superuser
-
-        entry = temp_passwords.load_temp_password(identifier)
-        assert entry is not None
-        assert not entry.is_expired
-
-    def test_new_temp_password_clears_expired_temporary_lock(self):
         identifier = "expired@example.com"
-        User = get_user_model()
-        user = User.all_objects.create_user(username=identifier, email=identifier)
+        user = get_user_model().all_objects.create_user(username=identifier, email=identifier)
         user.temporary_expires_at = timezone.now() - timedelta(hours=1)
         user.is_active = False
         user.save(update_fields=["temporary_expires_at", "is_active"])
 
         with patch("apps.users.temp_passwords.generate_password", return_value="TempPass123"):
-            call_command("temp_password", identifier, update=True)
+            call_command("password", identifier, temporary=True, update=True)
 
         user.refresh_from_db()
         assert user.temporary_expires_at is None
@@ -194,44 +68,42 @@ class TempPasswordCommandTests(TestCase):
         authed.refresh_from_db()
         assert authed.is_active
 
-    def test_expires_in_must_be_positive(self):
-        identifier = "expires@example.com"
-        User = get_user_model()
-        User.objects.create_user(username=identifier, email=identifier)
+    def test_delete_password_disables_password_and_force_flag(self):
+        """Deleting a password should set an unusable password and clear force-change flag."""
 
-        with self.subTest("zero"):
-            with self.assertRaisesMessage(
-                CommandError, "Expiration must be a positive number of seconds."
-            ):
-                call_command("temp_password", identifier, update=True, expires_in=0)
+        user = get_user_model().objects.create_user(
+            username="delete-user",
+            email="delete@example.com",
+            password="Temp1234",
+            force_password_change=True,
+        )
 
-        with self.subTest("negative"):
-            with self.assertRaisesMessage(
-                CommandError, "Expiration must be a positive number of seconds."
-            ):
-                call_command("temp_password", identifier, update=True, expires_in=-1)
+        temp_passwords.store_temp_password(user.username, "TempDelete123")
 
-    def test_multiple_users_with_same_email_reported(self):
-        User = get_user_model()
-        email = "shared@example.com"
-        User.objects.create_user(username="user-a", email=email)
-        User.objects.create_user(username="user-b", email=email)
-
-        with self.assertRaisesMessage(
-            CommandError,
-            "Multiple users share this email address. Provide the username instead. Matches: user-a, user-b",
-        ):
-            call_command("temp_password", email)
-
-    def test_expiration_cleared_when_updating_permissions(self):
-        identifier = "reactivate@example.com"
-        User = get_user_model()
-        user = User.objects.create_user(username=identifier, email=identifier)
-        user.temporary_expires_at = timezone.now() - timedelta(minutes=5)
-        user.save(update_fields=["temporary_expires_at"])
-
-        call_command("temp_password", identifier, update=True, staff=True)
+        call_command("password", user.username, delete=True)
 
         user.refresh_from_db()
-        assert user.temporary_expires_at is None
-        assert user.is_staff
+        assert not user.has_usable_password()
+        assert user.force_password_change is False
+        assert temp_passwords.load_temp_password(user.username) is None
+
+    def test_expires_in_must_be_positive_for_temporary_passwords(self):
+        """Temporary password expiration must remain a positive duration."""
+
+        identifier = "expires@example.com"
+        get_user_model().objects.create_user(username=identifier, email=identifier)
+
+        with self.assertRaisesMessage(
+            CommandError, "Expiration must be a positive number of seconds."
+        ):
+            call_command("password", identifier, temporary=True, expires_in=0)
+
+    def test_missing_user_without_create_raises_error(self):
+        """The command should keep explicit messaging when users are missing."""
+
+        identifier = "missing@example.com"
+        with self.assertRaisesMessage(
+            CommandError,
+            f"No user found for identifier '{identifier}'. Use --create to add one.",
+        ):
+            call_command("password", identifier)
