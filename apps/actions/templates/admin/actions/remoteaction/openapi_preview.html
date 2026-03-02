@@ -29,21 +29,55 @@
   (function() {
     const copyButton = document.getElementById("copy-yaml-button");
     const yamlCode = document.getElementById("openapi-yaml-content");
-    if (!copyButton || !yamlCode || !navigator.clipboard) {
+    if (!copyButton || !yamlCode) {
       return;
     }
 
-    copyButton.addEventListener("click", async function() {
+    const FEEDBACK_DURATION_MS = 1000;
+
+    const setTemporaryButtonText = (text) => {
       const originalText = copyButton.textContent;
-      try {
-        await navigator.clipboard.writeText(yamlCode.textContent || "");
-        copyButton.textContent = "{% trans 'Copied' %}";
-      } catch (error) {
-        copyButton.textContent = "{% trans 'Copy failed' %}";
-      }
-      window.setTimeout(function() {
+      copyButton.textContent = text;
+      setTimeout(() => {
         copyButton.textContent = originalText;
-      }, 1000);
+      }, FEEDBACK_DURATION_MS);
+    };
+
+    const fallbackCopyText = (text) => {
+      const fallbackTextarea = document.createElement("textarea");
+      fallbackTextarea.value = text;
+      fallbackTextarea.setAttribute("readonly", "");
+      fallbackTextarea.style.position = "fixed";
+      fallbackTextarea.style.opacity = "0";
+      document.body.appendChild(fallbackTextarea);
+      fallbackTextarea.select();
+
+      try {
+        return document.execCommand("copy");
+      } finally {
+        document.body.removeChild(fallbackTextarea);
+      }
+    };
+
+    copyButton.addEventListener("click", async () => {
+      const textToCopy = yamlCode.textContent || "";
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(textToCopy);
+          setTemporaryButtonText("{% trans 'Copied' %}");
+          return;
+        }
+
+        if (fallbackCopyText(textToCopy)) {
+          setTemporaryButtonText("{% trans 'Copied' %}");
+          return;
+        }
+
+        setTemporaryButtonText("{% trans 'Copy failed' %}");
+      } catch (error) {
+        console.error("Failed to copy YAML to clipboard:", error);
+        setTemporaryButtonText("{% trans 'Copy failed' %}");
+      }
     });
   })();
 </script>
