@@ -40,13 +40,10 @@ from ..utils import (
 logger = logging.getLogger(__name__)
 
 
-SUPPORTED_OCPP_SUBPROTOCOLS: tuple[str, ...] = (
-    OCPP_VERSION_16,
-    OCPP_VERSION_201,
-    OCPP_VERSION_21,
-)
-SUPPORTED_OCPP_VERSIONS: tuple[str, ...] = tuple(
-    subprotocol.removeprefix("ocpp") for subprotocol in SUPPORTED_OCPP_SUBPROTOCOLS
+SUPPORTED_OCPP_VERSIONS: tuple[str, ...] = (
+    "1.6",
+    "2.0.1",
+    "2.1",
 )
 
 
