@@ -289,6 +289,17 @@ def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_
     mock_test_login.assert_called_once_with()
 
 
+
+
+def test_evergo_admin_change_form_uses_cleaved_test_and_sync_action_label():
+    """Regression: change-form action button label should be cleaved to avoid bracketed wording."""
+
+    evergo_admin = admin.site._registry[EvergoUser]
+
+    assert evergo_admin.test_login_and_sync_action.label == "Test and Sync"
+    assert "[" not in evergo_admin.test_login_and_sync_action.label
+    assert "]" not in evergo_admin.test_login_and_sync_action.label
+
 @pytest.mark.django_db
 def test_evergo_order_and_field_value_admin_changelists_render(admin_client):
     """Ensure new order and field-value models are available in admin."""
