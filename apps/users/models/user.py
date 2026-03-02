@@ -65,6 +65,11 @@ class User(Entity, AbstractUser):
         default=False,
         help_text=_("Require both a password and authenticator code to sign in."),
     )
+    force_password_change = models.BooleanField(
+        _("force password change"),
+        default=False,
+        help_text=_("Require this user to change their password at the next login."),
+    )
     temporary_expires_at = models.DateTimeField(
         null=True,
         blank=True,
