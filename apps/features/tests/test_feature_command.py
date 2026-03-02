@@ -62,11 +62,48 @@ def test_feature_command_lists_all_for_selected_kind() -> None:
 
 
 @pytest.mark.django_db
-def test_feature_command_requires_kind_for_toggles() -> None:
-    """Enable/disable toggles require an explicit kind selector."""
+def test_feature_command_requires_kind_for_ambiguous_toggles() -> None:
+    """Enable/disable toggles require --kind when slug exists in both catalogs."""
 
-    with pytest.raises(CommandError, match="--kind is required"):
-        call_command("feature", "--enable", "suite-enabled")
+    Feature.objects.create(slug="ambiguous-toggle", display="Ambiguous Suite", is_enabled=False)
+    NodeFeature.objects.create(slug="ambiguous-toggle", display="Ambiguous Node")
+
+    with pytest.raises(CommandError, match="exists in both suite and node kinds"):
+        call_command("feature", "--enable", "ambiguous-toggle")
+
+
+@pytest.mark.django_db
+def test_feature_command_infers_suite_kind_for_toggle() -> None:
+    """Toggle operations should infer suite kind when slug is suite-only."""
+
+    feature = Feature.objects.create(slug="suite-only-toggle", display="Suite Only", is_enabled=True)
+
+    call_command("feature", "--disable", feature.slug)
+    feature.refresh_from_db()
+    assert feature.is_enabled is False
+
+
+@pytest.mark.django_db
+def test_feature_command_infers_node_kind_for_toggle() -> None:
+    """Toggle operations should infer node kind when slug is node-only."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    feature = NodeFeature.objects.create(slug="camera-operator", display="Camera Operator")
+
+    call_command("feature", "--enable", feature.slug)
+    assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_feature_command_unknown_slug_without_kind_reports_helpful_error() -> None:
+    """Unknown slug without --kind should raise a specific validation error."""
+
+    with pytest.raises(CommandError, match="Unknown feature 'missing-feature'"):
+        call_command("feature", "--disable", "missing-feature")
 
 
 @pytest.mark.django_db
