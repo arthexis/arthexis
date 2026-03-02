@@ -14,6 +14,7 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
 from apps.sites.models import Landing
+from apps.sites.views.landing import SUPPORTED_OCPP_VERSIONS
 
 
 @pytest.fixture
@@ -75,6 +76,26 @@ def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(clie
 
 
 @pytest.mark.django_db
+def test_operator_interface_notice_page_renders_supported_versions(client):
+    """Operator notice page should render websocket guidance and OCPP versions."""
+
+    response = client.get(reverse("pages:operator-interface-notice"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "wss://testserver/&lt;charge_point_id&gt;/" in content
+    for version in SUPPORTED_OCPP_VERSIONS:
+        assert f"OCPP {version}" in content
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_page_is_get_only(client):
+    """Operator notice page should reject non-GET requests."""
+
+    response = client.post(reverse("pages:operator-interface-notice"))
+
+    assert response.status_code == 405
+
 def test_footer_fragment_is_get_only(client):
     """The footer fragment endpoint should reject non-GET methods."""
 

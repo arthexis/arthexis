@@ -21,6 +21,11 @@ from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
+from apps.ocpp.consumers.constants import (
+    OCPP_VERSION_16,
+    OCPP_VERSION_201,
+    OCPP_VERSION_21,
+)
 from utils.decorators import staff_required
 from utils.sites import get_site
 
@@ -33,6 +38,13 @@ from ..utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+SUPPORTED_OCPP_VERSIONS: tuple[str, ...] = (
+    "1.6",
+    "2.0.1",
+    "2.1",
+)
 
 
 def _get_client_ip(request) -> str:
@@ -60,6 +72,17 @@ def footer_fragment(request):
         module=getattr(request, "current_module", None),
     )
     return TemplateResponse(request, "core/footer.html", context)
+
+
+@require_GET
+def operator_interface_notice(request):
+    """Render a minimal vendor-facing notice for OCPP websocket onboarding."""
+
+    context = {
+        "ocpp_versions": SUPPORTED_OCPP_VERSIONS,
+        "ws_endpoint": f"wss://{request.get_host()}/<charge_point_id>/",
+    }
+    return TemplateResponse(request, "pages/operator_interface_notice.html", context)
 
 
 @landing("Home")

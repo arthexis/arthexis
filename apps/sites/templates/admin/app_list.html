@@ -23,8 +23,8 @@
                   <a
                     href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
                     class="favorite-star favorited"
-                    title="{% translate 'Toggle favorite' %}"
-                    aria-label="{% translate 'Toggle favorite' %}"
+                    title="{% translate 'Configure favorite' %}"
+                    aria-label="{% translate 'Configure favorite' %}"
                   >
                     &#9733;
                   </a>
@@ -69,8 +69,8 @@
                   <a
                     href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
                     class="favorite-star{% if fav %} favorited{% endif %}"
-                    title="{% translate 'Toggle favorite' %}"
-                    aria-label="{% translate 'Toggle favorite' %}"
+                    title="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
+                    aria-label="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
                   >
                     &#9733;
                   </a>

@@ -12,13 +12,73 @@
 
 {% block content %}
 <div id="content-main">
-  <h1>{% trans "My OpenAPI Spec" %}</h1>
   <p>
     {% trans "Preview the generated OpenAPI file before downloading it." %}
   </p>
+  <p>
+    {% trans "Configure which actions are available in" %}
+    <a href="{{ actions_changelist_url }}">{% trans "Remote Actions" %}</a>.
+  </p>
   <p class="submit-row">
     <a class="button default" href="{{ download_url }}">{% trans "Download YAML" %}</a>
+    <button class="button" type="button" id="copy-yaml-button">{% trans "Copy YAML" %}</button>
   </p>
-  <pre><code>{{ payload }}</code></pre>
+  <pre><code id="openapi-yaml-content">{{ payload }}</code></pre>
 </div>
+<script>
+  (function() {
+    const copyButton = document.getElementById("copy-yaml-button");
+    const yamlCode = document.getElementById("openapi-yaml-content");
+    if (!copyButton || !yamlCode) {
+      return;
+    }
+
+    const FEEDBACK_DURATION_MS = 1000;
+
+    const setTemporaryButtonText = (text) => {
+      const originalText = copyButton.textContent;
+      copyButton.textContent = text;
+      setTimeout(() => {
+        copyButton.textContent = originalText;
+      }, FEEDBACK_DURATION_MS);
+    };
+
+    const fallbackCopyText = (text) => {
+      const fallbackTextarea = document.createElement("textarea");
+      fallbackTextarea.value = text;
+      fallbackTextarea.setAttribute("readonly", "");
+      fallbackTextarea.style.position = "fixed";
+      fallbackTextarea.style.opacity = "0";
+      document.body.appendChild(fallbackTextarea);
+      fallbackTextarea.select();
+
+      try {
+        return document.execCommand("copy");
+      } finally {
+        document.body.removeChild(fallbackTextarea);
+      }
+    };
+
+    copyButton.addEventListener("click", async () => {
+      const textToCopy = yamlCode.textContent || "";
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(textToCopy);
+          setTemporaryButtonText("{% trans 'Copied' %}");
+          return;
+        }
+
+        if (fallbackCopyText(textToCopy)) {
+          setTemporaryButtonText("{% trans 'Copied' %}");
+          return;
+        }
+
+        setTemporaryButtonText("{% trans 'Copy failed' %}");
+      } catch (error) {
+        console.error("Failed to copy YAML to clipboard:", error);
+        setTemporaryButtonText("{% trans 'Copy failed' %}");
+      }
+    });
+  })();
+</script>
 {% endblock %}

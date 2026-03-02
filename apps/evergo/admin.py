@@ -204,7 +204,7 @@ class EvergoUserAdmin(
     ) = _build_credentials_actions(
         "_test_login_and_sync_bulk_action",
         "_test_login_and_sync",
-        _("Test Evergo login and sync profile fields"),
+        _("Test and Sync"),
     )
 
 
