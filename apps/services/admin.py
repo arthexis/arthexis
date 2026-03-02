@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -51,11 +49,8 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
         raw_ids = request.GET.get("ids", "")
         selected_ids: list[int] = []
         for value in raw_ids.split(","):
-            normalized = value.strip()
-            if not normalized:
-                continue
             try:
-                selected_ids.append(int(normalized))
+                selected_ids.append(int(value))
             except ValueError:
                 continue
 
@@ -69,7 +64,7 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
         report_rows: list[dict[str, object]] = []
         for service in services:
             unit_name = service.unit_template.format(service=service_name_placeholder)
-            configured = service.is_configured(service_name=service_name, lock_dir=Path(locks))
+            configured = service.is_configured(service_name=service_name, lock_dir=locks)
             report_rows.append(
                 {
                     "service": service,
