@@ -17,7 +17,7 @@ dependencies = [
   "autobahn==24.4.2",
   "Automat==25.4.16",
   "billiard==4.2.4",
-  "boto3==1.36.23",
+  "boto3==1.42.59",
   "botocore==1.36.23",
   "celery==5.5.3",
   "certifi==2026.1.4",
