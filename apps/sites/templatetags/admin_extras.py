@@ -323,14 +323,18 @@ def model_admin_actions(context, app_label, model_name):
     actions = []
     seen = set()
 
-    def add_action(action_name, func, label, url):
+    def add_action(action_name, func, label, url, method="get"):
         if not url:
             return
         label_text = str(label)
+        method_value = str(method or "get").strip().lower()
+        if method_value not in {"get", "post", "put", "patch", "delete"}:
+            method_value = "get"
         actions.append(
             {
                 "url": url,
                 "label": label,
+                "method": method_value,
                 "is_discover": getattr(func, "is_discover_action", False)
                 or label_text.strip().lower() == "discover",
             }
@@ -444,6 +448,7 @@ def model_admin_actions(context, app_label, model_name):
         skip_queryset_actions=False,
     ):
         dashboard_url = getattr(func, "dashboard_url", None)
+        dashboard_method = getattr(func, "dashboard_method", "get")
         if isinstance(dashboard_url, str):
             try:
                 url = reverse(dashboard_url)
@@ -451,7 +456,7 @@ def model_admin_actions(context, app_label, model_name):
                 url = dashboard_url
         else:
             url = ""
-        add_action(action_name, func, label, url)
+        add_action(action_name, func, label, url, method=dashboard_method)
 
     if request is not None:
         action_cache[cache_key] = actions
