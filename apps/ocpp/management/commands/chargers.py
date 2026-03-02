@@ -35,7 +35,7 @@ class Command(BaseCommand):
             dest="cp",
             help=(
                 "Connector identifier used to filter chargers. Provide a connector "
-                "number or 'all' to select aggregate connectors. Non-numeric "
+                "number or 'all' to select all connector charge points. Non-numeric "
                 "values fall back to matching the charge point path, ignoring "
                 "surrounding slashes."
             ),

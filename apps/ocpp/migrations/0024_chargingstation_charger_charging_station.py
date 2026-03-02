@@ -12,10 +12,12 @@ def _link_existing_charge_points(apps, schema_editor):
 
     Charger = apps.get_model("ocpp", "Charger")
     ChargingStation = apps.get_model("ocpp", "ChargingStation")
-    station_ids = set(
+    station_ids = (
         Charger.objects.exclude(charger_id__isnull=True)
         .exclude(charger_id="")
         .values_list("charger_id", flat=True)
+        .distinct()
+        .iterator(chunk_size=1000)
     )
     for station_id in station_ids:
         station, _created = ChargingStation.objects.get_or_create(station_id=station_id)

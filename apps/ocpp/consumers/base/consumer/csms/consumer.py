@@ -201,8 +201,7 @@ class CSMSConsumer(
                 ).first()
             )()
             self.aggregate_charger = aggregate
-            if aggregate is not None:
-                self.charger = aggregate
+            self.charger = aggregate
             previous_key = self.store_key
             new_key = store.identity_key(self.charger_id, None)
             if previous_key != new_key:
@@ -241,6 +240,14 @@ class CSMSConsumer(
         )()
         if existing:
             self.charger = existing
+            if (
+                self.charging_station
+                and self.charger.charging_station_id != self.charging_station.pk
+            ):
+                self.charger.charging_station = self.charging_station
+                await database_sync_to_async(self.charger.save)(
+                    update_fields=["charging_station"]
+                )
             await database_sync_to_async(self.charger.refresh_manager_node)()
         else:
 

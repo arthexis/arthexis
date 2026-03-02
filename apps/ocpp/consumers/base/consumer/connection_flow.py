@@ -51,7 +51,24 @@ class ConnectionFlowMixin:
             self.aggregate_charger = self.charger
             await self._clear_cached_status_fields()
             return station_created
-        self.aggregate_charger = None
+        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id=self.charger_id,
+            connector_id=None,
+            defaults={
+                "last_path": self.scope.get("path", ""),
+                "charging_station": station,
+            },
+        )
+        if self.charger.charging_station_id is None:
+            self.charger.charging_station = station
+            await database_sync_to_async(self.charger.save)(
+                update_fields=["charging_station"]
+            )
+        if self.scope.get("path") and self.charger.last_path != self.scope.get("path"):
+            self.charger.last_path = self.scope.get("path")
+            await database_sync_to_async(self.charger.save)(update_fields=["last_path"])
+        self.aggregate_charger = self.charger
+        await self._clear_cached_status_fields()
         return station_created
 
     async def _register_charger_logs(self) -> None:
