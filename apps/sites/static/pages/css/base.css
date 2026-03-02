@@ -424,12 +424,17 @@ body.user-story-open {
 
 .user-story-card {
   width: min(28rem, 100%);
+  max-height: calc(100dvh - 3rem);
   border-radius: 1rem;
   box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.45);
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
   transform: translateY(1rem);
   transition: transform 0.25s ease;
+}
+
+.user-story-card .card-body {
+  overflow-y: auto;
 }
 
 .user-story-overlay.show .user-story-card {
@@ -612,6 +617,7 @@ body.user-story-open {
 
 .chat-drawer {
   width: min(28rem, 100%);
+  max-height: calc(100dvh - 3rem);
   border-radius: 1rem;
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
@@ -659,7 +665,7 @@ body.user-story-open {
 
 .chat-messages {
   flex: 1 1 auto;
-  max-height: 18rem;
+  min-height: 0;
   overflow-y: auto;
   padding: 1rem 1.25rem;
   display: flex;
@@ -790,5 +796,21 @@ body.chat-open {
     width: 100%;
     max-width: none;
     border-radius: 1rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .user-story-overlay,
+  .chat-overlay {
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .user-story-card,
+  .chat-drawer {
+    width: 100%;
+    max-width: none;
+    min-height: calc(100dvh - 2rem);
+    max-height: calc(100dvh - 2rem);
   }
 }
