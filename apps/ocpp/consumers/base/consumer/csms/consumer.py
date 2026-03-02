@@ -31,6 +31,7 @@ from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from apps.ocpp.models import (
     Transaction,
     Charger,
+    ChargingStation,
     ChargerConfiguration,
     MeterValue,
     CostUpdate,
@@ -187,22 +188,21 @@ class CSMSConsumer(
             except (TypeError, ValueError):
                 return
         if connector_value is None:
-            aggregate = self.aggregate_charger
-            if (
-                not aggregate
-                or aggregate.connector_id is not None
-                or aggregate.charger_id != self.charger_id
-            ):
-                aggregate, _ = await database_sync_to_async(
-                    Charger.objects.get_or_create
-                )(
+            self.charging_station, _ = await database_sync_to_async(
+                ChargingStation.objects.get_or_create
+            )(
+                station_id=self.charger_id,
+                defaults={"last_path": self.scope.get("path", "")},
+            )
+            aggregate = await database_sync_to_async(
+                lambda: Charger.objects.filter(
                     charger_id=self.charger_id,
                     connector_id=None,
-                    defaults={"last_path": self.scope.get("path", "")},
-                )
-                await database_sync_to_async(aggregate.refresh_manager_node)()
-                self.aggregate_charger = aggregate
-            self.charger = self.aggregate_charger
+                ).first()
+            )()
+            self.aggregate_charger = aggregate
+            if aggregate is not None:
+                self.charger = aggregate
             previous_key = self.store_key
             new_key = store.identity_key(self.charger_id, None)
             if previous_key != new_key:
@@ -214,10 +214,7 @@ class CSMSConsumer(
                 store.logs["charger"].setdefault(
                     new_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
                 )
-            aggregate_name = await sync_to_async(
-                lambda: self.charger.name or self.charger.charger_id
-            )()
-            friendly_name = aggregate_name or self.charger_id
+            friendly_name = self.charger_id
             _register_log_names_for_identity(self.charger_id, None, friendly_name)
             self.store_key = new_key
             self.connector_value = None
@@ -230,17 +227,13 @@ class CSMSConsumer(
             and self.charger.connector_id == connector_value
         ):
             return
-        if (
-            not self.aggregate_charger
-            or self.aggregate_charger.connector_id is not None
-        ):
-            aggregate, _ = await database_sync_to_async(Charger.objects.get_or_create)(
-                charger_id=self.charger_id,
-                connector_id=None,
+        if not getattr(self, "charging_station", None):
+            self.charging_station, _ = await database_sync_to_async(
+                ChargingStation.objects.get_or_create
+            )(
+                station_id=self.charger_id,
                 defaults={"last_path": self.scope.get("path", "")},
             )
-            await database_sync_to_async(aggregate.refresh_manager_node)()
-            self.aggregate_charger = aggregate
         existing = await database_sync_to_async(
             Charger.objects.filter(
                 charger_id=self.charger_id, connector_id=connector_value
@@ -255,8 +248,14 @@ class CSMSConsumer(
                 charger, _ = Charger.objects.get_or_create(
                     charger_id=self.charger_id,
                     connector_id=connector_value,
-                    defaults={"last_path": self.scope.get("path", "")},
+                    defaults={
+                        "last_path": self.scope.get("path", ""),
+                        "charging_station": self.charging_station,
+                    },
                 )
+                if charger.charging_station_id is None and self.charging_station:
+                    charger.charging_station = self.charging_station
+                    charger.save(update_fields=["charging_station"])
                 if self.scope.get("path") and charger.last_path != self.scope.get(
                     "path"
                 ):

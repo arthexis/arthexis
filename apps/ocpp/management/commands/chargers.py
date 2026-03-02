@@ -117,7 +117,7 @@ class Command(BaseCommand):
             if not match_count:
                 if connector_filter == store.AGGREGATE_SLUG:
                     raise CommandError(
-                        "No chargers found matching aggregate connector 'all'."
+                        "No charge points found matching station connector selector 'all'."
                     )
                 raise CommandError(
                     f"No chargers found matching connector '{cp_raw}'."
@@ -236,7 +236,7 @@ class Command(BaseCommand):
         self, queryset: QuerySet[Charger], connector: int | str
     ) -> QuerySet[Charger]:
         if connector == store.AGGREGATE_SLUG:
-            return queryset.filter(connector_id__isnull=True)
+            return queryset.filter(connector_id__isnull=False)
         return queryset.filter(connector_id=connector)
 
     def _parse_cp(self, value: str) -> tuple[int | str | None, str | None]:

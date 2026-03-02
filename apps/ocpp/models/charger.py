@@ -55,6 +55,14 @@ class Charger(Ownable):
         default=True,
         help_text="Display this charger on the public status dashboard.",
     )
+    charging_station = models.ForeignKey(
+        "ChargingStation",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="charge_points",
+        help_text=_("Physical charging station that owns this charge point."),
+    )
     language = models.ForeignKey(
         Language,
         on_delete=models.SET_NULL,

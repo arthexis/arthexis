@@ -12,7 +12,7 @@ from apps.nodes.models import Node
 
 from .... import store
 from ....forwarder import forwarder
-from ....models import Charger, Transaction
+from ....models import Charger, ChargingStation, Transaction
 from ...connection import RateLimitedConnectionMixin
 from ..identity import _register_log_names_for_identity, _resolve_client_ip
 from config.offline import requires_network
@@ -32,26 +32,33 @@ class ConnectionFlowMixin:
 
     async def _ensure_charger_record(self, existing_charger: Charger | None) -> bool:
         """Ensure a charger record exists and refresh cached metadata."""
-        created = False
+        station, station_created = await database_sync_to_async(
+            ChargingStation.objects.get_or_create
+        )(
+            station_id=self.charger_id,
+            defaults={"last_path": self.scope.get("path", "")},
+        )
+        self.charging_station = station
+        self.charger = existing_charger
         if existing_charger is not None:
             self.charger = existing_charger
-        else:
-            self.charger, created = await database_sync_to_async(
-                Charger.objects.get_or_create
-            )(
-                charger_id=self.charger_id,
-                connector_id=None,
-                defaults={"last_path": self.scope.get("path", "")},
-            )
-        await database_sync_to_async(self.charger.refresh_manager_node)()
-        self.aggregate_charger = self.charger
-        await self._clear_cached_status_fields()
-        return created
+            if self.charger.charging_station_id is None:
+                self.charger.charging_station = station
+                await database_sync_to_async(self.charger.save)(
+                    update_fields=["charging_station"]
+                )
+            await database_sync_to_async(self.charger.refresh_manager_node)()
+            self.aggregate_charger = self.charger
+            await self._clear_cached_status_fields()
+            return station_created
+        self.aggregate_charger = None
+        return station_created
 
     async def _register_charger_logs(self) -> None:
         """Register charger log names based on location or charger id."""
+        charger = getattr(self, "charger", None)
         location_name = await sync_to_async(
-            lambda: self.charger.location.name if self.charger.location else ""
+            lambda: charger.location.name if charger and charger.location else ""
         )()
         friendly_name = location_name or self.charger_id
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
@@ -123,7 +130,7 @@ class ConnectionFlowMixin:
         self._header_reference_created = False
         existing_charger = await database_sync_to_async(
             lambda: Charger.objects.select_related(
-                "ws_auth_user", "ws_auth_group", "station_model"
+                "ws_auth_user", "ws_auth_group", "station_model", "charging_station"
             )
             .filter(charger_id=self.charger_id, connector_id=None)
             .first(),
