@@ -57,7 +57,8 @@ class Command(BaseCommand):
             raise CommandError("Choose only one of --enable or --disable.")
 
         if (enable_slug or disable_slug) and not kind:
-            raise CommandError("--kind is required when using --enable or --disable.")
+            toggled_slug = enable_slug or disable_slug
+            kind = self._infer_kind_for_slug(slug=toggled_slug)
 
         if enable_slug:
             self._toggle_feature(kind=kind, slug=enable_slug, enabled=True)
@@ -84,6 +85,28 @@ class Command(BaseCommand):
             return
 
         raise CommandError(f"Unsupported feature kind: {kind}")
+
+    def _infer_kind_for_slug(self, *, slug: str) -> str:
+        """Infer feature kind from slug when exactly one kind contains it.
+
+        Raises:
+            CommandError: If slug is unknown or exists in both suite and node features.
+        """
+
+        suite_exists = Feature.objects.filter(slug=slug).exists()
+        node_exists = NodeFeature.objects.filter(slug=slug).exists()
+
+        if suite_exists and node_exists:
+            raise CommandError(
+                f"Feature '{slug}' exists in both suite and node kinds; specify --kind."
+            )
+        if suite_exists:
+            return FeatureKind.SUITE
+        if node_exists:
+            return FeatureKind.NODE
+        raise CommandError(
+            f"Unknown feature '{slug}'. Specify --kind to target a specific feature catalog."
+        )
 
     def _toggle_node_feature(self, *, slug: str, enabled: bool) -> None:
         """Enable or disable a node feature assignment for the local node."""
