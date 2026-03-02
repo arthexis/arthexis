@@ -40,7 +40,7 @@ django-parler==2.3
 django-timezone-field==7.2.1
 dnspython==2.7.0
 docutils==0.22.4
-filelock==3.24.3
+filelock==3.25.0
 graphene-django==3.2.3
 graphviz==0.21
 h11==0.16.0
