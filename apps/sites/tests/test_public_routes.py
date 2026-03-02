@@ -57,6 +57,25 @@ def test_public_pages_render_for_anonymous(client):
 
 
 @pytest.mark.django_db
+def test_public_home_places_chat_above_feedback_and_on_same_side(client):
+    """Regression: chat and feedback affordances should share the right edge with chat stacked above."""
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+
+    base_template = Path("apps/sites/templates/pages/base.html").read_text()
+    assert base_template.index('id="chat-widget"') < base_template.index('id="user-story-toggle"')
+
+    css = Path("apps/sites/static/pages/css/base.css").read_text()
+    assert "right: 1.75rem;" in css
+    assert '.chat-widget[data-has-feedback="true"]' in css
+    assert "bottom: 5.25rem;" in css
+
+    assert "data-has-feedback=\"{% if feedback_ingestion_enabled %}true{% else %}false{% endif %}\"" in base_template
+
+
+@pytest.mark.django_db
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
     """Regression: public home should hide feedback UI when ingestion feature is disabled."""
 

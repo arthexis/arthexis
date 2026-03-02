@@ -351,6 +351,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <div
       id="chat-widget"
       class="chat-widget"
+      data-has-feedback="{% if feedback_ingestion_enabled %}true{% else %}false{% endif %}"
       data-path="{{ chat_socket_path }}"
       data-session-storage-key="pages.chat.session"
       data-connected-text="{% trans 'Connected' %}"

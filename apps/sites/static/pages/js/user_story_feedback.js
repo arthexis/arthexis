@@ -76,6 +76,7 @@
     if (!overlay.hasAttribute('hidden')) {
       return;
     }
+    document.dispatchEvent(new CustomEvent('pages:dialog-opened', { detail: { source: 'feedback' } }));
     previousFocus = document.activeElement;
     overlay.removeAttribute('hidden');
     requestAnimationFrame(() => {
@@ -127,6 +128,15 @@
 
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !overlay.hasAttribute('hidden')) {
+      closeOverlay();
+    }
+  });
+
+  document.addEventListener('pages:dialog-opened', event => {
+    if (overlay.hasAttribute('hidden')) {
+      return;
+    }
+    if (event.detail && event.detail.source !== 'feedback') {
       closeOverlay();
     }
   });

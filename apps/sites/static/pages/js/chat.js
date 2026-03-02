@@ -225,6 +225,7 @@
       if (drawerOpen) {
         return;
       }
+      document.dispatchEvent(new CustomEvent('pages:dialog-opened', { detail: { source: 'chat' } }));
       drawerOpen = true;
       previousFocus = document.activeElement;
       widget.classList.add('open');
@@ -393,6 +394,15 @@
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && drawerOpen) {
         event.preventDefault();
+        closeDrawer();
+      }
+    });
+
+    document.addEventListener('pages:dialog-opened', (event) => {
+      if (!drawerOpen) {
+        return;
+      }
+      if (event.detail && event.detail.source !== 'chat') {
         closeDrawer();
       }
     });
