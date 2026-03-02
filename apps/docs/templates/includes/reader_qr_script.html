@@ -5,6 +5,7 @@
     const baseUrlString = (qrContainer && qrContainer.dataset.url) || window.location.href;
     let lastQrUrl = "";
     let activeHeadingId = window.location.hash.replace(/^#/, "");
+    let allowImplicitHashUpdates = Boolean(activeHeadingId);
 
     const buildQrUrl = () => {
       try {
@@ -48,6 +49,10 @@
         return;
       }
 
+      if (!allowImplicitHashUpdates) {
+        return;
+      }
+
       activeHeadingId = nextId;
       const basePath = `${window.location.pathname}${window.location.search}`;
       history.replaceState(null, "", `${basePath}#${nextId}`);
@@ -67,6 +72,15 @@
       }
 
       const visibility = new Map();
+
+      window.addEventListener(
+        "scroll",
+        () => {
+          allowImplicitHashUpdates = true;
+          selectActiveHeading();
+        },
+        { once: true, passive: true }
+      );
 
       const selectActiveHeading = () => {
         const visibleHeadings = headings
