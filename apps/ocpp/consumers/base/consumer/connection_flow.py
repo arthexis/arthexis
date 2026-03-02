@@ -32,7 +32,7 @@ class ConnectionFlowMixin:
 
     async def _ensure_charger_record(self, existing_charger: Charger | None) -> bool:
         """Ensure a charger record exists and refresh cached metadata."""
-        station, station_created = await database_sync_to_async(
+        station, _station_created = await database_sync_to_async(
             ChargingStation.objects.get_or_create
         )(
             station_id=self.charger_id,
@@ -50,8 +50,10 @@ class ConnectionFlowMixin:
             await database_sync_to_async(self.charger.refresh_manager_node)()
             self.aggregate_charger = self.charger
             await self._clear_cached_status_fields()
-            return station_created
-        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
+            return False
+        self.charger, charger_created = await database_sync_to_async(
+            Charger.objects.get_or_create
+        )(
             charger_id=self.charger_id,
             connector_id=None,
             defaults={
@@ -69,7 +71,7 @@ class ConnectionFlowMixin:
             await database_sync_to_async(self.charger.save)(update_fields=["last_path"])
         self.aggregate_charger = self.charger
         await self._clear_cached_status_fields()
-        return station_created
+        return charger_created
 
     async def _register_charger_logs(self) -> None:
         """Register charger log names based on location or charger id."""

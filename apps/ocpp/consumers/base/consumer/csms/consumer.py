@@ -222,7 +222,8 @@ class CSMSConsumer(
                 self._header_reference_created = True
             return
         if (
-            self.connector_value == connector_value
+            self.charger is not None
+            and self.connector_value == connector_value
             and self.charger.connector_id == connector_value
         ):
             return
