@@ -111,10 +111,19 @@ def _get_charger(serial: str, connector_slug: str | None) -> tuple[Charger, str]
         raise Http404("Charger not found") from exc
     connector_value, normalized_slug = _normalize_connector_slug(connector_slug)
     if connector_value is None:
-        charger, _ = Charger.objects.get_or_create(
-            charger_id=serial,
-            connector_id=None,
+        charger = (
+            Charger.objects.filter(charger_id=serial, connector_id=None)
+            .order_by("pk")
+            .first()
         )
+        if charger is None:
+            charger = (
+                Charger.objects.filter(charger_id=serial, connector_id__isnull=False)
+                .order_by("connector_id", "pk")
+                .first()
+            )
+        if charger is None:
+            raise Http404("Charger not found")
     else:
         charger, _ = Charger.objects.get_or_create(
             charger_id=serial,

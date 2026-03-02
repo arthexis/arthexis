@@ -209,10 +209,6 @@ class ChargerAdmin(
     filter_horizontal = ("owner_users", "owner_groups")
     actions = [
         "purge_data",
-        "fetch_cp_configuration",
-        "toggle_rfid_authentication",
-        "send_rfid_list_to_evcs",
-        "update_rfids_from_evcs",
         "recheck_charger_status",
         "setup_cp_diagnostics",
         "configure_local_ftp_server",
@@ -222,8 +218,6 @@ class ChargerAdmin(
         "change_availability_inoperative",
         "set_availability_state_operative",
         "set_availability_state_inoperative",
-        "clear_authorization_cache",
-        "clear_charging_profiles",
         "unlock_connector",
         "remote_stop_transaction",
         "reset_chargers",
