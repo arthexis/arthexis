@@ -47,7 +47,7 @@ dependencies = [
   "django-timezone-field==7.2.1",
   "Django==5.2.11",
   "dnspython==2.7.0",
-  "filelock==3.24.3",
+  "filelock==3.25.0",
   "graphene-django==3.2.3",
   "h11==0.16.0",
   "httpcore==1.0.9",
