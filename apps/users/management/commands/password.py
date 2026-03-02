@@ -190,10 +190,17 @@ class Command(BaseCommand):
             queryset = self._build_queryset(manager, identifier, lookup=lookup)
             return list(queryset.order_by("username"))
         except OperationalError as exc:
-            if "require_2fa" in str(exc):
+            message = str(exc).lower()
+            missing_column_signatures = (
+                "no such column",
+                "undefined column",
+                "unknown column",
+                "column does not exist",
+            )
+            if any(signature in message for signature in missing_column_signatures):
                 raise CommandError(
-                    "The database schema is out of date. Run migrations to add the "
-                    "`require_2fa` column before managing passwords."
+                    "The database schema is out of date. Run migrations before managing "
+                    "passwords."
                 ) from exc
             raise
 
@@ -223,15 +230,15 @@ class Command(BaseCommand):
 
         user = manager.create_user(**kwargs)
         user.set_unusable_password()
-        fields = ["password"]
+        fields = {"password"}
         if staff:
             user.is_staff = True
-            fields.append("is_staff")
+            fields.add("is_staff")
         if superuser:
             user.is_superuser = True
             user.is_staff = True
-            fields.extend(["is_superuser", "is_staff"])
-        user.save(update_fields=fields)
+            fields.update(["is_superuser", "is_staff"])
+        user.save(update_fields=list(fields))
         return user
 
     def _update_user(self, user, *, staff: bool = False, superuser: bool = False) -> None:
@@ -252,7 +259,14 @@ class Command(BaseCommand):
     def _delete_password(self, user) -> None:
         user.set_unusable_password()
         user.force_password_change = False
-        user.save(update_fields=["password", "force_password_change"])
+        temp_passwords.discard_temp_password(user.username)
+
+        fields = ["password", "force_password_change"]
+        if getattr(user, "temporary_expires_at", None) is not None:
+            user.temporary_expires_at = None
+            fields.append("temporary_expires_at")
+
+        user.save(update_fields=fields)
 
     def _set_force_password_change(self, user, force_change: bool) -> None:
         if user.force_password_change == force_change:

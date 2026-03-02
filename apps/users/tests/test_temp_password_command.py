@@ -78,11 +78,14 @@ class PasswordCommandTests(TestCase):
             force_password_change=True,
         )
 
+        temp_passwords.store_temp_password(user.username, "TempDelete123")
+
         call_command("password", user.username, delete=True)
 
         user.refresh_from_db()
         assert not user.has_usable_password()
         assert user.force_password_change is False
+        assert temp_passwords.load_temp_password(user.username) is None
 
     def test_expires_in_must_be_positive_for_temporary_passwords(self):
         """Temporary password expiration must remain a positive duration."""
@@ -104,4 +107,3 @@ class PasswordCommandTests(TestCase):
             f"No user found for identifier '{identifier}'. Use --create to add one.",
         ):
             call_command("password", identifier)
-
