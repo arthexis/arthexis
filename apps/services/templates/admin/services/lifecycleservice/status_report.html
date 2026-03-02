@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:services_lifecycleservice_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Status report" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <h2>{% blocktrans count counter=selected_count %}1 selected service{% plural %}{{ counter }} selected services{% endblocktrans %}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>{% trans "Service" %}</th>
+          <th>{% trans "Unit" %}</th>
+          <th>{% trans "Activation" %}</th>
+          <th>{% trans "Configured" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.service.display }}</td>
+            <td><code>{{ row.unit_name }}</code></td>
+            <td>{{ row.service.get_activation_display }}</td>
+            <td>
+              {% if row.configured %}
+                {% trans "Yes" %}
+              {% else %}
+                {% trans "No" %}
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4">{% trans "No services were selected." %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
