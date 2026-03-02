@@ -41,8 +41,7 @@ class ConnectionFlowMixin:
         self.charging_station = station
         self.charger = existing_charger
         if existing_charger is not None:
-            self.charger = existing_charger
-            if self.charger.charging_station_id is None:
+            if self.charger.charging_station_id != station.pk:
                 self.charger.charging_station = station
                 await database_sync_to_async(self.charger.save)(
                     update_fields=["charging_station"]
@@ -61,7 +60,7 @@ class ConnectionFlowMixin:
                 "charging_station": station,
             },
         )
-        if self.charger.charging_station_id is None:
+        if self.charger.charging_station_id != station.pk:
             self.charger.charging_station = station
             await database_sync_to_async(self.charger.save)(
                 update_fields=["charging_station"]

@@ -188,12 +188,13 @@ class CSMSConsumer(
             except (TypeError, ValueError):
                 return
         if connector_value is None:
-            self.charging_station, _ = await database_sync_to_async(
-                ChargingStation.objects.get_or_create
-            )(
-                station_id=self.charger_id,
-                defaults={"last_path": self.scope.get("path", "")},
-            )
+            if not getattr(self, "charging_station", None):
+                self.charging_station, _ = await database_sync_to_async(
+                    ChargingStation.objects.get_or_create
+                )(
+                    station_id=self.charger_id,
+                    defaults={"last_path": self.scope.get("path", "")},
+                )
             aggregate = await database_sync_to_async(
                 lambda: Charger.objects.filter(
                     charger_id=self.charger_id,
@@ -261,7 +262,10 @@ class CSMSConsumer(
                         "charging_station": self.charging_station,
                     },
                 )
-                if charger.charging_station_id is None and self.charging_station:
+                if (
+                    self.charging_station
+                    and charger.charging_station_id != self.charging_station.pk
+                ):
                     charger.charging_station = self.charging_station
                     charger.save(update_fields=["charging_station"])
                 if self.scope.get("path") and charger.last_path != self.scope.get(
