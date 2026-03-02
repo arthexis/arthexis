@@ -13,6 +13,11 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 
+from apps.ocpp.consumers.constants import (
+    OCPP_VERSION_16,
+    OCPP_VERSION_201,
+    OCPP_VERSION_21,
+)
 from apps.core import changelog
 from apps.docs import views as docs_views
 from apps.features.utils import is_suite_feature_enabled
@@ -35,15 +40,10 @@ from ..utils import (
 logger = logging.getLogger(__name__)
 
 
-_SUPPORTED_OCPP_VERSIONS: tuple[str, ...] = (
-    "1.0",
-    "1.0.6",
-    "1.2",
-    "1.5",
-    "1.6",
-    "2.0",
-    "2.0.1",
-    "2.1",
+SUPPORTED_OCPP_VERSIONS: tuple[str, ...] = (
+    OCPP_VERSION_16.removeprefix("ocpp"),
+    OCPP_VERSION_201.removeprefix("ocpp"),
+    OCPP_VERSION_21.removeprefix("ocpp"),
 )
 
 
@@ -79,7 +79,7 @@ def operator_interface_notice(request):
     """Render a minimal vendor-facing notice for OCPP websocket onboarding."""
 
     context = {
-        "ocpp_versions": _SUPPORTED_OCPP_VERSIONS,
+        "ocpp_versions": SUPPORTED_OCPP_VERSIONS,
         "ws_endpoint": f"wss://{request.get_host()}/<charge_point_id>/",
     }
     return TemplateResponse(request, "pages/operator_interface_notice.html", context)
