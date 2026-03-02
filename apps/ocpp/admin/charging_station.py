@@ -25,9 +25,7 @@ class ChargingStationAdmin(AuthorizationActionsMixin, EntityModelAdmin):
 
     def _station_charge_points(self, station_queryset):
         """Return charge-point rows linked to selected stations."""
-
-        station_ids = list(station_queryset.values_list("pk", flat=True))
-        return Charger.objects.filter(charging_station_id__in=station_ids)
+        return Charger.objects.filter(charging_station__in=station_queryset)
 
     @admin.action(description="Fetch station configuration")
     def fetch_station_configuration(self, request, queryset):
