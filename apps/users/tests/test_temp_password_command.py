@@ -13,7 +13,7 @@ from apps.users.backends import TempPasswordBackend
 
 
 class PasswordCommandTests(TestCase):
-    """Coverage for the password and temp_password management commands."""
+    """Coverage for the password management command."""
 
     def test_generates_password_without_identifier(self):
         """The command should allow pure password generation with no user target."""
@@ -105,12 +105,3 @@ class PasswordCommandTests(TestCase):
         ):
             call_command("password", identifier)
 
-    def test_temp_password_alias_command_delegates(self):
-        """The legacy temp_password command should continue to function as an alias."""
-
-        identifier = "alias-user@example.com"
-        call_command("temp_password", identifier, create=True)
-
-        user = get_user_model().all_objects.get(username=identifier)
-        assert user.email == identifier
-        assert temp_passwords.load_temp_password(identifier) is not None
