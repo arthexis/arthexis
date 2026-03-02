@@ -351,34 +351,35 @@ jobs:
               `PR does not include label ${integrationLabel} or integration-sensitive file changes`
             );
             core.info('Integration tests skipped: no label and no integration-sensitive file changes.');
+      - name: Detect pytest xdist arguments
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(pytest --help)"
+          if rg -q -- '--dist' <<<"$pytest_help"; then
+            echo "PYTEST_XDIST_ARGS=-n auto --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
+          fi
       - name: Run tests on upgraded install
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           : > pytest.log
+          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+
+          marker_expr="critical and not integration"
           echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
-          pytest_help="$(pytest --help)"
-          if rg -q -- '--dist' <<<"$pytest_help"; then
-            xdist_args=("-n" "auto" "--dist" "loadfile")
-          else
-            xdist_args=()
+          if [ -z "${PYTEST_XDIST_ARGS:-}" ]; then
             echo "pytest-xdist is unavailable; running upgraded critical tests serially." | tee -a pytest.log
           fi
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee -a pytest.log
-      - name: Run integration tests on upgraded install
-        if: ${{ steps.integration_gate.outputs.run_integration == 'true' }}
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          echo "=== Integration tests ===" | tee -a pytest.log
-          pytest_help="$(pytest --help)"
-          if rg -q -- '--dist' <<<"$pytest_help"; then
-            xdist_args=("-n" "auto" "--dist" "loadfile")
-          else
-            xdist_args=()
-            echo "pytest-xdist is unavailable; running upgraded integration tests serially." | tee -a pytest.log
+
+          if [ "${{ steps.integration_gate.outputs.run_integration }}" = "true" ]; then
+            marker_expr="critical or integration"
+            echo "=== Integration tests ===" | tee -a pytest.log
           fi
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "integration" | tee -a pytest.log
+
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "${marker_expr}" | tee -a pytest.log
       - name: Report integration test skip
         if: ${{ steps.integration_gate.outputs.run_integration != 'true' }}
         run: |
