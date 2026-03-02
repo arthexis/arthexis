@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.http import Http404, HttpResponse, JsonResponse
@@ -35,6 +36,36 @@ from ..utils import (
 logger = logging.getLogger(__name__)
 
 
+_SUPPORTED_OCPP_VERSIONS: tuple[str, ...] = (
+    "1.6J",
+    "2.0.1",
+    "2.1",
+)
+
+
+def _format_operator_ws_endpoint_host(request, site) -> str:
+    """Return a websocket host value suitable for the operator notice endpoint."""
+
+    raw_host = request.get_host()
+    parsed = urlsplit(f"//{raw_host}")
+    hostname = parsed.hostname
+    port = parsed.port
+
+    if hostname is None:
+        return raw_host
+
+    if port is None:
+        return raw_host
+
+    if port in {80, 443}:
+        return hostname
+
+    if site is not None and bool(getattr(site, "managed", False)):
+        return hostname
+
+    return raw_host
+
+
 def _get_client_ip(request) -> str:
     """Return the client IP from the request headers."""
 
@@ -60,6 +91,19 @@ def footer_fragment(request):
         module=getattr(request, "current_module", None),
     )
     return TemplateResponse(request, "core/footer.html", context)
+
+
+@require_GET
+def operator_interface_notice(request):
+    """Render a minimal vendor-facing notice for OCPP websocket onboarding."""
+
+    site = get_site(request)
+    ws_host = _format_operator_ws_endpoint_host(request, site)
+    context = {
+        "ocpp_versions": _SUPPORTED_OCPP_VERSIONS,
+        "ws_endpoint": f"wss://{ws_host}/<charge_point_id>/",
+    }
+    return TemplateResponse(request, "pages/operator_interface_notice.html", context)
 
 
 @landing("Home")

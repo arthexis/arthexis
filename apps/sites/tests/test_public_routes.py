@@ -75,6 +75,67 @@ def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(clie
 
 
 @pytest.mark.django_db
+def test_operator_interface_notice_page_renders_supported_versions(client):
+    """Operator notice page should render websocket guidance and OCPP versions."""
+
+    response = client.get(reverse("pages:operator-interface-notice"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "wss://testserver/&lt;charge_point_id&gt;/" in content
+    for version in ("1.6J", "2.0.1", "2.1"):
+        assert f"OCPP {version}" in content
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_omits_port_for_managed_site(client, settings):
+    """Managed sites should present a clean websocket host without explicit ports."""
+
+    settings.ALLOWED_HOSTS = ["testserver", "example.test"]
+
+    site, _created = Site.objects.get_or_create(
+        domain="example.test",
+        defaults={"name": "example", "managed": True},
+    )
+    site.managed = True
+    site.save(update_fields=["managed"])
+
+    response = client.get(reverse("pages:operator-interface-notice"), HTTP_HOST="example.test:8443")
+
+    assert response.status_code == 200
+    assert "wss://example.test/&lt;charge_point_id&gt;/" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, settings):
+    """Unmanaged sites should preserve explicit non-standard ports in the endpoint."""
+
+    settings.ALLOWED_HOSTS = ["testserver", "example-unmanaged.test"]
+
+    site, _created = Site.objects.get_or_create(
+        domain="example-unmanaged.test",
+        defaults={"name": "example-unmanaged", "managed": False},
+    )
+    site.managed = False
+    site.save(update_fields=["managed"])
+
+    response = client.get(
+        reverse("pages:operator-interface-notice"),
+        HTTP_HOST="example-unmanaged.test:8443",
+    )
+
+    assert response.status_code == 200
+    assert "wss://example-unmanaged.test:8443/&lt;charge_point_id&gt;/" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_page_is_get_only(client):
+    """Operator notice page should reject non-GET requests."""
+
+    response = client.post(reverse("pages:operator-interface-notice"))
+
+    assert response.status_code == 405
+
 def test_footer_fragment_is_get_only(client):
     """The footer fragment endpoint should reject non-GET methods."""
 
