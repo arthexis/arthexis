@@ -21,6 +21,11 @@ from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
+from apps.ocpp.consumers.constants import (
+    OCPP_VERSION_16,
+    OCPP_VERSION_201,
+    OCPP_VERSION_21,
+)
 from utils.decorators import staff_required
 from utils.sites import get_site
 
