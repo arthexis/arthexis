@@ -10,6 +10,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import RequestFactory
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,6 +19,11 @@ from apps.sites.templatetags.admin_extras import model_admin_actions
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
+
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 
 class _LinkParser(HTMLParser):
@@ -66,7 +72,8 @@ def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_
 
     user = admin_user
 
-    response = admin_client.get(reverse("admin:actions_remoteactiontoken_generate_token"), follow=True)
+    with override_settings(STORAGES=TEST_STORAGES):
+        response = admin_client.get(reverse("admin:actions_remoteactiontoken_generate_token"), follow=True)
 
     assert response.status_code == 200
     assert RemoteActionToken.objects.filter(user=user).exists()
@@ -75,7 +82,8 @@ def test_remote_action_token_generate_tool_creates_token_for_current_user(admin_
 def test_remote_action_token_dashboard_includes_generate_action_link(admin_client):
     """Regression: token model exposes Generate Token as a row action, not a top button."""
 
-    response = admin_client.get(reverse("admin:index"))
+    with override_settings(STORAGES=TEST_STORAGES):
+        response = admin_client.get(reverse("admin:index"))
 
     assert response.status_code == 200
     action_url = reverse("admin:actions_remoteactiontoken_generate_token")
@@ -105,7 +113,8 @@ def test_remote_action_token_dashboard_shows_generate_link_for_add_only_admin(cl
     user.user_permissions.add(add_permission)
     client.force_login(user)
 
-    response = client.get(reverse("admin:index"))
+    with override_settings(STORAGES=TEST_STORAGES):
+        response = client.get(reverse("admin:index"))
 
     assert response.status_code == 200
     action_url = reverse("admin:actions_remoteactiontoken_generate_token")
