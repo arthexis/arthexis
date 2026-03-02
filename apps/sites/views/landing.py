@@ -27,6 +27,7 @@ from apps.ocpp.consumers.constants import (
     OCPP_VERSION_201,
     OCPP_VERSION_21,
 )
+from apps.ocpp.utils.websocket import resolve_ws_scheme
 from utils.decorators import staff_required
 from utils.sites import get_site
 
@@ -104,9 +105,10 @@ def operator_interface_notice(request):
 
     site = get_site(request)
     ws_host = _format_operator_ws_endpoint_host(request, site)
+    ws_scheme = resolve_ws_scheme(request=request)
     context = {
         "ocpp_versions": _SUPPORTED_OCPP_VERSIONS,
-        "ws_endpoint": f"wss://{ws_host}/<charge_point_id>/",
+        "ws_endpoint": f"{ws_scheme}://{ws_host}/<charge_point_id>/",
     }
     return TemplateResponse(request, "pages/operator_interface_notice.html", context)
 
