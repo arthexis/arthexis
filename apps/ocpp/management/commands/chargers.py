@@ -490,7 +490,7 @@ class Command(BaseCommand):
             "rfid": "RFID",
             "public": "Public",
             "status": "Status",
-            "energy": "Total Energy (kWh)",
+            "energy": "Total Energy (kW)",
             "last_contact": "Last Contact",
         }
 
