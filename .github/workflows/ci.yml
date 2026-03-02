@@ -47,23 +47,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           clean: false
-      - uses: actions/setup-python@v6
+      - name: Setup Python CI environment
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.13'
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-      - name: Cache virtualenv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
@@ -106,8 +93,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s
-' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -121,8 +107,7 @@ jobs:
           echo "mode=changed" >> "${GITHUB_OUTPUT}"
           {
             echo "paths<<EOF"
-            printf '%s
-' "${CHANGED_FIXTURES}"
+            printf '%s\n' "${CHANGED_FIXTURES}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
@@ -184,23 +169,10 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           clean: false
-      - uses: actions/setup-python@v6
+      - name: Setup Python CI environment
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.13'
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-      - name: Cache virtualenv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-
       - name: Install from default branch
         run: |
           ./install.sh --no-start
