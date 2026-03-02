@@ -31,8 +31,8 @@ class Command(BaseCommand):
         coverage_parser.add_argument(
             "--version",
             required=True,
-            choices=("1.6", "2.0.1", "2.1"),
-            help="OCPP protocol version.",
+            choices=("1.6J", "1.6", "2.0.1", "2.1"),
+            help="OCPP protocol version (1.6J preferred; 1.6 alias supported).",
         )
 
         transactions_parser = subparsers.add_parser(
@@ -76,7 +76,7 @@ class Command(BaseCommand):
             "stdout": self.stdout,
             "stderr": self.stderr,
         }
-        if version == "1.6":
+        if version in {"1.6", "1.6J"}:
             run_coverage_ocpp16(**kwargs)
         elif version == "2.0.1":
             run_coverage_ocpp201(**kwargs)

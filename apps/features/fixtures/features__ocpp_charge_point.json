@@ -9,7 +9,7 @@
       "node_feature": null,
       "admin_requirements": "Provide charger administration, monitoring dashboards, and simulator controls.",
       "public_requirements": "Expose charger status pages, connector details, and session lookups for operators.",
-      "service_requirements": "Create charger records for supported OCPP 1.6 sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
+      "service_requirements": "Create charger records for supported OCPP 1.6J sessions on first connect, register charge points to the local node, and enforce admission rules for known chargers when creation is disabled.",
       "admin_views": [
         "admin:ocpp_charger_changelist",
         "admin:ocpp_simulator_changelist"
@@ -38,8 +38,8 @@
       "is_seed_data": true,
       "is_deleted": false,
       "slug": "ocpp-16-charge-point",
-      "display": "OCPP 1.6 Charge Point",
-      "summary": "Support OCPP 1.6 charge point onboarding and call handling.",
+      "display": "OCPP 1.6J Charge Point",
+      "summary": "Support OCPP 1.6J charge point onboarding and call handling.",
       "protocol_coverage": {
         "ocpp16": {
           "cp_to_csms": [
@@ -101,7 +101,7 @@
         "ocpp-16-charge-point"
       ],
       "node_id": "apps/ocpp/tests/test_coverage_ocpp16_command.py::test_ocpp16_coverage_matches_fixture",
-      "name": "OCPP 1.6 coverage report matches fixture",
+      "name": "OCPP 1.6J coverage report matches fixture",
       "is_regression_guard": true,
       "notes": "Guards protocol coverage command output against committed fixture.",
       "is_seed_data": true,

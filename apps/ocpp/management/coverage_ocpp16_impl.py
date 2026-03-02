@@ -345,11 +345,11 @@ def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=
     badge_output.parent.mkdir(parents=True, exist_ok=True)
 
     badge_value = f"{round(overall_percentage, 1)}%"
-    badge_svg = render_badge("ocpp 1.6", badge_value, coverage_color(overall_percentage))
+    badge_svg = render_badge("ocpp 1.6j", badge_value, coverage_color(overall_percentage))
     badge_output.write_text(badge_svg + "\n", encoding="utf-8")
 
     if overall_percentage < 100 and stderr:
-        stderr.write("OCPP 1.6 coverage is incomplete; consider adding more handlers.")
+        stderr.write("OCPP 1.6J coverage is incomplete; consider adding more handlers.")
         stderr.write(
             f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations."
         )
@@ -358,7 +358,7 @@ def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=
 
 
 class Command(BaseCommand):
-    help = "Compute OCPP 1.6 call coverage and generate a badge."
+    help = "Compute OCPP 1.6J call coverage and generate a badge."
 
     def add_arguments(self, parser) -> None:
         """Register arguments for legacy compatibility."""
@@ -371,7 +371,7 @@ class Command(BaseCommand):
 
         from apps.ocpp.management.commands._ocpp_command_helpers import warn_deprecated_command
 
-        warn_deprecated_command("coverage_ocpp16", "ocpp coverage --version 1.6")
+        warn_deprecated_command("coverage_ocpp16", "ocpp coverage --version 1.6J")
         command_options = {
             key: value
             for key, value in options.items()
@@ -381,7 +381,7 @@ class Command(BaseCommand):
             "ocpp",
             "coverage",
             "--version",
-            "1.6",
+            "1.6J",
             stdout=self.stdout,
             stderr=self.stderr,
             **command_options,

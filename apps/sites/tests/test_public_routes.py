@@ -14,7 +14,6 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
 from apps.sites.models import Landing
-from apps.sites.views.landing import SUPPORTED_OCPP_VERSIONS
 
 
 @pytest.fixture
@@ -83,9 +82,66 @@ def test_operator_interface_notice_page_renders_supported_versions(client):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert "wss://testserver/&lt;charge_point_id&gt;/" in content
-    for version in SUPPORTED_OCPP_VERSIONS:
+    assert "ws://testserver/&lt;charge_point_id&gt;/" in content
+    for version in ("1.6J", "2.0.1", "2.1"):
         assert f"OCPP {version}" in content
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_uses_wss_for_https_requests(client, settings):
+    """HTTPS requests should produce a secure websocket endpoint."""
+
+    settings.ALLOWED_HOSTS = ["testserver", "secure.example.test"]
+
+    response = client.get(
+        reverse("pages:operator-interface-notice"),
+        secure=True,
+        HTTP_HOST="secure.example.test",
+    )
+
+    assert response.status_code == 200
+    assert "wss://secure.example.test/&lt;charge_point_id&gt;/" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_omits_port_for_managed_site(client, settings):
+    """Managed sites should present a clean websocket host without explicit ports."""
+
+    settings.ALLOWED_HOSTS = ["testserver", "example.test"]
+
+    site, _created = Site.objects.get_or_create(
+        domain="example.test",
+        defaults={"name": "example", "managed": True},
+    )
+    site.managed = True
+    site.save(update_fields=["managed"])
+
+    response = client.get(reverse("pages:operator-interface-notice"), HTTP_HOST="example.test:8443")
+
+    assert response.status_code == 200
+    assert "wss://example.test/&lt;charge_point_id&gt;/" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, settings):
+    """Unmanaged sites should preserve explicit non-standard ports in the endpoint."""
+
+    settings.ALLOWED_HOSTS = ["testserver", "example-unmanaged.test"]
+
+    site, _created = Site.objects.get_or_create(
+        domain="example-unmanaged.test",
+        defaults={"name": "example-unmanaged", "managed": False},
+    )
+    site.managed = False
+    site.save(update_fields=["managed"])
+
+    response = client.get(
+        reverse("pages:operator-interface-notice"),
+        HTTP_HOST="example-unmanaged.test:8443",
+    )
+
+    assert response.status_code == 200
+    assert "wss://example-unmanaged.test:8443/&lt;charge_point_id&gt;/" in response.content.decode()
 
 
 @pytest.mark.django_db
