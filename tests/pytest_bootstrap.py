@@ -30,5 +30,10 @@ def apply_bootstrap(base_dir: Path) -> None:
     ensure_clean_test_databases(base_dir)
     django.setup()
 
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
     if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "0") == "1":
         settings.MIGRATION_MODULES = DisableMigrations()
