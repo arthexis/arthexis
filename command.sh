@@ -18,9 +18,14 @@ if [ ! -d .venv ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
 fi
-source .venv/bin/activate
+
+VENV_PYTHON=".venv/bin/python"
+if [ ! -x "$VENV_PYTHON" ]; then
+  echo "Python executable not found at $VENV_PYTHON. Run ./install.sh first." >&2
+  exit 1
+fi
 
 # Canonical interface:
 #   Usage: arthexis cmd list [--deprecated] [--celery|--no-celery]
 #   Usage: arthexis cmd run [--deprecated] [--celery|--no-celery] <django-command> [args...]
-python -m utils.command_api "$@"
+exec "$VENV_PYTHON" -m utils.command_api "$@"

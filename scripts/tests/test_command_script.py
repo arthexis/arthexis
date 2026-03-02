@@ -174,7 +174,8 @@ def test_shell_and_batch_wrappers_document_matching_options(
     command_batch_contents: str,
 ) -> None:
     """Static parity test for documented options in POSIX and Windows wrappers."""
-    assert "python -m utils.command_api" in command_script_contents
+    assert "-m utils.command_api" in command_script_contents
+    assert "VENV_PYTHON=\".venv/bin/python\"" in command_script_contents
     assert "-m utils.command_api" in command_batch_contents
     for usage_fragment in (EXPECTED_LIST_USAGE, EXPECTED_RUN_USAGE):
         assert usage_fragment in command_script_contents
