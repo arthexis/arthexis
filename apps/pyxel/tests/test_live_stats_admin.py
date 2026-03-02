@@ -180,10 +180,11 @@ def test_pyxel_changelist_exposes_open_viewport_action(client, django_user_model
 
 
 
+@pytest.mark.regression
 def test_admin_dashboard_model_row_includes_open_viewport_link(
     client, django_user_model, monkeypatch
 ):
-    """Regression: admin dashboard should show Open Viewport in the Pyxel model row."""
+    """Regression: dashboard row Open Viewport should trigger the launch endpoint."""
 
     admin_user = django_user_model.objects.create_superuser(
         username="admin",
@@ -197,7 +198,7 @@ def test_admin_dashboard_model_row_includes_open_viewport_link(
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert reverse("admin:pyxel_pyxelviewport_changelist") in content
+    assert reverse("admin-pyxel-open-viewport") in content
     assert "Open Viewport" in content
 
 @pytest.mark.regression

@@ -33,7 +33,8 @@ class PyxelViewportAdmin(admin.ModelAdmin):
         """Describe the dashboard action that points to the viewport changelist."""
 
     open_viewport_dashboard.label = _("Open Viewport")
-    open_viewport_dashboard.dashboard_url = "admin:pyxel_pyxelviewport_changelist"
+    open_viewport_dashboard.dashboard_url = "admin-pyxel-open-viewport"
+    open_viewport_dashboard.dashboard_method = "post"
 
     def changelist_view(self, request, extra_context=None):
         """Inject the Open Viewport action link into changelist object tools."""
