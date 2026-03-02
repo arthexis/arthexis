@@ -198,7 +198,9 @@ def test_admin_dashboard_model_row_includes_open_viewport_link(
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert reverse("admin-pyxel-open-viewport") in content
+    launch_url = reverse("admin-pyxel-open-viewport")
+    assert launch_url in content
+    assert f'<form method="post" action="{launch_url}"' in content
     assert "Open Viewport" in content
 
 @pytest.mark.regression

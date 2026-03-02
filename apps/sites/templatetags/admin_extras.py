@@ -327,11 +327,14 @@ def model_admin_actions(context, app_label, model_name):
         if not url:
             return
         label_text = str(label)
+        method_value = str(method or "get").strip().lower()
+        if method_value not in {"get", "post", "put", "patch", "delete"}:
+            method_value = "get"
         actions.append(
             {
                 "url": url,
                 "label": label,
-                "method": method.lower(),
+                "method": method_value,
                 "is_discover": getattr(func, "is_discover_action", False)
                 or label_text.strip().lower() == "discover",
             }
