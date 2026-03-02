@@ -73,15 +73,6 @@
 
       const visibility = new Map();
 
-      window.addEventListener(
-        "scroll",
-        () => {
-          allowImplicitHashUpdates = true;
-          selectActiveHeading();
-        },
-        { once: true, passive: true }
-      );
-
       const selectActiveHeading = () => {
         const visibleHeadings = headings
           .filter((heading) => visibility.get(heading))
@@ -96,6 +87,23 @@
           updateHash(nextId);
         }
       };
+
+      const interactionEvents = ["pointerdown", "keydown", "touchstart", "mousedown"];
+
+      const unlockImplicitHashUpdates = () => {
+        allowImplicitHashUpdates = true;
+        interactionEvents.forEach((eventName) => {
+          window.removeEventListener(eventName, unlockImplicitHashUpdates);
+        });
+        selectActiveHeading();
+      };
+
+      interactionEvents.forEach((eventName) => {
+        window.addEventListener(eventName, unlockImplicitHashUpdates, {
+          once: true,
+          passive: eventName !== "keydown",
+        });
+      });
 
       const observer = new IntersectionObserver(
         (entries) => {
