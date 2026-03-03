@@ -440,8 +440,16 @@ body.user-story-open {
   transition: transform 0.25s ease;
 }
 
+.user-story-card,
+.user-story-card *,
+.user-story-card *::before,
+.user-story-card *::after {
+  box-sizing: border-box;
+}
+
 .user-story-card .card-body {
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .user-story-overlay.show .user-story-card {
