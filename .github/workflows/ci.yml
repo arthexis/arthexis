@@ -67,6 +67,9 @@ jobs:
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+      - name: Validate generated requirements
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
@@ -211,6 +214,9 @@ jobs:
       - name: Validate pyproject dependency ordering (PR)
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+      - name: Validate generated requirements (PR)
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
       - name: Apply upgrade
         run: |
           set -Eeuo pipefail
