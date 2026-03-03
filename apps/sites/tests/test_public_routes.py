@@ -83,8 +83,8 @@ def test_public_home_places_chat_above_feedback_and_on_same_side(client):
     assert re.search(r"\.chat-widget\s*\{[^}]*right:\s*1\.75rem;", css, re.S)
     assert re.search(r'\.chat-widget\[data-has-feedback="true"\]\s*\{[^}]*bottom:\s*5\.25rem;', css, re.S)
     assert re.search(r"\.user-story-card\s*\{[^}]*width:\s*min\(28rem, 100%\);", css, re.S)
-    assert "overflow-x: hidden;" in css
-    assert "box-sizing: border-box;" in css
+    assert re.search(r"\.user-story-card\s*\.card-body\s*\{[^}]*overflow-x:\s*hidden;", css, re.S)
+    assert re.search(r"\.user-story-card\s*,\s*[^{]*\{[^}]*box-sizing:\s*border-box;", css, re.S)
 
 
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
