@@ -30,6 +30,7 @@ nav:
       - OCPP User Manual: development/ocpp-user-manual.md
       - Release Package Options: development/release-package-options.md
       - Admin UI Framework: development/admin-ui-framework.md
+      - Dependency Management: development/dependency-management.md
   - Performance:
       - Public Charger Optimizations: performance/public_charger_optimizations.md
   - Legal:
