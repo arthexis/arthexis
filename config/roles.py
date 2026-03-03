@@ -14,7 +14,7 @@ class RoleProfile:
     """Validation profile describing required and forbidden settings for a role."""
 
     name: str
-    required: tuple[tuple[str, Callable[[Mapping[str, Any]], bool], str], ...]
+    required: tuple[tuple[Callable[[Mapping[str, Any]], bool], str], ...]
     forbidden: tuple[tuple[Callable[[Mapping[str, Any]], bool], str], ...]
 
 
@@ -34,25 +34,17 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
         name="Terminal",
         required=(
             (
-                "PAGES_CHAT_SOCKET_PATH",
                 lambda values: not values.get("PAGES_CHAT_ENABLED", True)
                 or _value_present(values.get("PAGES_CHAT_SOCKET_PATH")),
                 "PAGES_CHAT_SOCKET_PATH must be set when PAGES_CHAT_ENABLED is true.",
             ),
         ),
-        forbidden=(
-            (
-                lambda values: values.get("PAGES_CHAT_ENABLED", True)
-                and not _value_present(values.get("PAGES_CHAT_SOCKET_PATH")),
-                "cannot enable pages chat with an empty PAGES_CHAT_SOCKET_PATH.",
-            ),
-        ),
+        forbidden=(),
     ),
     "Control": RoleProfile(
         name="Control",
         required=(
             (
-                "CELERY_BROKER_URL",
                 lambda values: _value_present(values.get("CELERY_BROKER_URL")),
                 "CELERY_BROKER_URL is required for Control nodes.",
             ),
@@ -63,7 +55,6 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
         name="Satellite",
         required=(
             (
-                "OCPP_STATE_REDIS_URL",
                 lambda values: _value_present(values.get("OCPP_STATE_REDIS_URL")),
                 "OCPP_STATE_REDIS_URL is required for Satellite nodes.",
             ),
@@ -74,7 +65,6 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
         name="Watchtower",
         required=(
             (
-                "CHANNEL_REDIS_URL",
                 lambda values: _value_present(values.get("CHANNEL_REDIS_URL")),
                 "CHANNEL_REDIS_URL is required for Watchtower nodes.",
             ),
@@ -113,7 +103,7 @@ def validate_role_settings(values: Mapping[str, Any], *, strict: bool | None = N
             f"Invalid NODE_ROLE '{values.get('NODE_ROLE')}'. Supported roles: {allowed}."
         )
 
-    for setting_name, validator, message in profile.required:
+    for validator, message in profile.required:
         if not validator(values):
             raise ImproperlyConfigured(f"{profile.name} role validation failed: {message}")
 
