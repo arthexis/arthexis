@@ -8,7 +8,6 @@ from scripts.check_test_pr_markers import validate_test_file
 
 
 pytestmark = [
-    pytest.mark.regression,
     pytest.mark.pr("PR-5652", "2026-02-26T00:00:00Z"),
 ]
 

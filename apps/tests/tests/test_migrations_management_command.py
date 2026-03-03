@@ -8,8 +8,6 @@ from django.core.management import CommandError, call_command
 from apps.tests.management.commands.migrations import Command
 
 
-pytestmark = pytest.mark.regression
-
 
 def test_migrations_command_rejects_unknown_action() -> None:
     """Regression: unsupported migration actions should raise command errors."""
