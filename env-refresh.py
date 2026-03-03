@@ -260,6 +260,34 @@ def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) 
         _attempt()
 
 
+def _call_command_with_sqlite_lock_retry(
+    command: str,
+    *args: Any,
+    using_sqlite: bool,
+    attempts: int = 5,
+    base_delay: float = 0.2,
+    **kwargs: Any,
+) -> None:
+    """Run a management command while retrying transient SQLite lock errors."""
+
+    for attempt in range(1, attempts + 1):
+        try:
+            call_command(command, *args, **kwargs)
+            return
+        except OperationalError as exc:
+            if "database is locked" not in str(exc).lower() or not using_sqlite:
+                raise
+            if attempt == attempts:
+                raise
+            close_old_connections()
+            delay = base_delay * attempt
+            print(
+                f"Database locked while running {command}; retrying in {delay:.1f}s",
+                flush=True,
+            )
+            time.sleep(delay)
+
+
 def _assign_many_to_many(instance: "Model", field_name: str, value: Any) -> bool:
     manager = getattr(instance, field_name)
     if value is None or (
@@ -655,7 +683,10 @@ def run_database_tasks(
 
     # Ensure Application entries exist for local apps before loading fixtures
     # that reference them.
-    call_command("register_site_apps")
+    _call_command_with_sqlite_lock_retry(
+        "register_site_apps",
+        using_sqlite=using_sqlite,
+    )
 
     fixture_hash_file = locks_dir / "fixtures.md5"
     fixture_cache_file = locks_dir / "fixtures.by-app.json"
@@ -720,7 +751,10 @@ def run_database_tasks(
                     default_db=default_db,
                     interactive=False,
                 )
-                call_command("register_site_apps")
+                _call_command_with_sqlite_lock_retry(
+                    "register_site_apps",
+                    using_sqlite=using_sqlite,
+                )
                 existing_tables = set(connection.introspection.table_names())
                 missing_tables = required_tables - existing_tables
             if missing_tables:
