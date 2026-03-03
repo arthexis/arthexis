@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 
 from config import settings
 
@@ -56,6 +57,21 @@ def _expected_local_apps_from_manifest_files() -> list[str]:
     return app_entries
 
 
+def _manifest_entries_with_source() -> list[tuple[str, str]]:
+    """Return normalized app entries paired with their manifest module path."""
+
+    entries: list[tuple[str, str]] = []
+    manifests = sorted((settings.BASE_DIR / "apps").rglob("manifest.py"))
+    for manifest_path in manifests:
+        module_name = ".".join(
+            manifest_path.relative_to(settings.BASE_DIR).with_suffix("").parts
+        )
+        for app_entry in _extract_manifest_apps(manifest_path):
+            entries.append((module_name, app_entry.strip()))
+
+    return entries
+
+
 def test_local_apps_manifest_loading_is_complete_and_deterministic() -> None:
     """Regression: manifest loading should reproduce the project app list deterministically."""
 
@@ -85,8 +101,42 @@ def test_local_apps_manifest_loading_does_not_import_app_configs(
     assert loaded_apps
 
 
-def test_local_apps_manifests_resolve_to_importable_app_configs() -> None:
-    """Every loaded manifest entry should resolve through AppConfig.create."""
+@pytest.mark.parametrize(
+    ("manifest_module", "app_entry"),
+    _manifest_entries_with_source(),
+    ids=lambda entry: entry,
+)
+def test_manifest_entry_resolves_to_importable_app_config(
+    manifest_module: str,
+    app_entry: str,
+) -> None:
+    """Every discovered manifest entry should resolve through AppConfig.create."""
 
-    for app_entry in settings._load_local_apps_from_manifests():
+    try:
         settings._validate_manifest_app_entry(app_entry)
+    except ImproperlyConfigured as exc:  # pragma: no cover - assertion path only
+        raise AssertionError(
+            f"Manifest '{manifest_module}' contains invalid DJANGO_APPS entry '{app_entry}'."
+        ) from exc
+
+
+def test_manifest_entries_are_unique_after_normalization() -> None:
+    """Regression: no manifest may register duplicate normalized app entries."""
+
+    entries_by_app: dict[str, list[str]] = {}
+    for manifest_module, app_entry in _manifest_entries_with_source():
+        entries_by_app.setdefault(app_entry, []).append(manifest_module)
+
+    duplicates = {
+        app_entry: sorted(modules)
+        for app_entry, modules in entries_by_app.items()
+        if len(modules) > 1
+    }
+
+    assert not duplicates, (
+        "Duplicate normalized DJANGO_APPS entries detected: "
+        + ", ".join(
+            f"{app_entry} (manifests: {', '.join(modules)})"
+            for app_entry, modules in sorted(duplicates.items())
+        )
+    )

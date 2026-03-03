@@ -231,6 +231,12 @@ jobs:
           source .venv/bin/activate
           python -m pip install -r requirements-ci.txt
 
+      - name: Validate manifest app entries early (upgraded install)
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest tests/test_installed_apps_manifests.py -q
+
       - name: Validate upgraded migrations
         run: |
           set -Eeuo pipefail
