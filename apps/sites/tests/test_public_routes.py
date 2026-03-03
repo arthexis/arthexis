@@ -315,7 +315,6 @@ def test_whatsapp_webhook_post_payload_validation(
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_disabled_returns_blank_public_home(client):
     """Home should render a blank page when the interface feature is disabled."""
 
@@ -333,7 +332,6 @@ def test_operator_site_interface_disabled_returns_blank_public_home(client):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_redirects_to_configured_interface_landing(client):
     """Disabled interface feature should redirect home to configured interface landing."""
 
@@ -358,7 +356,6 @@ def test_operator_site_interface_redirects_to_configured_interface_landing(clien
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client):
     """Landing redirects once and then renders without self-redirect loops."""
 
@@ -389,7 +386,6 @@ def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client)
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     """Unsafe absolute/scheme-relative targets should not redirect users away."""
 
@@ -418,7 +414,6 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(client):
     """Anonymous query-string toggles must not suppress public navigation chrome."""
 
@@ -429,7 +424,6 @@ def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(clie
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_public_home_shows_chat_when_site_public_chat_enabled(client, settings):
     """Regression: anonymous users should see chat when the current site enables public chat."""
 
