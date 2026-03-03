@@ -53,7 +53,9 @@ resolve_running_port() {
   fi
 
   local runserver_port
-  runserver_port="$(pgrep -af "manage.py runserver" | sed -n 's/.*0\.0\.0\.0:\([0-9]\{2,5\}\).*/\1/p' | head -n1)"
+  runserver_port="$( (pgrep -af "manage.py runserver" || true) | sed -n \
+    -e 's/.*runserver[[:space:]][^[:space:]]*:\([0-9]\{2,5\}\)\([[:space:]].*\|$\)/\1/p' \
+    -e 's/.*runserver[[:space:]]\([0-9]\{2,5\}\)\([[:space:]].*\|$\)/\1/p' | head -n1)"
   if [ -n "$runserver_port" ] && is_port_reachable "$runserver_port"; then
     printf '%s\n' "$runserver_port"
     return 0
@@ -64,6 +66,16 @@ resolve_running_port() {
 
 parse_canonical_action() {
   # Mirror the legacy compatibility rules from utils.command_api.parse_legacy_args.
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        printf 'help\n'
+        return
+        ;;
+    esac
+  done
+
   if [ "$#" -eq 0 ]; then
     printf 'list\n'
     return
