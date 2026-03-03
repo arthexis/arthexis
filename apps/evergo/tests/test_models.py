@@ -300,7 +300,7 @@ def test_upsert_order_extracts_contact_and_address_components():
     """Regression: order sync should persist phone and address pieces for admin usage."""
     User = get_user_model()
     suite_user = User.objects.create_user(username="suite-upsert", email="suite-upsert@example.com")
-    profile = EvergoUser.objects.create(user=suite_user)
+    profile = EvergoUser.objects.create(user=suite_user, evergo_email="suite-upsert@evergo.example.com")
 
     payload = {
         "id": 29545,
@@ -350,7 +350,10 @@ def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
         username="suite-customer-locality-blank-municipio",
         email="suite-customer-locality-blank-municipio@example.com",
     )
-    profile = EvergoUser.objects.create(user=suite_user)
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-customer-locality-blank-municipio@evergo.example.com",
+    )
 
     payload = {
         "id": 43121,
@@ -378,7 +381,7 @@ def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
     """Regression: customer address fallback should avoid municipio/ciudad duplication by preferring municipio."""
     user_model = get_user_model()
     suite_user = user_model.objects.create_user(username="suite-customer-locality", email="suite-customer-locality@example.com")
-    profile = EvergoUser.objects.create(user=suite_user)
+    profile = EvergoUser.objects.create(user=suite_user, evergo_email="suite-customer-locality@evergo.example.com")
 
     payload = {
         "id": 43120,

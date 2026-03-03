@@ -160,7 +160,7 @@ class Command(BaseCommand):
         queries_file = options.get("queries_file")
 
         if inline_queries and queries_file:
-            raise CommandError("Use only one of --queries or --queries-file.")
+            raise CommandError("Use only one of --queries or --queries-file")
 
         if inline_queries:
             resolved = str(inline_queries).strip()

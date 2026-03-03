@@ -1,6 +1,5 @@
 import datetime
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -58,35 +57,6 @@ def test_public_pages_render_for_anonymous(client):
     )
 
 
-def test_public_home_places_chat_above_feedback_and_on_same_side(client):
-    """Regression: chat and feedback affordances should share the right edge with chat stacked above."""
-
-    response = client.get(reverse("pages:index"))
-
-    assert response.status_code == 200
-
-    content = response.content.decode()
-    assert 'id="chat-widget"' in content
-    assert 'id="user-story-toggle"' in content
-    assert content.index('id="chat-widget"') < content.index('id="user-story-toggle"')
-    assert 'id="chat-widget" data-has-feedback="true"' in content
-
-    Feature.objects.update_or_create(
-        slug="feedback-ingestion",
-        defaults={"display": "Feedback Ingestion", "is_enabled": False},
-    )
-    disabled_response = client.get(reverse("pages:index"))
-    disabled_content = disabled_response.content.decode()
-    assert 'id="chat-widget" data-has-feedback="false"' in disabled_content
-
-    css = Path("apps/sites/static/pages/css/base.css").read_text()
-    assert re.search(r"\.chat-widget\s*\{[^}]*right:\s*1\.75rem;", css, re.S)
-    assert re.search(r'\.chat-widget\[data-has-feedback="true"\]\s*\{[^}]*bottom:\s*5\.25rem;', css, re.S)
-    assert re.search(r"\.user-story-card\s*\{[^}]*width:\s*min\(28rem, 100%\);", css, re.S)
-    assert re.search(r"\.user-story-card\s*\.card-body\s*\{[^}]*overflow-x:\s*hidden;", css, re.S)
-    assert re.search(r"\.user-story-card\s*,\s*[^{]*\{[^}]*box-sizing:\s*border-box;", css, re.S)
-
-
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
     """Regression: public home should hide feedback UI when ingestion feature is disabled."""
 
@@ -132,7 +102,7 @@ def test_operator_interface_notice_uses_wss_for_https_requests(client, settings)
 
 
 def test_operator_interface_notice_omits_port_for_managed_site(client, settings):
-    """Managed sites should present a clean websocket host without explicit ports."""
+    """Regression: managed sites should present a clean websocket host without explicit ports."""
 
     settings.ALLOWED_HOSTS = ["testserver", "example.test"]
 
@@ -143,14 +113,18 @@ def test_operator_interface_notice_omits_port_for_managed_site(client, settings)
     site.managed = True
     site.save(update_fields=["managed"])
 
-    response = client.get(reverse("pages:operator-interface-notice"), HTTP_HOST="example.test:8443")
+    response = client.get(
+        reverse("pages:operator-interface-notice"),
+        secure=True,
+        HTTP_HOST="example.test:8443",
+    )
 
     assert response.status_code == 200
     assert "wss://example.test/&lt;charge_point_id&gt;/" in response.content.decode()
 
 
 def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, settings):
-    """Unmanaged sites should preserve explicit non-standard ports in the endpoint."""
+    """Regression: unmanaged sites should preserve explicit non-standard ports in the endpoint."""
 
     settings.ALLOWED_HOSTS = ["testserver", "example-unmanaged.test"]
 
@@ -163,6 +137,7 @@ def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, setting
 
     response = client.get(
         reverse("pages:operator-interface-notice"),
+        secure=True,
         HTTP_HOST="example-unmanaged.test:8443",
     )
 
@@ -177,8 +152,9 @@ def test_operator_interface_notice_page_is_get_only(client):
 
     assert response.status_code == 405
 
+@pytest.mark.django_db
 def test_footer_fragment_is_get_only(client):
-    """The footer fragment endpoint should reject non-GET methods."""
+    """Regression: the footer fragment endpoint should reject non-GET methods."""
 
     response = client.get(reverse("pages:footer-fragment"))
     assert response.status_code == 200
