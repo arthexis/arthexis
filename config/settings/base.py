@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 
+from config.channel_layer import resolve_channel_layers
+
 import django.utils.encoding as encoding
 from utils.env import env_bool
 
@@ -142,17 +144,10 @@ VIDEO_FRAME_SERVICE_SLEEP = float(
     os.environ.get("VIDEO_FRAME_SERVICE_SLEEP", "0.05")
 )
 
-if CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL],
-            },
-        }
-    }
-else:
-    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+CHANNEL_LAYERS, CHANNEL_LAYER_DECISION = resolve_channel_layers(
+    channel_redis_url=CHANNEL_REDIS_URL,
+    ocpp_state_redis_url=OCPP_STATE_REDIS_URL,
+)
 
 OCPP_PENDING_CALL_TTL = int(os.environ.get("OCPP_PENDING_CALL_TTL", "1800"))
 OCPP_ASYNC_LOGGING = env_bool(
