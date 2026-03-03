@@ -12,7 +12,6 @@ from utils import command_api
 
 
 pytestmark = [
-    pytest.mark.regression,
     pytest.mark.pr("PR-5652", "2026-02-26T00:00:00Z"),
 ]
 

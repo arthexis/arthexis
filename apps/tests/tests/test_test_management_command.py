@@ -8,8 +8,6 @@ import pytest
 from django.core.management import CommandError, call_command
 
 
-pytestmark = pytest.mark.regression
-
 
 def test_test_command_rejects_unknown_action() -> None:
     """Regression: unsupported actions should raise a command error."""
