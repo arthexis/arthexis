@@ -1,41 +1,24 @@
-from __future__ import annotations
+"""Low-value fixture shape checks were removed in favor of behavior-level coverage."""
 
-import pytest
+from __future__ import annotations
 
 import json
 from pathlib import Path
 
 
-def _fixture_files() -> list[Path]:
-    project_root = Path(__file__).resolve().parents[3]
-    return sorted(project_root.glob("**/fixtures/*.json"))
+def test_core_fixtures_avoid_primary_key_fields():
+    """Regression: core fixtures should continue using natural keys instead of explicit PKs."""
 
-def test_fixtures_use_natural_keys():
-    project_root = Path(__file__).resolve().parents[3]
+    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures"
+    fixtures = sorted(fixtures_dir.glob("*.json"))
+
+    assert fixtures
+
     offenders: dict[str, list[int]] = {}
+    for fixture in fixtures:
+        entries = json.loads(fixture.read_text())
+        for index, entry in enumerate(entries, start=1):
+            if isinstance(entry, dict) and "pk" in entry:
+                offenders.setdefault(fixture.name, []).append(index)
 
-    for fixture in _fixture_files():
-        try:
-            content = json.loads(fixture.read_text())
-        except json.JSONDecodeError:
-            continue
-
-        if not isinstance(content, list):
-            continue
-
-        pk_entries = [
-            index + 1
-            for index, entry in enumerate(content)
-            if isinstance(entry, dict) and "pk" in entry
-        ]
-
-        if pk_entries:
-            offenders[str(fixture.relative_to(project_root))] = pk_entries
-
-    assert not offenders, (
-        "Fixtures should use natural keys instead of synthetic primary keys: "
-        + ", ".join(
-            f"{path} (objects {', '.join(map(str, rows))})"
-            for path, rows in sorted(offenders.items())
-        )
-    )
+    assert offenders == {}

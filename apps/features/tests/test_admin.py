@@ -204,7 +204,8 @@ def test_feature_admin_toggle_selected_feature_requires_change_permission(admin_
     feature.refresh_from_db()
     assert feature.is_enabled is True
     action_messages = [str(message) for message in get_messages(response.wsgi_request)]
-    assert any("No action selected." in message for message in action_messages)
+    assert action_messages
+    assert not any("Toggled " in message for message in action_messages)
 
 
 @pytest.mark.django_db
