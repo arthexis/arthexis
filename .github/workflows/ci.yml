@@ -70,6 +70,10 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
+      - name: Validate manifest app entries early
+        run: |
+          source .venv/bin/activate
+          pytest tests/test_installed_apps_manifests.py -q
       - name: Validate migrations
         run: |
           source .venv/bin/activate
@@ -216,6 +220,12 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           ./upgrade.sh --local --no-restart
+
+      - name: Validate manifest app entries early (upgraded install)
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest tests/test_installed_apps_manifests.py -q
 
       - name: Validate upgraded migrations
         run: |
