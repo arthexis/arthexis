@@ -328,7 +328,7 @@ def test_operator_site_interface_disabled_returns_operator_notice(client):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert "Charging Station Interface Endpoint" in content
+    assert 'id="operator-interface-title"' in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
@@ -414,7 +414,9 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     response = client.get(reverse("pages:index"))
 
     assert response.status_code == 200
-    assert b"<body" in response.content
+    content = response.content.decode()
+    assert 'id="operator-interface-title"' in content
+    assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
 @pytest.mark.django_db
