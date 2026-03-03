@@ -316,8 +316,8 @@ def test_whatsapp_webhook_post_payload_validation(
 
 @pytest.mark.django_db
 @pytest.mark.regression
-def test_operator_site_interface_disabled_returns_blank_public_home(client):
-    """Home should render a blank page when the interface feature is disabled."""
+def test_operator_site_interface_disabled_returns_operator_notice(client):
+    """Regression: home should render the OCPP notice when interface mode is disabled."""
 
     Feature.objects.update_or_create(
         slug="operator-site-interface",
@@ -327,9 +327,9 @@ def test_operator_site_interface_disabled_returns_blank_public_home(client):
     response = client.get(reverse("pages:index"))
 
     assert response.status_code == 200
-    body_match = re.search(rb"<body[^>]*>(.*?)</body>", response.content, re.DOTALL)
-    assert body_match is not None
-    assert body_match.group(1).strip() == b""
+    content = response.content.decode()
+    assert "Charging Station Interface Endpoint" in content
+    assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
 @pytest.mark.django_db

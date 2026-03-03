@@ -1,15 +1,18 @@
 """Static and media asset settings."""
 
+import sys
+
 from config.whitenoise import add_headers as whitenoise_add_headers
 
 from .base import BASE_DIR, DEBUG
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
+USE_MANIFEST_STATICFILES = not DEBUG and "runserver" not in sys.argv
 STATICFILES_BACKEND = (
-    "django.contrib.staticfiles.storage.StaticFilesStorage"
-    if DEBUG
-    else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    if USE_MANIFEST_STATICFILES
+    else "django.contrib.staticfiles.storage.StaticFilesStorage"
 )
 
 STORAGES = {
@@ -32,6 +35,7 @@ ADMIN_APP_STYLESHEETS: dict[str, str] = {}
 # traffic chart fail to load their JavaScript dependencies.
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
+
 
 MERMAID_USE_CDN = True
 MEDIA_URL = "/media/"
