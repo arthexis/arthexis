@@ -179,3 +179,50 @@ def test_shell_and_batch_wrappers_document_matching_options(
     for usage_fragment in (EXPECTED_LIST_USAGE, EXPECTED_RUN_USAGE):
         assert usage_fragment in command_script_contents
         assert usage_fragment in command_batch_contents
+
+
+def test_run_command_uses_fast_path_when_requested(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fast-run mode should skip discovery and run normalized commands directly."""
+
+    captured: dict[str, list[str]] = {}
+
+    class Result:
+        returncode = 0
+
+    def fail_resolve(*args, **kwargs):
+        raise AssertionError("_resolve_command should not be used in fast-run mode")
+
+    def fake_run(cmd, cwd, check):
+        captured["cmd"] = cmd
+        return Result()
+
+    monkeypatch.setenv("ARTHEXIS_COMMAND_FAST_RUN", "1")
+    monkeypatch.setattr(command_api, "_resolve_command", fail_resolve)
+    monkeypatch.setattr(command_api.subprocess, "run", fake_run)
+
+    exit_code = command_api.run_command(
+        tmp_path, "check-time", ["--verbosity", "2"], command_api.CommandOptions()
+    )
+
+    assert exit_code == 0
+    assert captured["cmd"] == [
+        command_api.sys.executable,
+        "manage.py",
+        "check_time",
+        "--verbosity",
+        "2",
+    ]
+
+
+def test_run_command_fast_path_still_validates_command_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fast-run mode should preserve command-name validation safeguards."""
+    monkeypatch.setenv("ARTHEXIS_COMMAND_FAST_RUN", "1")
+
+    with pytest.raises(command_api.CommandApiError, match="Invalid command name"):
+        command_api.run_command(
+            tmp_path, "bad*name", [], command_api.CommandOptions()
+        )

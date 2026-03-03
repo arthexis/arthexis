@@ -51,6 +51,12 @@ class CommandOptions:
         return "--celery" if self.celery else "--no-celery"
 
 
+
+
+def _fast_run_enabled() -> bool:
+    """Return whether run-mode should skip command discovery for faster execution."""
+    return os.getenv("ARTHEXIS_COMMAND_FAST_RUN", "") in {"1", "true", "TRUE", "yes", "YES"}
+
 def _cache_ttl_seconds() -> int:
     """Read and sanitize cache TTL from environment."""
     configured = os.getenv("ARTHEXIS_COMMAND_CACHE_TTL", str(DEFAULT_CACHE_TTL_SECONDS))
@@ -281,7 +287,14 @@ def run_command(
     base_dir: Path, raw_command: str, command_args: list[str], options: CommandOptions
 ) -> int:
     """Validate and execute a Django command."""
-    command = _resolve_command(base_dir, raw_command, options)
+    if _fast_run_enabled():
+        try:
+            command = normalize_command_name(raw_command)
+        except ValueError as exc:
+            raise CommandApiError(str(exc)) from exc
+    else:
+        command = _resolve_command(base_dir, raw_command, options)
+
     process = subprocess.run(
         [sys.executable, "manage.py", command, *command_args],
         cwd=base_dir,
