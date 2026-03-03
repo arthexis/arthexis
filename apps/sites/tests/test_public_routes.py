@@ -303,8 +303,10 @@ def test_whatsapp_webhook_post_payload_validation(
         assert response.json()["status"] == "ok"
 
 
-def test_operator_site_interface_disabled_returns_blank_public_home(client):
-    """Home should render a blank page when the interface feature is disabled."""
+@pytest.mark.django_db
+@pytest.mark.regression
+def test_operator_site_interface_disabled_returns_operator_notice(client):
+    """Regression: home should render the OCPP notice when interface mode is disabled."""
 
     Feature.objects.update_or_create(
         slug="operator-site-interface",
@@ -314,9 +316,9 @@ def test_operator_site_interface_disabled_returns_blank_public_home(client):
     response = client.get(reverse("pages:index"))
 
     assert response.status_code == 200
-    body_match = re.search(rb"<body[^>]*>(.*?)</body>", response.content, re.DOTALL)
-    assert body_match is not None
-    assert body_match.group(1).strip() == b""
+    content = response.content.decode()
+    assert 'id="operator-interface-title"' in content
+    assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
 def test_operator_site_interface_redirects_to_configured_interface_landing(client):
@@ -395,7 +397,9 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     response = client.get(reverse("pages:index"))
 
     assert response.status_code == 200
-    assert b"<body" in response.content
+    content = response.content.decode()
+    assert 'id="operator-interface-title"' in content
+    assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
 def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(client):
