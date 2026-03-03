@@ -224,7 +224,9 @@ collect_requirement_files() {
   local -n out_array="$1"
   local hardware_file="$SCRIPT_DIR/requirements-hw.txt"
 
-  mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' ! -name 'requirements-hw.txt' -print | sort)
+  if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+    out_array+=("$SCRIPT_DIR/requirements.txt")
+  fi
 
   if [ -f "$hardware_file" ] && should_install_hardware_requirements; then
     out_array+=("$hardware_file")

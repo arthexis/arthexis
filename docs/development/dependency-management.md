@@ -1,10 +1,10 @@
 # Dependency management
 
-`pyproject.toml` is the canonical source for runtime dependencies via `[project].dependencies`.
+`pyproject.toml` is the canonical source for runtime dependencies via `[project].dependencies` and CI tooling dependencies via `[project.optional-dependencies].ci`.
 
-`requirements.txt` is generated output for deployment compatibility and should not be edited manually.
+`requirements.txt` and `requirements-ci.txt` are generated outputs and should not be edited manually.
 
-## Regenerate requirements
+## Regenerate requirements files
 
 Use either command:
 
@@ -18,9 +18,9 @@ or:
 make requirements
 ```
 
-## Validate generated requirements
+## Validate generated requirements files
 
-To verify `requirements.txt` matches generated output:
+To verify `requirements.txt` and `requirements-ci.txt` match generated output:
 
 ```bash
 python scripts/generate_requirements.py --check
@@ -32,4 +32,4 @@ or:
 make requirements-check
 ```
 
-CI runs this check and fails when the committed file differs from generated output.
+CI runs this check and fails when either committed file differs from generated output.
