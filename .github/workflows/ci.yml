@@ -163,21 +163,21 @@ jobs:
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
-      # Check out the PR first so local actions resolve from the PR revision.
+      # Check out the PR first so local actions are available in the workspace.
       - name: Checkout PR changes
         uses: actions/checkout@v6
         with:
           clean: false
-      - name: Setup Python CI environment
-        uses: ./.github/actions/setup-python-env
-        with:
-          python-version: '3.13'
       # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
       - name: Checkout main
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.repository.default_branch }}
           clean: false
+      - name: Setup Python CI environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
       - name: Install from default branch
         run: |
           ./install.sh --no-start
