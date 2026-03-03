@@ -10,6 +10,7 @@ from pathlib import Path
 
 import django.utils.encoding as encoding
 from utils.env import env_bool
+from config.roles import validate_role_settings
 
 if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatibility
     from django.utils.encoding import force_str
@@ -228,3 +229,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # GitHub issue reporting
 GITHUB_ISSUE_REPORTING_ENABLED = env_bool("GITHUB_ISSUE_REPORTING_ENABLED", True)
 GITHUB_ISSUE_REPORTING_COOLDOWN = 3600  # seconds
+
+validate_role_settings(globals())
