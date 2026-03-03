@@ -12,6 +12,12 @@ from django.conf import settings
 from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
+from apps.core.channel_metrics import (
+    failed_reconnect,
+    websocket_connected,
+    websocket_disconnected,
+)
+
 from .frame_cache import frame_cache_url, get_frame, get_status
 from .models import MjpegStream
 
@@ -88,7 +94,9 @@ class RedisVideoStreamTrack(VideoStreamTrack):
         super().__init__()
         self._slug = slug
         self._stream_key = _stream_key(slug)
-        self._redis = _redis_client() or Redis.from_url(_redis_url(), decode_responses=False)
+        self._redis = _redis_client() or Redis.from_url(
+            _redis_url(), decode_responses=False
+        )
         self._last_id = start_id
         self._closed = False
 
@@ -103,6 +111,7 @@ class RedisVideoStreamTrack(VideoStreamTrack):
                     count=1,
                 )
             except RedisError as exc:
+                failed_reconnect(source="video.webrtc_stream", reason=type(exc).__name__)
                 logger.warning("WebRTC redis read failed for %s: %s", self._slug, exc)
                 await asyncio.sleep(0.2)
                 continue
@@ -159,7 +168,10 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
         self.stream = stream
         self.start_id = _resolve_start_id(self.scope)
         await self.accept()
-        self.redis = _redis_client() or Redis.from_url(_redis_url(), decode_responses=False)
+        websocket_connected(source="video.redis_stream")
+        self.redis = _redis_client() or Redis.from_url(
+            _redis_url(), decode_responses=False
+        )
         self.stream_task = asyncio.create_task(self._stream_frames())
 
     async def disconnect(self, code: int) -> None:
@@ -167,6 +179,7 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
             self.stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self.stream_task
+        websocket_disconnected(source="video.redis_stream")
 
     async def _stream_frames(self) -> None:
         if self.start_id == "$":
@@ -183,6 +196,7 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
                     count=1,
                 )
             except RedisError as exc:
+                failed_reconnect(source="video.redis_stream", reason=type(exc).__name__)
                 logger.warning("Redis stream read failed for %s: %s", self.slug, exc)
                 await asyncio.sleep(0.2)
                 continue
@@ -220,10 +234,12 @@ class WebRTCSignalingConsumer(AsyncJsonWebsocketConsumer):
         self.pc = RTCPeerConnection({"iceServers": ice_servers})
         self.pc.addTrack(RedisVideoStreamTrack(slug, start_id=self.start_id))
         await self.accept()
+        websocket_connected(source="video.webrtc_signaling")
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "pc"):
             await self.pc.close()
+        websocket_disconnected(source="video.webrtc_signaling")
 
     async def receive_json(self, content: dict[str, Any], **kwargs: Any) -> None:
         message_type = content.get("type")
