@@ -1,5 +1,8 @@
 """Regression tests for admin login template customizations."""
 
+import re
+from pathlib import Path
+
 import pytest
 from django.urls import reverse
 
@@ -54,3 +57,15 @@ def test_admin_index_hides_feedback_button_when_feedback_ingestion_disabled(
     assert response.status_code == 200
     content = response.content.decode()
     assert 'id="user-story-toggle"' not in content
+
+
+
+def test_admin_styles_hide_feedback_and_chat_toggles_when_dialogs_open():
+    """Regression: admin floating toggles should never overlap an open dialog."""
+
+    css = Path("apps/sites/static/sites/css/admin/base_site.css").read_text()
+    assert re.search(
+        r"body\.user-story-open \.chat-widget,\s*body\.chat-open \.user-story-toggle",
+        css,
+        re.S,
+    )
