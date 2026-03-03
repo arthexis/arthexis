@@ -8,7 +8,8 @@ from .base import BASE_DIR, DEBUG
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
-USE_MANIFEST_STATICFILES = not DEBUG and "runserver" not in sys.argv
+_IS_DEV_SERVER = any(command in sys.argv for command in ("runserver", "runserver_plus"))
+USE_MANIFEST_STATICFILES = not DEBUG and not _IS_DEV_SERVER
 STATICFILES_BACKEND = (
     "whitenoise.storage.CompressedManifestStaticFilesStorage"
     if USE_MANIFEST_STATICFILES
