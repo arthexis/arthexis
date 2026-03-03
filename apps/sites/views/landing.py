@@ -113,6 +113,18 @@ def operator_interface_notice(request):
     return TemplateResponse(request, "pages/operator_interface_notice.html", context)
 
 
+def _render_operator_interface_fallback(request, site):
+    """Render the OCPP-facing fallback notice used for disabled operator interfaces."""
+
+    ws_host = _format_operator_ws_endpoint_host(request, site)
+    ws_scheme = resolve_ws_scheme(request=request)
+    context = {
+        "ocpp_versions": _SUPPORTED_OCPP_VERSIONS,
+        "ws_endpoint": f"{ws_scheme}://{ws_host}/<charge_point_id>/",
+    }
+    return TemplateResponse(request, "pages/operator_interface_notice.html", context)
+
+
 @landing("Home")
 def index(request):
     """Render the public home page or interface fallback when configured."""
@@ -142,7 +154,7 @@ def index(request):
                         getattr(site, "pk", None),
                         target_path,
                     )
-                    return render(request, "pages/operator_interface_blank.html")
+                    return _render_operator_interface_fallback(request, site)
 
                 parsed_target = urlparse(target_path)
                 params = parse_qs(parsed_target.query, keep_blank_values=True)
@@ -153,7 +165,7 @@ def index(request):
                 redirect_target = urlunparse(rebuilt_target)
                 if redirect_target != request.get_full_path():
                     return redirect(redirect_target)
-        return render(request, "pages/operator_interface_blank.html")
+        return _render_operator_interface_fallback(request, site)
 
     if site:
         referrer_landing = get_referrer_landing(request, site)
