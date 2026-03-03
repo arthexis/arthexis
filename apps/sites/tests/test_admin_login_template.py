@@ -1,5 +1,6 @@
 """Regression tests for admin login template customizations."""
 
+
 import pytest
 from django.urls import reverse
 
@@ -54,3 +55,5 @@ def test_admin_index_hides_feedback_button_when_feedback_ingestion_disabled(
     assert response.status_code == 200
     content = response.content.decode()
     assert 'id="user-story-toggle"' not in content
+
+
