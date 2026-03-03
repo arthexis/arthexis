@@ -11,6 +11,7 @@ from django.contrib.sites.models import Site
 from django.utils.translation import gettext
 
 from apps.chats.models import ChatMessage, ChatSession
+from apps.core.channel_metrics import websocket_connected, websocket_disconnected
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         self.group_name = f"chat-session-{self.session.pk}"
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        websocket_connected(source="sites.chat")
         await self._send_history()
         await self._broadcast_presence("join")
         await self._touch_session(user)
@@ -57,6 +59,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
                 await self._broadcast_presence("leave")
         finally:
             self.session = None
+            websocket_disconnected(source="sites.chat")
             await super().disconnect(code)
 
     async def receive_json(self, content, **kwargs):

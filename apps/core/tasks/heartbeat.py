@@ -4,14 +4,16 @@ import logging
 
 from celery import shared_task
 
+from apps.core.channel_metrics import emit_periodic_metrics
 
 logger = logging.getLogger(__name__)
 
 
 @shared_task(name="apps.core.tasks.heartbeat")
 def heartbeat() -> None:
-    """Log a simple heartbeat message."""
+    """Log a simple heartbeat message and periodic channel metrics."""
     logger.info("Heartbeat task executed")
+    emit_periodic_metrics()
 
 
 @shared_task(bind=True, name="core.tasks.heartbeat")
