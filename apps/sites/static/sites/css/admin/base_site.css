@@ -825,6 +825,13 @@ body.user-story-open {
     transition: transform 0.25s ease;
 }
 
+.user-story-card,
+.user-story-card *,
+.user-story-card *::before,
+.user-story-card *::after {
+    box-sizing: border-box;
+}
+
 .user-story-card .user-story-header {
     display: flex;
     align-items: flex-start;
@@ -838,6 +845,7 @@ body.user-story-open {
 .user-story-card .user-story-body {
     padding: 1rem 1.25rem 1.5rem;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .user-story-card .user-story-title {
@@ -1097,4 +1105,3 @@ body.user-story-open {
         max-height: calc(100dvh - 2rem);
     }
 }
-
