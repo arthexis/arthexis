@@ -317,7 +317,7 @@ def test_operator_site_interface_disabled_returns_operator_notice(client):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'id="operator-interface-title"' in content
+    assert "Charging Station Interface Endpoint" in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 

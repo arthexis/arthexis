@@ -99,16 +99,8 @@ def footer_fragment(request):
     return TemplateResponse(request, "core/footer.html", context)
 
 
-@require_GET
-def operator_interface_notice(request):
-    """Render a minimal vendor-facing notice for OCPP websocket onboarding."""
-
-    site = get_site(request)
-    return _render_operator_interface_notice(request, site)
-
-
-def _build_operator_interface_notice_context(request, site):
-    """Build template context for operator interface onboarding notice views."""
+def _operator_interface_notice_context(request, site):
+    """Build the template context for the OCPP operator interface notice."""
 
     ws_host = _format_operator_ws_endpoint_host(request, site)
     ws_scheme = resolve_ws_scheme(request=request)
@@ -118,11 +110,26 @@ def _build_operator_interface_notice_context(request, site):
     }
 
 
-def _render_operator_interface_notice(request, site):
-    """Render the operator interface onboarding notice template."""
+@require_GET
+def operator_interface_notice(request):
+    """Render a minimal vendor-facing notice for OCPP websocket onboarding."""
 
-    context = _build_operator_interface_notice_context(request, site)
-    return TemplateResponse(request, "pages/operator_interface_notice.html", context)
+    site = get_site(request)
+    return TemplateResponse(
+        request,
+        "pages/operator_interface_notice.html",
+        _operator_interface_notice_context(request, site),
+    )
+
+
+def _render_operator_interface_fallback(request, site):
+    """Render the OCPP-facing fallback notice used for disabled operator interfaces."""
+
+    return TemplateResponse(
+        request,
+        "pages/operator_interface_notice.html",
+        _operator_interface_notice_context(request, site),
+    )
 
 
 def _render_operator_interface_fallback(request, site):
