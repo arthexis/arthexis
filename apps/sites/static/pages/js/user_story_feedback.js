@@ -1,4 +1,6 @@
 (() => {
+  const DIALOG_OPENED_EVENT = 'pages:dialog-opened';
+
   const toggle = document.getElementById('user-story-toggle');
   const overlay = document.getElementById('user-story-overlay');
   const form = document.getElementById('user-story-form');
@@ -76,7 +78,7 @@
     if (!overlay.hasAttribute('hidden')) {
       return;
     }
-    document.dispatchEvent(new CustomEvent('pages:dialog-opened', { detail: { source: 'feedback' } }));
+    document.dispatchEvent(new CustomEvent(DIALOG_OPENED_EVENT, { detail: { source: 'feedback' } }));
     previousFocus = document.activeElement;
     overlay.removeAttribute('hidden');
     requestAnimationFrame(() => {
@@ -89,7 +91,7 @@
     });
   };
 
-  const closeOverlay = () => {
+  const closeOverlay = ({ restoreFocus = true } = {}) => {
     if (overlay.hasAttribute('hidden')) {
       return;
     }
@@ -102,7 +104,7 @@
       form.reset();
       setCharCount();
       setRatingHint();
-      if (previousFocus) {
+      if (restoreFocus && previousFocus) {
         previousFocus.focus();
       }
     }, 200);
@@ -132,12 +134,12 @@
     }
   });
 
-  document.addEventListener('pages:dialog-opened', event => {
+  document.addEventListener(DIALOG_OPENED_EVENT, event => {
     if (overlay.hasAttribute('hidden')) {
       return;
     }
     if (event.detail && event.detail.source !== 'feedback') {
-      closeOverlay();
+      closeOverlay({ restoreFocus: false });
     }
   });
 

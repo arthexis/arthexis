@@ -64,15 +64,23 @@ def test_public_home_places_chat_above_feedback_and_on_same_side(client):
 
     assert response.status_code == 200
 
-    base_template = Path("apps/sites/templates/pages/base.html").read_text()
-    assert base_template.index('id="chat-widget"') < base_template.index('id="user-story-toggle"')
+    content = response.content.decode()
+    assert 'id="chat-widget"' in content
+    assert 'id="user-story-toggle"' in content
+    assert content.index('id="chat-widget"') < content.index('id="user-story-toggle"')
+    assert 'id="chat-widget" data-has-feedback="true"' in content
+
+    Feature.objects.update_or_create(
+        slug="feedback-ingestion",
+        defaults={"display": "Feedback Ingestion", "is_enabled": False},
+    )
+    disabled_response = client.get(reverse("pages:index"))
+    disabled_content = disabled_response.content.decode()
+    assert 'id="chat-widget" data-has-feedback="false"' in disabled_content
 
     css = Path("apps/sites/static/pages/css/base.css").read_text()
-    assert "right: 1.75rem;" in css
-    assert '.chat-widget[data-has-feedback="true"]' in css
-    assert "bottom: 5.25rem;" in css
-
-    assert "data-has-feedback=\"{% if feedback_ingestion_enabled %}true{% else %}false{% endif %}\"" in base_template
+    assert re.search(r"\.chat-widget\s*\{[^}]*right:\s*1\.75rem;", css, re.S)
+    assert re.search(r'\.chat-widget\[data-has-feedback="true"\]\s*\{[^}]*bottom:\s*5\.25rem;', css, re.S)
 
 
 @pytest.mark.django_db

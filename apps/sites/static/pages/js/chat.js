@@ -22,6 +22,8 @@
     return '';
   };
 
+  const DIALOG_OPENED_EVENT = 'pages:dialog-opened';
+
   const sanitizeAvatarUrl = (raw) => {
     const value = String(raw || '').trim();
     if (!value) {
@@ -225,7 +227,7 @@
       if (drawerOpen) {
         return;
       }
-      document.dispatchEvent(new CustomEvent('pages:dialog-opened', { detail: { source: 'chat' } }));
+      document.dispatchEvent(new CustomEvent(DIALOG_OPENED_EVENT, { detail: { source: 'chat' } }));
       drawerOpen = true;
       previousFocus = document.activeElement;
       widget.classList.add('open');
@@ -250,7 +252,7 @@
       });
     };
 
-    const closeDrawer = () => {
+    const closeDrawer = ({ restoreFocus = true } = {}) => {
       if (!drawerOpen) {
         return;
       }
@@ -263,7 +265,9 @@
       if (toggleLabel) {
         toggleLabel.textContent = strings.open;
       }
-      const focusTarget = previousFocus && typeof previousFocus.focus === 'function' ? previousFocus : toggle;
+      const focusTarget = restoreFocus
+        ? (previousFocus && typeof previousFocus.focus === 'function' ? previousFocus : toggle)
+        : null;
       previousFocus = null;
       window.setTimeout(() => {
         overlay.setAttribute('hidden', '');
@@ -398,12 +402,12 @@
       }
     });
 
-    document.addEventListener('pages:dialog-opened', (event) => {
+    document.addEventListener(DIALOG_OPENED_EVENT, (event) => {
       if (!drawerOpen) {
         return;
       }
       if (event.detail && event.detail.source !== 'chat') {
-        closeDrawer();
+        closeDrawer({ restoreFocus: false });
       }
     });
 

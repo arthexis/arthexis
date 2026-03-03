@@ -786,10 +786,6 @@ body.chat-open {
   .chat-widget {
     right: 1.25rem;
   }
-
-  .chat-widget[data-has-feedback="true"] {
-    bottom: 5.25rem;
-  }
 }
 
 @media (max-width: 767.98px) {
