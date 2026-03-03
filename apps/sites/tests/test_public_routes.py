@@ -10,10 +10,13 @@ from django.urls import reverse
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
+
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
 from apps.sites.models import Landing
+
+pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture
@@ -37,7 +40,6 @@ def staff_user(db):
     )
 
 
-@pytest.mark.django_db
 def test_public_pages_render_for_anonymous(client):
     """Anonymous users should be able to render public pages."""
 
@@ -56,7 +58,6 @@ def test_public_pages_render_for_anonymous(client):
     )
 
 
-@pytest.mark.django_db
 def test_public_home_places_chat_above_feedback_and_on_same_side(client):
     """Regression: chat and feedback affordances should share the right edge with chat stacked above."""
 
@@ -83,7 +84,6 @@ def test_public_home_places_chat_above_feedback_and_on_same_side(client):
     assert re.search(r'\.chat-widget\[data-has-feedback="true"\]\s*\{[^}]*bottom:\s*5\.25rem;', css, re.S)
 
 
-@pytest.mark.django_db
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
     """Regression: public home should hide feedback UI when ingestion feature is disabled."""
 
@@ -101,7 +101,6 @@ def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(clie
     assert 'pages/js/base.js' in content
 
 
-@pytest.mark.django_db
 def test_operator_interface_notice_page_renders_supported_versions(client):
     """Operator notice page should render websocket guidance and OCPP versions."""
 
@@ -114,7 +113,6 @@ def test_operator_interface_notice_page_renders_supported_versions(client):
         assert f"OCPP {version}" in content
 
 
-@pytest.mark.django_db
 def test_operator_interface_notice_uses_wss_for_https_requests(client, settings):
     """HTTPS requests should produce a secure websocket endpoint."""
 
@@ -130,7 +128,6 @@ def test_operator_interface_notice_uses_wss_for_https_requests(client, settings)
     assert "wss://secure.example.test/&lt;charge_point_id&gt;/" in response.content.decode()
 
 
-@pytest.mark.django_db
 def test_operator_interface_notice_omits_port_for_managed_site(client, settings):
     """Managed sites should present a clean websocket host without explicit ports."""
 
@@ -149,7 +146,6 @@ def test_operator_interface_notice_omits_port_for_managed_site(client, settings)
     assert "wss://example.test/&lt;charge_point_id&gt;/" in response.content.decode()
 
 
-@pytest.mark.django_db
 def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, settings):
     """Unmanaged sites should preserve explicit non-standard ports in the endpoint."""
 
@@ -171,7 +167,6 @@ def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, setting
     assert "wss://example-unmanaged.test:8443/&lt;charge_point_id&gt;/" in response.content.decode()
 
 
-@pytest.mark.django_db
 def test_operator_interface_notice_page_is_get_only(client):
     """Operator notice page should reject non-GET requests."""
 
@@ -190,7 +185,6 @@ def test_footer_fragment_is_get_only(client):
     assert rejected.status_code == 405
 
 
-@pytest.mark.django_db
 def test_user_story_submit_is_post_only(client):
     """The user-story endpoint should reject GET requests."""
 
@@ -198,7 +192,6 @@ def test_user_story_submit_is_post_only(client):
     assert rejected.status_code == 405
 
 
-@pytest.mark.django_db
 def test_release_checklist_requires_staff(client, user, staff_user):
     """Release checklist access should be limited to staff users."""
 
@@ -218,7 +211,6 @@ def test_release_checklist_requires_staff(client, user, staff_user):
         assert any(t.name == "docs/readme.html" for t in staff_response.templates)
 
 
-@pytest.mark.django_db
 def test_client_report_download_enforces_login_and_ownership(
     client, user, staff_user, monkeypatch, tmp_path
 ):
@@ -261,7 +253,6 @@ def test_client_report_download_enforces_login_and_ownership(
     assert staff_response["Content-Type"] == "application/pdf"
 
 
-@pytest.mark.django_db
 def test_invitation_login_invalid_tokens_are_handled_safely(client):
     """Invitation login should safely reject malformed/invalid tokens."""
 
@@ -280,7 +271,6 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
     assert malformed_uid_response.status_code == 400
 
 
-@pytest.mark.django_db
 def test_whatsapp_webhook_get_not_allowed(client, settings):
     """Webhook should reject GET requests."""
 
@@ -291,7 +281,6 @@ def test_whatsapp_webhook_get_not_allowed(client, settings):
     assert response.status_code == 405
 
 
-@pytest.mark.django_db
 @pytest.mark.parametrize(
     "payload, expected_status",
     [
@@ -332,8 +321,6 @@ def test_operator_site_interface_disabled_returns_operator_notice(client):
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_redirects_to_configured_interface_landing(client):
     """Disabled interface feature should redirect home to configured interface landing."""
 
@@ -357,8 +344,6 @@ def test_operator_site_interface_redirects_to_configured_interface_landing(clien
     assert response["Location"] == "/operator/?operator_interface=1"
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client):
     """Landing redirects once and then renders without self-redirect loops."""
 
@@ -388,8 +373,6 @@ def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client)
     assert second.status_code == 200
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     """Unsafe absolute/scheme-relative targets should not redirect users away."""
 
@@ -419,8 +402,6 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(client):
     """Anonymous query-string toggles must not suppress public navigation chrome."""
 
@@ -430,8 +411,6 @@ def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(clie
     assert b"<nav" in response.content
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_public_home_shows_chat_when_site_public_chat_enabled(client, settings):
     """Regression: anonymous users should see chat when the current site enables public chat."""
 
