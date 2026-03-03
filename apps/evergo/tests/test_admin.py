@@ -696,6 +696,72 @@ def test_evergo_customer_admin_change_form_has_status_readonly(admin_client):
 
 
 @pytest.mark.django_db
+def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow_link(admin_client):
+    """Regression: order changelist should prioritize SO link and hide remote/user columns."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-columns",
+        email="suite-admin-order-columns@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-columns@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=5512,
+        order_number="SO-5512",
+        status_name="Programado",
+        assigned_engineer_name="Assigned Engineer [Name]",
+    )
+
+    changelist_url = reverse("admin:evergo_evergoorder_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+
+    assert "Order Number" in content
+    assert "Remote id" not in content
+    assert 'scope="col" class="column-user"' not in content
+    assert reverse("admin:evergo_evergoorder_change", args=[order.pk]) in content
+    assert reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id}) in content
+    assert "Assigned Engineer [Name]" not in content
+    assert ">Assigned Engineer<" in content
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admin_client):
+    """Regression: order change view should expose Process SO tool action and link field."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-process",
+        email="suite-admin-order-process@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-process@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=6601, order_number="SO-6601")
+
+    change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    flow_url = reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id})
+
+    assert "Process SO" in content
+    assert flow_url in content
+
+    assert "Open Evergo Flow" in content
+
+
+@pytest.mark.django_db
 def test_evergo_customer_admin_date_filters_local_and_remote(admin_client):
     """Regression: customer changelist should filter local and remote date ranges."""
 
