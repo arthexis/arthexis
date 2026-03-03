@@ -228,3 +228,4 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # GitHub issue reporting
 GITHUB_ISSUE_REPORTING_ENABLED = env_bool("GITHUB_ISSUE_REPORTING_ENABLED", True)
 GITHUB_ISSUE_REPORTING_COOLDOWN = 3600  # seconds
+
