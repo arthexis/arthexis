@@ -222,3 +222,48 @@ def test_load_fixtures_with_deferred_retry_handles_chained_dependencies(
 
     assert calls == ["a.json", "b.json", "c.json", "b.json", "c.json", "c.json"]
     assert capsys.readouterr().out == "..."
+
+
+def test_call_command_with_sqlite_lock_retry_retries_and_succeeds(
+    monkeypatch, env_refresh_module, capsys
+):
+    """Regression: SQLite lock conflicts during command calls should be retried."""
+
+    calls: list[str] = []
+
+    def _flaky_call(command: str, *args, **kwargs) -> None:
+        calls.append(command)
+        if len(calls) == 1:
+            raise env_refresh_module.OperationalError("database is locked")
+
+    monkeypatch.setattr(env_refresh_module, "call_command", _flaky_call)
+
+    env_refresh_module._call_command_with_sqlite_lock_retry(
+        "register_site_apps",
+        using_sqlite=True,
+        attempts=3,
+        base_delay=0,
+    )
+
+    output = capsys.readouterr().out
+    assert "Database locked while running register_site_apps" in output
+    assert calls == ["register_site_apps", "register_site_apps"]
+
+
+def test_call_command_with_sqlite_lock_retry_raises_after_max_attempts(
+    monkeypatch, env_refresh_module
+):
+    """Regression: repeated SQLite lock conflicts should still fail after retries."""
+
+    def _always_locked(command: str, *args, **kwargs) -> None:
+        raise env_refresh_module.OperationalError("database is locked")
+
+    monkeypatch.setattr(env_refresh_module, "call_command", _always_locked)
+
+    with pytest.raises(env_refresh_module.OperationalError, match="database is locked"):
+        env_refresh_module._call_command_with_sqlite_lock_retry(
+            "register_site_apps",
+            using_sqlite=True,
+            attempts=2,
+            base_delay=0,
+        )
