@@ -8,13 +8,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
 
+
 from apps.sites.forms import UserStoryForm
 from apps.sites.models import UserStory, UserStoryAttachment
 from apps.features.models import Feature
 
+pytestmark = [pytest.mark.django_db]
 
-@pytest.mark.django_db
-@pytest.mark.regression
+
 def test_anonymous_user_cannot_upload_feedback_files(client, settings):
     """Anonymous feedback should reject uploaded files."""
 
@@ -34,8 +35,6 @@ def test_anonymous_user_cannot_upload_feedback_files(client, settings):
     assert "attachments" in response.json()["errors"]
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_submission_rejected_when_feedback_ingestion_feature_disabled(client, settings):
     """Regression: submissions should be rejected when feedback ingestion is disabled."""
 
@@ -54,8 +53,6 @@ def test_submission_rejected_when_feedback_ingestion_feature_disabled(client, se
     assert response.json()["success"] is False
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_authenticated_non_staff_feedback_limits_files(settings):
     """Non-staff authenticated users should be limited to configured attachment count."""
 
@@ -90,8 +87,6 @@ def test_authenticated_non_staff_feedback_limits_files(settings):
     assert "attachments" in form.errors
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_staff_feedback_supports_unlimited_text_and_files(settings):
     """Staff feedback should allow long comments and multiple attachments."""
 
@@ -128,8 +123,6 @@ def test_staff_feedback_supports_unlimited_text_and_files(settings):
     assert UserStoryAttachment.objects.filter(user_story=story).count() == 3
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_form_enforces_comment_limit_for_non_staff():
     """Non-staff users should keep the 400-character feedback limit."""
 
@@ -153,8 +146,6 @@ def test_form_enforces_comment_limit_for_non_staff():
     assert "comments" in form.errors
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_form_save_attachments_after_manual_instance_save(settings):
     """Attachments should persist even when the instance is saved with commit=False first."""
 
@@ -192,8 +183,6 @@ def test_form_save_attachments_after_manual_instance_save(settings):
     assert UserStoryAttachment.objects.filter(user_story=story).count() == 2
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_attachment_limit_validation_message_uses_singular_for_one(settings):
     """Attachment count validation should use singular noun when the limit is one."""
 
@@ -228,8 +217,6 @@ def test_attachment_limit_validation_message_uses_singular_for_one(settings):
     assert "up to 1 file." in form.errors["attachments"][0]
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_form_rejects_disallowed_attachment_extension(settings):
     """Attachments with non-whitelisted file extensions should be rejected."""
 
@@ -263,8 +250,6 @@ def test_form_rejects_disallowed_attachment_extension(settings):
     assert "Unsupported file type" in form.errors["attachments"][0]
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_form_rejects_oversized_attachments(settings):
     """Attachments larger than configured maximum should be rejected."""
 
@@ -298,8 +283,6 @@ def test_form_rejects_oversized_attachments(settings):
     assert "MB or smaller" in form.errors["attachments"][0]
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_feedback_submission_updates_chat_profile_preference(client, settings):
     """Regression: feedback submissions should persist chat preference for authenticated users."""
 
@@ -330,8 +313,6 @@ def test_feedback_submission_updates_chat_profile_preference(client, settings):
     assert story.contact_via_chat is True
 
 
-@pytest.mark.django_db
-@pytest.mark.regression
 def test_user_story_form_prefills_chat_opt_in_for_authenticated_user():
     """Regression: feedback form should pre-check chat preference from chat profile."""
 
@@ -359,7 +340,6 @@ def test_user_story_form_prefills_chat_opt_in_for_authenticated_user():
     assert form.fields["contact_via_chat"].initial is True
 
 
-@pytest.mark.regression
 def test_user_story_form_prefill_chat_opt_in_handles_missing_profile_method():
     """Form prefill should gracefully handle users without profile helper support."""
 
