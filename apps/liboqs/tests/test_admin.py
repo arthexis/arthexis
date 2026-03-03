@@ -15,4 +15,7 @@ def test_oqs_algorithm_admin_registered() -> None:
 
     registered_admin = admin.site._registry.get(OqsAlgorithm)
 
-    assert isinstance(registered_admin, OqsAlgorithmAdmin)
+    assert registered_admin is not None, "OqsAlgorithm is not registered in admin.site._registry"
+    assert isinstance(registered_admin, OqsAlgorithmAdmin), (
+        f"Expected OqsAlgorithmAdmin for OqsAlgorithm, got {type(registered_admin).__name__}"
+    )

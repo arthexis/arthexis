@@ -27,7 +27,7 @@ def test_discover_algorithms_returns_sorted_mechanisms(monkeypatch: pytest.Monke
     """Regression: discovered algorithm names should be stable and sorted."""
 
     fake_oqs = SimpleNamespace(
-        get_enabled_kem_mechanisms=lambda: ["Kyber1024", "Kyber512"],
+        get_enabled_kem_mechanisms=lambda: ["Kyber512", "Kyber1024"],
         get_enabled_sig_mechanisms=lambda: ["Dilithium5", "Dilithium2"],
     )
     monkeypatch.setattr("apps.liboqs.services.import_module", lambda _name: fake_oqs)

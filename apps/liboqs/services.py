@@ -14,9 +14,9 @@ def get_oqs_module():
 
     try:
         return import_module("oqs")
-    except ModuleNotFoundError as exc:
+    except (ModuleNotFoundError, ImportError) as exc:
         raise OqsImportError(
-            "The `oqs` package is not installed. Install liboqs Python bindings to enable this app."
+            "The `oqs` module could not be imported. Install liboqs Python bindings and ensure native dependencies are available."
         ) from exc
 
 
