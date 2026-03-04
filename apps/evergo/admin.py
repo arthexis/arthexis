@@ -224,6 +224,7 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         "validation_state_check",
         "refreshed_at",
     )
+    list_display_links = ("order_number_link",)
     list_filter = (
         "validation_state",
         "status_name",
@@ -265,6 +266,8 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
             "Order",
             {
                 "fields": (
+                    "user",
+                    "remote_id",
                     "order_number",
                     "evergo_flow_link",
                     "status_name",
@@ -319,12 +322,13 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
     def order_number_link(self, obj):
         """Render order number as the primary record link in changelist rows."""
         value = obj.order_number or str(obj.remote_id)
-        change_url = reverse("admin:evergo_evergoorder_change", args=[obj.pk])
-        return format_html('<a href="{}">{}</a>', change_url, value)
+        return value
 
     @admin.display(description="Status Name", ordering="status_name")
     def status_name_link(self, obj):
         """Render status text linking directly to the public Evergo process flow."""
+        if not getattr(obj, "remote_id", None):
+            return "-"
         value = obj.status_name or "-"
         return format_html('<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>', self._flow_url(obj), value)
 
@@ -339,6 +343,8 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
     @admin.display(description="Process SO")
     def evergo_flow_link(self, obj):
         """Show a direct link to the Evergo order processing flow on change view."""
+        if not getattr(obj, "remote_id", None):
+            return "-"
         return format_html(
             '<a class="button" href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
             self._flow_url(obj),
@@ -347,7 +353,20 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     def _flow_url(self, obj):
         """Build the public order tracking flow URL for an Evergo order snapshot."""
+        if not getattr(obj, "remote_id", None):
+            return ""
         return reverse("evergo:order-tracking-public", kwargs={"order_id": obj.remote_id})
+
+    def get_queryset(self, request):
+        """Restrict order visibility to the current user's linked Evergo profile."""
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(user__user=request.user)
+
+    def has_add_permission(self, request):
+        """Disallow manual admin creation; orders are synchronized from Evergo."""
+        return False
 
     @admin.display(description="Valid", boolean=True)
     def validation_state_check(self, obj):
@@ -394,6 +413,9 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     def process_so_action(self, request, obj):
         """Expose a change-view tool button that opens the SO processing flow."""
+        if not getattr(obj, "remote_id", None):
+            self.message_user(request, _("Order has no remote ID yet."), level=messages.WARNING)
+            return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[obj.pk]))
         return HttpResponseRedirect(self._flow_url(obj))
 
     process_so_action.label = _("Process SO")
