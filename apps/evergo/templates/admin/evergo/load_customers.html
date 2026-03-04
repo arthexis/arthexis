@@ -1,34 +1,18 @@
 {% extends "admin/base_site.html" %}
+{% load i18n %}
 
-{% block extrastyle %}
-  {{ block.super }}
-  <style>
-    .evergo-load-customers-form textarea {
-      padding: 12px 14px;
-      line-height: 1.5;
-    }
-
-    .evergo-load-customers-form .form-line-copy {
-      margin: 0 0 12px;
-      display: block;
-    }
-
-    .evergo-load-customers-form .submit-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .evergo-load-customers-form .submit-row .button,
-    .evergo-load-customers-form .submit-row .default {
-      box-sizing: border-box;
-      border-radius: 4px;
-      min-width: 140px;
-      text-align: center;
-      display: inline-block;
-      text-decoration: none;
-    }
-  </style>
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo;
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo;
+    <a href="{% url 'admin:evergo_evergocustomer_changelist' %}">{% translate "Customers" %}</a>
+    |
+    <a href="{% url 'admin:evergo_evergoorder_changelist' %}">{% translate "Orders" %}</a>
+    &rsaquo;
+    {{ title }}
+  </div>
 {% endblock %}
 
 {% block content %}
@@ -70,9 +54,14 @@
       </fieldset>
 
       <div class="submit-row">
-        <button type="submit" class="default" onclick="document.getElementById('id_load_mode').value='filtered';">Load filtered customers</button>
-        <button type="submit" class="button" onclick="document.getElementById('id_load_mode').value='all';">Load all customers</button>
-        <a href="{% url 'admin:evergo_evergouser_changelist' %}" class="button">Cancel</a>
+        <input type="submit" value="Load filtered customers" class="default" onclick="document.getElementById('id_load_mode').value='filtered';" />
+        <input
+          type="submit"
+          value="Load all customers"
+          class="button"
+          onclick="document.getElementById('id_load_mode').value='all'; return confirm('{% translate "This will sync every customer available to this profile. Continue?" %}');"
+        />
+        <a href="{% url 'admin:evergo_evergocustomer_changelist' %}" class="button">Cancel</a>
       </div>
     </form>
   </div>
