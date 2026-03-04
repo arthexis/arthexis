@@ -59,3 +59,4 @@ def test_app_down_template_uses_dark_background():
     assert DARK_THEME_BACKGROUND_STYLE in content
     assert "main {" in content
     assert "background: #ffffff;" in content
+    assert re.search(r"color\s*:\s*#111827\s*;", content)
