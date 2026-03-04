@@ -14,13 +14,10 @@ import config.route_providers as route_providers
 
 @override_settings(ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK=False)
 def test_explicit_route_provider_discovery_without_legacy_fallback():
-    """Route discovery should continue to resolve explicit providers when fallback is disabled."""
+    """Fallback-disable mode should fail when any app still relies on implicit URL mounting."""
 
-    routes = {str(pattern.pattern) for pattern in route_providers.autodiscovered_route_patterns()}
-
-    assert "blog/" not in routes
-    assert "awg/" in routes
-    assert "actions/api/" in routes
+    with pytest.raises(ImproperlyConfigured, match="fallback include is disabled"):
+        route_providers.autodiscovered_route_patterns()
 
 
 def test_legacy_fallback_warns_when_app_relies_on_implicit_urls(monkeypatch):
@@ -80,6 +77,109 @@ def test_legacy_fallback_disabled_fails_for_apps_without_routes(monkeypatch):
 
     with pytest.raises(ImproperlyConfigured, match="fallback include is disabled"):
         route_providers.autodiscovered_route_patterns()
+
+
+def test_legacy_fallback_warns_when_routes_module_still_relies_on_implicit_urls(monkeypatch):
+    """Apps with ``routes.py`` should still be flagged if they rely on implicit fallback includes."""
+
+    module_name = "legacy_fake_app_routes"
+    routes_name = f"{module_name}.routes"
+    urls_name = f"{module_name}.urls"
+
+    fake_module = ModuleType(module_name)
+    fake_routes = ModuleType(routes_name)
+    fake_routes.ROOT_URLPATTERNS = []
+    fake_urls = ModuleType(urls_name)
+    fake_urls.urlpatterns = []
+
+    monkeypatch.setitem(sys.modules, module_name, fake_module)
+    monkeypatch.setitem(sys.modules, routes_name, fake_routes)
+    monkeypatch.setitem(sys.modules, urls_name, fake_urls)
+    monkeypatch.setattr(
+        route_providers,
+        "_iter_project_apps",
+        lambda: [
+            SimpleNamespace(
+                name=module_name,
+                label="legacy-fake-routes",
+                path="/workspace/arthexis/apps/legacy_fake_app_routes",
+            )
+        ],
+    )
+
+    with pytest.deprecated_call(match="Implicit route-provider fallback include is deprecated"):
+        patterns = route_providers.autodiscovered_route_patterns()
+
+    assert {str(pattern.pattern) for pattern in patterns} == {"legacy-fake-routes/"}
+
+
+@override_settings(ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK=False)
+def test_legacy_fallback_disabled_fails_when_routes_module_omits_legacy_mounts(monkeypatch):
+    """Disabling fallback should fail for apps with ``routes.py`` that still rely on implicit includes."""
+
+    module_name = "legacy_fake_app_routes_disabled"
+    routes_name = f"{module_name}.routes"
+    api_urls_name = f"{module_name}.api.urls"
+
+    fake_module = ModuleType(module_name)
+    fake_routes = ModuleType(routes_name)
+    fake_routes.ROOT_URLPATTERNS = []
+    fake_api_urls = ModuleType(api_urls_name)
+    fake_api_urls.urlpatterns = []
+
+    monkeypatch.setitem(sys.modules, module_name, fake_module)
+    monkeypatch.setitem(sys.modules, routes_name, fake_routes)
+    monkeypatch.setitem(sys.modules, api_urls_name, fake_api_urls)
+    monkeypatch.setattr(
+        route_providers,
+        "_iter_project_apps",
+        lambda: [
+            SimpleNamespace(
+                name=module_name,
+                label="legacy-fake-routes-disabled",
+                path="/workspace/arthexis/apps/legacy_fake_app_routes_disabled",
+            )
+        ],
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="fallback include is disabled"):
+        route_providers.autodiscovered_route_patterns()
+
+
+def test_legacy_api_urls_are_not_double_included_when_explicitly_mounted(monkeypatch):
+    """Fallback should skip ``api.urls`` when it is already included by ``ROOT_URLPATTERNS``."""
+
+    module_name = "legacy_fake_app_api"
+    routes_name = f"{module_name}.routes"
+    api_urls_name = f"{module_name}.api.urls"
+
+    fake_module = ModuleType(module_name)
+    fake_routes = ModuleType(routes_name)
+    fake_api_urls = ModuleType(api_urls_name)
+    fake_api_urls.urlpatterns = []
+
+    monkeypatch.setitem(sys.modules, module_name, fake_module)
+    monkeypatch.setitem(sys.modules, routes_name, fake_routes)
+    monkeypatch.setitem(sys.modules, api_urls_name, fake_api_urls)
+
+    fake_routes.ROOT_URLPATTERNS = [
+        route_providers.path("legacy-fake-api/api/", route_providers.include(api_urls_name))
+    ]
+    monkeypatch.setattr(
+        route_providers,
+        "_iter_project_apps",
+        lambda: [
+            SimpleNamespace(
+                name=module_name,
+                label="legacy-fake-api",
+                path="/workspace/arthexis/apps/legacy_fake_app_api",
+            )
+        ],
+    )
+
+    patterns = route_providers.autodiscovered_route_patterns()
+
+    assert [str(pattern.pattern) for pattern in patterns] == ["legacy-fake-api/api/"]
 
 
 def test_duplicate_prefix_detection_fails_for_overlapping_cross_app_mounts():

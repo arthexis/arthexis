@@ -167,7 +167,9 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
     - Include legacy ``urls`` under ``/<app_label>/`` when ``routes.py`` is
       absent, or when ``routes.py`` does not already mount that app's
       ``urls`` module.
-    - Include optional ``api.urls`` under ``/<app_label>/api/`` when present.
+    - Include legacy ``api.urls`` under ``/<app_label>/api/`` when ``routes.py``
+      is absent, or when ``routes.py`` does not already mount that app's
+      ``api.urls`` module.
     """
 
     patterns: list[URLPattern] = []
@@ -200,12 +202,23 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
 
         has_legacy_urls = _module_exists(app_urls_module)
         has_legacy_api_urls = _module_exists(app_api_urls_module)
-        if not has_routes_module and (has_legacy_urls or has_legacy_api_urls):
-            apps_relying_on_legacy_fallback.append(app_config.label)
 
         routes_already_include_app_urls = _patterns_include_module(
             root_patterns, app_urls_module
         )
+        routes_already_include_app_api_urls = _patterns_include_module(
+            root_patterns, app_api_urls_module
+        )
+
+        app_relies_on_legacy_fallback = (
+            has_legacy_urls
+            and not routes_already_include_app_urls
+            or has_legacy_api_urls
+            and not routes_already_include_app_api_urls
+        )
+        if app_relies_on_legacy_fallback:
+            apps_relying_on_legacy_fallback.append(app_config.label)
+
         if _legacy_fallback_enabled() and not routes_already_include_app_urls:
             urls_pattern = _include_if_exists(
                 app_config,
@@ -218,7 +231,7 @@ def autodiscovered_route_patterns() -> list[URLPattern]:
                     (str(urls_pattern.pattern), app_config.label, "legacy:urls")
                 )
 
-        if _legacy_fallback_enabled():
+        if _legacy_fallback_enabled() and not routes_already_include_app_api_urls:
             api_pattern = _include_if_exists(
                 app_config,
                 "api.urls",
