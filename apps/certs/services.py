@@ -563,6 +563,13 @@ def verify_certificate(
     certificate_key_path: Path | None,
     sudo: str = "sudo",
 ) -> CertificateVerificationResult:
+    """Validate certificate files and cryptographic metadata for a domain.
+
+    Filesystem permission issues are converted into verification messages so
+    callers (for example status commands) do not crash when certificate paths
+    are root-owned.
+    """
+
     messages: list[str] = []
     ok = True
 
@@ -571,17 +578,39 @@ def verify_certificate(
         ok = False
         messages.append(message)
 
-    if not certificate_path:
-        add_issue("Certificate path is not set.")
-    elif not certificate_path.exists():
-        add_issue(f"Certificate file not found at {certificate_path}.")
+    def path_exists(path: Path, *, label: str) -> bool | None:
+        """Return ``True`` when *path* is accessible and present.
 
-    if not certificate_key_path:
-        add_issue("Certificate key path is not set.")
-    elif not certificate_key_path.exists():
-        add_issue(f"Certificate key file not found at {certificate_key_path}.")
+        ``Path.exists`` can raise :class:`PermissionError` for restricted
+        directories (such as ``/etc/letsencrypt/live``). In that case we record
+        a concrete issue and continue with remaining checks.
+        """
 
-    if certificate_path and certificate_path.exists():
+        try:
+            return path.exists()
+        except PermissionError as exc:
+            add_issue(f"{label} path is not accessible at {path}: {exc}.")
+            return None
+
+    def check_path(path: Path | None, *, label: str) -> bool | None:
+        """Check whether a path is configured, accessible, and present."""
+
+        if not path:
+            add_issue(f"{label} path is not set.")
+            return None
+
+        exists = path_exists(path, label=label)
+        if exists is False:
+            add_issue(f"{label} file not found at {path}.")
+        return exists
+
+    cert_exists: bool | None = check_path(certificate_path, label="Certificate")
+    key_exists: bool | None = check_path(
+        certificate_key_path,
+        label="Certificate key",
+    )
+
+    if certificate_path and cert_exists is True:
         try:
             enddate = get_certificate_expiration(
                 certificate_path=certificate_path, sudo=sudo
@@ -630,8 +659,8 @@ def verify_certificate(
     if (
         certificate_path
         and certificate_key_path
-        and certificate_path.exists()
-        and certificate_key_path.exists()
+        and cert_exists is True
+        and key_exists is True
     ):
         try:
             cert_modulus = _run_command(

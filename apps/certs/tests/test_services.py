@@ -509,3 +509,33 @@ def test_request_certbot_certificate_godaddy_challenge_failure_includes_dns_hint
         )
 
     assert "Using DNS-01" in str(exc_info.value)
+
+
+def test_verify_certificate_handles_permission_error():
+    """Permission errors while probing certificate paths should not crash verification."""
+
+    class RestrictedPath:
+        def __init__(self, value: str):
+            self.value = value
+
+        def __str__(self) -> str:
+            return self.value
+
+        def exists(self) -> bool:
+            raise PermissionError("access denied")
+
+    result = services.verify_certificate(
+        domain="example.com",
+        certificate_path=RestrictedPath("/etc/letsencrypt/live/example/fullchain.pem"),
+        certificate_key_path=RestrictedPath("/etc/letsencrypt/live/example/privkey.pem"),
+        sudo="",
+    )
+
+    assert result.ok is False
+    assert any(
+        "Certificate path is not accessible" in message for message in result.messages
+    )
+    assert any(
+        "Certificate key path is not accessible" in message
+        for message in result.messages
+    )
