@@ -82,6 +82,7 @@ def test_operator_interface_notice_page_renders_supported_versions(client):
     assert response.status_code == 200
     content = response.content.decode()
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
+    assert "background: #111827;" in content
     for version in ("1.6J", "2.0.1", "2.1"):
         assert f"OCPP {version}" in content
 
@@ -298,6 +299,7 @@ def test_operator_site_interface_disabled_returns_operator_notice(client):
     content = response.content.decode()
     assert "Charging Station Interface Endpoint" in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
+    assert "background: #111827;" in content
 
 
 def test_operator_site_interface_redirects_to_configured_interface_landing(client):
@@ -379,6 +381,7 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     content = response.content.decode()
     assert 'id="operator-interface-title"' in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
+    assert "background: #111827;" in content
 
 
 def test_operator_interface_mode_query_param_alone_does_not_hide_navigation(client):

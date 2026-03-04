@@ -46,3 +46,14 @@ location /health {
 
     assert result == 0
     assert conf.read_text(encoding="utf-8").startswith("# Not a server block")
+
+
+def test_app_down_template_uses_dark_background():
+    """503 maintenance page should keep a dark outer background and white card."""
+
+    app_down_template = Path("config/data/nginx/maintenance/app-down.html")
+    content = app_down_template.read_text(encoding="utf-8")
+
+    assert "background: #111827;" in content
+    assert "main {" in content
+    assert "background: #ffffff;" in content
