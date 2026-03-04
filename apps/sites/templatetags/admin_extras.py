@@ -325,8 +325,12 @@ def model_admin_actions(context, app_label, model_name):
     actions = []
     seen = set()
 
+    def action_key(value: str) -> str:
+        return str(value or "").strip().lower().replace("-", "_")
+
     def add_action(action_name, func, label, url, method="get", caller_sigil=""):
-        if action_name in seen or not url:
+        key = action_key(action_name)
+        if key in seen or not url:
             return
         action = DashboardAction.from_legacy(
             label=str(label),
@@ -336,7 +340,7 @@ def model_admin_actions(context, app_label, model_name):
         ).as_rendered_action()
         action["is_discover"] = bool(getattr(func, "is_discover_action", False)) or bool(action["is_discover"])
         actions.append(action)
-        seen.add(action_name)
+        seen.add(key)
 
     content_type = ContentType.objects.get_for_model(model, for_concrete_model=False)
     for configured_action in DashboardAction.objects.filter(
@@ -346,7 +350,7 @@ def model_admin_actions(context, app_label, model_name):
         payload = configured_action.as_rendered_action()
         if payload["url"]:
             actions.append(payload)
-            seen.add(configured_action.slug)
+            seen.add(action_key(configured_action.slug))
 
     for action_name, (func, _name, description) in model_admin.get_actions(
         request
@@ -397,7 +401,7 @@ def model_admin_actions(context, app_label, model_name):
 
     def iter_model_admin_named_actions(action_names, *, skip_queryset_actions):
         for action_name in action_names:
-            if action_name in seen:
+            if action_key(action_name) in seen:
                 continue
             func = getattr(model_admin, action_name, None)
             if func is None:

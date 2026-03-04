@@ -56,8 +56,14 @@ class DashboardActionAdmin(EntityModelAdmin):
         if request.method.lower() != "post":
             raise PermissionDenied
         action = (
-            DashboardAction.objects.filter(pk=action_id, is_active=True, recipe__isnull=False)
-            .select_related("recipe")
+            DashboardAction.objects.filter(
+                pk=action_id,
+                is_active=True,
+                recipe__isnull=False,
+                target_type=DashboardAction.TargetType.RECIPE,
+                http_method=DashboardAction.HttpMethod.POST,
+            )
+            .select_related("recipe", "content_type")
             .first()
         )
         if action is None:
