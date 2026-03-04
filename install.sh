@@ -505,7 +505,7 @@ collect_requirement_files() {
     local -n out_array="$1"
 
     mapfile -t out_array < <(find "$BASE_DIR" -maxdepth 1 -type f \
-        \(-name 'requirements.txt' -o -name 'requirements-hw.txt'\) -print | sort)
+        \( -name 'requirements.txt' -o -name 'requirements-hw.txt' \) -print | sort)
 }
 
 compute_requirements_checksum() {
