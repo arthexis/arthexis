@@ -24,8 +24,10 @@ def _load_qrcode_module():
 
     try:
         import qrcode
-    except ModuleNotFoundError:
-        return None
+    except ModuleNotFoundError as exc:
+        if exc.name == "qrcode":
+            return None
+        raise
     return qrcode
 
 
