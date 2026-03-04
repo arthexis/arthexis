@@ -696,6 +696,162 @@ def test_evergo_customer_admin_change_form_has_status_readonly(admin_client):
 
 
 @pytest.mark.django_db
+def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow_link(admin_client):
+    """Regression: order changelist should prioritize SO link and hide remote/user columns."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-columns",
+        email="suite-admin-order-columns@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-columns@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=5512,
+        order_number="SO-5512",
+        status_name="Programado",
+        assigned_engineer_name="Assigned Engineer [Name]",
+    )
+
+    changelist_url = reverse("admin:evergo_evergoorder_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+
+    assert "Order Number" in content
+    assert "Remote id" not in content
+    assert 'scope="col" class="column-user"' not in content
+    assert reverse("admin:evergo_evergoorder_change", args=[order.pk]) in content
+    assert reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id}) in content
+    assert "Assigned Engineer [Name]" not in content
+    assert 'field-assigned_engineer_name_cleaved">Assigned Engineer<' in content
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admin_client):
+    """Regression: order change view should expose Process SO tool action and link field."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-process",
+        email="suite-admin-order-process@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-process@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=6601, order_number="SO-6601")
+
+    change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    flow_url = reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id})
+
+    assert "Process SO" in content
+    assert flow_url in content
+    assert "Open Evergo Flow" in content
+
+    action_url = reverse(
+        "admin:evergo_evergoorder_actions",
+        args=[order.pk, "process_so_action"],
+    )
+    action_response = admin_client.post(action_url)
+    assert action_response.status_code == 302
+    assert action_response["Location"] == flow_url
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
+    """Regression: missing remote_id should not break order change page nor SO action."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-process-missing-remote-id",
+        email="suite-admin-order-process-missing-remote-id@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-process-missing-remote-id@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=9901, order_number="SO-9901")
+    EvergoOrder.objects.filter(pk=order.pk).update(remote_id=None)
+    order.refresh_from_db()
+
+    change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Open Evergo Flow" not in content
+
+    action_url = reverse(
+        "admin:evergo_evergoorder_actions",
+        args=[order.pk, "process_so_action"],
+    )
+    action_response = admin_client.post(action_url, follow=True)
+    assert action_response.status_code == 200
+    assert "Order has no remote ID yet." in action_response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_get_queryset_limits_non_superuser_visibility():
+    """Security regression: non-superusers should only see orders from their own Evergo profile."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-owner-visible",
+        email="suite-admin-order-owner-visible@example.com",
+        is_staff=True,
+    )
+    other_owner = user_model.objects.create_user(
+        username="suite-admin-order-owner-hidden",
+        email="suite-admin-order-owner-hidden@example.com",
+        is_staff=True,
+    )
+
+    owner_profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-owner-visible@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    other_profile = EvergoUser.objects.create(
+        user=other_owner,
+        evergo_email="suite-admin-order-owner-hidden@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    visible_order = EvergoOrder.objects.create(user=owner_profile, remote_id=9911, order_number="SO-9911")
+    EvergoOrder.objects.create(user=other_profile, remote_id=9912, order_number="SO-9912")
+
+    model_admin = admin.site._registry[EvergoOrder]
+    request = RequestFactory().get(reverse("admin:evergo_evergoorder_changelist"))
+    request.user = owner
+
+    queryset = model_admin.get_queryset(request)
+
+    assert list(queryset.values_list("id", flat=True)) == [visible_order.id]
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_disables_add_view(admin_client):
+    """Regression: admin add flow should be disabled for synchronized Evergo orders."""
+
+    add_url = reverse("admin:evergo_evergoorder_add")
+    response = admin_client.get(add_url)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
 def test_evergo_customer_admin_date_filters_local_and_remote(admin_client):
     """Regression: customer changelist should filter local and remote date ranges."""
 
