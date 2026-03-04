@@ -301,6 +301,8 @@ def test_operator_site_interface_disabled_returns_operator_notice(client):
     assert response.status_code == 200
     content = response.content.decode()
     assert "Charging Station Interface Endpoint" in content
+    assert ".notice h1" in content
+    assert "color: #0f172a;" in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
     assert DARK_THEME_BACKGROUND_STYLE in content
 
