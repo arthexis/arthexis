@@ -10,7 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from config import settings
 
-pytestmark = pytest.mark.critical
+pytestmark = pytest.mark.regression
 
 
 def _extract_manifest_apps(manifest_path: Path) -> list[str]:

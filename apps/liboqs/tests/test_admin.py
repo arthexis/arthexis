@@ -9,7 +9,7 @@ from apps.liboqs.admin import OqsAlgorithmAdmin
 from apps.liboqs.models import OqsAlgorithm
 
 
-@pytest.mark.critical
+@pytest.mark.regression
 def test_oqs_algorithm_admin_registered() -> None:
     """Regression: OqsAlgorithm should remain available in Django admin."""
 

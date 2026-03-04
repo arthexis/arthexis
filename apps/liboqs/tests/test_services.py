@@ -9,7 +9,7 @@ import pytest
 from apps.liboqs.services import OqsImportError, discover_algorithms
 
 
-@pytest.mark.critical
+@pytest.mark.regression
 def test_discover_algorithms_raises_specific_error_without_oqs(monkeypatch: pytest.MonkeyPatch):
     """Regression: missing bindings should raise a dedicated, actionable error."""
 
@@ -22,7 +22,7 @@ def test_discover_algorithms_raises_specific_error_without_oqs(monkeypatch: pyte
         discover_algorithms()
 
 
-@pytest.mark.critical
+@pytest.mark.regression
 def test_discover_algorithms_returns_sorted_mechanisms(monkeypatch: pytest.MonkeyPatch):
     """Regression: discovered algorithm names should be stable and sorted."""
 
