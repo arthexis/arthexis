@@ -132,12 +132,6 @@ def _render_operator_interface_fallback(request, site):
     )
 
 
-def _render_operator_interface_fallback(request, site):
-    """Render the OCPP-facing fallback notice used for disabled operator interfaces."""
-
-    return _render_operator_interface_notice(request, site)
-
-
 @landing("Home")
 def index(request):
     """Render the public home page or interface fallback when configured."""
