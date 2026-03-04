@@ -31,25 +31,8 @@ def discover_suite_tests(*, timeout: int = 120) -> list[dict[str, object]]:
         TestDiscoveryError: If pytest collection fails or emits invalid JSON.
     """
 
-    collector = (
-        "import json, pytest;\n"
-        "class P:\n"
-        "  def __init__(self): self.items=[]\n"
-        "  def pytest_collection_modifyitems(self, session, config, items):\n"
-        "    for item in items:\n"
-        "      path=str(getattr(item, 'path', '') or '')\n"
-        "      self.items.append({\n"
-        "        'node_id': item.nodeid,\n"
-        "        'name': item.name,\n"
-        "        'file_path': path,\n"
-        "        'module_path': getattr(getattr(item,'module',None),'__name__','') or '',\n"
-        "        'class_name': getattr(getattr(item,'cls',None),'__name__','') or '',\n"
-        "        'marks': sorted([k for k,v in item.keywords.items() if v and isinstance(k,str)])\n"
-        "      })\n"
-        "p=P(); rc=pytest.main(['--collect-only','-q','--disable-warnings'], plugins=[p]);\n"
-        "print(json.dumps({'returncode': rc, 'items': p.items}))\n"
-    )
-    command = [sys.executable, "-c", collector]
+    collector_script_path = Path(__file__).with_name("_pytest_collector.py")
+    command = [sys.executable, str(collector_script_path)]
 
     try:
         result = subprocess.run(
@@ -89,7 +72,7 @@ def discover_suite_tests(*, timeout: int = 120) -> list[dict[str, object]]:
         file_path = _normalize_file_path(base_dir, str(raw.get("file_path", "")))
         normalized.append(
             {
-                "node_id": node_id,
+                "node_id": node_id[:512],
                 "name": str(raw.get("name", ""))[:255],
                 "module_path": str(raw.get("module_path", ""))[:512],
                 "class_name": str(raw.get("class_name", ""))[:255],
