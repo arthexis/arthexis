@@ -75,7 +75,9 @@ class Command(BaseCommand):
 
         if slug:
             if include_enabled and include_disabled:
-                _kind, is_enabled = get_feature_state(slug=slug, kind=kind)
+                raise CommandError(
+                    "Choose only one of --enabled or --disabled when using --feature."
+                )
             elif include_enabled:
                 _kind = set_feature_enabled(slug=slug, enabled=True, kind=kind)
                 _kind, is_enabled = get_feature_state(slug=slug, kind=_kind)

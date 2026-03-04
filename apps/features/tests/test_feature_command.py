@@ -122,6 +122,19 @@ def test_features_command_with_feature_flag_behaves_like_singular_toggle() -> No
 
 
 @pytest.mark.django_db
+def test_features_command_with_feature_rejects_mutually_exclusive_status_flags() -> None:
+    """Plural command should reject conflicting status flags for ``--feature`` mode."""
+
+    feature = Feature.objects.create(slug="conflict-slug", display="Conflict", is_enabled=False)
+
+    with pytest.raises(CommandError, match="Choose only one of --enabled or --disabled"):
+        call_command("features", "--feature", feature.slug, "--enabled", "--disabled")
+
+    feature.refresh_from_db()
+    assert feature.is_enabled is False
+
+
+@pytest.mark.django_db
 def test_features_command_reset_all_reloads_mainstream_fixtures() -> None:
     """Reset-all should mirror admin reload behavior by replacing feature rows."""
 

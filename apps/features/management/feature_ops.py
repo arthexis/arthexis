@@ -27,7 +27,9 @@ def infer_kind_for_slug(*, slug: str, kind: str | None = None) -> str:
         CommandError: If the slug is unknown or ambiguous across feature catalogs.
     """
 
-    if kind:
+    if kind is not None:
+        if kind not in (FeatureKind.SUITE, FeatureKind.NODE):
+            raise CommandError(f"Unsupported feature kind: {kind}")
         return kind
     suite_exists = Feature.objects.filter(slug=slug).exists()
     node_exists = NodeFeature.objects.filter(slug=slug).exists()
