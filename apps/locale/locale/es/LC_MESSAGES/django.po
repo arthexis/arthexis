@@ -6076,3 +6076,18 @@ msgstr "Error al copiar. Por favor, inténtalo de nuevo."
 
 #~ msgid "Alt text"
 #~ msgstr "Texto alternativo"
+
+msgid "Feature metadata including optional runtime parameters editable from admin."
+msgstr "Metadatos de la funcionalidad, incluidos parámetros de ejecución opcionales editables desde administración."
+
+msgid "Feature parameters"
+msgstr "Parámetros de funcionalidad"
+
+msgid "Default language"
+msgstr "Idioma predeterminado"
+
+msgid "Fallback UI language used when users have not selected a language yet."
+msgstr "Idioma de interfaz alternativo cuando los usuarios aún no han seleccionado uno."
+
+msgid "Spanish"
+msgstr "Español"

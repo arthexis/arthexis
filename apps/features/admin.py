@@ -20,6 +20,7 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.app.models import Application
 
 from .models import Feature, FeatureNote, FeatureTest
+from .parameters import get_feature_parameter_definitions, set_feature_parameter_values
 
 
 def _autogrow_textarea_widget() -> forms.Textarea:
@@ -79,8 +80,82 @@ class SourceAppListFilter(admin.SimpleListFilter):
         return queryset.filter(main_app_id=app_id)
 
 
+class FeatureAdminForm(forms.ModelForm):
+    """Feature admin form with dynamic parameter fields."""
+
+    PARAM_FIELD_PREFIX = "param__"
+
+    class Meta:
+        model = Feature
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._parameter_keys: list[str] = []
+        slug = (self.instance.slug or "").strip()
+        known_dynamic_field_names = {
+            name for name in self.fields if name.startswith(self.PARAM_FIELD_PREFIX)
+        }
+        metadata = self.instance.metadata if isinstance(self.instance.metadata, dict) else {}
+        parameters = metadata.get("parameters")
+        if not isinstance(parameters, dict):
+            parameters = {}
+
+        for definition in get_feature_parameter_definitions(slug):
+            field_name = f"{self.PARAM_FIELD_PREFIX}{definition.key}"
+            self._parameter_keys.append(definition.key)
+            if definition.choices:
+                field = forms.ChoiceField(required=False, choices=definition.choices)
+            else:
+                field = forms.CharField(required=False)
+            field.label = definition.label
+            field.help_text = definition.help_text
+            field.initial = definition.default
+            self.fields[field_name] = field
+            initial_value = parameters.get(definition.key, definition.default)
+            if not initial_value:
+                initial_value = definition.default
+            self.initial[field_name] = str(initial_value).strip()
+
+        for field_name in known_dynamic_field_names:
+            key = field_name.replace(self.PARAM_FIELD_PREFIX, "", 1)
+            if key not in self._parameter_keys:
+                self.fields.pop(field_name, None)
+
+    def clean(self):
+        """Validate dynamic parameter values using feature parameter definitions."""
+
+        cleaned_data = super().clean()
+        slug = (cleaned_data.get("slug") or self.instance.slug or "").strip()
+        if not slug:
+            return cleaned_data
+
+        definitions = {d.key: d for d in get_feature_parameter_definitions(slug)}
+        for key, definition in definitions.items():
+            field_name = f"{self.PARAM_FIELD_PREFIX}{key}"
+            if field_name not in self.fields:
+                continue
+            try:
+                cleaned_data[field_name] = definition.normalize(cleaned_data.get(field_name))
+            except ValueError as exc:
+                self.add_error(field_name, str(exc))
+
+        return cleaned_data
+
+    def cleaned_parameter_values(self) -> dict[str, str]:
+        """Return normalized dynamic parameter values ready for persistence."""
+
+        values: dict[str, str] = {}
+        for key in self._parameter_keys:
+            field_name = f"{self.PARAM_FIELD_PREFIX}{key}"
+            if field_name in self.cleaned_data:
+                values[key] = self.cleaned_data[field_name]
+        return values
+
+
 @admin.register(Feature)
 class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
+    form = FeatureAdminForm
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
     actions = ("toggle_selected_feature",)
@@ -126,6 +201,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
                     "admin_views",
                     "public_views",
                     "service_views",
+                    "metadata",
                 )
             },
         ),
@@ -278,6 +354,28 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             ),
         ]
         return custom_urls + urls
+
+    def get_fieldsets(self, request, obj=None):
+        """Append dynamic parameter fields for features that define editable params."""
+
+        fieldsets = list(super().get_fieldsets(request, obj))
+        if obj is None:
+            return fieldsets
+
+        parameter_fields = [
+            f"{FeatureAdminForm.PARAM_FIELD_PREFIX}{definition.key}"
+            for definition in get_feature_parameter_definitions(obj.slug)
+        ]
+        if parameter_fields:
+            fieldsets.append((_("Feature parameters"), {"fields": tuple(parameter_fields)}))
+        return fieldsets
+
+    def save_model(self, request, obj, form, change):
+        """Persist both model fields and dynamic parameter values."""
+
+        if isinstance(form, FeatureAdminForm):
+            set_feature_parameter_values(obj, form.cleaned_parameter_values())
+        super().save_model(request, obj, form, change)
 
     def toggle_feature(self, request, feature_id: int):
         feature = self.get_object(request, feature_id)
