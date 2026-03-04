@@ -12,6 +12,7 @@ from django.conf import settings
 DEFAULT_TEST_MARKERS = {
     "", "asyncio", "anyio", "ddtrace", "django_db", "filterwarnings", "parametrize", "skip", "skipif", "usefixtures", "xfail"
 }
+MAX_NODE_ID_LENGTH = 512
 
 
 class TestDiscoveryError(RuntimeError):

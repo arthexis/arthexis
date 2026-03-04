@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import json
 
 import pytest
 from django.core.management import CommandError, call_command
 
-from apps.tests.discovery import _infer_app_label, _normalize_marks
+from apps.tests.discovery import MAX_NODE_ID_LENGTH, _infer_app_label, _normalize_marks, discover_suite_tests
 from apps.tests.models import SuiteTest
 
 

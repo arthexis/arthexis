@@ -10,6 +10,7 @@ from pathlib import Path
 
 from django.db import transaction
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
 from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
 from apps.tests.models import SuiteTest
