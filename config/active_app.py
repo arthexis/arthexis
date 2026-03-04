@@ -1,5 +1,7 @@
 import socket
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
+from typing import Iterator
 
 _HOSTNAME = socket.gethostname()
 _ACTIVE_APP: ContextVar[str] = ContextVar("active_app", default=_HOSTNAME)
@@ -18,3 +20,13 @@ def set_active_app(name: str) -> Token[str]:
 def reset_active_app(token: Token[str]) -> None:
     """Restore the active app name using a token returned by ``set_active_app``."""
     _ACTIVE_APP.reset(token)
+
+
+@contextmanager
+def active_app(name: str) -> Iterator[None]:
+    """Temporarily set and restore the active app name for the current context."""
+    token = set_active_app(name)
+    try:
+        yield
+    finally:
+        reset_active_app(token)

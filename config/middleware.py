@@ -11,7 +11,7 @@ from apps.core.models import UsageEvent
 from apps.nodes.models import Node
 from utils.sites import get_site
 
-from .active_app import reset_active_app, set_active_app
+from .active_app import active_app
 from .request_utils import is_https_request
 
 _is_https_request = is_https_request
@@ -29,13 +29,10 @@ class ActiveAppMiddleware:
         role_name = node.role.name if node and node.role else "Terminal"
         site_name = site.name if site else ""
         active = site_name or role_name
-        token = set_active_app(active)
-        request.site = site
-        request.active_app = active
-        try:
+        with active_app(active):
+            request.site = site
+            request.active_app = active
             response = self.get_response(request)
-        finally:
-            reset_active_app(token)
         return response
 
 
