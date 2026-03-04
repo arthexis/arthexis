@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 import pytest
 from django.core.management import CommandError, call_command
 
-from apps.tests.discovery import _infer_app_label, _normalize_marks
+from apps.tests.discovery import MAX_NODE_ID_LENGTH, _infer_app_label, _normalize_marks, discover_suite_tests
 from apps.tests.models import SuiteTest
 
 
@@ -98,3 +99,76 @@ def test_infer_app_label_from_apps_path() -> None:
 
     assert _infer_app_label("apps/tests/tests/test_test_management_command.py") == "tests"
     assert _infer_app_label("tests/test_misc.py") == ""
+
+
+
+def test_discover_suite_tests_truncates_long_node_ids(monkeypatch) -> None:
+    """Regression: discovery should cap node ids to the SuiteTest field length."""
+
+    long_node_id = "apps/tests/tests/test_long.py::test_case[" + ("x" * 700) + "]"
+    payload = {
+        "returncode": 0,
+        "items": [
+            {
+                "node_id": long_node_id,
+                "name": "test_case",
+                "file_path": "apps/tests/tests/test_long.py",
+                "module_path": "apps.tests.tests.test_long",
+                "class_name": "",
+                "marks": ["regression"],
+            }
+        ],
+    }
+
+    class FakeCompletedProcess:
+        stdout = "collected 1 item\n" + json.dumps(payload)
+        stderr = ""
+
+    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    tests = discover_suite_tests()
+
+    assert len(tests[0]["node_id"]) == MAX_NODE_ID_LENGTH
+    assert tests[0]["node_id"] == long_node_id[:MAX_NODE_ID_LENGTH]
+
+
+@pytest.mark.django_db
+def test_discover_subcommand_is_atomic_on_bulk_create_failure(monkeypatch) -> None:
+    """Regression: failed inserts should rollback deletions during refresh."""
+
+    SuiteTest.objects.create(
+        node_id="apps/tests/tests/test_existing.py::test_existing",
+        name="test_existing",
+    )
+
+    monkeypatch.setattr(
+        "apps.tests.management.commands.test.discover_suite_tests",
+        lambda: [
+            {
+                "node_id": "apps/tests/tests/test_new.py::test_new",
+                "name": "test_new",
+                "module_path": "apps.tests.tests.test_new",
+                "app_label": "tests",
+                "class_name": "",
+                "marks": [],
+                "file_path": "apps/tests/tests/test_new.py",
+                "is_parameterized": False,
+            }
+        ],
+    )
+
+    original_bulk_create = SuiteTest.objects.bulk_create
+
+    def raising_bulk_create(*args, **kwargs):
+        raise RuntimeError("insert failed")
+
+    monkeypatch.setattr(SuiteTest.objects, "bulk_create", raising_bulk_create)
+
+    with pytest.raises(RuntimeError, match="insert failed"):
+        call_command("test", "discover")
+
+    monkeypatch.setattr(SuiteTest.objects, "bulk_create", original_bulk_create)
+
+    assert SuiteTest.objects.filter(
+        node_id="apps/tests/tests/test_existing.py::test_existing"
+    ).exists()

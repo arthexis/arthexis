@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
 from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
 from apps.tests.models import SuiteTest
@@ -106,8 +107,9 @@ class Command(BaseCommand):
         except TestDiscoveryError as exc:
             raise CommandError(str(exc)) from exc
 
-        deleted_count, _deleted_details = SuiteTest.objects.all().delete()
-        SuiteTest.objects.bulk_create([SuiteTest(**item) for item in tests])
+        with transaction.atomic():
+            deleted_count, _deleted_details = SuiteTest.objects.all().delete()
+            SuiteTest.objects.bulk_create([SuiteTest(**item) for item in tests])
         self.stdout.write(
             self.style.SUCCESS(
                 f"Refreshed suite tests: removed {deleted_count}, discovered {len(tests)}."

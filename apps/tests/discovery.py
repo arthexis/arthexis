@@ -12,6 +12,7 @@ from django.conf import settings
 DEFAULT_TEST_MARKERS = {
     "", "asyncio", "anyio", "ddtrace", "django_db", "filterwarnings", "parametrize", "skip", "skipif", "usefixtures", "xfail"
 }
+MAX_NODE_ID_LENGTH = 512
 
 
 class TestDiscoveryError(RuntimeError):
@@ -89,7 +90,7 @@ def discover_suite_tests(*, timeout: int = 120) -> list[dict[str, object]]:
         file_path = _normalize_file_path(base_dir, str(raw.get("file_path", "")))
         normalized.append(
             {
-                "node_id": node_id,
+                "node_id": node_id[:MAX_NODE_ID_LENGTH],
                 "name": str(raw.get("name", ""))[:255],
                 "module_path": str(raw.get("module_path", ""))[:512],
                 "class_name": str(raw.get("class_name", ""))[:255],
