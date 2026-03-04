@@ -996,3 +996,43 @@ def test_evergo_admin_load_customers_wizard_shows_explicit_load_mode_buttons(adm
     assert response.status_code == 200
     assert b"Load all customers" in response.content
     assert b"Load filtered customers" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_breadcrumbs_link_customers_and_orders(admin_client):
+    """Regression: load customers wizard breadcrumb should fork to customer and order changelists."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'href="/admin/evergo/evergocustomer/"' in content
+    assert 'href="/admin/evergo/evergoorder/"' in content
+    assert "Customers" in content
+    assert "Orders" in content
+    assert "|" in content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_load_all_button_requires_confirmation(admin_client):
+    """Regression: load-all action should require explicit client-side confirmation."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Load all customers" in content
+    assert "return confirm('This will sync every customer available to this profile. Continue?');" in content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_cancel_returns_to_customers(admin_client):
+    """Regression: cancel action should use the customers changelist destination."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    assert 'href="/admin/evergo/evergocustomer/" class="button">Cancel</a>' in response.content.decode("utf-8")
