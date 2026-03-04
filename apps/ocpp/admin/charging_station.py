@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
 from ..models import Charger, ChargingStation
@@ -9,7 +10,7 @@ from .charge_point.actions.authorization import AuthorizationActionsMixin
 
 
 @admin.register(ChargingStation)
-class ChargingStationAdmin(AuthorizationActionsMixin, EntityModelAdmin):
+class ChargingStationAdmin(AuthorizationActionsMixin, OwnableAdminMixin, EntityModelAdmin):
     """Expose station-level commands that target all station charge points."""
 
     list_display = ("station_id", "display_name", "last_heartbeat", "location")

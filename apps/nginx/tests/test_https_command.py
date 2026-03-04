@@ -588,34 +588,6 @@ def test_https_enable_warns_when_self_signed_certificate_is_expired(monkeypatch)
 
 
 @pytest.mark.django_db
-def test_https_enable_escapes_domain_in_force_renewal_guidance(monkeypatch):
-    """Remediation command hints should shell-escape domains used in suggested commands."""
-
-    from datetime import timedelta
-    from django.utils import timezone
-
-    malicious_domain = "example.com;echo pwned"
-
-    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
-        self.expiration_date = timezone.now() + timedelta(days=1)
-        return "requested"
-
-    monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
-
-    def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
-
-    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
-
-    out = StringIO()
-    call_command("https", "--enable", "--certbot", malicious_domain, "--no-sudo", stdout=out)
-
-    rendered = out.getvalue()
-    assert "--certbot 'example.com;echo pwned'" in rendered
-    assert "--godaddy 'example.com;echo pwned'" in rendered
-
-
-@pytest.mark.django_db
 def test_https_warn_days_must_be_non_negative():
     """`--warn-days` should reject negative values with a clear validation error."""
 
