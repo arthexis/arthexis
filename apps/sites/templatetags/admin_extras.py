@@ -21,6 +21,8 @@ from django.utils.html import format_html_join
 from django.utils.text import capfirst
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+from apps.actions.models import DashboardAction
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
@@ -323,23 +325,28 @@ def model_admin_actions(context, app_label, model_name):
     actions = []
     seen = set()
 
-    def add_action(action_name, func, label, url, method="get"):
+    def add_action(action_name, func, label, url, method="get", caller_sigil=""):
         if not url:
             return
-        label_text = str(label)
-        method_value = str(method or "get").strip().lower()
-        if method_value not in {"get", "post", "put", "patch", "delete"}:
-            method_value = "get"
-        actions.append(
-            {
-                "url": url,
-                "label": label,
-                "method": method_value,
-                "is_discover": getattr(func, "is_discover_action", False)
-                or label_text.strip().lower() == "discover",
-            }
-        )
+        action = DashboardAction.from_legacy(
+            label=str(label),
+            method=str(method),
+            url=url,
+            caller_sigil=caller_sigil,
+        ).as_rendered_action()
+        action["is_discover"] = bool(getattr(func, "is_discover_action", False)) or bool(action["is_discover"])
+        actions.append(action)
         seen.add(action_name)
+
+    content_type = ContentType.objects.get_for_model(model, for_concrete_model=False)
+    for configured_action in DashboardAction.objects.filter(
+        content_type=content_type,
+        is_active=True,
+    ).select_related("recipe"):
+        payload = configured_action.as_rendered_action()
+        if payload["url"]:
+            actions.append(payload)
+            seen.add(configured_action.slug)
 
     for action_name, (func, _name, description) in model_admin.get_actions(
         request

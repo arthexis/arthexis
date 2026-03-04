@@ -7,8 +7,11 @@ import hmac
 import secrets
 import uuid
 
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.db import models
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -56,6 +59,133 @@ class RemoteAction(Ownable):
         """Return the human-readable action name."""
 
         return self.display
+
+
+class DashboardAction(models.Model):
+    """Declarative dashboard action rendered on an admin model row."""
+
+    class HttpMethod(models.TextChoices):
+        """Supported methods used by dashboard model-row actions."""
+
+        GET = "get", _("GET")
+        POST = "post", _("POST")
+
+    class TargetType(models.TextChoices):
+        """Supported executable targets for dashboard actions."""
+
+        ADMIN_URL = "admin_url", _("Admin URL Name")
+        ABSOLUTE_URL = "absolute_url", _("Absolute URL")
+        RECIPE = "recipe", _("Recipe")
+
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        related_name="dashboard_actions",
+        help_text=_("Model row where this action appears on the admin dashboard."),
+    )
+    slug = models.SlugField(max_length=100)
+    label = models.CharField(max_length=120)
+    http_method = models.CharField(
+        max_length=8,
+        choices=HttpMethod.choices,
+        default=HttpMethod.GET,
+    )
+    target_type = models.CharField(
+        max_length=24,
+        choices=TargetType.choices,
+        default=TargetType.ADMIN_URL,
+    )
+    admin_url_name = models.CharField(max_length=200, blank=True)
+    absolute_url = models.CharField(max_length=500, blank=True)
+    recipe = models.ForeignKey(
+        "recipes.Recipe",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="dashboard_actions",
+    )
+    caller_sigil = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text=_("Optional marker passed to downstream executables."),
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ("order", "label")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("content_type", "slug"),
+                name="actions_dashboardaction_unique_slug_per_model",
+            )
+        ]
+        verbose_name = _("Dashboard Action")
+        verbose_name_plural = _("Dashboard Actions")
+
+    def __str__(self) -> str:
+        """Return the UI label used for this dashboard action."""
+
+        return self.label
+
+    def clean(self):
+        """Validate target fields for the selected target type."""
+
+        super().clean()
+        if self.target_type == self.TargetType.ADMIN_URL and not self.admin_url_name:
+            raise ValidationError({"admin_url_name": _("Admin URL name is required.")})
+        if self.target_type == self.TargetType.ABSOLUTE_URL and not self.absolute_url:
+            raise ValidationError({"absolute_url": _("Absolute URL is required.")})
+        if self.target_type == self.TargetType.RECIPE and not self.recipe_id:
+            raise ValidationError({"recipe": _("Recipe is required.")})
+
+    @classmethod
+    def from_legacy(
+        cls,
+        *,
+        label: str,
+        method: str,
+        url: str,
+        caller_sigil: str = "",
+    ) -> "DashboardAction":
+        """Build an unsaved instance from legacy dashboard-action metadata."""
+
+        normalized_method = str(method or cls.HttpMethod.GET).strip().lower()
+        if normalized_method not in {cls.HttpMethod.GET, cls.HttpMethod.POST}:
+            normalized_method = cls.HttpMethod.GET
+        return cls(
+            slug="legacy-action",
+            label=label,
+            http_method=normalized_method,
+            target_type=cls.TargetType.ABSOLUTE_URL,
+            absolute_url=url,
+            caller_sigil=caller_sigil,
+        )
+
+    def resolve_url(self) -> str:
+        """Return the action target URL resolved from the configured target type."""
+
+        if self.target_type == self.TargetType.ADMIN_URL:
+            try:
+                return reverse(self.admin_url_name)
+            except NoReverseMatch:
+                return self.admin_url_name
+        if self.target_type == self.TargetType.ABSOLUTE_URL:
+            return self.absolute_url
+        if self.target_type == self.TargetType.RECIPE:
+            return reverse("admin:actions_dashboardaction_execute", args=[self.pk])
+        return ""
+
+    def as_rendered_action(self) -> dict[str, str | bool]:
+        """Return a template-friendly action payload for dashboard row rendering."""
+
+        return {
+            "url": self.resolve_url(),
+            "label": self.label,
+            "method": self.http_method,
+            "is_discover": self.label.strip().lower() == "discover",
+            "caller_sigil": self.caller_sigil,
+        }
 
 
 class RemoteActionToken(models.Model):

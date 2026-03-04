@@ -160,6 +160,25 @@ def test_remote_action_dashboard_button_opens_preview_page(admin_user):
     assert "openapi" in response.context_data["payload"].lower()
 
 
+def test_model_admin_actions_includes_declarative_dashboard_action(admin_client):
+    """Dashboard rows should include declarative actions from DashboardAction records."""
+
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.actions.models import DashboardAction
+    from apps.pyxel.models import PyxelViewport
+
+    response = admin_client.get(reverse("admin:index"))
+    assert response.status_code == 200
+
+    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    action = DashboardAction.objects.get(content_type=content_type, slug="open-viewport")
+
+    actions = model_admin_actions({"request": response.wsgi_request}, "pyxel", "PyxelViewport")
+
+    assert any(item["url"] == action.resolve_url() and item["method"] == "post" for item in actions)
+
+
 @pytest.mark.integration
 def test_remote_action_openapi_download_requires_explicit_query_param(admin_client):
     """Regression: OpenAPI endpoint only downloads when explicitly requested."""
