@@ -326,7 +326,7 @@ def model_admin_actions(context, app_label, model_name):
     seen = set()
 
     def add_action(action_name, func, label, url, method="get", caller_sigil=""):
-        if not url:
+        if action_name in seen or not url:
             return
         action = DashboardAction.from_legacy(
             label=str(label),

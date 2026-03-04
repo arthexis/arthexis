@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import yaml
+import logging
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
@@ -18,6 +19,7 @@ from apps.actions.openapi import build_openapi_spec
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -53,19 +55,41 @@ class DashboardActionAdmin(EntityModelAdmin):
 
         if request.method.lower() != "post":
             raise PermissionDenied
-        action = DashboardAction.objects.filter(pk=action_id, is_active=True).select_related("recipe").first()
-        if action is None or action.recipe_id is None:
+        action = (
+            DashboardAction.objects.filter(pk=action_id, is_active=True, recipe__isnull=False)
+            .select_related("recipe")
+            .first()
+        )
+        if action is None:
             raise PermissionDenied
         if not self.has_change_permission(request, action):
             raise PermissionDenied
+        if action.caller_sigil and not DashboardAction._is_safe_caller_sigil(action.caller_sigil):
+            self.message_user(
+                request,
+                _("Dashboard action '%(label)s' failed: invalid caller sigil.")
+                % {"label": action.label},
+                level=messages.ERROR,
+            )
+            return redirect("admin:index")
 
-        execution = action.recipe.execute(caller=action.caller_sigil or action.content_type.app_label)
-        self.message_user(
-            request,
-            _("Dashboard action '%(label)s' executed. Result: %(result)s")
-            % {"label": action.label, "result": execution.result},
-            level=messages.SUCCESS,
-        )
+        try:
+            execution = action.recipe.execute(caller=action.caller_sigil or action.content_type.app_label)
+        except Exception as exc:  # pragma: no cover - defensive: recipe runtime failures are dynamic
+            logger.exception("Dashboard action execution failed", extra={"action_id": action.pk})
+            self.message_user(
+                request,
+                _("Dashboard action '%(label)s' failed: %(error)s")
+                % {"label": action.label, "error": exc},
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                _("Dashboard action '%(label)s' executed. Result: %(result)s")
+                % {"label": action.label, "result": execution.result},
+                level=messages.SUCCESS,
+            )
         return redirect("admin:index")
 
 

@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import secrets
 import uuid
+from urllib.parse import urlparse
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
@@ -136,8 +137,33 @@ class DashboardAction(models.Model):
             raise ValidationError({"admin_url_name": _("Admin URL name is required.")})
         if self.target_type == self.TargetType.ABSOLUTE_URL and not self.absolute_url:
             raise ValidationError({"absolute_url": _("Absolute URL is required.")})
+        if self.target_type == self.TargetType.ABSOLUTE_URL:
+            parsed = urlparse((self.absolute_url or "").strip())
+            is_safe_relative = bool(parsed.path) and not parsed.scheme and not parsed.netloc
+            is_safe_absolute = parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+            if not (is_safe_relative or is_safe_absolute):
+                raise ValidationError({"absolute_url": _("Invalid or unsafe URL scheme.")})
         if self.target_type == self.TargetType.RECIPE and not self.recipe_id:
             raise ValidationError({"recipe": _("Recipe is required.")})
+        if self.target_type == self.TargetType.RECIPE and self.http_method != self.HttpMethod.POST:
+            raise ValidationError({"http_method": _("Recipe-backed actions must use POST.")})
+        if self.caller_sigil and not self._is_safe_caller_sigil(self.caller_sigil):
+            raise ValidationError({"caller_sigil": _("Caller sigil contains unsupported characters.")})
+
+    @staticmethod
+    def _is_safe_caller_sigil(value: str) -> bool:
+        """Return whether a caller sigil is safe for downstream recipe expansion."""
+
+        return bool(value) and all(ch.isalnum() or ch in {"_", ".", "-"} for ch in value)
+
+    @staticmethod
+    def _is_safe_target_url(value: str) -> bool:
+        """Return whether a rendered target URL uses an allowed scheme."""
+
+        parsed = urlparse((value or "").strip())
+        if parsed.scheme in {"http", "https"}:
+            return bool(parsed.netloc)
+        return bool(parsed.path) and not parsed.scheme and not parsed.netloc
 
     @classmethod
     def from_legacy(
@@ -151,7 +177,7 @@ class DashboardAction(models.Model):
         """Build an unsaved instance from legacy dashboard-action metadata."""
 
         normalized_method = str(method or cls.HttpMethod.GET).strip().lower()
-        if normalized_method not in {cls.HttpMethod.GET, cls.HttpMethod.POST}:
+        if normalized_method not in cls.HttpMethod.values:
             normalized_method = cls.HttpMethod.GET
         return cls(
             slug="legacy-action",
@@ -169,11 +195,18 @@ class DashboardAction(models.Model):
             try:
                 return reverse(self.admin_url_name)
             except NoReverseMatch:
-                return self.admin_url_name
+                if self._is_safe_target_url(self.admin_url_name):
+                    return self.admin_url_name
+                return ""
         if self.target_type == self.TargetType.ABSOLUTE_URL:
-            return self.absolute_url
+            return self.absolute_url if self._is_safe_target_url(self.absolute_url) else ""
         if self.target_type == self.TargetType.RECIPE:
-            return reverse("admin:actions_dashboardaction_execute", args=[self.pk])
+            if not self.pk:
+                return ""
+            try:
+                return reverse("admin:actions_dashboardaction_execute", args=[self.pk])
+            except NoReverseMatch:
+                return ""
         return ""
 
     def as_rendered_action(self) -> dict[str, str | bool]:

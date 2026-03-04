@@ -31,7 +31,9 @@ def unseed_pyxel_open_viewport_action(apps, schema_editor):
 
     content_type_model = apps.get_model("contenttypes", "ContentType")
     dashboard_action_model = apps.get_model("actions", "DashboardAction")
-    content_type, _created = content_type_model.objects.get_or_create(app_label="pyxel", model="pyxelviewport")
+    content_type = content_type_model.objects.filter(app_label="pyxel", model="pyxelviewport").first()
+    if content_type is None:
+        return
     dashboard_action_model.objects.filter(content_type=content_type, slug="open-viewport").delete()
 
 
