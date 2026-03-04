@@ -656,6 +656,7 @@ def test_evergo_customer_admin_changelist_links_and_filters(admin_client):
     assert 'scope="col" class="column-user"' not in content
     assert '/admin/evergo/evergocustomer/' in content
     assert reverse("admin:evergo_evergoorder_change", args=[installed_order.pk]) in content
+    assert reverse("evergo:order-tracking-public", kwargs={"order_id": installed_order.remote_id}) in content
     assert "SO-9101" in content
 
     city_filtered = admin_client.get(changelist_url, {"city_municipio": "Apodaca"})
@@ -733,8 +734,8 @@ def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow
 
 
 @pytest.mark.django_db
-def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admin_client):
-    """Regression: order change view should expose Process SO tool action and link field."""
+def test_evergo_order_admin_change_view_has_process_order_button_and_flow_link(admin_client):
+    """Regression: order change view should expose Process Order tool action and link field."""
 
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -755,9 +756,8 @@ def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admi
     content = response.content.decode("utf-8")
     flow_url = reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id})
 
-    assert "Process SO" in content
+    assert "Process Order" in content
     assert flow_url in content
-    assert "Open Evergo Flow" in content
 
     action_url = reverse(
         "admin:evergo_evergoorder_actions",
@@ -770,7 +770,7 @@ def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admi
 
 @pytest.mark.django_db
 def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
-    """Regression: missing remote_id should not break order change page nor SO action."""
+    """Regression: missing remote_id should not break order change page nor Process Order action."""
 
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -791,7 +791,7 @@ def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert "Open Evergo Flow" not in content
+    assert 'class="button"' not in content
 
     action_url = reverse(
         "admin:evergo_evergoorder_actions",
