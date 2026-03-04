@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import json
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -98,3 +99,68 @@ def test_infer_app_label_from_apps_path() -> None:
 
     assert _infer_app_label("apps/tests/tests/test_test_management_command.py") == "tests"
     assert _infer_app_label("tests/test_misc.py") == ""
+
+
+def test_discovery_truncates_node_id_to_model_limit(monkeypatch) -> None:
+    """Discovery should trim node IDs to fit SuiteTest model constraints."""
+
+    long_node_id = "apps/tests/tests/test_example.py::test_param[" + ("x" * 800) + "]"
+
+    payload = {
+        "returncode": 0,
+        "items": [
+            {
+                "node_id": long_node_id,
+                "name": "test_param",
+                "file_path": "apps/tests/tests/test_example.py",
+                "module_path": "apps.tests.tests.test_example",
+                "class_name": "",
+                "marks": [],
+            }
+        ],
+    }
+
+    monkeypatch.setattr(
+        "apps.tests.discovery.subprocess.run",
+        lambda *args, **kwargs: type("Result", (), {"stdout": json.dumps(payload), "stderr": ""})(),
+    )
+
+    from apps.tests.discovery import discover_suite_tests
+
+    discovered = discover_suite_tests()
+    assert len(discovered) == 1
+    assert len(discovered[0]["node_id"]) == 512
+
+
+def test_discover_subcommand_wraps_refresh_in_atomic_transaction(monkeypatch) -> None:
+    """Discover should run delete+create inside a database transaction."""
+
+    events: list[str] = []
+
+    class _AtomicContext:
+        def __enter__(self):
+            events.append("enter")
+
+        def __exit__(self, exc_type, exc, tb):
+            events.append("exit")
+
+    class FakeQuerySet:
+        def delete(self) -> tuple[int, dict[str, int]]:
+            events.append("delete")
+            return 0, {}
+
+    class FakeManager:
+        def all(self) -> FakeQuerySet:
+            return FakeQuerySet()
+
+        def bulk_create(self, items):
+            events.append("create")
+            return items
+
+    monkeypatch.setattr("apps.tests.management.commands.test.transaction.atomic", lambda: _AtomicContext())
+    monkeypatch.setattr(SuiteTest, "objects", FakeManager())
+    monkeypatch.setattr("apps.tests.management.commands.test.discover_suite_tests", lambda: [])
+
+    call_command("test", "discover")
+
+    assert events == ["enter", "delete", "create", "exit"]
