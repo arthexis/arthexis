@@ -18,7 +18,7 @@ def seed_operator_default_language(apps, schema_editor):
         return
 
     metadata = feature.metadata if isinstance(feature.metadata, dict) else {}
-    parameters = metadata.get("parameters", {}) if isinstance(metadata, dict) else {}
+    parameters = metadata.get("parameters")
     if not isinstance(parameters, dict):
         parameters = {}
     parameters.setdefault("default_language", "en")
@@ -37,7 +37,7 @@ def unseed_operator_default_language(apps, schema_editor):
         return
 
     metadata = feature.metadata if isinstance(feature.metadata, dict) else {}
-    parameters = metadata.get("parameters", {}) if isinstance(metadata, dict) else {}
+    parameters = metadata.get("parameters")
     if not isinstance(parameters, dict):
         return
 

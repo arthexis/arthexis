@@ -84,7 +84,6 @@ class FeatureAdminForm(forms.ModelForm):
     """Feature admin form with dynamic parameter fields."""
 
     PARAM_FIELD_PREFIX = "param__"
-    param__default_language = forms.ChoiceField(required=False)
 
     class Meta:
         model = Feature
@@ -97,18 +96,22 @@ class FeatureAdminForm(forms.ModelForm):
         known_dynamic_field_names = {
             name for name in self.fields if name.startswith(self.PARAM_FIELD_PREFIX)
         }
+        metadata = self.instance.metadata if isinstance(self.instance.metadata, dict) else {}
+        parameters = metadata.get("parameters")
+        if not isinstance(parameters, dict):
+            parameters = {}
+
         for definition in get_feature_parameter_definitions(slug):
             field_name = f"{self.PARAM_FIELD_PREFIX}{definition.key}"
             self._parameter_keys.append(definition.key)
-            if field_name not in self.fields:
-                continue
-            self.fields[field_name].label = definition.label
-            self.fields[field_name].help_text = definition.help_text
-            self.fields[field_name].choices = definition.choices
-            self.fields[field_name].required = False
-            self.fields[field_name].initial = definition.default
-            metadata = self.instance.metadata or {}
-            parameters = metadata.get("parameters", {}) if isinstance(metadata, dict) else {}
+            if definition.choices:
+                field = forms.ChoiceField(required=False, choices=definition.choices)
+            else:
+                field = forms.CharField(required=False)
+            field.label = definition.label
+            field.help_text = definition.help_text
+            field.initial = definition.default
+            self.fields[field_name] = field
             initial_value = parameters.get(definition.key, definition.default)
             if not initial_value:
                 initial_value = definition.default

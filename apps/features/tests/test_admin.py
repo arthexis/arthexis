@@ -364,3 +364,11 @@ def test_feature_admin_operator_site_language_parameter_is_editable(admin_client
     form = FeatureAdminForm(data=form_data, instance=feature)
     assert form.is_valid(), form.errors
     assert form.cleaned_parameter_values() == {"default_language": "es"}
+
+    save_data = dict(form_data)
+    save_data["_save"] = "Save"
+    post_response = admin_client.post(change_url, data=save_data)
+    assert post_response.status_code == 302
+
+    feature.refresh_from_db()
+    assert feature.metadata["parameters"]["default_language"] == "es"

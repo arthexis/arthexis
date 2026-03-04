@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from django.core.cache import cache
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
 
 
@@ -34,6 +36,7 @@ class FeatureParameterDefinition:
         return value
 
 
+# Intentional subset for the operator experience; keep in sync manually with product requirements.
 OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
     ("en", _("English")),
     ("de", _("German")),
@@ -83,21 +86,39 @@ def get_feature_parameter(slug: str, key: str, *, fallback: str = "") -> str:
 
     from .models import Feature
 
-    feature = Feature.objects.filter(slug=slug).only("metadata").first()
+    cache_key = f"feature-param:{slug}:{key}"
+    cached_value = cache.get(cache_key)
+    if isinstance(cached_value, str):
+        return cached_value
+
     definition_map = {d.key: d for d in get_feature_parameter_definitions(slug)}
     definition = definition_map.get(key)
     if definition is None:
         return fallback
 
+    try:
+        feature = Feature.objects.filter(slug=slug).only("metadata").first()
+    except (OperationalError, ProgrammingError):
+        return fallback if fallback is not None else definition.default
+
     raw_value = get_feature_parameter_value(feature, key, default=definition.default) if feature else definition.default
     try:
-        return definition.normalize(raw_value)
+        normalized_value = definition.normalize(raw_value)
     except ValueError:
-        return fallback or definition.default
+        normalized_value = fallback if fallback is not None else definition.default
+
+    cache.set(cache_key, normalized_value, timeout=300)
+    return normalized_value
 
 
 def set_feature_parameter_values(feature, values: dict[str, Any]) -> None:
-    """Persist normalized parameter values into ``feature.metadata``."""
+    """Persist normalized parameter values into ``feature.metadata``.
+
+    ``set_feature_parameter_values`` mutates ``feature.metadata`` only and does not
+    call ``feature.save()``; callers such as admin ``save_model`` are responsible
+    for persistence. Each ``definition.normalize`` call may raise ``ValueError``,
+    so validate data before calling this helper when partial updates are undesired.
+    """
 
     metadata = getattr(feature, "metadata", {})
     if not isinstance(metadata, dict):
@@ -112,6 +133,7 @@ def set_feature_parameter_values(feature, values: dict[str, Any]) -> None:
         if definition is None:
             continue
         params[key] = definition.normalize(raw_value)
+        cache.delete(f"feature-param:{feature.slug}:{key}")
 
     metadata["parameters"] = params
     feature.metadata = metadata
