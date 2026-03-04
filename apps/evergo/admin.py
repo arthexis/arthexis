@@ -212,6 +212,8 @@ class EvergoUserAdmin(
 class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect synchronized Evergo order snapshots."""
 
+    PROCESS_ORDER_LABEL = _("Process Order")
+
     change_form_template = "django_object_actions/change_form.html"
     changelist_actions = ("load_orders_wizard",)
     change_actions = ("process_so_action",)
@@ -340,7 +342,7 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         normalized_name = " ".join(cleaved_name.split())
         return normalized_name or "-"
 
-    @admin.display(description="Process Order")
+    @admin.display(description=PROCESS_ORDER_LABEL)
     def evergo_flow_link(self, obj):
         """Show a direct link to the Evergo order processing flow on change view."""
         if not getattr(obj, "remote_id", None):
@@ -348,7 +350,7 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         return format_html(
             '<a class="button" href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
             self._flow_url(obj),
-            _("Process Order"),
+            self.PROCESS_ORDER_LABEL,
         )
 
     def _flow_url(self, obj):
@@ -418,8 +420,8 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
             return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[obj.pk]))
         return HttpResponseRedirect(self._flow_url(obj))
 
-    process_so_action.label = _("Process Order")
-    process_so_action.short_description = _("Process Order")
+    process_so_action.label = PROCESS_ORDER_LABEL
+    process_so_action.short_description = PROCESS_ORDER_LABEL
 
 
 @admin.register(EvergoOrderFieldValue)
@@ -634,15 +636,16 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     @admin.display(description=_("Status of Last SO"))
     def status_of_last_so(self, obj):
         """Return the latest order status label for the customer."""
-        if obj.latest_order and obj.latest_order.status_name:
-            if obj.latest_order.remote_id:
-                return format_html(
-                    '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
-                    reverse("evergo:order-tracking-public", kwargs={"order_id": obj.latest_order.remote_id}),
-                    obj.latest_order.status_name,
-                )
-            return obj.latest_order.status_name
-        return "-"
+        latest_order = obj.latest_order
+        if not (latest_order and latest_order.status_name):
+            return "-"
+        if not latest_order.remote_id:
+            return latest_order.status_name
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+            reverse("evergo:order-tracking-public", kwargs={"order_id": latest_order.remote_id}),
+            latest_order.status_name,
+        )
 
     @admin.display(description=_("Phone number"))
     def phone_number_display(self, obj):

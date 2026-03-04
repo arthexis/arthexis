@@ -791,7 +791,7 @@ def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert "Process Order" not in content
+    assert 'class="button"' not in content
 
     action_url = reverse(
         "admin:evergo_evergoorder_actions",
