@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import re
 from typing import Iterable
 
@@ -201,8 +202,37 @@ def refresh_application_models(
     _refresh_application_models(database, applications=applications)
 
 
+def _load_manifest_app_entries() -> set[str]:
+    """Return normalized DJANGO_APPS entries discovered from app manifests."""
+
+    try:
+        from config.settings.base import APPS_DIR, BASE_DIR
+    except Exception:  # pragma: no cover - startup fallback
+        return set()
+
+    app_entries: set[str] = set()
+    for manifest_path in sorted(APPS_DIR.rglob("manifest.py")):
+        module_name = ".".join(manifest_path.relative_to(BASE_DIR).with_suffix("").parts)
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:  # pragma: no cover - invalid manifests are validated elsewhere
+            continue
+
+        manifest_entries = getattr(module, "DJANGO_APPS", None)
+        if not isinstance(manifest_entries, list):
+            continue
+
+        app_entries.update(
+            entry.strip()
+            for entry in manifest_entries
+            if isinstance(entry, str) and entry.strip()
+        )
+
+    return app_entries
+
+
 def refresh_enabled_apps_lock(using: str = "default"):
-    """Persist enabled application labels to the lock file for next restart."""
+    """Persist enabled application selectors to the lock file for next restart."""
 
     connection = connections[using]
     try:
@@ -213,7 +243,27 @@ def refresh_enabled_apps_lock(using: str = "default"):
     if Application._meta.db_table not in existing_tables:
         return None
 
-    enabled_names = Application.objects.using(using).filter(enabled=True).values_list(
-        "name", flat=True
-    )
-    return write_enabled_apps_lock(enabled_names, settings.BASE_DIR)
+    enabled_names = {
+        name.strip()
+        for name in Application.objects.using(using)
+        .filter(enabled=True)
+        .values_list("name", flat=True)
+        if name and name.strip()
+    }
+    disabled_names = {
+        name.strip()
+        for name in Application.objects.using(using)
+        .filter(enabled=False)
+        .values_list("name", flat=True)
+        if name and name.strip()
+    }
+
+    manifest_entries = _load_manifest_app_entries()
+    manifest_enabled = {
+        entry
+        for entry in manifest_entries
+        if entry not in disabled_names and entry.rsplit(".", 1)[-1] not in disabled_names
+    }
+
+    selectors = enabled_names | manifest_enabled
+    return write_enabled_apps_lock(selectors, settings.BASE_DIR)

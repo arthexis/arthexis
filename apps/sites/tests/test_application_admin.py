@@ -48,7 +48,7 @@ def test_application_admin_warns_about_restart(settings):
     setattr(request, "_messages", FallbackStorage(request))
 
     admin_instance = ApplicationAdmin(Application, admin.site)
-    admin_instance._notify_restart_required(request, using="default")
+    admin_instance._notify_restart_required(request)
 
     messages = [str(message) for message in request._messages]
     lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)

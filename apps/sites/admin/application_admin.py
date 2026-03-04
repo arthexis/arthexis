@@ -6,7 +6,6 @@ from apps.app.models import (
     Application,
     ApplicationModel,
     refresh_application_models,
-    refresh_enabled_apps_lock,
 )
 from apps.links.models.reference import Reference
 from apps.locals.user_data import EntityModelAdmin
@@ -14,8 +13,6 @@ from utils.enabled_apps_lock import get_enabled_apps_lock_path
 
 from .filters import ApplicationInstalledListFilter
 from .forms import ApplicationForm
-
-
 
 
 class ApplicationReferenceInline(admin.TabularInline):
@@ -32,6 +29,7 @@ class ApplicationReferenceInline(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):  # pragma: no cover - admin UI
         return False
+
 
 class ApplicationModelInline(admin.TabularInline):
     model = ApplicationModel
@@ -73,14 +71,13 @@ class ApplicationAdmin(EntityModelAdmin):
         """Persist enabled-app lock metadata after model changes."""
 
         super().save_model(request, obj, form, change)
-        self._notify_restart_required(request, using=obj._state.db or "default")
+        self._notify_restart_required(request)
 
     def delete_model(self, request, obj):
         """Persist enabled-app lock metadata after model deletion."""
 
-        using = obj._state.db or "default"
         super().delete_model(request, obj)
-        self._notify_restart_required(request, using=using)
+        self._notify_restart_required(request)
 
     @admin.display(description="Verbose name")
     def app_verbose_name(self, obj):
@@ -104,12 +101,10 @@ class ApplicationAdmin(EntityModelAdmin):
             level=messages.SUCCESS,
         )
 
-    def _notify_restart_required(self, request, *, using: str) -> None:
+    def _notify_restart_required(self, request) -> None:
         """Inform staff that app enablement takes effect after a suite restart."""
 
-        lock_path = refresh_enabled_apps_lock(using=using) or get_enabled_apps_lock_path(
-            settings.BASE_DIR
-        )
+        lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
         self.message_user(
             request,
             _(

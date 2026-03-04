@@ -165,3 +165,17 @@ def test_manifest_loading_respects_enabled_apps_lock() -> None:
     )
 
     assert filtered == ["apps.core", "apps.sites"]
+
+
+def test_manifest_loading_preserves_required_apps_when_lock_excludes_them() -> None:
+    """Regression: required local apps should stay enabled even if lock omits them."""
+
+    lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("apps.blog\n", encoding="utf-8")
+
+    filtered = app_settings._filter_local_apps_by_enabled_lock(
+        ["apps.app", "apps.sites", "apps.blog"]
+    )
+
+    assert filtered == ["apps.app", "apps.sites", "apps.blog"]

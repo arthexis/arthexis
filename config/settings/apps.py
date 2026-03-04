@@ -10,6 +10,8 @@ from utils.enabled_apps_lock import read_enabled_apps_lock
 
 from .base import APPS_DIR, BASE_DIR, HAS_DEBUG_TOOLBAR
 
+REQUIRED_LOCAL_APP_PATHS = ("apps.app", "apps.sites")
+
 
 def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
     """Return app entries with exact duplicates removed while preserving order."""
@@ -79,6 +81,17 @@ def _load_local_apps_from_manifests() -> list[str]:
     return _filter_local_apps_by_enabled_lock(app_entries)
 
 
+def _is_required_local_app_entry(app_entry: str) -> bool:
+    """Return whether app entry must always remain enabled for core startup."""
+
+    normalized_entry = app_entry.strip()
+    return any(
+        normalized_entry == required_path
+        or normalized_entry.startswith(f"{required_path}.")
+        for required_path in REQUIRED_LOCAL_APP_PATHS
+    )
+
+
 def _entry_matches_enabled_selector(app_entry: str, selector: str) -> bool:
     """Return whether a manifest app entry matches a lock-file selector."""
 
@@ -104,7 +117,8 @@ def _filter_local_apps_by_enabled_lock(app_entries: list[str]) -> list[str]:
     return [
         app_entry
         for app_entry in app_entries
-        if any(
+        if _is_required_local_app_entry(app_entry)
+        or any(
             _entry_matches_enabled_selector(app_entry, selector)
             for selector in selectors
         )
