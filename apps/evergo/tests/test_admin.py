@@ -999,19 +999,19 @@ def test_evergo_admin_load_customers_wizard_shows_explicit_load_mode_buttons(adm
 
 
 @pytest.mark.django_db
-def test_evergo_admin_load_customers_wizard_breadcrumbs_link_customers_and_orders(admin_client):
-    """Regression: load customers wizard breadcrumb should fork to customer and order changelists."""
+def test_evergo_admin_load_customers_wizard_breadcrumb_links_customers_and_offers_orders_shortcut(admin_client):
+    """Regression: wizard breadcrumb should remain linear while exposing an orders shortcut link."""
     wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
 
     response = admin_client.get(wizard_url)
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert 'href="/admin/evergo/evergocustomer/"' in content
-    assert 'href="/admin/evergo/evergoorder/"' in content
+    assert f'href="{reverse("admin:evergo_evergocustomer_changelist")}"' in content
+    assert f'href="{reverse("admin:evergo_evergoorder_changelist")}"' in content
     assert "Customers" in content
-    assert "Orders" in content
-    assert "|" in content
+    assert "Go to Orders" in content
+    assert "Customers |" not in content
 
 
 @pytest.mark.django_db
@@ -1025,6 +1025,7 @@ def test_evergo_admin_load_customers_wizard_load_all_button_requires_confirmatio
     content = response.content.decode("utf-8")
     assert "Load all customers" in content
     assert "return confirm('This will sync every customer available to this profile. Continue?');" in content
+    assert "escapejs" not in content
 
 
 @pytest.mark.django_db
@@ -1035,4 +1036,4 @@ def test_evergo_admin_load_customers_wizard_cancel_returns_to_customers(admin_cl
     response = admin_client.get(wizard_url)
 
     assert response.status_code == 200
-    assert 'href="/admin/evergo/evergocustomer/" class="button">Cancel</a>' in response.content.decode("utf-8")
+    assert f'href="{reverse("admin:evergo_evergocustomer_changelist")}" class="button">Cancel</a>' in response.content.decode("utf-8")
