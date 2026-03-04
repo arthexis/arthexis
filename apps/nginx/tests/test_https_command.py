@@ -20,7 +20,9 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -35,7 +37,9 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
     from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None)
+    monkeypatch.setattr(
+        certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None
+    )
 
     call_command("https", "--enable", "--godaddy", "example.com", "--no-sudo")
 
@@ -67,7 +71,9 @@ def test_https_godaddy_implies_enable(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -82,7 +88,9 @@ def test_https_godaddy_implies_enable(monkeypatch):
 
     from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None)
+    monkeypatch.setattr(
+        certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None
+    )
 
     call_command("https", "--godaddy", "example.net", "--no-sudo")
 
@@ -99,7 +107,9 @@ def test_https_certbot_implies_enable(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["sudo"] = sudo
         return "requested"
 
@@ -121,6 +131,47 @@ def test_https_certbot_implies_enable(monkeypatch):
     assert provision_calls["sudo"] == ""
 
 
+@pytest.mark.django_db
+def test_https_site_uses_latest_enabled_config_port(monkeypatch):
+    """New HTTPS site configs should inherit the latest enabled nginx port when available."""
+
+    from django.utils import timezone
+
+    SiteConfiguration.objects.create(
+        name="active-upstream",
+        enabled=True,
+        mode="public",
+        protocol="http",
+        port=9999,
+        last_applied_at=timezone.now(),
+    )
+    SiteConfiguration.objects.create(
+        name="unapplied-upstream",
+        enabled=True,
+        mode="public",
+        protocol="http",
+        port=7777,
+        last_applied_at=None,
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--site", "porsche-abb-1.gelectriic.com", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="porsche-abb-1.gelectriic.com")
+    assert config.port == 9999
 
 
 @pytest.mark.django_db
@@ -129,14 +180,18 @@ def test_https_site_url_implies_enable_and_creates_managed_site(monkeypatch):
 
     provision_calls: dict[str, str] = {}
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["sudo"] = sudo
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -161,13 +216,17 @@ def test_https_disable_clears_managed_site_require_https(monkeypatch):
 
     from django.contrib.sites.models import Site
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -202,12 +261,15 @@ def test_https_site_rejects_loopback_host():
     with pytest.raises(CommandError, match="public host"):
         call_command("https", "--site", "http://[::1]")
 
+
 @pytest.mark.django_db
 def test_https_site_rejects_local_combination():
     """`--site` and `--local` should fail to avoid contradictory certificate intent."""
 
     with pytest.raises(CommandError, match="cannot be combined"):
         call_command("https", "--enable", "--local", "--site", "example.com")
+
+
 @pytest.mark.django_db
 def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     """Credential prompts should still run when stdout is redirected but stdin is interactive."""
@@ -215,8 +277,12 @@ def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
     import sys
     from apps.dns.models import DNSProviderCredential
     from apps.nginx.management.commands.https import Command
-    from apps.nginx.management.commands.https_parts.certificate_flow import _prompt_for_godaddy_credential
-    from apps.nginx.management.commands.https_parts.service import HttpsProvisioningService
+    from apps.nginx.management.commands.https_parts.certificate_flow import (
+        _prompt_for_godaddy_credential,
+    )
+    from apps.nginx.management.commands.https_parts.service import (
+        HttpsProvisioningService,
+    )
 
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
@@ -260,7 +326,9 @@ def test_https_enable_with_godaddy_reports_manual_steps(monkeypatch):
         is_enabled=True,
     )
 
-    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
@@ -299,7 +367,9 @@ def test_https_enable_with_godaddy_sandbox_override(monkeypatch):
 
     provision_calls: dict[str, object] = {}
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["sudo"] = sudo
         provision_calls["dns_use_sandbox"] = dns_use_sandbox
         return "requested"
@@ -346,7 +416,9 @@ def test_https_enable_with_godaddy_no_sandbox_override(monkeypatch):
 
     provision_calls: dict[str, object] = {}
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["dns_use_sandbox"] = dns_use_sandbox
         return "requested"
 
@@ -379,20 +451,25 @@ def test_https_enable_passes_force_renewal_to_certbot(monkeypatch):
 
     provision_calls: dict[str, object] = {}
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         provision_calls["force_renewal"] = force_renewal
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
     call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal")
 
     assert provision_calls["force_renewal"] is True
+
 
 @pytest.mark.django_db
 def test_https_enable_force_renewal_warns_when_paths_change(monkeypatch):
@@ -407,7 +484,9 @@ def test_https_enable_force_renewal_warns_when_paths_change(monkeypatch):
         is_enabled=True,
     )
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         self.certificate_path = "/etc/letsencrypt/live/example.dev-0001/fullchain.pem"
         self.certificate_key_path = "/etc/letsencrypt/live/example.dev-0001/privkey.pem"
         return "requested"
@@ -415,12 +494,16 @@ def test_https_enable_force_renewal_warns_when_paths_change(monkeypatch):
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
     out = StringIO()
-    call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal", stdout=out)
+    call_command(
+        "https", "--enable", "--godaddy", "example.dev", "--force-renewal", stdout=out
+    )
 
     rendered = out.getvalue()
     assert "cert old=/etc/letsencrypt/live/example.dev/fullchain.pem" in rendered
@@ -453,20 +536,27 @@ def test_https_enable_force_renewal_preserves_existing_lineage_paths(monkeypatch
 
     observed_paths: dict[str, str] = {}
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         observed_paths["before"] = self.certificate_path
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
     call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal")
 
-    assert observed_paths["before"] == "/etc/letsencrypt/live/example.dev-0001/fullchain.pem"
+    assert (
+        observed_paths["before"]
+        == "/etc/letsencrypt/live/example.dev-0001/fullchain.pem"
+    )
 
 
 @pytest.mark.django_db
@@ -485,14 +575,18 @@ def test_https_enable_force_renewal_raises_if_certificate_stays_expired(monkeypa
         is_enabled=True,
     )
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         self.expiration_date = timezone.now() - timedelta(minutes=1)
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -513,23 +607,30 @@ def test_https_enable_force_renewal_warns_when_expiration_unavailable(monkeypatc
         is_enabled=True,
     )
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         self.expiration_date = None
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
     out = StringIO()
-    call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal", stdout=out)
+    call_command(
+        "https", "--enable", "--godaddy", "example.dev", "--force-renewal", stdout=out
+    )
 
     rendered = out.getvalue()
     assert "expiration could not be determined" in rendered
     assert "services.get_certificate_expiration" in rendered
+
 
 @pytest.mark.django_db
 def test_https_enable_warns_when_certificate_is_expired(monkeypatch):
@@ -538,25 +639,32 @@ def test_https_enable_warns_when_certificate_is_expired(monkeypatch):
     from datetime import timedelta
     from django.utils import timezone
 
-    def fake_provision(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         self.expiration_date = timezone.now() - timedelta(days=1)
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
     out = StringIO()
-    call_command("https", "--enable", "--certbot", "example.warn", "--no-sudo", stdout=out)
+    call_command(
+        "https", "--enable", "--certbot", "example.warn", "--no-sudo", stdout=out
+    )
 
     rendered = out.getvalue()
     assert "has expired" in rendered
     assert "./command.sh https --renew" in rendered
     assert "only when you need to force immediate reissuance" in rendered
     assert "--force-renewal" in rendered
+
 
 @pytest.mark.django_db
 def test_https_enable_warns_when_self_signed_certificate_is_expired(monkeypatch):
@@ -574,7 +682,9 @@ def test_https_enable_warns_when_self_signed_certificate_is_expired(monkeypatch)
     monkeypatch.setattr(SelfSignedCertificate, "generate", fake_provision)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -592,20 +702,26 @@ def test_https_warn_days_must_be_non_negative():
     """`--warn-days` should reject negative values with a clear validation error."""
 
     with pytest.raises(CommandError, match="positive integer"):
-        call_command("https", "--enable", "--certbot", "example.com", "--warn-days", "-1")
+        call_command(
+            "https", "--enable", "--certbot", "example.com", "--warn-days", "-1"
+        )
 
 
 @pytest.mark.django_db
 def test_https_enable_surfaces_certbot_challenge_as_command_error(monkeypatch):
     """Regression: certbot challenge failures should be shown as user-facing command output."""
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         raise CertbotChallengeError("Some challenges have failed.")
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -619,14 +735,18 @@ def test_https_enable_restores_https_when_http01_challenge_fails(monkeypatch):
 
     apply_protocols: list[str] = []
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         raise CertbotChallengeError("Some challenges have failed.")
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
         apply_protocols.append(self.protocol)
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -644,14 +764,18 @@ def test_https_enable_http01_bootstraps_http_site_before_certbot(monkeypatch):
 
     apply_protocols: list[str] = []
 
-    def fake_request(self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False):
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
         return "requested"
 
     monkeypatch.setattr(CertbotCertificate, "request", fake_request)
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
         apply_protocols.append(self.protocol)
-        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
 
@@ -712,7 +836,9 @@ def test_https_renew_refreshes_expiration_before_due_check(monkeypatch):
     monkeypatch.setattr(CertificateBase, "renew", fake_renew)
 
     out = StringIO()
-    call_command("https", "--renew", "--godaddy", "example.com", "--no-sudo", stdout=out)
+    call_command(
+        "https", "--renew", "--godaddy", "example.com", "--no-sudo", stdout=out
+    )
 
     assert renewed_ids == [cert.pk]
     assert "Renewed 1 certificate(s)." in out.getvalue()
@@ -744,11 +870,20 @@ def test_https_renew_keeps_missing_certificate_files_due(monkeypatch):
         renewed_ids.append(self.pk)
         return "renewed"
 
-    monkeypatch.setattr(CertificateBase, "update_expiration_date", fake_update_expiration_date)
+    monkeypatch.setattr(
+        CertificateBase, "update_expiration_date", fake_update_expiration_date
+    )
     monkeypatch.setattr(CertificateBase, "renew", fake_renew)
 
     out = StringIO()
-    call_command("https", "--renew", "--godaddy", "missing-file.example.com", "--no-sudo", stdout=out)
+    call_command(
+        "https",
+        "--renew",
+        "--godaddy",
+        "missing-file.example.com",
+        "--no-sudo",
+        stdout=out,
+    )
 
     assert renewed_ids == [cert.pk]
     assert "Renewed 1 certificate(s)." in out.getvalue()
@@ -777,7 +912,9 @@ def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
     )
 
     out = StringIO()
-    call_command("https", "--renew", "--godaddy", "example.com", "--no-sudo", stdout=out)
+    call_command(
+        "https", "--renew", "--godaddy", "example.com", "--no-sudo", stdout=out
+    )
 
     rendered = out.getvalue()
     assert "No certificates were due for renewal for example.com." in rendered
