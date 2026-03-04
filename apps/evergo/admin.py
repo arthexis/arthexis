@@ -340,7 +340,7 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         normalized_name = " ".join(cleaved_name.split())
         return normalized_name or "-"
 
-    @admin.display(description="Process SO")
+    @admin.display(description="Process Order")
     def evergo_flow_link(self, obj):
         """Show a direct link to the Evergo order processing flow on change view."""
         if not getattr(obj, "remote_id", None):
@@ -348,7 +348,7 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
         return format_html(
             '<a class="button" href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
             self._flow_url(obj),
-            _("Open Evergo Flow"),
+            _("Process Order"),
         )
 
     def _flow_url(self, obj):
@@ -418,8 +418,8 @@ class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
             return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[obj.pk]))
         return HttpResponseRedirect(self._flow_url(obj))
 
-    process_so_action.label = _("Process SO")
-    process_so_action.short_description = _("Process SO")
+    process_so_action.label = _("Process Order")
+    process_so_action.short_description = _("Process Order")
 
 
 @admin.register(EvergoOrderFieldValue)
@@ -635,6 +635,12 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def status_of_last_so(self, obj):
         """Return the latest order status label for the customer."""
         if obj.latest_order and obj.latest_order.status_name:
+            if obj.latest_order.remote_id:
+                return format_html(
+                    '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+                    reverse("evergo:order-tracking-public", kwargs={"order_id": obj.latest_order.remote_id}),
+                    obj.latest_order.status_name,
+                )
             return obj.latest_order.status_name
         return "-"
 
