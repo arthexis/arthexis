@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 API_ROOT = "https://api.github.com"
 REQUEST_TIMEOUT = 10
-ISSUE_LOCK_DIR = Path(__file__).resolve().parent.parent / ".locks" / "github-issues"
+ISSUE_LOCK_DIR = Path(__file__).resolve().parents[3] / ".locks" / "github-issues"
 ISSUE_LOCK_TTL = timedelta(hours=1)
 
 
@@ -536,3 +536,4 @@ class GitHubIssue:
             fingerprint=fingerprint,
             timeout=self.REQUEST_TIMEOUT,
         )
+
