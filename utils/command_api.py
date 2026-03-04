@@ -296,7 +296,7 @@ def run_command(
         command = _resolve_command(base_dir, raw_command, options)
 
     process = subprocess.run(
-        [sys.executable, "manage.py", command, *command_args],
+        [sys.executable, "manage.py", options.celery_flag, command, *command_args],
         cwd=base_dir,
         check=False,
     )
