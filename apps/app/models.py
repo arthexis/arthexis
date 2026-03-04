@@ -4,10 +4,13 @@ import re
 from typing import Iterable
 
 from django.apps import apps as django_apps
+from django.conf import settings
 from django.db import connections, models, transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
+from utils.enabled_apps_lock import write_enabled_apps_lock
 
 DEFAULT_MODEL_WIKI_URLS: dict[tuple[str, str], str] = {
     ("app", "app.Application"): "https://en.wikipedia.org/wiki/Application_software",
@@ -35,6 +38,7 @@ class Application(Entity):
         choices=Importance.choices,
         default=Importance.BASELINE,
     )
+    enabled = models.BooleanField(default=True)
 
     objects = ApplicationManager()
 
@@ -195,3 +199,21 @@ def refresh_application_models(
 ) -> None:
     database = using or kwargs.get("using") or "default"
     _refresh_application_models(database, applications=applications)
+
+
+def refresh_enabled_apps_lock(using: str = "default"):
+    """Persist enabled application labels to the lock file for next restart."""
+
+    connection = connections[using]
+    try:
+        existing_tables = set(connection.introspection.table_names())
+    except (OperationalError, ProgrammingError):
+        return None
+
+    if Application._meta.db_table not in existing_tables:
+        return None
+
+    enabled_names = Application.objects.using(using).filter(enabled=True).values_list(
+        "name", flat=True
+    )
+    return write_enabled_apps_lock(enabled_names, settings.BASE_DIR)
