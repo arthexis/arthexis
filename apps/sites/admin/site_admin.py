@@ -102,11 +102,11 @@ class SiteAdmin(DjangoSiteAdmin):
         "domain",
         "name",
         "template",
-        "default_landing",
-        "interface_landing",
+        "default_landing_short",
+        "interface_landing_short",
         "managed",
-        "require_https",
-        "enable_public_chat",
+        "require_https_short",
+        "public_chat_short",
     )
     list_select_related = ()
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
@@ -179,8 +179,32 @@ class SiteAdmin(DjangoSiteAdmin):
         try:
             Site._meta.get_field("interface_landing")
         except (FieldDoesNotExist, FieldError):
-            return tuple(item for item in list_display if item != "interface_landing")
+            return tuple(item for item in list_display if item != "interface_landing_short")
         return tuple(list_display)
+
+    @admin.display(description=_("Default"), ordering="default_landing")
+    def default_landing_short(self, obj):
+        """Render the default landing with a compact changelist heading."""
+
+        return obj.default_landing
+
+    @admin.display(description=_("Interface"), ordering="interface_landing")
+    def interface_landing_short(self, obj):
+        """Render the interface landing with a compact changelist heading."""
+
+        return obj.interface_landing
+
+    @admin.display(description=_("HTTPS"), ordering="require_https")
+    def require_https_short(self, obj):
+        """Render the HTTPS toggle with a compact changelist heading."""
+
+        return obj.require_https
+
+    @admin.display(description=_("Public chat"), ordering="enable_public_chat")
+    def public_chat_short(self, obj):
+        """Render public chat toggle with a compact changelist heading."""
+
+        return obj.enable_public_chat
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "links" / "fixtures"
