@@ -7,14 +7,16 @@ from html.parser import HTMLParser
 
 import pytest
 from django.contrib import admin
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 from django.test import RequestFactory
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.actions.models import RemoteAction, RemoteActionToken
+from apps.actions.models import DashboardAction, RemoteAction, RemoteActionToken
 from apps.sites.templatetags.admin_extras import model_admin_actions
 
 
@@ -158,6 +160,114 @@ def test_remote_action_dashboard_button_opens_preview_page(admin_user):
     assert response.context_data["download_url"].endswith("?download=1")
     assert response.context_data["actions_changelist_url"] == reverse("admin:actions_remoteaction_changelist")
     assert "openapi" in response.context_data["payload"].lower()
+
+
+def test_model_admin_actions_includes_declarative_dashboard_action(admin_client):
+    """Dashboard rows should include declarative actions from DashboardAction records."""
+
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.actions.models import DashboardAction
+    from apps.pyxel.models import PyxelViewport
+
+    response = admin_client.get(reverse("admin:index"))
+    assert response.status_code == 200
+
+    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    action = DashboardAction.objects.get(content_type=content_type, slug="open-viewport")
+
+    actions = model_admin_actions({"request": response.wsgi_request}, "pyxel", "PyxelViewport")
+
+    assert any(item["url"] == action.resolve_url() and item["method"] == "post" for item in actions)
+
+
+def test_dashboard_action_rejects_recipe_with_get_method():
+    """Recipe-backed actions must use POST to match the execution endpoint."""
+
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.pyxel.models import PyxelViewport
+    from apps.recipes.models import Recipe
+
+    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    recipe = Recipe.objects.create(
+        slug="validate-method",
+        display="Validate Method",
+        script="result = 'ok'",
+    )
+    action = DashboardAction(
+        content_type=content_type,
+        slug="invalid-recipe-method",
+        label="Invalid Recipe Method",
+        target_type=DashboardAction.TargetType.RECIPE,
+        http_method=DashboardAction.HttpMethod.GET,
+        recipe=recipe,
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        action.full_clean()
+
+    assert "Recipe-backed actions must use POST" in str(exc.value)
+
+
+def test_dashboard_action_rejects_unsafe_absolute_url():
+    """Unsafe URL schemes should not be accepted for absolute-url actions."""
+
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.pyxel.models import PyxelViewport
+
+    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    action = DashboardAction(
+        content_type=content_type,
+        slug="unsafe-url",
+        label="Unsafe",
+        target_type=DashboardAction.TargetType.ABSOLUTE_URL,
+        absolute_url="javascript:alert(1)",
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        action.full_clean()
+
+    assert "Invalid or unsafe URL scheme" in str(exc.value)
+
+
+def test_dashboard_action_execute_view_handles_recipe_failure(admin_user):
+    """Recipe execution failures should show an error message instead of a 500."""
+
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.pyxel.models import PyxelViewport
+    from apps.recipes.models import Recipe
+
+    request = RequestFactory().post("/admin/actions/dashboardaction/1/execute/")
+    request.user = admin_user
+    request.session = {}
+    setattr(request, "_messages", FallbackStorage(request))
+
+    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    recipe = Recipe.objects.create(
+        slug="broken-recipe",
+        display="Broken Recipe",
+        script="raise RuntimeError('boom')",
+    )
+    action = DashboardAction.objects.create(
+        content_type=content_type,
+        slug="broken-recipe",
+        label="Broken Recipe",
+        target_type=DashboardAction.TargetType.RECIPE,
+        http_method=DashboardAction.HttpMethod.POST,
+        recipe=recipe,
+        is_active=True,
+    )
+
+    model_admin = admin.site._registry[DashboardAction]
+    response = model_admin.execute_view(request, action.pk)
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("admin:index")
+    messages = [str(message) for message in request._messages]
+    assert any("failed" in message.lower() for message in messages)
 
 
 @pytest.mark.integration
