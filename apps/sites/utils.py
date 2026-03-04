@@ -14,6 +14,7 @@ from django.urls import path as django_path
 from django.utils.translation import get_language
 
 from apps.celery.utils import celery_feature_enabled
+from apps.features.parameters import get_feature_parameter
 
 try:  # pragma: no cover - compatibility shim for Django versions without constant
     from django.utils.translation import LANGUAGE_SESSION_KEY
@@ -160,6 +161,12 @@ def get_request_language_code(request) -> str:
     if not language_code:
         cookie_name = getattr(settings, "LANGUAGE_COOKIE_NAME", "django_language")
         language_code = getattr(request, "COOKIES", {}).get(cookie_name, "")
+    if not language_code:
+        language_code = get_feature_parameter(
+            "operator-site-interface",
+            "default_language",
+            fallback="en",
+        )
     if not language_code:
         language_code = getattr(request, "LANGUAGE_CODE", "") or ""
     if not language_code:

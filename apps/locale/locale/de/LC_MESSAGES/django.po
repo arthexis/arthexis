@@ -6003,3 +6003,18 @@ msgstr "Kopiert!"
 #: pages/templates/pages/base.html:975
 msgid "Copy failed. Please try again."
 msgstr "Kopieren fehlgeschlagen. Bitte versuchen Sie es erneut."
+
+msgid "Feature metadata including optional runtime parameters editable from admin."
+msgstr "Funktionsmetadaten einschließlich optionaler Laufzeitparameter, die im Admin bearbeitet werden können."
+
+msgid "Feature parameters"
+msgstr "Funktionsparameter"
+
+msgid "Default language"
+msgstr "Standardsprache"
+
+msgid "Fallback UI language used when users have not selected a language yet."
+msgstr "Fallback-UI-Sprache, wenn Benutzer noch keine Sprache ausgewählt haben."
+
+msgid "Spanish"
+msgstr "Spanisch"

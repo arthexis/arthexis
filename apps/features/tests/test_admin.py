@@ -12,7 +12,7 @@ from django.contrib.messages import get_messages
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.features.admin import FeatureAdmin
+from apps.features.admin import FeatureAdmin, FeatureAdminForm
 from apps.features.admin import SourceAppListFilter
 from apps.features.models import Feature
 
@@ -318,3 +318,49 @@ def test_feature_admin_from_app_filter_uses_admin_queryset_scope(rf):
     lookup_values = {label for _, label in list_filter.lookups(request, feature_admin)}
     assert "deleted-app" in lookup_values
     assert "active-app" not in lookup_values
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_operator_site_language_parameter_is_editable(admin_client):
+    """Regression: operator interface language parameter should render and persist in admin."""
+
+    feature, _created = Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={
+            "display": "Operator Site Interface",
+            "source": Feature.Source.CUSTOM,
+            "metadata": {"parameters": {"default_language": "en"}},
+        },
+    )
+
+    change_url = reverse("admin:features_feature_change", args=[feature.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    assert b"Feature parameters" in response.content
+    assert b'id="id_param__default_language"' in response.content
+
+    form_data = {
+        "display": feature.display,
+        "slug": feature.slug,
+        "summary": "",
+        "is_enabled": True,
+        "main_app": "",
+        "node_feature": "",
+        "user": "",
+        "group": "",
+        "admin_requirements": "",
+        "public_requirements": "",
+        "service_requirements": "",
+        "admin_views": "[]",
+        "public_views": "[]",
+        "service_views": "[]",
+        "code_locations": "[]",
+        "protocol_coverage": "{}",
+        "metadata": '{"parameters": {"default_language": "en"}}',
+        "param__default_language": "es",
+    }
+    form = FeatureAdminForm(data=form_data, instance=feature)
+    assert form.is_valid(), form.errors
+    assert form.cleaned_parameter_values() == {"default_language": "es"}

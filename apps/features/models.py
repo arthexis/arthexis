@@ -110,6 +110,13 @@ class Feature(Ownable):
             "Protocol call coverage keyed by protocol slug (e.g. ocpp16, ocpp201, ocpp21)."
         ),
     )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_(
+            "Feature metadata including optional runtime parameters editable from admin."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
