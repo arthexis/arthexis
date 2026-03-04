@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from django.core.management.base import CommandError
+from django.db.models import F
 
 from apps.nginx.management.commands.https_parts.constants import (
     NGINX_CONFIGURE_REMEDIATION_TEMPLATE,
@@ -31,7 +32,7 @@ def _get_or_create_config(domain: str, *, protocol: str) -> SiteConfiguration:
     except SiteConfiguration.DoesNotExist:
         defaults_source = (
             SiteConfiguration.objects.filter(enabled=True)
-            .order_by("-last_applied_at", "-id")
+            .order_by(F("last_applied_at").desc(nulls_last=True), "-id")
             .first()
             or SiteConfiguration.get_default()
         )

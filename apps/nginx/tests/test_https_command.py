@@ -145,6 +145,14 @@ def test_https_site_uses_latest_enabled_config_port(monkeypatch):
         port=9999,
         last_applied_at=timezone.now(),
     )
+    SiteConfiguration.objects.create(
+        name="unapplied-upstream",
+        enabled=True,
+        mode="public",
+        protocol="http",
+        port=7777,
+        last_applied_at=None,
+    )
 
     def fake_request(
         self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
