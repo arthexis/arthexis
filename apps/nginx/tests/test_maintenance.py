@@ -2,6 +2,8 @@ from pathlib import Path
 
 from apps.nginx.maintenance import update_config
 
+DARK_THEME_BACKGROUND_STYLE = "background: #111827;"
+
 
 def test_update_config_inserts_maintenance_snippets(tmp_path: Path):
     conf = tmp_path / "nginx.conf"
@@ -54,6 +56,6 @@ def test_app_down_template_uses_dark_background():
     app_down_template = Path("config/data/nginx/maintenance/app-down.html")
     content = app_down_template.read_text(encoding="utf-8")
 
-    assert "background: #111827;" in content
+    assert DARK_THEME_BACKGROUND_STYLE in content
     assert "main {" in content
     assert "background: #ffffff;" in content
