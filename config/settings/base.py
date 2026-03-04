@@ -60,6 +60,9 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 # avoid contacting remote peers.
 NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
+ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK = env_bool(
+    "ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK", True
+)
 
 CACHE_LOCATION = os.environ.get("DJANGO_CACHE_DIR", str(BASE_DIR / "cache"))
 with contextlib.suppress(OSError):
