@@ -24,7 +24,7 @@ click==8.3.1
 colorama==0.4.6
 constantly==23.10.4
 cron-descriptor==2.0.6
-cryptography>=46.0.5
+cryptography~=46.0.5
 daphne==4.2.1
 defusedxml==0.7.1
 diff-match-patch==20241021
@@ -82,7 +82,7 @@ Twisted==25.5.0
 txaio==25.9.2
 typing_extensions==4.14.1
 tzdata==2025.3
-urllib3>=2.6.3
+urllib3~=2.6.3
 vine==5.1.0
 wcwidth==0.6.0
 webauthn==2.7.1
