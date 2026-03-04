@@ -532,4 +532,10 @@ def test_verify_certificate_handles_permission_error():
     )
 
     assert result.ok is False
-    assert any("not accessible" in message for message in result.messages)
+    assert any(
+        "Certificate path is not accessible" in message for message in result.messages
+    )
+    assert any(
+        "Certificate key path is not accessible" in message
+        for message in result.messages
+    )
