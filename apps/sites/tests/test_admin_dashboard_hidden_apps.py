@@ -6,13 +6,28 @@ from django.urls import reverse
 
 @pytest.mark.django_db
 @pytest.mark.integration
-def test_admin_dashboard_renders_hide_controls(admin_client):
-    """Admin dashboard app headers should expose per-app hide controls."""
+def test_admin_dashboard_defers_app_group_hydration(admin_client):
+    """Dashboard should render a hydration container and load app groups asynchronously."""
 
     response = admin_client.get(reverse("admin:index"))
 
     assert response.status_code == 200
     content = response.content.decode()
+    assert "data-dashboard-app-list-container" in content
+    assert "Loading app groups..." in content
+    assert reverse("admin:dashboard_app_groups") in content
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_admin_dashboard_app_groups_endpoint_renders_hide_controls(admin_client):
+    """Hydrated app groups should expose per-app hide controls."""
+
+    response = admin_client.get(reverse("admin:dashboard_app_groups"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "data-dashboard-app-list" in content
     assert "data-app-visibility-toggle" in content
     assert "Show Hidden apps" in content
 

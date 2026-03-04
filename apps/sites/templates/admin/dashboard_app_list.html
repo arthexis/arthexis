@@ -1,7 +1,7 @@
 {% load i18n admin_extras favorites %}
 
 {% if show_changelinks is False %}
-  {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=False show_favorites=show_favorites %}
+  {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=False show_favorites=show_favorites defer_app_groups=defer_app_groups %}
 {% else %}
-  {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=True show_favorites=show_favorites %}
+  {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=True show_favorites=show_favorites defer_app_groups=defer_app_groups %}
 {% endif %}

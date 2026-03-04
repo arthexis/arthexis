@@ -47,7 +47,13 @@ class DashboardContentTypeQueryTests(TestCase):
         self.client.force_login(self.user)
 
     def test_dashboard_uses_precomputed_content_type_map(self):
+        """Regression: dashboard favorites should batch content-type lookups."""
+
         get_for_models_original = ContentType.objects.get_for_models
+        Favorite.objects.create(
+            user=self.user,
+            content_type=ContentType.objects.get_for_model(get_user_model()),
+        )
 
         def guarded_get_for_model(*args, **kwargs):
             raise AssertionError("Per-model content type lookup regression on dashboard render")
