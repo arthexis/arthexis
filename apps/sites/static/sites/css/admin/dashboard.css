@@ -434,6 +434,24 @@
         display: inline;
         margin-left: 0;
     }
+    .dashboard-main td.actions .inline-form {
+        display: inline;
+        margin: 0;
+        padding: 0;
+    }
+    .dashboard-main td.actions .inline-form .actionlink {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        color: var(--link-fg);
+        cursor: pointer;
+        font: inherit;
+        text-decoration: none;
+    }
+    .dashboard-main td.actions .inline-form .actionlink:hover,
+    .dashboard-main td.actions .inline-form .actionlink:focus-visible {
+        text-decoration: underline;
+    }
     .dashboard-main .module table {
         width: 100%;
     }
