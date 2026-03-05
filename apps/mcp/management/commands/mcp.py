@@ -63,7 +63,7 @@ class Command(BaseCommand):
             run_mcp_server(allow_raw=options.get("allow"), deny_raw=options.get("deny"))
             return
 
-        if group == "key":
+        elif group == "key":
             key_action = options.get("key_action")
             if key_action != "create":
                 raise CommandError("The key group requires an action. Use: mcp key create")
@@ -79,5 +79,3 @@ class Command(BaseCommand):
             self.stdout.write(f"expires_at={expires_at_text}")
             self.stdout.write(f"api_key={plain_key}")
             return
-
-        raise CommandError("A command group is required. Use: mcp server | mcp key create")
