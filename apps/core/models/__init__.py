@@ -1,6 +1,10 @@
-from .admin_notice import AdminNotice
-from .email import EmailArtifact, EmailTransaction, EmailTransactionAttachment
-from .invite_lead import InviteLead
+"""Model exports for the core app.
+
+This module may be imported even when ``apps.core`` is not present in
+``INSTALLED_APPS`` (for example by abstract dependencies like ``Ownable``).
+Concrete model imports are therefore guarded to avoid startup errors.
+"""
+
 from .ownable import (
     OwnedObjectLink,
     Ownable,
@@ -8,20 +12,33 @@ from .ownable import (
     get_owned_objects_for_user,
     get_ownable_models,
 )
-from .usage_event import UsageEvent
 
 __all__ = [
-    "AdminNotice",
-    "EmailArtifact",
-    "EmailTransaction",
-    "EmailTransactionAttachment",
-    "InviteLead",
     "OwnedObjectLink",
     "Ownable",
-    "UsageEvent",
     "get_owned_objects_for_group",
     "get_owned_objects_for_user",
     "get_ownable_models",
-    "RFID",
 ]
-from apps.cards.models import RFID
+
+try:
+    from .admin_notice import AdminNotice
+    from .email import EmailArtifact, EmailTransaction, EmailTransactionAttachment
+    from .invite_lead import InviteLead
+    from .usage_event import UsageEvent
+    from apps.cards.models import RFID
+except RuntimeError:
+    # Core concrete models are unavailable unless apps.core is installed.
+    pass
+else:
+    __all__.extend(
+        [
+            "AdminNotice",
+            "EmailArtifact",
+            "EmailTransaction",
+            "EmailTransactionAttachment",
+            "InviteLead",
+            "UsageEvent",
+            "RFID",
+        ]
+    )

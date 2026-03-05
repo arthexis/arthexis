@@ -69,6 +69,7 @@ class Command(BaseCommand):
             profile.evergo_password = password
 
         is_load_customers = bool(options.get("load_customers"))
+        raw_queries = self._resolve_queries(options) if is_load_customers else ""
         if is_load_customers and not profile.evergo_email:
             raise CommandError(
                 "Evergo profile is missing evergo_email. Use --email to set it before loading customers."
@@ -97,7 +98,6 @@ class Command(BaseCommand):
             )
 
         if options.get("load_customers"):
-            raw_queries = self._resolve_queries(options)
             timeout = options.get("timeout") or 20
             if timeout <= 0:
                 raise CommandError("--timeout must be greater than zero.")
