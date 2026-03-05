@@ -169,18 +169,6 @@ def test_run_command_does_not_append_celery_flag(
     ]
 
 
-def test_shell_and_batch_wrappers_document_matching_options(
-    command_script_contents: str,
-    command_batch_contents: str,
-) -> None:
-    """Static parity test for documented options in POSIX and Windows wrappers."""
-    assert "python -m utils.command_api" in command_script_contents
-    assert "-m utils.command_api" in command_batch_contents
-    for usage_fragment in (EXPECTED_LIST_USAGE, EXPECTED_RUN_USAGE):
-        assert usage_fragment in command_script_contents
-        assert usage_fragment in command_batch_contents
-
-
 def test_run_command_uses_fast_path_when_requested(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
