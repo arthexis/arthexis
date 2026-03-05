@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 
 import pytest
@@ -59,7 +60,7 @@ def test_mcp_tools_list_returns_registered_tools() -> None:
                 "properties": {
                     "api_key": {
                         "type": "string",
-                        "description": "MCP API key generated via manage.py create_mcp_api_key.",
+                        "description": "MCP API key generated via manage.py mcp key create.",
                     }
                 },
                 "required": ["api_key"],
@@ -195,7 +196,7 @@ def test_mcp_tools_call_strips_api_key_before_handler() -> None:
 
 
 def test_mcp_management_command_accepts_allow_and_deny(monkeypatch) -> None:
-    """The mcp_server management command should pass allow and deny tool filters."""
+    """The mcp server subcommand should pass allow and deny tool filters."""
 
     captured: dict[str, set[str]] = {}
 
@@ -206,12 +207,13 @@ def test_mcp_management_command_accepts_allow_and_deny(monkeypatch) -> None:
         captured["deny"] = deny or set()
 
     monkeypatch.setattr(
-        "apps.mcp.management.commands.mcp_server.run_stdio_server",
+        "apps.mcp.management.commands._mcp_command_logic.run_stdio_server",
         _fake_run_stdio_server,
     )
 
     call_command(
-        "mcp_server",
+        "mcp",
+        "server",
         "--allow",
         "arthexis.graphql.query,arthexis.auth.whoami",
         "--deny",
@@ -277,3 +279,52 @@ def test_security_group_check_rejects_user_without_membership() -> None:
         )
 
     assert "security groups" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_mcp_key_create_subcommand_generates_api_key() -> None:
+    """The mcp key create subcommand should create user-scoped API keys."""
+
+    user = get_user_model().objects.create_user(username="key-user")
+    del user
+
+    out = io.StringIO()
+    call_command(
+        "mcp",
+        "key",
+        "create",
+        "--username",
+        "key-user",
+        "--label",
+        "tests",
+        "--expires-in-days",
+        "0",
+        stdout=out,
+    )
+
+    output = out.getvalue()
+    assert "MCP API key created." in output
+    assert "username=key-user" in output
+    assert "expires_at=never" in output
+
+
+@pytest.mark.django_db
+def test_legacy_create_mcp_api_key_command_prints_deprecation_warning(capsys) -> None:
+    """Legacy create_mcp_api_key should still work while warning about mcp key create."""
+
+    user = get_user_model().objects.create_user(username="legacy-key-user")
+    del user
+
+    call_command(
+        "create_mcp_api_key",
+        "--username",
+        "legacy-key-user",
+        "--label",
+        "legacy",
+        "--expires-in-days",
+        "0",
+    )
+
+    captured = capsys.readouterr()
+    assert "Deprecation warning" in captured.err
+    assert "python manage.py mcp key create" in captured.err

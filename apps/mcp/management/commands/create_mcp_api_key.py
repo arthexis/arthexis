@@ -1,23 +1,24 @@
 from __future__ import annotations
 
-"""Create MCP API keys for users."""
+"""Deprecated compatibility wrapper for ``manage.py create_mcp_api_key``."""
 
-from datetime import timedelta
+from typing import Any
 
-from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
+from django.core.management.base import BaseCommand
 
-from apps.mcp.models import McpApiKey
+from apps.mcp.management.commands._mcp_command_logic import create_mcp_api_key
 
 
 class Command(BaseCommand):
-    """Generate an MCP API key for a specific user."""
+    """Backward-compatible shim for legacy MCP API key creation."""
 
-    help = "Create an MCP API key for a user with optional expiration."
+    help = (
+        "[Deprecated] Create an MCP API key for a user. "
+        "Prefer: python manage.py mcp key create"
+    )
 
     def add_arguments(self, parser) -> None:
-        """Register command-line arguments for API key generation."""
+        """Register legacy options for backwards compatibility."""
 
         parser.add_argument(
             "--username",
@@ -36,37 +37,23 @@ class Command(BaseCommand):
             help="Optional expiration in days. Use 0 to create a non-expiring key.",
         )
 
-    def handle(self, *args, **options):  # type: ignore[override]
-        """Generate and print a new user-scoped MCP API key."""
+    def handle(self, *args: Any, **options: Any) -> None:  # type: ignore[override]
+        """Emit a deprecation warning and run canonical key-creation logic."""
 
-        username = options["username"]
-        label = options["label"].strip()
-        expires_in_days = options["expires_in_days"]
-
-        if not label:
-            raise CommandError("--label must not be empty.")
-        if expires_in_days < 0:
-            raise CommandError("--expires-in-days must be zero or greater.")
-
-        user_model = get_user_model()
-        try:
-            user = user_model.objects.get(username=username)
-        except user_model.DoesNotExist as exc:
-            raise CommandError(f"User '{username}' does not exist.") from exc
-
-        expires_at = None
-        if expires_in_days > 0:
-            expires_at = timezone.now() + timedelta(days=expires_in_days)
-
-        _api_key, plain_key = McpApiKey.objects.create_for_user(
-            user=user,
-            label=label,
-            expires_at=expires_at,
+        self.stderr.write(
+            self.style.WARNING(
+                "Deprecation warning: 'python manage.py create_mcp_api_key' will be removed in a future "
+                "release. Use 'python manage.py mcp key create'."
+            )
         )
 
+        username, label, expires_at_text, plain_key = create_mcp_api_key(
+            username=options["username"],
+            label=options["label"],
+            expires_in_days=options["expires_in_days"],
+        )
         self.stdout.write(self.style.SUCCESS("MCP API key created."))
         self.stdout.write(f"username={username}")
         self.stdout.write(f"label={label}")
-        expires_at_text = expires_at.isoformat() if expires_at else "never"
         self.stdout.write(f"expires_at={expires_at_text}")
         self.stdout.write(f"api_key={plain_key}")

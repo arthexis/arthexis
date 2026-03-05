@@ -1,34 +1,25 @@
 from __future__ import annotations
 
-"""Run an MCP server that exposes Arthexis operational tools."""
+"""Deprecated compatibility wrapper for ``manage.py mcp_server``."""
 
-import os
 from typing import Any
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
-from apps.mcp.server import run_stdio_server
-
-
-def _parse_csv_names(raw_value: str | None) -> set[str]:
-    """Parse a comma-separated list into normalized non-empty tool names."""
-
-    if not raw_value:
-        return set()
-    normalized: set[str] = set()
-    for value in raw_value.split(","):
-        item = value.strip()
-        if item:
-            normalized.add(item)
-    return normalized
+from apps.mcp.management.commands._mcp_command_logic import run_mcp_server
 
 
 class Command(BaseCommand):
-    """Django command entrypoint for the suite MCP server."""
+    """Backward-compatible shim for the legacy MCP server command."""
 
-    help = "Run the suite MCP server over stdio."
+    help = (
+        "[Deprecated] Run the suite MCP server over stdio. "
+        "Prefer: python manage.py mcp server"
+    )
 
     def add_arguments(self, parser) -> None:
+        """Register legacy options for backwards compatibility."""
+
         parser.add_argument(
             "--allow",
             default="",
@@ -41,16 +32,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:  # type: ignore[override]
-        allow = _parse_csv_names(options.get("allow"))
-        deny = _parse_csv_names(options.get("deny"))
+        """Emit a deprecation warning and run the canonical MCP server logic."""
 
-        allow_from_env = _parse_csv_names(os.getenv("ARTHEXIS_MCP_TOOLS_ALLOW"))
-        deny_from_env = _parse_csv_names(os.getenv("ARTHEXIS_MCP_TOOLS_DENY"))
-
-        allow.update(allow_from_env)
-        deny.update(deny_from_env)
-
-        if allow and deny and allow.issubset(deny):
-            raise CommandError("The deny-list blocks every allowed MCP tool.")
-
-        run_stdio_server(allow=allow, deny=deny)
+        self.stderr.write(
+            self.style.WARNING(
+                "Deprecation warning: 'python manage.py mcp_server' will be removed in a future release. "
+                "Use 'python manage.py mcp server'."
+            )
+        )
+        run_mcp_server(allow_raw=options.get("allow"), deny_raw=options.get("deny"))
