@@ -2,71 +2,25 @@
 
 {% if app_list %}
   {% favorite_map as favorites_map %}
-  {% dashboard_model_status_map app_list as model_statuses %}
   {% if show_favorites is not False %}
     {% with show_model_badges=False %}
       {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
       {{ favorites_block }}
     {% endwith %}
-{% endif %}
-  <div id="dashboard-app-list" data-dashboard-app-list>
-  {% with show_model_badges=show_model_badges|default:True %}
-  {% celery_feature_enabled as celery_enabled %}
-  {% for app in app_list %}
-    {% if app.app_label != 'django_celery_beat' or celery_enabled %}
-    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}" data-app-label="{{ app.app_label }}" data-app-name="{{ app.name }}">
-      <table>
-        <caption class="app-caption">
-          <div class="app-caption-inner">
-            <a
-              class="section app-caption-link"
-              href="{{ app.app_url }}"
-              title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}"
-            >
-              {{ app.name }}
-            </a>
-            {% if enable_app_visibility_controls %}
-            <button
-              type="button"
-              class="app-visibility-toggle button-link"
-              data-app-visibility-toggle
-              data-app-label="{{ app.app_label }}"
-              data-hide-label="{% translate 'Hide' %}"
-              data-unhide-label="{% translate 'Unhide' %}"
-            >
-              {% translate 'Hide' %}
-            </button>
-            {% endif %}
-          </div>
-        </caption>
-        <thead class="visually-hidden">
-          <tr>
-            <th scope="col">{% translate 'Model name' %}</th>
-            <th scope="col">{% translate 'Model actions' %}</th>
-            <th scope="col">{% translate 'Add link' %}</th>
-            <th scope="col">{% translate 'Change or view list link' %}</th>
-          </tr>
-        </thead>
-        <tbody id="app-{{ app.app_label }}-models">
-        {% for model in app.models %}
-          {% model_app_label model app.app_label as model_app_label %}
-          {% with model_name=model.object_name|lower %}
-            {% favorite_ct_id model_app_label model.object_name as ct_id %}
-            {% favorite_get ct_id as fav %}
-            {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id=model_app_label|add:"-"|add:model_name show_model_badges=show_model_badges model_statuses=model_statuses %}
-          {% endwith %}
-        {% endfor %}
-        </tbody>
-      </table>
+  {% endif %}
+
+  {% if defer_app_groups %}
+    <div
+      data-dashboard-app-list-container
+      hx-get="{% url 'admin:dashboard_app_groups' %}"
+      hx-trigger="load"
+      hx-swap="innerHTML"
+    >
+      <p>{% translate "Loading app groups..." %}</p>
+      <noscript><p>{% translate "Enable JavaScript to load app groups." %}</p></noscript>
     </div>
-    {% endif %}
-  {% endfor %}
-  {% endwith %}
-  </div>
-  {% if enable_app_visibility_controls %}
-  <p class="dashboard-hidden-apps-toggle" data-hidden-apps-toggle-wrap data-show-label="{% translate 'Show Hidden apps' %}" data-hide-label="{% translate 'Hide Hidden apps' %}" hidden>
-    <button type="button" class="button-link" data-hidden-apps-toggle>{% translate 'Show Hidden apps' %}</button>
-  </p>
+  {% else %}
+    {% include "admin/includes/dashboard_app_groups.html" %}
   {% endif %}
 {% else %}
   <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
