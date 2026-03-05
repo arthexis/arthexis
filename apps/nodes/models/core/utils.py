@@ -5,9 +5,6 @@ import re
 
 from django.conf import settings
 
-from apps.release.models import PackageRelease
-
-
 class NameRepresentationMixin:
     """Provide a name-based ``__str__`` for models with a ``name`` field."""
 
@@ -44,7 +41,7 @@ def _format_upgrade_body(version: str, revision: str) -> str:
         if (
             base_version
             and revision
-            and not PackageRelease.matches_revision(base_version, revision)
+            and not _matches_release_revision(base_version, revision)
             and not normalized.endswith("+")
         ):
             display_version = f"{display_version}+"
@@ -54,3 +51,20 @@ def _format_upgrade_body(version: str, revision: str) -> str:
         rev_short = (rev_clean[-6:] if rev_clean else revision[-6:])
         parts.append(f"r{rev_short}")
     return " ".join(parts).strip()
+
+
+def _matches_release_revision(version: str, revision: str) -> bool:
+    """Return ``True`` when a stored release revision matches ``revision``.
+
+    The release app can be optional in some installations. In those setups,
+    importing release models can raise a ``RuntimeError`` during Django app
+    initialization, so this helper treats the revision as matching.
+    """
+
+    try:
+        from apps.release.models import PackageRelease
+    except RuntimeError as exc:
+        if "isn't in an application in INSTALLED_APPS" not in str(exc):
+            raise
+        return True
+    return PackageRelease.matches_revision(version, revision)

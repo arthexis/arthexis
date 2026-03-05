@@ -19,6 +19,7 @@ dependencies = [
   "billiard==4.2.4",
   "boto3==1.36.23",
   "botocore==1.36.23",
+  "bleach==6.3.0",
   "celery==5.5.3",
   "certifi==2026.2.25",
   "cffi==2.0.0",
@@ -57,6 +58,8 @@ dependencies = [
   "incremental==24.11.0",
   "jmespath==1.0.1",
   "kombu==5.5.4",
+  "Markdown==3.10.2",
+  "mdx_truly_sane_lists==1.3",
   "outcome==1.3.0.post0",
   "packaging==26.0",
   "pillow==12.1.1",
@@ -70,9 +73,11 @@ dependencies = [
   "pycparser==3.0",
   "pyOpenSSL==25.3.0",
   "PySocks==1.7.1",
+  "PyYAML==6.0.3",
   "python-crontab==3.3.0",
   "python-dateutil==2.9.0.post0",
   "python-dotenv==1.2.1",
+  "qrcode==8.2",
   "redis==7.2.1",
   "reportlab==4.4.10",
   "requests==2.32.5",
@@ -128,10 +133,7 @@ ci = [
   "twine==6.1.0",
 ]
 docs = [
-  "bleach==6.3.0",
   "docutils==0.22.4",
-  "Markdown==3.10.2",
-  "mdx_truly_sane_lists==1.3",
   "mkdocs==1.6.1",
 ]
 hardware = [
@@ -142,7 +144,6 @@ hardware = [
 nodes = [
   "graphviz==0.21",
   "pyftpdlib==2.2.0",
-  "qrcode==8.2",
 ]
 video = [
   "aiortc==1.14.0",
