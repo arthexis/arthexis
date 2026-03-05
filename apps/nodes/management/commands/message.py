@@ -1,62 +1,43 @@
-"""Management command to broadcast :class:`~nodes.models.NetMessage` entries."""
+"""Compatibility wrapper for the deprecated ``message`` command."""
 
 from __future__ import annotations
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
-
-from apps.nodes.models import NetMessage
 
 
 class Command(BaseCommand):
-    """Send a network message across nodes."""
+    """Bridge legacy ``message`` calls to ``node message``."""
 
-    help = "Broadcast a Net Message to the network"
+    help = "Deprecated; use `python manage.py node message ...` instead."
 
     def add_arguments(self, parser) -> None:
+        """Mirror legacy args and forward to the unified node command."""
+
         parser.add_argument("subject", help="Subject or first line of the message")
-        parser.add_argument(
-            "body",
-            nargs="?",
-            default="",
-            help="Optional body text for the message",
-        )
-        parser.add_argument(
-            "--reach",
-            dest="reach",
-            help="Optional node role name that limits propagation",
-        )
-        parser.add_argument(
-            "--seen",
-            nargs="+",
-            dest="seen",
-            help="UUIDs of nodes that have already seen the message",
-        )
-        parser.add_argument(
-            "--lcd-channel-type",
-            dest="lcd_channel_type",
-            help="LCD channel type to target (for example low, high, clock, uptime)",
-        )
-        parser.add_argument(
-            "--lcd-channel-num",
-            dest="lcd_channel_num",
-            type=int,
-            help="LCD channel number to target",
-        )
+        parser.add_argument("body", nargs="?", default="", help="Optional body text")
+        parser.add_argument("--reach", dest="reach")
+        parser.add_argument("--seen", nargs="+", dest="seen")
+        parser.add_argument("--lcd-channel-type", dest="lcd_channel_type")
+        parser.add_argument("--lcd-channel-num", dest="lcd_channel_num", type=int)
 
     def handle(self, *args, **options):
-        subject: str = options["subject"]
-        body: str = options["body"]
-        reach: str | None = options.get("reach")
-        seen: list[str] | None = options.get("seen")
-        lcd_channel_type: str | None = options.get("lcd_channel_type")
-        lcd_channel_num: int | None = options.get("lcd_channel_num")
+        """Print deprecation notice and execute ``node message``."""
 
-        NetMessage.broadcast(
-            subject=subject,
-            body=body,
-            reach=reach,
-            seen=seen,
-            lcd_channel_type=lcd_channel_type,
-            lcd_channel_num=lcd_channel_num,
+        self.stdout.write(
+            self.style.WARNING(
+                "DEPRECATED: `manage.py message` is deprecated; use `manage.py node message` instead."
+            )
         )
-        self.stdout.write(self.style.SUCCESS("Net message broadcast"))
+        call_command(
+            "node",
+            "message",
+            options["subject"],
+            options["body"],
+            reach=options.get("reach"),
+            seen=options.get("seen"),
+            lcd_channel_type=options.get("lcd_channel_type"),
+            lcd_channel_num=options.get("lcd_channel_num"),
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )

@@ -12,8 +12,10 @@ import re
 import shutil
 import subprocess
 import textwrap
+import time
 import uuid
 from collections.abc import Iterable
+from pathlib import Path
 from secrets import token_hex
 from urllib.parse import urlsplit, urlunsplit
 
@@ -25,7 +27,8 @@ from django.test import RequestFactory
 from django.urls import reverse
 from requests import RequestException
 
-from apps.nodes.models import Node
+from apps.content.utils import capture_and_save_screenshot
+from apps.nodes.models import NetMessage, Node, PendingNetMessage
 from apps.nodes.tasks import poll_peers
 from apps.nodes.views import node_info, register_node
 
@@ -122,6 +125,83 @@ class Command(BaseCommand):
             "ready",
             help="Verify that this node is ready to register with a host it visits.",
             description="Example: python manage.py node ready",
+        )
+
+        message_parser = subparsers.add_parser(
+            "message",
+            help="Broadcast a network message.",
+            description="Example: python manage.py node message Subject 'Body text'",
+        )
+        message_parser.add_argument("subject", help="Subject or first line of the message")
+        message_parser.add_argument(
+            "body",
+            nargs="?",
+            default="",
+            help="Optional body text for the message",
+        )
+        message_parser.add_argument(
+            "--reach",
+            dest="reach",
+            help="Optional node role name that limits propagation",
+        )
+        message_parser.add_argument(
+            "--seen",
+            nargs="+",
+            dest="seen",
+            help="UUIDs of nodes that have already seen the message",
+        )
+        message_parser.add_argument(
+            "--lcd-channel-type",
+            dest="lcd_channel_type",
+            help="LCD channel type to target (for example low, high, clock, uptime)",
+        )
+        message_parser.add_argument(
+            "--lcd-channel-num",
+            dest="lcd_channel_num",
+            type=int,
+            help="LCD channel number to target",
+        )
+
+        purge_nodes_parser = subparsers.add_parser(
+            "purge_nodes",
+            help="Delete soft-deleted and duplicate nodes.",
+            description="Example: python manage.py node purge_nodes --remove-anonymous",
+        )
+        purge_nodes_parser.add_argument(
+            "--remove-anonymous",
+            action="store_true",
+            dest="remove_anonymous",
+            help="Also delete nodes missing both MAC address and hostname.",
+        )
+
+        subparsers.add_parser(
+            "purge_net_messages",
+            help="Delete all net messages and pending deliveries.",
+            description="Example: python manage.py node purge_net_messages",
+        )
+
+        screenshot_parser = subparsers.add_parser(
+            "screenshot",
+            help="Capture screenshot content from a URL or local desktop.",
+            description="Example: python manage.py node screenshot https://localhost:8000",
+        )
+        screenshot_parser.add_argument(
+            "url",
+            nargs="?",
+            help=(
+                "URL to capture. Defaults to the local node site using the PORT "
+                "environment variable or the dev server port when available."
+            ),
+        )
+        screenshot_parser.add_argument(
+            "--freq",
+            type=int,
+            help="Capture another screenshot every N seconds until stopped.",
+        )
+        screenshot_parser.add_argument(
+            "--local",
+            action="store_true",
+            help="Capture a screenshot of the local desktop instead of a URL.",
         )
 
     def handle(self, *args, **options):
@@ -368,6 +448,132 @@ class Command(BaseCommand):
 
     def _handle_ready(self, **options):
         self._run_registration_checks()
+
+    def _handle_message(self, **options):
+        """Broadcast a net message across nodes."""
+
+        NetMessage.broadcast(
+            subject=options["subject"],
+            body=options["body"],
+            reach=options.get("reach"),
+            seen=options.get("seen"),
+            lcd_channel_type=options.get("lcd_channel_type"),
+            lcd_channel_num=options.get("lcd_channel_num"),
+        )
+        self.stdout.write(self.style.SUCCESS("Net message broadcast"))
+
+    def _handle_purge_nodes(self, **options):
+        """Delete soft-deleted nodes and deduplicate remaining nodes."""
+
+        remove_anonymous = options.get("remove_anonymous", False)
+
+        soft_deleted = Node.all_objects.filter(is_deleted=True)
+        _, soft_delete_counts = soft_deleted.delete()
+        soft_deleted_count = soft_delete_counts.get(Node._meta.label, 0)
+
+        kept_keys: set[str] = set()
+        duplicate_ids: list[int] = []
+        nodes_missing_keys: list[Node] = []
+
+        for node in Node.objects.order_by("-id"):
+            dedup_key = self._deduplication_key(node)
+            if not dedup_key:
+                nodes_missing_keys.append(node)
+                continue
+            if dedup_key in kept_keys:
+                duplicate_ids.append(node.pk)
+            else:
+                kept_keys.add(dedup_key)
+
+        _, duplicate_delete_counts = Node.objects.filter(pk__in=duplicate_ids).delete()
+        duplicate_count = duplicate_delete_counts.get(Node._meta.label, 0)
+
+        anonymous_delete_counts: dict[str, int] | None = None
+        if remove_anonymous and nodes_missing_keys:
+            _, anonymous_delete_counts = Node.objects.filter(
+                pk__in=[node.pk for node in nodes_missing_keys]
+            ).delete()
+
+        messages: list[str] = []
+        if soft_deleted_count:
+            suffix = "" if soft_deleted_count == 1 else "s"
+            messages.append(f"Removed {soft_deleted_count} soft-deleted node{suffix}")
+        if duplicate_count:
+            suffix = "" if duplicate_count == 1 else "s"
+            messages.append(f"Deleted {duplicate_count} duplicate node{suffix}")
+        if anonymous_delete_counts:
+            anonymous_count = anonymous_delete_counts.get(Node._meta.label, 0)
+            if anonymous_count:
+                suffix = "" if anonymous_count == 1 else "s"
+                messages.append(
+                    f"Deleted {anonymous_count} anonymous node{suffix} missing deduplication keys"
+                )
+
+        if messages:
+            self.stdout.write(self.style.SUCCESS("; ".join(messages)))
+        else:
+            self.stdout.write("No nodes purged.")
+
+        if nodes_missing_keys and not remove_anonymous:
+            skipped_descriptions = "; ".join(
+                self._format_anonymous_node(node) for node in nodes_missing_keys
+            )
+            self.stdout.write(
+                self.style.WARNING(
+                    "Skipped nodes missing deduplication keys: " f"{skipped_descriptions}"
+                )
+            )
+
+    def _handle_purge_net_messages(self, **options):
+        """Delete all network messages and pending delivery rows."""
+
+        deleted, model_counts = NetMessage.objects.all().delete()
+        message_count = model_counts.get(NetMessage._meta.label, 0)
+        pending_count = model_counts.get(PendingNetMessage._meta.label, 0)
+
+        if deleted:
+            suffix = "s" if message_count != 1 else ""
+            message = f"Deleted {message_count} net message{suffix}"
+            if pending_count:
+                pending_label = (
+                    "pending queue entry" if pending_count == 1 else "pending queue entries"
+                )
+                message = f"{message}, cleared {pending_count} {pending_label}"
+            related = deleted - message_count - pending_count
+            if related > 0:
+                related_label = "related row" if related == 1 else "related rows"
+                message = f"{message}, removed {related} {related_label}"
+            self.stdout.write(self.style.SUCCESS(f"{message}."))
+        else:
+            self.stdout.write("No net messages found.")
+
+    def _handle_screenshot(self, **options):
+        """Capture a screenshot and save it as content."""
+
+        frequency = options.get("freq")
+        if frequency is not None and frequency <= 0:
+            raise CommandError("--freq must be a positive integer")
+
+        local_capture = options.get("local")
+        url = options.get("url")
+        if local_capture and url:
+            raise CommandError("--local cannot be used together with a URL")
+
+        last_path: Path | None = None
+
+        try:
+            while True:
+                path = capture_and_save_screenshot(url=url, method="COMMAND", local=local_capture)
+                path_str = path.as_posix() if path else ""
+                self.stdout.write(path_str)
+                last_path = path
+                if frequency is None:
+                    break
+                time.sleep(frequency)
+        except KeyboardInterrupt:
+            self.stdout.write(self.style.WARNING("Stopping screenshot capture"))
+
+        return last_path.as_posix() if last_path else ""
 
     def _decode_token(self, token: str) -> dict:
         try:
@@ -684,6 +890,24 @@ class Command(BaseCommand):
         if port == 80:
             return ("http",)
         return ("http", "https")
+
+    def _deduplication_key(self, node: Node) -> str:
+        """Return the preferred stable key used to deduplicate nodes."""
+
+        mac = (node.mac_address or "").strip()
+        if mac:
+            return mac.lower()
+        hostname = (node.hostname or "").strip()
+        if hostname:
+            return hostname.lower()
+        return ""
+
+    def _format_anonymous_node(self, node: Node) -> str:
+        """Return a readable description for nodes without deduplication keys."""
+
+        mac = (node.mac_address or "").strip() or "<missing>"
+        hostname = (node.hostname or "").strip() or "<missing>"
+        return f"id={node.pk}, mac={mac}, hostname={hostname}"
 
     def _run_registration_checks(self) -> None:
         node, created = Node.register_current()
