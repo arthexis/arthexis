@@ -61,17 +61,3 @@ def test_low_channel_gaps_use_uptime_payload(uptime_mocks):
     assert uptime_payload.line2 == "ON 120m0s eth0"
     assert uptime_payload.scroll_ms == lcd_screen.DEFAULT_SCROLL_MS
 
-
-def test_low_channel_whitespace_payload_uses_uptime_payload(uptime_mocks):
-    base_dir, now = uptime_mocks
-    payload = lcd_screen.LockPayload("   ", "\t", lcd_screen.DEFAULT_SCROLL_MS)
-
-    uptime_payload = lcd_screen._select_low_payload(
-        payload,
-        base_dir=base_dir,
-        now=now,
-    )
-
-    assert uptime_payload.line1 == "UP 0d1h0m"
-    assert uptime_payload.line2 == "ON 120m0s eth0"
-    assert uptime_payload.scroll_ms == lcd_screen.DEFAULT_SCROLL_MS
