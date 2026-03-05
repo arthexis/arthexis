@@ -7,9 +7,23 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 PREFIX = "[Test Runner]"
+
+
+class ProcessLike(Protocol):
+    """Protocol for subprocess handles used by the VS Code launcher."""
+
+    def wait(self) -> int:
+        """Wait for the process and return its exit code."""
+
+    def terminate(self) -> None:
+        """Request a graceful process termination."""
+
+    def kill(self) -> None:
+        """Forcefully terminate the process."""
 
 
 def build_pytest_command(extra_args: list[str] | None = None) -> list[str]:
@@ -26,12 +40,25 @@ def run_tests(extra_args: list[str] | None = None) -> int:
 
     command = build_pytest_command(extra_args)
     print(f"{PREFIX} Running: {' '.join(command)}")
-    completed = subprocess.run(command, cwd=BASE_DIR, check=False)
-    if completed.returncode == 0:
+
+    process: ProcessLike = subprocess.Popen(command, cwd=BASE_DIR)
+    try:
+        return_code = process.wait()
+    except KeyboardInterrupt:
+        print(f"{PREFIX} Interrupted. Stopping pytest process...")
+        process.terminate()
+        try:
+            process.wait()
+        except KeyboardInterrupt:
+            process.kill()
+            process.wait()
+        return 130
+
+    if return_code == 0:
         print(f"{PREFIX} Tests passed.")
     else:
-        print(f"{PREFIX} Tests failed with exit code {completed.returncode}.")
-    return completed.returncode
+        print(f"{PREFIX} Tests failed with exit code {return_code}.")
+    return return_code
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
