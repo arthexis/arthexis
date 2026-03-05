@@ -1,10 +1,4 @@
 {% if messages %}
-<style>
-.messagelist li .copy-message {
-  float: right;
-  margin-left: 1em;
-}
-</style>
 <ul class="messagelist">{% for message in messages %}
   <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>
     <span class="message-content">{{ message|capfirst }}</span>

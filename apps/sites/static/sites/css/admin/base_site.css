@@ -1,3 +1,8 @@
+.messagelist li .copy-message {
+    float: right;
+    margin-left: 1em;
+}
+
 .breadcrumbs__copy-link {
     margin-left: 0.5rem;
     font-size: 0.875rem;
