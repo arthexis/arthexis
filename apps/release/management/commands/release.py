@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import os
+import re
 from pathlib import Path
 
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.release.domain import capture_migration_state, prepare_release
+from apps.release.domain import (
+    capture_migration_state,
+    list_transform_names,
+    prepare_release,
+    run_transform,
+)
 from apps.release.models import PackageRelease
 from apps.release.release import DEFAULT_PACKAGE, ReleaseError, build
 from apps.release.models import Package as PackageModel
@@ -23,12 +33,39 @@ REQUIRED_PACKAGE_FIELDS = (
     "repository_url",
     "homepage_url",
 )
+RELEASE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+class BundleVerificationError(CommandError):
+    """Raised when a release migration bundle cannot be verified."""
+
+
+def _resolve_signing_key() -> str:
+    """Return configured HMAC signing key when available."""
+
+    return (
+        os.environ.get("RELEASE_BUNDLE_SIGNING_KEY")
+        or os.environ.get("ARTHEXIS_RELEASE_BUNDLE_SIGNING_KEY")
+        or ""
+    ).strip()
+
+
+def _assert_relative_to(base: Path, candidate: Path, *, label: str) -> None:
+    """Ensure candidate stays within base directory."""
+
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise BundleVerificationError(f"{label} escapes bundle directory: {candidate}") from exc
 
 
 class Command(BaseCommand):
     """Run release-related actions from a single command entrypoint."""
 
-    help = "Run release actions (prepare, build, capture-state, clean-logs, check-pypi)."
+    help = (
+        "Run release actions (prepare, build, capture-state, clean-logs, "
+        "check-pypi, apply-migrations, run-data-transforms)."
+    )
 
     def add_arguments(self, parser):
         """Register action subcommands and their options."""
@@ -92,6 +129,54 @@ class Command(BaseCommand):
                 "Release primary key or version to check. "
                 "Defaults to the latest release for the active package."
             ),
+        )
+
+        migration_parser = subparsers.add_parser(
+            "apply-migrations",
+            help=(
+                "Apply release migration bundle deltas for installed versions and "
+                "fall back to `manage.py migrate` on bundle mismatch."
+            ),
+        )
+        migration_parser.add_argument("target_version", help="Target release version")
+        migration_parser.add_argument(
+            "--installed-version",
+            dest="installed_version",
+            help="Installed release version. Defaults to VERSION file.",
+        )
+        migration_parser.add_argument(
+            "--bundle-dir",
+            dest="bundle_dir",
+            help="Bundle directory. Defaults to releases/<target_version>/migrations.",
+        )
+        migration_parser.add_argument(
+            "--strict",
+            action="store_true",
+            help="Fail instead of falling back to migrate when bundle verification fails.",
+        )
+        migration_parser.add_argument(
+            "--skip-data-transforms",
+            action="store_true",
+            help="Skip deferred post-migration data transforms.",
+        )
+
+        transforms_parser = subparsers.add_parser(
+            "run-data-transforms",
+            help=(
+                "Run idempotent, checkpointed data transforms moved out of "
+                "schema-critical migrations."
+            ),
+        )
+        transforms_parser.add_argument(
+            "transform",
+            nargs="?",
+            help="Optional transform name. Runs all registered transforms when omitted.",
+        )
+        transforms_parser.add_argument(
+            "--max-batches",
+            type=int,
+            default=1,
+            help="Number of batches to process for each transform.",
         )
 
     def handle(self, *args, **options):
@@ -195,6 +280,183 @@ class Command(BaseCommand):
             stdout=self.stdout,
             stderr=self.stderr,
         )
+
+    def _handle_run_data_transforms(self, options: dict[str, object]) -> None:
+        max_batches = int(options["max_batches"])
+        if max_batches < 1:
+            raise CommandError("--max-batches must be >= 1")
+
+        transform_name = options.get("transform")
+        names = [str(transform_name)] if transform_name else list_transform_names()
+        for name in names:
+            self._run_transform_batches(name, max_batches=max_batches)
+
+    def _handle_apply_migrations(self, options: dict[str, object]) -> None:
+        target_version = str(options["target_version"]).strip()
+        if not RELEASE_VERSION_PATTERN.fullmatch(target_version):
+            raise BundleVerificationError(f"Invalid target version: {target_version!r}")
+        installed_version = self._resolve_installed_version(options.get("installed_version"))
+        if not RELEASE_VERSION_PATTERN.fullmatch(installed_version):
+            raise BundleVerificationError(f"Invalid installed version: {installed_version!r}")
+        bundle_dir = self._resolve_bundle_dir(target_version, options.get("bundle_dir"))
+
+        try:
+            self._verify_bundle(bundle_dir)
+            if installed_version == target_version:
+                call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
+                call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
+                self._run_deferred_data_transforms(skip=bool(options["skip_data_transforms"]))
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        "Installed version matches target; database state verified and synchronized."
+                    )
+                )
+                return
+
+            manifest = self._load_manifest(bundle_dir, installed_version, target_version)
+            self._apply_manifest(manifest)
+            call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
+            self._run_deferred_data_transforms(skip=bool(options["skip_data_transforms"]))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Applied migration bundle for {installed_version} -> {target_version}."
+                )
+            )
+        except BundleVerificationError as exc:
+            if bool(options.get("strict")):
+                raise
+            self.stderr.write(self.style.WARNING(f"{exc}. Falling back to Django migrate."))
+            call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
+            call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
+            self._run_deferred_data_transforms(skip=bool(options["skip_data_transforms"]))
+
+    def _run_transform_batches(self, transform_name: str, *, max_batches: int) -> None:
+        for index in range(max_batches):
+            try:
+                result = run_transform(transform_name)
+            except KeyError as exc:
+                raise CommandError(str(exc)) from exc
+
+            self.stdout.write(
+                f"{transform_name}: batch={index + 1} processed={result.processed} "
+                f"updated={result.updated} complete={result.complete}"
+            )
+            if result.complete:
+                break
+
+    def _resolve_installed_version(self, explicit_version: object) -> str:
+        if explicit_version:
+            return str(explicit_version).strip()
+
+        version_file = Path(settings.BASE_DIR) / "VERSION"
+        if not version_file.exists():
+            raise BundleVerificationError("Installed version could not be determined: VERSION file missing")
+
+        version = version_file.read_text(encoding="utf-8").strip()
+        if not version:
+            raise BundleVerificationError("Installed version could not be determined: VERSION file empty")
+        return version
+
+    def _resolve_bundle_dir(self, target_version: str, explicit_dir: object) -> Path:
+        if explicit_dir:
+            bundle_dir = Path(str(explicit_dir)).expanduser().resolve()
+        else:
+            bundle_dir = (Path(settings.BASE_DIR) / "releases" / target_version / "migrations").resolve()
+
+        if not bundle_dir.exists():
+            raise BundleVerificationError(f"Bundle directory not found: {bundle_dir}")
+        return bundle_dir
+
+    def _verify_bundle(self, bundle_dir: Path) -> None:
+        checksum_file = bundle_dir / "checksums.sha256"
+        if not checksum_file.exists():
+            raise BundleVerificationError("Bundle checksum file is missing")
+
+        for line in checksum_file.read_text(encoding="utf-8").splitlines():
+            entry = line.strip()
+            if not entry:
+                continue
+            parts = entry.split("  ", 1)
+            if len(parts) != 2:
+                raise BundleVerificationError(f"Malformed checksum line: {entry}")
+            expected_digest, relative_path = parts
+            artifact_path = (bundle_dir / relative_path).resolve()
+            _assert_relative_to(bundle_dir, artifact_path, label="Bundle artifact path")
+            if not artifact_path.exists():
+                raise BundleVerificationError(f"Bundle artifact is missing: {relative_path}")
+            actual_digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+            if actual_digest != expected_digest:
+                raise BundleVerificationError(f"Checksum mismatch for {relative_path}")
+
+        signing_key = _resolve_signing_key()
+        signature_file = bundle_dir / "checksums.sha256.sig"
+        if signing_key and not signature_file.exists():
+            raise BundleVerificationError("Bundle signature file is missing")
+
+        if signing_key and signature_file.exists():
+            expected_signature = hmac.new(
+                signing_key.encode("utf-8"), checksum_file.read_bytes(), hashlib.sha256
+            ).hexdigest()
+            actual_signature = signature_file.read_text(encoding="utf-8").strip()
+            if not hmac.compare_digest(expected_signature, actual_signature):
+                raise BundleVerificationError("Bundle signature validation failed")
+
+    def _load_manifest(
+        self, bundle_dir: Path, installed_version: str, target_version: str
+    ) -> dict[str, object]:
+        manifest_path = bundle_dir / "manifests" / f"{installed_version}__to__{target_version}.json"
+        if not manifest_path.exists():
+            raise BundleVerificationError(
+                f"Manifest for {installed_version} -> {target_version} is missing"
+            )
+
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise BundleVerificationError(f"Manifest is not valid JSON: {manifest_path}") from exc
+
+        deltas = payload.get("deltas")
+        if not isinstance(deltas, dict):
+            raise BundleVerificationError("Manifest payload is missing deltas map")
+        return payload
+
+    def _apply_manifest(self, manifest: dict[str, object]) -> None:
+        deltas = manifest.get("deltas", {})
+        if not isinstance(deltas, dict):
+            raise BundleVerificationError("Manifest deltas format is invalid")
+
+        for app_label in sorted(deltas):
+            migration_names = deltas[app_label]
+            if not isinstance(migration_names, list):
+                raise BundleVerificationError(f"Manifest deltas for app '{app_label}' must be a list")
+            if not migration_names:
+                continue
+            target_migration = str(migration_names[-1])
+            call_command(
+                "migrate",
+                app_label,
+                target_migration,
+                "--noinput",
+                stdout=self.stdout,
+                stderr=self.stderr,
+            )
+
+    def _run_deferred_data_transforms(self, *, skip: bool) -> None:
+        if skip:
+            self.stdout.write("Skipping deferred data transforms.")
+            return
+
+        try:
+            call_command(
+                "release",
+                "run-data-transforms",
+                "--max-batches",
+                "1",
+                stdout=self.stdout,
+                stderr=self.stderr,
+            )
+        except Exception as exc:  # pragma: no cover - defensive non-blocking path
+            self.stderr.write(self.style.WARNING(f"Deferred data transforms failed: {exc}"))
 
     def _get_package(self, identifier):
         if not identifier:

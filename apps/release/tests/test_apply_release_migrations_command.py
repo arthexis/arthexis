@@ -53,13 +53,13 @@ def test_apply_release_migrations_uses_manifest_delta(monkeypatch, settings, tmp
     def fake_call_command(*args, **kwargs):
         calls.append((args, kwargs))
 
-    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+    monkeypatch.setattr("apps.release.management.commands.release.call_command", fake_call_command)
 
-    call_command("apply_release_migrations", target_version, bundle_dir=str(bundle_dir))
+    call_command("release", "apply-migrations", target_version, bundle_dir=str(bundle_dir))
 
     assert calls[0][0] == ("migrate", "demoapp", "0002_auto", "--noinput")
     assert calls[1][0] == ("migrate", "--check")
-    assert calls[2][0] == ("run_release_data_transforms", "--max-batches", "1")
+    assert calls[2][0] == ("release", "run-data-transforms", "--max-batches", "1")
 
 
 def test_apply_release_migrations_same_version_still_syncs_db(monkeypatch, settings, tmp_path) -> None:
@@ -75,13 +75,13 @@ def test_apply_release_migrations_same_version_still_syncs_db(monkeypatch, setti
     def fake_call_command(*args, **kwargs):
         calls.append(args)
 
-    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+    monkeypatch.setattr("apps.release.management.commands.release.call_command", fake_call_command)
 
-    call_command("apply_release_migrations", version, bundle_dir=str(bundle_dir))
+    call_command("release", "apply-migrations", version, bundle_dir=str(bundle_dir))
 
     assert ("migrate", "--noinput") in calls
     assert ("migrate", "--check") in calls
-    assert ("run_release_data_transforms", "--max-batches", "1") in calls
+    assert ("release", "run-data-transforms", "--max-batches", "1") in calls
     assert not any(len(call) > 1 and call[0] == "migrate" and call[1] == "demoapp" for call in calls)
 
 
@@ -102,13 +102,13 @@ def test_apply_release_migrations_falls_back_on_bundle_mismatch(monkeypatch, set
     def fake_call_command(*args, **kwargs):
         calls.append(args)
 
-    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+    monkeypatch.setattr("apps.release.management.commands.release.call_command", fake_call_command)
 
-    call_command("apply_release_migrations", target_version, bundle_dir=str(bundle_dir))
+    call_command("release", "apply-migrations", target_version, bundle_dir=str(bundle_dir))
 
     assert ("migrate", "--noinput") in calls
     assert ("migrate", "--check") in calls
-    assert ("run_release_data_transforms", "--max-batches", "1") in calls
+    assert ("release", "run-data-transforms", "--max-batches", "1") in calls
 
 
 def test_apply_release_migrations_validates_signature_when_key_is_set(monkeypatch, settings, tmp_path) -> None:
@@ -132,9 +132,9 @@ def test_apply_release_migrations_validates_signature_when_key_is_set(monkeypatc
     def fake_call_command(*args, **kwargs):
         calls.append(args)
 
-    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+    monkeypatch.setattr("apps.release.management.commands.release.call_command", fake_call_command)
 
-    call_command("apply_release_migrations", target_version, bundle_dir=str(bundle_dir))
+    call_command("release", "apply-migrations", target_version, bundle_dir=str(bundle_dir))
 
     assert ("migrate", "demoapp", "0002_auto", "--noinput") in calls
 
@@ -153,10 +153,11 @@ def test_apply_release_migrations_skips_data_transforms_when_requested(monkeypat
     def fake_call_command(*args, **kwargs):
         calls.append(args)
 
-    monkeypatch.setattr("apps.release.management.commands.apply_release_migrations.call_command", fake_call_command)
+    monkeypatch.setattr("apps.release.management.commands.release.call_command", fake_call_command)
 
     call_command(
-        "apply_release_migrations",
+        "release",
+        "apply-migrations",
         target_version,
         bundle_dir=str(bundle_dir),
         skip_data_transforms=True,
@@ -164,4 +165,4 @@ def test_apply_release_migrations_skips_data_transforms_when_requested(monkeypat
 
     assert ("migrate", "demoapp", "0002_auto", "--noinput") in calls
     assert ("migrate", "--check") in calls
-    assert ("run_release_data_transforms", "--max-batches", "1") not in calls
+    assert ("release", "run-data-transforms", "--max-batches", "1") not in calls

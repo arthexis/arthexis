@@ -87,5 +87,34 @@ def test_release_clean_logs_without_targets_raises_command_error() -> None:
         call_command("release", "clean-logs")
 
 
+def test_release_run_data_transforms_invokes_all_registered(monkeypatch) -> None:
+    """Regression: ``release run-data-transforms`` should run all discovered transforms."""
+
+    monkeypatch.setattr(
+        "apps.release.management.commands.release.list_transform_names",
+        lambda: ["first", "second"],
+    )
+
+    captured: list[tuple[str, int]] = []
+
+    def fake_runner(self, name: str, *, max_batches: int) -> None:
+        captured.append((name, max_batches))
+
+    monkeypatch.setattr(
+        "apps.release.management.commands.release.Command._run_transform_batches",
+        fake_runner,
+    )
+
+    call_command("release", "run-data-transforms", "--max-batches", "2")
+
+    assert captured == [("first", 2), ("second", 2)]
+
+
+def test_release_run_data_transforms_rejects_invalid_max_batches() -> None:
+    """Regression: ``release run-data-transforms`` should enforce positive batches."""
+
+    with pytest.raises(CommandError, match="--max-batches must be >= 1"):
+        call_command("release", "run-data-transforms", "--max-batches", "0")
+
 
 
