@@ -2,7 +2,8 @@ from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.contrib.admin.utils import flatten_fieldsets
+from django.core.exceptions import FieldError, ValidationError
 from django.db.models import Q
 from django.http import HttpResponseBase, HttpResponseRedirect
 from django.shortcuts import redirect
@@ -63,20 +64,38 @@ class OwnableAdminMixin:
     def _form_includes_ownable_validation(self, form_class):
         return form_class and issubclass(form_class, OwnableAdminForm)
 
+
     def get_form(self, request, obj=None, **kwargs):
+        """Return a form class that enforces ownership validation and tolerates dynamic fields."""
+
         form_class = kwargs.get("form") or getattr(self, "form", None)
-        if self._form_includes_ownable_validation(form_class):
+        if not self._form_includes_ownable_validation(form_class):
+            if form_class:
+                form_class = type(
+                    f"Ownable{form_class.__name__}",
+                    (OwnableAdminForm, form_class),
+                    {},
+                )
+                kwargs["form"] = form_class
+            else:
+                kwargs["form"] = self.ownable_form_class
+                form_class = kwargs["form"]
+
+        model_field_names = {field.name for field in self.model._meta.get_fields()}
+        declared_field_names = set(getattr(form_class, "declared_fields", {}).keys())
+        allowed_fields = model_field_names | declared_field_names
+
+        field_names = kwargs.get("fields")
+        if field_names is None:
+            field_names = flatten_fieldsets(self.get_fieldsets(request, obj))
+        if field_names:
+            kwargs["fields"] = [name for name in field_names if name in allowed_fields]
+
+        try:
             return super().get_form(request, obj, **kwargs)
-        if form_class:
-            form_class = type(
-                f"Ownable{form_class.__name__}",
-                (OwnableAdminForm, form_class),
-                {},
-            )
-            kwargs["form"] = form_class
-        else:
-            kwargs["form"] = self.ownable_form_class
-        return super().get_form(request, obj, **kwargs)
+        except FieldError:
+            kwargs.pop("fields", None)
+            return super().get_form(request, obj, **kwargs)
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
