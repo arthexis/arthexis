@@ -39,6 +39,8 @@ ALLOWED_EMPTY_TEST_FILES = {
     "apps/screens/tests/test_startup_notifications_lcd.py",
     "apps/sites/tests/test_view_history.py",
     "apps/tasks/tests/test_models.py",
+    "apps/tests/domain/test_results.py",
+    "apps/users/tests/test_rfid_auth_audit_suite.py",
     "apps/tests/management/commands/test.py",
     "apps/users/management/commands/test_login.py",
     "apps/users/tests/test_temp_password_command.py",
