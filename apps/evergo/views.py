@@ -25,6 +25,18 @@ EVERGO_PORTAL_ORDER_URL_TEMPLATE = getattr(
 )
 EVERGO_PORTAL_MAIN_URL = getattr(settings, "EVERGO_PORTAL_MAIN_URL", "https://portal-mex.evergo.com/")
 
+DISPLAY_TEXT_FIXUPS = {
+    "Orden en ejecuci?n": "Orden en ejecución",
+}
+
+
+def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
+    """Normalize common encoding artifacts in user-facing Evergo text."""
+    normalized = str(value or "").strip()
+    if not normalized:
+        return default
+    return DISPLAY_TEXT_FIXUPS.get(normalized, normalized)
+
 
 def customer_public_detail(request, pk: int) -> HttpResponse:
     """Render a public Evergo customer profile and artifacts."""
@@ -248,6 +260,8 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
         "evergo/order_tracking_public.html",
         {
             "order": order,
+            "order_status_display": _normalize_display_text(order.status_name),
+            "order_client_display": _normalize_display_text(order.client_name),
             "form": form,
             "missing_images": missing_images,
             "image_field_names": IMAGE_FIELD_NAMES,

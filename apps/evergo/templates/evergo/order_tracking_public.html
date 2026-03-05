@@ -10,6 +10,7 @@
         .card { border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
         .grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); }
         .field { min-width: 0; }
+        .grid > .field { padding-inline: .2rem; }
         label { display: block; font-size: .92rem; margin-bottom: .2rem; }
         input, select { width: 100%; padding: .45rem; border-radius: 6px; border: 1px solid #777; }
         .images { display:grid; gap:.8rem; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); }
@@ -21,13 +22,13 @@
         .errorlist { color: #a30000; }
         @media (max-width: 860px) {
             .grid { gap: 1rem; }
-            .grid > .field { padding-inline: .25rem; }
+            .grid > .field { padding-inline: .3rem; }
         }
     </style>
 </head>
 <body>
     <h1>Order Tracking · <a href="{{ evergo_so_url }}" target="_blank" rel="noopener noreferrer">{{ order.order_number|default:order.remote_id }}</a></h1>
-    <p>Estatus: {{ order.status_name|default:"-" }} · Cliente: {{ order.client_name|default:"-" }}</p>
+    <p>Estatus: {{ order_status_display }} · Cliente: {{ order_client_display }}</p>
 
     {% if messages %}
       <div class="messages">
@@ -70,7 +71,7 @@
         <div class="card">
             <h2>Evidencias fotográficas</h2>
             <p>Si no subes una imagen se enviará una imagen N/A.</p>
-            <details>
+            <details open>
                 <summary>Fotos principales (editar si es necesario)</summary>
                 <div class="images" style="margin-top:.8rem;">
                     {% for field in image_fields|slice:":6" %}

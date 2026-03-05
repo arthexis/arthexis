@@ -94,11 +94,9 @@ class EvergoOrderTrackingForm(forms.Form):
         min_value=0,
         max_digits=8,
         decimal_places=2,
+        initial=0,
         label="Neutro-Tierra",
     )
-    marca_cargador = forms.ChoiceField(choices=(), required=False)
-    numero_serie = forms.CharField(max_length=128, label="Número de Serie")
-
     prueba_carga = forms.ChoiceField(
         choices=(
             ("Vehículo Eléctrico", "Vehículo Eléctrico"),
@@ -108,6 +106,9 @@ class EvergoOrderTrackingForm(forms.Form):
         initial="Sin prueba",
         label="Prueba de carga",
     )
+    marca_cargador = forms.ChoiceField(choices=(), required=False)
+    numero_serie = forms.CharField(max_length=128, label="Número de Serie")
+
 
     foto_tablero = forms.ImageField(required=False)
     foto_medidor = forms.ImageField(required=False)
@@ -147,7 +148,8 @@ class EvergoOrderTrackingForm(forms.Form):
             (brand, brand) for brand in brands
         ]
         if not self.is_bound:
-            self.initial.setdefault("fecha_visita", timezone.localtime().strftime("%Y-%m-%dT%H:%M"))
+            default_visit_time = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+            self.initial.setdefault("fecha_visita", default_visit_time.strftime("%Y-%m-%dT%H:%M"))
 
 
 class EvergoDashboardLookupForm(forms.Form):

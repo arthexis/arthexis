@@ -22,7 +22,7 @@ on:
       - reopened
       - ready_for_review
   schedule:
-    - cron: '0 2 * * 1'
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -113,8 +113,7 @@ jobs:
             exit 0
           fi
 
-          CHANGED_FIXTURES="$(printf '%s
-' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
+          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | rg '^apps/.*/fixtures/.*\.json$' || true)"
           if [ -z "${CHANGED_FIXTURES}" ]; then
             echo "mode=changed" >> "${GITHUB_OUTPUT}"
             {
@@ -128,8 +127,7 @@ jobs:
           echo "mode=changed" >> "${GITHUB_OUTPUT}"
           {
             echo "paths<<EOF"
-            printf '%s
-' "${CHANGED_FIXTURES}"
+            printf '%s\n' "${CHANGED_FIXTURES}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - name: Lint seed fixtures
@@ -388,6 +386,12 @@ jobs:
           : > pytest.log
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
 
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "=== Full test suite (scheduled daily run) ===" | tee -a pytest.log
+            pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee -a pytest.log
+            exit 0
+          fi
+
           marker_expr="critical and not integration"
           echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
           if [ -z "${PYTEST_XDIST_ARGS:-}" ]; then
@@ -401,7 +405,7 @@ jobs:
 
           pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "${marker_expr}" | tee -a pytest.log
       - name: Report integration test skip
-        if: ${{ steps.integration_gate.outputs.run_integration != 'true' }}
+        if: ${{ github.event_name != 'schedule' && steps.integration_gate.outputs.run_integration != 'true' }}
         run: |
           set -Eeuo pipefail
           echo "=== Integration tests skipped ===" | tee -a pytest.log
@@ -411,14 +415,20 @@ jobs:
         run: |
           {
             echo "## Upgrade test coverage";
-            echo "- Critical tests (excluding integration): executed";
-            if [ "${{ steps.integration_gate.outputs.run_integration }}" = "true" ]; then
-              echo "- Integration tests: executed";
-              echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "- Full test suite: executed";
+              echo "- Reason: scheduled daily run";
+              echo "- Integration tests: included via full suite";
             else
-              echo "- Integration tests: skipped";
-              echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
-              echo "- Branch protection note: keep requiring the **upgrade** job so critical tests remain mandatory while integration executes conditionally.";
+              echo "- Critical tests (excluding integration): executed";
+              if [ "${{ steps.integration_gate.outputs.run_integration }}" = "true" ]; then
+                echo "- Integration tests: executed";
+                echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
+              else
+                echo "- Integration tests: skipped";
+                echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
+                echo "- Branch protection note: keep requiring the **upgrade** job so critical tests remain mandatory while integration executes conditionally.";
+              fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload pytest log
