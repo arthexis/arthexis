@@ -117,4 +117,53 @@ def test_release_run_data_transforms_rejects_invalid_max_batches() -> None:
         call_command("release", "run-data-transforms", "--max-batches", "0")
 
 
+def test_legacy_apply_release_migrations_alias_delegates(monkeypatch) -> None:
+    """Regression: legacy apply_release_migrations command should still work."""
+
+    captured: dict[str, object] = {}
+
+    def fake_call_command(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(
+        "apps.release.management.commands.apply_release_migrations.call_command",
+        fake_call_command,
+    )
+
+    call_command(
+        "apply_release_migrations",
+        "2.0.0",
+        installed_version="1.0.0",
+        bundle_dir="/tmp/bundle",
+        strict=True,
+        skip_data_transforms=True,
+    )
+
+    assert captured["args"] == ("release", "apply-migrations", "2.0.0")
+    assert captured["kwargs"]["installed_version"] == "1.0.0"
+    assert captured["kwargs"]["bundle_dir"] == "/tmp/bundle"
+    assert captured["kwargs"]["strict"] is True
+    assert captured["kwargs"]["skip_data_transforms"] is True
+
+
+def test_legacy_run_release_data_transforms_alias_delegates(monkeypatch) -> None:
+    """Regression: legacy run_release_data_transforms command should still work."""
+
+    captured: dict[str, object] = {}
+
+    def fake_call_command(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(
+        "apps.release.management.commands.run_release_data_transforms.call_command",
+        fake_call_command,
+    )
+
+    call_command("run_release_data_transforms", "cleanup_users", max_batches=3)
+
+    assert captured["args"] == ("release", "run-data-transforms", "cleanup_users")
+    assert captured["kwargs"]["max_batches"] == 3
+
 
