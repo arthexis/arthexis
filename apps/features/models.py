@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.apps import apps as django_apps
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -135,6 +136,50 @@ class Feature(Ownable):
 
     def get_absolute_url(self):
         return reverse("features:detail", kwargs={"slug": self.slug})
+
+    def set_enabled(self, enabled: bool, *, save: bool = True) -> bool:
+        """Set the enabled state and optionally persist it.
+
+        Returns:
+            bool: ``True`` when the state changed; otherwise ``False``.
+        """
+
+        enabled = bool(enabled)
+        if self.is_enabled == enabled:
+            return False
+        self.is_enabled = enabled
+        if save:
+            self.save(update_fields=["is_enabled", "updated_at"])
+        return True
+
+    def toggle_enabled(self, *, save: bool = True) -> bool:
+        """Invert the enabled state and optionally persist it.
+
+        Returns:
+            bool: ``True`` when the feature is enabled after toggling.
+        """
+
+        self.set_enabled(not self.is_enabled, save=save)
+        return bool(self.is_enabled)
+
+    def ensure_can_delete(self) -> None:
+        """Validate that the feature can be deleted.
+
+        Raises:
+            ValidationError: If the suite feature is still enabled.
+        """
+
+        if self.is_enabled:
+            raise ValidationError(
+                _("Disable this suite feature before deleting it."),
+                code="enabled_feature_delete_forbidden",
+            )
+
+    def delete(self, using=None, keep_parents=False):
+        """Delete a suite feature only after it is explicitly disabled."""
+
+        self.ensure_can_delete()
+        return super().delete(using=using, keep_parents=keep_parents)
 
     def is_enabled_for_node(self, node=None) -> bool:
         """Return whether the feature is enabled for the supplied node."""

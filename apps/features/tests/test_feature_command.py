@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import StringIO
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
@@ -148,3 +149,18 @@ def test_features_command_reset_all_reloads_mainstream_fixtures() -> None:
     assert "Reloaded" in output
     assert not Feature.objects.filter(slug="temporary-local").exists()
     assert Feature.objects.filter(slug="development-blog").exists()
+
+
+@pytest.mark.django_db
+def test_enabled_suite_feature_must_be_disabled_before_delete() -> None:
+    """Enabled suite features should reject deletion until explicitly disabled."""
+
+    feature = Feature.objects.create(slug="delete-guard", display="Delete Guard", is_enabled=True)
+
+    with pytest.raises(ValidationError, match="Disable this suite feature before deleting it"):
+        feature.delete()
+
+    feature.set_enabled(False)
+    feature.delete()
+
+    assert not Feature.all_objects.filter(slug="delete-guard").exists()

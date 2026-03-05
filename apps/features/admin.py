@@ -273,6 +273,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
             with transaction.atomic():
                 feature_manager.update(is_seed_data=False)
+                feature_manager.filter(is_enabled=True).update(is_enabled=False)
                 feature_manager.all().delete()
                 call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
         except CommandError as exc:
@@ -355,8 +356,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
 
         with transaction.atomic():
             for feature in queryset.select_for_update().only("pk", "is_enabled"):
-                feature.is_enabled = not feature.is_enabled
-                feature.save(update_fields=["is_enabled", "updated_at"])
+                feature.toggle_enabled()
                 toggled_total += 1
                 if feature.is_enabled:
                     enabled_total += 1
@@ -430,8 +430,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if request.method != "POST":
             return HttpResponseRedirect(reverse("admin:features_feature_change", args=[feature.pk]))
 
-        feature.is_enabled = not feature.is_enabled
-        feature.save(update_fields=["is_enabled", "updated_at"])
+        feature.toggle_enabled()
         status = _("enabled") if feature.is_enabled else _("disabled")
         messages.success(
             request,

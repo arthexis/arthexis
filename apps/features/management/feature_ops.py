@@ -54,8 +54,7 @@ def set_feature_enabled(*, slug: str, enabled: bool, kind: str | None = None) ->
         feature = Feature.objects.filter(slug=slug).first()
         if feature is None:
             raise CommandError(f"Unknown suite feature: {slug}")
-        feature.is_enabled = enabled
-        feature.save(update_fields=["is_enabled", "updated_at"])
+        feature.set_enabled(enabled)
         return resolved_kind
 
     if resolved_kind == FeatureKind.NODE:
@@ -150,6 +149,7 @@ def reset_all_suite_features() -> tuple[int, int]:
     deleted_count = feature_manager.filter(is_deleted=False).count()
     with transaction.atomic():
         feature_manager.update(is_seed_data=False)
+        feature_manager.filter(is_enabled=True).update(is_enabled=False)
         feature_manager.all().delete()
         call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
         _ensure_reset_baseline_features()
