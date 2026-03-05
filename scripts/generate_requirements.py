@@ -32,7 +32,12 @@ class RequirementsGenerationError(RuntimeError):
 
 
 def _load_dependencies(pyproject_path: Path) -> tuple[list[str], list[str]]:
-    """Return runtime and CI dependency specifiers from ``pyproject.toml``."""
+    """Return runtime and CI dependency specifiers from ``pyproject.toml``.
+
+    The CI requirements intentionally include every optional dependency group so
+    that test collection can import all app modules without extra manual
+    installation steps.
+    """
     if not pyproject_path.exists():
         raise FileNotFoundError(f"Missing dependency source file: {pyproject_path}")
 
@@ -53,11 +58,13 @@ def _load_dependencies(pyproject_path: Path) -> tuple[list[str], list[str]]:
             "Expected [project.optional-dependencies] to be a table of dependency lists"
         )
 
-    ci_dependencies = optional_dependencies.get("ci", [])
-    if not isinstance(ci_dependencies, list):
-        raise RequirementsGenerationError(
-            "Expected [project.optional-dependencies].ci to be a list"
-        )
+    ci_dependencies: list[str] = []
+    for group_name, group_dependencies in optional_dependencies.items():
+        if not isinstance(group_dependencies, list):
+            raise RequirementsGenerationError(
+                f"Expected [project.optional-dependencies].{group_name} to be a list"
+            )
+        ci_dependencies.extend(group_dependencies)
 
     dependencies = [*runtime_dependencies, *ci_dependencies]
 

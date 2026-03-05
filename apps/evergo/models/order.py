@@ -49,7 +49,7 @@ class EvergoOrder(models.Model):
     )
 
     user = models.ForeignKey("evergo.EvergoUser", on_delete=models.CASCADE, related_name="orders")
-    remote_id = models.PositiveIntegerField(unique=True, db_index=True)
+    remote_id = models.PositiveIntegerField(unique=True, db_index=True, null=True, blank=True)
     order_number = models.CharField(max_length=64, blank=True)
     prefix = models.CharField(max_length=32, blank=True)
     suffix = models.CharField(max_length=32, blank=True)
