@@ -2,10 +2,14 @@
 
 from django.db import migrations
 
+from utils.migration_branches import SafelyDeprecatedMigration
+
 
 class Migration(migrations.Migration):
     dependencies = [
         ("core", "0002_initial"),
     ]
 
-    operations = []
+    operations = [
+        SafelyDeprecatedMigration(reason="legacy branch alignment placeholder"),
+    ]

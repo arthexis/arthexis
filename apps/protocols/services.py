@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable
-
 from django.db import models, transaction
 
 from apps.protocols.models import Protocol, ProtocolCall
@@ -77,48 +75,9 @@ def sync_protocol_from_spec(spec: dict) -> Protocol:
     return protocol
 
 
-def dump_protocol_to_spec(protocol: Protocol) -> dict:
-    calls = protocol.calls.all()
-    return {
-        "slug": protocol.slug,
-        "name": protocol.name,
-        "version": protocol.version,
-        "description": protocol.description,
-        "calls": {
-            ProtocolCall.CP_TO_CSMS: sorted(
-                call.name for call in calls if call.direction == ProtocolCall.CP_TO_CSMS
-            ),
-            ProtocolCall.CSMS_TO_CP: sorted(
-                call.name for call in calls if call.direction == ProtocolCall.CSMS_TO_CP
-            ),
-        },
-    }
-
-
-def export_protocol_spec(protocol_slug: str, output: Path) -> Path:
-    protocol = Protocol.objects.get(slug=protocol_slug)
-    spec = dump_protocol_to_spec(protocol)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return output
-
-
-def import_protocol_spec(protocol_slug: str, source: Path | None = None) -> Protocol:
-    path = source or spec_path(protocol_slug)
-    spec = load_protocol_spec_from_file(path)
-    if spec.get("slug") != protocol_slug:
-        raise ProtocolSpecError(
-            f"Spec slug {spec.get('slug')} does not match requested {protocol_slug}"
-        )
-    return sync_protocol_from_spec(spec)
-
-
 __all__ = [
     "ProtocolSpecError",
     "load_protocol_spec_from_file",
     "sync_protocol_from_spec",
-    "dump_protocol_to_spec",
-    "export_protocol_spec",
-    "import_protocol_spec",
     "spec_path",
 ]

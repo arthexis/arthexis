@@ -280,3 +280,45 @@ class BranchTagOperation(_BranchOperation):
             [],
             kwargs,
         )
+
+
+class SafelyDeprecatedMigration(Operation):
+    """Mark a historical migration as intentionally safe to skip.
+
+    The operation is a pure marker: it never alters schema state or data.
+    """
+
+    reduces_to_sql = True
+    reversible = True
+    elidable = True
+
+    def __init__(self, *, reason: str = ""):
+        self.reason = reason.strip()
+
+    def state_forwards(self, app_label: str, state: Any) -> None:  # pragma: no cover - no state change
+        return None
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state) -> None:  # pragma: no cover - no db change
+        return None
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state) -> None:  # pragma: no cover - no db change
+        return None
+
+    def describe(self) -> str:
+        if self.reason:
+            return f"Deprecated no-op migration marker: {self.reason}"
+        return "Deprecated no-op migration marker"
+
+    @property
+    def migration_name_fragment(self) -> str:
+        return "safely_deprecated"
+
+    def deconstruct(self):
+        kwargs: dict[str, str] = {}
+        if self.reason:
+            kwargs["reason"] = self.reason
+        return (
+            f"{self.__class__.__module__}.{self.__class__.__qualname__}",
+            [],
+            kwargs,
+        )
