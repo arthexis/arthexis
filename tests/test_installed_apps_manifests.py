@@ -199,7 +199,10 @@ def test_manifest_loading_keeps_declared_dependencies_when_selected_app_is_enabl
 def test_manifest_loading_validates_requires_apps_entries() -> None:
     """Regression: manifests must define REQUIRES_APPS as a string list when provided."""
 
-    with pytest.raises(ImproperlyConfigured, match="REQUIRES_APPS"):
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="Dependency map for 'apps.app' contains an invalid entry",
+    ):
         app_settings._filter_local_apps_by_enabled_lock(
             ["apps.app"],
             requirements_by_app={"apps.app": [""]},
