@@ -7,7 +7,6 @@ from django.core.exceptions import ValidationError
 
 from apps.features.models import Feature
 
-
 @pytest.mark.django_db
 @pytest.mark.regression
 def test_enabled_suite_feature_cannot_be_deleted() -> None:
@@ -17,7 +16,6 @@ def test_enabled_suite_feature_cannot_be_deleted() -> None:
 
     with pytest.raises(ValidationError, match="Disable this suite feature before deleting it"):
         feature.delete()
-
 
 @pytest.mark.django_db
 def test_disabled_suite_feature_can_be_deleted() -> None:
@@ -31,7 +29,6 @@ def test_disabled_suite_feature_can_be_deleted() -> None:
 
     assert not Feature.all_objects.filter(pk=feature.pk).exists()
 
-
 @pytest.mark.django_db
 def test_set_enabled_returns_transition_state() -> None:
     """set_enabled should report whether a state transition happened."""
@@ -41,3 +38,14 @@ def test_set_enabled_returns_transition_state() -> None:
     assert feature.set_enabled(True) is False
     assert feature.set_enabled(False) is True
 
+
+@pytest.mark.django_db
+def test_set_enabled_persists_when_update_fields_is_empty() -> None:
+    """set_enabled should still persist core fields when callers pass an empty update list."""
+
+    feature = Feature.objects.create(slug="empty-update-fields", display="Empty Update Fields", is_enabled=True)
+
+    assert feature.set_enabled(False, update_fields=[]) is True
+
+    feature.refresh_from_db()
+    assert feature.is_enabled is False

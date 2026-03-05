@@ -386,6 +386,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             super().delete_model(request, obj)
         except ValidationError as exc:
             messages.error(request, exc.message)
+            raise
 
     def delete_queryset(self, request, queryset):
         """Delete selected features while reporting rows blocked by enablement state."""
@@ -395,6 +396,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
                 feature.delete()
             except ValidationError as exc:
                 messages.error(request, f"{feature.display}: {exc.message}")
+                raise
 
     def get_urls(self):
         urls = super().get_urls()

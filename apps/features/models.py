@@ -145,8 +145,10 @@ class Feature(Ownable):
         if not changed:
             return False
         self.is_enabled = next_state
-        fields = ["is_enabled", "updated_at"] if update_fields is None else update_fields
-        self.save(update_fields=fields)
+        fields_to_save = {"is_enabled", "updated_at"}
+        if update_fields is not None:
+            fields_to_save.update(update_fields)
+        self.save(update_fields=sorted(fields_to_save))
         return True
 
     def delete(self, using=None, keep_parents=False):
