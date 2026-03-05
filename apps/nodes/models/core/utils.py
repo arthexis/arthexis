@@ -65,12 +65,13 @@ def _matches_release_revision(version: str, revision: str) -> bool:
 
     try:
         package_release_module = importlib.import_module("apps.release.models")
-        package_release = getattr(package_release_module, "PackageRelease")
-    except (ImportError, ModuleNotFoundError):
-        return False
-    except RuntimeError as exc:
-        if "isn't in an application in INSTALLED_APPS" not in str(exc):
+        package_release = getattr(package_release_module, "PackageRelease", None)
+    except (ImportError, RuntimeError) as exc:
+        if isinstance(exc, RuntimeError) and "isn't in an application in INSTALLED_APPS" not in str(exc):
             raise
+        return False
+
+    if package_release is None:
         return False
 
     return bool(package_release.matches_revision(version, revision))
