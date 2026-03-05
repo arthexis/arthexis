@@ -226,10 +226,10 @@ def test_manifest_loading_preserves_required_apps_when_lock_excludes_them() -> N
     lock_path.write_text("apps.blog\n", encoding="utf-8")
 
     filtered = app_settings._filter_local_apps_by_enabled_lock(
-        ["apps.app", "apps.sites", "apps.blog"]
+        ["apps.app", "apps.sites", "apps.users", "apps.blog"]
     )
 
-    assert filtered == ["apps.app", "apps.sites", "apps.blog"]
+    assert filtered == ["apps.app", "apps.sites", "apps.users", "apps.blog"]
 
 
 def test_manifest_loading_keeps_declared_dependencies_when_selected_app_is_enabled() -> None:

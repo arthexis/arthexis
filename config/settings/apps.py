@@ -10,7 +10,7 @@ from utils.enabled_apps_lock import read_enabled_apps_lock
 
 from .base import APPS_DIR, BASE_DIR, HAS_DEBUG_TOOLBAR
 
-REQUIRED_LOCAL_APP_PATHS = ("apps.app", "apps.sites")
+REQUIRED_LOCAL_APP_PATHS = ("apps.app", "apps.sites", "apps.users")
 
 
 def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
