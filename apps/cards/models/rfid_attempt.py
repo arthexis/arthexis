@@ -17,6 +17,20 @@ class RFIDAttempt(Entity):
         CAMERA = "camera", _("Camera scan")
         ON_DEMAND = "on-demand", _("On-demand scan")
         OCPP = "ocpp", _("OCPP")
+        AUTH = "auth", _("Authentication")
+
+    class Reason(models.TextChoices):
+        """Stable reason codes used in payload metadata for audit analytics."""
+
+        RFID_MISSING = "rfid_missing", _("RFID value missing")
+        TAG_NOT_FOUND = "tag_not_found", _("RFID tag not found")
+        TAG_NOT_ALLOWED = "tag_not_allowed", _("RFID tag not allowed")
+        USER_NOT_LINKED = "user_not_linked", _("User not linked")
+        READ_ERROR = "read_error", _("RFID read error")
+        RFID_MISMATCH = "rfid_mismatch", _("RFID mismatch")
+        CELL_VALUE_MISMATCH = "cell_value_mismatch", _("Cell value mismatch")
+        EXTERNAL_COMMAND_ERROR = "external_command_error", _("External command failed")
+        ACCOUNT_NOT_FOUND = "account_not_found", _("Account not found")
 
     class Status(models.TextChoices):
         SCANNED = "scanned", _("Scanned")
