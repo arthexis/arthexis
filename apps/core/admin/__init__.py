@@ -34,6 +34,7 @@ from .inlines import (
 )
 from .invites import InviteLeadAdmin
 from .mixins import (
+    OwnableAdminForm,
     OwnableAdminMixin,
     ProfileAdminMixin,
     SaveBeforeChangeAction,
@@ -81,6 +82,7 @@ __all__ = [
     "OdooProductAdminForm",
     "OpenPayProcessorAdmin",
     "OpenPayProcessorAdminForm",
+    "OwnableAdminForm",
     "OwnableAdminMixin",
     "PayPalProcessorAdmin",
     "PayPalProcessorAdminForm",
