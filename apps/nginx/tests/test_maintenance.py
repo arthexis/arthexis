@@ -2,6 +2,8 @@ from pathlib import Path
 
 from apps.nginx.maintenance import update_config
 
+DARK_THEME_BACKGROUND_STYLE = "background: #111827;"
+
 
 def test_update_config_inserts_maintenance_snippets(tmp_path: Path):
     conf = tmp_path / "nginx.conf"
@@ -46,3 +48,15 @@ location /health {
 
     assert result == 0
     assert conf.read_text(encoding="utf-8").startswith("# Not a server block")
+
+
+def test_app_down_template_uses_dark_background():
+    """503 maintenance page should keep a dark outer background and white card."""
+
+    app_down_template = Path("config/data/nginx/maintenance/app-down.html")
+    content = app_down_template.read_text(encoding="utf-8")
+
+    assert DARK_THEME_BACKGROUND_STYLE in content
+    assert "main {" in content
+    assert "background: #ffffff;" in content
+    assert re.search(r"color\s*:\s*#111827\s*;", content)

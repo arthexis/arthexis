@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from django.core.management.base import CommandError
+from django.db.models import F
 
 from apps.nginx.management.commands.https_parts.constants import (
     NGINX_CONFIGURE_REMEDIATION_TEMPLATE,
@@ -29,7 +30,12 @@ def _get_or_create_config(domain: str, *, protocol: str) -> SiteConfiguration:
         config = SiteConfiguration.objects.get(name=name)
         created = False
     except SiteConfiguration.DoesNotExist:
-        defaults_source = SiteConfiguration.get_default()
+        defaults_source = (
+            SiteConfiguration.objects.filter(enabled=True)
+            .order_by(F("last_applied_at").desc(nulls_last=True), "-id")
+            .first()
+            or SiteConfiguration.get_default()
+        )
         config = SiteConfiguration.objects.create(
             name=name,
             enabled=True,
@@ -59,12 +65,15 @@ def _apply_config(service, config: SiteConfiguration, *, reload: bool) -> None:
         result = config.apply(reload=reload)
     except (NginxUnavailableError, ValidationError) as exc:
         raise CommandError(
-            f"{exc}\n" + NGINX_CONFIGURE_REMEDIATION_TEMPLATE.format(command=sys.argv[0])
+            f"{exc}\n"
+            + NGINX_CONFIGURE_REMEDIATION_TEMPLATE.format(command=sys.argv[0])
         ) from exc
 
     service.stdout.write(service.style.SUCCESS(result.message))
     if not result.validated:
-        service.stdout.write("nginx configuration applied but validation was skipped or failed.")
+        service.stdout.write(
+            "nginx configuration applied but validation was skipped or failed."
+        )
     if not result.reloaded:
         service.stdout.write(
             "nginx reload/start did not complete automatically; check the service status."

@@ -195,6 +195,26 @@ def test_duplicate_prefix_detection_fails_for_overlapping_cross_app_mounts():
         )
 
 
+def test_iter_project_apps_ignores_base_dir_packages_outside_apps_dir(monkeypatch, settings):
+    """App discovery should ignore modules under ``BASE_DIR`` but outside ``APPS_DIR``."""
+
+    settings.BASE_DIR = "/workspace/arthexis"
+    settings.APPS_DIR = "/workspace/arthexis/apps"
+
+    in_repo_app = SimpleNamespace(path="/workspace/arthexis/apps/example")
+    virtualenv_app = SimpleNamespace(path="/workspace/arthexis/.venv/lib/python/site-packages/demo")
+
+    monkeypatch.setattr(
+        route_providers.apps,
+        "get_app_configs",
+        lambda: [in_repo_app, virtualenv_app],
+    )
+
+    discovered = list(route_providers._iter_project_apps())
+
+    assert discovered == [in_repo_app]
+
+
 def test_autodiscovery_ignores_vendored_apps_outside_apps_dir(monkeypatch):
     """Regression: third-party apps under ``.venv`` should not be treated as project route providers."""
 

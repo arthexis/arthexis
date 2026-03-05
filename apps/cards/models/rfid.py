@@ -4,7 +4,6 @@ import base64
 from io import BytesIO
 from typing import Any
 
-import qrcode
 from django.apps import apps
 from django.core.management.color import no_style
 from django.core.validators import RegexValidator
@@ -18,6 +17,18 @@ from apps.base.models import Entity
 
 
 __all__ = ["RFID"]
+
+
+def _load_qrcode_module():
+    """Return the optional ``qrcode`` module when available."""
+
+    try:
+        import qrcode
+    except ModuleNotFoundError as exc:
+        if exc.name == "qrcode":
+            return None
+        raise
+    return qrcode
 
 
 class RFID(Entity):
@@ -217,7 +228,10 @@ class RFID(Entity):
 
         if not self.rfid:
             return ""
-        qr = qrcode.QRCode(box_size=6, border=2)
+        qrcode_module = _load_qrcode_module()
+        if qrcode_module is None:
+            return ""
+        qr = qrcode_module.QRCode(box_size=6, border=2)
         qr.add_data(self.rfid)
         qr.make(fit=True)
         image = qr.make_image(fill_color="black", back_color="white")

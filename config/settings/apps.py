@@ -6,7 +6,11 @@ from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
 from django.core.exceptions import ImproperlyConfigured
 
+from utils.enabled_apps_lock import read_enabled_apps_lock
+
 from .base import APPS_DIR, BASE_DIR, HAS_DEBUG_TOOLBAR
+
+REQUIRED_LOCAL_APP_PATHS = ("apps.app", "apps.sites")
 
 
 def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
@@ -74,7 +78,51 @@ def _load_local_apps_from_manifests() -> list[str]:
             normalized_entry = manifest_entry.strip()
             app_entries.append(normalized_entry)
 
-    return app_entries
+    return _filter_local_apps_by_enabled_lock(app_entries)
+
+
+def _is_required_local_app_entry(app_entry: str) -> bool:
+    """Return whether app entry must always remain enabled for core startup."""
+
+    normalized_entry = app_entry.strip()
+    return any(
+        normalized_entry == required_path
+        or normalized_entry.startswith(f"{required_path}.")
+        for required_path in REQUIRED_LOCAL_APP_PATHS
+    )
+
+
+def _entry_matches_enabled_selector(app_entry: str, selector: str) -> bool:
+    """Return whether a manifest app entry matches a lock-file selector."""
+
+    normalized_entry = app_entry.strip()
+    normalized_selector = selector.strip()
+    if not normalized_entry or not normalized_selector:
+        return False
+
+    if normalized_entry == normalized_selector:
+        return True
+
+    label = normalized_entry.rsplit(".", 1)[-1]
+    return label == normalized_selector
+
+
+def _filter_local_apps_by_enabled_lock(app_entries: list[str]) -> list[str]:
+    """Filter manifest app entries using the optional enabled apps lock file."""
+
+    selectors = read_enabled_apps_lock(BASE_DIR)
+    if selectors is None:
+        return app_entries
+
+    return [
+        app_entry
+        for app_entry in app_entries
+        if _is_required_local_app_entry(app_entry)
+        or any(
+            _entry_matches_enabled_selector(app_entry, selector)
+            for selector in selectors
+        )
+    ]
 
 
 LOCAL_APPS = _load_local_apps_from_manifests()

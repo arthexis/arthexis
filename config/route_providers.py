@@ -19,9 +19,15 @@ from django.urls.resolvers import URLPattern, URLResolver
 
 
 def _iter_project_apps() -> Iterable:
-    """Yield app configs that live under the first-party ``apps`` directory."""
+    """Yield app configs that are part of this repository's ``apps`` package.
 
-    apps_dir = Path(settings.APPS_DIR).resolve()
+    This intentionally ignores third-party packages that may also live under
+    ``BASE_DIR`` (for example when a local virtualenv lives at ``.venv/`` in
+    the repository root).
+    """
+
+    base_dir = Path(settings.BASE_DIR).resolve()
+    apps_dir = Path(getattr(settings, "APPS_DIR", base_dir / "apps")).resolve()
     for app_config in apps.get_app_configs():
         app_path = Path(app_config.path).resolve()
         try:

@@ -9,8 +9,19 @@ import pytest
 from django.core.exceptions import ImproperlyConfigured
 
 from config import settings
+from config.settings import apps as app_settings
+from utils.enabled_apps_lock import get_enabled_apps_lock_path
 
 pytestmark = pytest.mark.regression
+
+
+@pytest.fixture(autouse=True)
+def _clear_enabled_apps_lock_file() -> None:
+    """Remove enabled-app lock file so manifest tests are deterministic."""
+
+    lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
+    if lock_path.exists():
+        lock_path.unlink()
 
 
 def _extract_manifest_apps(manifest_path: Path) -> list[str]:
@@ -140,3 +151,31 @@ def test_manifest_entries_are_unique_after_normalization() -> None:
             for app_entry, modules in sorted(duplicates.items())
         )
     )
+
+
+def test_manifest_loading_respects_enabled_apps_lock() -> None:
+    """Regression: enabled-app lock should filter manifest entries on restart."""
+
+    lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("core\napps.sites\n", encoding="utf-8")
+
+    filtered = app_settings._filter_local_apps_by_enabled_lock(
+        ["apps.core", "apps.sites", "apps.blog"]
+    )
+
+    assert filtered == ["apps.core", "apps.sites"]
+
+
+def test_manifest_loading_preserves_required_apps_when_lock_excludes_them() -> None:
+    """Regression: required local apps should stay enabled even if lock omits them."""
+
+    lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("apps.blog\n", encoding="utf-8")
+
+    filtered = app_settings._filter_local_apps_by_enabled_lock(
+        ["apps.app", "apps.sites", "apps.blog"]
+    )
+
+    assert filtered == ["apps.app", "apps.sites", "apps.blog"]

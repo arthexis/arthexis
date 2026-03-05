@@ -9,6 +9,10 @@ import sys
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
+from apps.tests.models import SuiteTest
 
 
 class Command(BaseCommand):
@@ -49,6 +53,11 @@ class Command(BaseCommand):
             help="Do not pass --latest to env-refresh.",
         )
 
+        subparsers.add_parser(
+            "discover",
+            help="Collect and refresh suite test metadata.",
+        )
+
     def handle(self, *args, **options) -> None:
         """Dispatch to the selected subcommand."""
 
@@ -62,6 +71,9 @@ class Command(BaseCommand):
                 debounce=options["debounce"],
                 latest=options["latest"],
             )
+            return
+        if action == "discover":
+            self._discover_suite_tests()
             return
         raise CommandError(f"Unsupported action: {action}")
 
@@ -86,6 +98,23 @@ class Command(BaseCommand):
         exit_code = test_server.main(argv)
         if exit_code != 0:
             raise CommandError(f"test server exited with status {exit_code}")
+
+    def _discover_suite_tests(self) -> None:
+        """Collect pytest tests and persist metadata in ``SuiteTest`` rows."""
+
+        try:
+            tests = discover_suite_tests()
+        except TestDiscoveryError as exc:
+            raise CommandError(str(exc)) from exc
+
+        with transaction.atomic():
+            deleted_count, _deleted_details = SuiteTest.objects.all().delete()
+            SuiteTest.objects.bulk_create([SuiteTest(**item) for item in tests])
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Refreshed suite tests: removed {deleted_count}, discovered {len(tests)}."
+            )
+        )
 
     @staticmethod
     def _base_dir() -> Path:

@@ -656,6 +656,7 @@ def test_evergo_customer_admin_changelist_links_and_filters(admin_client):
     assert 'scope="col" class="column-user"' not in content
     assert '/admin/evergo/evergocustomer/' in content
     assert reverse("admin:evergo_evergoorder_change", args=[installed_order.pk]) in content
+    assert reverse("evergo:order-tracking-public", kwargs={"order_id": installed_order.remote_id}) in content
     assert "SO-9101" in content
 
     city_filtered = admin_client.get(changelist_url, {"city_municipio": "Apodaca"})
@@ -733,8 +734,8 @@ def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow
 
 
 @pytest.mark.django_db
-def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admin_client):
-    """Regression: order change view should expose Process SO tool action and link field."""
+def test_evergo_order_admin_change_view_has_process_order_button_and_flow_link(admin_client):
+    """Regression: order change view should expose Process Order tool action and link field."""
 
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -755,9 +756,8 @@ def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admi
     content = response.content.decode("utf-8")
     flow_url = reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id})
 
-    assert "Process SO" in content
+    assert "Process Order" in content
     assert flow_url in content
-    assert "Open Evergo Flow" in content
 
     action_url = reverse(
         "admin:evergo_evergoorder_actions",
@@ -770,7 +770,7 @@ def test_evergo_order_admin_change_view_has_process_so_button_and_flow_link(admi
 
 @pytest.mark.django_db
 def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
-    """Regression: missing remote_id should not break order change page nor SO action."""
+    """Regression: missing remote_id should not break order change page nor Process Order action."""
 
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -791,7 +791,7 @@ def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert "Open Evergo Flow" not in content
+    assert 'class="button"' not in content
 
     action_url = reverse(
         "admin:evergo_evergoorder_actions",
@@ -996,3 +996,43 @@ def test_evergo_admin_load_customers_wizard_shows_explicit_load_mode_buttons(adm
     assert response.status_code == 200
     assert b"Load all customers" in response.content
     assert b"Load filtered customers" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_breadcrumbs_link_customers_and_orders(admin_client):
+    """Regression: load customers wizard breadcrumb should fork to customer and order changelists."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'href="/admin/evergo/evergocustomer/"' in content
+    assert 'href="/admin/evergo/evergoorder/"' in content
+    assert "Customers" in content
+    assert "Orders" in content
+    assert "|" in content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_load_all_button_requires_confirmation(admin_client):
+    """Regression: load-all action should require explicit client-side confirmation."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Load all customers" in content
+    assert "return confirm('This will sync every customer available to this profile. Continue?');" in content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_cancel_returns_to_customers(admin_client):
+    """Regression: cancel action should use the customers changelist destination."""
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    assert 'href="/admin/evergo/evergocustomer/" class="button">Cancel</a>' in response.content.decode("utf-8")
