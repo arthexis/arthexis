@@ -115,8 +115,6 @@ Repository = "https://github.com/arthexis/arthexis"
 Homepage = "https://arthexis.com"
 
 
-[project.scripts]
-arthexis = "arthexis.__main__:main"
 
 [project.optional-dependencies]
 ci = [
@@ -157,7 +155,6 @@ video = [
 include-package-data = true
 
 [tool.setuptools.package-data]
-"arthexis.scripts" = [ "*.sh",]
 config = [ "**/*",]
 "apps.release" = [ "**/*",]
 "apps.energy" = [ "**/*",]

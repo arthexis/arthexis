@@ -20,13 +20,13 @@ def _parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--text",
-        help="Text containing sigils to resolve."
+        help="Text containing sigils to resolve.",
     )
     parser.add_argument(
         "-f",
         "--file",
         type=Path,
-        help="Path to a file whose contents should be resolved."
+        help="Path to a file whose contents should be resolved.",
     )
     parser.add_argument(
         "positional_text",
