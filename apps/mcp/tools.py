@@ -178,7 +178,7 @@ def list_tools(*, allow: set[str] | None = None, deny: set[str] | None = None) -
                     },
                     "api_key": {
                         "type": "string",
-                        "description": "MCP API key generated via manage.py create_mcp_api_key.",
+                        "description": "MCP API key generated via manage.py mcp key create.",
                     },
                 },
                 "required": ["query", "api_key"],
@@ -194,7 +194,7 @@ def list_tools(*, allow: set[str] | None = None, deny: set[str] | None = None) -
                 "properties": {
                     "api_key": {
                         "type": "string",
-                        "description": "MCP API key generated via manage.py create_mcp_api_key.",
+                        "description": "MCP API key generated via manage.py mcp key create.",
                     }
                 },
                 "required": ["api_key"],
