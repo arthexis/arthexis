@@ -1,3 +1,5 @@
+"""Regression and ownership behavior tests for ownable models."""
+
 import json
 
 import pytest
@@ -59,7 +61,10 @@ def test_owned_object_helpers_return_direct_and_indirect_lists():
     assert any(link.via == user.username for link in via_members)
 
 @pytest.mark.django_db
+@pytest.mark.regression
 def test_ownable_admins_use_mixin():
+    """Regression: every registered ownable admin should include OwnableAdminMixin."""
+
     registry = admin.site._registry
     for model in get_ownable_models():
         admin_instance = registry.get(model)
