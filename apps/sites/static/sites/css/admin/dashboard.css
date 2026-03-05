@@ -221,16 +221,23 @@
         display: inline;
         margin: 0;
     }
-    .dashboard-side .button-link {
+    .button-as-link,
+    .dashboard-side .button-link,
+    .dashboard-main td.actions .inline-form .actionlink {
         background: none;
         border: none;
         padding: 0;
         font: inherit;
         color: var(--link-fg);
         cursor: pointer;
+        text-decoration: none;
     }
+    .button-as-link:hover,
+    .button-as-link:focus-visible,
     .dashboard-side .button-link:hover,
-    .dashboard-side .button-link:focus-visible {
+    .dashboard-side .button-link:focus-visible,
+    .dashboard-main td.actions .inline-form .actionlink:hover,
+    .dashboard-main td.actions .inline-form .actionlink:focus-visible {
         text-decoration: underline;
     }
     #google-calendar-module {
@@ -433,6 +440,11 @@
     .dashboard-main td.actions .actionlink {
         display: inline;
         margin-left: 0;
+    }
+    .dashboard-main td.actions .inline-form {
+        display: inline;
+        margin: 0;
+        padding: 0;
     }
     .dashboard-main .module table {
         width: 100%;
