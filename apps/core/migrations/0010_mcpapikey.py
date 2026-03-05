@@ -2,6 +2,8 @@
 
 from django.db import migrations
 
+from utils.migration_branches import SafelyDeprecatedMigration
+
 
 class Migration(migrations.Migration):
     """No-op migration kept for compatibility with prior migration history."""
@@ -11,4 +13,6 @@ class Migration(migrations.Migration):
         ("mcp", "0001_initial"),
     ]
 
-    operations = []
+    operations = [
+        SafelyDeprecatedMigration(reason="compatibility shim after MCP app split"),
+    ]
