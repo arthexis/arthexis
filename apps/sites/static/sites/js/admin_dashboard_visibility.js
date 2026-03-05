@@ -8,8 +8,6 @@
   }
 
   const hideNarrowMode = () => window.matchMedia("(max-width: 640px)").matches;
-  const hiddenToggleWrap = document.querySelector("[data-hidden-apps-toggle-wrap]");
-  const hiddenToggleButton = document.querySelector("[data-hidden-apps-toggle]");
   const storageUserKey = window.__adminDashboardUserKey || "anon";
   const storageKey = `admin-dashboard-hidden-apps:${window.location.origin}:${storageUserKey}`;
 
@@ -35,6 +33,9 @@
     if (!appList) {
       return;
     }
+
+    const hiddenToggleWrap = document.querySelector("[data-hidden-apps-toggle-wrap]");
+    const hiddenToggleButton = document.querySelector("[data-hidden-apps-toggle]");
 
     const appModules = Array.from(appList.querySelectorAll(".module[data-app-label]"));
     const appToggleButtons = Array.from(appList.querySelectorAll("[data-app-visibility-toggle]"));
@@ -112,6 +113,18 @@
       });
     });
 
+    if (hiddenToggleButton && hiddenToggleButton.dataset.visibilityBound !== "true") {
+      hiddenToggleButton.dataset.visibilityBound = "true";
+      hiddenToggleButton.addEventListener("click", () => {
+        if (hideNarrowMode()) {
+          return;
+        }
+
+        revealHiddenApps = !revealHiddenApps;
+        syncVisibility();
+      });
+    }
+
     const bootstrapStyle = document.getElementById("dashboard-app-visibility-bootstrap");
     if (bootstrapStyle) {
       bootstrapStyle.remove();
@@ -119,18 +132,6 @@
 
     syncVisibility();
   };
-
-  if (hiddenToggleButton && hiddenToggleButton.dataset.visibilityBound !== "true") {
-    hiddenToggleButton.dataset.visibilityBound = "true";
-    hiddenToggleButton.addEventListener("click", () => {
-      if (hideNarrowMode()) {
-        return;
-      }
-
-      revealHiddenApps = !revealHiddenApps;
-      syncVisibility();
-    });
-  }
 
   window.addEventListener("resize", () => syncVisibility());
   bindDashboardVisibility();
