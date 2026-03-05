@@ -23,6 +23,7 @@ jobs:
             const defaultBranch = context.payload.repository?.default_branch;
 
             const candidateRefs = new Set();
+            const openHeadRefs = new Set();
             let page = 1;
 
             while (true) {
@@ -63,12 +64,35 @@ jobs:
                 candidateRefs.add(pr.head.ref);
               }
 
-              const oldestClosedAt = pulls[pulls.length - 1].closed_at;
-              if (oldestClosedAt && new Date(oldestClosedAt).getTime() <= cutoff) {
+              const oldestUpdatedAt = pulls[pulls.length - 1].updated_at;
+              if (oldestUpdatedAt && new Date(oldestUpdatedAt).getTime() <= cutoff) {
                 break;
               }
 
               page += 1;
+            }
+
+            let openPage = 1;
+            while (true) {
+              const { data: openPulls } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+                page: openPage,
+              });
+
+              if (openPulls.length === 0) {
+                break;
+              }
+
+              for (const pr of openPulls) {
+                if (pr.head.repo?.full_name === `${owner}/${repo}`) {
+                  openHeadRefs.add(pr.head.ref);
+                }
+              }
+
+              openPage += 1;
             }
 
             if (candidateRefs.size === 0) {
@@ -77,6 +101,11 @@ jobs:
             }
 
             for (const ref of candidateRefs) {
+              if (openHeadRefs.has(ref)) {
+                core.info(`Skipping branch ${ref}: still used by an open PR.`);
+                continue;
+              }
+
               try {
                 await github.rest.git.deleteRef({
                   owner,
