@@ -154,8 +154,12 @@ def _build_dashboard_rows(*, profile: EvergoUser, sales_orders: list[str], custo
     for order in orders:
         rows.append(
             {
-                "so": order.order_number or str(order.remote_id),
-                "so_url": EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id),
+                "so": order.order_number or (str(order.remote_id) if order.remote_id is not None else "-"),
+                "so_url": (
+                    EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id)
+                    if order.remote_id is not None
+                    else ""
+                ),
                 "customer_name": order.client_name or "-",
                 "status": order.status_name or "-",
                 "full_address": _format_full_address(order),
@@ -268,7 +272,11 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             "image_fields": [form[name] for name in IMAGE_FIELD_NAMES],
             "collapsed_defaults": COLLAPSED_DEFAULT_FIELDS,
             "collapsed_fields": [form[name] for name in COLLAPSED_DEFAULT_FIELDS],
-            "evergo_so_url": EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id),
+            "evergo_so_url": (
+                EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id)
+                if order.remote_id is not None
+                else ""
+            ),
         },
     )
 

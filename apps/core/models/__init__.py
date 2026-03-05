@@ -27,7 +27,9 @@ try:
     from .invite_lead import InviteLead
     from .usage_event import UsageEvent
     from apps.cards.models import RFID
-except RuntimeError:
+except RuntimeError as exc:
+    if "isn't in an application in INSTALLED_APPS" not in str(exc):
+        raise
     # Core concrete models are unavailable unless apps.core is installed.
     pass
 else:

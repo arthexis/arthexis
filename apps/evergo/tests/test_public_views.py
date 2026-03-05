@@ -288,6 +288,35 @@ def test_my_evergo_dashboard_shows_validation_errors_for_large_query_payload(cli
     assert "Too many values in raw_queries" in response.content.decode()
 
 
+@pytest.mark.django_db
+def test_my_evergo_dashboard_handles_orders_without_remote_id(client):
+    """Regression: dashboard rows should be null-safe when remote_id is absent."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-owner-4", email="dash4@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="dash4@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=None,
+        order_number="",
+        client_name="No Remote",
+        status_name="Pendiente",
+    )
+
+    response = client.post(
+        reverse("evergo:my-dashboard", kwargs={"token": profile.dashboard_token}),
+        data={"raw_queries": "No Remote"},
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "No Remote" in content
+    assert "&gt;-&lt;" not in content
+    assert ">-</a>" in content
+    assert "portal-mex.evergo.com/ordenes/None" not in content
+
+
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
     """Security: TSV export should neutralize formulas and preserve table shape."""
     from apps.evergo.views import _to_tsv
