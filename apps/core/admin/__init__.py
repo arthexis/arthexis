@@ -1,6 +1,3 @@
-from apps.locals.user_data import EntityModelAdmin
-
-from . import site as site  # noqa: F401
 from .mixins import (
     OwnableAdminForm,
     OwnableAdminMixin,
@@ -8,6 +5,9 @@ from .mixins import (
     SaveBeforeChangeAction,
     _build_credentials_actions,
 )
+from apps.locals.user_data import EntityModelAdmin
+
+from . import site as site  # noqa: F401
 from .admin_notice_admin import AdminNoticeAdmin
 from .emails import EmailCollectorAdmin, EmailInboxAdmin, EmailSearchForm
 from .forms import (
