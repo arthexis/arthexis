@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import importlib
 import re
 
 from django.conf import settings
-
-from apps.release.models import PackageRelease
-
 
 class NameRepresentationMixin:
     """Provide a name-based ``__str__`` for models with a ``name`` field."""
@@ -44,7 +42,7 @@ def _format_upgrade_body(version: str, revision: str) -> str:
         if (
             base_version
             and revision
-            and not PackageRelease.matches_revision(base_version, revision)
+            and not _matches_release_revision(base_version, revision)
             and not normalized.endswith("+")
         ):
             display_version = f"{display_version}+"
@@ -54,3 +52,25 @@ def _format_upgrade_body(version: str, revision: str) -> str:
         rev_short = (rev_clean[-6:] if rev_clean else revision[-6:])
         parts.append(f"r{rev_short}")
     return " ".join(parts).strip()
+
+
+def _matches_release_revision(version: str, revision: str) -> bool:
+    """Return whether revision matches the given release version when available.
+
+    The ``apps.release`` application can be excluded by enabled-app locks. In
+    that configuration, importing concrete release models at module import time
+    triggers ``RuntimeError`` before Django startup. This helper performs a
+    guarded runtime import so callers can still format upgrade text.
+    """
+
+    try:
+        package_release_module = importlib.import_module("apps.release.models")
+        package_release = getattr(package_release_module, "PackageRelease")
+    except (ImportError, ModuleNotFoundError):
+        return False
+    except RuntimeError as exc:
+        if "isn't in an application in INSTALLED_APPS" not in str(exc):
+            raise
+        return False
+
+    return bool(package_release.matches_revision(version, revision))

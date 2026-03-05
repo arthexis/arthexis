@@ -3,6 +3,7 @@ import pytest
 from django.contrib.sites.models import Site
 
 from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models.core import utils as node_utils
 
 
 def test_select_preferred_ip_prefers_global_address():
@@ -232,3 +233,32 @@ def test_refresh_features_does_not_auto_assign_heavy_feature(tmp_path):
     node.refresh_features()
 
     assert not node.features.filter(pk=feature.pk).exists()
+
+
+def test_format_upgrade_body_handles_missing_release_app(monkeypatch):
+    """Regression: formatting should not fail when apps.release is disabled."""
+
+    def _raise_runtime_error(_name: str):
+        raise RuntimeError(
+            "Model class apps.release.models.package.Package doesn't declare an explicit app_label and isn't in an application in INSTALLED_APPS."
+        )
+
+    monkeypatch.setattr(node_utils.importlib, "import_module", _raise_runtime_error)
+
+    assert node_utils._format_upgrade_body("1.2.3", "abcdef1234") == "v1.2.3+ ref1234"
+
+
+def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
+    """Revision suffix should not include plus when release revision matches."""
+
+    class _PackageRelease:
+        @staticmethod
+        def matches_revision(version: str, revision: str) -> bool:
+            return version == "1.2.3" and revision == "abcdef1234"
+
+    class _ReleaseModels:
+        PackageRelease = _PackageRelease
+
+    monkeypatch.setattr(node_utils.importlib, "import_module", lambda _name: _ReleaseModels)
+
+    assert node_utils._format_upgrade_body("1.2.3", "abcdef1234") == "v1.2.3 ref1234"
