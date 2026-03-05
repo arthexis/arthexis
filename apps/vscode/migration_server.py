@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 PREFIX = "[Migration Runner]"
@@ -15,6 +16,30 @@ CONFLICT_PATTERN = re.compile(
     r"Conflicting migrations detected; multiple leaf nodes in the migration graph",
     re.IGNORECASE,
 )
+
+
+class ProcessLike(Protocol):
+    """Protocol for subprocess handles used by the VS Code migration launcher."""
+
+    def communicate(self) -> tuple[str, str]:
+        """Return buffered stdout and stderr for the completed process."""
+
+    def wait(self) -> int:
+        """Wait for the process and return its exit code."""
+
+    def terminate(self) -> None:
+        """Request a graceful process termination."""
+
+    def kill(self) -> None:
+        """Forcefully terminate the process."""
+
+
+class CommandResult(Protocol):
+    """Protocol describing completed command output."""
+
+    returncode: int
+    stdout: str
+    stderr: str
 
 
 def build_migration_command(extra_args: list[str] | None = None) -> list[str]:
@@ -32,13 +57,13 @@ def build_merge_command() -> list[str]:
     return [sys.executable, "manage.py", "makemigrations", "--merge", "--noinput"]
 
 
-def _build_run_kwargs() -> dict[str, object]:
+def _build_popen_kwargs() -> dict[str, object]:
     """Build common subprocess arguments for migration-related commands."""
 
-    run_kwargs: dict[str, object] = {
+    popen_kwargs: dict[str, object] = {
         "cwd": BASE_DIR,
-        "check": False,
-        "capture_output": True,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
         "text": True,
     }
 
@@ -46,26 +71,44 @@ def _build_run_kwargs() -> dict[str, object]:
     if sys.platform == "win32" and creationflags is not None:
         # Keep migration subprocess in its own process group so debugger-level
         # Ctrl+C signals do not interrupt import-time startup unexpectedly.
-        run_kwargs["creationflags"] = creationflags
+        popen_kwargs["creationflags"] = creationflags
     elif sys.platform != "win32":
         # On POSIX, start a new session to avoid debugger-level Ctrl+C signals
         # propagating into this subprocess during startup.
-        run_kwargs["start_new_session"] = True
+        popen_kwargs["start_new_session"] = True
 
-    return run_kwargs
+    return popen_kwargs
 
 
-def _run_command(command: list[str]) -> subprocess.CompletedProcess[str] | None:
+def _collect_process_result(process: ProcessLike) -> CommandResult:
+    """Collect process output into a ``CompletedProcess``-compatible object."""
+
+    stdout, stderr = process.communicate()
+    returncode = process.wait()
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def _stop_interrupted_process(process: ProcessLike) -> None:
+    """Stop an interrupted process, escalating to force-kill when needed."""
+
+    process.terminate()
+    try:
+        process.wait()
+    except KeyboardInterrupt:
+        process.kill()
+        process.wait()
+
+
+def _run_command(command: list[str]) -> CommandResult | None:
     """Run a command while preserving useful console output and signal handling."""
 
     print(f"{PREFIX} Running: {' '.join(command)}")
+    process: ProcessLike = subprocess.Popen(command, **_build_popen_kwargs())
     try:
-        completed = subprocess.run(command, **_build_run_kwargs())
+        completed = _collect_process_result(process)
     except KeyboardInterrupt:
-        print(
-            f"{PREFIX} Migration run interrupted by a console signal "
-            "(for example debugger Ctrl+C propagation)."
-        )
+        print(f"{PREFIX} Interrupted. Stopping migration process...")
+        _stop_interrupted_process(process)
         return None
 
     if completed.stdout:
@@ -75,7 +118,7 @@ def _run_command(command: list[str]) -> subprocess.CompletedProcess[str] | None:
     return completed
 
 
-def _has_conflicting_migrations(completed: subprocess.CompletedProcess[str]) -> bool:
+def _has_conflicting_migrations(completed: CommandResult) -> bool:
     """Return ``True`` when command output indicates migration graph conflicts."""
 
     output = f"{completed.stdout}\n{completed.stderr}"
