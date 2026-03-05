@@ -7,4 +7,6 @@ DJANGO_APPS = [
 
 REQUIRES_APPS = [
     "apps.groups",
+    "apps.media",
+    "apps.nodes",
 ]
