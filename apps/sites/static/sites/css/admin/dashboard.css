@@ -221,16 +221,23 @@
         display: inline;
         margin: 0;
     }
-    .dashboard-side .button-link {
+    .button-as-link,
+    .dashboard-side .button-link,
+    .dashboard-main td.actions .inline-form .actionlink {
         background: none;
         border: none;
         padding: 0;
         font: inherit;
         color: var(--link-fg);
         cursor: pointer;
+        text-decoration: none;
     }
+    .button-as-link:hover,
+    .button-as-link:focus-visible,
     .dashboard-side .button-link:hover,
-    .dashboard-side .button-link:focus-visible {
+    .dashboard-side .button-link:focus-visible,
+    .dashboard-main td.actions .inline-form .actionlink:hover,
+    .dashboard-main td.actions .inline-form .actionlink:focus-visible {
         text-decoration: underline;
     }
     #google-calendar-module {
@@ -438,19 +445,6 @@
         display: inline;
         margin: 0;
         padding: 0;
-    }
-    .dashboard-main td.actions .inline-form .actionlink {
-        border: 0;
-        background: transparent;
-        padding: 0;
-        color: var(--link-fg);
-        cursor: pointer;
-        font: inherit;
-        text-decoration: none;
-    }
-    .dashboard-main td.actions .inline-form .actionlink:hover,
-    .dashboard-main td.actions .inline-form .actionlink:focus-visible {
-        text-decoration: underline;
     }
     .dashboard-main .module table {
         width: 100%;
