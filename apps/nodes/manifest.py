@@ -3,3 +3,9 @@
 DJANGO_APPS = [
     "apps.nodes",
 ]
+
+REQUIRES_APPS = [
+    "apps.audio",
+    "apps.content",
+    "apps.credentials",
+]

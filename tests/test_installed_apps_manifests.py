@@ -196,6 +196,45 @@ def test_manifest_loading_keeps_declared_dependencies_when_selected_app_is_enabl
     assert filtered == ["apps.app", "apps.sites", "apps.groups", "apps.modules"]
 
 
+def test_manifest_loading_keeps_transitive_dependencies_for_required_sites_app() -> None:
+    """Regression: required sites app should pull transitive model dependencies from manifests."""
+
+    lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("apps.sites\n", encoding="utf-8")
+
+    filtered = app_settings._filter_local_apps_by_enabled_lock(
+        [
+            "apps.app",
+            "apps.sites",
+            "apps.groups",
+            "apps.media",
+            "apps.audio",
+            "apps.content",
+            "apps.nodes",
+            "apps.credentials",
+            "apps.modules",
+        ],
+        requirements_by_app={
+            "apps.sites": ["apps.modules"],
+            "apps.modules": ["apps.groups", "apps.media", "apps.nodes"],
+            "apps.nodes": ["apps.audio", "apps.content", "apps.credentials"],
+        },
+    )
+
+    assert filtered == [
+        "apps.app",
+        "apps.sites",
+        "apps.groups",
+        "apps.media",
+        "apps.audio",
+        "apps.content",
+        "apps.nodes",
+        "apps.credentials",
+        "apps.modules",
+    ]
+
+
 def test_manifest_loading_validates_requires_apps_entries() -> None:
     """Regression: manifests must define REQUIRES_APPS as a string list when provided."""
 
