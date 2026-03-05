@@ -47,17 +47,23 @@ def test_all_installed_app_models_modules_import_cleanly() -> None:
     for app_label in settings.LOCAL_APPS:
         try:
             models_module = _import_models_module_if_present(app_label)
-        except RuntimeError as exc:
-            failures.append(f"{app_label}.models: {exc}")
+        except Exception as exc:
+            failures.append(f"{app_label}.models: {type(exc).__name__}: {exc}")
             continue
 
         if models_module is None:
             continue
 
-        for submodule_name in _iter_models_submodule_names(models_module):
+        try:
+            submodule_names = _iter_models_submodule_names(models_module)
+        except Exception as exc:
+            failures.append(f"{app_label}.models discovery: {type(exc).__name__}: {exc}")
+            continue
+
+        for submodule_name in submodule_names:
             try:
                 importlib.import_module(submodule_name)
-            except RuntimeError as exc:
-                failures.append(f"{submodule_name}: {exc}")
+            except Exception as exc:
+                failures.append(f"{submodule_name}: {type(exc).__name__}: {exc}")
 
     assert not failures, "\n".join(failures)
