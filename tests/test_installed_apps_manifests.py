@@ -179,3 +179,28 @@ def test_manifest_loading_preserves_required_apps_when_lock_excludes_them() -> N
     )
 
     assert filtered == ["apps.app", "apps.sites", "apps.blog"]
+
+
+def test_manifest_loading_keeps_declared_dependencies_when_selected_app_is_enabled() -> None:
+    """Regression: lock-selected apps should keep manifest-declared dependencies enabled."""
+
+    lock_path = get_enabled_apps_lock_path(settings.BASE_DIR)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("apps.modules\n", encoding="utf-8")
+
+    filtered = app_settings._filter_local_apps_by_enabled_lock(
+        ["apps.app", "apps.sites", "apps.groups", "apps.modules"],
+        requirements_by_app={"apps.modules": ["apps.groups"]},
+    )
+
+    assert filtered == ["apps.app", "apps.sites", "apps.groups", "apps.modules"]
+
+
+def test_manifest_loading_validates_requires_apps_entries() -> None:
+    """Regression: manifests must define REQUIRES_APPS as a string list when provided."""
+
+    with pytest.raises(ImproperlyConfigured, match="REQUIRES_APPS"):
+        app_settings._filter_local_apps_by_enabled_lock(
+            ["apps.app"],
+            requirements_by_app={"apps.app": [""]},
+        )

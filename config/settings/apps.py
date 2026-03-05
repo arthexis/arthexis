@@ -57,9 +57,11 @@ def _load_local_apps_from_manifests() -> list[str]:
     """Collect Django app entries from app manifest modules without importing apps."""
 
     app_entries: list[str] = []
+    manifest_requirements: dict[str, list[str]] = {}
     for manifest_module in _iter_app_manifest_modules():
         module = importlib.import_module(manifest_module)
         manifest_entries = getattr(module, "DJANGO_APPS", None)
+        required_entries = getattr(module, "REQUIRES_APPS", [])
 
         if manifest_entries is None:
             continue
@@ -68,6 +70,20 @@ def _load_local_apps_from_manifests() -> list[str]:
             raise ImproperlyConfigured(
                 f"{manifest_module}.DJANGO_APPS must be defined as a list."
             )
+
+        if not isinstance(required_entries, list):
+            raise ImproperlyConfigured(
+                f"{manifest_module}.REQUIRES_APPS must be defined as a list."
+            )
+
+        normalized_requirements: list[str] = []
+        for required_entry in required_entries:
+            if not isinstance(required_entry, str) or not required_entry.strip():
+                raise ImproperlyConfigured(
+                    f"{manifest_module}.REQUIRES_APPS contains an invalid entry: {required_entry!r}."
+                )
+
+            normalized_requirements.append(required_entry.strip())
 
         for manifest_entry in manifest_entries:
             if not isinstance(manifest_entry, str) or not manifest_entry.strip():
@@ -78,7 +94,13 @@ def _load_local_apps_from_manifests() -> list[str]:
             normalized_entry = manifest_entry.strip()
             app_entries.append(normalized_entry)
 
-    return _filter_local_apps_by_enabled_lock(app_entries)
+            if normalized_requirements:
+                manifest_requirements[normalized_entry] = normalized_requirements
+
+    return _filter_local_apps_by_enabled_lock(
+        app_entries,
+        requirements_by_app=manifest_requirements,
+    )
 
 
 def _is_required_local_app_entry(app_entry: str) -> bool:
@@ -107,14 +129,46 @@ def _entry_matches_enabled_selector(app_entry: str, selector: str) -> bool:
     return label == normalized_selector
 
 
-def _filter_local_apps_by_enabled_lock(app_entries: list[str]) -> list[str]:
+def _filter_local_apps_by_enabled_lock(
+    app_entries: list[str],
+    *,
+    requirements_by_app: dict[str, list[str]] | None = None,
+) -> list[str]:
     """Filter manifest app entries using the optional enabled apps lock file."""
+
+    requirements = requirements_by_app or {}
+    for app_entry, required_entries in requirements.items():
+        if not isinstance(required_entries, list):
+            raise ImproperlyConfigured(
+                f"Dependency map for '{app_entry}' must be a list of app entries."
+            )
+        for required_entry in required_entries:
+            if not isinstance(required_entry, str) or not required_entry.strip():
+                raise ImproperlyConfigured(
+                    f"Dependency map for '{app_entry}' contains an invalid entry: {required_entry!r}."
+                )
+
+    def _expand_required_apps(enabled_entries: set[str]) -> set[str]:
+        pending = list(enabled_entries)
+        expanded = set(enabled_entries)
+        while pending:
+            current = pending.pop()
+            for dependency in requirements.get(current, []):
+                if dependency in expanded:
+                    continue
+                expanded.add(dependency)
+                pending.append(dependency)
+        return expanded
 
     selectors = read_enabled_apps_lock(BASE_DIR)
     if selectors is None:
-        return app_entries
+        return [
+            app_entry
+            for app_entry in app_entries
+            if app_entry in _expand_required_apps(set(app_entries))
+        ]
 
-    return [
+    explicitly_enabled = {
         app_entry
         for app_entry in app_entries
         if _is_required_local_app_entry(app_entry)
@@ -122,6 +176,14 @@ def _filter_local_apps_by_enabled_lock(app_entries: list[str]) -> list[str]:
             _entry_matches_enabled_selector(app_entry, selector)
             for selector in selectors
         )
+    }
+
+    enabled_with_dependencies = _expand_required_apps(explicitly_enabled)
+
+    return [
+        app_entry
+        for app_entry in app_entries
+        if app_entry in enabled_with_dependencies
     ]
 
 

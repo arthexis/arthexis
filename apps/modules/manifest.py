@@ -3,3 +3,8 @@
 DJANGO_APPS = [
     "apps.modules",
 ]
+
+
+REQUIRES_APPS = [
+    "apps.groups",
+]
