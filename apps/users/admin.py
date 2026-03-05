@@ -2,11 +2,13 @@
 
 from django.contrib import admin
 
+from apps.core.admin import OwnableAdminMixin
+
 from .models import ChatProfile
 
 
 @admin.register(ChatProfile)
-class ChatProfileAdmin(admin.ModelAdmin):
+class ChatProfileAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Manage per-owner chat preferences."""
 
     list_display = (
