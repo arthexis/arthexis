@@ -3,7 +3,7 @@ from pathlib import Path
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import models
@@ -355,8 +355,9 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
 
         with transaction.atomic():
             for feature in queryset.select_for_update().only("pk", "is_enabled"):
-                feature.is_enabled = not feature.is_enabled
-                feature.save(update_fields=["is_enabled", "updated_at"])
+                changed = feature.set_enabled(not feature.is_enabled)
+                if not changed:
+                    continue
                 toggled_total += 1
                 if feature.is_enabled:
                     enabled_total += 1
@@ -377,6 +378,23 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             },
             level=messages.SUCCESS,
         )
+
+    def delete_model(self, request, obj):
+        """Delete a feature row, surfacing enablement guards as admin errors."""
+
+        try:
+            super().delete_model(request, obj)
+        except ValidationError as exc:
+            messages.error(request, exc.message)
+
+    def delete_queryset(self, request, queryset):
+        """Delete selected features while reporting rows blocked by enablement state."""
+
+        for feature in queryset:
+            try:
+                feature.delete()
+            except ValidationError as exc:
+                messages.error(request, f"{feature.display}: {exc.message}")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -430,8 +448,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if request.method != "POST":
             return HttpResponseRedirect(reverse("admin:features_feature_change", args=[feature.pk]))
 
-        feature.is_enabled = not feature.is_enabled
-        feature.save(update_fields=["is_enabled", "updated_at"])
+        feature.set_enabled(not feature.is_enabled)
         status = _("enabled") if feature.is_enabled else _("disabled")
         messages.success(
             request,

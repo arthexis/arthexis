@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.apps import apps as django_apps
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -135,6 +136,28 @@ class Feature(Ownable):
 
     def get_absolute_url(self):
         return reverse("features:detail", kwargs={"slug": self.slug})
+
+    def set_enabled(self, enabled: bool, *, update_fields: list[str] | None = None) -> bool:
+        """Set and persist enabled state, returning whether a transition occurred."""
+
+        next_state = bool(enabled)
+        changed = self.is_enabled != next_state
+        if not changed:
+            return False
+        self.is_enabled = next_state
+        fields = ["is_enabled", "updated_at"] if update_fields is None else update_fields
+        self.save(update_fields=fields)
+        return True
+
+    def delete(self, using=None, keep_parents=False):
+        """Prevent deleting enabled suite features before they are explicitly disabled."""
+
+        if self.is_enabled:
+            raise ValidationError(
+                _("Disable this suite feature before deleting it."),
+                code="enabled_feature_delete_blocked",
+            )
+        return super().delete(using=using, keep_parents=keep_parents)
 
     def is_enabled_for_node(self, node=None) -> bool:
         """Return whether the feature is enabled for the supplied node."""
