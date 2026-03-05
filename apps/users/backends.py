@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import ipaddress
+import logging
 import os
 import socket
 import subprocess
@@ -14,12 +15,19 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
+from django.db import DatabaseError
 
 from apps.cards.models import RFID
+from apps.cards.models import RFIDAttempt
 from apps.cards.reader import read_rfid_cell_value
 from apps.energy.models import CustomerAccount
+from apps.features.utils import is_suite_feature_enabled
 from . import temp_passwords
 from .system import ensure_system_user
+
+
+logger = logging.getLogger(__name__)
+RFID_AUTH_AUDIT_FEATURE_SLUG = "rfid-auth-audit"
 
 
 class PasswordOrOTPBackend(ModelBackend):
@@ -63,6 +71,98 @@ class PasswordOrOTPBackend(ModelBackend):
 class RFIDBackend:
     """Authenticate using a user's RFID."""
 
+    @staticmethod
+    def _audit_enabled() -> bool:
+        """Return whether RFID auth audit recording is currently enabled."""
+
+        return is_suite_feature_enabled(RFID_AUTH_AUDIT_FEATURE_SLUG, default=True)
+
+    @classmethod
+    def _record_auth_attempt(
+        cls,
+        *,
+        rfid: str,
+        status: str,
+        reason_code: str | None = None,
+        tag: RFID | None = None,
+        account: CustomerAccount | None = None,
+        metadata: dict[str, str | int | bool | None] | None = None,
+    ) -> None:
+        """Persist RFID login attempt metadata when auth auditing is enabled."""
+
+        if not cls._audit_enabled():
+            return
+
+        normalized_rfid = (rfid or "").strip().upper()
+        if not normalized_rfid:
+            return
+
+        payload: dict[str, str | int | bool | None] = {
+            "rfid": normalized_rfid,
+            "audit_suite": True,
+        }
+        if tag is not None:
+            payload["label_id"] = tag.pk
+            payload["allowed"] = tag.allowed
+        if reason_code:
+            payload["reason_code"] = reason_code
+        if metadata:
+            payload.update(metadata)
+
+        try:
+            RFIDAttempt.record_attempt(
+                payload,
+                source=RFIDAttempt.Source.AUTH,
+                status=status,
+                authenticated=status == RFIDAttempt.Status.ACCEPTED,
+                account_id=account.pk if account else None,
+            )
+        except DatabaseError:
+            logger.warning("Unable to record RFID auth attempt", exc_info=True)
+
+    @classmethod
+    def _reject(
+        cls,
+        *,
+        rfid: str,
+        reason_code: str,
+        tag: RFID | None = None,
+        account: CustomerAccount | None = None,
+        metadata: dict[str, str | int | bool | None] | None = None,
+    ):
+        """Record a rejected RFID auth attempt and return ``None``."""
+
+        cls._record_auth_attempt(
+            rfid=rfid,
+            status=RFIDAttempt.Status.REJECTED,
+            reason_code=reason_code,
+            tag=tag,
+            account=account,
+            metadata=metadata,
+        )
+        return None
+
+    @classmethod
+    def _accept(
+        cls,
+        *,
+        user,
+        rfid: str,
+        tag: RFID,
+        account: CustomerAccount | None = None,
+        metadata: dict[str, str | int | bool | None] | None = None,
+    ):
+        """Record an accepted RFID auth attempt and return the resolved user."""
+
+        cls._record_auth_attempt(
+            rfid=rfid,
+            status=RFIDAttempt.Status.ACCEPTED,
+            tag=tag,
+            account=account,
+            metadata=metadata,
+        )
+        return user
+
     def authenticate(self, request, rfid=None, **kwargs):
         if not rfid:
             return None
@@ -70,9 +170,20 @@ class RFIDBackend:
         if not rfid_value:
             return None
 
-        tag = RFID.matching_queryset(rfid_value).filter(allowed=True).first()
+        matching_tags = RFID.matching_queryset(rfid_value)
+        tag = matching_tags.filter(allowed=True).first()
         if not tag:
-            return None
+            blocked_tag = matching_tags.first()
+            reason = (
+                RFIDAttempt.Reason.TAG_NOT_ALLOWED
+                if blocked_tag is not None
+                else RFIDAttempt.Reason.TAG_NOT_FOUND
+            )
+            return self._reject(
+                rfid=rfid_value,
+                reason_code=reason,
+                tag=blocked_tag,
+            )
 
         update_fields: list[str] = []
         if tag.adopt_rfid(rfid_value):
@@ -98,18 +209,41 @@ class RFIDBackend:
                     key_type=key_choice,
                 )
                 if result.get("error"):
-                    return None
+                    return self._reject(
+                        rfid=rfid_value,
+                        reason_code=RFIDAttempt.Reason.READ_ERROR,
+                        tag=tag,
+                        metadata={"read_error": str(result.get("error"))[:128]},
+                    )
                 scanned_rfid = result.get("rfid")
                 if scanned_rfid:
                     expected_rfid = (tag.rfid or rfid_value).strip().upper()
                     if expected_rfid and scanned_rfid.strip().upper() != expected_rfid:
-                        return None
+                        return self._reject(
+                            rfid=rfid_value,
+                            reason_code=RFIDAttempt.Reason.RFID_MISMATCH,
+                            tag=tag,
+                            metadata={"expected_rfid": expected_rfid},
+                        )
                 cell_value = result.get("value")
                 if cell_value is None:
-                    return None
+                    return self._reject(
+                        rfid=rfid_value,
+                        reason_code=RFIDAttempt.Reason.READ_ERROR,
+                        tag=tag,
+                    )
                 if f"{int(cell_value):02X}" != expected_value:
-                    return None
-            return login_user
+                    return self._reject(
+                        rfid=rfid_value,
+                        reason_code=RFIDAttempt.Reason.CELL_VALUE_MISMATCH,
+                        tag=tag,
+                    )
+            return self._accept(
+                user=login_user,
+                rfid=rfid_value,
+                tag=tag,
+                metadata={"auth_path": "login_rfid"},
+            )
 
         command = (tag.external_command or "").strip()
         if command:
@@ -126,10 +260,19 @@ class RFIDBackend:
                     text=True,
                     env=env,
                 )
-            except Exception:
-                return None
+            except (OSError, subprocess.SubprocessError):
+                return self._reject(
+                    rfid=rfid_value,
+                    reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
+                    tag=tag,
+                )
             if completed.returncode != 0:
-                return None
+                return self._reject(
+                    rfid=rfid_value,
+                    reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
+                    tag=tag,
+                    metadata={"external_returncode": completed.returncode},
+                )
 
         account = (
             CustomerAccount.objects.filter(
@@ -153,8 +296,18 @@ class RFIDBackend:
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
-            return account.user
-        return None
+            return self._accept(
+                user=account.user,
+                rfid=rfid_value,
+                tag=tag,
+                account=account,
+                metadata={"auth_path": "customer_account"},
+            )
+        return self._reject(
+            rfid=rfid_value,
+            reason_code=RFIDAttempt.Reason.ACCOUNT_NOT_FOUND,
+            tag=tag,
+        )
 
     def get_user(self, user_id):
         User = get_user_model()
