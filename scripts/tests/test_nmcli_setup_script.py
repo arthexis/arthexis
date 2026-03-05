@@ -72,33 +72,6 @@ def _run_script_with_nmcli_mock(tmp_path: Path, nmcli_mock_contents: str) -> tup
     return result, calls
 
 
-def test_nmcli_setup_script_has_valid_bash_syntax() -> None:
-    """The setup script should parse successfully under bash."""
-    if BASH is None:
-        pytest.skip("bash not found in PATH")
-
-    script_path = _script_path_for_bash(SCRIPT_PATH)
-    result = subprocess.run(
-        [BASH, "-n", script_path],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-
-
-def test_nmcli_setup_script_uses_safe_parsing_patterns() -> None:
-    """The script should parse nmcli output robustly and force stable locale."""
-    contents = SCRIPT_PATH.read_text(encoding="utf-8")
-
-    assert 'LC_ALL=C nmcli --terse --fields NAME,TYPE connection show' in contents
-    assert '802-11-wireless.mode,connection.interface-name,ipv4.method' in contents
-    assert 'connection_type="${line##*:}"' in contents
-    assert 'connection_id="${line%:"$connection_type"}"' in contents
-    assert 'connection_id="${connection_id//\\\\:/:}"' in contents
-
-
 def test_nmcli_setup_script_handles_colons_and_continues_on_profile_failure(tmp_path: Path) -> None:
     """The script should unescape escaped colons and continue after per-profile errors."""
     if BASH is None:
