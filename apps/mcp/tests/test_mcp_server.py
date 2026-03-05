@@ -308,23 +308,16 @@ def test_mcp_key_create_subcommand_generates_api_key() -> None:
     assert "expires_at=never" in output
 
 
-@pytest.mark.django_db
-def test_legacy_create_mcp_api_key_command_prints_deprecation_warning(capsys) -> None:
-    """Legacy create_mcp_api_key should still work while warning about mcp key create."""
 
-    user = get_user_model().objects.create_user(username="legacy-key-user")
-    del user
+def test_legacy_mcp_commands_are_removed() -> None:
+    """Legacy MCP command names should no longer be discoverable."""
 
-    call_command(
-        "create_mcp_api_key",
-        "--username",
-        "legacy-key-user",
-        "--label",
-        "legacy",
-        "--expires-in-days",
-        "0",
-    )
+    from django.core.management.base import CommandError
 
-    captured = capsys.readouterr()
-    assert "Deprecation warning" in captured.err
-    assert "python manage.py mcp key create" in captured.err
+    with pytest.raises(CommandError) as mcp_server_error:
+        call_command("mcp_server")
+    with pytest.raises(CommandError) as key_error:
+        call_command("create_mcp_api_key")
+
+    assert "Unknown command" in str(mcp_server_error.value)
+    assert "Unknown command" in str(key_error.value)
