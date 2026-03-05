@@ -58,6 +58,40 @@ def _extract_manifest_apps(manifest_path: Path) -> list[str]:
     raise AssertionError(f"{manifest_path} must declare DJANGO_APPS")
 
 
+def _extract_manifest_requires_apps(manifest_path: Path) -> list[str]:
+    """Return REQUIRES_APPS from a manifest file via static AST evaluation."""
+
+    module_ast = ast.parse(manifest_path.read_text(encoding="utf-8"))
+    for statement in module_ast.body:
+        if not isinstance(statement, ast.Assign):
+            continue
+
+        if len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+            continue
+
+        if statement.targets[0].id != "REQUIRES_APPS":
+            continue
+
+        try:
+            parsed_value = ast.literal_eval(statement.value)
+        except (ValueError, SyntaxError) as exc:
+            raise AssertionError(
+                f"{manifest_path} must declare REQUIRES_APPS as a literal list of strings"
+            ) from exc
+
+        if not isinstance(parsed_value, list):
+            raise AssertionError(f"{manifest_path} REQUIRES_APPS must be a list")
+
+        if not all(isinstance(entry, str) and entry.strip() for entry in parsed_value):
+            raise AssertionError(
+                f"{manifest_path} REQUIRES_APPS must contain non-empty string entries"
+            )
+
+        return [entry.strip() for entry in parsed_value]
+
+    return []
+
+
 def _expected_local_apps_from_manifest_files() -> list[str]:
     """Build expected local apps from manifest files to avoid brittle hard-coded lists."""
 
@@ -81,6 +115,23 @@ def _manifest_entries_with_source() -> list[tuple[str, str]]:
             entries.append((module_name, app_entry.strip()))
 
     return entries
+
+
+def _manifest_requirements_by_app_entry() -> dict[str, list[str]]:
+    """Return manifest dependency map keyed by each DJANGO_APPS entry."""
+
+    requirements_by_app: dict[str, list[str]] = {}
+    manifests = sorted((settings.BASE_DIR / "apps").rglob("manifest.py"))
+    for manifest_path in manifests:
+        manifest_apps = _extract_manifest_apps(manifest_path)
+        required_apps = _extract_manifest_requires_apps(manifest_path)
+        if not required_apps:
+            continue
+
+        for app_entry in manifest_apps:
+            requirements_by_app[app_entry] = required_apps
+
+    return requirements_by_app
 
 
 def test_local_apps_manifest_loading_is_complete_and_deterministic() -> None:
@@ -206,32 +257,28 @@ def test_manifest_loading_keeps_transitive_dependencies_for_required_sites_app()
     filtered = app_settings._filter_local_apps_by_enabled_lock(
         [
             "apps.app",
-            "apps.sites",
-            "apps.groups",
-            "apps.media",
             "apps.audio",
             "apps.content",
-            "apps.nodes",
             "apps.credentials",
+            "apps.groups",
+            "apps.media",
             "apps.modules",
+            "apps.nodes",
+            "apps.sites",
         ],
-        requirements_by_app={
-            "apps.sites": ["apps.modules"],
-            "apps.modules": ["apps.groups", "apps.media", "apps.nodes"],
-            "apps.nodes": ["apps.audio", "apps.content", "apps.credentials"],
-        },
+        requirements_by_app=_manifest_requirements_by_app_entry(),
     )
 
     assert filtered == [
         "apps.app",
-        "apps.sites",
-        "apps.groups",
-        "apps.media",
         "apps.audio",
         "apps.content",
-        "apps.nodes",
         "apps.credentials",
+        "apps.groups",
+        "apps.media",
         "apps.modules",
+        "apps.nodes",
+        "apps.sites",
     ]
 
 
