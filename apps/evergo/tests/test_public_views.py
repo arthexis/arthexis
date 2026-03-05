@@ -116,6 +116,28 @@ def test_order_tracking_public_renders_defaults(client):
 
 
 @pytest.mark.django_db
+def test_order_tracking_public_normalizes_common_status_text_artifacts(client):
+    """Regression: tracking page should normalize known status encoding artifacts for display."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-4b", email="owner4b@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="owner4b@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=28695,
+        order_number="GM01195",
+        status_name="Orden en ejecuci?n",
+    )
+
+    client.force_login(owner)
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    assert "Estatus: Orden en ejecución" in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_order_tracking_public_requires_login(client):
     """Security: anonymous users should be redirected to login for tracking form access."""
     User = get_user_model()
