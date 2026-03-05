@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, Mapping, TYPE_CHECKING, Any
 
 import requests
+from django.conf import settings
 
 if TYPE_CHECKING:
     from apps.release.models import Package
@@ -19,8 +20,22 @@ logger = logging.getLogger(__name__)
 
 API_ROOT = "https://api.github.com"
 REQUEST_TIMEOUT = 10
-ISSUE_LOCK_DIR = Path(__file__).resolve().parent.parent / ".locks" / "github-issues"
 ISSUE_LOCK_TTL = timedelta(hours=1)
+
+
+def _resolve_issue_lock_dir() -> Path:
+    """Return the project-level lock directory for GitHub issue fingerprints."""
+
+    with contextlib.suppress(Exception):
+        configured_base_dir = getattr(settings, "BASE_DIR", None)
+        if configured_base_dir:
+            return Path(configured_base_dir) / ".locks" / "github-issues"
+
+    # Fallback for imports that happen before Django settings are configured.
+    return Path(__file__).resolve().parents[3] / ".locks" / "github-issues"
+
+
+ISSUE_LOCK_DIR = _resolve_issue_lock_dir()
 
 
 class GitHubRepositoryError(RuntimeError):

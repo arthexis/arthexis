@@ -43,9 +43,9 @@ import random
 import secrets
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import websockets
 
@@ -53,6 +53,12 @@ from apps.ocpp import store
 from apps.ocpp.cpsim_service import cpsim_service_enabled, queue_cpsim_request
 from apps.ocpp.utils import resolve_ws_scheme
 from apps.simulators.network import validate_simulator_endpoint
+from apps.simulators.evcs_mobilityhouse import MobilityHouseChargePointAdapter
+from apps.simulators.simulator_runtime import (
+    build_legacy_simulator_config,
+    build_mobility_house_simulator_config,
+    resolve_simulator_backend,
+)
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -134,6 +140,8 @@ _simulators: Dict[int, SimulatorState] = {
     2: SimulatorState(),
 }
 
+_runtime_adapters: Dict[int, object] = {}
+
 # Persist state in the package directory so consecutive runs can load it.
 STATE_FILE = Path(__file__).with_name("simulator.json")
 
@@ -177,6 +185,39 @@ for key, val in _load_state_file().items():  # pragma: no cover - simple load
 
 
 # ---------------------------------------------------------------------------
+
+def _normalize_payload(value: Any) -> dict[str, object]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if is_dataclass(value):
+        return asdict(value)
+    if isinstance(value, Mapping):
+        return dict(value)
+    if hasattr(value, "__dict__"):
+        return dict(value.__dict__)
+    return {}
+
+
+def _backend_simulator_from_payload(
+    payload: Mapping[str, object],
+    *,
+    cp_idx: int = 1,
+    sim_state: SimulatorState | None = None,
+):
+    selection = resolve_simulator_backend(cp_idx=cp_idx)
+    if selection.use_mobility_house:
+        config = build_mobility_house_simulator_config(payload, cp_idx=cp_idx)
+        return (
+            selection,
+            MobilityHouseChargePointAdapter(config, sim_state=sim_state),
+        )
+    config = build_legacy_simulator_config(payload, cp_idx=cp_idx)
+    from apps.simulators.charge_point import ChargePointSimulator
+
+    return (selection, ChargePointSimulator(config))
+
 # Simulation logic
 # ---------------------------------------------------------------------------
 
@@ -196,6 +237,8 @@ async def simulate_cp(
     pre_charge_delay: float,
     session_count: float,
     interval: float = 5.0,
+    start_delay: float = 0.0,
+    meter_interval: float | None = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
     ws_scheme: Optional[str] = None,
@@ -237,7 +280,9 @@ async def simulate_cp(
             self.average_kwh = average_kwh
             self.amperage = amperage
             self.pre_charge_delay = pre_charge_delay
+            self.start_delay = max(0.0, float(start_delay))
             self.interval = interval
+            self.meter_interval = interval if (meter_interval is None or meter_interval <= 0) else float(meter_interval)
             self.username = username
             self.password = password
             self.state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
@@ -422,7 +467,7 @@ async def simulate_cp(
 
         def metering_plan(self) -> tuple[int, float]:
             meter_start = random.randint(1000, 2000)
-            steps = max(1, int(self.duration / self.interval))
+            steps = max(1, int(self.duration / self.meter_interval))
             target_kwh = self.jitter(self.average_kwh)
             step_avg = (target_kwh * 1000) / steps if steps else target_kwh * 1000
             return meter_start, step_avg
@@ -438,7 +483,7 @@ async def simulate_cp(
                 await self.send(ws, [2, "hb", "Heartbeat", {}])
                 self.state.last_message = "Heartbeat"
                 await self.recv(ws)
-                await asyncio.sleep(5)
+                await asyncio.sleep(self.meter_interval)
                 if time.monotonic() - last_mv >= 30:
                     idle_step = max(2, int(step_avg / 100))
                     next_meter += random.randint(0, idle_step)
@@ -558,7 +603,7 @@ async def simulate_cp(
                         ],
                 )
                 self.state.last_message = "MeterValues"
-                await asyncio.sleep(self.interval)
+                await asyncio.sleep(self.meter_interval)
             return meter
 
         async def stop_transaction(self, ws, tx_id: int, meter: int) -> None:
@@ -588,7 +633,7 @@ async def simulate_cp(
                 await self.send(ws, [2, "hb", "Heartbeat", {}])
                 self.state.last_message = "Heartbeat"
                 await self.recv(ws)
-                await asyncio.sleep(5)
+                await asyncio.sleep(self.meter_interval)
                 if time.monotonic() - last_mv >= 30:
                     idle_step = max(2, int(step_avg / 100))
                     next_meter += random.randint(0, idle_step)
@@ -709,6 +754,7 @@ def simulate(
     cp: int = 1,
     name: str = "Simulator",
     delay: Optional[float] = None,
+    start_delay: float = 0.0,
     reconnect_slots: Optional[str] = None,
     demo_mode: bool = False,
     meter_interval: Optional[float] = None,
@@ -786,7 +832,9 @@ def simulate(
                 pre_charge_delay,
                 session_count,
                 interval,
-                username,
+                    start_delay,
+                    meter_interval,
+                    username,
                 password,
                 allow_private_network,
                 ws_scheme,
@@ -811,7 +859,9 @@ def simulate(
                     amperage,
                     pre_charge_delay,
                     session_count,
-                    interval,
+                interval,
+                    start_delay,
+                    meter_interval,
                     username,
                     password,
                     allow_private_network,
@@ -868,7 +918,9 @@ def simulate(
                 pre_charge_delay,
                 session_count,
                 interval,
-                username,
+                    start_delay,
+                    meter_interval,
+                    username,
                 password,
                 allow_private_network,
                 ws_scheme,
@@ -897,7 +949,9 @@ def simulate(
                     amperage,
                     pre_charge_delay,
                     session_count,
-                    interval,
+                interval,
+                    start_delay,
+                    meter_interval,
                     username,
                     password,
                     allow_private_network,
@@ -934,7 +988,7 @@ def _start_simulator(
     ``log_file`` is the path to the log capturing all simulator traffic.
     """
 
-    state = _simulators[cp]
+    state = _simulators.setdefault(cp, SimulatorState())
     params = params or {}
 
     simulate_signature = inspect.signature(simulate)
@@ -959,8 +1013,10 @@ def _start_simulator(
     state.last_message = ""
     state.phase = "Starting"
     state.params = filtered_params
+    state.params.setdefault("start_delay", state.params.get("start_delay") if isinstance(state.params, dict) else None)
     state.params.pop("daemon", None)
     state.params.setdefault("allow_private_network", False)
+    state.params.setdefault("start_delay", 0.0)
     state.running = True
     state.start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     state.stop_time = None
@@ -979,6 +1035,28 @@ def _start_simulator(
         _save_state_file(_simulators)
         return True, state.last_status, log_file
 
+    selection = resolve_simulator_backend(cp_idx=cp)
+    if selection.use_mobility_house:
+        runtime_params = _normalize_payload(state.params)
+        _, runtime = _backend_simulator_from_payload(
+            runtime_params,
+            cp_idx=cp,
+            sim_state=state,
+        )
+        _runtime_adapters[cp] = runtime
+        started, status, log_file = runtime.start()
+        if not started:
+            state.running = False
+            state.last_error = status
+            state.phase = "Error"
+        state.last_status = status
+        _save_state_file(_simulators)
+        return started, status, log_file
+
+    fallback_reason = ""
+    if selection.feature_enabled and not selection.dependency_available:
+        fallback_reason = selection.reason
+
     try:
         coro = simulate(cp=cp, **state.params)
     except ValueError as exc:
@@ -988,6 +1066,7 @@ def _start_simulator(
         state.running = False
         _save_state_file(_simulators)
         return False, state.last_status, log_file
+
     threading.Thread(target=lambda: asyncio.run(coro), daemon=True).start()
 
     # Wait for initial connection result
@@ -1006,12 +1085,13 @@ def _start_simulator(
             break
         time.sleep(0.1)
 
+    if fallback_reason and status_msg.startswith("Connection"):
+        status_msg = f"{fallback_reason} {status_msg}"
+
     state.last_status = status_msg
     _save_state_file(_simulators)
 
-    return state.running and status_msg == "Connection accepted", status_msg, log_file
-
-
+    return state.running and status_msg.startswith("Connection accepted"), status_msg, log_file
 def _stop_simulator(cp: int = 1) -> bool:
     """Mark the simulator as requested to stop."""
 
@@ -1114,3 +1194,33 @@ __all__ = [
     "view_cp_simulator",
     "view_simulator",
 ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

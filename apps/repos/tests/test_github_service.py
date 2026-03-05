@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
+from django.conf import settings
 
 from apps.repos.services import github
 
@@ -20,6 +22,10 @@ class DummyResponse:
 
     def close(self):
         self.closed = True
+
+
+def test_issue_lock_dir_uses_project_root():
+    assert github.ISSUE_LOCK_DIR == Path(settings.BASE_DIR) / ".locks" / "github-issues"
 
 
 def test_fetch_repository_issues_handles_pagination(monkeypatch):

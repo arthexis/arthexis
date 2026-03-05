@@ -39,6 +39,11 @@ class SimulatorConfig:
     interval: float = 5.0
     pre_charge_delay: float = 10.0
     repeat: bool = False
+    cp_idx: int = 1
+    start_delay: float = 0.0
+    meter_interval: float = 5.0
+    reconnect_slots: str | None = None
+    demo_mode: bool = False
     username: Optional[str] = None
     password: Optional[str] = None
     serial_number: str = ""

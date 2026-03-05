@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 import sys
 
@@ -192,3 +193,55 @@ def test_duplicate_prefix_detection_fails_for_overlapping_cross_app_mounts():
                 ("shared/v2/", "app_b", "apps.app_b.routes"),
             ]
         )
+
+
+def test_autodiscovery_ignores_vendored_apps_outside_apps_dir(monkeypatch):
+    """Regression: third-party apps under ``.venv`` should not be treated as project route providers."""
+
+    base_dir = Path("C:/workspace/repo")
+    apps_dir = base_dir / "apps"
+    first_party_path = apps_dir / "fake_core_app"
+    vendored_path = base_dir / ".venv" / "Lib" / "site-packages" / "django" / "contrib" / "admindocs"
+
+    first_party_module = "fake_core_app"
+    first_party_routes = f"{first_party_module}.routes"
+    vendored_module = "fake_vendor_admindocs"
+    vendored_urls = f"{vendored_module}.urls"
+
+    fake_first_party = ModuleType(first_party_module)
+    fake_first_party_routes = ModuleType(first_party_routes)
+    fake_first_party_routes.ROOT_URLPATTERNS = [
+        route_providers.path("admindocs/commands/", lambda request: None)
+    ]
+    fake_vendored = ModuleType(vendored_module)
+    fake_vendored_urls = ModuleType(vendored_urls)
+    fake_vendored_urls.urlpatterns = []
+
+    monkeypatch.setitem(sys.modules, first_party_module, fake_first_party)
+    monkeypatch.setitem(sys.modules, first_party_routes, fake_first_party_routes)
+    monkeypatch.setitem(sys.modules, vendored_module, fake_vendored)
+    monkeypatch.setitem(sys.modules, vendored_urls, fake_vendored_urls)
+    monkeypatch.setattr(route_providers.settings, "BASE_DIR", base_dir)
+    monkeypatch.setattr(route_providers.settings, "APPS_DIR", apps_dir)
+    monkeypatch.setattr(
+        route_providers.apps,
+        "get_app_configs",
+        lambda: [
+            SimpleNamespace(
+                name=first_party_module,
+                label="core",
+                path=str(first_party_path),
+            ),
+            SimpleNamespace(
+                name=vendored_module,
+                label="admindocs",
+                path=str(vendored_path),
+            ),
+        ],
+    )
+
+    patterns = route_providers.autodiscovered_route_patterns()
+    mounted_prefixes = [str(pattern.pattern) for pattern in patterns]
+
+    assert "admindocs/commands/" in mounted_prefixes
+    assert "admindocs/" not in mounted_prefixes
