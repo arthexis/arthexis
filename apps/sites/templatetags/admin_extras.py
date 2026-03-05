@@ -34,6 +34,14 @@ logger = logging.getLogger(__name__)
 _USES_QUERYSET_CACHE = weakref.WeakKeyDictionary()
 
 
+def _content_type_for_model(model: type[Model]) -> ContentType | None:
+    """Return content type for a model using batched lookup APIs."""
+
+    return ContentType.objects.get_for_models(
+        model, for_concrete_models=False
+    ).get(model)
+
+
 def _resolve_current_admin_app_label(request) -> str:
     """Return the active admin app label inferred from request resolver metadata."""
 
@@ -342,7 +350,7 @@ def model_admin_actions(context, app_label, model_name):
         actions.append(action)
         seen.add(key)
 
-    content_type = ContentType.objects.get_for_model(model, for_concrete_model=False)
+    content_type = _content_type_for_model(model)
     for configured_action in DashboardAction.objects.filter(
         content_type=content_type,
         is_active=True,
@@ -492,9 +500,9 @@ def dashboard_model_status(app_label: str, model_name: str) -> dict | None:
     except LookupError:
         return None
 
-    content_type = ContentType.objects.get_for_model(
-        model, for_concrete_model=False
-    )
+    content_type = _content_type_for_model(model)
+    if content_type is None:
+        return None
 
     try:
         rule = DashboardRule.objects.select_related("content_type").get(

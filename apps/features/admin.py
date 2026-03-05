@@ -311,6 +311,40 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     reload_base.requires_queryset = False
     reload_base.methods = ("GET", "POST")
 
+
+    def response_action(self, request, queryset):
+        """Handle denied bulk actions with explicit admin feedback."""
+
+        selected_action = request.POST.get("action")
+        if (
+            selected_action == "toggle_selected_feature"
+            and not self.has_change_permission(request)
+        ):
+            self.message_user(
+                request,
+                _("You do not have permission to run this action."),
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(request.get_full_path())
+
+        return super().response_action(request, queryset)
+
+    def changelist_view(self, request, extra_context=None):
+        """Emit feedback when a posted bulk action is not permitted."""
+
+        selected_action = request.POST.get("action") if request.method == "POST" else None
+        if (
+            selected_action == "toggle_selected_feature"
+            and not self.has_change_permission(request)
+        ):
+            self.message_user(
+                request,
+                _("You do not have permission to run this action."),
+                level=messages.WARNING,
+            )
+
+        return super().changelist_view(request, extra_context=extra_context)
+
     @admin.action(description=_("Toggle selected feature"), permissions=["change"])
     def toggle_selected_feature(self, request, queryset):
         """Flip the enabled state for each selected suite feature."""
@@ -369,6 +403,16 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if parameter_fields:
             fieldsets.append((_("Feature parameters"), {"fields": tuple(parameter_fields)}))
         return fieldsets
+
+    def get_formsets_with_inlines(self, request, obj=None):
+        """Skip inline formsets on POST when no inline management payload is submitted."""
+
+        for formset, inline in super().get_formsets_with_inlines(request, obj=obj):
+            if request.method == "POST":
+                prefix = formset.get_default_prefix()
+                if f"{prefix}-TOTAL_FORMS" not in request.POST:
+                    continue
+            yield formset, inline
 
     def save_model(self, request, obj, form, change):
         """Persist both model fields and dynamic parameter values."""

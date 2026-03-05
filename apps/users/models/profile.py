@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import Ownable
+from apps.core.models.ownable import Ownable
 
 
 class Profile(Ownable):
