@@ -54,8 +54,7 @@ def set_feature_enabled(*, slug: str, enabled: bool, kind: str | None = None) ->
         feature = Feature.objects.filter(slug=slug).first()
         if feature is None:
             raise CommandError(f"Unknown suite feature: {slug}")
-        feature.is_enabled = enabled
-        feature.save(update_fields=["is_enabled", "updated_at"])
+        feature.set_enabled(enabled)
         return resolved_kind
 
     if resolved_kind == FeatureKind.NODE:
