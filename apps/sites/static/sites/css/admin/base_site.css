@@ -1,6 +1,6 @@
 .messagelist li .copy-message {
     float: right;
-    margin-left: 1em;
+    margin-left: var(--admin-ui-space-4);
 }
 
 .breadcrumbs__copy-link {
