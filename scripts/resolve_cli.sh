@@ -3,13 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: ./resolve.sh [--file PATH | --text TEXT | TEXT...]
+Usage: resolve.sh [--file PATH | --text TEXT | TEXT ...]
 
-Resolve sigils in the provided text using the project's resolver. When no
-arguments are supplied the script reads from standard input.
+Resolve sigils in either piped input, a file, or provided text arguments.
 
 Options:
-  -f, --file PATH   Resolve sigils in the contents of PATH.
+  -f, --file PATH  Read input from PATH.
       --text TEXT   Resolve sigils in the provided TEXT.
   -h, --help        Show this help message and exit.
 
@@ -20,7 +19,6 @@ Examples:
 USAGE
 }
 
-BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON_CMD="${PYTHON:-python}"
 
 if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
@@ -83,11 +81,11 @@ while [[ $# -gt 0 ]]; do
  done
 
 if [[ -n "$file" ]]; then
-  "$PYTHON_CMD" "$BASE_DIR/scripts/resolve_sigils.py" --file "$file"
+  "$PYTHON_CMD" -m scripts.resolve_sigils --file "$file"
 elif [[ -n "$explicit_text" ]]; then
-  "$PYTHON_CMD" "$BASE_DIR/scripts/resolve_sigils.py" --text "$explicit_text"
+  "$PYTHON_CMD" -m scripts.resolve_sigils --text "$explicit_text"
 elif [[ ${#positional_text[@]} -gt 0 ]]; then
-  "$PYTHON_CMD" "$BASE_DIR/scripts/resolve_sigils.py" --text "${positional_text[*]}"
+  "$PYTHON_CMD" -m scripts.resolve_sigils --text "${positional_text[*]}"
 else
-  "$PYTHON_CMD" "$BASE_DIR/scripts/resolve_sigils.py"
+  "$PYTHON_CMD" -m scripts.resolve_sigils
 fi

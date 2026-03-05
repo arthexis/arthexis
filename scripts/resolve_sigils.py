@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(__file__).resolve().parents[2]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
@@ -20,13 +20,13 @@ def _parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--text",
-        help="Text containing sigils to resolve."
+        help="Text containing sigils to resolve.",
     )
     parser.add_argument(
         "-f",
         "--file",
         type=Path,
-        help="Path to a file whose contents should be resolved."
+        help="Path to a file whose contents should be resolved.",
     )
     parser.add_argument(
         "positional_text",
