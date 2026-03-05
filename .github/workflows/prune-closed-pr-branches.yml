@@ -1,0 +1,95 @@
+name: Prune branches for closed PRs
+
+on:
+  schedule:
+    - cron: '15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete branches for PRs closed over 24h ago
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+            const defaultBranch = context.payload.repository?.default_branch;
+
+            const candidateRefs = new Set();
+            let page = 1;
+
+            while (true) {
+              const { data: pulls } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'closed',
+                sort: 'updated',
+                direction: 'desc',
+                per_page: 100,
+                page,
+              });
+
+              if (pulls.length === 0) {
+                break;
+              }
+
+              for (const pr of pulls) {
+                const closedAt = pr.closed_at ? new Date(pr.closed_at).getTime() : null;
+                if (!closedAt) {
+                  continue;
+                }
+
+                if (closedAt > cutoff) {
+                  continue;
+                }
+
+                if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+                  core.info(`Skipping PR #${pr.number}: head branch is in a fork.`);
+                  continue;
+                }
+
+                if (pr.head.ref === defaultBranch) {
+                  core.info(`Skipping PR #${pr.number}: head branch is the default branch.`);
+                  continue;
+                }
+
+                candidateRefs.add(pr.head.ref);
+              }
+
+              const oldestClosedAt = pulls[pulls.length - 1].closed_at;
+              if (oldestClosedAt && new Date(oldestClosedAt).getTime() <= cutoff) {
+                break;
+              }
+
+              page += 1;
+            }
+
+            if (candidateRefs.size === 0) {
+              core.info('No branches eligible for pruning.');
+              return;
+            }
+
+            for (const ref of candidateRefs) {
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `heads/${ref}`,
+                });
+                core.info(`Deleted branch: ${ref}`);
+              } catch (error) {
+                if (error.status === 422 || error.status === 404) {
+                  core.info(`Skipping branch ${ref}: already deleted or protected.`);
+                  continue;
+                }
+
+                throw error;
+              }
+            }
