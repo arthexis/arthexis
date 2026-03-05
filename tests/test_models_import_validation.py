@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import pkgutil
 from types import ModuleType
 
@@ -44,7 +45,12 @@ def test_all_installed_app_models_modules_import_cleanly() -> None:
     failures: list[str] = []
 
     for app_label in settings.LOCAL_APPS:
-        models_module = _import_models_module_if_present(app_label)
+        try:
+            models_module = _import_models_module_if_present(app_label)
+        except RuntimeError as exc:
+            failures.append(f"{app_label}.models: {exc}")
+            continue
+
         if models_module is None:
             continue
 
