@@ -99,7 +99,6 @@ def _reset_pending_calls() -> None:
     store._pending_call_handles.clear()
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 @pytest.mark.critical
 async def test_handle_clear_charging_profile_result_updates_profile():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-1")
@@ -272,7 +271,6 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 @pytest.mark.critical
 async def test_unlock_connector_result_updates_state():
     _reset_pending_calls()
@@ -367,7 +365,6 @@ async def test_unlock_connector_error_records_failure():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 @pytest.mark.critical
 async def test_handle_clear_charging_profile_error_records_failure():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-2")
@@ -456,7 +453,6 @@ async def test_cleared_charging_limit_persists_event():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 @pytest.mark.critical
 async def test_notify_charging_limit_persists_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
@@ -500,7 +496,6 @@ async def test_notify_charging_limit_persists_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 @pytest.mark.critical
 async def test_notify_report_persists_inventory_snapshot():
     charger = await database_sync_to_async(Charger.objects.create)(
