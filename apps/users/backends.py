@@ -260,7 +260,7 @@ class RFIDBackend:
                     text=True,
                     env=env,
                 )
-            except (OSError, subprocess.SubprocessError):
+            except (OSError, subprocess.SubprocessError, UnicodeDecodeError):
                 return self._reject(
                     rfid=rfid_value,
                     reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
