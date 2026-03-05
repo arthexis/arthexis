@@ -105,7 +105,7 @@ class EvergoOrder(models.Model):
         """Return an informative order identifier for admin and logs."""
         if self.order_number:
             return self.order_number
-        return f"EvergoOrder#{self.remote_id}"
+        return f"EvergoOrder#{self.remote_id}" if self.remote_id is not None else "EvergoOrder#draft"
 
     def sync_dynamic_field_values(self, payload: dict[str, Any]) -> None:
         """Track dropdown-like field values as they appear in incoming order payloads."""

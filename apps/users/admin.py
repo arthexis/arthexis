@@ -5,9 +5,7 @@ from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.admin import OwnableAdminForm, OwnableAdminMixin
-
-from apps.core.admin import OwnableAdminMixin
+from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
 
 from .models import ChatProfile
 

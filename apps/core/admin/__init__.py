@@ -1,3 +1,10 @@
+from .mixins import (
+    OwnableAdminForm,
+    OwnableAdminMixin,
+    ProfileAdminMixin,
+    SaveBeforeChangeAction,
+    _build_credentials_actions,
+)
 from apps.locals.user_data import EntityModelAdmin
 
 from . import site as site  # noqa: F401
@@ -33,12 +40,6 @@ from .inlines import (
     _build_profile_inline,
 )
 from .invites import InviteLeadAdmin
-from .mixins import (
-    OwnableAdminMixin,
-    ProfileAdminMixin,
-    SaveBeforeChangeAction,
-    _build_credentials_actions,
-)
 from .odoo import OdooCustomerSearchForm, OdooEmployeeAdmin, OdooProductAdmin
 from .payments import (
     OpenPayProcessorAdmin,
@@ -81,6 +82,7 @@ __all__ = [
     "OdooProductAdminForm",
     "OpenPayProcessorAdmin",
     "OpenPayProcessorAdminForm",
+    "OwnableAdminForm",
     "OwnableAdminMixin",
     "PayPalProcessorAdmin",
     "PayPalProcessorAdminForm",

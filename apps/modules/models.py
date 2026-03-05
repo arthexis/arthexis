@@ -8,7 +8,6 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
-from apps.groups.models import SecurityGroup
 from apps.media.models import MediaFile
 from apps.media.utils import ensure_media_bucket
 from apps.nodes.models import NodeFeature, NodeRole
@@ -57,7 +56,7 @@ class Module(Entity):
         verbose_name=_("Favicon"),
     )
     security_group = models.ForeignKey(
-        SecurityGroup,
+        "groups.SecurityGroup",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

@@ -116,6 +116,28 @@ def test_order_tracking_public_renders_defaults(client):
 
 
 @pytest.mark.django_db
+def test_order_tracking_public_normalizes_common_status_text_artifacts(client):
+    """Regression: tracking page should normalize known status encoding artifacts for display."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-4b", email="owner4b@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="owner4b@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=28695,
+        order_number="GM01195",
+        status_name="Orden en ejecuci?n",
+    )
+
+    client.force_login(owner)
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    assert "Estatus: Orden en ejecución" in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_order_tracking_public_requires_login(client):
     """Security: anonymous users should be redirected to login for tracking form access."""
     User = get_user_model()
@@ -264,6 +286,35 @@ def test_my_evergo_dashboard_shows_validation_errors_for_large_query_payload(cli
 
     assert response.status_code == 200
     assert "Too many values in raw_queries" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_my_evergo_dashboard_handles_orders_without_remote_id(client):
+    """Regression: dashboard rows should be null-safe when remote_id is absent."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-dashboard-owner-4", email="dash4@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="dash4@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    EvergoOrder.objects.create(
+        user=profile,
+        remote_id=None,
+        order_number="",
+        client_name="No Remote",
+        status_name="Pendiente",
+    )
+
+    response = client.post(
+        reverse("evergo:my-dashboard", kwargs={"token": profile.dashboard_token}),
+        data={"raw_queries": "No Remote"},
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "No Remote" in content
+    assert "&gt;-&lt;" not in content
+    assert ">-</a>" in content
+    assert "portal-mex.evergo.com/ordenes/None" not in content
 
 
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
