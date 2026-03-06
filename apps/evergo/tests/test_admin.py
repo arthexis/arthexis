@@ -490,6 +490,76 @@ def test_evergo_customer_export_view_exports_only_selected_records(
     assert "7201\tSelected Export" in body
     assert "7202\tSkipped Export" not in body
 
+@pytest.mark.django_db
+def test_evergo_customer_export_view_post_scope_uses_hidden_selected_ids(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: selected export should still work when selection is carried by hidden fields."""
+
+    first = evergo_customer_export_record(
+        username="suite-admin-export-hidden-selected-1",
+        email="suite-admin-export-hidden-selected-1@example.com",
+        remote_id=7301,
+        name="Hidden Selected",
+    )
+    evergo_customer_export_record(
+        username="suite-admin-export-hidden-selected-2",
+        email="suite-admin-export-hidden-selected-2@example.com",
+        remote_id=7302,
+        name="Hidden Unselected",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        export_url,
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+            "selected": [str(first.pk)],
+            "export_scope_selected": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert "7301	Hidden Selected" in body
+    assert "7302	Hidden Unselected" not in body
+
+
+@pytest.mark.django_db
+def test_evergo_customer_export_view_post_scope_can_export_all_even_with_selected_ids(
+    admin_client, evergo_customer_export_record
+):
+    """Regression: users should be able to export all records from selected-confirmation flow."""
+
+    first = evergo_customer_export_record(
+        username="suite-admin-export-hidden-all-1",
+        email="suite-admin-export-hidden-all-1@example.com",
+        remote_id=7401,
+        name="Visible One",
+    )
+    second = evergo_customer_export_record(
+        username="suite-admin-export-hidden-all-2",
+        email="suite-admin-export-hidden-all-2@example.com",
+        remote_id=7402,
+        name="Visible Two",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        export_url,
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+            "selected": [str(first.pk), str(second.pk)],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert "7401	Visible One" in body
+    assert "7402	Visible Two" in body
+
 
 def test_evergo_customer_admin_changelist_shows_status_and_clean_phone(admin_client):
     """Regression: changelist should show last SO status and trim +52/52 phone prefixes."""

@@ -198,13 +198,23 @@ class ImportExportAdminMixin:
         return response
 
     def _selected_queryset(self, request, queryset):
-        """Return queryset filtered to selected primary keys when requested."""
+        """Return queryset filtered to selected primary keys when requested.
+
+        On the confirmation page we keep selected primary keys in hidden fields so
+        users can switch between exporting selected records and all filtered
+        records without relying on query-string rewrites.
+        """
+
         selected_values = request.GET.getlist("selected")
+        if request.method == "POST":
+            selected_values = request.POST.getlist("selected") or selected_values
+            exporting_selected = request.POST.get("export_scope_selected") == "on"
+        else:
+            exporting_selected = request.GET.get("export_scope") == "selected"
         selected_ids = [value for value in selected_values if value]
-        export_scope = request.GET.get("export_scope")
-        if export_scope != "selected" or not selected_ids:
-            return queryset, False
-        return queryset.filter(pk__in=selected_ids), True
+        if not exporting_selected or not selected_ids:
+            return queryset, False, selected_ids
+        return queryset.filter(pk__in=selected_ids), True, selected_ids
 
     def export_view(self, request):
         """Render export confirmation and stream model data in selected format."""
@@ -223,7 +233,7 @@ class ImportExportAdminMixin:
             queryset = changelist.get_queryset(request)
         finally:
             request.GET = original_get
-        queryset, exporting_selected = self._selected_queryset(request, queryset)
+        queryset, exporting_selected, selected_ids = self._selected_queryset(request, queryset)
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
         if request.method == "POST" and export_format:
@@ -281,7 +291,7 @@ class ImportExportAdminMixin:
                 "changelist_url": changelist_url,
                 "export_count": queryset.count(),
                 "exporting_selected": exporting_selected,
-                "selected_ids": request.GET.getlist("selected") if exporting_selected else [],
+                "selected_ids": selected_ids,
                 "export_columns": [
                     {
                         "name": field.name,
