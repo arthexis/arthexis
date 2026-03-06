@@ -9,7 +9,7 @@
       <div class="row g-3 align-items-start simulator-layout">
         <div class="col-12 col-xl-6">
           <div class="row g-2">
-            <div class="col-sm-6 col-md-4">
+            <div class="col-sm-6 col-md-8">
               <div class="mb-2">
                 <label class="form-label" for="host{{ idx }}">Host</label>
                 <input id="host{{ idx }}" name="host" value="{{ form_params.host|default:'' }}" class="form-control form-control-sm" hx-preserve>
@@ -104,6 +104,9 @@
                 <input id="password{{ idx }}" name="password" type="password" value="" class="form-control form-control-sm" hx-preserve>
               </div>
             </div>
+          </div>
+          <div class="simulator-help text-muted small mt-2">
+            The simulator opens an OCPP connection using the configured host/port and charge point IDs, then sends BootNotification and periodic Heartbeat messages while active. When started, it also simulates a charging session by authorizing the RFID, beginning a transaction, streaming meter values, and stopping the transaction at the end of the configured duration.
           </div>
         </div>
         <div class="col-12 col-xl-6">

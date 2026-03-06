@@ -1,4 +1,5 @@
 from datetime import timedelta
+from random import randint
 
 from django.contrib.auth.views import redirect_to_login
 from django.shortcuts import resolve_url
@@ -26,6 +27,11 @@ SIMULATOR_BACKEND_CHOICES: tuple[tuple[str, str], ...] = (
     ("arthexis", "arthexis"),
     ("mobilityhouse", "mobilityhouse"),
 )
+
+def _random_serial_number() -> str:
+    """Return a random six-digit serial number for simulator defaults."""
+
+    return str(randint(100000, 999999))
 
 
 @landing("Charge Point Simulator")
@@ -114,7 +120,7 @@ def cp_simulator(request):
         "host": default_host,
         "ws_port": int(default_ws_port) if default_ws_port else None,
         "cp_path": "CP2",
-        "serial_number": "CP2",
+        "serial_number": _random_serial_number(),
         "connector_id": 1,
         "rfid": "FFFFFFFF",
         "vin": "WP0ZZZ00000000000",

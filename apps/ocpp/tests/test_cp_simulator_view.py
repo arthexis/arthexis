@@ -1,3 +1,4 @@
+import re
 import pytest
 from django.urls import reverse
 
@@ -247,3 +248,26 @@ def test_cp_simulator_form_preserves_host_and_port_inputs(logged_in_client):
     port_tag_match = re.search(r'<input[^>]*id="ws_port1"[^>]*>', content)
     assert port_tag_match, "Input with id='ws_port1' not found"
     assert "hx-preserve" in port_tag_match.group(0), "hx-preserve missing from ws_port1 input"
+
+
+def test_cp_simulator_default_serial_number_is_six_digits(logged_in_client):
+    """Initial render seeds simulator serial number with a random six-digit value."""
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    serial_number = response.context["form_params"]["serial_number"]
+    assert serial_number.isdigit()
+    assert len(serial_number) == 6
+
+
+def test_cp_simulator_view_renders_help_text_and_wide_host_field(logged_in_client):
+    """Simulator UI explains behavior and keeps host input wider than other fields."""
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'class="col-sm-6 col-md-8"' in content
+    assert "sends BootNotification and periodic Heartbeat messages" in content
+    assert "simulates a charging session by authorizing the RFID" in content
