@@ -3,3 +3,7 @@
 DJANGO_APPS = [
     "apps.audio",
 ]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+]

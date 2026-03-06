@@ -3,3 +3,7 @@
 DJANGO_APPS = [
     "apps.aws",
 ]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+]

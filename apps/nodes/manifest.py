@@ -8,4 +8,5 @@ REQUIRES_APPS = [
     "apps.audio",
     "apps.content",
     "apps.credentials",
+    "apps.discovery",
 ]

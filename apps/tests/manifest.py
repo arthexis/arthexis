@@ -3,3 +3,7 @@
 DJANGO_APPS = [
     "apps.tests",
 ]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+]
