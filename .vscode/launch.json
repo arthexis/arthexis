@@ -55,6 +55,23 @@
             "subProcess": true
         },
         {
+            "name": "Migration Server",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "module": "apps.vscode.migration_server",
+            "cwd": "${workspaceFolder}",
+            "noDebug": true,
+            "console": "integratedTerminal",
+            "subProcess": true,
+            "args": [
+                "--server"
+            ]
+        },
+        {
             "name": "Run Tests",
             "type": "python",
             "request": "launch",
