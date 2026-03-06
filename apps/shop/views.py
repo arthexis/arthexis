@@ -41,12 +41,11 @@ def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopPro
     if len(products) != len(product_ids):
         raise CartValidationError("Some cart items are no longer available. Please review your cart.")
 
-    first_product = products[product_ids[0]]
-    shop = first_product.shop
+    shop_ids = {product.shop_id for product in products.values()}
+    if len(shop_ids) > 1:
+        raise CartValidationError("Your cart contains items from multiple shops. Please update your cart.")
 
-    for product_id in product_ids:
-        if products[product_id].shop_id != shop.id:
-            raise CartValidationError("Your cart contains items from multiple shops. Please update your cart.")
+    shop = next(iter(products.values())).shop
 
     return shop, products
 
