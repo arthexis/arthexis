@@ -26,12 +26,10 @@ try:
     from .email import EmailArtifact, EmailTransaction, EmailTransactionAttachment
     from .invite_lead import InviteLead
     from .usage_event import UsageEvent
-    from apps.cards.models import RFID
 except RuntimeError as exc:
     if "isn't in an application in INSTALLED_APPS" not in str(exc):
         raise
     # Core concrete models are unavailable unless apps.core is installed.
-    pass
 else:
     __all__.extend(
         [
@@ -41,6 +39,16 @@ else:
             "EmailTransactionAttachment",
             "InviteLead",
             "UsageEvent",
-            "RFID",
         ]
     )
+
+try:
+    from apps.cards.models import RFID
+except RuntimeError as exc:
+    if "isn't in an application in INSTALLED_APPS" not in str(exc):
+        raise
+except ModuleNotFoundError:
+    # The cards app is optional for some deployments and tests.
+    pass
+else:
+    __all__.append("RFID")
