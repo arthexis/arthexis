@@ -1,0 +1,30 @@
+{% extends "pages/base.html" %}
+{% block title %}{{ shop.name }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1>{{ shop.name }}</h1>
+  <p>{{ shop.description }}</p>
+  <p><a class="btn btn-outline-primary" href="{% url 'shop-cart' slug=shop.slug %}">Open cart ({{ cart_lines|length }})</a></p>
+  <div class="row g-3">
+    {% for product in products %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5">{{ product.name }}</h2>
+            <p>{{ product.description|default:"No description yet." }}</p>
+            <p><strong>{{ product.unit_price }} {{ product.currency }}</strong></p>
+            <form method="post" action="{% url 'shop-add-to-cart' slug=shop.slug product_id=product.id %}">
+              {% csrf_token %}
+              <label for="qty-{{ product.id }}" class="form-label">Quantity</label>
+              <input id="qty-{{ product.id }}" name="quantity" type="number" min="1" value="1" class="form-control mb-2">
+              <button type="submit" class="btn btn-primary">Add to cart</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <p>No active products available.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

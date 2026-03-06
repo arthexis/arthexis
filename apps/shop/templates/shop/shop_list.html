@@ -1,0 +1,17 @@
+{% extends "pages/base.html" %}
+{% block title %}Shops{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1>Shops</h1>
+  <div class="list-group">
+    {% for shop in shops %}
+      <a class="list-group-item list-group-item-action" href="{% url 'shop-detail' slug=shop.slug %}">
+        <strong>{{ shop.name }}</strong><br>
+        <small>{{ shop.description|default:"Simple storefront for products." }}</small>
+      </a>
+    {% empty %}
+      <p>No shops are available yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "pages/base.html" %}
+{% block title %}Track order{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1>Track your order</h1>
+  <form method="get" class="mb-4">
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-primary">Find order</button>
+  </form>
+
+  {% if order %}
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h5">Order #{{ order.id }}</h2>
+        <p>Status: <strong>{{ order.get_status_display }}</strong></p>
+        <p>Tracking number: {{ order.tracking_number|default:"Not yet assigned" }}</p>
+        <p>Odoo sales order reference: {{ order.odoo_sales_order_ref|default:"Pending" }}</p>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
