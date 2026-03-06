@@ -209,7 +209,7 @@ class EvergoUserAdmin(
 
 
 @admin.register(EvergoOrder)
-class EvergoOrderAdmin(DjangoObjectActions, admin.ModelAdmin):
+class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelAdmin):
     """Inspect synchronized Evergo order snapshots."""
 
     PROCESS_ORDER_LABEL = _("Process Order")

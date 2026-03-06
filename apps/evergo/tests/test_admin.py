@@ -37,6 +37,30 @@ def evergo_customer_export_record(db):
     return _create
 
 
+@pytest.fixture
+def evergo_order_record(db):
+    """Create an Evergo order with its required owner + profile graph."""
+
+    user_model = get_user_model()
+
+    def _create(*, username, email, remote_id, order_number, **order_kwargs):
+        owner = user_model.objects.create_user(username=username, email=email)
+        profile = EvergoUser.objects.create(
+            user=owner,
+            evergo_email=email,
+            evergo_password="secret",  # noqa: S106
+        )
+        order = EvergoOrder.objects.create(
+            user=profile,
+            remote_id=remote_id,
+            order_number=order_number,
+            **order_kwargs,
+        )
+        return owner, profile, order
+
+    return _create
+
+
 @pytest.mark.django_db
 def test_evergo_admin_app_and_changelist_are_accessible(admin_client):
     """Ensure Evergo appears in admin and the model changelist renders."""
@@ -804,20 +828,15 @@ def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow
 
 
 @pytest.mark.django_db
-def test_evergo_order_admin_change_view_has_process_order_button_and_flow_link(admin_client):
+def test_evergo_order_admin_change_view_has_process_order_button_and_flow_link(admin_client, evergo_order_record):
     """Regression: order change view should expose Process Order tool action and link field."""
 
-    user_model = get_user_model()
-    owner = user_model.objects.create_user(
+    _, profile, order = evergo_order_record(
         username="suite-admin-order-process",
         email="suite-admin-order-process@example.com",
+        remote_id=6601,
+        order_number="SO-6601",
     )
-    profile = EvergoUser.objects.create(
-        user=owner,
-        evergo_email="suite-admin-order-process@example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-    order = EvergoOrder.objects.create(user=profile, remote_id=6601, order_number="SO-6601")
 
     change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
     response = admin_client.get(change_url)
@@ -839,20 +858,47 @@ def test_evergo_order_admin_change_view_has_process_order_button_and_flow_link(a
 
 
 @pytest.mark.django_db
-def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
+def test_evergo_order_admin_change_form_process_order_button_redirects_to_flow(admin_client, evergo_order_record):
+    """Regression: posting the change form with Process Order should redirect to the flow view."""
+
+    _, profile, order = evergo_order_record(
+        username="suite-admin-order-process-change-form",
+        email="suite-admin-order-process-change-form@example.com",
+        remote_id=6602,
+        order_number="SO-6602",
+        status_name="Programado",
+        site_name="Brand",
+    )
+
+    change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    flow_url = reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id})
+
+    response = admin_client.post(
+        change_url,
+        data={
+            "user": str(profile.pk),
+            "remote_id": str(order.remote_id),
+            "order_number": order.order_number,
+            "status_name": order.status_name,
+            "site_name": order.site_name,
+            "_action": "process_so_action",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == flow_url
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client, evergo_order_record):
     """Regression: missing remote_id should not break order change page nor Process Order action."""
 
-    user_model = get_user_model()
-    owner = user_model.objects.create_user(
+    _, _, order = evergo_order_record(
         username="suite-admin-order-process-missing-remote-id",
         email="suite-admin-order-process-missing-remote-id@example.com",
+        remote_id=9901,
+        order_number="SO-9901",
     )
-    profile = EvergoUser.objects.create(
-        user=owner,
-        evergo_email="suite-admin-order-process-missing-remote-id@example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-    order = EvergoOrder.objects.create(user=profile, remote_id=9901, order_number="SO-9901")
     EvergoOrder.objects.filter(pk=order.pk).update(remote_id=None)
     order.refresh_from_db()
 
