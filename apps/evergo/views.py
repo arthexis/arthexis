@@ -12,6 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
@@ -301,7 +302,7 @@ def _load_remote_phase_one_initial_data(*, profile: EvergoUser, order_id: int) -
     """Load and normalize phase-one defaults from the latest WS API order detail payload."""
     try:
         order_payload = profile.fetch_order_detail(order_id=order_id)
-    except Exception:
+    except (EvergoAPIError, OSError):
         return {}
     return _extract_phase_one_initial_data(order_payload)
 
@@ -311,11 +312,12 @@ def _extract_phase_one_initial_data(order_payload: dict[str, object]) -> dict[st
     if not isinstance(order_payload, dict):
         return {}
 
-    candidate_sources: list[dict[str, object]] = [order_payload]
+    candidate_sources: list[dict[str, object]] = []
     for key in TRACKING_PREFILL_SOURCE_KEYS:
         source = order_payload.get(key)
         if isinstance(source, dict):
             candidate_sources.append(source)
+    candidate_sources.append(order_payload)
 
     initial_data: dict[str, object] = {}
     for field_name in TRACKING_PREFILL_FIELDS:
@@ -374,7 +376,10 @@ def _normalize_datetime_local_value(*, value: object) -> str | None:
         raw_value = raw_value[:-1] + "+00:00"
 
     try:
-        return datetime.fromisoformat(raw_value).strftime(DATETIME_LOCAL_FORMAT)
+        parsed = datetime.fromisoformat(raw_value)
+        if timezone.is_aware(parsed):
+            parsed = timezone.localtime(parsed, timezone.get_default_timezone())
+        return parsed.strftime(DATETIME_LOCAL_FORMAT)
     except ValueError:
         return None
 
