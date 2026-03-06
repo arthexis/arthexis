@@ -50,18 +50,31 @@
         <div class="form-row">
           <p class="export-summary">
             {% if exporting_selected %}
-              {% blocktrans count record_count=export_count with column_count=export_columns|length %}
-                You are about to export {{ record_count }} selected record using {{ column_count }} column.
-              {% plural %}
-                You are about to export {{ record_count }} selected records using {{ column_count }} columns.
-              {% endblocktrans %}
+              {% if export_count == total_export_count %}
+                {% blocktrans count record_count=export_count %}
+                  You are about to export {{ record_count }} selected record
+                {% plural %}
+                  You are about to export {{ record_count }} selected records
+                {% endblocktrans %}
+              {% else %}
+                {% blocktrans count record_count=export_count with total_count=total_export_count %}
+                  You are about to export {{ record_count }} out of {{ total_count }} record
+                {% plural %}
+                  You are about to export {{ record_count }} out of {{ total_count }} records
+                {% endblocktrans %}
+              {% endif %}
             {% else %}
-              {% blocktrans count record_count=export_count with column_count=export_columns|length %}
-                You are about to export {{ record_count }} record using {{ column_count }} column.
+              {% blocktrans count record_count=export_count %}
+                You are about to export {{ record_count }} record
               {% plural %}
-                You are about to export {{ record_count }} records using {{ column_count }} columns.
+                You are about to export {{ record_count }} records
               {% endblocktrans %}
             {% endif %}
+            {% blocktrans count column_count=export_columns|length %}
+              using {{ column_count }} column.
+            {% plural %}
+              using {{ column_count }} columns.
+            {% endblocktrans %}
           </p>
         </div>
         <div class="form-row">

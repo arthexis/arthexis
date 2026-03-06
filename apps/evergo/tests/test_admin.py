@@ -471,7 +471,7 @@ def test_evergo_customer_export_view_scopes_to_selected_records(admin_client, ev
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert "about to export 1 selected record using" in content
+    assert "about to export 1 out of 2 records using" in content
     assert 'name="export_scope_selected"' in content
     assert re.search(
         r'<input[^>]*id="id_export_scope_selected"[^>]*checked',
