@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import functools
 from io import BytesIO
 
 
+@functools.lru_cache(maxsize=1)
 def _load_qrcode_module():
     """Return the optional ``qrcode`` module when available."""
     try:
