@@ -489,6 +489,32 @@ body.user-story-open {
   margin-inline: 0.2rem;
 }
 
+.user-story-contact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.user-story-contact-name {
+  width: 100%;
+}
+
+.user-story-contact-optin {
+  margin-bottom: 0.4rem;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .user-story-contact-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .user-story-contact-optin {
+    justify-self: end;
+  }
+}
+
 .user-story-rating input {
   position: absolute;
   opacity: 0;

@@ -95,7 +95,7 @@ class UserStoryForm(forms.ModelForm):
     attachments = MultipleFileField(required=False)
     contact_via_chat = forms.BooleanField(
         required=False,
-        label=_("I would like to be contacted via chat"),
+        label=_("You may contact me"),
     )
 
     class Meta:
