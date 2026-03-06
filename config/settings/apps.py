@@ -24,23 +24,53 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
     return deduped
 
 
+def _is_private_package_path(path: Path) -> bool:
+    """Return whether any segment in the path is private/hidden."""
+
+    return any(part.startswith((".", "_")) for part in path.parts)
+
+
 def _is_django_app_dir(path: Path) -> bool:
     """Return whether the given directory looks like a conventional Django app package."""
 
-    if not path.is_dir() or path.name.startswith(".") or path.name.startswith("_"):
+    if not path.is_dir():
         return False
 
-    return (path / "__init__.py").exists() and (path / "apps.py").exists()
+    relative_path = path.relative_to(APPS_DIR)
+    if _is_private_package_path(relative_path):
+        return False
+
+    if not (path / "__init__.py").exists():
+        return False
+
+    if (path / "apps.py").exists():
+        return True
+
+    if len(relative_path.parts) != 1:
+        return False
+
+    return any(
+        (path / marker).exists()
+        for marker in ("models.py", "admin.py", "migrations", "templates", "static")
+    )
+
+
+def _to_module_path(path: Path) -> str:
+    """Convert an app directory into its importable ``apps.*`` module path."""
+
+    return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
 def _load_local_apps() -> list[str]:
-    """Load local Django apps from ``apps/*`` using standard package discovery."""
+    """Load local Django apps from ``apps/`` using package discovery."""
 
-    return [
-        f"apps.{app_dir.name}"
-        for app_dir in sorted(APPS_DIR.iterdir(), key=lambda candidate: candidate.name)
-        if _is_django_app_dir(app_dir)
+    app_dirs = [
+        candidate.parent
+        for candidate in APPS_DIR.rglob("__init__.py")
+        if _is_django_app_dir(candidate.parent)
     ]
+
+    return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
 
 
 LOCAL_APPS = _load_local_apps()

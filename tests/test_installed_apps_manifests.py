@@ -14,7 +14,9 @@ def test_local_apps_use_standard_package_discovery_regression() -> None:
 
     assert discovered
     assert discovered == sorted(discovered)
+    assert "apps.base" in discovered
     assert "apps.core" in discovered
+    assert "apps.ocpp.forwarder" in discovered
 
 
 def test_local_apps_are_importable_through_appconfig_regression() -> None:

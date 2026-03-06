@@ -21,7 +21,7 @@ __all__ = [
     "OwnedObjectLink",
     "Ownable",
     "UsageEvent",
+    "get_ownable_models",
     "get_owned_objects_for_group",
     "get_owned_objects_for_user",
-    "get_ownable_models",
 ]
