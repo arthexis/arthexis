@@ -12,13 +12,13 @@
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
                 <label class="form-label" for="host{{ idx }}">Host</label>
-                <input id="host{{ idx }}" name="host" value="{{ form_params.host|default:'' }}" class="form-control form-control-sm">
+                <input id="host{{ idx }}" name="host" value="{{ form_params.host|default:'' }}" class="form-control form-control-sm" hx-preserve>
               </div>
             </div>
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
                 <label class="form-label" for="ws_port{{ idx }}">Port</label>
-                <input id="ws_port{{ idx }}" name="ws_port" value="{{ form_params.ws_port|default_if_none:'' }}" class="form-control form-control-sm">
+                <input id="ws_port{{ idx }}" name="ws_port" value="{{ form_params.ws_port|default_if_none:'' }}" class="form-control form-control-sm" hx-preserve>
               </div>
             </div>
             <div class="col-sm-6 col-md-4">
