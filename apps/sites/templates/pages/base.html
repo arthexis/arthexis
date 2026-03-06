@@ -358,19 +358,7 @@
                   readonly
                 >
               </div>
-              <div class="form-check user-story-chat-optin user-story-contact-optin">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  value="1"
-                  id="user-story-contact-via-chat"
-                  name="contact_via_chat"
-                  {% if chat_opt_in_checked %}checked{% endif %}
-                >
-                <label class="form-check-label" for="user-story-contact-via-chat">
-                  {% trans 'You may contact me' %}
-                </label>
-              </div>
+              {% include 'pages/includes/user_story_contact_optin_checkbox.html' with checkbox_wrapper_classes='user-story-chat-optin user-story-contact-optin' %}
             </div>
           {% else %}
             <div class="mb-3">
@@ -445,19 +433,7 @@
               {% endif %}
             </div>
             {% if not request.user.is_authenticated %}
-              <div class="form-check user-story-chat-optin mb-3">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  value="1"
-                  id="user-story-contact-via-chat"
-                  name="contact_via_chat"
-                  {% if chat_opt_in_checked %}checked{% endif %}
-                >
-                <label class="form-check-label" for="user-story-contact-via-chat">
-                  {% trans 'You may contact me' %}
-                </label>
-              </div>
+              {% include 'pages/includes/user_story_contact_optin_checkbox.html' with checkbox_wrapper_classes='user-story-chat-optin mb-3' %}
             {% endif %}
             <button type="submit" class="btn btn-primary w-100 py-2">
               {% trans 'Submit feedback' %}
