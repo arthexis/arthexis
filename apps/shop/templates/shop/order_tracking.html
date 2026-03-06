@@ -1,0 +1,23 @@
+{% extends "pages/base.html" %}
+{% block title %}Order {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1>Order {{ order.order_number }}</h1>
+  <p>Status: <strong>{{ order.get_status_display }}</strong></p>
+  <p>Total: <strong>{{ order.total_amount }}</strong></p>
+  <p>Payment provider: {{ order.payment_provider|default:"Not assigned" }}</p>
+  {% if order.odoo_sales_order_reference %}
+    <p>Odoo Sales Order: {{ order.odoo_sales_order_reference }}</p>
+  {% endif %}
+  {% if order.tracking_number %}
+    <p>Shipment tracking number: {{ order.tracking_number }}</p>
+  {% endif %}
+
+  <h2 class="h4 mt-4">Items</h2>
+  <ul>
+    {% for item in order.items.all %}
+      <li>{{ item.product_name }} — {{ item.quantity }} × {{ item.unit_price }} = {{ item.line_total }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
