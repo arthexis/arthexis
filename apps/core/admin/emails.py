@@ -15,8 +15,25 @@ from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
 class EmailCollectorAdmin(EntityModelAdmin):
-    list_display = ("name", "inbox", "subject", "sender", "body", "fragment")
-    search_fields = ("name", "subject", "sender", "body", "fragment")
+    list_display = (
+        "name",
+        "inbox",
+        "subject",
+        "sender",
+        "body",
+        "fragment",
+        "notification_mode",
+    )
+    search_fields = (
+        "name",
+        "subject",
+        "sender",
+        "body",
+        "fragment",
+        "notification_subject",
+        "notification_message",
+        "notification_recipients",
+    )
     actions = ["preview_messages"]
 
     @admin.action(description=_("Preview matches"))

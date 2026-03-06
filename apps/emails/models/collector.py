@@ -30,6 +30,36 @@ class EmailCollector(Entity):
         default=False,
         help_text="Treat subject, sender and body filters as regular expressions (case-insensitive).",
     )
+    NOTIFY_POPUP = "popup"
+    NOTIFY_NONE = "none"
+    NOTIFY_NET_MESSAGE = "net_message"
+    NOTIFY_EMAIL = "email"
+    NOTIFICATION_MODE_CHOICES = [
+        (NOTIFY_POPUP, "Local popup"),
+        (NOTIFY_NONE, "Nothing"),
+        (NOTIFY_NET_MESSAGE, "Net message"),
+        (NOTIFY_EMAIL, "Email"),
+    ]
+    notification_mode = models.CharField(
+        max_length=16,
+        choices=NOTIFICATION_MODE_CHOICES,
+        default=NOTIFY_NONE,
+        help_text="Action to run after collecting a new email artifact.",
+    )
+    notification_subject = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Optional notification subject template. Supports [sigil] tokens.",
+    )
+    notification_message = models.TextField(
+        blank=True,
+        help_text="Optional notification message template. Supports [sigil] tokens.",
+    )
+    notification_recipients = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Comma-separated recipients used when notification mode is Email.",
+    )
 
     class Meta:
         verbose_name = _("Email Collector")
@@ -75,6 +105,74 @@ class EmailCollector(Entity):
             use_regular_expressions=self.use_regular_expressions,
         )
 
+    @staticmethod
+    def _render_notification_template(template: str, context: dict[str, str]) -> str:
+        """Render ``template`` by replacing ``[token]`` placeholders from context."""
+        if not template:
+            return ""
+
+        import re
+
+        def _replace(match: re.Match[str]) -> str:
+            key = match.group(1).strip()
+            if not key:
+                return ""
+            return context.get(key.lower(), match.group(0))
+
+        return re.sub(r"\[([^\]]+)\]", _replace, template)
+
+    @staticmethod
+    def _parse_recipients(raw: str) -> list[str]:
+        """Return normalized recipient addresses from a comma-separated string."""
+        if not raw:
+            return []
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
+    def _notify_for_message(self, msg: dict[str, str], sigils: dict[str, str]) -> None:
+        """Dispatch collector notification according to ``notification_mode``."""
+        mode = (self.notification_mode or self.NOTIFY_NONE).strip().lower()
+        if mode == self.NOTIFY_NONE:
+            return
+
+        context = {
+            "subject": msg.get("subject", ""),
+            "sender": msg.get("from", ""),
+            "from": msg.get("from", ""),
+            "body": msg.get("body", ""),
+            "date": msg.get("date", ""),
+        }
+        context.update({str(key).lower(): str(value) for key, value in sigils.items()})
+
+        subject_template = self.notification_subject or "[subject]"
+        message_template = self.notification_message or "[body]"
+        rendered_subject = self._render_notification_template(subject_template, context)
+        rendered_message = self._render_notification_template(message_template, context)
+
+        if mode == self.NOTIFY_POPUP:
+            from apps.core.notifications import notify_async
+
+            notify_async(rendered_subject, rendered_message)
+            return
+
+        if mode == self.NOTIFY_NET_MESSAGE:
+            from apps.nodes.models import NetMessage
+
+            NetMessage.broadcast(rendered_subject, rendered_message)
+            return
+
+        if mode == self.NOTIFY_EMAIL:
+            recipients = self._parse_recipients(self.notification_recipients)
+            if not recipients:
+                return
+            from apps.emails import mailer
+
+            mailer.send(
+                subject=rendered_subject,
+                message=rendered_message,
+                recipient_list=recipients,
+                fail_silently=False,
+            )
+
     def collect(self, limit: int = 10) -> None:
         """Poll the inbox and store new artifacts until an existing one is found."""
         messages = self.search_messages(limit=limit)
@@ -84,11 +182,13 @@ class EmailCollector(Entity):
             )
             if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
                 break
+            sigils = self._parse_sigils(msg.get("body", ""))
             EmailArtifact.objects.create(
                 collector=self,
                 subject=msg.get("subject", ""),
                 sender=msg.get("from", ""),
                 body=msg.get("body", ""),
-                sigils=self._parse_sigils(msg.get("body", "")),
+                sigils=sigils,
                 fingerprint=fp,
             )
+            self._notify_for_message(msg, sigils)
