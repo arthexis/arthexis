@@ -69,7 +69,6 @@ class FakeConfig:
         self.ini_lines.append((key, value))
 
 
-@pytest.mark.regression
 def test_pytest_configure_registers_pr_current_marker() -> None:
     """Marker plugin should register the dynamic ``pr_current`` marker."""
 
@@ -81,7 +80,6 @@ def test_pytest_configure_registers_pr_current_marker() -> None:
     assert ("markers", "pr_current: dynamically applied to tests whose pytest.mark.pr reference matches --current-pr") in config.ini_lines
 
 
-@pytest.mark.regression
 def test_collection_does_not_promote_regression_to_critical() -> None:
     """Regression-marked tests should no longer receive implicit ``critical`` marks."""
 
@@ -93,7 +91,6 @@ def test_collection_does_not_promote_regression_to_critical() -> None:
     assert "critical" not in item.added_markers
 
 
-@pytest.mark.regression
 def test_collection_marks_current_pr_and_extends_markexpr() -> None:
     """Matching PR markers should map to ``pr_current`` and update ``markexpr``."""
 

@@ -128,7 +128,6 @@ def test_execute_raises_for_failing_bash_script():
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_supports_bash_safe_normalized_kwarg_names(monkeypatch):
     """Regression: normalized bash kwarg env vars resolve across shell backends."""
 
@@ -208,7 +207,6 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
     assert execution.result == "hello-green"
 
 
-@pytest.mark.regression
 def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkeypatch):
     """Regression: NUL-delimited launcher diagnostics are normalized before matching."""
 
@@ -225,7 +223,6 @@ def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkey
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_supports_windows_git_bash_fallback(monkeypatch):
     """Regression: Windows recipes fall back to Git Bash paths when WSL bash fails."""
 
@@ -258,7 +255,6 @@ def test_execute_supports_windows_git_bash_fallback(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_recognizes_missing_windows_shell_paths(monkeypatch):
     """Regression: missing Git/MSYS shell paths report runtime errors consistently."""
 
