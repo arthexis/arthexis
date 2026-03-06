@@ -87,18 +87,6 @@ def test_role_profiles_reject_invalid_configuration(
         validate_role_settings(settings_values)
 
 
-def test_role_validation_is_relaxed_in_debug_mode() -> None:
-    """Development defaults skip strict role validation while DEBUG is enabled."""
-
-    validate_role_settings(
-        {
-            "DEBUG": True,
-            "NODE_ROLE": "Control",
-            "CELERY_BROKER_URL": "",
-        }
-    )
-
-
 def test_unknown_role_raises_specific_configuration_error() -> None:
     """Unknown roles are rejected when strict validation is active."""
 

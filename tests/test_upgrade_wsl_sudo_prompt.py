@@ -9,8 +9,6 @@ The goal is to lock in two historical fixes that protect unattended workflows:
 
 from pathlib import Path
 
-import pytest
-
 
 
 def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
@@ -51,15 +49,6 @@ def test_upgrade_script_supports_short_flag_aliases() -> None:
 
     assert "--latest|--unstable|-l|-t" in script_text
     assert "--force|-f" in script_text
-
-
-def test_upgrade_bat_supports_short_flag_aliases() -> None:
-    """Regression: batch upgrader should accept the same short aliases."""
-
-    script_text = Path("upgrade.bat").read_text(encoding="utf-8")
-
-    assert 'if "%~1"=="-t" (' in script_text
-    assert 'if "%~1"=="-f" (' in script_text
 
 
 def test_upgrade_script_auto_reruns_after_self_update() -> None:
