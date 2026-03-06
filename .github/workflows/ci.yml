@@ -8,7 +8,7 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
   ARTHEXIS_DB_BACKEND: sqlite
-  PYTEST_WORKERS: '2'
+  PYTEST_WORKERS: 'auto'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -155,11 +155,23 @@ jobs:
         run: |
           source .venv/bin/activate
           ruff check --select E9,F823 .
+      - name: Detect pytest xdist arguments
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(pytest --help)"
+          if grep -q -- '--dist' <<<"$pytest_help"; then
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
+          fi
       - name: Run tests
         run: |
-          set -o pipefail
+          set -Eeuo pipefail
           source .venv/bin/activate
-          pytest -n "${PYTEST_WORKERS}" --dist loadgroup --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v6
@@ -375,7 +387,8 @@ jobs:
           source .venv/bin/activate
           pytest_help="$(pytest --help)"
           if grep -q -- '--dist' <<<"$pytest_help"; then
-            echo "PYTEST_XDIST_ARGS=-n auto --dist loadfile" >> "${GITHUB_ENV}"
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
           else
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
