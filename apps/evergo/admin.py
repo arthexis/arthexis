@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils.html import format_html
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
@@ -340,7 +340,7 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
     @admin.display(description="Customer")
     def customer_name_link(self, obj):
         """Show the linked customer as a direct link to its admin change view."""
-        customer = obj.customers.order_by("pk").first()
+        customer = obj.customers.first()
         if customer is None:
             return "-"
         return format_html(
@@ -376,7 +376,9 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     def get_queryset(self, request):
         """Restrict order visibility to the current user's linked Evergo profile."""
-        queryset = super().get_queryset(request).prefetch_related("customers")
+        queryset = super().get_queryset(request).prefetch_related(
+            Prefetch("customers", queryset=EvergoCustomer.objects.order_by("pk"))
+        )
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
