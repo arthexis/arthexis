@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Django migrations once for VS Code launcher workflows."""
+"""Run Django migrations for VS Code launcher workflows."""
 
 from __future__ import annotations
 
@@ -8,11 +8,27 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Protocol
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 PREFIX = "[Migration Runner]"
+DEFAULT_WATCH_DIRS = ("apps", "config", "utils")
+WATCH_FILE_SUFFIXES = (".py", ".pyi")
+WATCH_IGNORE_DIRS = {
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "logs",
+    "media",
+    "node_modules",
+    "staticfiles",
+    "__pycache__",
+}
 CONFLICT_PATTERN = re.compile(
     r"Conflicting migrations detected; multiple leaf nodes in the migration graph",
     re.IGNORECASE,
@@ -164,23 +180,131 @@ def run_migrations(extra_args: list[str] | None = None) -> int:
     return completed.returncode
 
 
+def _iter_watch_files() -> list[Path]:
+    """Return a deterministic list of source files that should trigger reruns."""
+
+    files: set[Path] = set()
+    for dir_name in DEFAULT_WATCH_DIRS:
+        root = BASE_DIR / dir_name
+        if not root.is_dir():
+            continue
+
+        for dirpath, dirs, filenames in os.walk(root, topdown=True):
+            dirs[:] = [dir_name for dir_name in dirs if dir_name not in WATCH_IGNORE_DIRS]
+            for filename in filenames:
+                if filename.endswith(WATCH_FILE_SUFFIXES):
+                    files.add(Path(dirpath) / filename)
+    return sorted(files)
+
+
+def _capture_watch_state() -> dict[Path, int]:
+    """Capture file modification nanosecond timestamps for watchable source files."""
+
+    state: dict[Path, int] = {}
+    for path in _iter_watch_files():
+        try:
+            state[path] = path.stat().st_mtime_ns
+        except OSError:
+            continue
+    return state
+
+
+def _detect_changed_files(previous: dict[Path, int], current: dict[Path, int]) -> list[Path]:
+    """Return sorted files that changed between two state snapshots."""
+
+    all_paths = previous.keys() | current.keys()
+    changed_paths = {
+        path for path in all_paths if previous.get(path) != current.get(path)
+    }
+    return sorted(changed_paths)
+
+
+def _wait_for_source_change_once(
+    *,
+    baseline: dict[Path, int],
+    interval: float,
+    debounce: float,
+) -> tuple[dict[Path, int], list[Path]]:
+    """Block until source changes settle, then return the new state and changed files."""
+
+    while True:
+        time.sleep(interval)
+        current_state = _capture_watch_state()
+        changed_files = _detect_changed_files(baseline, current_state)
+        if not changed_files:
+            continue
+
+        stable_until = time.monotonic() + debounce
+        while time.monotonic() < stable_until:
+            time.sleep(interval)
+            next_state = _capture_watch_state()
+            next_changes = _detect_changed_files(current_state, next_state)
+            if next_changes:
+                current_state = next_state
+                changed_files = _detect_changed_files(baseline, current_state)
+                stable_until = time.monotonic() + debounce
+
+        return current_state, changed_files
+
+
+def run_migration_server(
+    *,
+    extra_args: list[str] | None = None,
+    interval: float = 1.0,
+    debounce: float = 1.0,
+    watch: bool = False,
+) -> int:
+    """Run migrations once or keep rerunning when watched source files change."""
+
+    exit_code = run_migrations(extra_args)
+    if not watch or exit_code == 130:
+        return exit_code
+
+    interval = max(0.1, interval)
+    debounce = max(0.1, debounce)
+    baseline = _capture_watch_state()
+    print(
+        f"{PREFIX} Watching source files for migration reruns "
+        f"(interval={interval:.1f}s, debounce={debounce:.1f}s). Press Ctrl+C to stop."
+    )
+
+    while True:
+        try:
+            baseline, changed_files = _wait_for_source_change_once(
+                baseline=baseline,
+                interval=interval,
+                debounce=debounce,
+            )
+        except KeyboardInterrupt:
+            print(f"{PREFIX} Migration server interrupted. Exiting.")
+            return 130
+
+        preview = ", ".join(str(path.relative_to(BASE_DIR)) for path in changed_files[:3])
+        if len(changed_files) > 3:
+            preview += f", +{len(changed_files) - 3} more"
+        print(f"{PREFIX} Source changes detected ({preview}). Re-running migrations.")
+        exit_code = run_migrations(extra_args)
+        if exit_code == 130:
+            return exit_code
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse launcher arguments for a one-shot migration run."""
+    """Parse launcher arguments for migration runs and optional watch mode."""
 
     parser = argparse.ArgumentParser(
-        description="Run Django migrations once."
+        description="Run Django migrations once or in watch mode."
     )
     parser.add_argument(
         "--interval",
         type=float,
         default=1.0,
-        help="Compatibility flag from legacy watcher mode (ignored).",
+        help="Polling interval in seconds when --watch/--server is enabled.",
     )
     parser.add_argument(
         "--debounce",
         type=float,
         default=1.0,
-        help="Compatibility flag from legacy watcher mode (ignored).",
+        help="Debounce window in seconds before rerunning migrations in watch mode.",
     )
     parser.add_argument(
         "--latest",
@@ -194,6 +318,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="latest",
         action="store_false",
         help="Compatibility flag from legacy watcher mode (ignored).",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Keep running and re-run migrations when code files change.",
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Alias for --watch for legacy migration server launchers.",
     )
     parser.add_argument(
         "extra_args",
@@ -210,7 +344,12 @@ def main(argv: list[str] | None = None) -> int:
     extra_args = args.extra_args
     if extra_args and extra_args[0] == "--":
         extra_args = extra_args[1:]
-    return run_migrations(extra_args)
+    return run_migration_server(
+        extra_args=extra_args,
+        interval=args.interval,
+        debounce=args.debounce,
+        watch=args.watch or args.server,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
