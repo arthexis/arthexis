@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from urllib.parse import quote_plus
 
 from django.conf import settings
@@ -10,6 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
@@ -28,6 +31,19 @@ EVERGO_PORTAL_MAIN_URL = getattr(settings, "EVERGO_PORTAL_MAIN_URL", "https://po
 DISPLAY_TEXT_FIXUPS = {
     "Orden en ejecuci?n": "Orden en ejecución",
 }
+
+DATETIME_LOCAL_FORMAT = "%Y-%m-%dT%H:%M"
+
+TRACKING_PREFILL_SOURCE_KEYS = (
+    "reporte_visita",
+    "reporte_visita_tecnica",
+    "visita_tecnica",
+    "reporte_instalacion",
+    "instalacion",
+    "seguimiento",
+    "tracking",
+    "data",
+)
 
 
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
@@ -256,7 +272,8 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                     )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
     else:
-        form = EvergoOrderTrackingForm(charger_brands=brands)
+        remote_initial_data = _load_remote_phase_one_initial_data(profile=profile, order_id=order_id)
+        form = EvergoOrderTrackingForm(charger_brands=brands, initial=remote_initial_data)
         missing_images = []
 
     return render(
@@ -279,6 +296,92 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             ),
         },
     )
+
+
+def _load_remote_phase_one_initial_data(*, profile: EvergoUser, order_id: int) -> dict[str, object]:
+    """Load and normalize phase-one defaults from the latest WS API order detail payload."""
+    try:
+        order_payload = profile.fetch_order_detail(order_id=order_id)
+    except (EvergoAPIError, OSError):
+        return {}
+    return _extract_phase_one_initial_data(order_payload)
+
+
+def _extract_phase_one_initial_data(order_payload: dict[str, object]) -> dict[str, object]:
+    """Extract public tracking form-compatible field values from variable WS API structures."""
+    if not isinstance(order_payload, dict):
+        return {}
+
+    candidate_sources: list[dict[str, object]] = []
+    for key in TRACKING_PREFILL_SOURCE_KEYS:
+        source = order_payload.get(key)
+        if isinstance(source, dict):
+            candidate_sources.append(source)
+    candidate_sources.append(order_payload)
+
+    initial_data: dict[str, object] = {}
+    for field_name in TRACKING_PREFILL_FIELDS:
+        value = _first_present_value(candidate_sources=candidate_sources, field_name=field_name)
+        if value in (None, ""):
+            continue
+        normalized = _normalize_tracking_prefill_value(field_name=field_name, value=value)
+        if normalized in (None, ""):
+            continue
+        initial_data[field_name] = normalized
+
+    return initial_data
+
+
+def _first_present_value(*, candidate_sources: list[dict[str, object]], field_name: str) -> object | None:
+    """Return the first non-empty value for a field name from ordered payload dictionaries."""
+    for source in candidate_sources:
+        if field_name in source and source[field_name] not in (None, ""):
+            return source[field_name]
+    return None
+
+
+def _normalize_tracking_prefill_value(*, field_name: str, value: object) -> object | None:
+    """Normalize raw WS payload values into form-friendly types."""
+    if field_name == "fecha_visita":
+        return _normalize_datetime_local_value(value=value)
+
+    if field_name in TRACKING_INT_FIELDS:
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    if field_name in TRACKING_DECIMAL_FIELDS:
+        try:
+            return Decimal(str(value).strip())
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    return str(value).strip()
+
+
+def _normalize_datetime_local_value(*, value: object) -> str | None:
+    """Convert datetime-like payload values into datetime-local input format."""
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+
+    for pattern in (DATETIME_LOCAL_FORMAT, "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(raw_value, pattern).strftime(DATETIME_LOCAL_FORMAT)
+        except ValueError:
+            continue
+
+    if raw_value.endswith("Z"):
+        raw_value = raw_value[:-1] + "+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+        if timezone.is_aware(parsed):
+            parsed = timezone.localtime(parsed, timezone.get_default_timezone())
+        return parsed.strftime(DATETIME_LOCAL_FORMAT)
+    except ValueError:
+        return None
 
 
 IMAGE_FIELD_NAMES = [
@@ -313,6 +416,41 @@ COLLAPSED_DEFAULT_FIELDS = [
     "calibre_principal",
     "garantia",
 ]
+
+TRACKING_PREFILL_FIELDS = [
+    "calibre_principal",
+    "capacidad_itm_principal",
+    "concentracion_medidores",
+    "fecha_visita",
+    "garantia",
+    "kit_cfe",
+    "marca_cargador",
+    "metraje_visita_tecnica",
+    "numero_serie",
+    "obra_civil",
+    "programacion_cargador",
+    "prueba_carga",
+    "requiere_instalacion",
+    "servicio",
+    "tipo_inmueble",
+    "tipo_visita",
+    "voltaje_fase_fase",
+    "voltaje_fase_neutro",
+    "voltaje_fase_tierra",
+    "voltaje_neutro_tierra",
+]
+
+TRACKING_INT_FIELDS = {
+    "metraje_visita_tecnica",
+    "capacidad_itm_principal",
+}
+
+TRACKING_DECIMAL_FIELDS = {
+    "voltaje_fase_fase",
+    "voltaje_fase_tierra",
+    "voltaje_fase_neutro",
+    "voltaje_neutro_tierra",
+}
 
 
 def _build_phase_one_payload(cleaned_data: dict[str, object]) -> dict[str, object]:

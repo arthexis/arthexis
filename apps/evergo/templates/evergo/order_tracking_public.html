@@ -16,6 +16,9 @@
         .images { display:grid; gap:.8rem; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); }
         .preview { width:100%; height:120px; object-fit:cover; border-radius:8px; border:1px dashed #666; margin-top:.4rem; }
         .actions { margin-top: 1rem; }
+        .header { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
+        .quick-actions { display:flex; align-items:center; gap:.45rem; }
+        .quick-icon { display:inline-flex; align-items:center; justify-content:center; width:2.2rem; height:2.2rem; border-radius:999px; border:1px solid #777; text-decoration:none; font-size:1.15rem; }
         button { padding: .7rem 1rem; border: 0; border-radius: 8px; background:#0b5ed7; color:#fff; }
         .messages { color: #0a7f39; }
         .messages .warning { color:#a86100; }
@@ -27,7 +30,17 @@
     </style>
 </head>
 <body>
-    <h1>Order Tracking · <a href="{{ evergo_so_url }}" target="_blank" rel="noopener noreferrer">{{ order.order_number|default:order.remote_id }}</a></h1>
+    <div class="header">
+      <h1>Order Tracking · <a href="{{ evergo_so_url }}" target="_blank" rel="noopener noreferrer">{{ order.order_number|default:order.remote_id }}</a></h1>
+      <div class="quick-actions" aria-label="Actions">
+        {% if feedback_ingestion_enabled %}
+          <a class="quick-icon" href="#user-story-toggle" title="Feedback" aria-label="Feedback">★</a>
+        {% endif %}
+        {% if chat_enabled %}
+          <a class="quick-icon" href="#chat-widget" title="Chat" aria-label="Chat">💬</a>
+        {% endif %}
+      </div>
+    </div>
     <p>Estatus: {{ order_status_display }} · Cliente: {{ order_client_display }}</p>
 
     {% if messages %}
@@ -102,6 +115,10 @@
             <button type="submit">Enviar Visita + Asignar + Instalación</button>
         </div>
     </form>
+
+
+    <div id="user-story-toggle" hidden aria-hidden="true"></div>
+    <div id="chat-widget" hidden aria-hidden="true"></div>
 
     <script>
       document.querySelectorAll('input[type="file"]').forEach((input) => {

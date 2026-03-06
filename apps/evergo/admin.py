@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils.html import format_html
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
@@ -220,6 +220,7 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     list_display = (
         "order_number_link",
+        "customer_name_link",
         "status_name_link",
         "brand_name",
         "assigned_engineer_name_cleaved",
@@ -243,6 +244,7 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
     )
     readonly_fields = (
         "evergo_flow_link",
+        "customer_name_link",
         "validation_state_check",
         "phone_primary",
         "phone_secondary",
@@ -271,6 +273,7 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
                     "user",
                     "remote_id",
                     "order_number",
+                    "customer_name_link",
                     "evergo_flow_link",
                     "status_name",
                     "site_name",
@@ -334,6 +337,18 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
         value = obj.status_name or "-"
         return format_html('<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>', self._flow_url(obj), value)
 
+    @admin.display(description="Customer")
+    def customer_name_link(self, obj):
+        """Show the linked customer as a direct link to its admin change view."""
+        customer = obj.customers.first()
+        if customer is None:
+            return "-"
+        return format_html(
+            '<a href="{}">{}</a>',
+            reverse("admin:evergo_evergocustomer_change", args=[customer.pk]),
+            customer.name,
+        )
+
     @admin.display(description="Assigned Engineer", ordering="assigned_engineer_name")
     def assigned_engineer_name_cleaved(self, obj):
         """Return engineer name with bracketed fragments removed (cleaved)."""
@@ -361,7 +376,9 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     def get_queryset(self, request):
         """Restrict order visibility to the current user's linked Evergo profile."""
-        queryset = super().get_queryset(request)
+        queryset = super().get_queryset(request).prefetch_related(
+            Prefetch("customers", queryset=EvergoCustomer.objects.order_by("pk"))
+        )
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
