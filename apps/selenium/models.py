@@ -10,8 +10,11 @@ from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
-from playwright.sync_api import Browser as PlaywrightBrowserInstance
-from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Browser as PlaywrightBrowserInstance
+    from playwright.sync_api import BrowserContext, Page, Playwright
 
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Ownable
@@ -19,6 +22,21 @@ from apps.sigils.sigil_resolver import resolve_sigils
 from apps.selenium.playwright import normalize_playwright_cookie
 
 logger = logging.getLogger(__name__)
+
+
+def _load_sync_playwright():
+    """Return Playwright sync launcher or raise a descriptive error."""
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ModuleNotFoundError as exc:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            "The 'playwright' package is required by selenium models. "
+            "Install project optional dependency group 'ci' or add playwright."
+        ) from exc
+    return sync_playwright
 
 
 class UnsupportedBrowserEngineError(ValueError):
@@ -33,10 +51,10 @@ class InvalidCookiePayloadError(ValueError):
 class PlaywrightDriver:
     """Small compatibility wrapper around a Playwright page/context/browser lifecycle."""
 
-    playwright: Playwright
-    browser: PlaywrightBrowserInstance
-    context: BrowserContext
-    page: Page
+    playwright: "Playwright"
+    browser: "PlaywrightBrowserInstance"
+    context: "BrowserContext"
+    page: "Page"
 
     def get(self, url: str) -> None:
         """Navigate to ``url`` and wait for network idle."""
@@ -153,6 +171,7 @@ class SeleniumBrowser(Entity):
     def create_driver(self) -> PlaywrightDriver:
         """Launch a Playwright browser and return a Selenium-like wrapper driver."""
 
+        sync_playwright = _load_sync_playwright()
         playwright = sync_playwright().start()
 
         launchers = {
