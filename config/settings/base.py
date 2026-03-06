@@ -10,6 +10,8 @@ from pathlib import Path
 import django.utils.encoding as encoding
 from utils.env import env_bool
 
+from config.admin_urls import normalize_admin_url_path
+
 if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatibility
     from django.utils.encoding import force_str
 
@@ -63,6 +65,10 @@ ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK = env_bool(
     "ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK", True
 )
+ADMIN_URL_PATH = normalize_admin_url_path(os.environ.get("ADMIN_URL_PATH", "admin/"))
+ADMIN_SITE_HEADER = os.environ.get("ADMIN_SITE_HEADER", "Constellation")
+ADMIN_SITE_TITLE = os.environ.get("ADMIN_SITE_TITLE", "Constellation")
+ADMIN_INDEX_TITLE = os.environ.get("ADMIN_INDEX_TITLE", "Site administration")
 
 CACHE_LOCATION = os.environ.get("DJANGO_CACHE_DIR", str(BASE_DIR / "cache"))
 with contextlib.suppress(OSError):

@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Callable, Sequence
 
+from config.admin_urls import admin_mount_path
 from config.loadenv import loadenv
 from utils import revision
 
@@ -96,7 +97,7 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
                 )
             http_scheme = "https" if getattr(self, "ssl_options", None) else "http"
             self.stdout.write(
-                f"Admin available at {http_scheme}://{host}:{server_port}/admin/"
+                f"Admin available at {http_scheme}://{host}:{server_port}{admin_mount_path()}"
             )
 
             global _RUNSERVER_STARTED_AT

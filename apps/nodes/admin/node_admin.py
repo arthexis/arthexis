@@ -20,6 +20,7 @@ from django.template.response import TemplateResponse
 from django.test import signals
 from django.test.client import RequestFactory
 from django.urls import NoReverseMatch, path, reverse
+from django.conf import settings
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
@@ -243,7 +244,10 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 hostname="",
                 port=obj.port,
             )
-            remote_url = next(self._iter_remote_urls(temp_node, "/admin/"), "")
+            remote_url = next(
+                self._iter_remote_urls(temp_node, f"/{settings.ADMIN_URL_PATH}"),
+                "",
+            )
             if remote_url:
                 break
 
