@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from apps.locals.user_data import EntityModelAdmin
 
-from ..models import AdminNotice
+from apps.core.models.admin_notice import AdminNotice
 
 
 @admin.register(AdminNotice)

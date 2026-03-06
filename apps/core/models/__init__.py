@@ -2,7 +2,10 @@
 
 This module may be imported even when ``apps.core`` is not present in
 ``INSTALLED_APPS`` (for example by abstract dependencies like ``Ownable``).
-Concrete model imports are therefore guarded to avoid startup errors.
+
+Core-owned concrete models are exported eagerly when ``apps.core`` is
+installed. Cross-app optional dependencies are guarded separately so they
+cannot mask core model exports.
 """
 
 from .ownable import (
