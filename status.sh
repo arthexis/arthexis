@@ -2,32 +2,18 @@
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=scripts/helpers/env.sh
-. "$BASE_DIR/scripts/helpers/env.sh"
-# shellcheck source=scripts/helpers/logging.sh
-. "$BASE_DIR/scripts/helpers/logging.sh"
-# shellcheck source=scripts/helpers/ports.sh
-. "$BASE_DIR/scripts/helpers/ports.sh"
-# shellcheck source=scripts/helpers/service_manager.sh
-. "$BASE_DIR/scripts/helpers/service_manager.sh"
-arthexis_load_env_file "$BASE_DIR"
-arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
-LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
-exec > >(tee "$LOG_FILE") 2>&1
-# Always read startup errors from the repository log directory so test fixtures
-# that seed the log file are honored.
-ERROR_LOG="$BASE_DIR/logs/error.log"
-mkdir -p "$(dirname "$ERROR_LOG")"
 STARTUP_TIMEOUT=300
 STATUS_WAIT_INTERVAL=2
+STATUS_WAIT_TIMEOUT=60
 exit_code=0
 WAIT_FOR_REACHABLE=false
 
 usage() {
   cat <<'EOF'
-Usage: ./status.sh [--wait]
+Usage: ./status.sh [options]
 
 Options:
+  -h, --help  Show this help message and exit.
   --wait  Keep polling when the app is not reachable yet and exit after it becomes reachable.
 EOF
 }
@@ -49,6 +35,23 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+# shellcheck source=scripts/helpers/env.sh
+. "$BASE_DIR/scripts/helpers/env.sh"
+# shellcheck source=scripts/helpers/logging.sh
+. "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
+arthexis_load_env_file "$BASE_DIR"
+arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
+LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
+exec > >(tee "$LOG_FILE") 2>&1
+# Always read startup errors from the repository log directory so test fixtures
+# that seed the log file are honored.
+ERROR_LOG="$BASE_DIR/logs/error.log"
+mkdir -p "$(dirname "$ERROR_LOG")"
 
 arthexis_suite_reachable() {
   local port="$1"
@@ -247,7 +250,25 @@ fi
 
 if [ "$WAIT_FOR_REACHABLE" = true ] && [ "$SUITE_REACHABLE" = false ]; then
   echo "Waiting for application to become reachable on port $PORT..."
+  WAIT_STARTED_AT=$(date +%s)
   while true; do
+    WAIT_NOW=$(date +%s)
+    WAIT_ELAPSED=$((WAIT_NOW - WAIT_STARTED_AT))
+    if [ "$WAIT_ELAPSED" -ge "$STATUS_WAIT_TIMEOUT" ]; then
+      echo "Timed out waiting for reachability after ${STATUS_WAIT_TIMEOUT}s."
+      exit_code=1
+      break
+    fi
+
+    if STARTED_AT=$(arthexis_read_startup_timestamp); then
+      ELAPSED=$((WAIT_NOW - STARTED_AT))
+      if [ "$ELAPSED" -ge "$STARTUP_TIMEOUT" ]; then
+        echo "Startup failed: suite not reachable after ${STARTUP_TIMEOUT}s."
+        exit_code=1
+        break
+      fi
+    fi
+
     sleep "$STATUS_WAIT_INTERVAL"
     if arthexis_suite_reachable "$PORT"; then
       SUITE_REACHABLE=true
