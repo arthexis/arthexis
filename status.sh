@@ -19,7 +19,36 @@ exec > >(tee "$LOG_FILE") 2>&1
 ERROR_LOG="$BASE_DIR/logs/error.log"
 mkdir -p "$(dirname "$ERROR_LOG")"
 STARTUP_TIMEOUT=300
+STATUS_WAIT_INTERVAL=2
 exit_code=0
+WAIT_FOR_REACHABLE=false
+
+usage() {
+  cat <<'EOF'
+Usage: ./status.sh [--wait]
+
+Options:
+  --wait  Keep polling when the app is not reachable yet and exit after it becomes reachable.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --wait)
+      WAIT_FOR_REACHABLE=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 arthexis_suite_reachable() {
   local port="$1"
@@ -214,6 +243,19 @@ elif [ "$RUNNING" = true ]; then
   echo "Application process running but port $PORT is not reachable yet"
 else
   echo "Application is not running"
+fi
+
+if [ "$WAIT_FOR_REACHABLE" = true ] && [ "$SUITE_REACHABLE" = false ]; then
+  echo "Waiting for application to become reachable on port $PORT..."
+  while true; do
+    sleep "$STATUS_WAIT_INTERVAL"
+    if arthexis_suite_reachable "$PORT"; then
+      SUITE_REACHABLE=true
+      echo "Application reachable at: http://localhost:$PORT"
+      break
+    fi
+    echo "Still waiting for application to become reachable on port $PORT..."
+  done
 fi
 
 if STARTED_AT=$(arthexis_read_startup_timestamp); then
