@@ -228,3 +228,6 @@ def test_cp_simulator_backend_selection_persists_in_session(logged_in_client):
     assert response.status_code == 200
     assert response.context["message"] == "Simulator backend updated"
     assert response.wsgi_request.session["cp_simulator_backend"] == "mobilityhouse"
+
+    assert get_simulator_state(cp=1, refresh_file=True)["running"] is False
+    assert get_simulator_state(cp=2, refresh_file=True)["running"] is False

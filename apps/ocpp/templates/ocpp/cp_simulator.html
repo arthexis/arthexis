@@ -17,6 +17,7 @@
   <form method="post" class="simulator-backend-form">
     {% csrf_token %}
     <input type="hidden" name="action" value="select-backend">
+    <input type="hidden" name="simulator_slot" value="{{ simulator_slot }}">
     <label for="simulator-backend-select">Simulator backend</label>
     <select id="simulator-backend-select" name="simulator_backend" onchange="this.form.submit()">
       {% for value, label in backend_choices %}
