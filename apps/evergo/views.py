@@ -31,6 +31,19 @@ DISPLAY_TEXT_FIXUPS = {
     "Orden en ejecuci?n": "Orden en ejecución",
 }
 
+DATETIME_LOCAL_FORMAT = "%Y-%m-%dT%H:%M"
+
+TRACKING_PREFILL_SOURCE_KEYS = (
+    "reporte_visita",
+    "reporte_visita_tecnica",
+    "visita_tecnica",
+    "reporte_instalacion",
+    "instalacion",
+    "seguimiento",
+    "tracking",
+    "data",
+)
+
 
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     """Normalize common encoding artifacts in user-facing Evergo text."""
@@ -288,7 +301,7 @@ def _load_remote_phase_one_initial_data(*, profile: EvergoUser, order_id: int) -
     """Load and normalize phase-one defaults from the latest WS API order detail payload."""
     try:
         order_payload = profile.fetch_order_detail(order_id=order_id)
-    except EvergoAPIError:
+    except Exception:
         return {}
     return _extract_phase_one_initial_data(order_payload)
 
@@ -299,16 +312,7 @@ def _extract_phase_one_initial_data(order_payload: dict[str, object]) -> dict[st
         return {}
 
     candidate_sources: list[dict[str, object]] = [order_payload]
-    for key in (
-        "reporte_visita",
-        "reporte_visita_tecnica",
-        "visita_tecnica",
-        "reporte_instalacion",
-        "instalacion",
-        "seguimiento",
-        "tracking",
-        "data",
-    ):
+    for key in TRACKING_PREFILL_SOURCE_KEYS:
         source = order_payload.get(key)
         if isinstance(source, dict):
             candidate_sources.append(source)
@@ -360,9 +364,9 @@ def _normalize_datetime_local_value(*, value: object) -> str | None:
     if not raw_value:
         return None
 
-    for pattern in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+    for pattern in (DATETIME_LOCAL_FORMAT, "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
         try:
-            return datetime.strptime(raw_value, pattern).strftime("%Y-%m-%dT%H:%M")
+            return datetime.strptime(raw_value, pattern).strftime(DATETIME_LOCAL_FORMAT)
         except ValueError:
             continue
 
@@ -370,7 +374,7 @@ def _normalize_datetime_local_value(*, value: object) -> str | None:
         raw_value = raw_value[:-1] + "+00:00"
 
     try:
-        return datetime.fromisoformat(raw_value).strftime("%Y-%m-%dT%H:%M")
+        return datetime.fromisoformat(raw_value).strftime(DATETIME_LOCAL_FORMAT)
     except ValueError:
         return None
 
@@ -409,26 +413,26 @@ COLLAPSED_DEFAULT_FIELDS = [
 ]
 
 TRACKING_PREFILL_FIELDS = [
-    "metraje_visita_tecnica",
-    "programacion_cargador",
-    "capacidad_itm_principal",
-    "fecha_visita",
-    "voltaje_fase_fase",
-    "voltaje_fase_tierra",
-    "voltaje_fase_neutro",
-    "voltaje_neutro_tierra",
-    "prueba_carga",
-    "marca_cargador",
-    "numero_serie",
-    "tipo_visita",
-    "requiere_instalacion",
-    "tipo_inmueble",
-    "concentracion_medidores",
-    "servicio",
-    "obra_civil",
-    "kit_cfe",
     "calibre_principal",
+    "capacidad_itm_principal",
+    "concentracion_medidores",
+    "fecha_visita",
     "garantia",
+    "kit_cfe",
+    "marca_cargador",
+    "metraje_visita_tecnica",
+    "numero_serie",
+    "obra_civil",
+    "programacion_cargador",
+    "prueba_carga",
+    "requiere_instalacion",
+    "servicio",
+    "tipo_inmueble",
+    "tipo_visita",
+    "voltaje_fase_fase",
+    "voltaje_fase_neutro",
+    "voltaje_fase_tierra",
+    "voltaje_neutro_tierra",
 ]
 
 TRACKING_INT_FIELDS = {

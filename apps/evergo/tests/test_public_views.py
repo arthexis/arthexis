@@ -10,6 +10,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.features.models import Feature
 
 
 @pytest.mark.django_db
@@ -144,12 +145,12 @@ def test_order_tracking_public_prefills_values_from_remote_order_payload(mock_fe
     response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
 
     assert response.status_code == 200
-    content = response.content.decode()
-    assert 'value="31"' in content
-    assert 'value="32A"' in content
-    assert 'value="2026-03-10T13:45"' in content
-    assert 'value="220.50"' in content
-    assert 'value="SER-REMOTE"' in content
+    form = response.context["form"]
+    assert form.initial["metraje_visita_tecnica"] == 31
+    assert form.initial["programacion_cargador"] == "32A"
+    assert form.initial["fecha_visita"] == "2026-03-10T13:45"
+    assert str(form.initial["voltaje_fase_fase"]) == "220.50"
+    assert form.initial["numero_serie"] == "SER-REMOTE"
 
 
 @pytest.mark.django_db
@@ -157,6 +158,10 @@ def test_order_tracking_public_prefills_values_from_remote_order_payload(mock_fe
 def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, client, settings):
     """Regression: tracking view should expose feedback/chat quick actions when enabled by permissions."""
     settings.PAGES_CHAT_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
 
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-icons", email="owner-icons@example.com")
@@ -179,6 +184,10 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
 def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, client, settings):
     """Regression: tracking view should hide feedback/chat quick actions when permissions disable them."""
     settings.PAGES_CHAT_ENABLED = False
+    Feature.objects.update_or_create(
+        slug="feedback-ingestion",
+        defaults={"display": "Feedback Ingestion", "is_enabled": False},
+    )
 
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-no-icons", email="owner-no-icons@example.com")
