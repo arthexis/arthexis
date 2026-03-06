@@ -2,7 +2,10 @@
 
 This module may be imported even when ``apps.core`` is not present in
 ``INSTALLED_APPS`` (for example by abstract dependencies like ``Ownable``).
-Concrete model imports are therefore guarded to avoid startup errors.
+
+Core-owned concrete models are exported eagerly when ``apps.core`` is
+installed. Cross-app optional dependencies are guarded separately so they
+cannot mask core model exports.
 """
 
 from .ownable import (
@@ -26,7 +29,6 @@ try:
     from .email import EmailArtifact, EmailTransaction, EmailTransactionAttachment
     from .invite_lead import InviteLead
     from .usage_event import UsageEvent
-    from apps.cards.models import RFID
 except RuntimeError as exc:
     if "isn't in an application in INSTALLED_APPS" not in str(exc):
         raise
@@ -41,6 +43,15 @@ else:
             "EmailTransactionAttachment",
             "InviteLead",
             "UsageEvent",
-            "RFID",
         ]
     )
+
+try:
+    from apps.cards.models import RFID
+except RuntimeError as exc:
+    if "isn't in an application in INSTALLED_APPS" not in str(exc):
+        raise
+    # Optional cross-app model unavailable when apps.cards is not installed.
+    pass
+else:
+    __all__.append("RFID")
