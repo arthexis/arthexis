@@ -8,6 +8,8 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 from django.contrib.sites.models import Site
+from django.core.cache import cache
+from django.utils import timezone
 from django.utils.translation import gettext
 
 from apps.chats.models import ChatMessage, ChatSession
@@ -15,6 +17,8 @@ from apps.core.channel_metrics import websocket_connected, websocket_disconnecte
 
 
 logger = logging.getLogger(__name__)
+
+PRESENCE_FLAP_WINDOW_SECONDS = 6
 
 
 class ChatConsumer(AsyncJsonWebsocketConsumer):
@@ -149,15 +153,56 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     async def _broadcast_presence(self, event: str):
         if not self.session:
             return
+        staff = bool(getattr(self.scope.get("user"), "is_staff", False))
+        if not self._should_emit_presence(event=event, staff=staff):
+            return
         await self.channel_layer.group_send(
             self.group_name,
             {
                 "type": "chat.presence",
                 "event": event,
-                "staff": bool(getattr(self.scope.get("user"), "is_staff", False)),
+                "staff": staff,
                 "author": self._display_name(),
             },
         )
+
+    def _presence_cache_key(self, *, staff: bool) -> str:
+        """Return cache key used to debounce noisy presence events."""
+
+        assert self.session is not None
+        return f"sites.chat.presence:{self.session.pk}:{int(staff)}"
+
+    def _should_emit_presence(self, *, event: str, staff: bool) -> bool:
+        """Debounce rapid join/leave flapping for the same audience role."""
+
+        if event not in {"join", "leave"}:
+            return True
+        if not self.session:
+            return False
+        now = timezone.now().timestamp()
+        cache_key = self._presence_cache_key(staff=staff)
+        state = cache.get(cache_key)
+        if isinstance(state, dict):
+            previous_event = state.get("event")
+            previous_at = float(state.get("at") or 0)
+            elapsed_seconds = now - previous_at
+            if elapsed_seconds < PRESENCE_FLAP_WINDOW_SECONDS:
+                if previous_event == "flap":
+                    return False
+                if previous_event == event:
+                    return False
+                cache.set(
+                    cache_key,
+                    {"event": "flap", "at": now},
+                    timeout=PRESENCE_FLAP_WINDOW_SECONDS,
+                )
+                return False
+        cache.set(
+            cache_key,
+            {"event": event, "at": now},
+            timeout=PRESENCE_FLAP_WINDOW_SECONDS,
+        )
+        return True
 
     def _display_name(self) -> str:
         user = self.scope.get("user")
