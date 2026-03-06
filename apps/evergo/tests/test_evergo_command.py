@@ -150,7 +150,6 @@ def test_evergo_command_load_customers_requires_query_source():
         call_command("evergo", suite_user.username, "--load-customers")
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_evergo_command_load_customers_requires_existing_evergo_email():
     """Command should reject load-customer runs when the profile email is missing."""
     User = get_user_model()

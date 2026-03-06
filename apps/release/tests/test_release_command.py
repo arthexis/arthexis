@@ -8,9 +8,6 @@ import pytest
 from django.core.management import CommandError, call_command
 
 
-pytestmark = pytest.mark.regression
-
-
 def test_release_prepare_routes_to_domain_function(monkeypatch) -> None:
     """Regression: ``release prepare`` should call ``prepare_release`` with version."""
 
@@ -165,5 +162,4 @@ def test_legacy_run_release_data_transforms_alias_delegates(monkeypatch) -> None
 
     assert captured["args"] == ("release", "run-data-transforms", "cleanup_users")
     assert captured["kwargs"]["max_batches"] == 3
-
 
