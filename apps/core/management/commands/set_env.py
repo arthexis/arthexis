@@ -13,11 +13,11 @@ from filelock import FileLock, Timeout
 _VALID_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _env_path() -> Path:
+def env_path() -> Path:
     return Path(settings.BASE_DIR) / "arthexis.env"
 
 
-def _read_env(path: Path) -> OrderedDict[str, str]:
+def read_env(path: Path) -> OrderedDict[str, str]:
     if not path.exists():
         return OrderedDict()
     values = dotenv_values(path)
@@ -53,7 +53,7 @@ def _validate_key(key: str) -> None:
         )
 
 
-def _write_env(path: Path, values: OrderedDict[str, str]) -> None:
+def write_env(path: Path, values: OrderedDict[str, str]) -> None:
     lines = [f"{key}={_format_env_value(value)}" for key, value in values.items()]
     if lines:
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -104,7 +104,7 @@ class Command(BaseCommand):
         if not any([set_pairs, get_keys, delete_keys, list_values]):
             raise CommandError("Provide at least one action: --set, --get, --delete, --list.")
 
-        env_path = _env_path()
+        path = env_path()
 
         for key, _value in set_pairs:
             _validate_key(key)
@@ -115,11 +115,11 @@ class Command(BaseCommand):
 
         values: OrderedDict[str, str]
         if set_pairs or delete_keys:
-            env_path.parent.mkdir(parents=True, exist_ok=True)
-            lock_path = env_path.with_suffix(env_path.suffix + ".lock")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            lock_path = path.with_suffix(path.suffix + ".lock")
             try:
                 with FileLock(lock_path, timeout=5):
-                    values = _read_env(env_path)
+                    values = read_env(path)
                     for key, value in set_pairs:
                         values[key] = value
 
@@ -129,11 +129,11 @@ class Command(BaseCommand):
                         else:
                             self.stdout.write(self.style.WARNING(f"Key not found: {key}"))
 
-                    _write_env(env_path, values)
+                    write_env(path, values)
             except Timeout as exc:
                 raise CommandError("Could not acquire lock to modify arthexis.env.") from exc
         else:
-            values = _read_env(env_path)
+            values = read_env(path)
 
         if list_values:
             if not values:

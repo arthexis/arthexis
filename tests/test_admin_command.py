@@ -10,7 +10,6 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 
-@override_settings(BASE_DIR="/tmp/arthexis-admin-command-show")
 def test_admin_show_prints_runtime_values(capsys):
     """The show action should print the currently active settings."""
 

@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from filelock import FileLock, Timeout
 
-from apps.core.management.commands.set_env import _env_path, _read_env, _write_env
+from apps.core.management.commands.set_env import env_path, read_env, write_env
 from config.admin_urls import normalize_admin_url_path
 
 
@@ -72,14 +72,12 @@ class Command(BaseCommand):
         action = options["action"]
         if action == "show":
             self._handle_show()
-            return
-        if action == "set":
+        elif action == "set":
             self._handle_set(options)
-            return
-        if action == "reset":
+        elif action == "reset":
             self._handle_reset(options)
-            return
-        raise CommandError(f"Unsupported admin action: {action}")
+        else:
+            raise CommandError(f"Unsupported admin action: {action}")
 
     def _handle_show(self) -> None:
         """Print currently active admin-site values."""
@@ -137,32 +135,32 @@ class Command(BaseCommand):
     def _persist_updates(self, updates: dict[str, str]) -> None:
         """Write updated keys to ``arthexis.env`` under a file lock."""
 
-        env_path = _env_path()
-        env_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = env_path.with_suffix(env_path.suffix + ".lock")
+        path = env_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = path.with_suffix(path.suffix + ".lock")
 
         try:
             with FileLock(lock_path, timeout=5):
-                values: OrderedDict[str, str] = _read_env(env_path)
+                values: OrderedDict[str, str] = read_env(path)
                 for key, value in updates.items():
                     values[key] = value
-                _write_env(env_path, values)
+                write_env(path, values)
         except Timeout as exc:
             raise CommandError("Could not acquire lock to modify arthexis.env.") from exc
 
     def _persist_deletes(self, keys: set[str]) -> None:
         """Remove keys from ``arthexis.env`` under a file lock."""
 
-        env_path = _env_path()
-        if not env_path.exists():
+        path = env_path()
+        if not path.exists():
             return
 
-        lock_path = env_path.with_suffix(env_path.suffix + ".lock")
+        lock_path = path.with_suffix(path.suffix + ".lock")
         try:
             with FileLock(lock_path, timeout=5):
-                values: OrderedDict[str, str] = _read_env(env_path)
+                values: OrderedDict[str, str] = read_env(path)
                 for key in sorted(keys):
                     values.pop(key, None)
-                _write_env(env_path, values)
+                write_env(path, values)
         except Timeout as exc:
             raise CommandError("Could not acquire lock to modify arthexis.env.") from exc

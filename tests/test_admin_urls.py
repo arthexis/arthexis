@@ -25,9 +25,12 @@ def test_normalize_admin_url_path_returns_trailing_slash_fragment(raw_path: str,
     assert admin_urls.normalize_admin_url_path(raw_path) == expected
 
 
-@pytest.mark.parametrize("raw_path", ["", "   ", "/", "///"])
-def test_normalize_admin_url_path_rejects_empty_path(raw_path: str):
-    """Blank paths should fail fast to avoid mounting admin at site root."""
+@pytest.mark.parametrize(
+    "raw_path",
+    ["", "   ", "/", "///", "<path:any>/", "admindocs/", "i18n/", "__debug__/"],
+)
+def test_normalize_admin_url_path_rejects_invalid_path(raw_path: str):
+    """Blank, dynamic, and reserved-prefix paths should be rejected."""
 
     with pytest.raises(ValueError, match="Admin URL path"):
         admin_urls.normalize_admin_url_path(raw_path)
@@ -70,3 +73,13 @@ def test_config_urls_applies_admin_branding_settings():
     assert urls_module.admin.site.site_header == "Ops Header"
     assert urls_module.admin.site.site_title == "Ops Title"
     assert urls_module.admin.site.index_title == "Ops Index"
+
+
+@pytest.mark.parametrize("reserved_path", ["admindocs/", "i18n/", "__debug__/"])
+def test_config_urls_rejects_reserved_admin_mount_prefix(reserved_path: str):
+    """Reserved route prefixes should fail during URL bootstrap."""
+
+    with override_settings(ADMIN_URL_PATH=reserved_path):
+        with pytest.raises(ValueError, match="reserved route prefix"):
+            urls_module = importlib.import_module("config.urls")
+            importlib.reload(urls_module)
