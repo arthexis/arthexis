@@ -2,8 +2,19 @@ from __future__ import annotations
 
 from io import BytesIO
 
-import qrcode
-from qrcode.image.svg import SvgImage
+
+def _load_qrcode_module():
+    """Return the optional ``qrcode`` module when available."""
+    try:
+        import qrcode
+    except ModuleNotFoundError as exc:
+        if exc.name == "qrcode":
+            raise RuntimeError(
+                "The 'qrcode' package is required to generate QR images. "
+                "Install project optional dependency group 'nodes' or add qrcode."
+            ) from exc
+        raise
+    return qrcode
 
 
 def build_qr_png_bytes(
@@ -14,6 +25,8 @@ def build_qr_png_bytes(
     fill_color: str = "black",
     back_color: str = "white",
 ) -> bytes:
+    """Return a PNG QR image for ``url`` as raw bytes."""
+    qrcode = _load_qrcode_module()
     qr = qrcode.QRCode(box_size=box_size, border=border)
     qr.add_data(url)
     qr.make(fit=True)
@@ -29,6 +42,10 @@ def build_qr_svg_text(
     box_size: int = 6,
     border: int = 2,
 ) -> str:
+    """Return an SVG QR image for ``url`` as UTF-8 text."""
+    qrcode = _load_qrcode_module()
+    from qrcode.image.svg import SvgImage
+
     qr = qrcode.QRCode(box_size=box_size, border=border)
     qr.add_data(url)
     qr.make(fit=True)
