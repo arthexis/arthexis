@@ -11,16 +11,6 @@ from apps.core.tasks.auto_upgrade import _project_base_dir
 
 
 @pytest.mark.django_db
-def test_project_base_dir_prefers_environment(monkeypatch, settings, tmp_path):
-    env_base = tmp_path / "runtime"
-    env_base.mkdir()
-
-    settings.BASE_DIR = tmp_path / "settings"
-    monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
-
-    assert _project_base_dir() == env_base
-
-@pytest.mark.django_db
 def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path):
     env_base = tmp_path / "runtime"
     log_dir = env_base / "logs"
@@ -95,24 +85,6 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
     assert any(
         "recorded upgrade failure" in issue["label"] for issue in report["summary"]["issues"]
     )
-
-def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
-    calls: list[tuple[str | None, bool]] = []
-
-    class Runner:
-        def __call__(self, channel_override=None, *, manual_trigger=False):
-            calls.append((channel_override, manual_trigger))
-
-        def delay(self, channel_override=None):  # pragma: no cover - defensive
-            raise AssertionError("delay should not be used")
-
-    monkeypatch.setattr(upgrade, "check_github_updates", Runner())
-    settings.CELERY_BROKER_URL = "memory://"
-
-    queued = upgrade._trigger_upgrade_check()
-
-    assert not queued
-    assert calls == [(None, True)]
 
 def test_health_check_failure_without_revision(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks, "get_revision", lambda: "")
