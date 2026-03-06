@@ -206,7 +206,11 @@ def _backend_simulator_from_payload(
     cp_idx: int = 1,
     sim_state: SimulatorState | None = None,
 ):
-    selection = resolve_simulator_backend(cp_idx=cp_idx)
+    preferred_backend = payload.get("simulator_backend")
+    selection = resolve_simulator_backend(
+        cp_idx=cp_idx,
+        preferred_backend=str(preferred_backend) if preferred_backend is not None else None,
+    )
     if selection.use_mobility_house:
         config = build_mobility_house_simulator_config(payload, cp_idx=cp_idx)
         return (
@@ -998,6 +1002,9 @@ def _start_simulator(
         if param.kind != inspect.Parameter.VAR_KEYWORD and name != "cp"
     }
     filtered_params = {key: value for key, value in params.items() if key in allowed_params}
+    preferred_backend = params.get("simulator_backend")
+    if preferred_backend is not None:
+        filtered_params["simulator_backend"] = str(preferred_backend)
 
     cp_path = filtered_params.get(
         "cp_path", (state.params or {}).get("cp_path", f"CP{cp}")
@@ -1035,7 +1042,11 @@ def _start_simulator(
         _save_state_file(_simulators)
         return True, state.last_status, log_file
 
-    selection = resolve_simulator_backend(cp_idx=cp)
+    preferred_backend = state.params.get("simulator_backend") if isinstance(state.params, dict) else None
+    selection = resolve_simulator_backend(
+        cp_idx=cp,
+        preferred_backend=str(preferred_backend) if preferred_backend is not None else None,
+    )
     if selection.use_mobility_house:
         runtime_params = _normalize_payload(state.params)
         _, runtime = _backend_simulator_from_payload(
@@ -1058,7 +1069,9 @@ def _start_simulator(
         fallback_reason = selection.reason
 
     try:
-        coro = simulate(cp=cp, **state.params)
+        runtime_params = dict(state.params)
+        runtime_params.pop("simulator_backend", None)
+        coro = simulate(cp=cp, **runtime_params)
     except ValueError as exc:
         state.last_error = str(exc)
         state.last_status = "Invalid simulator configuration"

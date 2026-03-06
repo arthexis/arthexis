@@ -216,13 +216,62 @@ class SimulatorBackendSelection:
     dependency_available: bool
 
 
-def resolve_simulator_backend(*, cp_idx: int = 1) -> SimulatorBackendSelection:
+def _normalize_backend_override(value: object) -> str | None:
+    """Normalize user-provided backend preference to a supported identifier."""
+
+    if value is None:
+        return None
+    candidate = str(value).strip().lower()
+    if candidate in {"arthexis", "legacy"}:
+        return "arthexis"
+    if candidate in {"mobilityhouse", "mobility_house", "v2"}:
+        return "mobilityhouse"
+    return None
+
+
+def resolve_simulator_backend(
+    *, cp_idx: int = 1, preferred_backend: str | None = None
+) -> SimulatorBackendSelection:
     """Return whether to use the Mobility House backend, with reasoning."""
 
     feature_enabled = is_suite_feature_enabled(
         MOBILITY_HOUSE_SIMULATOR_FEATURE_SLUG, default=False
     )
     dependency_available = find_spec("ocpp") is not None
+    backend_override = _normalize_backend_override(preferred_backend)
+
+    if backend_override == "arthexis":
+        return SimulatorBackendSelection(
+            use_mobility_house=False,
+            backend="legacy",
+            reason="Arthexis backend selected from simulator controls.",
+            feature_enabled=feature_enabled,
+            dependency_available=dependency_available,
+        )
+
+    if backend_override == "mobilityhouse":
+        if feature_enabled and dependency_available:
+            return SimulatorBackendSelection(
+                use_mobility_house=True,
+                backend="mobility_house",
+                reason=(
+                    "Mobility House backend selected from simulator controls. "
+                    f"Using v2 backend for slot {cp_idx}."
+                ),
+                feature_enabled=True,
+                dependency_available=True,
+            )
+
+        return SimulatorBackendSelection(
+            use_mobility_house=False,
+            backend="legacy",
+            reason=(
+                "Mobility House backend was selected but is unavailable. "
+                "Falling back to Arthexis backend."
+            ),
+            feature_enabled=feature_enabled,
+            dependency_available=dependency_available,
+        )
 
     if not feature_enabled:
         return SimulatorBackendSelection(
@@ -332,7 +381,6 @@ __all__ = [
     "build_legacy_simulator_config",
     "build_mobility_house_simulator_config",
 ]
-
 
 
 

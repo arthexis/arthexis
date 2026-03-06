@@ -215,3 +215,19 @@ def test_start_simulator_ignores_unexpected_params(fake_simulate):
     params = get_simulator_state(cp=1, refresh_file=True)["params"]
     assert "foo" not in params
     assert params["cp_path"] == "CP-GAMMA"
+
+
+def test_cp_simulator_backend_selection_persists_in_session(logged_in_client):
+    """Backend dropdown updates the stored backend preference without starting a simulator."""
+
+    response = logged_in_client.post(
+        reverse("ocpp:cp-simulator"),
+        data={"action": "select-backend", "simulator_backend": "mobilityhouse"},
+    )
+
+    assert response.status_code == 200
+    assert response.context["message"] == "Simulator backend updated"
+    assert response.wsgi_request.session["cp_simulator_backend"] == "mobilityhouse"
+
+    assert get_simulator_state(cp=1, refresh_file=True)["running"] is False
+    assert get_simulator_state(cp=2, refresh_file=True)["running"] is False
