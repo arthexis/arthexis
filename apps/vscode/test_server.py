@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,13 +36,22 @@ def build_pytest_command(extra_args: list[str] | None = None) -> list[str]:
     return command
 
 
+def _build_subprocess_env() -> dict[str, str]:
+    """Build subprocess environment with debug mode disabled for test runs."""
+
+    env = dict(os.environ)
+    env["DEBUG"] = "0"
+    env["DJANGO_DEBUG"] = "0"
+    return env
+
+
 def run_tests(extra_args: list[str] | None = None) -> int:
     """Run pytest and return the subprocess exit code."""
 
     command = build_pytest_command(extra_args)
     print(f"{PREFIX} Running: {' '.join(command)}")
 
-    process: ProcessLike = subprocess.Popen(command, cwd=BASE_DIR)
+    process: ProcessLike = subprocess.Popen(command, cwd=BASE_DIR, env=_build_subprocess_env())
     try:
         return_code = process.wait()
     except KeyboardInterrupt:

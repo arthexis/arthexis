@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -62,6 +63,7 @@ def _build_popen_kwargs() -> dict[str, object]:
 
     popen_kwargs: dict[str, object] = {
         "cwd": BASE_DIR,
+        "env": _build_subprocess_env(),
         "stdout": subprocess.PIPE,
         "stderr": subprocess.PIPE,
         "text": True,
@@ -78,6 +80,15 @@ def _build_popen_kwargs() -> dict[str, object]:
         popen_kwargs["start_new_session"] = True
 
     return popen_kwargs
+
+
+def _build_subprocess_env() -> dict[str, str]:
+    """Build subprocess environment with debug mode disabled for migrations."""
+
+    env = dict(os.environ)
+    env["DEBUG"] = "0"
+    env["DJANGO_DEBUG"] = "0"
+    return env
 
 
 def _collect_process_result(process: ProcessLike) -> CommandResult:
