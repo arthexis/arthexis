@@ -233,7 +233,7 @@ class ImportExportAdminMixin:
             queryset = changelist.get_queryset(request)
         finally:
             request.GET = original_get
-        total_export_count = queryset.count()
+        total_export_count = queryset.count() if not export_format else None
         queryset, exporting_selected, selected_ids = self._selected_queryset(request, queryset)
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
