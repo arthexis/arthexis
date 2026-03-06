@@ -1,16 +1,10 @@
 """Application registry and site integration settings."""
 
-import importlib
-
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
 from django.core.exceptions import ImproperlyConfigured
 
-from utils.enabled_apps_lock import read_enabled_apps_lock
-
 from .base import APPS_DIR, BASE_DIR, HAS_DEBUG_TOOLBAR
-
-REQUIRED_LOCAL_APP_PATHS = ("apps.app", "apps.sites", "apps.users")
 
 
 def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
@@ -29,19 +23,19 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
     return deduped
 
 
-def _iter_app_manifest_modules() -> list[str]:
-    """Return sorted manifest module names discovered under the apps package."""
+def _iter_local_app_package_paths() -> list[str]:
+    """Return sorted local app package paths discovered by ``apps.py`` modules."""
 
-    manifest_modules: list[str] = []
-    for manifest_path in sorted(APPS_DIR.rglob("manifest.py")):
-        module_path = manifest_path.relative_to(BASE_DIR).with_suffix("")
-        manifest_modules.append(".".join(module_path.parts))
+    app_packages: list[str] = []
+    for app_config_module in sorted(APPS_DIR.rglob("apps.py")):
+        package_path = app_config_module.parent.relative_to(BASE_DIR)
+        app_packages.append(".".join(package_path.parts))
 
-    return manifest_modules
+    return app_packages
 
 
-def _validate_manifest_app_entry(app_entry: str) -> None:
-    """Ensure a manifest app entry can be resolved as a Django app module/config."""
+def _validate_local_app_entry(app_entry: str) -> None:
+    """Ensure a local app entry can be resolved as a Django app module/config."""
 
     from django.apps import AppConfig
 
@@ -53,141 +47,14 @@ def _validate_manifest_app_entry(app_entry: str) -> None:
         ) from exc
 
 
-def _load_local_apps_from_manifests() -> list[str]:
-    """Collect Django app entries from app manifest modules without importing apps."""
+def _load_local_apps() -> list[str]:
+    """Collect Django app package entries discovered from local ``apps.py`` modules."""
 
-    app_entries: list[str] = []
-    manifest_requirements: dict[str, list[str]] = {}
-    for manifest_module in _iter_app_manifest_modules():
-        module = importlib.import_module(manifest_module)
-        manifest_entries = getattr(module, "DJANGO_APPS", None)
-        required_entries = getattr(module, "REQUIRES_APPS", [])
-
-        if manifest_entries is None:
-            continue
-
-        if not isinstance(manifest_entries, list):
-            raise ImproperlyConfigured(
-                f"{manifest_module}.DJANGO_APPS must be defined as a list."
-            )
-
-        if not isinstance(required_entries, list):
-            raise ImproperlyConfigured(
-                f"{manifest_module}.REQUIRES_APPS must be defined as a list."
-            )
-
-        normalized_requirements: list[str] = []
-        for required_entry in required_entries:
-            if not isinstance(required_entry, str) or not required_entry.strip():
-                raise ImproperlyConfigured(
-                    f"{manifest_module}.REQUIRES_APPS contains an invalid entry: {required_entry!r}."
-                )
-
-            normalized_requirements.append(required_entry.strip())
-
-        for manifest_entry in manifest_entries:
-            if not isinstance(manifest_entry, str) or not manifest_entry.strip():
-                raise ImproperlyConfigured(
-                    f"{manifest_module}.DJANGO_APPS contains an invalid entry: {manifest_entry!r}."
-                )
-
-            normalized_entry = manifest_entry.strip()
-            app_entries.append(normalized_entry)
-
-            if normalized_requirements:
-                manifest_requirements[normalized_entry] = normalized_requirements
-
-    return _filter_local_apps_by_enabled_lock(
-        app_entries,
-        requirements_by_app=manifest_requirements,
-    )
+    app_entries = _iter_local_app_package_paths()
+    return _dedupe_app_entries(app_entries)
 
 
-def _is_required_local_app_entry(app_entry: str) -> bool:
-    """Return whether app entry must always remain enabled for core startup."""
-
-    normalized_entry = app_entry.strip()
-    return any(
-        normalized_entry == required_path
-        or normalized_entry.startswith(f"{required_path}.")
-        for required_path in REQUIRED_LOCAL_APP_PATHS
-    )
-
-
-def _entry_matches_enabled_selector(app_entry: str, selector: str) -> bool:
-    """Return whether a manifest app entry matches a lock-file selector."""
-
-    normalized_entry = app_entry.strip()
-    normalized_selector = selector.strip()
-    if not normalized_entry or not normalized_selector:
-        return False
-
-    if normalized_entry == normalized_selector:
-        return True
-
-    label = normalized_entry.rsplit(".", 1)[-1]
-    return label == normalized_selector
-
-
-def _filter_local_apps_by_enabled_lock(
-    app_entries: list[str],
-    *,
-    requirements_by_app: dict[str, list[str]] | None = None,
-) -> list[str]:
-    """Filter manifest app entries using the optional enabled apps lock file."""
-
-    requirements = requirements_by_app or {}
-    for app_entry, required_entries in requirements.items():
-        if not isinstance(required_entries, list):
-            raise ImproperlyConfigured(
-                f"Dependency map for '{app_entry}' must be a list of app entries."
-            )
-        for required_entry in required_entries:
-            if not isinstance(required_entry, str) or not required_entry.strip():
-                raise ImproperlyConfigured(
-                    f"Dependency map for '{app_entry}' contains an invalid entry: {required_entry!r}."
-                )
-
-    def _expand_required_apps(enabled_entries: set[str]) -> set[str]:
-        pending = list(enabled_entries)
-        expanded = set(enabled_entries)
-        while pending:
-            current = pending.pop()
-            for dependency in requirements.get(current, []):
-                if dependency in expanded:
-                    continue
-                expanded.add(dependency)
-                pending.append(dependency)
-        return expanded
-
-    selectors = read_enabled_apps_lock(BASE_DIR)
-    if selectors is None:
-        return [
-            app_entry
-            for app_entry in app_entries
-            if app_entry in _expand_required_apps(set(app_entries))
-        ]
-
-    explicitly_enabled = {
-        app_entry
-        for app_entry in app_entries
-        if _is_required_local_app_entry(app_entry)
-        or any(
-            _entry_matches_enabled_selector(app_entry, selector)
-            for selector in selectors
-        )
-    }
-
-    enabled_with_dependencies = _expand_required_apps(explicitly_enabled)
-
-    return [
-        app_entry
-        for app_entry in app_entries
-        if app_entry in enabled_with_dependencies
-    ]
-
-
-LOCAL_APPS = _load_local_apps_from_manifests()
+LOCAL_APPS = _load_local_apps()
 
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
