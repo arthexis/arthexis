@@ -29,6 +29,28 @@ def _save_cart(request: HttpRequest, cart: dict) -> None:
     request.session.modified = True
 
 
+def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopProduct]]:
+    """Resolve cart entries to active products from a single shop."""
+
+    product_ids = [entry.get("product_id") for entry in entries]
+    products = {
+        product.id: product
+        for product in ShopProduct.objects.select_related("shop").filter(id__in=product_ids, is_active=True)
+    }
+
+    if len(products) != len(product_ids):
+        raise CartValidationError("Some cart items are no longer available. Please review your cart.")
+
+    first_product = products[product_ids[0]]
+    shop = first_product.shop
+
+    for product_id in product_ids:
+        if products[product_id].shop_id != shop.id:
+            raise CartValidationError("Your cart contains items from multiple shops. Please update your cart.")
+
+    return shop, products
+
+
 @require_GET
 def shop_index(request: HttpRequest) -> HttpResponse:
     """Render all active shops and their active products."""
@@ -60,6 +82,15 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
         raise Http404("Invalid quantity.") from exc
 
     cart = _get_cart(request)
+    if cart:
+        first_item = next(iter(cart.values()))
+        if first_item.get("shop_id") != product.shop_id:
+            cart.clear()
+            messages.warning(
+                request,
+                "Your cart was cleared because it contained items from a different shop.",
+            )
+
     existing = cart.get(str(product.id))
     next_qty = qty + int(existing["quantity"]) if existing else qty
 
@@ -130,12 +161,11 @@ def checkout(request: HttpRequest) -> HttpResponse:
             {"form": form, "entries": entries, "total": calculate_cart_total(entries)},
         )
 
-    shop_id = request.POST.get("shop_id")
-    if shop_id:
-        shop = get_object_or_404(Shop, id=shop_id, is_active=True)
-    else:
-        first_product = get_object_or_404(ShopProduct, id=entries[0]["product_id"])
-        shop = first_product.shop
+    try:
+        shop, products = _resolve_cart_products(entries)
+    except CartValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("shop:cart")
 
     with transaction.atomic():
         order = ShopOrder.objects.create(
@@ -156,10 +186,11 @@ def checkout(request: HttpRequest) -> HttpResponse:
             quantity = int(entry["quantity"])
             line_total = unit_price * quantity
             total += line_total
+            product = products[entry["product_id"]]
             ShopOrderItem.objects.create(
                 order=order,
-                product_id=entry["product_id"],
-                odoo_product_id=entry.get("odoo_product_id"),
+                product=product,
+                odoo_product=product.odoo_product,
                 product_name=entry["name"],
                 sku=entry.get("sku", ""),
                 unit_price=unit_price,

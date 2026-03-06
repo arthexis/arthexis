@@ -113,7 +113,7 @@ class ShopOrder(Entity):
         """Assign a simple chronological order number when needed."""
 
         if not self.order_number:
-            self.order_number = timezone.now().strftime("SO%Y%m%d%H%M%S%f")[-18:]
+            self.order_number = timezone.now().strftime("SO%y%m%d%H%M%S%f")[:20]
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
