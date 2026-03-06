@@ -80,12 +80,12 @@
           </div>
         {% endif %}
         <div class="user-story-field">
-          <span class="user-story-label" id="user-story-rating-group-label">
-            {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
-              Your experience on {{ link_start }}this page{{ link_end }}
-            {% endblocktrans %}
-          </span>
-          <div class="user-story-feedback-options">
+          <div class="user-story-rating-row">
+            <span class="user-story-label" id="user-story-rating-group-label">
+              {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+                Rate {{ link_start }}this page{{ link_end }}
+              {% endblocktrans %}
+            </span>
             <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
               <input type="radio" id="user-story-rating-5" name="rating" value="5" required>
               <label for="user-story-rating-5" title="{% trans 'Requires no improvement' %}" aria-label="{% trans '5 stars' %}">★</label>
@@ -98,6 +98,8 @@
               <input type="radio" id="user-story-rating-1" name="rating" value="1">
               <label for="user-story-rating-1" title="{% trans 'Requires urgent attention' %}" aria-label="{% trans '1 star' %}">★</label>
             </div>
+          </div>
+          <div class="user-story-feedback-options">
             <span
               class="user-story-rating-hint"
               id="user-story-rating-hint"
