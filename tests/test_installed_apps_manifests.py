@@ -134,6 +134,25 @@ def _manifest_requirements_by_app_entry() -> dict[str, list[str]]:
     return requirements_by_app
 
 
+def _module_imports_discovery(module_path: Path) -> bool:
+    """Return whether a Python module imports ``apps.discovery``."""
+
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(alias.name.startswith("apps.discovery") for alias in node.names):
+                return True
+            continue
+
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+
+        if node.module.startswith("apps.discovery"):
+            return True
+
+    return False
+
+
 def test_local_apps_manifest_loading_is_complete_and_deterministic() -> None:
     """Regression: manifest loading should reproduce the project app list deterministically."""
 
@@ -292,3 +311,45 @@ def test_manifest_loading_validates_requires_apps_entries() -> None:
             ["apps.app"],
             requirements_by_app={"apps.app": [""]},
         )
+
+
+def test_apps_importing_discovery_declare_manifest_dependency() -> None:
+    """Regression: apps importing discovery must declare it in REQUIRES_APPS."""
+
+    requirements_by_app = _manifest_requirements_by_app_entry()
+    missing_dependencies: dict[str, list[str]] = {}
+
+    for manifest_path in sorted((settings.BASE_DIR / "apps").rglob("manifest.py")):
+        app_dir = manifest_path.parent
+        app_entries = _extract_manifest_apps(manifest_path)
+        python_modules = [
+            module_path
+            for module_path in app_dir.rglob("*.py")
+            if module_path.name != "manifest.py"
+            and "migrations" not in module_path.parts
+        ]
+        modules_with_discovery_imports = [
+            module_path
+            for module_path in python_modules
+            if _module_imports_discovery(module_path)
+        ]
+        if not modules_with_discovery_imports:
+            continue
+
+        for app_entry in app_entries:
+            requires_apps = requirements_by_app.get(app_entry, [])
+            if "apps.discovery" in requires_apps:
+                continue
+
+            missing_dependencies[app_entry] = [
+                str(path.relative_to(settings.BASE_DIR))
+                for path in modules_with_discovery_imports
+            ]
+
+    assert not missing_dependencies, (
+        "Apps importing apps.discovery must declare 'apps.discovery' in REQUIRES_APPS: "
+        + ", ".join(
+            f"{app_entry} (modules: {', '.join(paths)})"
+            for app_entry, paths in sorted(missing_dependencies.items())
+        )
+    )

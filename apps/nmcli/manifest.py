@@ -3,3 +3,7 @@
 DJANGO_APPS = [
     "apps.nmcli",
 ]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+]

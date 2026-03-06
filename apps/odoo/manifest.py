@@ -3,3 +3,7 @@
 DJANGO_APPS = [
     "apps.odoo",
 ]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+]

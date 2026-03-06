@@ -3,3 +3,7 @@
 DJANGO_APPS = [
     "apps.core",
 ]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+]
