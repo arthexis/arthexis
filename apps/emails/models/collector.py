@@ -1,9 +1,16 @@
+import logging
+import re
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.core.models import EmailArtifact
 from apps.emails.models.inbox import EmailInbox
+
+
+logger = logging.getLogger(__name__)
+
 
 class EmailCollector(Entity):
     """Search an inbox for matching messages and extract data via sigils."""
@@ -30,15 +37,15 @@ class EmailCollector(Entity):
         default=False,
         help_text="Treat subject, sender and body filters as regular expressions (case-insensitive).",
     )
-    NOTIFY_POPUP = "popup"
-    NOTIFY_NONE = "none"
-    NOTIFY_NET_MESSAGE = "net_message"
     NOTIFY_EMAIL = "email"
+    NOTIFY_NET_MESSAGE = "net_message"
+    NOTIFY_NONE = "none"
+    NOTIFY_POPUP = "popup"
     NOTIFICATION_MODE_CHOICES = [
-        (NOTIFY_POPUP, "Local popup"),
-        (NOTIFY_NONE, "Nothing"),
-        (NOTIFY_NET_MESSAGE, "Net message"),
         (NOTIFY_EMAIL, "Email"),
+        (NOTIFY_NET_MESSAGE, "Net message"),
+        (NOTIFY_NONE, "Nothing"),
+        (NOTIFY_POPUP, "Local popup"),
     ]
     notification_mode = models.CharField(
         max_length=16,
@@ -70,7 +77,6 @@ class EmailCollector(Entity):
         """Extract values from ``text`` according to ``fragment`` sigils."""
         if not self.fragment:
             return {}
-        import re
 
         parts = re.split(r"\[([^\]]+)\]", self.fragment)
         pattern = ""
@@ -111,8 +117,6 @@ class EmailCollector(Entity):
         if not template:
             return ""
 
-        import re
-
         def _replace(match: re.Match[str]) -> str:
             key = match.group(1).strip()
             if not key:
@@ -137,7 +141,6 @@ class EmailCollector(Entity):
         context = {
             "subject": msg.get("subject", ""),
             "sender": msg.get("from", ""),
-            "from": msg.get("from", ""),
             "body": msg.get("body", ""),
             "date": msg.get("date", ""),
         }
@@ -146,6 +149,7 @@ class EmailCollector(Entity):
         subject_template = self.notification_subject or "[subject]"
         message_template = self.notification_message or "[body]"
         rendered_subject = self._render_notification_template(subject_template, context)
+        rendered_subject = rendered_subject.replace("\n", " ").replace("\r", " ")
         rendered_message = self._render_notification_template(message_template, context)
 
         if mode == self.NOTIFY_POPUP:
@@ -191,4 +195,7 @@ class EmailCollector(Entity):
                 sigils=sigils,
                 fingerprint=fp,
             )
-            self._notify_for_message(msg, sigils)
+            try:
+                self._notify_for_message(msg, sigils)
+            except Exception:
+                logger.exception("Failed to send notification for collector %s", self.pk)

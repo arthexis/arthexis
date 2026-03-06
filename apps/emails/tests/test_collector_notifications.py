@@ -48,7 +48,7 @@ def test_collect_popup_notification_renders_sigil_templates(monkeypatch):
         subject="Incident",
         fragment="Ticket [ticket_id] is [status]",
         notification_mode=EmailCollector.NOTIFY_POPUP,
-        notification_subject="Alert [ticket_id] from [from]",
+        notification_subject="Alert [ticket_id] from [sender]",
         notification_message="Status [status]",
     )
 
@@ -163,6 +163,81 @@ def test_collect_email_mode_sends_using_recipients(monkeypatch):
     assert captured["message"] == "Rate changed"
     assert captured["recipient_list"] == ["ops@example.com", "qa@example.com"]
     assert captured["kwargs"]["fail_silently"] is False
+
+
+def test_collect_email_mode_sanitizes_subject_newlines(monkeypatch):
+    """Collector email mode should strip newlines from rendered subjects."""
+
+    owner = _create_owner("collector-email-header-owner")
+    inbox = _create_inbox(owner, "collector-email-header@example.com")
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        notification_mode=EmailCollector.NOTIFY_EMAIL,
+        notification_subject="Alert [subject]",
+        notification_message="[body]",
+        notification_recipients="ops@example.com",
+    )
+
+    monkeypatch.setattr(
+        collector,
+        "search_messages",
+        lambda limit: [
+            {
+                "subject": "Line1\nLine2\rLine3",
+                "from": "market@example.com",
+                "body": "Rate changed",
+            }
+        ],
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_send(subject, message, recipient_list, **kwargs):
+        captured["subject"] = subject
+        captured["message"] = message
+        captured["recipient_list"] = recipient_list
+        captured["kwargs"] = kwargs
+        return 1
+
+    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
+
+    collector.collect(limit=1)
+
+    assert captured["subject"] == "Alert Line1 Line2 Line3"
+
+
+def test_collect_continues_when_notification_fails(monkeypatch, caplog):
+    """Collector should keep processing later messages even if notification fails."""
+
+    owner = _create_owner("collector-failure-owner")
+    inbox = _create_inbox(owner, "collector-failure@example.com")
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        notification_mode=EmailCollector.NOTIFY_EMAIL,
+        notification_subject="[subject]",
+        notification_message="[body]",
+        notification_recipients="ops@example.com",
+    )
+
+    monkeypatch.setattr(
+        collector,
+        "search_messages",
+        lambda limit: [
+            {"subject": "First", "from": "ops@example.com", "body": "One"},
+            {"subject": "Second", "from": "ops@example.com", "body": "Two"},
+        ],
+    )
+
+    def _fake_send(*_args, **_kwargs):
+        raise RuntimeError("mail backend down")
+
+    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
+
+    with caplog.at_level("ERROR"):
+        collector.collect(limit=2)
+
+    assert EmailArtifact.objects.filter(collector=collector).count() == 2
+    assert "Failed to send notification for collector" in caplog.text
 
 
 def test_collect_none_mode_skips_dispatch(monkeypatch):

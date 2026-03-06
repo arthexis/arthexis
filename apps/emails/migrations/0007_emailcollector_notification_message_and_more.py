@@ -23,10 +23,10 @@ class Migration(migrations.Migration):
             name="notification_mode",
             field=models.CharField(
                 choices=[
-                    ("popup", "Local popup"),
-                    ("none", "Nothing"),
-                    ("net_message", "Net message"),
                     ("email", "Email"),
+                    ("net_message", "Net message"),
+                    ("none", "Nothing"),
+                    ("popup", "Local popup"),
                 ],
                 default="none",
                 help_text="Action to run after collecting a new email artifact.",
