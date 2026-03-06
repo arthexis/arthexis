@@ -29,6 +29,7 @@ def serialize_product_for_cart(product: ShopProduct, quantity: int) -> dict:
 
     return {
         "product_id": product.id,
+        "shop_id": product.shop_id,
         "name": product.name,
         "sku": product.sku,
         "unit_price": str(product.unit_price),

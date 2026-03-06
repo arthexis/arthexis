@@ -29,6 +29,27 @@ def _save_cart(request: HttpRequest, cart: dict) -> None:
     request.session.modified = True
 
 
+def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopProduct]]:
+    """Resolve cart entries to active products from a single shop."""
+
+    product_ids = [entry.get("product_id") for entry in entries]
+    products = {
+        product.id: product
+        for product in ShopProduct.objects.select_related("shop").filter(id__in=product_ids, is_active=True)
+    }
+
+    if len(products) != len(product_ids):
+        raise CartValidationError("Some cart items are no longer available. Please review your cart.")
+
+    shop_ids = {product.shop_id for product in products.values()}
+    if len(shop_ids) > 1:
+        raise CartValidationError("Your cart contains items from multiple shops. Please update your cart.")
+
+    shop = next(iter(products.values())).shop
+
+    return shop, products
+
+
 @require_GET
 def shop_index(request: HttpRequest) -> HttpResponse:
     """Render all active shops and their active products."""
@@ -60,6 +81,15 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
         raise Http404("Invalid quantity.") from exc
 
     cart = _get_cart(request)
+    if cart:
+        first_item = next(iter(cart.values()))
+        if first_item.get("shop_id") != product.shop_id:
+            cart.clear()
+            messages.warning(
+                request,
+                "Your cart was cleared because it contained items from a different shop.",
+            )
+
     existing = cart.get(str(product.id))
     next_qty = qty + int(existing["quantity"]) if existing else qty
 
@@ -130,28 +160,11 @@ def checkout(request: HttpRequest) -> HttpResponse:
             {"form": form, "entries": entries, "total": calculate_cart_total(entries)},
         )
 
-    shop_id = request.POST.get("shop_id")
-    product_ids = [entry["product_id"] for entry in entries]
-    products_by_id = ShopProduct.objects.select_related("shop").in_bulk(product_ids)
-    missing_product_ids = [product_id for product_id in product_ids if product_id not in products_by_id]
-    if missing_product_ids:
-        messages.error(request, "Some products in your cart are no longer available. Please review your cart.")
+    try:
+        shop, products = _resolve_cart_products(entries)
+    except CartValidationError as exc:
+        messages.error(request, str(exc))
         return redirect("shop:cart")
-
-    products = [products_by_id[product_id] for product_id in product_ids]
-    cart_shop_ids = {product.shop_id for product in products}
-    if len(cart_shop_ids) != 1:
-        messages.error(request, "Your cart has products from multiple shops. Please checkout one shop at a time.")
-        return redirect("shop:cart")
-
-    cart_shop_id = next(iter(cart_shop_ids))
-    if shop_id:
-        shop = get_object_or_404(Shop, id=shop_id, is_active=True)
-        if shop.id != cart_shop_id:
-            messages.error(request, "Selected shop does not match the products in your cart.")
-            return redirect("shop:cart")
-    else:
-        shop = products[0].shop
 
     with transaction.atomic():
         order = ShopOrder.objects.create(
@@ -168,15 +181,15 @@ def checkout(request: HttpRequest) -> HttpResponse:
 
         total = Decimal("0.00")
         for entry in entries:
-            product = products_by_id[entry["product_id"]]
             unit_price = Decimal(entry["unit_price"])
             quantity = int(entry["quantity"])
             line_total = unit_price * quantity
             total += line_total
+            product = products[entry["product_id"]]
             ShopOrderItem.objects.create(
                 order=order,
                 product=product,
-                odoo_product_id=entry.get("odoo_product_id"),
+                odoo_product=product.odoo_product,
                 product_name=entry["name"],
                 sku=entry.get("sku", ""),
                 unit_price=unit_price,
