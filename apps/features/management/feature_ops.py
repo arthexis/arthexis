@@ -148,7 +148,7 @@ def reset_all_suite_features() -> tuple[int, int]:
     feature_manager = getattr(Feature, "all_objects", Feature._default_manager)
     deleted_count = feature_manager.filter(is_deleted=False).count()
     with transaction.atomic():
-        feature_manager.update(is_seed_data=False)
+        feature_manager.update(is_seed_data=False, is_enabled=False)
         feature_manager.all().delete()
         call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
         _ensure_reset_baseline_features()

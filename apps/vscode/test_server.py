@@ -61,7 +61,10 @@ def run_tests(extra_args: list[str] | None = None) -> int:
             process.wait()
         except KeyboardInterrupt:
             process.kill()
-            process.wait()
+            try:
+                process.wait()
+            except KeyboardInterrupt:
+                return 130
         return 130
 
     if return_code == 0:
