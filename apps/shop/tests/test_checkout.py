@@ -71,3 +71,87 @@ class ShopCheckoutTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, order.order_number)
+
+    def test_checkout_rejects_mixed_shop_cart(self):
+        """Checkout should fail when cart includes products from multiple shops."""
+
+        first_shop = Shop.objects.create(name="Shop One", slug="shop-one")
+        second_shop = Shop.objects.create(name="Shop Two", slug="shop-two")
+        first_product = ShopProduct.objects.create(
+            shop=first_shop,
+            name="Product A",
+            sku="A-1",
+            unit_price=Decimal("10.00"),
+            stock_quantity=10,
+        )
+        second_product = ShopProduct.objects.create(
+            shop=second_shop,
+            name="Product B",
+            sku="B-1",
+            unit_price=Decimal("20.00"),
+            stock_quantity=10,
+        )
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": first_shop.slug, "product_id": first_product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": second_shop.slug, "product_id": second_product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+
+        response = self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("shop:cart"))
+        self.assertEqual(ShopOrder.objects.count(), 0)
+
+    def test_checkout_rejects_stale_cart_product(self):
+        """Checkout should gracefully fail when cart references a deleted product."""
+
+        shop = Shop.objects.create(name="RFID Store", slug="rfid-store")
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="RFID Card Bundle",
+            sku="RFID-10",
+            unit_price=Decimal("49.90"),
+            stock_quantity=20,
+        )
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+        product.delete()
+
+        response = self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("shop:cart"))
+        self.assertEqual(ShopOrder.objects.count(), 0)

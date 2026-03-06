@@ -131,11 +131,27 @@ def checkout(request: HttpRequest) -> HttpResponse:
         )
 
     shop_id = request.POST.get("shop_id")
+    product_ids = [entry["product_id"] for entry in entries]
+    products_by_id = ShopProduct.objects.select_related("shop").in_bulk(product_ids)
+    missing_product_ids = [product_id for product_id in product_ids if product_id not in products_by_id]
+    if missing_product_ids:
+        messages.error(request, "Some products in your cart are no longer available. Please review your cart.")
+        return redirect("shop:cart")
+
+    products = [products_by_id[product_id] for product_id in product_ids]
+    cart_shop_ids = {product.shop_id for product in products}
+    if len(cart_shop_ids) != 1:
+        messages.error(request, "Your cart has products from multiple shops. Please checkout one shop at a time.")
+        return redirect("shop:cart")
+
+    cart_shop_id = next(iter(cart_shop_ids))
     if shop_id:
         shop = get_object_or_404(Shop, id=shop_id, is_active=True)
+        if shop.id != cart_shop_id:
+            messages.error(request, "Selected shop does not match the products in your cart.")
+            return redirect("shop:cart")
     else:
-        first_product = get_object_or_404(ShopProduct, id=entries[0]["product_id"])
-        shop = first_product.shop
+        shop = products[0].shop
 
     with transaction.atomic():
         order = ShopOrder.objects.create(
@@ -152,13 +168,14 @@ def checkout(request: HttpRequest) -> HttpResponse:
 
         total = Decimal("0.00")
         for entry in entries:
+            product = products_by_id[entry["product_id"]]
             unit_price = Decimal(entry["unit_price"])
             quantity = int(entry["quantity"])
             line_total = unit_price * quantity
             total += line_total
             ShopOrderItem.objects.create(
                 order=order,
-                product_id=entry["product_id"],
+                product=product,
                 odoo_product_id=entry.get("odoo_product_id"),
                 product_name=entry["name"],
                 sku=entry.get("sku", ""),
