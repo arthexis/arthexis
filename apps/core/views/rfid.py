@@ -5,7 +5,7 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
 from utils.api import api_login_required
 

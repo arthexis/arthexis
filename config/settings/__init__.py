@@ -3,8 +3,6 @@
 from .base import *  # noqa: F401,F403
 from .security import *  # noqa: F401,F403
 from .apps import *  # noqa: F401,F403
-from .apps import _load_local_apps_from_manifests  # noqa: F401
-from .apps import _validate_manifest_app_entry  # noqa: F401
 from .middleware import *  # noqa: F401,F403
 from .database import *  # noqa: F401,F403
 from .i18n import *  # noqa: F401,F403
