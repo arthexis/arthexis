@@ -18,7 +18,7 @@ from apps.core.channel_metrics import websocket_connected, websocket_disconnecte
 
 logger = logging.getLogger(__name__)
 
-PRESENCE_FLAP_WINDOW_SECONDS = 6
+DEFAULT_PRESENCE_FLAP_WINDOW_SECONDS = 6
 
 
 class ChatConsumer(AsyncJsonWebsocketConsumer):
@@ -180,29 +180,35 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         if not self.session:
             return False
         now = timezone.now().timestamp()
+        window_seconds = self._presence_flap_window_seconds()
         cache_key = self._presence_cache_key(staff=staff)
         state = cache.get(cache_key)
         if isinstance(state, dict):
             previous_event = state.get("event")
             previous_at = float(state.get("at") or 0)
             elapsed_seconds = now - previous_at
-            if elapsed_seconds < PRESENCE_FLAP_WINDOW_SECONDS:
-                if previous_event == "flap":
-                    return False
+            if elapsed_seconds < window_seconds:
                 if previous_event == event:
                     return False
-                cache.set(
-                    cache_key,
-                    {"event": "flap", "at": now},
-                    timeout=PRESENCE_FLAP_WINDOW_SECONDS,
-                )
-                return False
+                if previous_event == "join" and event == "leave":
+                    return False
         cache.set(
             cache_key,
             {"event": event, "at": now},
-            timeout=PRESENCE_FLAP_WINDOW_SECONDS,
+            timeout=window_seconds,
         )
         return True
+
+    def _presence_flap_window_seconds(self) -> int:
+        """Return flap suppression window length in seconds from settings."""
+
+        return int(
+            getattr(
+                settings,
+                "PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
+                DEFAULT_PRESENCE_FLAP_WINDOW_SECONDS,
+            )
+        )
 
     def _display_name(self) -> str:
         user = self.scope.get("user")

@@ -1,10 +1,12 @@
-import time
 from types import SimpleNamespace
 from unittest import TestCase, mock
 
 from django.core.cache import cache
 
-from apps.sites.consumers import ChatConsumer
+from apps.sites.consumers import (
+    ChatConsumer,
+    DEFAULT_PRESENCE_FLAP_WINDOW_SECONDS,
+)
 
 
 class ChatConsumerPresenceDebounceTests(TestCase):
@@ -27,13 +29,15 @@ class ChatConsumerPresenceDebounceTests(TestCase):
 
         consumer = self._build_consumer(session_pk=101)
 
-        with mock.patch("apps.sites.consumers.PRESENCE_FLAP_WINDOW_SECONDS", 1):
+        with mock.patch(
+            "apps.sites.consumers.settings.PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
+            1,
+            create=True,
+        ), mock.patch("apps.sites.consumers.timezone.now") as mock_now:
+            mock_now.return_value.timestamp.side_effect = [1000.0, 1000.1, 1000.2, 1001.2]
             self.assertTrue(consumer._should_emit_presence(event="join", staff=True))
             self.assertFalse(consumer._should_emit_presence(event="leave", staff=True))
             self.assertFalse(consumer._should_emit_presence(event="join", staff=True))
-
-            time.sleep(1.1)
-
             self.assertTrue(consumer._should_emit_presence(event="join", staff=True))
 
     def test_should_emit_presence_tracks_staff_and_visitor_channels_independently(self):
@@ -41,7 +45,27 @@ class ChatConsumerPresenceDebounceTests(TestCase):
 
         consumer = self._build_consumer(session_pk=102)
 
-        with mock.patch("apps.sites.consumers.PRESENCE_FLAP_WINDOW_SECONDS", 1):
+        with mock.patch(
+            "apps.sites.consumers.settings.PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
+            1,
+            create=True,
+        ), mock.patch("apps.sites.consumers.timezone.now") as mock_now:
+            mock_now.return_value.timestamp.side_effect = [1000.0, 1000.1, 1000.2]
             self.assertTrue(consumer._should_emit_presence(event="join", staff=True))
             self.assertFalse(consumer._should_emit_presence(event="leave", staff=True))
             self.assertTrue(consumer._should_emit_presence(event="join", staff=False))
+
+    def test_presence_flap_window_defaults_to_module_fallback(self):
+        """Default flap window should stay stable when setting is absent."""
+
+        consumer = self._build_consumer(session_pk=103)
+
+        with mock.patch.dict(
+            "apps.sites.consumers.settings.__dict__",
+            {},
+            clear=False,
+        ):
+            self.assertEqual(
+                consumer._presence_flap_window_seconds(),
+                DEFAULT_PRESENCE_FLAP_WINDOW_SECONDS,
+            )
