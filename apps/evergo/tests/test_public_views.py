@@ -116,6 +116,91 @@ def test_order_tracking_public_renders_defaults(client):
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
+def test_order_tracking_public_prefills_values_from_remote_order_payload(mock_fetch_order_detail, client):
+    """Regression: tracking view should prefill phase-one values from WS order detail payload."""
+    mock_fetch_order_detail.return_value = {
+        "reporte_visita": {
+            "metraje_visita_tecnica": "31",
+            "programacion_cargador": "32A",
+            "fecha_visita": "2026-03-10 13:45:00",
+            "voltaje_fase_fase": "220.50",
+            "numero_serie": "SER-REMOTE",
+        }
+    }
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-prefill", email="owner-prefill@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-prefill@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30199, order_number="GM030199")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'value="31"' in content
+    assert 'value="32A"' in content
+    assert 'value="2026-03-10T13:45"' in content
+    assert 'value="220.50"' in content
+    assert 'value="SER-REMOTE"' in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
+def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, client, settings):
+    """Regression: tracking view should expose feedback/chat quick actions when enabled by permissions."""
+    settings.PAGES_CHAT_ENABLED = True
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-icons", email="owner-icons@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="owner-icons@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28700, order_number="GM01170")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'href="#chat-widget"' in content
+    assert 'href="#user-story-toggle"' in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
+def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, client, settings):
+    """Regression: tracking view should hide feedback/chat quick actions when permissions disable them."""
+    settings.PAGES_CHAT_ENABLED = False
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-no-icons", email="owner-no-icons@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-no-icons@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28701, order_number="GM01171")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'href="#chat-widget"' not in content
+    assert 'href="#user-story-toggle"' not in content
+
+
+@pytest.mark.django_db
 def test_order_tracking_public_normalizes_common_status_text_artifacts(client):
     """Regression: tracking page should normalize known status encoding artifacts for display."""
     User = get_user_model()
