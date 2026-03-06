@@ -98,3 +98,9 @@ def test_debug_filter_uses_contextvar_per_task_for_log_attribution() -> None:
     assert second == ("gamma", False)
 
 
+def test_get_active_app_defaults_when_no_request_context() -> None:
+    """Background code paths should always have a safe default active app name."""
+
+    assert get_active_app()
+    with active_app(""):
+        assert get_active_app()
