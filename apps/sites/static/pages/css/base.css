@@ -607,9 +607,9 @@ body.user-story-open {
   padding: 0 0.35rem;
   border-radius: 999px;
   font-size: 0.65rem;
-  background: #16a34a;
+  background: #9333ea;
   color: #fff;
-  box-shadow: 0 0.35rem 0.85rem rgba(14, 116, 44, 0.45);
+  box-shadow: 0 0.35rem 0.85rem rgba(107, 33, 168, 0.45);
 }
 
 .chat-toggle .chat-unread[hidden] {
