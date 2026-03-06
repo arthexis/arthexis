@@ -261,6 +261,20 @@ def test_cp_simulator_default_serial_number_is_six_digits(logged_in_client):
     assert len(serial_number) == 6
 
 
+def test_cp_simulator_default_serial_number_stays_stable_per_session(logged_in_client):
+    """HTMX refreshes keep the same default serial for one logged-in session."""
+
+    first_response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+    second_response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert (
+        first_response.context["form_params"]["serial_number"]
+        == second_response.context["form_params"]["serial_number"]
+    )
+
+
 def test_cp_simulator_view_renders_help_text_and_wide_host_field(logged_in_client):
     """Simulator UI explains behavior and keeps host input wider than other fields."""
 

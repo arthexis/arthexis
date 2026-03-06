@@ -34,6 +34,19 @@ def _random_serial_number() -> str:
     return str(randint(100000, 999999))
 
 
+def _session_default_serial_number(request) -> str:
+    """Return a six-digit serial number that stays stable for the current session."""
+
+    session_key = "cp_simulator_default_serial_number"
+    serial_number = request.session.get(session_key)
+    if isinstance(serial_number, str) and serial_number.isdigit() and len(serial_number) == 6:
+        return serial_number
+
+    serial_number = _random_serial_number()
+    request.session[session_key] = serial_number
+    return serial_number
+
+
 @landing("Charge Point Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
@@ -120,7 +133,7 @@ def cp_simulator(request):
         "host": default_host,
         "ws_port": int(default_ws_port) if default_ws_port else None,
         "cp_path": "CP2",
-        "serial_number": _random_serial_number(),
+        "serial_number": _session_default_serial_number(request),
         "connector_id": 1,
         "rfid": "FFFFFFFF",
         "vin": "WP0ZZZ00000000000",
