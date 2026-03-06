@@ -28,8 +28,8 @@ def test_local_apps_are_importable_through_appconfig_regression() -> None:
         assert config.name == app_entry
 
 
-def test_installed_apps_include_core_before_admin_autodiscovery_regression() -> None:
-    """Regression: ``apps.core`` must be in Django's installed app registry."""
+def test_installed_apps_include_core_in_registry_regression() -> None:
+    """Regression: ``apps.core`` remains available via Django's app registry."""
 
     core_config = django_apps.get_app_config("core")
 
