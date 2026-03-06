@@ -2,6 +2,40 @@
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+STARTUP_TIMEOUT=300
+STATUS_WAIT_INTERVAL=2
+STATUS_WAIT_TIMEOUT=60
+exit_code=0
+WAIT_FOR_REACHABLE=false
+
+usage() {
+  cat <<'EOF'
+Usage: ./status.sh [options]
+
+Options:
+  -h, --help  Show this help message and exit.
+  --wait  Keep polling when the app is not reachable yet and exit after it becomes reachable.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --wait)
+      WAIT_FOR_REACHABLE=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
+
 # shellcheck source=scripts/helpers/env.sh
 . "$BASE_DIR/scripts/helpers/env.sh"
 # shellcheck source=scripts/helpers/logging.sh
@@ -18,8 +52,6 @@ exec > >(tee "$LOG_FILE") 2>&1
 # that seed the log file are honored.
 ERROR_LOG="$BASE_DIR/logs/error.log"
 mkdir -p "$(dirname "$ERROR_LOG")"
-STARTUP_TIMEOUT=300
-exit_code=0
 
 arthexis_suite_reachable() {
   local port="$1"
@@ -214,6 +246,37 @@ elif [ "$RUNNING" = true ]; then
   echo "Application process running but port $PORT is not reachable yet"
 else
   echo "Application is not running"
+fi
+
+if [ "$WAIT_FOR_REACHABLE" = true ] && [ "$SUITE_REACHABLE" = false ]; then
+  echo "Waiting for application to become reachable on port $PORT..."
+  WAIT_STARTED_AT=$(date +%s)
+  while true; do
+    WAIT_NOW=$(date +%s)
+    WAIT_ELAPSED=$((WAIT_NOW - WAIT_STARTED_AT))
+    if [ "$WAIT_ELAPSED" -ge "$STATUS_WAIT_TIMEOUT" ]; then
+      echo "Timed out waiting for reachability after ${STATUS_WAIT_TIMEOUT}s."
+      exit_code=1
+      break
+    fi
+
+    if STARTED_AT=$(arthexis_read_startup_timestamp); then
+      ELAPSED=$((WAIT_NOW - STARTED_AT))
+      if [ "$ELAPSED" -ge "$STARTUP_TIMEOUT" ]; then
+        echo "Startup failed: suite not reachable after ${STARTUP_TIMEOUT}s."
+        exit_code=1
+        break
+      fi
+    fi
+
+    sleep "$STATUS_WAIT_INTERVAL"
+    if arthexis_suite_reachable "$PORT"; then
+      SUITE_REACHABLE=true
+      echo "Application reachable at: http://localhost:$PORT"
+      break
+    fi
+    echo "Still waiting for application to become reachable on port $PORT..."
+  done
 fi
 
 if STARTED_AT=$(arthexis_read_startup_timestamp); then
