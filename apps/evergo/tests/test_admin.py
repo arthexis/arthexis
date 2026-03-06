@@ -551,7 +551,7 @@ def test_evergo_customer_export_view_post_scope_can_export_all_even_with_selecte
         {
             "format": "tsv",
             "export_columns": ["remote_id", "name"],
-            "selected": [str(first.pk), str(second.pk)],
+            "selected": [str(first.pk)],
         },
     )
 
