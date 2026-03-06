@@ -23,6 +23,7 @@ class Discovery(Entity):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        app_label = "discovery"
         ordering = ["-created_at"]
         verbose_name = _("Discovery")
         verbose_name_plural = _("Discoveries")
@@ -50,6 +51,7 @@ class DiscoveryItem(Entity):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        app_label = "discovery"
         ordering = ["-created_at"]
         verbose_name = _("Discovery Item")
         verbose_name_plural = _("Discovery Items")
