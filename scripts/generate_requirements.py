@@ -58,15 +58,16 @@ def _load_dependencies(pyproject_path: Path) -> tuple[list[str], list[str]]:
             "Expected [project.optional-dependencies] to be a table of dependency lists"
         )
 
-    ci_dependencies: list[str] = []
+    ci_optional_dependencies: list[str] = []
     for group_name, group_dependencies in optional_dependencies.items():
         if not isinstance(group_dependencies, list):
             raise RequirementsGenerationError(
                 f"Expected [project.optional-dependencies].{group_name} to be a list"
             )
-        ci_dependencies.extend(group_dependencies)
+        ci_optional_dependencies.extend(group_dependencies)
 
-    dependencies = [*runtime_dependencies, *ci_dependencies]
+    ci_dependencies = [*runtime_dependencies, *ci_optional_dependencies]
+    dependencies = ci_dependencies
 
     invalid_entries = [entry for entry in dependencies if not isinstance(entry, str)]
     if invalid_entries:
