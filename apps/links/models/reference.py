@@ -5,9 +5,8 @@ from __future__ import annotations
 import hashlib
 import uuid
 from io import BytesIO
-
-import qrcode
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import models
@@ -154,7 +153,8 @@ class Reference(Entity):
                     {"transaction_uuid": "Cannot modify transaction UUID"}
                 )
         if not self.image_media and self.value:
-            qr = qrcode.QRCode(box_size=10, border=4)
+            qr_code_module = _load_qrcode_module()
+            qr = qr_code_module.QRCode(box_size=10, border=4)
             qr.add_data(self.value)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
@@ -215,6 +215,21 @@ class Reference(Entity):
 
 
 REFERENCE_FILE_BUCKET_SLUG = "links-reference-files"
+
+
+def _load_qrcode_module():
+    """Return the ``qrcode`` module or raise a clear configuration error."""
+
+    try:
+        import qrcode
+    except ModuleNotFoundError as exc:
+        raise ImproperlyConfigured(
+            "The 'qrcode' package is required to generate reference QR images. "
+            "Install project optional dependency group 'nodes' or add qrcode."
+        ) from exc
+    return qrcode
+
+
 REFERENCE_FILE_ALLOWED_PATTERNS = "\n".join(
     [
         "*.pdf",
