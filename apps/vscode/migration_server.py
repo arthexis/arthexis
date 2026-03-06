@@ -183,17 +183,18 @@ def run_migrations(extra_args: list[str] | None = None) -> int:
 def _iter_watch_files() -> list[Path]:
     """Return a deterministic list of source files that should trigger reruns."""
 
-    files: list[Path] = []
+    files: set[Path] = set()
     for dir_name in DEFAULT_WATCH_DIRS:
         root = BASE_DIR / dir_name
-        if not root.exists() or not root.is_dir():
+        if not root.is_dir():
             continue
-        for path in root.rglob("*"):
-            if any(part in WATCH_IGNORE_DIRS for part in path.parts):
-                continue
-            if path.suffix in WATCH_FILE_SUFFIXES and path.is_file():
-                files.append(path)
-    return sorted(set(files))
+
+        for dirpath, dirs, filenames in os.walk(root, topdown=True):
+            dirs[:] = [dir_name for dir_name in dirs if dir_name not in WATCH_IGNORE_DIRS]
+            for filename in filenames:
+                if filename.endswith(WATCH_FILE_SUFFIXES):
+                    files.add(Path(dirpath) / filename)
+    return sorted(files)
 
 
 def _capture_watch_state() -> dict[Path, int]:
@@ -211,15 +212,11 @@ def _capture_watch_state() -> dict[Path, int]:
 def _detect_changed_files(previous: dict[Path, int], current: dict[Path, int]) -> list[Path]:
     """Return sorted files that changed between two state snapshots."""
 
-    changed: set[Path] = set()
-    for path, previous_mtime in previous.items():
-        current_mtime = current.get(path)
-        if current_mtime is None or current_mtime != previous_mtime:
-            changed.add(path)
-    for path in current:
-        if path not in previous:
-            changed.add(path)
-    return sorted(changed)
+    all_paths = previous.keys() | current.keys()
+    changed_paths = {
+        path for path in all_paths if previous.get(path) != current.get(path)
+    }
+    return sorted(changed_paths)
 
 
 def _wait_for_source_change_once(
