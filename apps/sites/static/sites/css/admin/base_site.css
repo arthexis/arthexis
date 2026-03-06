@@ -215,6 +215,7 @@
 
 .chat-message {
     display: flex;
+    flex-direction: row-reverse;
     align-items: flex-start;
     gap: 0.75rem;
     font-size: 0.9rem;
@@ -224,21 +225,26 @@
 .chat-message .chat-body {
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 0.2rem;
     flex: 1 1 auto;
     min-width: 0;
 }
 
+.chat-message .chat-meta {
+    text-align: right;
+}
+
 .chat-message.staff {
-    flex-direction: row-reverse;
+    flex-direction: row;
 }
 
 .chat-message.staff .chat-body {
-    align-items: flex-end;
+    align-items: flex-start;
 }
 
 .chat-message.staff .chat-meta {
-    text-align: right;
+    text-align: left;
 }
 
 .chat-avatar {
