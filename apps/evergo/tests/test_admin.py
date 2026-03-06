@@ -792,7 +792,7 @@ def test_evergo_customer_admin_change_form_has_status_readonly(admin_client):
 
 @pytest.mark.django_db
 def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow_link(admin_client):
-    """Regression: order changelist should prioritize SO link and hide remote/user columns."""
+    """Regression: order changelist should prioritize SO link and include linked customer column."""
 
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -811,6 +811,7 @@ def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow
         status_name="Programado",
         assigned_engineer_name="Assigned Engineer [Name]",
     )
+    customer = EvergoCustomer.objects.create(user=profile, name="Rodrigo Customer", latest_order=order)
 
     changelist_url = reverse("admin:evergo_evergoorder_changelist")
     response = admin_client.get(changelist_url)
@@ -819,12 +820,41 @@ def test_evergo_order_admin_changelist_uses_order_number_primary_column_and_flow
     content = response.content.decode("utf-8")
 
     assert "Order Number" in content
+    assert "Customer" in content
     assert "Remote id" not in content
     assert 'scope="col" class="column-user"' not in content
     assert reverse("admin:evergo_evergoorder_change", args=[order.pk]) in content
     assert reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id}) in content
+    assert reverse("admin:evergo_evergocustomer_change", args=[customer.pk]) in content
     assert "Assigned Engineer [Name]" not in content
     assert 'field-assigned_engineer_name_cleaved">Assigned Engineer<' in content
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_change_form_shows_customer_readonly_link(admin_client):
+    """Regression: order change form should include readonly linked customer field."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-customer-readonly",
+        email="suite-admin-order-customer-readonly@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-customer-readonly@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=7601, order_number="SO-7601")
+    customer = EvergoCustomer.objects.create(user=profile, name="Rodrigo Readonly", latest_order=order)
+
+    change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Customer" in content
+    assert "Rodrigo Readonly" in content
+    assert reverse("admin:evergo_evergocustomer_change", args=[customer.pk]) in content
 
 
 @pytest.mark.django_db
