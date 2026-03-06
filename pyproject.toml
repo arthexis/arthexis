@@ -102,13 +102,11 @@ dependencies = [
   "zope.interface==8.2",
 ]
 
+readme = "README.md"
+
 [[project.authors]]
 name = "Rafael J. Guillén-Osorio"
 email = "tecnologia@gelectriic.com"
-
-[project.readme]
-file = "README.md"
-content-type = "text/markdown"
 
 [project.urls]
 Repository = "https://github.com/arthexis/arthexis"
