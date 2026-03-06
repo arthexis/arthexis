@@ -282,6 +282,7 @@ work/
 
 # Local simulator state
 apps/ocpp/simulator.json
+apps/simulators/simulator.json
 
 # Runtime cache directory
 cache/
