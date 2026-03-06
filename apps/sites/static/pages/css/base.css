@@ -700,14 +700,14 @@ body.user-story-open {
 .chat-message .chat-body {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: end;
   gap: 0.2rem;
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .chat-message .chat-meta {
-  text-align: right;
+  text-align: end;
 }
 
 .chat-message.staff {
@@ -715,11 +715,11 @@ body.user-story-open {
 }
 
 .chat-message.staff .chat-body {
-  align-items: flex-start;
+  align-items: start;
 }
 
 .chat-message.staff .chat-meta {
-  text-align: left;
+  text-align: start;
 }
 
 .chat-avatar {
