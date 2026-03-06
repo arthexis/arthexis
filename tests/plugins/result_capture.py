@@ -9,6 +9,7 @@ from contextlib import nullcontext
 from typing import Any
 
 import pytest
+from django.db.utils import DatabaseError, OperationalError
 
 COLLECTED_RESULTS: dict[str, dict[str, Any]] = defaultdict(lambda: {"logs": []})
 DB_BLOCKER: Any = None
@@ -95,7 +96,21 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             db_context = DB_BLOCKER.unblock() if DB_BLOCKER else nullcontext()
             with db_context:
                 persist_results(results, use_permanent_db=use_permanent_db)
-        except Exception as exc:  # pragma: no cover - best effort logging
+        except OperationalError as exc:  # pragma: no cover - best effort logging
+            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+            message = str(exc)
+            if "no such table" in message and "tests_testresult" in message:
+                warning = (
+                    "Skipping test result persistence because the tests_testresult "
+                    "table is unavailable in the active database."
+                )
+            else:
+                warning = f"Unable to persist test results to primary database: {exc}"
+            if reporter:
+                reporter.write_line(warning, yellow=True)
+            else:
+                print(warning, file=sys.stderr)
+        except DatabaseError as exc:  # pragma: no cover - best effort logging
             reporter = session.config.pluginmanager.get_plugin("terminalreporter")
             message = f"Unable to persist test results to primary database: {exc}"
             if reporter:
