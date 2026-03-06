@@ -231,3 +231,19 @@ def test_cp_simulator_backend_selection_persists_in_session(logged_in_client):
 
     assert get_simulator_state(cp=1, refresh_file=True)["running"] is False
     assert get_simulator_state(cp=2, refresh_file=True)["running"] is False
+
+
+def test_cp_simulator_form_preserves_host_and_port_inputs(logged_in_client):
+    """Regression: host and port inputs stay editable during HTMX polling refreshes."""
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    host_tag_match = re.search(r'<input[^>]*id="host1"[^>]*>', content)
+    assert host_tag_match, "Input with id='host1' not found"
+    assert "hx-preserve" in host_tag_match.group(0), "hx-preserve missing from host1 input"
+
+    port_tag_match = re.search(r'<input[^>]*id="ws_port1"[^>]*>', content)
+    assert port_tag_match, "Input with id='ws_port1' not found"
+    assert "hx-preserve" in port_tag_match.group(0), "hx-preserve missing from ws_port1 input"
