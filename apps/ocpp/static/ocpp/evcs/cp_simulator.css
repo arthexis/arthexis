@@ -11,3 +11,21 @@
 .simulator-details .stat { font-family: monospace; }
 .sim-msg { margin-bottom: 1em; color: #333; }
 .error { color: #b00020; }
+
+.simulator-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.simulator-backend-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.simulator-backend-form label {
+  font-weight: 600;
+}

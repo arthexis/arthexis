@@ -22,6 +22,11 @@ REPEAT_TRUE_STRINGS = {
     "loop",
 }
 
+SIMULATOR_BACKEND_CHOICES: tuple[tuple[str, str], ...] = (
+    ("arthexis", "arthexis"),
+    ("mobilityhouse", "mobilityhouse"),
+)
+
 
 @landing("Charge Point Simulator")
 def cp_simulator(request):
@@ -167,8 +172,15 @@ def cp_simulator(request):
     is_htmx = request.headers.get("HX-Request") == "true"
     message = ""
     dashboard_link: str | None = None
+    session_backend = str(request.session.get("cp_simulator_backend") or "arthexis").strip().lower()
+    backend_values = {value for value, _label in SIMULATOR_BACKEND_CHOICES}
+    selected_backend = session_backend if session_backend in backend_values else "arthexis"
     if request.method == "POST":
         action = request.POST.get("action")
+        requested_backend = str(request.POST.get("simulator_backend") or selected_backend).strip().lower()
+        if requested_backend in backend_values:
+            selected_backend = requested_backend
+            request.session["cp_simulator_backend"] = selected_backend
         repeat_value = _normalize_repeat(request.POST.get("repeat"))
         sim_params = {
             "host": request.POST.get("host") or default_params["host"],
@@ -201,6 +213,7 @@ def cp_simulator(request):
             "password": request.POST.get("password", ""),
             "allow_private_network": bool(getattr(user, "is_staff", False)),
             "ws_scheme": ws_scheme,
+            "simulator_backend": selected_backend,
         }
         simulator_slot = _cast_value(
             request.POST.get("simulator_slot"), int, simulator_slot
@@ -208,7 +221,9 @@ def cp_simulator(request):
         if simulator_slot not in {1, 2}:
             simulator_slot = 1
         action = request.POST.get("action")
-        if action == "stop":
+        if action == "select-backend":
+            message = _("Simulator backend updated")
+        elif action == "stop":
             _stop_simulator(simulator_slot)
             subject, body = format_lcd_lines("SIM STOP", "")
             NetMessage.broadcast(
@@ -257,6 +272,8 @@ def cp_simulator(request):
         "form_params": form_params,
         "simulator_slot": simulator_slot,
         "default_simulator": default_simulator,
+        "selected_backend": selected_backend,
+        "backend_choices": SIMULATOR_BACKEND_CHOICES,
     }
 
     template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
