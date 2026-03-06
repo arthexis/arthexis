@@ -10,7 +10,6 @@ The goal is to lock in two historical fixes that protect unattended workflows:
 from pathlib import Path
 
 
-
 def test_upgrade_script_skips_sudo_priming_for_check_mode() -> None:
     """Keep ``--check`` read-only so CI/automation does not block on sudo prompts."""
 
@@ -36,10 +35,7 @@ def test_upgrade_script_cleans_generated_merge_migrations() -> None:
     script_text = Path("upgrade.sh").read_text(encoding="utf-8")
 
     assert "Removing generated migration" in script_text
-    assert (
-        "^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\\.py$"
-        in script_text
-    )
+    assert "^apps/[^/]+/migrations/[0-9]+_merge_[0-9]{8}_[0-9]{4}\\.py$" in script_text
 
 
 def test_upgrade_script_supports_short_flag_aliases() -> None:
