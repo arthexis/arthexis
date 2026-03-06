@@ -240,9 +240,10 @@ def test_cp_simulator_form_preserves_host_and_port_inputs(logged_in_client):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'id="host1" name="host"' in content
-    host_input_fragment = content.split('id="host1" name="host"', 1)[1].split('>', 1)[0]
-    assert 'hx-preserve' in host_input_fragment
-    assert 'id="ws_port1" name="ws_port"' in content
-    port_input_fragment = content.split('id="ws_port1" name="ws_port"', 1)[1].split('>', 1)[0]
-    assert 'hx-preserve' in port_input_fragment
+    host_tag_match = re.search(r'<input[^>]*id="host1"[^>]*>', content)
+    assert host_tag_match, "Input with id='host1' not found"
+    assert "hx-preserve" in host_tag_match.group(0), "hx-preserve missing from host1 input"
+
+    port_tag_match = re.search(r'<input[^>]*id="ws_port1"[^>]*>', content)
+    assert port_tag_match, "Input with id='ws_port1' not found"
+    assert "hx-preserve" in port_tag_match.group(0), "hx-preserve missing from ws_port1 input"
