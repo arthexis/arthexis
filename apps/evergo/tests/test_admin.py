@@ -769,6 +769,47 @@ def test_evergo_order_admin_change_view_has_process_order_button_and_flow_link(a
 
 
 @pytest.mark.django_db
+def test_evergo_order_admin_change_form_process_order_button_redirects_to_flow(admin_client):
+    """Regression: posting the change form with Process Order should redirect to the flow view."""
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-admin-order-process-change-form",
+        email="suite-admin-order-process-change-form@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-process-change-form@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=6602,
+        order_number="SO-6602",
+        status_name="Programado",
+        site_name="Brand",
+    )
+
+    change_url = reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    flow_url = reverse("evergo:order-tracking-public", kwargs={"order_id": order.remote_id})
+
+    response = admin_client.post(
+        change_url,
+        data={
+            "user": str(profile.pk),
+            "remote_id": str(order.remote_id),
+            "order_number": order.order_number,
+            "status_name": order.status_name,
+            "site_name": order.site_name,
+            "_action": "process_so_action",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == flow_url
+
+
+@pytest.mark.django_db
 def test_evergo_order_admin_change_view_handles_missing_remote_id(admin_client):
     """Regression: missing remote_id should not break order change page nor Process Order action."""
 
