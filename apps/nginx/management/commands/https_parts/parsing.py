@@ -41,13 +41,17 @@ def _parse_site_domain(candidate: str | None) -> str | None:
     if normalized.startswith("-"):
         raise CommandError("--site must include a valid hostname or URL.")
 
-    if not _is_valid_public_hostname(normalized):
-        raise CommandError("--site must include a valid hostname or URL.")
+    ip_candidate = normalized
+    if ip_candidate.startswith("[") and ip_candidate.endswith("]"):
+        ip_candidate = ip_candidate[1:-1]
 
     try:
-        parsed_ip = ipaddress.ip_address(normalized)
+        parsed_ip = ipaddress.ip_address(ip_candidate)
     except ValueError:
         parsed_ip = None
+
+    if parsed_ip is None and not _is_valid_public_hostname(normalized):
+        raise CommandError("--site must include a valid hostname or URL.")
 
     if parsed_ip is not None and parsed_ip.is_loopback:
         raise CommandError("--site requires a public host. Use --local for local development.")

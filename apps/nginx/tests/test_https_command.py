@@ -249,6 +249,7 @@ def test_https_site_rejects_invalid_hostname_characters():
         call_command("https", "--site", "[example.com; return 301 http://evil.com;]")
 
 
+@pytest.mark.django_db
 def test_https_site_rejects_loopback_host():
     """`--site` should reject localhost/loopback targets and direct users to --local."""
 

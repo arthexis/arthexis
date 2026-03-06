@@ -44,14 +44,19 @@ def run_tests(extra_args: list[str] | None = None) -> int:
     process: ProcessLike = subprocess.Popen(command, cwd=BASE_DIR)
     try:
         return_code = process.wait()
-    except KeyboardInterrupt:
+    except KeyboardInterrupt as interrupted_error:
         print(f"{PREFIX} Interrupted. Stopping pytest process...")
         process.terminate()
         try:
             process.wait()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as second_interrupt:
+            if second_interrupt is interrupted_error:
+                return 130
             process.kill()
-            process.wait()
+            try:
+                process.wait()
+            except KeyboardInterrupt:
+                return 130
         return 130
 
     if return_code == 0:

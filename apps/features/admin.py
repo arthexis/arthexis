@@ -272,7 +272,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         try:
             feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
             with transaction.atomic():
-                feature_manager.update(is_seed_data=False)
+                feature_manager.update(is_seed_data=False, is_enabled=False)
                 feature_manager.all().delete()
                 call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
         except CommandError as exc:

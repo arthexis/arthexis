@@ -39,6 +39,7 @@ def test_test_server_subcommand_does_not_require_vscode_cli(monkeypatch) -> None
     assert called["argv"] == ["--interval", "1.5", "--debounce", "0.5", "--latest"]
 
 
+@pytest.mark.django_db
 def test_discover_subcommand_refreshes_suite_tests(monkeypatch) -> None:
     """Regression: ``test discover`` should replace persisted suite metadata."""
 

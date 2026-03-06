@@ -300,6 +300,7 @@ def test_feature_admin_from_app_filter_uses_admin_queryset_scope(rf):
         source=Feature.Source.MAINSTREAM,
         main_app=deleted_app,
         is_seed_data=True,
+        is_enabled=False,
     )
     Feature.objects.create(
         slug="active-feature",
