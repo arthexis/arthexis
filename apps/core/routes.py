@@ -3,6 +3,8 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
+from config.admin_urls import admin_route
+
 from apps.core import views as core_views
 from apps.core.admindocs import (
     CommandsView,
@@ -13,7 +15,7 @@ from apps.core.admindocs import (
 
 ROOT_URLPATTERNS = [
     path(
-        "admin/doc/commands/",
+        admin_route("doc/commands/"),
         RedirectView.as_view(pattern_name="django-admindocs-commands"),
     ),
     path(
@@ -22,7 +24,7 @@ ROOT_URLPATTERNS = [
         name="django-admindocs-commands",
     ),
     path(
-        "admin/doc/model-graphs/",
+        admin_route("doc/model-graphs/"),
         ModelGraphIndexView.as_view(),
         name="django-admindocs-model-graphs",
     ),
@@ -41,27 +43,27 @@ ROOT_URLPATTERNS = [
         name="django-admindocs-models-detail",
     ),
     path(
-        "admin/doc/",
+        admin_route("doc/"),
         RedirectView.as_view(pattern_name="django-admindocs-docroot"),
     ),
     path("version/", core_views.version_info, name="version-info"),
     path(
-        "admin/core/releases/<int:pk>/<str:action>/",
+        admin_route("core/releases/<int:pk>/<str:action>/"),
         core_views.release_progress,
         name="release-progress",
     ),
     path(
-        "admin/core/odoo-products/",
+        admin_route("core/odoo-products/"),
         core_views.odoo_products,
         name="odoo-products",
     ),
     path(
-        "admin/core/odoo-quote-report/",
+        admin_route("core/odoo-quote-report/"),
         core_views.odoo_quote_report,
         name="odoo-quote-report",
     ),
     path(
-        "admin/request-temp-password/",
+        admin_route("request-temp-password/"),
         core_views.request_temp_password,
         name="admin-request-temp-password",
     ),
