@@ -181,37 +181,34 @@ def test_user_story_submit_is_post_only(client):
     assert rejected.status_code == 405
 
 
-def test_feedback_copy_details_are_limited_to_staff(user, staff_user):
+@pytest.mark.parametrize(
+    ("user_fixture", "expected_flag"),
+    [
+        (None, "0"),
+        ("user", "0"),
+        ("staff_user", "1"),
+    ],
+)
+def test_feedback_copy_details_are_limited_to_staff(request, user_fixture, expected_flag):
     """Regression: feedback copy behavior should only include full details for staff users."""
 
     request_factory = RequestFactory()
+    req = request_factory.get("/")
+    req.user = request.getfixturevalue(user_fixture) if user_fixture else AnonymousUser()
 
-    anonymous_request = request_factory.get("/")
-    anonymous_request.user = AnonymousUser()
-    anonymous_html = render_to_string(
+    admin_html = render_to_string(
         "admin/includes/user_story_feedback.html",
-        {"request": anonymous_request, "user_story_attachment_limit": 2},
-        request=anonymous_request,
+        {"request": req, "user_story_attachment_limit": 2},
+        request=req,
     )
-    assert "data-copy-staff-details=\"0\"" in anonymous_html
+    assert f'data-copy-staff-details="{expected_flag}"' in admin_html
 
-    user_request = request_factory.get("/")
-    user_request.user = user
-    user_html = render_to_string(
-        "admin/includes/user_story_feedback.html",
-        {"request": user_request, "user_story_attachment_limit": 2},
-        request=user_request,
+    public_html = render_to_string(
+        "pages/base.html",
+        {"request": req},
+        request=req,
     )
-    assert "data-copy-staff-details=\"0\"" in user_html
-
-    staff_request = request_factory.get("/")
-    staff_request.user = staff_user
-    staff_html = render_to_string(
-        "admin/includes/user_story_feedback.html",
-        {"request": staff_request, "user_story_attachment_limit": 2},
-        request=staff_request,
-    )
-    assert "data-copy-staff-details=\"1\"" in staff_html
+    assert f'data-copy-staff-details="{expected_flag}"' in public_html
 
 
 def test_release_checklist_requires_staff(client, user, staff_user):
