@@ -5,8 +5,9 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.core.entity import Entity
@@ -33,6 +34,12 @@ class ClassificationTag(Entity):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(auto_dispatch=False) | models.Q(dispatch_route__gt=""),
+                name="classification_dispatch_route_required_when_auto_dispatch",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         """Return a human-readable label."""
@@ -80,6 +87,21 @@ class ImageClassifierModel(Entity):
 
     class Meta:
         ordering = ["-is_selected", "name", "version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["model_type"],
+                condition=models.Q(is_selected=True, is_deleted=False),
+                name="classification_unique_selected_model_per_type",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(is_selected=False)
+                    | models.Q(status="ready")
+                    | models.Q(is_deleted=True)
+                ),
+                name="classification_selected_model_must_be_ready",
+            ),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         """Return a human-readable label."""
@@ -112,9 +134,14 @@ class ImageClassifierModel(Entity):
         self.full_clean()
         if self.is_selected and self.promoted_at is None:
             self.promoted_at = timezone.now()
-        super().save(*args, **kwargs)
-        if self.is_selected:
-            type(self).objects.exclude(pk=self.pk).filter(is_selected=True).update(is_selected=False)
+        with transaction.atomic():
+            if self.is_selected:
+                type(self).objects.select_for_update().filter(
+                    model_type=self.model_type,
+                    is_selected=True,
+                    is_deleted=False,
+                ).exclude(pk=self.pk).update(is_selected=False)
+            super().save(*args, **kwargs)
 
 
 class TrainingRun(Entity):
@@ -223,7 +250,12 @@ class ProductModelAssignment(Entity):
         default=False,
         help_text="Use this classifier by default for this product.",
     )
-    min_confidence = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.5000"))
+    min_confidence = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.5000"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -232,7 +264,17 @@ class ProductModelAssignment(Entity):
             models.UniqueConstraint(
                 fields=["product", "classifier"],
                 name="classification_unique_product_classifier_assignment",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["product"],
+                condition=models.Q(is_default=True, is_deleted=False),
+                name="classification_unique_default_classifier_per_product",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(min_confidence__gte=Decimal("0"))
+                & models.Q(min_confidence__lte=Decimal("1")),
+                name="classification_product_assignment_min_confidence_between_zero_and_one",
+            ),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
@@ -270,15 +312,28 @@ class ContentClassification(Entity):
         related_name="classifications",
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.0000"))
+    confidence = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     route = models.CharField(max_length=120, blank=True)
     is_machine_generated = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict, blank=True)
-    classified_at = models.DateTimeField(auto_now_add=True)
+    queued_at = models.DateTimeField(default=timezone.now, editable=False)
+    classified_at = models.DateTimeField(null=True, blank=True)
     dispatched_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ["-classified_at"]
+        ordering = ["-queued_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(confidence__gte=Decimal("0"))
+                & models.Q(confidence__lte=Decimal("1")),
+                name="classification_content_confidence_between_zero_and_one",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         """Return a human-readable label."""

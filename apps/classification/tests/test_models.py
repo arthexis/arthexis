@@ -15,7 +15,6 @@ from apps.classification.models import (
 from apps.classification.services import apply_model_predictions
 from apps.media.models import MediaBucket, MediaFile
 
-
 @pytest.mark.django_db
 def test_selected_classifier_must_be_ready():
     """Selected classifiers must be in a ready state."""
@@ -28,7 +27,6 @@ def test_selected_classifier_must_be_ready():
             status=ImageClassifierModel.Status.DRAFT,
             is_selected=True,
         )
-
 
 @pytest.mark.django_db
 def test_selecting_classifier_demotes_previous_selection():
@@ -55,7 +53,6 @@ def test_selecting_classifier_demotes_previous_selection():
     assert first.is_selected is False
     assert second.is_selected is True
 
-
 @pytest.mark.django_db
 def test_media_creation_queues_pending_classification():
     """Creating a media file should enqueue a pending classification record."""
@@ -80,6 +77,28 @@ def test_media_creation_queues_pending_classification():
     classification = ContentClassification.objects.get(media_file=media)
     assert classification.status == ContentClassification.Status.PENDING
 
+@pytest.mark.django_db
+def test_media_creation_does_not_queue_non_image_file():
+    """Non-image media should not be enqueued for image classification."""
+
+    ImageClassifierModel.objects.create(
+        slug="general-v1",
+        name="General",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+    )
+    bucket = MediaBucket.objects.create(name="Uploads")
+
+    media = MediaFile.objects.create(
+        bucket=bucket,
+        file="protocols/buckets/example/doc-a.pdf",
+        original_name="doc-a.pdf",
+        content_type="application/pdf",
+        size=123,
+    )
+
+    assert ContentClassification.objects.filter(media_file=media).count() == 0
 
 @pytest.mark.django_db
 def test_apply_predictions_sets_dispatch_state_from_tag():
@@ -123,3 +142,39 @@ def test_apply_predictions_sets_dispatch_state_from_tag():
     assert dispatched.route == "security.review"
     assert dispatched.confidence == Decimal("0.9100")
     assert manual.status == ContentClassification.Status.TAGGED
+    assert dispatched.classified_at is not None
+    assert manual.classified_at is not None
+
+@pytest.mark.django_db
+def test_apply_predictions_skips_invalid_confidence_values():
+    """Malformed confidence values should be ignored without failing the batch."""
+
+    classifier = ImageClassifierModel.objects.create(
+        slug="general-v1",
+        name="General",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+    )
+    tag = ClassificationTag.objects.create(slug="safe", name="Safe")
+
+    bucket = MediaBucket.objects.create(name="Uploads")
+    media = MediaFile.objects.create(
+        bucket=bucket,
+        file="protocols/buckets/example/image-c.jpg",
+        original_name="image-c.jpg",
+        content_type="image/jpeg",
+        size=111,
+    )
+
+    records = apply_model_predictions(
+        media,
+        [
+            {"tag": tag.slug, "confidence": "not-a-number"},
+            {"tag": tag.slug, "confidence": "0.80"},
+        ],
+        classifier=classifier,
+    )
+
+    assert len(records) == 1
+    assert records[0].confidence == Decimal("0.8000")
