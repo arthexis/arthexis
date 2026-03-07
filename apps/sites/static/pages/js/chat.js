@@ -172,7 +172,7 @@
       scrollToBottom();
     };
 
-    const appendMessage = (message) => {
+    const appendMessage = (message, { markUnread = true } = {}) => {
       if (!message || typeof message !== 'object') {
         return;
       }
@@ -207,7 +207,9 @@
       item.appendChild(body);
       messages.appendChild(item);
       scrollToBottom();
-      addUnread();
+      if (markUnread) {
+        addUnread();
+      }
     };
 
     const handlePresence = (payload) => {
@@ -345,7 +347,7 @@
             }
             updateSessionHint(sessionId);
             if (Array.isArray(payload.messages)) {
-              payload.messages.forEach((entry) => appendMessage(entry));
+              payload.messages.forEach((entry) => appendMessage(entry, { markUnread: false }));
               if (payload.messages.length === 0) {
                 ensurePlaceholder();
               }
