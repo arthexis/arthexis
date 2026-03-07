@@ -19,6 +19,12 @@ def seed_card_shop_module(apps, schema_editor):
     Application = apps.get_model("app", "Application")
 
     db_alias = schema_editor.connection.alias
+    terminal_role = (
+        NodeRole.objects.using(db_alias).filter(name=TERMINAL_ROLE_NAME).first()
+    )
+
+    if terminal_role is None:
+        return
 
     module, _ = Module.objects.using(db_alias).update_or_create(
         path=CARD_SHOP_MODULE_PATH,
@@ -35,10 +41,8 @@ def seed_card_shop_module(apps, schema_editor):
         },
     )
 
-    terminal_role = NodeRole.objects.using(db_alias).filter(name=TERMINAL_ROLE_NAME).first()
     module.roles.clear()
-    if terminal_role is not None:
-        module.roles.add(terminal_role)
+    module.roles.add(terminal_role)
 
     Landing.objects.using(db_alias).update_or_create(
         module=module,
@@ -77,6 +81,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("modules", "0008_deprecate_charge_points_module_feature"),
+        ("pages", "0002_initial"),
     ]
 
     operations = [
