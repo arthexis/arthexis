@@ -5,8 +5,27 @@
 
 {% block content %}
 {% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
-<div class="container px-3 px-sm-4" data-language-container data-preferred-language="{{ preferred_language }}">
-  <div class="row justify-content-center mt-2 mt-sm-4">
+<div class="container px-3 px-sm-4" data-language-container data-preferred-language="{{ preferred_language }}" data-swipe-prev-url="{{ connector_prev_url }}" data-swipe-next-url="{{ connector_next_url }}">
+    {% if connector_switch_links %}
+  <div class="row justify-content-center mt-3">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <nav aria-label="{% trans "Connector navigation" %}">
+        <div class="nav nav-pills nav-fill gap-2" id="connector-switch-links">
+          {% for item in connector_switch_links %}
+          <a
+            class="nav-link{% if item.active %} active{% endif %}"
+            href="{{ item.url }}"
+            {% if item.active %}aria-current="page"{% endif %}
+          >
+            {{ item.label }}
+          </a>
+          {% endfor %}
+        </div>
+      </nav>
+    </div>
+  </div>
+  {% endif %}
+<div class="row justify-content-center mt-2 mt-sm-4">
     <div class="col-12 col-lg-8 col-xl-6">
       <div class="card shadow-sm border-0 overflow-hidden">
         <div class="card-header">
@@ -254,6 +273,63 @@
       currentIndex = nextIndex;
       currentLang = nextLang;
     }, 30000);
+  }());
+  (function () {
+    const languageContainer = document.querySelector('[data-language-container]');
+    if (!languageContainer) {
+      return;
+    }
+    const prevUrl = (languageContainer.getAttribute('data-swipe-prev-url') || '').trim();
+    const nextUrl = (languageContainer.getAttribute('data-swipe-next-url') || '').trim();
+    if (!prevUrl && !nextUrl) {
+      return;
+    }
+    let touchStartX = null;
+    let touchStartY = null;
+    const horizontalThreshold = 50;
+    const verticalLimit = 80;
+
+    document.addEventListener(
+      'touchstart',
+      (event) => {
+        if (!event.touches || event.touches.length !== 1) {
+          touchStartX = null;
+          touchStartY = null;
+          return;
+        }
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+      },
+      { passive: true }
+    );
+
+    document.addEventListener(
+      'touchend',
+      (event) => {
+        if (touchStartX === null || touchStartY === null) {
+          return;
+        }
+        const changed = event.changedTouches && event.changedTouches[0];
+        if (!changed) {
+          touchStartX = null;
+          touchStartY = null;
+          return;
+        }
+        const deltaX = changed.clientX - touchStartX;
+        const deltaY = Math.abs(changed.clientY - touchStartY);
+        touchStartX = null;
+        touchStartY = null;
+        if (Math.abs(deltaX) < horizontalThreshold || deltaY > verticalLimit) {
+          return;
+        }
+        if (deltaX < 0 && nextUrl) {
+          window.location.assign(nextUrl);
+        } else if (deltaX > 0 && prevUrl) {
+          window.location.assign(prevUrl);
+        }
+      },
+      { passive: true }
+    );
   }());
   (function () {
     let reloadTimer = window.setInterval(() => {

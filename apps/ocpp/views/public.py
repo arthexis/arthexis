@@ -5,6 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404
+from django.shortcuts import redirect
 from django.utils import translation
 from django.utils.translation import gettext as _
 
@@ -101,6 +102,23 @@ def charger_page(request, cid, connector=None):
     )
     if access_response is not None:
         return access_response
+
+    if connector is None and charger.connector_id is None:
+        default_connector = next(
+            (
+                sibling
+                for sibling in _connector_set(charger)
+                if sibling.connector_id is not None and sibling.is_visible_to(request.user)
+            ),
+            None,
+        )
+        if default_connector is not None:
+            return redirect(
+                "ocpp:charger-page-connector",
+                cid,
+                default_connector.connector_slug,
+            )
+
     connectors = _connector_set(charger)
     rfid_cache: dict[str, dict[str, str | None]] = {}
     overview = _connector_overview(
@@ -184,6 +202,25 @@ def charger_page(request, cid, connector=None):
         }
         for item in overview
     ]
+    connector_switch_links = [
+        item
+        for item in connector_links
+        if item["slug"] != Charger.AGGREGATE_CONNECTOR_SLUG
+    ]
+    connector_prev_url = ""
+    connector_next_url = ""
+    if connector_switch_links:
+        active_index = next(
+            (idx for idx, item in enumerate(connector_switch_links) if item["active"]),
+            0,
+        )
+        if len(connector_switch_links) > 1:
+            connector_prev_url = connector_switch_links[
+                (active_index - 1) % len(connector_switch_links)
+            ]["url"]
+            connector_next_url = connector_switch_links[
+                (active_index + 1) % len(connector_switch_links)
+            ]["url"]
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
@@ -198,6 +235,9 @@ def charger_page(request, cid, connector=None):
             "tx_rfid_details": tx_rfid_details,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
+            "connector_switch_links": connector_switch_links,
+            "connector_prev_url": connector_prev_url,
+            "connector_next_url": connector_next_url,
             "connector_overview": connector_overview,
             "active_connector_count": active_connector_count,
             "status_url": status_url,
