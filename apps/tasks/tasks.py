@@ -67,6 +67,19 @@ def run_scheduled_web_samplers() -> list[int]:
     return executed
 
 
+
+
+@shared_task(name="apps.playwright.tasks.run_scheduled_website_screenshots")
+def run_scheduled_website_screenshots() -> list[int]:
+    """Execute due Playwright website screenshot schedules."""
+
+    from apps.playwright.models import schedule_pending_website_screenshots
+
+    executed = schedule_pending_website_screenshots()
+    if executed:
+        logger.info("Executed %s scheduled website screenshots", len(executed))
+    return executed
+
 @shared_task(name="apps.repos.tasks.report_exception_to_github")
 def report_exception_to_github(payload: dict[str, Any]) -> None:
     """Send exception context to the GitHub issue helper.
