@@ -24,7 +24,6 @@ def build_extension_archive_response(extension: JsExtension) -> HttpResponse:
             )
             bundle.writestr(filename, payload)
 
-    archive.seek(0)
     response = HttpResponse(archive.getvalue(), content_type="application/zip")
 
     raw_name = f"{extension.slug}-{extension.version}.zip"

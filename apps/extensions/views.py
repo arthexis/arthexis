@@ -17,23 +17,22 @@ def _get_enabled_extension(slug: str) -> JsExtension:
 
 def extension_catalog(request: HttpRequest) -> JsonResponse:
     """Return metadata for all enabled extensions."""
-    payload = []
-    for extension in JsExtension.objects.filter(is_enabled=True).order_by("name"):
-        payload.append(
-            {
-                "slug": extension.slug,
-                "name": extension.name,
-                "description": extension.description,
-                "version": extension.version,
-                "manifest_version": extension.manifest_version,
-                "manifest_url": request.build_absolute_uri(
-                    reverse("extensions:manifest", args=[extension.slug])
-                ),
-                "download_url": request.build_absolute_uri(
-                    reverse("extensions:download", args=[extension.slug])
-                ),
-            }
-        )
+    payload = [
+        {
+            "slug": extension.slug,
+            "name": extension.name,
+            "description": extension.description,
+            "version": extension.version,
+            "manifest_version": extension.manifest_version,
+            "manifest_url": request.build_absolute_uri(
+                reverse("extensions:manifest", args=[extension.slug])
+            ),
+            "download_url": request.build_absolute_uri(
+                reverse("extensions:download", args=[extension.slug])
+            ),
+        }
+        for extension in JsExtension.objects.filter(is_enabled=True).order_by("name")
+    ]
     return JsonResponse({"extensions": payload})
 
 

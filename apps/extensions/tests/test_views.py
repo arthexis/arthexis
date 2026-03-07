@@ -150,7 +150,7 @@ def test_extension_catalog_and_download_archive(client) -> None:
 
     with zipfile.ZipFile(io.BytesIO(download_response.content)) as archive:
         names = sorted(archive.namelist())
-        assert names == ["content.js", "manifest.json", "options.html"]
+        assert names == ["content.js", "manifest.json", "options.html", "options.js"]
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["name"] == "GitHub Resolve Open Comments"
 
@@ -163,3 +163,5 @@ def test_github_seeded_extension_templates_expose_bulk_actions() -> None:
     assert "Resolve all open comments" in str(payload["content_script"])
     assert "Resolve all with comment" in str(payload["content_script"])
     assert "Default comment text" in str(payload["options_page"])
+    assert '<script src="options.js"></script>' in str(payload["options_page"])
+    assert "loadSettings" in JsExtension.github_resolve_comments_options_script()
