@@ -6,6 +6,7 @@ from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Iterable
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
@@ -75,6 +76,30 @@ class Command(BaseCommand):
                 "chargers."
             ),
         )
+        parser.add_argument(
+            "--ws-auth-username",
+            dest="ws_auth_username",
+            help=(
+                "Username used for HTTP Basic websocket authentication. Requires "
+                "--ws-auth-password and at least one charger selector."
+            ),
+        )
+        parser.add_argument(
+            "--ws-auth-password",
+            dest="ws_auth_password",
+            help=(
+                "Password for --ws-auth-username. The user is created when missing "
+                "and password is updated when present."
+            ),
+        )
+        parser.add_argument(
+            "--ws-auth-clear",
+            action="store_true",
+            help=(
+                "Remove HTTP Basic websocket protection from the matched chargers "
+                "(clears both user and group rules)."
+            ),
+        )
 
     def handle(self, *args, **options):
         serial = options.get("serial")
@@ -83,9 +108,23 @@ class Command(BaseCommand):
         sessions = options.get("sessions")
         enable_rfid = options.get("rfid_enable")
         disable_rfid = options.get("rfid_disable")
+        ws_auth_username = (options.get("ws_auth_username") or "").strip()
+        ws_auth_password = options.get("ws_auth_password")
+        ws_auth_clear = options.get("ws_auth_clear")
 
         if enable_rfid and disable_rfid:
             raise CommandError("Use either --rfid-enable or --rfid-disable, not both.")
+
+        if ws_auth_username and not ws_auth_password:
+            raise CommandError("--ws-auth-username requires --ws-auth-password.")
+
+        if ws_auth_password and not ws_auth_username:
+            raise CommandError("--ws-auth-password requires --ws-auth-username.")
+
+        if ws_auth_clear and ws_auth_username:
+            raise CommandError(
+                "Use either --ws-auth-clear or --ws-auth-username/--ws-auth-password, not both."
+            )
 
         if tail is not None and tail <= 0:
             raise CommandError("--tail requires a positive number of log entries.")
@@ -141,6 +180,11 @@ class Command(BaseCommand):
                 "RFID toggles require selecting at least one charger with --sn and/or --cp."
             )
 
+        if (ws_auth_username or ws_auth_clear) and not (serial or cp_raw):
+            raise CommandError(
+                "Websocket auth changes require selecting at least one charger with --sn and/or --cp."
+            )
+
         chargers = list(queryset.order_by("charger_id", "connector_id"))
 
         if not chargers:
@@ -157,6 +201,36 @@ class Command(BaseCommand):
                 )
             )
             # Refresh to reflect the updated state for output below.
+            chargers = list(
+                Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
+                    "location", "manager_node"
+                )
+            )
+
+        if ws_auth_username:
+            ws_auth_user = self._upsert_ws_auth_user(
+                username=ws_auth_username,
+                password=ws_auth_password,
+            )
+            updated = queryset.update(ws_auth_user=ws_auth_user, ws_auth_group=None)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Enabled websocket auth on {updated} charger(s) with user '{ws_auth_username}'."
+                )
+            )
+            chargers = list(
+                Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
+                    "location", "manager_node"
+                )
+            )
+
+        if ws_auth_clear:
+            updated = queryset.update(ws_auth_user=None, ws_auth_group=None)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Cleared websocket auth protection on {updated} charger(s)."
+                )
+            )
             chargers = list(
                 Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
                     "location", "manager_node"
@@ -669,6 +743,27 @@ class Command(BaseCommand):
         if heartbeat and meter_ts:
             return max(heartbeat, meter_ts)
         return heartbeat or meter_ts
+
+    def _upsert_ws_auth_user(self, *, username: str, password: str):
+        """Create or update the websocket HTTP Basic user for charger protection."""
+
+        user_model = get_user_model()
+        create_defaults: dict[str, object] = {}
+        if hasattr(user_model, "is_active"):
+            create_defaults["is_active"] = True
+
+        user, created = user_model.objects.get_or_create(
+            username=username,
+            defaults=create_defaults,
+        )
+
+        user.set_password(password)
+        update_fields = ["password"]
+        if created and hasattr(user, "is_active"):
+            user.is_active = True
+            update_fields.append("is_active")
+        user.save(update_fields=update_fields)
+        return user
 
     def _last_meter_value_timestamp(self, payload: dict | None) -> datetime | None:
         if not payload:
