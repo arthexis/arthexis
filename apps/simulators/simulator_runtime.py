@@ -301,13 +301,11 @@ def resolve_simulator_backend(
                 "Mobility House runtime requires the optional 'ocpp' package. "
                 "v2 backend unavailable; using legacy simulator."
             )
-        elif not mobility_house_enabled:
+        else:
             reason = (
                 "Mobility House runtime is disabled via suite feature parameter. "
                 "Using Arthexis backend."
             )
-        else:
-            reason = "Using Arthexis backend."
         return SimulatorBackendSelection(
             use_mobility_house=False,
             backend="legacy",

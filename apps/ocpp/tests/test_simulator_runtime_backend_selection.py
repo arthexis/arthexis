@@ -37,11 +37,7 @@ def test_backend_override_falls_back_when_mobilityhouse_unavailable(
 ) -> None:
     """Selecting Mobility House should fall back when optional dependency is absent."""
 
-    def _param(_slug: str, key: str, *, fallback: str = "") -> str:
-        del fallback
-        return "enabled" if key == simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY else "enabled"
-
-    monkeypatch.setattr(simulator_runtime, "get_feature_parameter", _param)
+    monkeypatch.setattr(simulator_runtime, "get_feature_parameter", lambda *args, **kwargs: "enabled")
     monkeypatch.setattr(simulator_runtime, "find_spec", lambda _: None)
 
     selection = simulator_runtime.resolve_simulator_backend(preferred_backend="mobilityhouse")
