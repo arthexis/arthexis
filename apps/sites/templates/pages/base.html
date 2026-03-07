@@ -371,20 +371,22 @@
               {% include 'pages/includes/user_story_contact_optin_checkbox.html' with checkbox_wrapper_classes='user-story-chat-optin user-story-contact-optin' %}
             </div>
           {% else %}
-            <div class="mb-3">
-              <label for="user-story-name" class="form-label">{% trans 'Email address' %}</label>
-              <input
-                type="email"
-                class="form-control"
-                id="user-story-name"
-                name="name"
-                maxlength="40"
-                placeholder="{% trans 'name@example.com' %}"
-                autocomplete="email"
-                inputmode="email"
-                required
-              >
-              <div class="form-text">{% trans 'We may contact you via email if your feedback is utilized.' %}</div>
+            <div class="user-story-contact-row mb-3">
+              <div class="user-story-contact-name">
+                <label for="user-story-name" class="form-label">{% trans 'Email address' %}</label>
+                <input
+                  type="email"
+                  class="form-control"
+                  id="user-story-name"
+                  name="name"
+                  maxlength="40"
+                  placeholder="{% trans 'name@example.com' %}"
+                  autocomplete="email"
+                  inputmode="email"
+                  required
+                >
+              </div>
+              {% include 'pages/includes/user_story_contact_optin_checkbox.html' with checkbox_wrapper_classes='user-story-chat-optin user-story-contact-optin' %}
             </div>
           {% endif %}
             <div class="mb-3">
@@ -442,9 +444,7 @@
                 </div>
               {% endif %}
             </div>
-            {% if not request.user.is_authenticated %}
-              {% include 'pages/includes/user_story_contact_optin_checkbox.html' with checkbox_wrapper_classes='user-story-chat-optin mb-3' %}
-            {% endif %}
+
             <button type="submit" class="btn btn-primary w-100 py-2">
               {% trans 'Submit feedback' %}
             </button>

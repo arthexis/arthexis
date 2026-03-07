@@ -482,11 +482,14 @@ body.user-story-open {
 
 
 .user-story-chat-optin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   padding-inline: 0.35rem;
 }
 
 .user-story-chat-optin .form-check-input {
-  margin-inline: 0.2rem;
+  margin: 0;
 }
 
 .user-story-contact-row {
@@ -503,15 +506,25 @@ body.user-story-open {
 .user-story-contact-optin {
   margin-bottom: 0.4rem;
   white-space: nowrap;
+  justify-self: end;
+}
+
+@media (max-width: 575.98px) {
+  .user-story-contact-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .user-story-contact-optin {
+    justify-self: start;
+    margin-bottom: 0;
+    white-space: normal;
+  }
 }
 
 @media (min-width: 768px) {
   .user-story-contact-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .user-story-contact-optin {
-    justify-self: end;
   }
 }
 
