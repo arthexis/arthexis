@@ -17,7 +17,6 @@
 
 {% block content %}
   <div id="content-main">
-    <h1>{{ title }}</h1>
     <form method="post" novalidate class="evergo-load-customers-form">
       {% csrf_token %}
       <input type="hidden" name="load_mode" id="id_load_mode" value="filtered" />
@@ -49,6 +48,15 @@
           </p>
           {% if form.raw_queries.help_text %}
             <div class="help">{{ form.raw_queries.help_text }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-row">
+          {{ form.next_view.errors }}
+          {{ form.next_view.label_tag }}
+          {{ form.next_view }}
+          {% if form.next_view.help_text %}
+            <div class="help">{{ form.next_view.help_text }}</div>
           {% endif %}
         </div>
       </fieldset>

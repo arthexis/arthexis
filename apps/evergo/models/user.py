@@ -11,7 +11,7 @@ import uuid
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils import timezone
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
@@ -299,7 +299,7 @@ class EvergoUser(Profile):
                 for item in data:
                     if not isinstance(item, dict) or not self._is_assigned_to_user(item):
                         continue
-                    was_created = self._upsert_order(item)
+                    was_created, _ = self._upsert_order(item)
                     self._upsert_customer_from_order(item)
                     if was_created:
                         created += 1
@@ -334,6 +334,8 @@ class EvergoUser(Profile):
         orders_created = 0
         orders_updated = 0
         placeholders_created = 0
+        loaded_customer_ids: set[int] = set()
+        loaded_order_ids: set[int] = set()
 
         with requests.Session() as session:
             self._login_session(session=session, timeout=timeout)
@@ -350,10 +352,14 @@ class EvergoUser(Profile):
                     unresolved.append(so_number)
                     continue
 
-                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_inc, created_inc, updated_inc, customer_ids, order_ids = self._process_order_payloads(
+                    order_payloads
+                )
                 customers_loaded += customers_inc
                 orders_created += created_inc
                 orders_updated += updated_inc
+                loaded_customer_ids.update(customer_ids)
+                loaded_order_ids.update(order_ids)
 
             lookup_names = [""] if load_all_customers else customer_names
             for customer_name in lookup_names:
@@ -367,10 +373,14 @@ class EvergoUser(Profile):
                         unresolved.append(customer_name)
                     continue
 
-                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_inc, created_inc, updated_inc, customer_ids, order_ids = self._process_order_payloads(
+                    order_payloads
+                )
                 customers_loaded += customers_inc
                 orders_created += created_inc
                 orders_updated += updated_inc
+                loaded_customer_ids.update(customer_ids)
+                loaded_order_ids.update(order_ids)
 
         return {
             "sales_orders": sales_orders,
@@ -380,6 +390,8 @@ class EvergoUser(Profile):
             "orders_updated": orders_updated,
             "placeholders_created": placeholders_created,
             "unresolved": unresolved,
+            "loaded_customer_ids": sorted(loaded_customer_ids),
+            "loaded_order_ids": sorted(loaded_order_ids),
         }
 
 
@@ -393,6 +405,69 @@ class EvergoUser(Profile):
                 method="GET",
                 url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
             )
+
+    def reload_order_from_remote(self, *, order: EvergoOrder, timeout: int = 20) -> EvergoOrder:
+        """Clear one cached order snapshot and fetch the latest data from Evergo."""
+        if order.user_id != self.pk:
+            raise EvergoAPIError("Order does not belong to this Evergo profile.")
+        if order.remote_id is None:
+            raise EvergoAPIError("Order has no remote ID and cannot be reloaded from Evergo.")
+
+        payload = self.fetch_order_detail(order_id=order.remote_id, timeout=timeout)
+        normalized_payload = self._extract_order_payload(payload)
+        if normalized_payload is None:
+            raise EvergoAPIError("Evergo order detail response did not include a valid order payload.")
+
+        remote_id = order.remote_id
+        with transaction.atomic():
+            order.delete()
+            self._upsert_order(normalized_payload)
+            self._upsert_customer_from_order(normalized_payload)
+        return EvergoOrder.objects.get(user=self, remote_id=remote_id)
+
+    def reload_customer_from_remote(self, *, customer: EvergoCustomer, timeout: int = 20) -> EvergoCustomer:
+        """Clear one cached customer snapshot and fetch fresh payload data from Evergo."""
+        if customer.user_id != self.pk:
+            raise EvergoAPIError("Customer does not belong to this Evergo profile.")
+
+        if customer.latest_order and customer.latest_order.remote_id is not None:
+            refreshed_order = self.reload_order_from_remote(order=customer.latest_order, timeout=timeout)
+            refreshed_customer = EvergoCustomer.objects.filter(user=self, latest_order=refreshed_order).order_by("pk").first()
+            if refreshed_customer is None:
+                raise EvergoAPIError("Reload succeeded but no customer snapshot was linked to the refreshed order.")
+            return refreshed_customer
+
+        queries = [token for token in [customer.latest_so, customer.name] if token]
+        if not queries:
+            raise EvergoAPIError("Customer has no lookup data (SO or name) for Evergo reload.")
+
+        customer_name = customer.name
+        with transaction.atomic():
+            customer.delete()
+            summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
+            if summary["customers_loaded"] <= 0:
+                raise EvergoAPIError("Evergo did not return data for the selected customer.")
+
+            refreshed_customer = EvergoCustomer.objects.filter(
+                user=self,
+                name__iexact=customer_name,
+            ).order_by("-latest_order_updated_at", "pk").first()
+            if refreshed_customer is None:
+                raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
+            return refreshed_customer
+
+    @staticmethod
+    def _extract_order_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Normalize Evergo order-detail responses into one order payload dictionary."""
+        if not isinstance(payload, dict):
+            return None
+        if isinstance(payload.get("data"), dict):
+            return payload["data"]
+        if isinstance(payload.get("orden"), dict):
+            return payload["orden"]
+        if to_int(payload.get("id")) is not None:
+            return payload
+        return None
 
     def fetch_charger_brand_options(self, *, timeout: int = 20) -> list[str]:
         """Build charger-brand options from the user's currently assigned orders."""
@@ -673,22 +748,30 @@ class EvergoUser(Profile):
             page += 1
         return rows
 
-    def _process_order_payloads(self, order_payloads: list[dict[str, Any]]) -> tuple[int, int, int]:
-        """Upsert orders/customers and return created/updated/customer counters."""
+    def _process_order_payloads(
+        self, order_payloads: list[dict[str, Any]]
+    ) -> tuple[int, int, int, set[int], set[int]]:
+        """Upsert orders/customers and return counters plus loaded record IDs."""
         customers_loaded = 0
         orders_created = 0
         orders_updated = 0
+        loaded_customer_ids: set[int] = set()
+        loaded_order_ids: set[int] = set()
 
         for payload in order_payloads:
-            was_created = self._upsert_order(payload)
-            customer_created = self._upsert_customer_from_order(payload)
+            was_created, order = self._upsert_order(payload)
+            customer_created, customer = self._upsert_customer_from_order(payload)
+            loaded_order_ids.add(order.pk)
+            if customer is not None:
+                loaded_customer_ids.add(customer.pk)
+
             customers_loaded += int(customer_created)
             if was_created:
                 orders_created += 1
             else:
                 orders_updated += 1
 
-        return customers_loaded, orders_created, orders_updated
+        return customers_loaded, orders_created, orders_updated, loaded_customer_ids, loaded_order_ids
 
     def _ensure_placeholder_order(self, *, so_number: str) -> EvergoOrder:
         """Create/update a provisional local order row when SO is not found upstream."""
@@ -704,12 +787,12 @@ class EvergoUser(Profile):
         )
         return order
 
-    def _upsert_customer_from_order(self, payload: dict[str, Any]) -> bool:
+    def _upsert_customer_from_order(self, payload: dict[str, Any]) -> tuple[bool, EvergoCustomer | None]:
         """Create/update a customer snapshot derived from one order payload."""
         customer_payload = payload.get("cliente")
         install_payload = payload.get("orden_instalacion")
         if not isinstance(customer_payload, dict) and not isinstance(install_payload, dict):
-            return False
+            return False, None
 
         customer_id = to_int(customer_payload.get("id")) if isinstance(customer_payload, dict) else None
         customer_name = ""
@@ -769,15 +852,15 @@ class EvergoUser(Profile):
         }
 
         if customer_id is not None:
-            _, created = EvergoCustomer.objects.update_or_create(
+            customer, created = EvergoCustomer.objects.update_or_create(
                 user=self,
                 remote_id=customer_id,
                 defaults=defaults,
             )
-            return created
+            return created, customer
 
         if not customer_name:
-            return False
+            return False, None
 
         existing_customer = (
             EvergoCustomer.objects.filter(user=self, remote_id__isnull=True, name=customer_name)
@@ -788,10 +871,10 @@ class EvergoUser(Profile):
             for field_name, value in defaults.items():
                 setattr(existing_customer, field_name, value)
             existing_customer.save(update_fields=[*defaults.keys(), "refreshed_at"])
-            return False
+            return False, existing_customer
 
-        EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
-        return True
+        customer = EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
+        return True, customer
 
     def _login_session(self, *, session: requests.Session, timeout: int) -> None:
         """Authenticate a requests session against Evergo."""
@@ -898,7 +981,7 @@ class EvergoUser(Profile):
         coordinator_id = to_int(installer.get("idCoordinador"))
         return self.evergo_user_id in {engineer_id, coordinator_id}
 
-    def _upsert_order(self, payload: dict[str, Any]) -> bool:
+    def _upsert_order(self, payload: dict[str, Any]) -> tuple[bool, EvergoOrder]:
         """Create or update an `EvergoOrder` from raw Evergo API data."""
         remote_id = to_int(payload.get("id"))
         if remote_id is None:
@@ -981,4 +1064,4 @@ class EvergoUser(Profile):
             )
 
         order.sync_dynamic_field_values(payload)
-        return created
+        return created, order

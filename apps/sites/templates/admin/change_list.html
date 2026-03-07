@@ -33,7 +33,7 @@
   {% favorite_map as favorites_map %}
   {% favorite_from_map favorites_map ct_id as fav %}
   <div class="content-title-with-favorite">
-    <h1>{{ title }}</h1>
+    <div class="content-title-text">{{ title }}</div>
     {% if ct_id %}
       <a
         href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"

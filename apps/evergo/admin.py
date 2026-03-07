@@ -22,10 +22,26 @@ from .forms import EvergoLoadCustomersForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
+def _parse_selected_ids_query_param(request) -> list[int]:
+    """Return validated integer IDs from a comma-separated ``id__in`` query parameter."""
+    raw_ids = (request.GET.get("id__in") or request.GET.get("ids") or "").strip()
+    if not raw_ids:
+        return []
+
+    selected_ids: list[int] = []
+    for value in raw_ids.split(","):
+        try:
+            selected_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return selected_ids
+
+
 def _load_customers_admin_view(admin_instance, request):
     """Render and process the shared Evergo customer-loading wizard."""
     opts = admin_instance.model._meta
     changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+    orders_changelist_url = reverse("admin:evergo_evergoorder_changelist")
 
     if request.method == "POST":
         if not admin_instance.has_change_permission(request):
@@ -73,7 +89,20 @@ def _load_customers_admin_view(admin_instance, request):
                         % {"items": ", ".join(summary["unresolved"])},
                         level=messages.WARNING,
                     )
-                return HttpResponseRedirect(changelist_url)
+                next_view = form.cleaned_data.get("next_view") or "orders"
+                selected_customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])]
+                selected_order_ids = [str(value) for value in summary.get("loaded_order_ids", [])]
+
+                if next_view == "customers":
+                    destination_url = changelist_url
+                    selected_ids = selected_customer_ids
+                else:
+                    destination_url = orders_changelist_url
+                    selected_ids = selected_order_ids
+
+                if selected_ids:
+                    return HttpResponseRedirect(f"{destination_url}?id__in={','.join(selected_ids)}")
+                return HttpResponseRedirect(destination_url)
     else:
         form = EvergoLoadCustomersForm(request_user=request.user)
 
@@ -216,7 +245,8 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     change_form_template = "django_object_actions/change_form.html"
     changelist_actions = ("load_orders_wizard",)
-    change_actions = ("process_so_action",)
+    actions = ("reload_selected_from_evergo",)
+    change_actions = ("process_so_action", "reload_from_evergo_action")
 
     list_display = (
         "order_number_link",
@@ -379,6 +409,9 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
         queryset = super().get_queryset(request).prefetch_related(
             Prefetch("customers", queryset=EvergoCustomer.objects.order_by("pk"))
         )
+        selected_ids = _parse_selected_ids_query_param(request)
+        if selected_ids:
+            queryset = queryset.filter(pk__in=selected_ids)
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
@@ -439,6 +472,51 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     process_so_action.label = PROCESS_ORDER_LABEL
     process_so_action.short_description = PROCESS_ORDER_LABEL
+
+    def _reload_order_from_evergo(self, request, order):
+        """Delete stale order data and rehydrate the order directly from Evergo."""
+        try:
+            refreshed_order = order.user.reload_order_from_remote(order=order)
+        except EvergoAPIError as exc:
+            self.message_user(
+                request,
+                _("Failed to reload order %(order)s from Evergo: %(error)s")
+                % {"order": str(order), "error": exc},
+                level=messages.ERROR,
+            )
+            return None
+
+        self.message_user(
+            request,
+            _("Reloaded order %(order)s from Evergo.") % {"order": str(order)},
+            level=messages.SUCCESS,
+        )
+        return refreshed_order
+
+    def reload_selected_from_evergo(self, request, queryset):
+        """Admin bulk action that refreshes selected orders from Evergo API payloads."""
+        reloaded = 0
+        for order in queryset:
+            if self._reload_order_from_evergo(request, order):
+                reloaded += 1
+
+        if reloaded:
+            self.message_user(
+                request,
+                _("Evergo reload finished. Orders refreshed: %(count)s") % {"count": reloaded},
+                level=messages.SUCCESS,
+            )
+
+    reload_selected_from_evergo.short_description = _("Reload selected from Evergo")
+
+    def reload_from_evergo_action(self, request, obj):
+        """Change-view action to refresh one order snapshot from Evergo."""
+        refreshed_order = self._reload_order_from_evergo(request, obj)
+        target_pk = refreshed_order.pk if refreshed_order is not None else obj.pk
+        return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[target_pk]))
+
+    reload_from_evergo_action.label = _("Reload from Evergo")
+    reload_from_evergo_action.short_description = _("Reload from Evergo")
 
 
 @admin.register(EvergoOrderFieldValue)
@@ -601,6 +679,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
 
     changelist_actions = ("load_customers_wizard",)
+    actions = ("reload_selected_from_evergo",)
     list_select_related = ("latest_order",)
 
     list_display = (
@@ -626,6 +705,9 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
         queryset = super().get_queryset(request)
+        selected_ids = _parse_selected_ids_query_param(request)
+        if selected_ids:
+            queryset = queryset.filter(pk__in=selected_ids)
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
@@ -701,3 +783,35 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def load_customers_view(self, request):
         """Render/handle the sales-order customer import wizard."""
         return _load_customers_admin_view(self, request)
+
+    def reload_selected_from_evergo(self, request, queryset):
+        """Delete selected customer cache rows and refetch each one from Evergo."""
+        refreshed = 0
+        for customer in queryset.select_related("user", "latest_order"):
+            customer_label = str(customer)
+            try:
+                customer.user.reload_customer_from_remote(customer=customer)
+            except EvergoAPIError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to reload customer %(customer)s from Evergo: %(error)s")
+                    % {"customer": customer_label, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+
+            refreshed += 1
+            self.message_user(
+                request,
+                _("Reloaded customer %(customer)s from Evergo.") % {"customer": customer_label},
+                level=messages.SUCCESS,
+            )
+
+        if refreshed:
+            self.message_user(
+                request,
+                _("Evergo reload finished. Customers refreshed: %(count)s") % {"count": refreshed},
+                level=messages.SUCCESS,
+            )
+
+    reload_selected_from_evergo.short_description = _("Reload selected from Evergo")

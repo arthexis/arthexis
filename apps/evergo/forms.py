@@ -32,6 +32,16 @@ class EvergoLoadCustomersForm(forms.Form):
             "SO patterns like J00830 are detected automatically."
         ),
     )
+    next_view = forms.ChoiceField(
+        label="Open next",
+        choices=(
+            ("orders", "Orders"),
+            ("customers", "Customers"),
+        ),
+        initial="orders",
+        required=False,
+        help_text="Choose which admin list should open after the sync completes.",
+    )
 
     def __init__(self, *args, request_user=None, **kwargs):
         """Optionally preselect an Evergo profile owned by the current request user."""
