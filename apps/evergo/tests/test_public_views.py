@@ -221,9 +221,17 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
         slug="staff-chat-bridge",
         defaults={"display": "Staff Chat Bridge", "is_enabled": True},
     )
+    Feature.objects.update_or_create(
+        slug="feedback-ingestion",
+        defaults={"display": "Feedback Ingestion", "is_enabled": True},
+    )
 
     User = get_user_model()
-    owner = User.objects.create_user(username="evergo-owner-icons", email="owner-icons@example.com")
+    owner = User.objects.create_user(
+        username="evergo-owner-icons",
+        email="owner-icons@example.com",
+        is_staff=True,
+    )
     profile = EvergoUser.objects.create(user=owner, evergo_email="owner-icons@example.com", evergo_password="secret")
     from apps.evergo.models import EvergoOrder
 

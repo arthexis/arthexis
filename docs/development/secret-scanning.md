@@ -1,24 +1,43 @@
 # Secret Scanning
 
-The CI pipeline runs automated secret scans to prevent accidental exposure of credentials. Every pull request executes a
-[Gitleaks](https://github.com/gitleaks/gitleaks) scan against the committed history of the change and the working tree to catch
-leaks before they land on the main branch. The scanner is configured with [`.gitleaks.toml`](https://github.com/arthexis/arthexis/blob/main/.gitleaks.toml)
-so that legitimate placeholder credentials used in test fixtures are ignored while any other matches will fail the build.
+The CI pipeline runs automated secret scans to prevent accidental exposure of credentials. The
+`Secret Scan` workflow is triggered on pull requests for these activity types:
+
+- `opened`
+- `synchronize`
+- `reopened`
+- `ready_for_review`
+
+It can also be run manually with `workflow_dispatch`.
+
+Every run uses [Gitleaks](https://github.com/gitleaks/gitleaks) with the repository
+[`.gitleaks.toml`](https://github.com/arthexis/arthexis/blob/main/.gitleaks.toml) configuration and executes two checks:
+
+1. A working-tree scan (`--no-git --source .`).
+2. A git-history scan over the pull request commit range (`--log-opts "<base>..<head>"`).
+
+If either scan finds a potential secret, the job fails. The workflow always uploads scan artifacts:
+
+- `gitleaks-working-tree.sarif`
+- `gitleaks-history.json`
 
 ## Running the scanner locally
 
-Run the same checks locally before pushing a branch so that failures can be resolved early. The commands below download the
-Gitleaks binary, scan the working tree, and then scan the commit range that would be sent to a pull request.
+Run the same command style locally before pushing a branch so failures are caught early.
 
 ```bash
-curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz \
+curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz \
   | tar -xz -C /tmp gitleaks
-/tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact --no-banner
+
+/tmp/gitleaks detect --no-git --source . --config .gitleaks.toml --redact --no-banner \
+  --report-format sarif --report-path gitleaks-working-tree.sarif --exit-code 1
+
 /tmp/gitleaks detect --source . --config .gitleaks.toml --redact --no-banner \
-  --log-opts "--no-merges origin/main..HEAD"
+  --log-opts "origin/main..HEAD" --report-format json --report-path gitleaks-history.json --exit-code 1
 ```
 
-Adjust the branch name in the final command to match the base branch of your pull request.
+For pull requests in CI, `origin/main..HEAD` is replaced with the exact SHA range
+`<pull_request.base.sha>..<pull_request.head.sha>`.
 
 ## If a real secret is detected
 

@@ -82,6 +82,7 @@ pytest==9.0.2
 python-crontab==3.3.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
+PyYAML==6.0.3
 qrcode==8.2
 redis==7.2.1
 reportlab==4.4.10

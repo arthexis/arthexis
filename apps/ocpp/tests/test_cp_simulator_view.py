@@ -1,9 +1,11 @@
+import re
 import pytest
 from django.urls import reverse
 
 from apps.simulators import evcs
 from apps.simulators.evcs import _start_simulator, get_simulator_state
 from apps.ocpp.views import simulator as simulator_view
+from apps.ocpp.models import Simulator
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.slow]
@@ -113,10 +115,9 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
         "reconnect_slots": "1,2",
         "demo_mode": "on",
         "meter_interval": "12.5",
-        "host": "example.com",
-        "ws_port": "9000",
+        "host": "example.com:9000",
         "cp_path": "CP-ALPHA",
-        "serial_number": "SN-ALPHA",
+        "serial_number": "SERIAL-ALPHA",
         "connector_id": "2",
         "rfid": "RFIDA",
         "vin": "VINA",
@@ -147,7 +148,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert params["host"] == "example.com"
     assert params["ws_port"] == 9000
     assert params["cp_path"] == "CP-ALPHA"
-    assert params["serial_number"] == "SN-ALPHA"
+    assert params["serial_number"] == "SERIAL-ALPHA"
     assert params["connector_id"] == 2
     assert params["rfid"] == "RFIDA"
     assert params["vin"] == "VINA"
@@ -164,7 +165,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
         "simulator_slot": "2",
         "simulator_name": "Beta",
         "cp_path": "CP-BETA",
-        "serial_number": "SN-BETA",
+        "serial_number": "SERIAL-BETA",
         "username": "bob",
         "password": "builder",
         "start_delay": "0.0",
@@ -188,7 +189,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert "username" not in params_two
     assert "password" not in params_two
     assert params_two["cp_path"] == "CP-BETA"
-    assert params_two["serial_number"] == "SN-BETA"
+    assert params_two["serial_number"] == "SERIAL-BETA"
     assert state_two["last_status"] == "Connection accepted"
 
 
@@ -233,8 +234,8 @@ def test_cp_simulator_backend_selection_persists_in_session(logged_in_client):
     assert get_simulator_state(cp=2, refresh_file=True)["running"] is False
 
 
-def test_cp_simulator_form_preserves_host_and_port_inputs(logged_in_client):
-    """Regression: host and port inputs stay editable during HTMX polling refreshes."""
+def test_cp_simulator_form_uses_single_host_input(logged_in_client):
+    """Regression: host stays editable while the dedicated port input remains removed."""
 
     response = logged_in_client.get(reverse("ocpp:cp-simulator"))
 
@@ -244,6 +245,97 @@ def test_cp_simulator_form_preserves_host_and_port_inputs(logged_in_client):
     assert host_tag_match, "Input with id='host1' not found"
     assert "hx-preserve" in host_tag_match.group(0), "hx-preserve missing from host1 input"
 
-    port_tag_match = re.search(r'<input[^>]*id="ws_port1"[^>]*>', content)
-    assert port_tag_match, "Input with id='ws_port1' not found"
-    assert "hx-preserve" in port_tag_match.group(0), "hx-preserve missing from ws_port1 input"
+    assert 'id="ws_port1"' not in content
+    assert 'id="serial_number1"' in content
+    assert 'for="cp_path1">CP Path<' in content
+    assert 'Charge Delay (s)' in content
+    assert 'How simulation works' in content
+
+
+def test_cp_simulator_host_without_port_clears_ws_port(logged_in_client, fake_simulate):
+    payload = {
+        "simulator_slot": "1",
+        "host": "example.com",
+        "cp_path": "CP-PLAIN",
+        "serial_number": "SERIAL-PLAIN",
+    }
+
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["host"] == "example.com"
+    assert params["ws_port"] is None
+
+
+def test_cp_simulator_accepts_ipv6_host_port(logged_in_client, fake_simulate):
+    payload = {
+        "simulator_slot": "1",
+        "host": "[::1]:9001",
+        "cp_path": "CP-IPV6",
+        "serial_number": "SERIAL-IPV6",
+    }
+
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["host"] == "::1"
+    assert params["ws_port"] == 9001
+
+
+def test_cp_simulator_form_prefers_default_simulator_host(logged_in_client):
+    Simulator.objects.create(
+        default=True,
+        host="remote.example",
+        ws_port=9443,
+        cp_path="CP-DEFAULT",
+        serial_number="SERIAL-DEFAULT",
+    )
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="host" value="remote.example:9443"' in content
+
+
+def test_cp_simulator_form_brackets_default_ipv6_host(logged_in_client):
+    Simulator.objects.create(
+        default=True,
+        host="::1",
+        ws_port=9001,
+        cp_path="CP-IPV6-DEFAULT",
+        serial_number="SERIAL-IPV6-DEFAULT",
+    )
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="host" value="[::1]:9001"' in content
+
+
+def test_cp_simulator_serial_defaults_to_cp_path_when_not_provided(
+    logged_in_client, fake_simulate
+):
+    Simulator.objects.create(
+        default=True,
+        host="remote.example",
+        ws_port=9000,
+        cp_path="CP-DEFAULT",
+        serial_number="SERIAL-DEFAULT",
+    )
+
+    payload = {
+        "simulator_slot": "1",
+        "host": "example.com:9000",
+        "cp_path": "CP-FALLBACK",
+        "serial_number": "",
+    }
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["cp_path"] == "CP-FALLBACK"
+    assert params["serial_number"] == "CP-FALLBACK"
