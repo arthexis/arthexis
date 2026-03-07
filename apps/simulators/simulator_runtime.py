@@ -256,6 +256,9 @@ def resolve_simulator_backend(
         default=False,
     )
     dependency_available = find_spec("ocpp") is not None
+    backend_available = arthexis_enabled or (
+        mobility_house_enabled and dependency_available
+    )
     backend_override = _normalize_backend_override(preferred_backend)
 
     if backend_override == "arthexis":
@@ -264,7 +267,7 @@ def resolve_simulator_backend(
                 use_mobility_house=False,
                 backend="legacy",
                 reason="Arthexis backend selected from simulator controls.",
-                feature_enabled=mobility_house_enabled,
+                feature_enabled=backend_available,
                 dependency_available=dependency_available,
             )
         backend_override = None
@@ -312,8 +315,20 @@ def resolve_simulator_backend(
             use_mobility_house=False,
             backend="legacy",
             reason=reason,
-            feature_enabled=mobility_house_enabled,
+            feature_enabled=backend_available,
             dependency_available=dependency_available,
+        )
+
+    if mobility_house_enabled and not dependency_available:
+        return SimulatorBackendSelection(
+            use_mobility_house=False,
+            backend="legacy",
+            reason=(
+                "Mobility House backend is enabled, but the optional 'ocpp' package "
+                "is not installed. Install 'ocpp' or disable mobilityhouse_backend."
+            ),
+            feature_enabled=False,
+            dependency_available=False,
         )
 
     return SimulatorBackendSelection(
@@ -323,7 +338,7 @@ def resolve_simulator_backend(
             "Simulator backends are disabled via suite feature parameters. "
             "Enable Arthexis and/or Mobility House backend options."
         ),
-        feature_enabled=mobility_house_enabled,
+        feature_enabled=backend_available,
         dependency_available=dependency_available,
     )
 
@@ -401,7 +416,3 @@ __all__ = [
     "build_legacy_simulator_config",
     "build_mobility_house_simulator_config",
 ]
-
-
-
-
