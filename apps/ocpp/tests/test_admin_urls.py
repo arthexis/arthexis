@@ -64,7 +64,7 @@ def test_charger_admin_changelist_shows_station_column(client):
 
 
 def test_charger_admin_hides_station_root_charge_points_from_list():
-    """Regression: station root rows should not appear in CP admin queryset."""
+    """Regression: station root rows should not appear on the changelist queryset."""
 
     station = ChargingStation.objects.create(station_id="STAT-HIDE")
     root_cp = Charger.objects.create(
@@ -80,11 +80,33 @@ def test_charger_admin_hides_station_root_charge_points_from_list():
     standalone_cp = Charger.objects.create(charger_id="CP-STANDALONE", connector_id=None)
 
     admin = ChargerAdmin(Charger, AdminSite())
-    queryset = admin.get_queryset(RequestFactory().get("/"))
+    request = RequestFactory().get("/admin/ocpp/charger/")
+    request.resolver_match = type(
+        "ResolverMatch", (), {"url_name": "ocpp_charger_changelist"}
+    )()
+    queryset = admin.get_queryset(request)
 
     assert root_cp not in queryset
     assert connector_cp in queryset
     assert standalone_cp in queryset
+
+
+def test_charger_admin_keeps_station_root_charge_points_in_detail_context():
+    """Regression: root rows should remain reachable for change/detail views."""
+
+    station = ChargingStation.objects.create(station_id="STAT-DETAIL")
+    root_cp = Charger.objects.create(
+        charger_id="CP-DETAIL",
+        charging_station=station,
+        connector_id=None,
+    )
+
+    admin = ChargerAdmin(Charger, AdminSite())
+    request = RequestFactory().get(f"/admin/ocpp/charger/{root_cp.pk}/change/")
+    request.resolver_match = type("ResolverMatch", (), {"url_name": "ocpp_charger_change"})()
+    queryset = admin.get_queryset(request)
+
+    assert root_cp in queryset
 
 
 def test_charger_admin_station_managed_fields_are_readonly():

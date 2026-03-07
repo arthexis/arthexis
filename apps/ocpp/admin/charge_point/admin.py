@@ -230,9 +230,14 @@ class ChargerAdmin(
     ]
 
     def get_queryset(self, request):
-        """Hide station root rows from CP admin once the station is configured."""
+        """Hide station root rows on the changelist while keeping detail URLs reachable."""
 
         queryset = super().get_queryset(request)
+        resolver_match = getattr(request, "resolver_match", None)
+        changelist_url_name = f"{self.opts.app_label}_{self.opts.model_name}_changelist"
+        if not resolver_match or resolver_match.url_name != changelist_url_name:
+            return queryset
+
         return queryset.exclude(
             Q(charging_station__isnull=False) & Q(connector_id__isnull=True)
         )
