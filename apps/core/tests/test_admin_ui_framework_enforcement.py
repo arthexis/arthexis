@@ -82,16 +82,19 @@ def _contains_custom_css(template_text: str) -> bool:
 
 
 def _marker_has_rationale(template_text: str) -> bool:
-    """Return whether the override marker appears with explanatory rationale text."""
+    """Return whether every override marker appears with explanatory rationale text."""
 
+    has_marker = False
     for raw_line in template_text.splitlines():
         marker_index = raw_line.find(CUSTOM_ADMIN_CSS_OVERRIDE_MARKER)
         if marker_index < 0:
             continue
+        has_marker = True
         rationale = raw_line[marker_index + len(CUSTOM_ADMIN_CSS_OVERRIDE_MARKER) :]
-        if rationale.strip(" -:#\t"):
-            return True
-    return False
+        cleaned_rationale = rationale.strip().removeprefix("--").removeprefix("#").strip(" -:#\t>}\")")
+        if not cleaned_rationale:
+            return False
+    return has_marker
 
 
 def _templates_with_custom_css() -> set[str]:
