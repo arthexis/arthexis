@@ -1183,3 +1183,90 @@ def test_evergo_admin_load_customers_wizard_cancel_returns_to_customers(admin_cl
 
     assert response.status_code == 200
     assert 'href="/admin/evergo/evergocustomer/" class="button">Cancel</a>' in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_reload_action_is_available(admin_client):
+    """Regression: customers changelist should expose bulk reload action."""
+    changelist_url = reverse("admin:evergo_evergocustomer_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    assert b'Reload selected from Evergo' in response.content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.reload_customer_from_remote")
+def test_evergo_customer_admin_reload_action_triggers_profile_reload(mock_reload_customer, admin_client):
+    """Bulk customer reload action should delegate to profile-level refresh behavior."""
+    owner = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-customer-reload@example.com",
+        evergo_password="secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+    customer = EvergoCustomer.objects.create(
+        user=profile,
+        remote_id=910,
+        name="Reload Target",
+        latest_so="GLY01228",
+    )
+
+    changelist_url = reverse("admin:evergo_evergocustomer_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {
+            "action": "reload_selected_from_evergo",
+            "_selected_action": [str(customer.pk)],
+            "index": 0,
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    mock_reload_customer.assert_called_once()
+    assert b"Customers refreshed: 1" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_reload_action_is_available(admin_client):
+    """Regression: orders changelist should expose bulk reload action."""
+    changelist_url = reverse("admin:evergo_evergoorder_changelist")
+    response = admin_client.get(changelist_url)
+
+    assert response.status_code == 200
+    assert b'Reload selected from Evergo' in response.content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.reload_order_from_remote")
+def test_evergo_order_admin_reload_action_triggers_profile_reload(mock_reload_order, admin_client):
+    """Bulk order reload action should delegate to profile-level refresh behavior."""
+    owner = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-reload@example.com",
+        evergo_password="secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=911,
+        order_number="GLY01228",
+    )
+
+    changelist_url = reverse("admin:evergo_evergoorder_changelist")
+    response = admin_client.post(
+        changelist_url,
+        {
+            "action": "reload_selected_from_evergo",
+            "_selected_action": [str(order.pk)],
+            "index": 0,
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    mock_reload_order.assert_called_once_with(order=order)
+    assert b"Orders refreshed: 1" in response.content
