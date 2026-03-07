@@ -299,7 +299,7 @@ class EvergoUser(Profile):
                 for item in data:
                     if not isinstance(item, dict) or not self._is_assigned_to_user(item):
                         continue
-                    was_created = self._upsert_order(item)
+                    was_created, _ = self._upsert_order(item)
                     self._upsert_customer_from_order(item)
                     if was_created:
                         created += 1
@@ -696,17 +696,11 @@ class EvergoUser(Profile):
         loaded_order_ids: set[int] = set()
 
         for payload in order_payloads:
-            was_created = self._upsert_order(payload)
-            customer_created = self._upsert_customer_from_order(payload)
-            order_id = to_int(payload.get("id"))
-            if order_id is not None:
-                loaded_order_ids.add(order_id)
-
-            customer_payload = payload.get("cliente")
-            if isinstance(customer_payload, dict):
-                customer_id = to_int(customer_payload.get("id"))
-                if customer_id is not None:
-                    loaded_customer_ids.add(customer_id)
+            was_created, order = self._upsert_order(payload)
+            customer_created, customer = self._upsert_customer_from_order(payload)
+            loaded_order_ids.add(order.pk)
+            if customer is not None:
+                loaded_customer_ids.add(customer.pk)
 
             customers_loaded += int(customer_created)
             if was_created:
@@ -730,12 +724,12 @@ class EvergoUser(Profile):
         )
         return order
 
-    def _upsert_customer_from_order(self, payload: dict[str, Any]) -> bool:
+    def _upsert_customer_from_order(self, payload: dict[str, Any]) -> tuple[bool, EvergoCustomer | None]:
         """Create/update a customer snapshot derived from one order payload."""
         customer_payload = payload.get("cliente")
         install_payload = payload.get("orden_instalacion")
         if not isinstance(customer_payload, dict) and not isinstance(install_payload, dict):
-            return False
+            return False, None
 
         customer_id = to_int(customer_payload.get("id")) if isinstance(customer_payload, dict) else None
         customer_name = ""
@@ -795,15 +789,15 @@ class EvergoUser(Profile):
         }
 
         if customer_id is not None:
-            _, created = EvergoCustomer.objects.update_or_create(
+            customer, created = EvergoCustomer.objects.update_or_create(
                 user=self,
                 remote_id=customer_id,
                 defaults=defaults,
             )
-            return created
+            return created, customer
 
         if not customer_name:
-            return False
+            return False, None
 
         existing_customer = (
             EvergoCustomer.objects.filter(user=self, remote_id__isnull=True, name=customer_name)
@@ -814,10 +808,10 @@ class EvergoUser(Profile):
             for field_name, value in defaults.items():
                 setattr(existing_customer, field_name, value)
             existing_customer.save(update_fields=[*defaults.keys(), "refreshed_at"])
-            return False
+            return False, existing_customer
 
-        EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
-        return True
+        customer = EvergoCustomer.objects.create(user=self, remote_id=None, **defaults)
+        return True, customer
 
     def _login_session(self, *, session: requests.Session, timeout: int) -> None:
         """Authenticate a requests session against Evergo."""
@@ -924,7 +918,7 @@ class EvergoUser(Profile):
         coordinator_id = to_int(installer.get("idCoordinador"))
         return self.evergo_user_id in {engineer_id, coordinator_id}
 
-    def _upsert_order(self, payload: dict[str, Any]) -> bool:
+    def _upsert_order(self, payload: dict[str, Any]) -> tuple[bool, EvergoOrder]:
         """Create or update an `EvergoOrder` from raw Evergo API data."""
         remote_id = to_int(payload.get("id"))
         if remote_id is None:
@@ -1007,4 +1001,4 @@ class EvergoUser(Profile):
             )
 
         order.sync_dynamic_field_values(payload)
-        return created
+        return created, order
