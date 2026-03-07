@@ -7,6 +7,7 @@ from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .forms import CartQuantityForm, CheckoutForm
@@ -52,10 +53,25 @@ def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopPro
 
 @require_GET
 def shop_index(request: HttpRequest) -> HttpResponse:
-    """Render all active shops and their active products."""
+    """Render shops currently open and include closure timing hints when relevant."""
 
-    shops = Shop.objects.filter(is_active=True).prefetch_related("products")
-    return render(request, "shop/index.html", {"shops": shops})
+    now = timezone.localtime()
+    active_shops = list(Shop.objects.filter(is_active=True).prefetch_related("products"))
+
+    open_shops = [shop for shop in active_shops if shop.is_open_at(now.time())]
+    next_opening_candidates = [
+        shop.next_opening_datetime(now)
+        for shop in active_shops
+        if shop.has_business_hours() and not shop.is_open_at(now.time())
+    ]
+    next_opening_candidates = [candidate for candidate in next_opening_candidates if candidate is not None]
+
+    context = {
+        "shops": open_shops,
+        "all_shops_closed_for_time": bool(active_shops and not open_shops and next_opening_candidates),
+        "next_opening_at": min(next_opening_candidates) if next_opening_candidates else None,
+    }
+    return render(request, "shop/index.html", context)
 
 
 @require_GET

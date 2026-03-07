@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
@@ -19,6 +20,8 @@ class Shop(Entity):
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     default_payment_provider = models.CharField(max_length=80, blank=True)
+    opening_time = models.TimeField(null=True, blank=True)
+    closing_time = models.TimeField(null=True, blank=True)
     odoo_deployment = models.ForeignKey(
         "odoo.OdooDeployment",
         null=True,
@@ -36,6 +39,39 @@ class Shop(Entity):
         if not self.slug:
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
+
+    def has_business_hours(self) -> bool:
+        """Return whether both opening and closing times are configured."""
+
+        return bool(self.opening_time and self.closing_time)
+
+    def is_open_at(self, current_time: time) -> bool:
+        """Return whether the shop is open for the supplied local time."""
+
+        if not self.has_business_hours():
+            return True
+
+        if self.opening_time == self.closing_time:
+            return True
+
+        if self.opening_time < self.closing_time:
+            return self.opening_time <= current_time < self.closing_time
+
+        return current_time >= self.opening_time or current_time < self.closing_time
+
+    def next_opening_datetime(self, reference: datetime) -> datetime | None:
+        """Return the next local opening datetime when business hours are configured."""
+
+        if not self.has_business_hours() or self.is_open_at(reference.time()):
+            return None
+
+        if self.opening_time < self.closing_time:
+            opening_date = (
+                reference.date() if reference.time() < self.opening_time else reference.date() + timedelta(days=1)
+            )
+            return datetime.combine(opening_date, self.opening_time, tzinfo=reference.tzinfo)
+
+        return datetime.combine(reference.date(), self.opening_time, tzinfo=reference.tzinfo)
 
     def __str__(self) -> str:
         """Return a readable representation."""

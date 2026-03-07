@@ -1,7 +1,10 @@
+from datetime import datetime, time
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.shop.models import Shop, ShopOrder, ShopProduct
 
@@ -52,7 +55,6 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(order.payment_provider, "stripe")
         self.assertEqual(order.items.count(), 1)
 
-
     def test_order_number_keeps_prefix_and_length_limit(self):
         """Generated order number should preserve SO prefix within max length."""
 
@@ -89,7 +91,6 @@ class ShopCheckoutTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, order.order_number)
-
 
     def test_add_to_cart_clears_items_from_different_shop(self):
         """Adding an item from another shop should clear existing cart items."""
@@ -161,3 +162,51 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Some cart items are no longer available")
         self.assertEqual(ShopOrder.objects.count(), 0)
+
+
+class ShopIndexTests(TestCase):
+    """Coverage for shop listing behavior and closed-state messaging."""
+
+    def test_index_shows_generic_closed_message_when_no_shops_exist(self):
+        """The index should show a generic closed message when there are no active shops."""
+
+        response = self.client.get(reverse("shop:index"))
+
+        self.assertContains(response, "Our shop is closed at the moment")
+        self.assertNotContains(response, "No active shops are available")
+
+    def test_index_shows_next_opening_time_when_all_shops_closed_by_hours(self):
+        """When all shops are closed by schedule, the next opening time should be shown."""
+
+        Shop.objects.create(
+            name="Morning Shop",
+            slug="morning-shop",
+            opening_time=time(9, 0),
+            closing_time=time(17, 0),
+        )
+        current_timezone = timezone.get_current_timezone()
+        now = timezone.make_aware(datetime(2026, 1, 1, 7, 30), current_timezone)
+
+        with patch("apps.shop.views.timezone.localtime", return_value=now):
+            response = self.client.get(reverse("shop:index"))
+
+        self.assertContains(response, "Our shop is closed at the moment")
+        self.assertContains(response, "It will next open at")
+
+    def test_index_hides_closed_message_when_a_shop_is_currently_open(self):
+        """When an in-hours shop exists, the shop should render instead of closed messaging."""
+
+        Shop.objects.create(
+            name="Open Shop",
+            slug="open-shop",
+            opening_time=time(9, 0),
+            closing_time=time(17, 0),
+        )
+        current_timezone = timezone.get_current_timezone()
+        now = timezone.make_aware(datetime(2026, 1, 1, 10, 0), current_timezone)
+
+        with patch("apps.shop.views.timezone.localtime", return_value=now):
+            response = self.client.get(reverse("shop:index"))
+
+        self.assertContains(response, "Open Shop")
+        self.assertNotContains(response, "Our shop is closed at the moment")
