@@ -132,6 +132,7 @@
 
 .chat-drawer {
     width: min(28rem, 100%);
+    max-height: calc(100vh - 3rem);
     max-height: calc(100dvh - 3rem);
     border-radius: 1rem;
     background: var(--body-bg);
@@ -228,7 +229,7 @@
 .chat-message .chat-body {
     display: flex;
     flex-direction: column;
-    align-items: end;
+    align-items: flex-end;
     gap: 0.2rem;
     flex: 1 1 auto;
     min-width: 0;
@@ -243,7 +244,7 @@
 }
 
 .chat-message.staff .chat-body {
-    align-items: start;
+    align-items: flex-start;
 }
 
 .chat-message.staff .chat-meta {
