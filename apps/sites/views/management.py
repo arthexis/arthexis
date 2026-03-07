@@ -40,6 +40,7 @@ from django.utils.http import (
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from webauthn.helpers.exceptions import (
     InvalidAuthenticationResponse,
@@ -518,11 +519,9 @@ def _read_json_body(request) -> dict[str, Any]:
 
 
 @never_cache
+@require_POST
 def passkey_login_options(request):
     """Create and store a WebAuthn challenge for passkey authentication."""
-
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
 
     options = build_authentication_options(request)
     request.session[PASSKEY_CHALLENGE_SESSION_KEY] = options.challenge
@@ -544,11 +543,9 @@ def _resolve_login_redirect(request, redirect_target: str) -> str:
 
 
 @never_cache
+@require_POST
 def passkey_login_verify(request):
     """Verify a passkey assertion and authenticate the matching user."""
-
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
 
     challenge = request.session.get(PASSKEY_CHALLENGE_SESSION_KEY)
     if not challenge:
