@@ -19,7 +19,6 @@ LEGACY_CUSTOM_ADMIN_CSS_TEMPLATES = {
     "apps/core/templates/admin/change_list.html",
     "apps/core/templates/admin/core/clientreport/generate.html",
     "apps/core/templates/admin/core/product/search_orders_for_selected.html",
-    "apps/core/templates/admin/core/request_temp_password.html",
     "apps/core/templates/admin/edit_inline/profile_stacked.html",
     "apps/core/templates/admin/includes/seed_datum_styles.html",
     "apps/core/templates/admin/index.html",
