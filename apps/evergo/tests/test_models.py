@@ -511,3 +511,68 @@ def test_reload_customer_from_remote_rebuilds_customer_and_order(mock_fetch_orde
     assert refreshed_order.status_name == "En Proceso"
     assert not EvergoCustomer.objects.filter(pk=stale_customer.pk).exists()
     assert not EvergoOrder.objects.filter(pk=stale_order.pk).exists()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(mock_load_customers):
+    """Fallback reload should locate refreshed customer by original name when no latest order exists."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username="suite-reload-customer-name", email="suite-reload-customer-name@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-reload-customer-name@evergo.example.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+    stale_customer = EvergoCustomer.objects.create(
+        user=profile,
+        remote_id=1901,
+        name="Customer Name Match",
+        latest_so="GLY12345",
+        latest_order=None,
+    )
+
+    def load_side_effect(*, raw_queries, timeout=20):
+        assert "GLY12345" in raw_queries
+        EvergoCustomer.objects.create(
+            user=profile,
+            remote_id=2901,
+            name="Customer Name Match",
+            latest_so="GLY12345",
+        )
+        return {"customers_loaded": 1}
+
+    mock_load_customers.side_effect = load_side_effect
+
+    refreshed = profile.reload_customer_from_remote(customer=stale_customer)
+
+    assert refreshed.pk != stale_customer.pk
+    assert refreshed.name == "Customer Name Match"
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_customers):
+    """Customer snapshot should remain if remote fallback reload fails."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username="suite-reload-customer-fail", email="suite-reload-customer-fail@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-reload-customer-fail@evergo.example.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+    stale_customer = EvergoCustomer.objects.create(
+        user=profile,
+        remote_id=3901,
+        name="Persistent Customer",
+        latest_so="GLY54321",
+        latest_order=None,
+    )
+    mock_load_customers.return_value = {"customers_loaded": 0}
+
+    with pytest.raises(EvergoAPIError, match="did not return data"):
+        profile.reload_customer_from_remote(customer=stale_customer)
+
+    assert EvergoCustomer.objects.filter(pk=stale_customer.pk).exists()

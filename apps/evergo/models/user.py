@@ -11,7 +11,7 @@ import uuid
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils import timezone
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
@@ -406,10 +406,12 @@ class EvergoUser(Profile):
         if normalized_payload is None:
             raise EvergoAPIError("Evergo order detail response did not include a valid order payload.")
 
-        order.delete()
-        self._upsert_order(normalized_payload)
-        self._upsert_customer_from_order(normalized_payload)
-        return EvergoOrder.objects.get(user=self, remote_id=order.remote_id)
+        remote_id = order.remote_id
+        with transaction.atomic():
+            order.delete()
+            self._upsert_order(normalized_payload)
+            self._upsert_customer_from_order(normalized_payload)
+        return EvergoOrder.objects.get(user=self, remote_id=remote_id)
 
     def reload_customer_from_remote(self, *, customer: EvergoCustomer, timeout: int = 20) -> EvergoCustomer:
         """Clear one cached customer snapshot and fetch fresh payload data from Evergo."""
@@ -427,15 +429,20 @@ class EvergoUser(Profile):
         if not queries:
             raise EvergoAPIError("Customer has no lookup data (SO or name) for Evergo reload.")
 
-        customer.delete()
-        summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
-        if summary["customers_loaded"] <= 0:
-            raise EvergoAPIError("Evergo did not return data for the selected customer.")
+        customer_name = customer.name
+        with transaction.atomic():
+            customer.delete()
+            summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
+            if summary["customers_loaded"] <= 0:
+                raise EvergoAPIError("Evergo did not return data for the selected customer.")
 
-        refreshed_customer = EvergoCustomer.objects.filter(user=self, name__iexact=queries[-1]).order_by("-latest_order_updated_at", "pk").first()
-        if refreshed_customer is None:
-            raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
-        return refreshed_customer
+            refreshed_customer = EvergoCustomer.objects.filter(
+                user=self,
+                name__iexact=customer_name,
+            ).order_by("-latest_order_updated_at", "pk").first()
+            if refreshed_customer is None:
+                raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
+            return refreshed_customer
 
     @staticmethod
     def _extract_order_payload(payload: dict[str, Any]) -> dict[str, Any] | None:

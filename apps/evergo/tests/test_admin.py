@@ -1225,7 +1225,7 @@ def test_evergo_customer_admin_reload_action_triggers_profile_reload(mock_reload
     )
 
     assert response.status_code == 200
-    mock_reload_customer.assert_called_once()
+    mock_reload_customer.assert_called_once_with(customer=customer)
     assert b"Customers refreshed: 1" in response.content
 
 
@@ -1270,3 +1270,30 @@ def test_evergo_order_admin_reload_action_triggers_profile_reload(mock_reload_or
     assert response.status_code == 200
     mock_reload_order.assert_called_once_with(order=order)
     assert b"Orders refreshed: 1" in response.content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.reload_order_from_remote")
+def test_evergo_order_change_action_redirects_to_refreshed_order(mock_reload_order, admin_client):
+    """Change-view action should redirect to the refreshed order primary key."""
+    owner = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-admin-order-reload-redirect@example.com",
+        evergo_password="secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=1001,
+        order_number="GLY09999",
+    )
+    refreshed_order = EvergoOrder(user=profile, remote_id=1001, order_number="GLY09999")
+    refreshed_order.pk = order.pk + 10
+    mock_reload_order.return_value = refreshed_order
+
+    action_url = reverse("admin:evergo_evergoorder_actions", args=["reload_from_evergo_action", order.pk])
+    response = admin_client.get(action_url)
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("admin:evergo_evergoorder_change", args=[refreshed_order.pk])

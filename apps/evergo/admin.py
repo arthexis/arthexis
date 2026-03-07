@@ -444,7 +444,7 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
     def _reload_order_from_evergo(self, request, order):
         """Delete stale order data and rehydrate the order directly from Evergo."""
         try:
-            order.user.reload_order_from_remote(order=order)
+            refreshed_order = order.user.reload_order_from_remote(order=order)
         except EvergoAPIError as exc:
             self.message_user(
                 request,
@@ -452,20 +452,21 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
                 % {"order": str(order), "error": exc},
                 level=messages.ERROR,
             )
-            return False
+            return None
 
         self.message_user(
             request,
             _("Reloaded order %(order)s from Evergo.") % {"order": str(order)},
             level=messages.SUCCESS,
         )
-        return True
+        return refreshed_order
 
     def reload_selected_from_evergo(self, request, queryset):
         """Admin bulk action that refreshes selected orders from Evergo API payloads."""
         reloaded = 0
         for order in queryset:
-            reloaded += int(self._reload_order_from_evergo(request, order))
+            if self._reload_order_from_evergo(request, order):
+                reloaded += 1
 
         if reloaded:
             self.message_user(
@@ -478,8 +479,9 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     def reload_from_evergo_action(self, request, obj):
         """Change-view action to refresh one order snapshot from Evergo."""
-        self._reload_order_from_evergo(request, obj)
-        return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[obj.pk]))
+        refreshed_order = self._reload_order_from_evergo(request, obj)
+        target_pk = refreshed_order.pk if refreshed_order is not None else obj.pk
+        return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[target_pk]))
 
     reload_from_evergo_action.label = _("Reload from Evergo")
     reload_from_evergo_action.short_description = _("Reload from Evergo")
