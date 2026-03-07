@@ -2,25 +2,57 @@
 
 from __future__ import annotations
 
-import yaml
 import logging
+
+import yaml
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
-from django.template.response import TemplateResponse
 from django.shortcuts import redirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
-from apps.actions.models import DashboardAction, RemoteAction, RemoteActionToken
+from apps.actions.models import (
+    DashboardAction,
+    RemoteAction,
+    RemoteActionToken,
+    StaffTask,
+    StaffTaskPreference,
+)
 from apps.actions.openapi import build_openapi_spec
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
 logger = logging.getLogger(__name__)
 
+
+@admin.register(StaffTask)
+class StaffTaskAdmin(EntityModelAdmin):
+    """Manage available dashboard staff tasks and default visibility."""
+
+    list_display = (
+        "label",
+        "slug",
+        "admin_url_name",
+        "order",
+        "default_enabled",
+        "superuser_only",
+        "is_active",
+    )
+    list_filter = ("default_enabled", "superuser_only", "is_active")
+    search_fields = ("label", "slug", "admin_url_name", "description")
+
+
+@admin.register(StaffTaskPreference)
+class StaffTaskPreferenceAdmin(EntityModelAdmin):
+    """Inspect per-user staff task visibility overrides."""
+
+    list_display = ("user", "task", "is_enabled", "updated_at")
+    list_filter = ("is_enabled", "task")
+    search_fields = ("user__username", "task__label", "task__slug")
 
 
 @admin.register(DashboardAction)

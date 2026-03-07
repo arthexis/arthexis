@@ -1,20 +1,26 @@
 from __future__ import annotations
 
-from pathlib import Path
 import logging
+from pathlib import Path
+import subprocess
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import AdminNotice
+from apps.actions.models import StaffTask, StaffTaskPreference
+from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
 from apps.core import changelog
+from apps.core.models import AdminNotice
+from apps.core.systemctl import _systemctl_command
+from apps.services.lifecycle import SERVICE_NAME_LOCK, lock_dir, read_service_name
 from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
 from .ui import (
@@ -40,17 +46,166 @@ logger = logging.getLogger(__name__)
 
 
 def _system_view(request):
+    ensure_default_staff_tasks_exist()
+    tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
+    task_pref_map = {
+        pref.task_id: pref
+        for pref in StaffTaskPreference.objects.filter(user=request.user, task__in=tasks)
+    }
+
+    if request.method == "POST":
+        selected_task_ids = {
+            int(task_id)
+            for task_id in request.POST.getlist("dashboard_tasks")
+            if str(task_id).isdigit()
+        }
+        for task in tasks:
+            if task.staff_only and not request.user.is_staff:
+                continue
+            if task.superuser_only and not request.user.is_superuser:
+                continue
+            enabled = task.pk in selected_task_ids
+            if enabled == task.default_enabled:
+                StaffTaskPreference.objects.filter(user=request.user, task=task).delete()
+                continue
+            StaffTaskPreference.objects.update_or_create(
+                user=request.user,
+                task=task,
+                defaults={"is_enabled": enabled},
+            )
+        messages.success(request, _("Dashboard tasks updated."))
+        return HttpResponseRedirect(reverse("admin:system"))
+
+    task_rows = []
+    for task in tasks:
+        if task.staff_only and not request.user.is_staff:
+            continue
+        if task.superuser_only and not request.user.is_superuser:
+            continue
+        try:
+            task_url = reverse(task.admin_url_name)
+        except NoReverseMatch:
+            continue
+        task_rows.append(
+            {
+                "task": task,
+                "url": task_url,
+                "is_enabled": task_pref_map.get(task.pk, None).is_enabled
+                if task.pk in task_pref_map
+                else task.default_enabled,
+            }
+        )
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Tasks"),
+            "task_rows": task_rows,
+        }
+    )
+    return TemplateResponse(request, "admin/system.html", context)
+
+
+def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]:
+    """Return suite service metadata and whether it is active in systemd."""
+
+    resolved_base_dir = Path(base_dir or settings.BASE_DIR)
+    service_name = read_service_name(lock_dir(resolved_base_dir) / SERVICE_NAME_LOCK)
+    if not service_name:
+        return {"configured": False, "service_name": "", "unit_name": "", "is_active": False}
+
+    command = _systemctl_command()
+    unit_name = f"{service_name}.service"
+    if not command:
+        return {
+            "configured": True,
+            "service_name": service_name,
+            "unit_name": unit_name,
+            "is_active": False,
+        }
+
+    try:
+        result = subprocess.run(
+            [*command, "is-active", "--quiet", unit_name],
+            check=False,
+            cwd=resolved_base_dir,
+            timeout=10,
+        )
+    except OSError:
+        return {
+            "configured": True,
+            "service_name": service_name,
+            "unit_name": unit_name,
+            "is_active": False,
+        }
+
+    return {
+        "configured": True,
+        "service_name": service_name,
+        "unit_name": unit_name,
+        "is_active": result.returncode == 0,
+    }
+
+
+def _system_details_view(request):
+    """Render system details and privileged server restart actions."""
+
     info = _gather_info(_auto_upgrade_next_check)
+    service_status = _suite_service_status()
+    can_restart = (
+        request.user.is_superuser
+        and bool(service_status["configured"])
+        and bool(service_status["is_active"])
+    )
 
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("System"),
-            "info": info,
             "system_fields": _build_system_fields(info),
+            "service_status": service_status,
+            "can_restart_server": can_restart,
         }
     )
-    return TemplateResponse(request, "admin/system.html", context)
+    return TemplateResponse(request, "admin/system_details.html", context)
+
+
+def _system_restart_server_view(request):
+    """Restart the configured suite systemd service for superusers."""
+
+    if request.method != "POST":
+        raise PermissionDenied
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    service_status = _suite_service_status()
+    if not service_status["configured"] or not service_status["is_active"]:
+        messages.error(
+            request,
+            _("Server restart is only available when the suite is active under systemd."),
+        )
+        return HttpResponseRedirect(reverse("admin:system-details"))
+
+    command = _systemctl_command()
+    if not command:
+        messages.error(request, _("Systemd controls are unavailable on this node."))
+        return HttpResponseRedirect(reverse("admin:system-details"))
+
+    unit_name = str(service_status["unit_name"])
+    try:
+        subprocess.run(
+            [*command, "restart", unit_name],
+            check=True,
+            cwd=Path(settings.BASE_DIR),
+            timeout=30,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        logger.exception("Unable to restart suite service %s", unit_name)
+        messages.error(request, _("Failed to restart %(unit)s.") % {"unit": unit_name})
+    else:
+        messages.success(request, _("Restart requested for %(unit)s.") % {"unit": unit_name})
+
+    return HttpResponseRedirect(reverse("admin:system-details"))
 
 
 def _system_startup_report_view(request):
@@ -299,6 +454,16 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "system/details/",
+                admin.site.admin_view(_system_details_view),
+                name="system-details",
+            ),
+            path(
+                "system/details/restart-server/",
+                admin.site.admin_view(_system_restart_server_view),
+                name="system-restart-server",
+            ),
             path(
                 "admin-notices/<int:notice_id>/dismiss/",
                 admin.site.admin_view(_dismiss_admin_notice_view),

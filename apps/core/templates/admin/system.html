@@ -4,166 +4,39 @@
 {% block content %}
 <div id="content-main">
   <div class="module system-reports">
-    <h2>{% trans "System Reports" %}</h2>
-    {% celery_feature_enabled as celery_enabled %}
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th scope="col">{% trans "Name" %}</th>
-          <th scope="col">{% trans "Purpose" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-startup-report' %}">
-              {% trans "Startup Report" %}
-            </a>
-          </th>
-          <td>{% trans "Review start and upgrade script activity with timestamps." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-upgrade-report' %}">
-              {% trans "Upgrade Report" %}
-            </a>
-          </th>
-          <td>{% trans "Check automated upgrade schedules and trigger update checks." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-uptime-report' %}">
-              {% trans "Uptime Report" %}
-            </a>
-          </th>
-          <td>{% trans "Visualize node uptime and downtime over common timeframes." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-services-report' %}">
-              {% trans "Suite Services Report" %}
-            </a>
-          </th>
-          <td>{% trans "Review statuses for all systemd services configured on this node." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-sql-report' %}">
-              {% trans "SQL Report" %}
-            </a>
-          </th>
-          <td>{% trans "Execute SQL with sigils resolved, benchmark runtime, and save queries for reuse." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-dashboard-rules-report' %}">
-              {% trans "Dashboard Rules" %}
-            </a>
-          </th>
-          <td>{% trans "Review dashboard rule results across all models and jump to their configurations." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-nginx-report' %}">
-              {% trans "NGINX Report" %}
-            </a>
-          </th>
-          <td>{% trans "Compare the expected NGINX site definition with the file on disk." %}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-changelog-report' %}">
-              {% trans "Changelog Report" %}
-            </a>
-          </th>
-          <td>{% trans "Review git commits grouped by release with on-demand loading." %}</td>
-        </tr>
-        {% if celery_enabled %}
+    <h2>{% trans "Staff Tasks" %}</h2>
+    <p class="help">{% trans "Choose which tasks appear as top dashboard buttons for your account." %}</p>
+    <form method="post">
+      {% csrf_token %}
+      <table class="table table-striped">
+        <thead>
           <tr>
-            <th scope="row">
-              <a href="{% url 'admin:nodes_nodefeature_celery_report' %}">
-                {% trans "Celery Report" %}
-              </a>
-            </th>
-            <td>{% trans "Inspect Celery worker status and task visibility." %}</td>
+            <th scope="col">{% trans "Task" %}</th>
+            <th scope="col">{% trans "Purpose" %}</th>
+            <th scope="col">{% trans "Dashboard Button" %}</th>
           </tr>
-        {% endif %}
-      </tbody>
-    </table>
-    {% if not celery_enabled %}
-      <p class="help">{% trans "Celery support is not enabled on this node." %}</p>
-    {% endif %}
-  </div>
-  <div>
-    <table class="system-info-table table table-striped">
-      <thead>
-        <tr>
-          <th scope="col">{% trans "System field" %}</th>
-          <th scope="col">{% trans "Sigil" %}</th>
-          <th scope="col">{% trans "Current values" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for field in system_fields %}
-        <tr>
-          <th scope="row">{{ field.label }}</th>
-          <td><code>{{ field.sigil }}</code></td>
-          <td>
-            {% if field.field_type == "boolean" %}
-              {% if field.value %}
-                {% trans "Yes" %}
-              {% else %}
-                {% trans "No" %}
-              {% endif %}
-            {% elif field.field_type == "features" %}
-              {% if field.value %}
-              <ul>
-                {% for feature in field.value %}
-                <li>
-                  {{ feature.display }}
-                  {% if feature.expected or feature.actual %}
-                    (
-                    {% if feature.expected and feature.actual %}
-                      {% trans "expected and actual" %}
-                    {% elif feature.expected %}
-                      {% trans "expected" %}
-                    {% else %}
-                      {% trans "actual" %}
-                    {% endif %}
-                    )
-                  {% endif %}
-                </li>
-                {% endfor %}
-              </ul>
-              {% else %}
-              <em>{% trans "No features detected" %}</em>
-              {% endif %}
-            {% elif field.field_type == "databases" %}
-              {% if field.value %}
-              <ul>
-                {% for database in field.value %}
-                <li>
-                  <strong>{{ database.alias }}</strong>
-                  {% if database.engine %}
-                    — {{ database.engine }}
-                  {% endif %}
-                  {% if database.name %}
-                    ({{ database.name }})
-                  {% endif %}
-                </li>
-                {% endfor %}
-              </ul>
-              {% else %}
-              <em>{% trans "No databases configured" %}</em>
-              {% endif %}
-            {% else %}
-              {{ field.value|default_if_none:"" }}
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for row in task_rows %}
+            <tr>
+              <th scope="row"><a href="{{ row.url }}">{{ row.task.label }}</a></th>
+              <td>{{ row.task.description }}</td>
+              <td>
+                <label>
+                  <input type="checkbox" name="dashboard_tasks" value="{{ row.task.pk }}" {% if row.is_enabled %}checked{% endif %}>
+                  {% trans "Show button" %}
+                </label>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3"><p class="help">{% trans "No tasks are configured." %}</p></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="submit" class="button">{% trans "Save task preferences" %}</button>
+    </form>
   </div>
 </div>
 {% endblock %}

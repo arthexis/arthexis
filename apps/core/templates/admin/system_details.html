@@ -1,0 +1,98 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module system-reports">
+    <h2>{% trans "System" %}</h2>
+    {% if service_status.configured %}
+      <p class="help">
+        {% blocktrans with unit=service_status.unit_name %}Service unit: {{ unit }}{% endblocktrans %}
+      </p>
+    {% else %}
+      <p class="help">{% trans "No suite service lock is configured; restart controls are unavailable." %}</p>
+    {% endif %}
+
+    {% if can_restart_server %}
+      <form method="post" action="{% url 'admin:system-restart-server' %}">
+        {% csrf_token %}
+        <button type="submit" class="button">{% trans "Restart Server" %}</button>
+      </form>
+    {% elif request.user.is_superuser and service_status.configured and not service_status.is_active %}
+      <p class="help">{% trans "Restart Server is available only while the suite service is active." %}</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <table class="system-info-table table table-striped">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "System field" %}</th>
+          <th scope="col">{% trans "Sigil" %}</th>
+          <th scope="col">{% trans "Current values" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for field in system_fields %}
+        <tr>
+          <th scope="row">{{ field.label }}</th>
+          <td><code>{{ field.sigil }}</code></td>
+          <td>
+            {% if field.field_type == "boolean" %}
+              {% if field.value %}
+                {% trans "Yes" %}
+              {% else %}
+                {% trans "No" %}
+              {% endif %}
+            {% elif field.field_type == "features" %}
+              {% if field.value %}
+              <ul>
+                {% for feature in field.value %}
+                <li>
+                  {{ feature.display }}
+                  {% if feature.expected or feature.actual %}
+                    (
+                    {% if feature.expected and feature.actual %}
+                      {% trans "expected and actual" %}
+                    {% elif feature.expected %}
+                      {% trans "expected" %}
+                    {% else %}
+                      {% trans "actual" %}
+                    {% endif %}
+                    )
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <em>{% trans "No features detected" %}</em>
+              {% endif %}
+            {% elif field.field_type == "databases" %}
+              {% if field.value %}
+              <ul>
+                {% for database in field.value %}
+                <li>
+                  <strong>{{ database.alias }}</strong>
+                  {% if database.engine %}
+                    — {{ database.engine }}
+                  {% endif %}
+                  {% if database.name %}
+                    ({{ database.name }})
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <em>{% trans "No databases configured" %}</em>
+              {% endif %}
+            {% else %}
+              {{ field.value|default_if_none:"" }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
