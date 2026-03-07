@@ -102,8 +102,10 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
     if not getattr(user, "is_staff", False):
         return []
 
-    ensure_default_staff_tasks_exist()
     tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
+    if not tasks:
+        ensure_default_staff_tasks_exist()
+        tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
     if not tasks:
         return []
 

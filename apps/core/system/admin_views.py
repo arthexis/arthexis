@@ -64,6 +64,10 @@ def _system_view(request):
                 continue
             if task.superuser_only and not request.user.is_superuser:
                 continue
+            try:
+                reverse(task.admin_url_name)
+            except NoReverseMatch:
+                continue
             enabled = task.pk in selected_task_ids
             if enabled == task.default_enabled:
                 StaffTaskPreference.objects.filter(user=request.user, task=task).delete()
@@ -86,13 +90,13 @@ def _system_view(request):
             task_url = reverse(task.admin_url_name)
         except NoReverseMatch:
             continue
+        pref = task_pref_map.get(task.pk)
+        is_enabled = pref.is_enabled if pref is not None else task.default_enabled
         task_rows.append(
             {
                 "task": task,
                 "url": task_url,
-                "is_enabled": task_pref_map.get(task.pk, None).is_enabled
-                if task.pk in task_pref_map
-                else task.default_enabled,
+                "is_enabled": is_enabled,
             }
         )
 
@@ -131,7 +135,7 @@ def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]
             cwd=resolved_base_dir,
             timeout=10,
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return {
             "configured": True,
             "service_name": service_name,
@@ -199,7 +203,7 @@ def _system_restart_server_view(request):
             cwd=Path(settings.BASE_DIR),
             timeout=30,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         logger.exception("Unable to restart suite service %s", unit_name)
         messages.error(request, _("Failed to restart %(unit)s.") % {"unit": unit_name})
     else:
