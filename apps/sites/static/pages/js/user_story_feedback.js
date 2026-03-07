@@ -101,9 +101,6 @@
     setTimeout(() => {
       overlay.setAttribute('hidden', '');
       resetAlerts();
-      form.reset();
-      setCharCount();
-      setRatingHint();
       if (restoreFocus && previousFocus) {
         previousFocus.focus();
       }
