@@ -30,10 +30,10 @@ class PasswordCommandTests(TestCase):
 
         user = get_user_model().objects.create_user(username="perm-user", email="perm@example.com")
 
-        call_command("password", "perm-user", password="StrongPass123")
+        call_command("password", "perm-user", password="permanent-password-for-tests")
 
         user.refresh_from_db()
-        assert user.check_password("StrongPass123")
+        assert user.check_password("permanent-password-for-tests")
         assert user.force_password_change is True
 
     def test_temporary_password_can_be_targeted_by_user_id_lookup(self):

@@ -4,9 +4,11 @@ title = "Arthexis Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
-  description = "Ignore known placeholder credentials in tests"
+  description = "Ignore known placeholder credentials and enum values in tests/admin code"
+  regexTarget = "line"
   regexes = [
-    '''password=\"password\"'''
+    '''password=\"password\"''',
+    '''DNSProviderCredential\.Provider\.GODADDY,\s+is_enabled=True'''
   ]
 
 [[rules]]

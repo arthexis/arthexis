@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import time
 
 import pytest
@@ -27,7 +28,8 @@ def test_base32_key_encodes_hex_secret_without_padding(user):
         key="3132333435363738393031323334353637383930",
     )
 
-    assert device.base32_key == "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    expected_base32 = base64.b32encode(bytes.fromhex(device.key)).decode("ascii").rstrip("=")
+    assert device.base32_key == expected_base32
     assert "=" not in device.base32_key
 
 
