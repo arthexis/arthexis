@@ -334,6 +334,8 @@ class EvergoUser(Profile):
         orders_created = 0
         orders_updated = 0
         placeholders_created = 0
+        loaded_customer_ids: set[int] = set()
+        loaded_order_ids: set[int] = set()
 
         with requests.Session() as session:
             self._login_session(session=session, timeout=timeout)
@@ -350,10 +352,14 @@ class EvergoUser(Profile):
                     unresolved.append(so_number)
                     continue
 
-                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_inc, created_inc, updated_inc, customer_ids, order_ids = self._process_order_payloads(
+                    order_payloads
+                )
                 customers_loaded += customers_inc
                 orders_created += created_inc
                 orders_updated += updated_inc
+                loaded_customer_ids.update(customer_ids)
+                loaded_order_ids.update(order_ids)
 
             lookup_names = [""] if load_all_customers else customer_names
             for customer_name in lookup_names:
@@ -367,10 +373,14 @@ class EvergoUser(Profile):
                         unresolved.append(customer_name)
                     continue
 
-                customers_inc, created_inc, updated_inc = self._process_order_payloads(order_payloads)
+                customers_inc, created_inc, updated_inc, customer_ids, order_ids = self._process_order_payloads(
+                    order_payloads
+                )
                 customers_loaded += customers_inc
                 orders_created += created_inc
                 orders_updated += updated_inc
+                loaded_customer_ids.update(customer_ids)
+                loaded_order_ids.update(order_ids)
 
         return {
             "sales_orders": sales_orders,
@@ -380,6 +390,8 @@ class EvergoUser(Profile):
             "orders_updated": orders_updated,
             "placeholders_created": placeholders_created,
             "unresolved": unresolved,
+            "loaded_customer_ids": sorted(loaded_customer_ids),
+            "loaded_order_ids": sorted(loaded_order_ids),
         }
 
 
@@ -673,22 +685,36 @@ class EvergoUser(Profile):
             page += 1
         return rows
 
-    def _process_order_payloads(self, order_payloads: list[dict[str, Any]]) -> tuple[int, int, int]:
-        """Upsert orders/customers and return created/updated/customer counters."""
+    def _process_order_payloads(
+        self, order_payloads: list[dict[str, Any]]
+    ) -> tuple[int, int, int, set[int], set[int]]:
+        """Upsert orders/customers and return counters plus loaded record IDs."""
         customers_loaded = 0
         orders_created = 0
         orders_updated = 0
+        loaded_customer_ids: set[int] = set()
+        loaded_order_ids: set[int] = set()
 
         for payload in order_payloads:
             was_created = self._upsert_order(payload)
             customer_created = self._upsert_customer_from_order(payload)
+            order_id = to_int(payload.get("id"))
+            if order_id is not None:
+                loaded_order_ids.add(order_id)
+
+            customer_payload = payload.get("cliente")
+            if isinstance(customer_payload, dict):
+                customer_id = to_int(customer_payload.get("id"))
+                if customer_id is not None:
+                    loaded_customer_ids.add(customer_id)
+
             customers_loaded += int(customer_created)
             if was_created:
                 orders_created += 1
             else:
                 orders_updated += 1
 
-        return customers_loaded, orders_created, orders_updated
+        return customers_loaded, orders_created, orders_updated, loaded_customer_ids, loaded_order_ids
 
     def _ensure_placeholder_order(self, *, so_number: str) -> EvergoOrder:
         """Create/update a provisional local order row when SO is not found upstream."""

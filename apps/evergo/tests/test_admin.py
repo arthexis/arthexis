@@ -222,6 +222,8 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
         "orders_updated": 0,
         "placeholders_created": 0,
         "unresolved": [],
+        "loaded_customer_ids": [101],
+        "loaded_order_ids": [202],
     }
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     profile = EvergoUser.objects.create(
@@ -239,7 +241,44 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
         {"profile": profile.pk, "raw_queries": "J00830, Customer Name"},
     )
     assert post_response.status_code == 302
+    assert post_response["Location"].endswith("/admin/evergo/evergoorder/?id__in=202")
     mock_load_customers.assert_called_once_with(raw_queries="J00830, Customer Name")
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_can_redirect_to_customers_with_selected_ids(
+    mock_load_customers, admin_client
+):
+    """Regression: wizard next-view selector should support customer destination with scoped IDs."""
+    mock_load_customers.return_value = {
+        "customers_loaded": 2,
+        "orders_created": 2,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+        "loaded_customer_ids": [12, 18],
+        "loaded_order_ids": [99],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="suite-tool-customers@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {
+            "profile": profile.pk,
+            "raw_queries": "J00830",
+            "next_view": "customers",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"].endswith("/admin/evergo/evergocustomer/?id__in=12,18")
 
 
 @pytest.mark.django_db
@@ -259,6 +298,8 @@ def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_cre
     content = response.content.decode("utf-8")
     assert f'value="{profile.pk}" selected' in content
     assert reverse("admin:evergo_evergouser_add") in content
+    assert 'name="next_view"' in content
+    assert '<option value="orders" selected>Orders</option>' in content
     assert 'class="button">Cancel</a>' in content
 
 
@@ -1075,6 +1116,8 @@ def test_evergo_admin_load_customers_wizard_load_all_button_submits_without_quer
         "orders_updated": 0,
         "placeholders_created": 0,
         "unresolved": [],
+        "loaded_customer_ids": [],
+        "loaded_order_ids": [],
     }
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     profile = EvergoUser.objects.create(
@@ -1090,7 +1133,43 @@ def test_evergo_admin_load_customers_wizard_load_all_button_submits_without_quer
     )
 
     assert response.status_code == 302
+    assert response["Location"].endswith("/admin/evergo/evergoorder/")
     mock_load_customers.assert_called_once_with(raw_queries="")
+
+
+@pytest.mark.django_db
+def test_evergo_admin_ids_query_param_scopes_order_and_customer_changelists(admin_client):
+    """Regression: ids query parameter should limit changelist rows to loaded records only."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="ids-scope-admin@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    selected_order = EvergoOrder.objects.create(user=profile, remote_id=701, order_number="SO-701")
+    unselected_order = EvergoOrder.objects.create(user=profile, remote_id=702, order_number="SO-702")
+    selected_customer = EvergoCustomer.objects.create(user=profile, remote_id=801, name="Selected Customer")
+    unselected_customer = EvergoCustomer.objects.create(user=profile, remote_id=802, name="Unselected Customer")
+
+    order_response = admin_client.get(
+        reverse("admin:evergo_evergoorder_changelist"),
+        {"id__in": str(selected_order.pk)},
+    )
+    customer_response = admin_client.get(
+        reverse("admin:evergo_evergocustomer_changelist"),
+        {"id__in": str(selected_customer.pk)},
+    )
+
+    assert order_response.status_code == 200
+    order_content = order_response.content.decode("utf-8")
+    assert selected_order.order_number in order_content
+    assert unselected_order.order_number not in order_content
+
+    assert customer_response.status_code == 200
+    customer_content = customer_response.content.decode("utf-8")
+    assert selected_customer.name in customer_content
+    assert unselected_customer.name not in customer_content
 
 
 @pytest.mark.django_db
@@ -1141,8 +1220,24 @@ def test_evergo_admin_load_customers_wizard_shows_explicit_load_mode_buttons(adm
     response = admin_client.get(wizard_url)
 
     assert response.status_code == 200
-    assert b"Load all customers" in response.content
-    assert b"Load filtered customers" in response.content
+    content = response.content.decode("utf-8")
+    assert "Load all customers" in content
+    assert "Load filtered customers" in content
+    assert '<div id="content-main">\n    <h1>' not in content
+
+
+@pytest.mark.django_db
+def test_evergo_admin_order_and_customer_changelists_do_not_duplicate_headers(admin_client):
+    """Regression: changelists should render a single container-owned header."""
+    order_response = admin_client.get(reverse("admin:evergo_evergoorder_changelist"))
+    customer_response = admin_client.get(reverse("admin:evergo_evergocustomer_changelist"))
+
+    assert order_response.status_code == 200
+    assert customer_response.status_code == 200
+    order_content = order_response.content.decode("utf-8")
+    customer_content = customer_response.content.decode("utf-8")
+    assert '<div class="content-title-with-favorite">\n    <h1>' not in order_content
+    assert '<div class="content-title-with-favorite">\n    <h1>' not in customer_content
 
 
 @pytest.mark.django_db
