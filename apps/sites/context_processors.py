@@ -45,6 +45,7 @@ _ROLE_FAVICONS = {
 
 def nav_links(request):
     """Provide navigation links for the current site."""
+    explicit_badge_role = bool(getattr(request, "badge_role_explicit", False))
     site = getattr(request, "badge_site", None) or get_site(request)
     node = getattr(request, "badge_node", None)
     role = getattr(request, "badge_role", None)
@@ -86,7 +87,7 @@ def nav_links(request):
     )
     pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
 
-    if not user_is_authenticated:
+    if not user_is_authenticated and not explicit_badge_role:
         template_id = getattr(getattr(site, "template", None), "id", "none")
         cache_key = (
             f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
@@ -336,6 +337,6 @@ def nav_links(request):
             getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
         ),
     }
-    if not user_is_authenticated:
+    if not user_is_authenticated and not explicit_badge_role:
         cache.set(cache_key, context, timeout=300)
     return context

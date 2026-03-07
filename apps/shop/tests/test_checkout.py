@@ -311,3 +311,15 @@ class ShopNextOpeningDatetimeTests(TestCase):
         next_opening = shop.next_opening_datetime(reference)
 
         self.assertEqual(next_opening, timezone.make_aware(datetime(2026, 1, 2, 22, 0), timezone.get_current_timezone()))
+
+    def test_next_opening_datetime_for_overnight_shop_at_opening_boundary(self):
+        """Overnight shops should return the next day at the exact opening-time boundary."""
+
+        shop = Shop(name="Overnight", slug="overnight-boundary", opening_time=time(22, 0), closing_time=time(5, 0))
+        current_timezone = timezone.get_current_timezone()
+        reference = timezone.make_aware(datetime(2026, 1, 2, 22, 0), current_timezone)
+
+        next_opening = shop.next_opening_datetime(reference)
+
+        self.assertEqual(next_opening, timezone.make_aware(datetime(2026, 1, 3, 22, 0), current_timezone))
+

@@ -6,7 +6,6 @@ import hashlib
 import uuid
 from io import BytesIO
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import models
@@ -154,18 +153,19 @@ class Reference(Entity):
                 )
         if not self.image_media and self.value:
             qr_code_module = _load_qrcode_module()
-            qr = qr_code_module.QRCode(box_size=10, border=4)
-            qr.add_data(self.value)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            buffer = BytesIO()
-            img.save(buffer, format="PNG")
-            filename = hashlib.sha256(self.value.encode()).hexdigest()[:16] + ".png"
-            bucket = get_reference_qr_bucket()
-            upload = ContentFile(buffer.getvalue(), name=filename)
-            self.image_media = create_media_file(
-                bucket=bucket, uploaded_file=upload, content_type="image/png"
-            )
+            if qr_code_module is not None:
+                qr = qr_code_module.QRCode(box_size=10, border=4)
+                qr.add_data(self.value)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                buffer = BytesIO()
+                img.save(buffer, format="PNG")
+                filename = hashlib.sha256(self.value.encode()).hexdigest()[:16] + ".png"
+                bucket = get_reference_qr_bucket()
+                upload = ContentFile(buffer.getvalue(), name=filename)
+                self.image_media = create_media_file(
+                    bucket=bucket, uploaded_file=upload, content_type="image/png"
+                )
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -218,15 +218,14 @@ REFERENCE_FILE_BUCKET_SLUG = "links-reference-files"
 
 
 def _load_qrcode_module():
-    """Return the ``qrcode`` module or raise a clear configuration error."""
+    """Return the optional ``qrcode`` module when available."""
 
     try:
         import qrcode
     except ModuleNotFoundError as exc:
-        raise ImproperlyConfigured(
-            "The 'qrcode' package is required to generate reference QR images. "
-            "Install project optional dependency group 'nodes' or add qrcode."
-        ) from exc
+        if exc.name == "qrcode":
+            return None
+        raise
     return qrcode
 
 

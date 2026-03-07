@@ -83,16 +83,16 @@ class Shop(Entity):
         if self.opening_time == self.closing_time:
             return None
 
-        if self.opening_time < self.closing_time:
-            opening_date = (
-                reference.date() if reference.time() < self.opening_time else reference.date() + timedelta(days=1)
-            )
-            return datetime.combine(opening_date, self.opening_time, tzinfo=reference.tzinfo)
+        opening_today = datetime.combine(reference.date(), self.opening_time, tzinfo=reference.tzinfo)
 
-        opening_date = reference.date()
+        if self.opening_time < self.closing_time:
+            if reference < opening_today:
+                return opening_today
+            return opening_today + timedelta(days=1)
+
         if reference.time() >= self.opening_time:
-            opening_date += timedelta(days=1)
-        return datetime.combine(opening_date, self.opening_time, tzinfo=reference.tzinfo)
+            return opening_today + timedelta(days=1)
+        return opening_today
 
     def __str__(self) -> str:
         """Return a readable representation."""

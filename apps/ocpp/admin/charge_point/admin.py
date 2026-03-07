@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib import admin, messages
 from django.contrib.admin.utils import quote
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -238,8 +238,16 @@ class ChargerAdmin(
         if not resolver_match or resolver_match.url_name != changelist_url_name:
             return queryset
 
+        has_connector_rows = Charger.objects.filter(
+            charger_id=OuterRef("charger_id"),
+            connector_id__isnull=False,
+        )
+        queryset = queryset.annotate(_has_connector_rows=Exists(has_connector_rows))
+
         return queryset.exclude(
-            Q(charging_station__isnull=False) & Q(connector_id__isnull=True)
+            Q(connector_id__isnull=True)
+            & Q(charging_station__isnull=False)
+            & Q(_has_connector_rows=True)
         )
 
     def get_readonly_fields(self, request, obj=None):

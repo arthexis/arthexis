@@ -98,8 +98,10 @@ def test_nav_links_only_shows_terminal_scoped_module_for_terminal_role(monkeypat
 
     terminal_request = RequestFactory().get("/shop-terminal-scope-test/")
     terminal_request.badge_role = terminal_role
+    terminal_request.badge_role_explicit = True
     control_request = RequestFactory().get("/shop-terminal-scope-test/")
     control_request.badge_role = control_role
+    control_request.badge_role_explicit = True
 
     terminal_context = context_processors.nav_links(terminal_request)
     control_context = context_processors.nav_links(control_request)
@@ -109,6 +111,61 @@ def test_nav_links_only_shows_terminal_scoped_module_for_terminal_role(monkeypat
 
     assert "/shop-terminal-scope-test/" in terminal_paths
     assert "/shop-terminal-scope-test/" not in control_paths
+
+
+@pytest.mark.django_db
+def test_nav_links_anonymous_cache_remains_enabled_without_explicit_badge_role(monkeypatch):
+    """Anonymous requests should still use cached nav context when role is implicit."""
+
+    cache.clear()
+    request = RequestFactory().get("/")
+
+    monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=False),
+    )
+
+    module = Module.objects.create(path="cached-nav-test", menu="Cached Nav")
+    Landing.objects.create(module=module, path="/cached-nav-test/", label="Cached Landing")
+
+    first_context = context_processors.nav_links(request)
+
+    module.delete()
+
+    second_context = context_processors.nav_links(request)
+
+    assert [m.path for m in first_context["nav_modules"]] == ["/cached-nav-test/"]
+    assert [m.path for m in second_context["nav_modules"]] == ["/cached-nav-test/"]
+
+
+@pytest.mark.django_db
+def test_nav_links_skips_anonymous_cache_when_badge_role_explicit(monkeypatch):
+    """Explicit badge role overrides should bypass anonymous nav cache."""
+
+    cache.clear()
+    request = RequestFactory().get("/")
+    request.badge_role_explicit = True
+
+    monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(id=1, template=None, enable_public_chat=False),
+    )
+
+    module = Module.objects.create(path="uncached-nav-test", menu="Uncached Nav")
+    Landing.objects.create(module=module, path="/uncached-nav-test/", label="Uncached Landing")
+
+    first_context = context_processors.nav_links(request)
+
+    module.delete()
+
+    second_context = context_processors.nav_links(request)
+
+    assert [m.path for m in first_context["nav_modules"]] == ["/uncached-nav-test/"]
+    assert second_context["nav_modules"] == []
 
 
 @pytest.mark.django_db
