@@ -1,0 +1,46 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "odoo-crm-sync",
+      "display": "Odoo CRM Sync",
+      "summary": "Umbrella suite feature for Odoo-backed CRM synchronizations.",
+      "is_enabled": true,
+      "main_app": [
+        "odoo"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Expose toggle controls for Odoo CRM sync integrations and allow operators to disable all Odoo sync jobs with one switch.",
+      "public_requirements": "",
+      "service_requirements": "All Odoo CRM sync integrations must treat this feature as a parent gate.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:odoo_odooemployee_changelist",
+        "admin:odoo_odoodeployment_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "Command: python manage.py odoo"
+      ],
+      "code_locations": [
+        "apps/odoo/sync_features.py",
+        "apps/odoo/admin.py",
+        "apps/core/admin/odoo.py",
+        "apps/odoo/management/commands/odoo.py"
+      ],
+      "protocol_coverage": {},
+      "metadata": {
+        "sync_integrations": [
+          "odoo-sync-deployment-discovery",
+          "odoo-sync-employee-import",
+          "odoo-sync-evergo-users"
+        ]
+      },
+      "created_at": "2026-03-07T00:00:00Z",
+      "updated_at": "2026-03-07T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]

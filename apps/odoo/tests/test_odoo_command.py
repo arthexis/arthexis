@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import json
 from io import StringIO
+from unittest.mock import MagicMock
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
+from apps.evergo.models import EvergoUser
+from apps.features.models import Feature
 from apps.odoo.models import OdooDeployment, OdooEmployee
+from apps.odoo.sync_features import (
+    ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+    ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+)
 
 
 @pytest.mark.django_db
@@ -226,3 +233,148 @@ def test_odoo_command_rpc_mode_rejects_unknown_profile_id(admin_user):
             "--method",
             "search_read",
         )
+
+
+@pytest.mark.django_db
+def test_odoo_command_sync_evergo_users_creates_missing_odoo_users(admin_user, monkeypatch):
+    """Sync mode should create missing Odoo users and local OdooEmployee links."""
+
+    Feature.objects.update_or_create(
+        slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
+        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+    )
+
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    evergo_user = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="tech@example.com",
+        evergo_password="secret",
+        email="tech@example.com",
+        name="Tech Example",
+    )
+
+    mock_execute = MagicMock(
+        side_effect=[[], 321],
+    )
+    monkeypatch.setattr(OdooEmployee, "execute", mock_execute)
+
+    out = StringIO()
+    call_command("odoo", "--profile-id", str(profile.pk), "--sync-evergo-users", stdout=out)
+
+    assert "created=1" in out.getvalue()
+    created_profile = OdooEmployee.objects.get(user=evergo_user.user, email="tech@example.com")
+    assert created_profile.odoo_uid == 321
+    assert mock_execute.call_count == 2
+    assert mock_execute.call_args_list[0].args == (
+        "res.users",
+        "search_read",
+        ["|", ("login", "=", "tech@example.com"), ("email", "=", "tech@example.com")],
+    )
+    assert mock_execute.call_args_list[0].kwargs == {"fields": ["id"], "limit": 1}
+    assert mock_execute.call_args_list[1].args == (
+        "res.users",
+        "create",
+        [[{"name": "Tech Example", "login": "tech@example.com", "email": "tech@example.com"}]],
+    )
+    assert mock_execute.call_args_list[1].kwargs == {}
+
+
+@pytest.mark.django_db
+def test_odoo_command_sync_evergo_users_respects_feature_toggles(admin_user):
+    """Sync mode should fail when Odoo CRM sync toggles disable this integration."""
+
+    Feature.objects.update_or_create(
+        slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+        defaults={"display": "Odoo CRM Sync", "is_enabled": False},
+    )
+    Feature.objects.update_or_create(
+        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+    )
+
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    with pytest.raises(
+        CommandError,
+        match=r"Odoo Evergo user sync integration is disabled",
+    ):
+        call_command("odoo", "--profile-id", str(profile.pk), "--sync-evergo-users")
+
+
+@pytest.mark.django_db
+def test_odoo_command_sync_evergo_users_requires_profile_id(admin_user):
+    """Sync mode requires explicit --profile-id to avoid writing to the wrong database."""
+
+    Feature.objects.update_or_create(
+        slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
+        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+    )
+
+    with pytest.raises(CommandError, match=r"--profile-id is required"):
+        call_command("odoo", "--sync-evergo-users")
+
+
+@pytest.mark.django_db
+def test_odoo_command_sync_evergo_users_reuses_existing_remote_uid(admin_user, monkeypatch):
+    """Sync mode should use remote search results and upsert local profile by Odoo uid."""
+
+    Feature.objects.update_or_create(
+        slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
+        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+    )
+
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    evergo_user = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="tech@example.com",
+        evergo_password="secret",
+        email="tech@example.com",
+        name="Tech Example",
+    )
+
+    monkeypatch.setattr(OdooEmployee, "execute", MagicMock(return_value=[{"id": 555}]))
+
+    out = StringIO()
+    call_command("odoo", "--profile-id", str(profile.pk), "--sync-evergo-users", stdout=out)
+
+    assert "created=1" in out.getvalue()
+    synced_profile = OdooEmployee.objects.get(user=evergo_user.user, email="tech@example.com")
+    assert synced_profile.odoo_uid == 555

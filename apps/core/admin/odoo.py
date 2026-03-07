@@ -14,6 +14,10 @@ from django.utils.translation import gettext_lazy as _
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 from apps.odoo.models import OdooEmployee, OdooProduct
+from apps.odoo.sync_features import (
+    ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
+    is_odoo_sync_integration_enabled,
+)
 
 from .forms import OdooEmployeeAdminForm, OdooProductAdminForm
 from .mixins import (
@@ -250,6 +254,19 @@ class OdooEmployeeAdmin(
             self.message_user(
                 request,
                 _("Use a POST request to run the employee import."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+            )
+
+        if not is_odoo_sync_integration_enabled(
+            ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
+            default=False,
+        ):
+            self.message_user(
+                request,
+                _("Odoo employee import sync is disabled by suite feature toggles."),
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(

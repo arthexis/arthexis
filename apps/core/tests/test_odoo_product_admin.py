@@ -6,7 +6,12 @@ from django.utils import timezone
 
 import pytest
 
+from apps.features.models import Feature
 from apps.odoo.models import OdooEmployee, OdooProduct
+from apps.odoo.sync_features import (
+    ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+    ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
+)
 from apps.users.models import User
 
 
@@ -181,7 +186,7 @@ def test_search_orders_view_accepts_post_selected_action(admin_client, admin_use
 def test_load_employees_changelist_action_posts_to_import_endpoint(admin_client, admin_user):
     """The changelist object action endpoint redirects to the import view."""
 
-    employee = OdooEmployee.objects.create(
+    OdooEmployee.objects.create(
         user=admin_user,
         host="https://odoo.example.com",
         database="odoodb",
@@ -259,6 +264,55 @@ def test_load_employees_action_creates_missing_odoo_profiles(admin_client, admin
     assert created_profile.verified_on is None
     assert OdooEmployee.objects.filter(host=profile.host, database=profile.database).count() == 3
 
+
+@pytest.mark.integration
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "feature_slug",
+    [
+        ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
+        ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+    ],
+)
+def test_load_employees_action_respects_sync_feature_toggle(
+    admin_client,
+    admin_user,
+    monkeypatch,
+    feature_slug,
+):
+    """Employee import should be skipped when an Odoo sync feature toggle is off."""
+
+    Feature.objects.update_or_create(
+        slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
+        slug=ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
+        defaults={"display": "Odoo Sync: Employee Import", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
+        slug=feature_slug,
+        defaults={"is_enabled": False},
+    )
+
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoodb",
+        username="admin",
+        password="secret",
+        odoo_uid=99,
+        verified_on=timezone.now(),
+    )
+
+    def fail_execute(*args, **kwargs):
+        raise AssertionError("execute should not be called when feature is disabled")
+
+    monkeypatch.setattr(OdooEmployee, "execute", fail_execute)
+
+    response = admin_client.post(reverse("admin:odoo_odooemployee_load_employees"))
+    assert response.status_code == 302
+    assert OdooEmployee.objects.count() == 1
 
 @pytest.mark.integration
 @pytest.mark.django_db
