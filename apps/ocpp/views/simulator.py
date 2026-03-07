@@ -113,9 +113,14 @@ def cp_simulator(request):
         port_value = str(ws_port or "").strip()
         if not host_value:
             return ""
+        host_display = (
+            host_value
+            if ":" not in host_value or (host_value.startswith("[") and host_value.endswith("]"))
+            else f"[{host_value}]"
+        )
         if not port_value:
-            return host_value
-        return f"{host_value}:{port_value}"
+            return host_display
+        return f"{host_display}:{port_value}"
 
     default_simulator = (
         Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
@@ -243,8 +248,8 @@ def cp_simulator(request):
             "ws_port": normalized_port,
             "cp_path": request.POST.get("cp_path") or default_params["cp_path"],
             "serial_number": request.POST.get("serial_number")
-            or default_params["serial_number"]
-            or request.POST.get("cp_path"),
+            or request.POST.get("cp_path")
+            or default_params["serial_number"],
             "connector_id": _cast_value(
                 request.POST.get("connector_id"), int, default_params["connector_id"]
             ),

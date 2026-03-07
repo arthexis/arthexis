@@ -298,3 +298,44 @@ def test_cp_simulator_form_prefers_default_simulator_host(logged_in_client):
     assert response.status_code == 200
     content = response.content.decode()
     assert 'name="host" value="remote.example:9443"' in content
+
+
+def test_cp_simulator_form_brackets_default_ipv6_host(logged_in_client):
+    Simulator.objects.create(
+        default=True,
+        host="::1",
+        ws_port=9001,
+        cp_path="CP-IPV6-DEFAULT",
+        serial_number="SERIAL-IPV6-DEFAULT",
+    )
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="host" value="[::1]:9001"' in content
+
+
+def test_cp_simulator_serial_defaults_to_cp_path_when_not_provided(
+    logged_in_client, fake_simulate
+):
+    Simulator.objects.create(
+        default=True,
+        host="remote.example",
+        ws_port=9000,
+        cp_path="CP-DEFAULT",
+        serial_number="SERIAL-DEFAULT",
+    )
+
+    payload = {
+        "simulator_slot": "1",
+        "host": "example.com:9000",
+        "cp_path": "CP-FALLBACK",
+        "serial_number": "",
+    }
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["cp_path"] == "CP-FALLBACK"
+    assert params["serial_number"] == "CP-FALLBACK"
