@@ -373,3 +373,68 @@ def test_feature_admin_operator_site_language_parameter_is_editable(admin_client
 
     feature.refresh_from_db()
     assert feature.metadata["parameters"]["default_language"] == "es"
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_ocpp_simulator_backend_parameters_are_editable(admin_client):
+    """Regression: simulator backend parameters should render and persist in admin."""
+
+    feature, _created = Feature.objects.update_or_create(
+        slug="ocpp-simulator",
+        defaults={
+            "display": "OCPP Simulator",
+            "source": Feature.Source.CUSTOM,
+            "metadata": {
+                "parameters": {
+                    "arthexis_backend": "enabled",
+                    "mobilityhouse_backend": "disabled",
+                }
+            },
+        },
+    )
+
+    change_url = reverse("admin:features_feature_change", args=[feature.pk])
+    response = admin_client.get(change_url)
+
+    assert response.status_code == 200
+    assert b'id="id_param__arthexis_backend"' in response.content
+    assert b'id="id_param__mobilityhouse_backend"' in response.content
+
+    form_data = {
+        "display": feature.display,
+        "slug": feature.slug,
+        "summary": "",
+        "is_enabled": True,
+        "main_app": "",
+        "node_feature": "",
+        "user": "",
+        "group": "",
+        "admin_requirements": "",
+        "public_requirements": "",
+        "service_requirements": "",
+        "admin_views": "[]",
+        "public_views": "[]",
+        "service_views": "[]",
+        "code_locations": "[]",
+        "protocol_coverage": "{}",
+        "metadata": '{"parameters": {"arthexis_backend": "enabled", "mobilityhouse_backend": "disabled"}}',
+        "param__arthexis_backend": "disabled",
+        "param__mobilityhouse_backend": "enabled",
+    }
+
+    form = FeatureAdminForm(data=form_data, instance=feature)
+    assert form.is_valid(), form.errors
+    assert form.cleaned_parameter_values() == {
+        "arthexis_backend": "disabled",
+        "mobilityhouse_backend": "enabled",
+    }
+
+    save_data = dict(form_data)
+    save_data["_save"] = "Save"
+    post_response = admin_client.post(change_url, data=save_data)
+    assert post_response.status_code == 302
+
+    feature.refresh_from_db()
+    assert feature.metadata["parameters"]["arthexis_backend"] == "disabled"
+    assert feature.metadata["parameters"]["mobilityhouse_backend"] == "enabled"
