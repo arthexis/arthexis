@@ -7,6 +7,18 @@ from typing import Any
 import pytest
 
 
+def _require_pytest_django_fixture(request: pytest.FixtureRequest, fixture_name: str) -> Any:
+    """Return a pytest-django fixture or raise a clear usage error when unavailable."""
+
+    try:
+        return request.getfixturevalue(fixture_name)
+    except pytest.FixtureLookupError as exc:
+        raise pytest.UsageError(
+            "Database-backed tests require pytest-django. Install test dependencies "
+            "(for example: `pip install -r requirements-ci.txt`) before running pytest."
+        ) from exc
+
+
 def requires_db(item: pytest.Item) -> bool:
     """Return ``True`` when a test item needs database access."""
 
@@ -24,20 +36,20 @@ def requires_db(item: pytest.Item) -> bool:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_db_for_django_tests(request: pytest.FixtureRequest, django_db_blocker: Any) -> None:
+def setup_db_for_django_tests(request: pytest.FixtureRequest) -> None:
     """Initialize the Django test database once for DB-backed tests."""
 
-    del django_db_blocker
     if not any(requires_db(item) for item in request.session.items):
         return
-    request.getfixturevalue("django_db_setup")
+    _require_pytest_django_fixture(request, "django_db_setup")
 
 
 @pytest.fixture(scope="session")
-def load_sigil_roots_once(django_db_setup: Any, django_db_blocker: Any) -> None:
+def load_sigil_roots_once(request: pytest.FixtureRequest) -> None:
     """Load SigilRoot fixtures once per session for tests that need the DB."""
 
-    del django_db_setup
+    _require_pytest_django_fixture(request, "django_db_setup")
+    django_db_blocker = _require_pytest_django_fixture(request, "django_db_blocker")
     from apps.sigils.loader import load_fixture_sigil_roots
 
     with django_db_blocker.unblock():
