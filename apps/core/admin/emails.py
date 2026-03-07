@@ -33,6 +33,8 @@ class EmailCollectorAdmin(EntityModelAdmin):
         "notification_subject",
         "notification_message",
         "notification_recipients",
+        "notification_recipe__slug",
+        "notification_recipe__display",
     )
     actions = ["preview_messages"]
 
