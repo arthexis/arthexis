@@ -285,7 +285,7 @@ def test_collect_recipe_mode_executes_configured_recipe(monkeypatch):
 
     collector.collect(limit=1)
 
-    assert captured["args"] == ("Alert 9", "Status open")
+    assert captured["args"] == ()
     assert captured["kwargs"] == {
         "subject": "Alert 9",
         "message": "Status open",
@@ -294,7 +294,6 @@ def test_collect_recipe_mode_executes_configured_recipe(monkeypatch):
         "date": "Tue",
         "sigils": {"ticket_id": "9", "status": "open"},
     }
-
 
 
 def test_collect_email_mode_with_recipe_executes_both_routes(monkeypatch):
@@ -357,7 +356,7 @@ def test_collect_email_mode_with_recipe_executes_both_routes(monkeypatch):
     assert sent["message"] == "Status open"
     assert sent["recipient_list"] == ["ops@example.com"]
     assert sent["kwargs"]["fail_silently"] is False
-    assert captured["args"] == ("Alert 10", "Status open")
+    assert captured["args"] == ()
     assert captured["kwargs"] == {
         "subject": "Alert 10",
         "message": "Status open",
@@ -366,6 +365,70 @@ def test_collect_email_mode_with_recipe_executes_both_routes(monkeypatch):
         "date": "Wed",
         "sigils": {"ticket_id": "10", "status": "open"},
     }
+
+
+def test_collect_email_mode_failure_still_executes_recipe(monkeypatch, caplog):
+    """Collector should still execute recipe when email dispatch fails."""
+
+    owner = _create_owner("collector-email-failure-recipe-owner")
+    inbox = _create_inbox(owner, "collector-email-failure-recipe@example.com")
+    recipe = Recipe.objects.create(
+        user=owner,
+        slug="collector-email-failure-recipe",
+        display="Collector Email Failure Recipe",
+        script="result = kwargs",
+    )
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        fragment="Ticket [ticket_id] is [status]",
+        notification_mode=EmailCollector.NOTIFY_EMAIL,
+        notification_subject="Alert [ticket_id]",
+        notification_message="Status [status]",
+        notification_recipients="ops@example.com",
+        notification_recipe=recipe,
+    )
+
+    monkeypatch.setattr(
+        collector,
+        "search_messages",
+        lambda limit: [
+            {
+                "subject": "Grid alarm",
+                "from": "grid@example.com",
+                "body": "Ticket 11 is open",
+                "date": "Thu",
+            }
+        ],
+    )
+
+    def _fake_send(*_args, **_kwargs):
+        raise RuntimeError("mail backend down")
+
+    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
+
+    captured: dict[str, object] = {}
+
+    def _fake_execute(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(recipe, "execute", _fake_execute)
+
+    with caplog.at_level("ERROR"):
+        collector.collect(limit=1)
+
+    assert captured["args"] == ()
+    assert captured["kwargs"] == {
+        "subject": "Alert 11",
+        "message": "Status open",
+        "sender": "grid@example.com",
+        "body": "Ticket 11 is open",
+        "date": "Thu",
+        "sigils": {"ticket_id": "11", "status": "open"},
+    }
+    assert "Failed email notification for collector" in caplog.text
+
 
 def test_collect_none_mode_skips_dispatch(monkeypatch):
     """Collector none mode should persist artifacts without dispatching notifications."""

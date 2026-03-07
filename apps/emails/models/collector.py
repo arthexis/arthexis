@@ -159,34 +159,41 @@ class EmailCollector(Entity):
         rendered_message = self._render_notification_template(message_template, context)
 
         if mode == self.NOTIFY_POPUP:
-            from apps.core.notifications import notify_async
+            try:
+                from apps.core.notifications import notify_async
 
-            notify_async(rendered_subject, rendered_message)
+                notify_async(rendered_subject, rendered_message)
+            except Exception:
+                logger.exception("Failed popup notification for collector %s", self.pk)
 
         if mode == self.NOTIFY_NET_MESSAGE:
-            from apps.nodes.models import NetMessage
+            try:
+                from apps.nodes.models import NetMessage
 
-            NetMessage.broadcast(rendered_subject, rendered_message)
+                NetMessage.broadcast(rendered_subject, rendered_message)
+            except Exception:
+                logger.exception("Failed net message notification for collector %s", self.pk)
 
         if mode == self.NOTIFY_EMAIL:
             recipients = self._parse_recipients(self.notification_recipients)
             if recipients:
-                from apps.emails import mailer
+                try:
+                    from apps.emails import mailer
 
-                mailer.send(
-                    subject=rendered_subject,
-                    message=rendered_message,
-                    recipient_list=recipients,
-                    fail_silently=False,
-                )
+                    mailer.send(
+                        subject=rendered_subject,
+                        message=rendered_message,
+                        recipient_list=recipients,
+                        fail_silently=False,
+                    )
+                except Exception:
+                    logger.exception("Failed email notification for collector %s", self.pk)
 
         recipe = self.notification_recipe
         if recipe is None:
             return
 
         recipe.execute(
-            rendered_subject,
-            rendered_message,
             subject=rendered_subject,
             message=rendered_message,
             sender=context.get("sender", ""),
