@@ -87,6 +87,8 @@ jobs:
               name = dependency.get('name', 'unknown-package')
               version = dependency.get('version', 'unknown-version')
               for vuln in dependency.get('vulns', []):
+                  if not isinstance(vuln, dict):
+                      continue
                   findings.append((name, version, vuln.get('id', 'UNKNOWN')))
 
           lines = [f'pip-audit findings: {len(findings)} vulnerability entries']
@@ -132,11 +134,22 @@ jobs:
               sys.exit(1)
 
           data = json.loads(report_path.read_text() or '{}')
+          if not isinstance(data, dict):
+              summary_path.write_text('Bandit JSON report has unexpected format. Review bandit.log for details.\n')
+              print('Bandit JSON report is not a valid object.', file=sys.stderr)
+              sys.exit(1)
+
           results = data.get('results', [])
+          if not isinstance(results, list):
+              results = []
           errors = data.get('errors', [])
+          if not isinstance(errors, list):
+              errors = []
 
           lines = [f'Bandit findings: {len(results)} issue(s) with medium+ severity and confidence']
           for issue in results[:20]:
+              if not isinstance(issue, dict):
+                  continue
               lines.append(
                   f"- {issue.get('issue_severity', '?')}/{issue.get('issue_confidence', '?')} "
                   f"{issue.get('test_id', 'B???')} at {issue.get('filename', '?')}:{issue.get('line_number', '?')}"
