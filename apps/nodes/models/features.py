@@ -213,7 +213,9 @@ class NodeFeatureMixin:
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
     }
-    SYSTEMD_DEPENDENT_FEATURE_SLUGS = frozenset(FEATURE_LOCK_MAP.keys())
+    SYSTEMD_DEPENDENT_FEATURE_SLUGS = frozenset(
+        set(FEATURE_LOCK_MAP.keys()) - {"rfid-scanner"}
+    )
     CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
     AP_ROUTER_SSID = "gelectriic-ap"
     NMCLI_TIMEOUT = 5
