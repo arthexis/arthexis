@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Sequence
-from urllib.parse import urlparse
 
+from django.core.exceptions import DisallowedHost
 from django.http import HttpRequest
 from django.http.request import split_domain_port
 
@@ -56,27 +56,14 @@ def _rp_id(request: HttpRequest) -> str:
 
 
 def _expected_origins(request: HttpRequest) -> list[str]:
-    origins: set[str] = set()
+    """Return trusted expected origins derived from Django-validated host/scheme."""
+
     scheme = "https" if is_https_request(request) else "http"
-    host = request.get_host()
-    if host:
-        origins.add(f"{scheme}://{host}")
-    forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST")
-    if forwarded_host:
-        forwarded_host = forwarded_host.split(",", 1)[0].strip()
-        forwarded_proto = request.META.get("HTTP_X_FORWARDED_PROTO", scheme)
-        forwarded_proto = forwarded_proto.split(",", 1)[0].strip() or scheme
-        if forwarded_host:
-            origins.add(f"{forwarded_proto}://{forwarded_host}")
-    origin_header = request.META.get("HTTP_ORIGIN")
-    if origin_header:
-        origins.add(origin_header)
-    referer = request.META.get("HTTP_REFERER")
-    if referer:
-        parsed = urlparse(referer)
-        if parsed.scheme and parsed.netloc:
-            origins.add(f"{parsed.scheme}://{parsed.netloc}")
-    return sorted(origins)
+    try:
+        host = request.get_host()
+    except DisallowedHost:
+        return []
+    return [f"{scheme}://{host}"] if host else []
 
 
 def build_registration_options(

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from webauthn.helpers.exceptions import InvalidJSONStructure
 
 from apps.users.models import PasskeyCredential
 
@@ -134,3 +135,52 @@ def test_passkey_login_verify_rejects_unknown_credential(client):
 
     assert response.status_code == 400
     assert response.json()["detail"]
+
+
+def test_passkey_login_verify_rejects_invalid_json_structure(client, passkey, monkeypatch):
+    """Verify endpoint should reject malformed WebAuthn payload structures."""
+
+    session = client.session
+    session["passkey_login_challenge"] = "expected-challenge"
+    session.save()
+
+    def _raise_invalid(*args, **kwargs):
+        raise InvalidJSONStructure("missing fields")
+
+    monkeypatch.setattr(
+        "apps.sites.views.management.verify_authentication_response",
+        _raise_invalid,
+    )
+
+    response = client.post(
+        reverse("pages:passkey-login-verify"),
+        data={
+            "credential": {
+                "id": passkey.credential_id,
+                "type": "public-key",
+                "response": {},
+            }
+        },
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]
+
+
+def test_login_page_hides_passkey_button_when_no_credentials(client):
+    """Login page should hide passkey CTA when no passkeys are enrolled."""
+
+    response = client.get(reverse("pages:login"))
+
+    assert response.status_code == 200
+    assert response.context["show_passkey_login"] is False
+
+
+def test_login_page_shows_passkey_button_when_credentials_exist(client, passkey):
+    """Login page should show passkey CTA when passkeys exist."""
+
+    response = client.get(reverse("pages:login"))
+
+    assert response.status_code == 200
+    assert response.context["show_passkey_login"] is True

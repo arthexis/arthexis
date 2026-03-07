@@ -41,7 +41,10 @@ from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
-from webauthn.helpers.exceptions import InvalidAuthenticationResponse
+from webauthn.helpers.exceptions import (
+    InvalidAuthenticationResponse,
+    InvalidJSONStructure,
+)
 
 from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
@@ -482,7 +485,7 @@ class CustomLoginView(LoginView):
                 or had_rfid_feature
             )
         context["show_rfid_login"] = has_rfid_feature
-        context["show_passkey_login"] = True
+        context["show_passkey_login"] = PasskeyCredential.objects.exists()
         if has_rfid_feature:
             context["rfid_login_url"] = reverse("pages:rfid-login")
         return context
@@ -574,7 +577,7 @@ def passkey_login_verify(request):
             credential_public_key=bytes(stored_credential.public_key),
             credential_current_sign_count=stored_credential.sign_count,
         )
-    except InvalidAuthenticationResponse:
+    except (InvalidAuthenticationResponse, InvalidJSONStructure):
         return JsonResponse({"detail": _("Passkey verification failed.")}, status=400)
 
     user = stored_credential.user
