@@ -1231,7 +1231,7 @@ def _current_revision(base_dir: Path) -> str:
     del base_dir  # Base directory handled by shared revision helper.
 
     try:
-        from . import get_revision
+        from utils.revision import get_revision
 
         return get_revision()
     except Exception:  # pragma: no cover - defensive fallback

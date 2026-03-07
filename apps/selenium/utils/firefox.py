@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import logging
 import shutil
+from importlib import import_module
 
-try:  # pragma: no cover - optional dependency may be missing
-    from geckodriver_autoinstaller import install as install_geckodriver
-except Exception:  # pragma: no cover - fallback when installer is unavailable
-    install_geckodriver = None
+
+def _resolve_geckodriver_installer():
+    """Resolve optional geckodriver installer without hard import dependency."""
+
+    try:  # pragma: no cover - optional dependency may be missing
+        module = import_module("geckodriver_autoinstaller")
+        return getattr(module, "install", None)
+    except Exception:  # pragma: no cover - fallback when installer is unavailable
+        return None
+
+
+install_geckodriver = _resolve_geckodriver_installer()
 
 logger = logging.getLogger(__name__)
 
