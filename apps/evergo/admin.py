@@ -245,7 +245,8 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     change_form_template = "django_object_actions/change_form.html"
     changelist_actions = ("load_orders_wizard",)
-    change_actions = ("process_so_action",)
+    actions = ("reload_selected_from_evergo",)
+    change_actions = ("process_so_action", "reload_from_evergo_action")
 
     list_display = (
         "order_number_link",
@@ -472,6 +473,51 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
     process_so_action.label = PROCESS_ORDER_LABEL
     process_so_action.short_description = PROCESS_ORDER_LABEL
 
+    def _reload_order_from_evergo(self, request, order):
+        """Delete stale order data and rehydrate the order directly from Evergo."""
+        try:
+            refreshed_order = order.user.reload_order_from_remote(order=order)
+        except EvergoAPIError as exc:
+            self.message_user(
+                request,
+                _("Failed to reload order %(order)s from Evergo: %(error)s")
+                % {"order": str(order), "error": exc},
+                level=messages.ERROR,
+            )
+            return None
+
+        self.message_user(
+            request,
+            _("Reloaded order %(order)s from Evergo.") % {"order": str(order)},
+            level=messages.SUCCESS,
+        )
+        return refreshed_order
+
+    def reload_selected_from_evergo(self, request, queryset):
+        """Admin bulk action that refreshes selected orders from Evergo API payloads."""
+        reloaded = 0
+        for order in queryset:
+            if self._reload_order_from_evergo(request, order):
+                reloaded += 1
+
+        if reloaded:
+            self.message_user(
+                request,
+                _("Evergo reload finished. Orders refreshed: %(count)s") % {"count": reloaded},
+                level=messages.SUCCESS,
+            )
+
+    reload_selected_from_evergo.short_description = _("Reload selected from Evergo")
+
+    def reload_from_evergo_action(self, request, obj):
+        """Change-view action to refresh one order snapshot from Evergo."""
+        refreshed_order = self._reload_order_from_evergo(request, obj)
+        target_pk = refreshed_order.pk if refreshed_order is not None else obj.pk
+        return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[target_pk]))
+
+    reload_from_evergo_action.label = _("Reload from Evergo")
+    reload_from_evergo_action.short_description = _("Reload from Evergo")
+
 
 @admin.register(EvergoOrderFieldValue)
 class EvergoOrderFieldValueAdmin(admin.ModelAdmin):
@@ -633,6 +679,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
 
     changelist_actions = ("load_customers_wizard",)
+    actions = ("reload_selected_from_evergo",)
     list_select_related = ("latest_order",)
 
     list_display = (
@@ -736,3 +783,35 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def load_customers_view(self, request):
         """Render/handle the sales-order customer import wizard."""
         return _load_customers_admin_view(self, request)
+
+    def reload_selected_from_evergo(self, request, queryset):
+        """Delete selected customer cache rows and refetch each one from Evergo."""
+        refreshed = 0
+        for customer in queryset.select_related("user", "latest_order"):
+            customer_label = str(customer)
+            try:
+                customer.user.reload_customer_from_remote(customer=customer)
+            except EvergoAPIError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to reload customer %(customer)s from Evergo: %(error)s")
+                    % {"customer": customer_label, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+
+            refreshed += 1
+            self.message_user(
+                request,
+                _("Reloaded customer %(customer)s from Evergo.") % {"customer": customer_label},
+                level=messages.SUCCESS,
+            )
+
+        if refreshed:
+            self.message_user(
+                request,
+                _("Evergo reload finished. Customers refreshed: %(count)s") % {"count": refreshed},
+                level=messages.SUCCESS,
+            )
+
+    reload_selected_from_evergo.short_description = _("Reload selected from Evergo")

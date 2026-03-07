@@ -11,7 +11,7 @@ import uuid
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils import timezone
 from encrypted_model_fields.fields import EncryptedCharField, EncryptedTextField
@@ -405,6 +405,69 @@ class EvergoUser(Profile):
                 method="GET",
                 url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
             )
+
+    def reload_order_from_remote(self, *, order: EvergoOrder, timeout: int = 20) -> EvergoOrder:
+        """Clear one cached order snapshot and fetch the latest data from Evergo."""
+        if order.user_id != self.pk:
+            raise EvergoAPIError("Order does not belong to this Evergo profile.")
+        if order.remote_id is None:
+            raise EvergoAPIError("Order has no remote ID and cannot be reloaded from Evergo.")
+
+        payload = self.fetch_order_detail(order_id=order.remote_id, timeout=timeout)
+        normalized_payload = self._extract_order_payload(payload)
+        if normalized_payload is None:
+            raise EvergoAPIError("Evergo order detail response did not include a valid order payload.")
+
+        remote_id = order.remote_id
+        with transaction.atomic():
+            order.delete()
+            self._upsert_order(normalized_payload)
+            self._upsert_customer_from_order(normalized_payload)
+        return EvergoOrder.objects.get(user=self, remote_id=remote_id)
+
+    def reload_customer_from_remote(self, *, customer: EvergoCustomer, timeout: int = 20) -> EvergoCustomer:
+        """Clear one cached customer snapshot and fetch fresh payload data from Evergo."""
+        if customer.user_id != self.pk:
+            raise EvergoAPIError("Customer does not belong to this Evergo profile.")
+
+        if customer.latest_order and customer.latest_order.remote_id is not None:
+            refreshed_order = self.reload_order_from_remote(order=customer.latest_order, timeout=timeout)
+            refreshed_customer = EvergoCustomer.objects.filter(user=self, latest_order=refreshed_order).order_by("pk").first()
+            if refreshed_customer is None:
+                raise EvergoAPIError("Reload succeeded but no customer snapshot was linked to the refreshed order.")
+            return refreshed_customer
+
+        queries = [token for token in [customer.latest_so, customer.name] if token]
+        if not queries:
+            raise EvergoAPIError("Customer has no lookup data (SO or name) for Evergo reload.")
+
+        customer_name = customer.name
+        with transaction.atomic():
+            customer.delete()
+            summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
+            if summary["customers_loaded"] <= 0:
+                raise EvergoAPIError("Evergo did not return data for the selected customer.")
+
+            refreshed_customer = EvergoCustomer.objects.filter(
+                user=self,
+                name__iexact=customer_name,
+            ).order_by("-latest_order_updated_at", "pk").first()
+            if refreshed_customer is None:
+                raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
+            return refreshed_customer
+
+    @staticmethod
+    def _extract_order_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Normalize Evergo order-detail responses into one order payload dictionary."""
+        if not isinstance(payload, dict):
+            return None
+        if isinstance(payload.get("data"), dict):
+            return payload["data"]
+        if isinstance(payload.get("orden"), dict):
+            return payload["orden"]
+        if to_int(payload.get("id")) is not None:
+            return payload
+        return None
 
     def fetch_charger_brand_options(self, *, timeout: int = 20) -> list[str]:
         """Build charger-brand options from the user's currently assigned orders."""

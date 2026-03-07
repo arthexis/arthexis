@@ -7,16 +7,19 @@ from typing import Any
 import pytest
 
 
+_PYTEST_DJANGO_MISSING_ERROR = (
+    "Database-backed tests require pytest-django. Install test dependencies "
+    "(for example: `pip install -r requirements-ci.txt`) before running pytest."
+)
+
+
 def _require_pytest_django_fixture(request: pytest.FixtureRequest, fixture_name: str) -> Any:
     """Return a pytest-django fixture or raise a clear usage error when unavailable."""
 
     try:
         return request.getfixturevalue(fixture_name)
     except pytest.FixtureLookupError as exc:
-        raise pytest.UsageError(
-            "Database-backed tests require pytest-django. Install test dependencies "
-            "(for example: `pip install -r requirements-ci.txt`) before running pytest."
-        ) from exc
+        raise pytest.UsageError(_PYTEST_DJANGO_MISSING_ERROR) from exc
 
 
 def requires_db(item: pytest.Item) -> bool:
@@ -33,6 +36,29 @@ def requires_db(item: pytest.Item) -> bool:
     from django.test import TransactionTestCase
 
     return issubclass(test_class, TransactionTestCase)
+
+
+def _ensure_pytest_django_plugin_for_db_items(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Fail fast when database tests are collected without pytest-django.
+
+    Raising once at collection time avoids repeating the same fixture lookup
+    error for every database-backed test in the suite.
+    """
+
+    if not any(requires_db(item) for item in items):
+        return
+    if config.pluginmanager.hasplugin("django"):
+        return
+    raise pytest.UsageError(_PYTEST_DJANGO_MISSING_ERROR)
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Validate required pytest plugins after deselection is finalized."""
+
+    _ensure_pytest_django_plugin_for_db_items(session.config, session.items)
 
 
 @pytest.fixture(scope="session", autouse=True)
