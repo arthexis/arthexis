@@ -21,6 +21,7 @@ from apps.audio.utils import has_audio_capture_device
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from apps.clocks.utils import has_clock_device
+from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
@@ -212,10 +213,12 @@ class NodeFeatureMixin:
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
     }
+    SYSTEMD_DEPENDENT_FEATURE_SLUGS = frozenset(FEATURE_LOCK_MAP.keys())
     CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
     AP_ROUTER_SSID = "gelectriic-ap"
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "systemd-manager",
         "ap-router",
         "gpio-rtc",
         "lcd-screen",
@@ -361,6 +364,14 @@ class NodeFeatureMixin:
         self, slug: str, *, base_dir: Path, base_path: Path
     ) -> bool:
         """Detect whether an auto-managed feature is active for the node."""
+        if slug == "systemd-manager":
+            return bool(_systemctl_command())
+
+        if slug in self.SYSTEMD_DEPENDENT_FEATURE_SLUGS and not self._detect_auto_feature(
+            "systemd-manager", base_dir=base_dir, base_path=base_path
+        ):
+            return False
+
         lock = self.FEATURE_LOCK_MAP.get(slug)
         if lock:
             project_lock_dir = base_dir / ".locks"

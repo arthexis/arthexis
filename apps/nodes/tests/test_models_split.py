@@ -13,6 +13,8 @@ def test_select_preferred_ip_prefers_global_address():
 
 
 def test_detect_auto_feature_uses_lock_file(tmp_path):
+    """Lock-based auto detection should require systemd-manager capability."""
+
     node = Node(
         hostname="auto-feature-node",
         base_path=str(tmp_path),
@@ -23,11 +25,68 @@ def test_detect_auto_feature_uses_lock_file(tmp_path):
     locks_dir.mkdir()
     (locks_dir / "rfid.lck").write_text("1")
 
-    result = node._detect_auto_feature(
-        "rfid-scanner", base_dir=tmp_path, base_path=tmp_path
-    )
+    from apps.nodes.models import features as node_features
+
+    original_command = node_features._systemctl_command
+    node_features._systemctl_command = lambda: ["systemctl"]
+    try:
+        result = node._detect_auto_feature(
+            "rfid-scanner", base_dir=tmp_path, base_path=tmp_path
+        )
+    finally:
+        node_features._systemctl_command = original_command
 
     assert result is True
+
+
+def test_detect_auto_feature_exposes_systemd_manager_when_systemctl_is_available(tmp_path):
+    """systemd-manager should reflect local systemctl command availability."""
+
+    node = Node(
+        hostname="systemd-node",
+        base_path=str(tmp_path),
+        public_endpoint="systemd-node",
+    )
+
+    from apps.nodes.models import features as node_features
+
+    original_command = node_features._systemctl_command
+    node_features._systemctl_command = lambda: ["systemctl"]
+    try:
+        result = node._detect_auto_feature(
+            "systemd-manager", base_dir=tmp_path, base_path=tmp_path
+        )
+    finally:
+        node_features._systemctl_command = original_command
+
+    assert result is True
+
+
+def test_detect_auto_feature_blocks_systemd_dependent_features_without_systemctl(tmp_path):
+    """Systemd-dependent lock features should not activate without systemd-manager."""
+
+    node = Node(
+        hostname="systemd-node",
+        base_path=str(tmp_path),
+        public_endpoint="systemd-node",
+    )
+
+    locks_dir = tmp_path / ".locks"
+    locks_dir.mkdir()
+    (locks_dir / "rfid.lck").write_text("1")
+
+    from apps.nodes.models import features as node_features
+
+    original_command = node_features._systemctl_command
+    node_features._systemctl_command = lambda: []
+    try:
+        result = node._detect_auto_feature(
+            "rfid-scanner", base_dir=tmp_path, base_path=tmp_path
+        )
+    finally:
+        node_features._systemctl_command = original_command
+
+    assert result is False
 
 
 @pytest.mark.django_db
