@@ -197,6 +197,15 @@
         </div>
       </nav>
       {% endif %}
+      {% if messages %}
+        <div class="mt-3" aria-live="polite" aria-atomic="true">
+          {% for message in messages %}
+            <div class="alert alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag|default:'info' }}{% endif %} mb-2" role="alert">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
       {% block content %}{% endblock %}
     </div>
     {% if chat_enabled %}

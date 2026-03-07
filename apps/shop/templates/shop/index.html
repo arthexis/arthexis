@@ -45,11 +45,10 @@
   {% empty %}
     <p>Our shop is closed at the moment.</p>
     {% if all_shops_closed_for_time and next_opening_at %}
-      {% now "Y-m-d" as today_date %}
-      {% if next_opening_at|date:"Y-m-d" == today_date %}
-        <p class="text-muted mb-0">It will next open at {{ next_opening_at|date:"H:i" }}.</p>
+      {% if next_opening_same_day %}
+        <p class="text-muted mb-0">It will next open at {{ next_opening_display }}.</p>
       {% else %}
-        <p class="text-muted mb-0">It will next open on {{ next_opening_at|date:"D, d M H:i" }}.</p>
+        <p class="text-muted mb-0">It will next open on {{ next_opening_display }}.</p>
       {% endif %}
     {% endif %}
   {% endfor %}

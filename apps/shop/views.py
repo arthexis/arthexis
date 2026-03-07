@@ -77,10 +77,24 @@ def shop_index(request: HttpRequest) -> HttpResponse:
     ]
     next_opening_candidates = [candidate for candidate in next_opening_candidates if candidate is not None]
 
+    next_opening_at = min(next_opening_candidates) if next_opening_candidates else None
+    next_opening_same_day = False
+    next_opening_display = None
+    if next_opening_at is not None:
+        localized_next_opening = next_opening_at.astimezone(now.tzinfo)
+        next_opening_same_day = localized_next_opening.date() == now.date()
+        next_opening_display = (
+            localized_next_opening.strftime("%H:%M")
+            if next_opening_same_day
+            else localized_next_opening.strftime("%a, %d %b %H:%M")
+        )
+
     context = {
         "shops": open_shops,
         "all_shops_closed_for_time": bool(active_shops and not open_shops and next_opening_candidates),
-        "next_opening_at": min(next_opening_candidates) if next_opening_candidates else None,
+        "next_opening_at": next_opening_at,
+        "next_opening_same_day": next_opening_same_day,
+        "next_opening_display": next_opening_display,
     }
     return render(request, "shop/index.html", context)
 
