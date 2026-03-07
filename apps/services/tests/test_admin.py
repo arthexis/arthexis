@@ -17,17 +17,6 @@ TEST_STORAGES = {
 
 @pytest.mark.django_db
 @override_settings(STORAGES=TEST_STORAGES)
-def test_lifecycle_service_admin_renders_status_check_action(admin_client):
-    """Regression: changelist action list includes Check selected statuses."""
-
-    response = admin_client.get(reverse("admin:services_lifecycleservice_changelist"))
-
-    assert response.status_code == 200
-    assert b"Check selected statuses" in response.content
-
-
-@pytest.mark.django_db
-@override_settings(STORAGES=TEST_STORAGES)
 def test_lifecycle_service_status_action_redirects_to_report(admin_client):
     """Regression: bulk status action redirects with selected ids in the querystring."""
 

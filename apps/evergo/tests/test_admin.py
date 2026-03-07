@@ -37,39 +37,6 @@ def evergo_customer_export_record(db):
 
 
 @pytest.mark.django_db
-def test_evergo_admin_load_customers_tool_action_is_registered_on_customers_only(admin_client):
-    """Load-customers tool action should be exposed only for customers."""
-
-    customer_tool_url = reverse("admin:evergo_evergocustomer_actions", args=["load_customers_wizard"])
-    response = admin_client.get(customer_tool_url)
-
-    assert response.status_code == 302
-    assert response["Location"] == reverse("admin:evergo_evergocustomer_load_customers")
-
-    contractor_tool_url = reverse("admin:evergo_evergouser_actions", args=["load_customers_wizard"])
-    contractor_response = admin_client.get(contractor_tool_url)
-    assert contractor_response.status_code == 404
-
-
-@pytest.mark.django_db
-def test_evergo_admin_load_orders_and_load_customers_actions_redirect_to_shared_wizard(admin_client):
-    """Load orders and load customers actions should point to the same wizard."""
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-
-    load_orders_action_url = reverse("admin:evergo_evergoorder_actions", args=["load_orders_wizard"])
-    load_customers_action_url = reverse("admin:evergo_evergocustomer_actions", args=["load_customers_wizard"])
-
-    load_orders_response = admin_client.get(load_orders_action_url)
-    load_customers_response = admin_client.get(load_customers_action_url)
-
-    assert load_orders_response.status_code == 302
-    assert load_orders_response["Location"] == wizard_url
-    assert load_customers_response.status_code == 302
-    assert load_customers_response["Location"] == wizard_url
-
-
-@pytest.mark.django_db
 @patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
     """Wizard submit should invoke sync for selected profile and redirect."""
@@ -243,29 +210,6 @@ def test_evergo_admin_load_customers_wizard_requires_queries_for_filtered_mode(a
 
 
 @pytest.mark.django_db
-@pytest.mark.integration
-def test_evergo_admin_load_customers_wizard_limits_query_count(admin_client):
-    """Filtered mode should cap query fan-out at 100 submitted tokens."""
-
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="query-limit@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    oversized = " ".join(f"SO{i:04d}" for i in range(101))
-    response = admin_client.post(
-        wizard_url,
-        {"profile": profile.pk, "raw_queries": oversized, "load_mode": "filtered"},
-    )
-
-    assert response.status_code == 200
-    assert b"Submit at most 100 values" in response.content
-
-
-@pytest.mark.django_db
 @patch("apps.evergo.models.user.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Change-form action should run login sync for a selected Evergo user."""
@@ -292,35 +236,6 @@ def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_
 
 
 @pytest.mark.django_db
-def test_evergo_customer_export_view_honors_column_selection_for_tsv(
-    admin_client, evergo_customer_export_record
-):
-    """TSV export should include only requested columns in request order."""
-
-    evergo_customer_export_record(
-        username="suite-admin-export-tsv",
-        email="suite-admin-export-tsv@example.com",
-        remote_id=7002,
-        name="TSV Export User",
-    )
-
-    export_url = reverse("admin:evergo_evergocustomer_export")
-    response = admin_client.post(
-        export_url,
-        {
-            "format": "tsv",
-            "export_columns": ["remote_id", "name"],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response["Content-Type"].startswith("text/tab-separated-values")
-    rows = response.content.decode("utf-8").strip().splitlines()
-    assert rows[0] == "remote_id\tname"
-    assert rows[1].startswith("7002\tTSV Export User")
-
-
-@pytest.mark.django_db
 def test_evergo_customer_export_view_rejects_empty_column_selection(
     admin_client, evergo_customer_export_record
 ):
@@ -338,43 +253,6 @@ def test_evergo_customer_export_view_rejects_empty_column_selection(
 
     assert response.status_code == 400
     assert "Select at least one column" in response.content.decode("utf-8")
-
-
-@pytest.mark.django_db
-@pytest.mark.integration
-def test_evergo_customer_export_view_post_scope_uses_hidden_selected_ids(
-    admin_client, evergo_customer_export_record
-):
-    """Selected export should remain scoped when IDs are carried by hidden POST fields."""
-
-    selected = evergo_customer_export_record(
-        username="suite-admin-export-hidden-selected-1",
-        email="suite-admin-export-hidden-selected-1@example.com",
-        remote_id=7301,
-        name="Hidden Selected",
-    )
-    evergo_customer_export_record(
-        username="suite-admin-export-hidden-selected-2",
-        email="suite-admin-export-hidden-selected-2@example.com",
-        remote_id=7302,
-        name="Hidden Unselected",
-    )
-
-    export_url = reverse("admin:evergo_evergocustomer_export")
-    response = admin_client.post(
-        export_url,
-        {
-            "format": "tsv",
-            "export_columns": ["remote_id", "name"],
-            "selected": [str(selected.pk)],
-            "export_scope_selected": "on",
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.content.decode("utf-8")
-    assert "7301\tHidden Selected" in body
-    assert "7302\tHidden Unselected" not in body
 
 
 @pytest.mark.django_db

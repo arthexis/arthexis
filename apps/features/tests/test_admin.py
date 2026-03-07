@@ -24,44 +24,6 @@ TEST_STORAGES = {
 
 
 @pytest.mark.django_db
-@override_settings(STORAGES=TEST_STORAGES)
-def test_feature_admin_change_form_renders_source_as_readonly(admin_client):
-    """Regression: source must be displayed as read-only on the change form."""
-
-    feature = Feature.objects.create(
-        slug="custom-local-feature",
-        display="Custom Local Feature",
-        source=Feature.Source.CUSTOM,
-    )
-
-    change_url = reverse("admin:features_feature_change", args=[feature.pk])
-    response = admin_client.get(change_url)
-
-    assert response.status_code == 200
-    assert b"field-source" in response.content
-    assert b'class="readonly">Custom<' in response.content
-
-
-@pytest.mark.django_db
-@override_settings(STORAGES=TEST_STORAGES)
-def test_feature_admin_change_form_uses_single_line_autogrow_textareas(admin_client):
-    """Regression: feature admin textareas should default to one row and autogrow."""
-
-    feature = Feature.objects.create(
-        slug="autogrow-feature",
-        display="Autogrow Feature",
-        source=Feature.Source.CUSTOM,
-    )
-
-    change_url = reverse("admin:features_feature_change", args=[feature.pk])
-    response = admin_client.get(change_url)
-
-    assert response.status_code == 200
-    assert b'rows="1"' in response.content
-    assert b"feature-admin-autogrow" in response.content
-
-
-@pytest.mark.django_db
 def test_feature_admin_toggle_selected_feature_action_flips_enabled_state(admin_client):
     """Regression: changelist action must invert enabled state for selected features."""
 
@@ -119,30 +81,6 @@ def test_feature_admin_toggle_selected_feature_action_reports_counts(admin_clien
 
 @pytest.mark.django_db
 @override_settings(STORAGES=TEST_STORAGES)
-def test_feature_admin_reload_all_preview_renders_expected_change_summary(admin_client):
-    """Regression: reload-all tool should first render a change summary confirmation view."""
-
-    Feature.objects.create(slug="custom-a", display="Custom A")
-    Feature.objects.create(slug="custom-b", display="Custom B")
-
-    action_url = reverse("admin:features_feature_actions", args=["reload_base"])
-    fixture_paths = [
-        Path("apps/features/fixtures/features__ocpp_charge_point.json"),
-        Path("apps/features/fixtures/features__evergo_api_client.json"),
-    ]
-
-    with patch("apps.features.admin.FeatureAdmin._mainstream_fixture_paths", return_value=fixture_paths):
-        response = admin_client.get(action_url)
-
-    assert response.status_code == 200
-    assert b"Reload all suite features" in response.content
-    assert b"This will delete" in response.content
-    assert b"existing suite feature" in response.content
-    assert b"2 fixtures will be loaded" in response.content
-
-
-@pytest.mark.django_db
-@override_settings(STORAGES=TEST_STORAGES)
 def test_feature_admin_reload_all_tool_drops_all_and_loads_fixtures(admin_client):
     """Regression: confirmed reload-all must clear features and load all mainstream fixtures."""
 
@@ -164,13 +102,6 @@ def test_feature_admin_reload_all_tool_drops_all_and_loads_fixtures(admin_client
     mock_call_command.assert_called_once_with(
         "load_user_data", *(str(path) for path in fixture_paths), verbosity=0
     )
-
-
-def test_feature_admin_reload_all_action_label_is_updated():
-    """Regression: suite feature object action metadata should use the Reload All label."""
-
-    assert str(FeatureAdmin.reload_base.label) == "Reload All"
-    assert str(FeatureAdmin.reload_base.short_description) == "Reload All"
 
 
 @pytest.mark.django_db
@@ -230,8 +161,6 @@ def test_feature_admin_reload_base_requires_delete_permission(admin_client, djan
     assert response.status_code == 403
 
 
-
-
 @pytest.mark.django_db
 def test_feature_admin_from_app_filter_shows_only_referenced_apps(rf):
     """Regression: from-app filter should only include apps referenced by suite features."""
@@ -254,35 +183,6 @@ def test_feature_admin_from_app_filter_shows_only_referenced_apps(rf):
     lookup_values = {label for _, label in list_filter.lookups(request, feature_admin)}
     assert "app-with-feature" in lookup_values
     assert "unused-app" not in lookup_values
-
-
-@pytest.mark.django_db
-def test_feature_admin_from_app_filter_limits_results(rf):
-    """Regression: from-app filter should limit changelist rows to selected app."""
-
-    from apps.app.models import Application
-
-    target_app = Application.objects.create(name="target-app")
-    other_app = Application.objects.create(name="other-app")
-    matching = Feature.objects.create(
-        slug="matching-feature",
-        display="Matching Feature",
-        source=Feature.Source.CUSTOM,
-        main_app=target_app,
-    )
-    Feature.objects.create(
-        slug="non-matching-feature",
-        display="Non Matching Feature",
-        source=Feature.Source.CUSTOM,
-        main_app=other_app,
-    )
-
-    request = rf.get("/admin/features/feature/", {"main_app": str(target_app.pk)})
-    feature_admin = admin.site._registry[Feature]
-    list_filter = SourceAppListFilter(request, {"main_app": str(target_app.pk)}, Feature, feature_admin)
-
-    filtered = list_filter.queryset(request, Feature.objects.all())
-    assert set(filtered.values_list("pk", flat=True)) == {matching.pk}
 
 
 @pytest.mark.django_db

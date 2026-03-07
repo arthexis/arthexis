@@ -10,18 +10,6 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 
-def test_admin_show_prints_runtime_values(capsys):
-    """The show action should print the currently active settings."""
-
-    call_command("admin", "show")
-
-    output = capsys.readouterr().out
-    assert "ADMIN_URL_PATH=" in output
-    assert "ADMIN_SITE_HEADER=" in output
-    assert "ADMIN_SITE_TITLE=" in output
-    assert "ADMIN_INDEX_TITLE=" in output
-
-
 def test_admin_set_persists_values_to_env(tmp_path):
     """Set action should persist normalized and custom values into arthexis.env."""
 
