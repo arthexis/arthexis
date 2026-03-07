@@ -509,6 +509,19 @@ body.user-story-open {
   justify-self: end;
 }
 
+@media (max-width: 575.98px) {
+  .user-story-contact-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .user-story-contact-optin {
+    justify-self: start;
+    margin-bottom: 0;
+    white-space: normal;
+  }
+}
+
 @media (min-width: 768px) {
   .user-story-contact-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

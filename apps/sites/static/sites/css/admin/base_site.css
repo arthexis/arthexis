@@ -1043,6 +1043,19 @@ body.user-story-open {
     justify-self: end;
 }
 
+@media (max-width: 35.99875rem) {
+    .user-story-contact-row {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .user-story-card .user-story-contact-optin {
+        justify-self: start;
+        margin-bottom: 0;
+        white-space: normal;
+    }
+}
+
 @media (min-width: 48rem) {
     .user-story-contact-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));

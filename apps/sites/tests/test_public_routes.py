@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.template.loader import render_to_string
+from django.test import RequestFactory
+from django.test.html import Element, parse_html
 from django.urls import reverse
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
@@ -68,11 +71,77 @@ def test_public_feedback_renders_guest_contact_optin_beside_email(client):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'class="user-story-contact-row mb-3"' in content
-    assert '<label for="user-story-name" class="form-label">Email address</label>' in content
-    assert content.count('name="contact_via_chat"') == 1
-    assert "You may contact me" in content
+    document = parse_html(content)
+    contact_rows = _elements_with_class(document, "user-story-contact-row")
+
+    assert len(contact_rows) == 1
+    contact_row = contact_rows[0]
+    assert _find_element(contact_row, "label", **{"for": "user-story-name"}) is not None
+    contact_checkboxes = _find_all_elements(contact_row, "input", name="contact_via_chat")
+    assert len(contact_checkboxes) == 1
+    assert "You may contact me" in _normalized_row_text(contact_row)
     assert "We may contact you via email if your feedback is utilized." not in content
+
+
+def test_admin_feedback_template_guest_contact_optin_scoped_to_contact_row():
+    """Regression: admin guest feedback template should render contact opt-in once inside the contact row."""
+
+    request = RequestFactory().get("/")
+    request.user = get_user_model()()
+
+    template_html = render_to_string("admin/includes/user_story_feedback.html", request=request)
+    document = parse_html(template_html)
+    contact_rows = _elements_with_class(document, "user-story-contact-row")
+
+    assert len(contact_rows) == 1
+    contact_row = contact_rows[0]
+    assert _find_element(contact_row, "label", **{"for": "user-story-name"}) is not None
+    assert len(_find_all_elements(contact_row, "input", name="contact_via_chat")) == 1
+
+
+def _elements_with_class(element: Element, class_name: str) -> list[Element]:
+    """Return all elements that include the given CSS class."""
+
+    matches: list[Element] = []
+    classes = dict(element.attributes).get("class", "")
+    if class_name in classes.split():
+        matches.append(element)
+    for child in element.children:
+        if isinstance(child, Element):
+            matches.extend(_elements_with_class(child, class_name))
+    return matches
+
+
+def _find_all_elements(element: Element, tag_name: str, **attributes: str) -> list[Element]:
+    """Return all descendants whose tag and attributes match."""
+
+    matches: list[Element] = []
+    if element.name == tag_name and _has_attributes(element, attributes):
+        matches.append(element)
+    for child in element.children:
+        if isinstance(child, Element):
+            matches.extend(_find_all_elements(child, tag_name, **attributes))
+    return matches
+
+
+def _find_element(element: Element, tag_name: str, **attributes: str) -> Element | None:
+    """Return the first descendant whose tag and attributes match."""
+
+    matches = _find_all_elements(element, tag_name, **attributes)
+    return matches[0] if matches else None
+
+
+def _has_attributes(element: Element, attributes: dict[str, str]) -> bool:
+    """Check whether an element includes all expected attributes."""
+
+    element_attributes = dict(element.attributes)
+    return all(element_attributes.get(name) == value for name, value in attributes.items())
+
+
+def _normalized_row_text(element: Element) -> str:
+    """Flatten an element to normalized text for robust label assertions."""
+
+    return " ".join(str(element).split())
 
 
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):
