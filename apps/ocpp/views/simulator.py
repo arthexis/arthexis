@@ -1,4 +1,5 @@
 from datetime import timedelta
+import ipaddress
 
 from django.contrib.auth.views import redirect_to_login
 from django.shortcuts import resolve_url
@@ -107,11 +108,25 @@ def cp_simulator(request):
         default_host = "127.0.0.1"
     default_ws_port = request.get_port() or host_port or "8000"
 
+    def _format_host_with_port(host: object, ws_port: object) -> str:
+        host_value = str(host or "").strip()
+        port_value = str(ws_port or "").strip()
+        if not host_value:
+            return ""
+        host_display = (
+            host_value
+            if ":" not in host_value or (host_value.startswith("[") and host_value.endswith("]"))
+            else f"[{host_value}]"
+        )
+        if not port_value:
+            return host_display
+        return f"{host_display}:{port_value}"
+
     default_simulator = (
         Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
     )
     default_params = {
-        "host": default_host,
+        "host": _format_host_with_port(default_host, default_ws_port),
         "ws_port": int(default_ws_port) if default_ws_port else None,
         "cp_path": "CP2",
         "serial_number": "CP2",
@@ -130,7 +145,12 @@ def cp_simulator(request):
     if default_simulator:
         default_params.update(
             {
-                "host": default_simulator.host or default_host,
+                "host": _format_host_with_port(
+                    default_simulator.host or default_host,
+                    default_simulator.ws_port
+                    if default_simulator.ws_port is not None
+                    else default_params["ws_port"],
+                ),
                 "ws_port": default_simulator.ws_port
                 if default_simulator.ws_port is not None
                 else default_params["ws_port"],
@@ -162,12 +182,50 @@ def cp_simulator(request):
         except (TypeError, ValueError):
             return fallback
 
-    def _port_value(raw_value):
-        if raw_value is None:
-            return default_params["ws_port"]
-        if str(raw_value).strip():
-            return _cast_value(raw_value, int, default_params["ws_port"])
-        return None
+    def _host_and_port_from_input(raw_host: object) -> tuple[str, int | None]:
+        host_input = str(raw_host or "").strip()
+        if not host_input:
+            return default_host, default_params["ws_port"]
+
+        if host_input.startswith("["):
+            closing_bracket = host_input.find("]")
+            if closing_bracket > 0:
+                bracket_host = host_input[1:closing_bracket].strip()
+                remainder = host_input[closing_bracket + 1 :].strip()
+                if not remainder:
+                    return bracket_host or host_input, None
+                if remainder.startswith(":"):
+                    port_input = remainder[1:].strip()
+                    try:
+                        return bracket_host or host_input, int(port_input)
+                    except (TypeError, ValueError):
+                        return bracket_host or host_input, None
+                return bracket_host or host_input, None
+
+        parsed_host, parsed_port = split_domain_port(host_input)
+        final_host = parsed_host or host_input
+
+        if parsed_host and parsed_port is not None:
+            try:
+                return final_host, int(parsed_port)
+            except (TypeError, ValueError):
+                return final_host, None
+
+        if ":" in host_input and host_input.count(":") >= 2:
+            ipv6_host, separator, maybe_port = host_input.rpartition(":")
+            if separator and maybe_port:
+                try:
+                    ipaddress.IPv6Address(ipv6_host)
+                    return ipv6_host, int(maybe_port)
+                except (ipaddress.AddressValueError, TypeError, ValueError):
+                    return final_host, None
+
+        if parsed_port is None:
+            return final_host, None
+        try:
+            return final_host, int(parsed_port)
+        except (TypeError, ValueError):
+            return final_host, None
 
     is_htmx = request.headers.get("HX-Request") == "true"
     message = ""
@@ -182,11 +240,15 @@ def cp_simulator(request):
             selected_backend = requested_backend
             request.session["cp_simulator_backend"] = selected_backend
         repeat_value = _normalize_repeat(request.POST.get("repeat"))
+        normalized_host, normalized_port = _host_and_port_from_input(
+            request.POST.get("host")
+        )
         sim_params = {
-            "host": request.POST.get("host") or default_params["host"],
-            "ws_port": _port_value(request.POST.get("ws_port")),
+            "host": normalized_host,
+            "ws_port": normalized_port,
             "cp_path": request.POST.get("cp_path") or default_params["cp_path"],
             "serial_number": request.POST.get("serial_number")
+            or request.POST.get("cp_path")
             or default_params["serial_number"],
             "connector_id": _cast_value(
                 request.POST.get("connector_id"), int, default_params["connector_id"]
@@ -262,6 +324,11 @@ def cp_simulator(request):
     state_params = state.get("params") or {}
 
     form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
+    if "host" in state_params or "ws_port" in state_params:
+        form_params["host"] = _format_host_with_port(
+            state_params.get("host", default_host),
+            state_params.get("ws_port"),
+        )
     form_params["repeat"] = _normalize_repeat(form_params.get("repeat"))
     form_params["password"] = ""
 
