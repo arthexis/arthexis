@@ -53,8 +53,6 @@ jobs:
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
