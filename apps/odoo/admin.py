@@ -11,6 +11,10 @@ from apps.locals.user_data import EntityModelAdmin
 
 from .models import OdooDeployment, OdooQuery, OdooQueryVariable
 from .services import sync_odoo_deployments
+from .sync_features import (
+    ODOO_SYNC_DEPLOYMENT_DISCOVERY_FEATURE_SLUG,
+    is_odoo_sync_integration_enabled,
+)
 
 
 @admin.register(OdooDeployment)
@@ -107,6 +111,20 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
                 or self.has_add_permission(request)
             ):
                 raise PermissionDenied
+            if not is_odoo_sync_integration_enabled(
+                ODOO_SYNC_DEPLOYMENT_DISCOVERY_FEATURE_SLUG,
+                default=True,
+            ):
+                self.message_user(
+                    request,
+                    _("Odoo deployment discovery sync is disabled by suite feature toggles."),
+                    level=messages.ERROR,
+                )
+                return TemplateResponse(
+                    request,
+                    "admin/odoo/odoodeployment/discover.html",
+                    context,
+                )
             result = sync_odoo_deployments(scan_filesystem=False)
             discovery = start_discovery(
                 _("Discover"),

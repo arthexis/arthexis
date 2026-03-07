@@ -6,10 +6,16 @@ import json
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
+from apps.evergo.models import EvergoUser
 from apps.odoo.models import OdooDeployment, OdooEmployee, OdooQuery
+from apps.odoo.sync_features import (
+    ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+    is_odoo_sync_integration_enabled,
+)
 
 
 class Command(BaseCommand):
@@ -40,9 +46,21 @@ class Command(BaseCommand):
             default="{}",
             help="JSON object passed as **kwargs to execute_kw. Example: '{\"fields\":[\"name\"],\"limit\":5}'",
         )
+        parser.add_argument(
+            "--sync-evergo-users",
+            action="store_true",
+            help=(
+                "Create missing Odoo users from local Evergo users and mirror them as "
+                "local Odoo employee profiles."
+            ),
+        )
 
     def handle(self, *args, **options) -> None:
         """Run status mode by default, or RPC mode when model/method are provided."""
+
+        if options.get("sync_evergo_users"):
+            self._handle_sync_evergo_users_mode(options)
+            return
 
         model_name = options.get("model")
         method_name = options.get("method")
@@ -128,6 +146,83 @@ class Command(BaseCommand):
             "result": result,
         }
         self.stdout.write(json.dumps(payload, default=str, indent=2, sort_keys=True))
+
+
+    def _handle_sync_evergo_users_mode(self, options: dict[str, Any]) -> None:
+        """Create missing Odoo users for discovered Evergo users."""
+
+        if not is_odoo_sync_integration_enabled(ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG, default=True):
+            raise CommandError(
+                "Odoo Evergo user sync integration is disabled by suite feature toggles."
+            )
+
+        profile = self._resolve_profile(options)
+        if not profile.is_verified or profile.odoo_uid is None:
+            raise CommandError(
+                f"Odoo profile id={profile.pk} is not verified. Verify credentials before syncing Evergo users."
+            )
+
+        created = 0
+        skipped = 0
+        errors = 0
+
+        for evergo_user in EvergoUser.objects.order_by("pk"):
+            email = str(evergo_user.email or evergo_user.evergo_email or "").strip().lower()
+            if not email:
+                skipped += 1
+                continue
+            if OdooEmployee.objects.filter(host=profile.host, database=profile.database, email__iexact=email).exists():
+                skipped += 1
+                continue
+
+            try:
+                remote_uid = profile.execute(
+                    "res.users",
+                    "create",
+                    [
+                        {
+                            "name": evergo_user.name or email,
+                            "login": email,
+                            "email": email,
+                        }
+                    ],
+                )
+                if not isinstance(remote_uid, int):
+                    raise ValueError("Odoo did not return a valid integer user id.")
+                with transaction.atomic():
+                    OdooEmployee.objects.create(
+                        user=evergo_user.user,
+                        group=evergo_user.group,
+                        host=profile.host,
+                        database=profile.database,
+                        username=email,
+                        password="",
+                        odoo_uid=remote_uid,
+                        name=evergo_user.name or email,
+                        email=email,
+                    )
+                created += 1
+            except (IntegrityError, ValueError) as exc:
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"Skipping Evergo user id={evergo_user.pk} ({email}): {exc}"
+                    )
+                )
+                errors += 1
+            except Exception as exc:
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"Odoo sync failed for Evergo user id={evergo_user.pk} ({email}): {type(exc).__name__}: {exc}"
+                    )
+                )
+                errors += 1
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Evergo-to-Odoo sync completed: "
+                f"created={created}, skipped={skipped}, errors={errors}"
+            )
+        )
 
     def _resolve_profile(self, options: dict[str, Any]) -> OdooEmployee:
         """Return the chosen Odoo profile or the first verified profile."""
