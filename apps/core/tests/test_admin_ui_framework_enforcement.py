@@ -81,6 +81,19 @@ def _contains_custom_css(template_text: str) -> bool:
     return any(snippet in lowered for snippet in CUSTOM_CSS_SNIPPETS)
 
 
+def _marker_has_rationale(template_text: str) -> bool:
+    """Return whether the override marker appears with explanatory rationale text."""
+
+    for raw_line in template_text.splitlines():
+        marker_index = raw_line.find(CUSTOM_ADMIN_CSS_OVERRIDE_MARKER)
+        if marker_index < 0:
+            continue
+        rationale = raw_line[marker_index + len(CUSTOM_ADMIN_CSS_OVERRIDE_MARKER) :]
+        if rationale.strip(" -:#\t"):
+            return True
+    return False
+
+
 def _templates_with_custom_css() -> set[str]:
     """Return template paths with custom CSS and no explicit override marker."""
 
@@ -92,14 +105,14 @@ def _templates_with_custom_css() -> set[str]:
     return template_paths_with_custom_css
 
 
-def test_admin_custom_css_legacy_allowlist_is_current():
+def test_admin_custom_css_legacy_allowlist_is_current() -> None:
     """Regression: keep the legacy allowlist in sync with current custom CSS usage."""
 
     discovered_custom_css_templates = _templates_with_custom_css()
     assert discovered_custom_css_templates == LEGACY_CUSTOM_ADMIN_CSS_TEMPLATES
 
 
-def test_admin_templates_forbid_new_custom_css_without_override_marker():
+def test_admin_templates_forbid_new_custom_css_without_override_marker() -> None:
     """Regression: block new admin custom CSS unless a template adds an explicit override marker."""
 
     non_compliant_templates: list[str] = []
@@ -119,4 +132,22 @@ def test_admin_templates_forbid_new_custom_css_without_override_marker():
         "If custom CSS is required for a specific template, add an in-template "
         f"comment marker '{CUSTOM_ADMIN_CSS_OVERRIDE_MARKER}' with rationale: "
         f"{non_compliant_templates}"
+    )
+
+
+def test_admin_custom_css_override_marker_requires_rationale() -> None:
+    """Regression: marker-only opt-outs are rejected unless they explain why custom CSS is required."""
+
+    marker_without_rationale: list[str] = []
+    for template_path in _admin_template_paths():
+        template_text = template_path.read_text(encoding="utf-8")
+        if CUSTOM_ADMIN_CSS_OVERRIDE_MARKER not in template_text:
+            continue
+        if _marker_has_rationale(template_text):
+            continue
+        marker_without_rationale.append(template_path.relative_to(PROJECT_ROOT).as_posix())
+
+    assert not marker_without_rationale, (
+        "Templates using the admin custom CSS override marker must include rationale text "
+        f"on the same line as '{CUSTOM_ADMIN_CSS_OVERRIDE_MARKER}': {marker_without_rationale}"
     )
