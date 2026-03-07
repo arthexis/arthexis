@@ -5,6 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404
+from django.shortcuts import redirect
 from django.utils import translation
 from django.utils.translation import gettext as _
 
@@ -96,6 +97,22 @@ def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
     _clear_stale_statuses_for_view()
     charger, connector_slug = _get_charger(cid, connector)
+    if connector is None and charger.connector_id is None:
+        default_connector = (
+            Charger.objects.filter(
+                charger_id=charger.charger_id,
+                connector_id__isnull=False,
+            )
+            .order_by("connector_id", "pk")
+            .first()
+        )
+        if default_connector is not None:
+            return redirect(
+                "ocpp:charger-page-connector",
+                cid,
+                default_connector.connector_slug,
+            )
+
     access_response = _ensure_charger_access(
         request.user, charger, request=request
     )
@@ -184,6 +201,26 @@ def charger_page(request, cid, connector=None):
         }
         for item in overview
     ]
+    connector_switch_links = [
+        item
+        for item in connector_links
+        if item["slug"] != Charger.AGGREGATE_CONNECTOR_SLUG
+    ]
+    connector_prev_url = ""
+    connector_next_url = ""
+    if connector_switch_links:
+        active_index = 0
+        for idx, item in enumerate(connector_switch_links):
+            if item["active"]:
+                active_index = idx
+                break
+        if len(connector_switch_links) > 1:
+            connector_prev_url = connector_switch_links[
+                (active_index - 1) % len(connector_switch_links)
+            ]["url"]
+            connector_next_url = connector_switch_links[
+                (active_index + 1) % len(connector_switch_links)
+            ]["url"]
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
@@ -198,6 +235,9 @@ def charger_page(request, cid, connector=None):
             "tx_rfid_details": tx_rfid_details,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
+            "connector_switch_links": connector_switch_links,
+            "connector_prev_url": connector_prev_url,
+            "connector_next_url": connector_next_url,
             "connector_overview": connector_overview,
             "active_connector_count": active_connector_count,
             "status_url": status_url,
