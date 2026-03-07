@@ -4,7 +4,79 @@ import pytest
 from django.utils import timezone
 
 from apps.playwright import models as playwright_models
-from apps.playwright.models import PlaywrightBrowser, WebsiteScreenshotSchedule, schedule_pending_website_screenshots
+from apps.playwright.models import PlaywrightBrowser, PlaywrightScript, SessionCookie, WebsiteScreenshotSchedule, schedule_pending_website_screenshots
+
+
+@pytest.mark.django_db
+def test_create_driver_passes_binary_path(monkeypatch):
+    browser = PlaywrightBrowser.objects.create(
+        name="custom",
+        engine=PlaywrightBrowser.Engine.CHROMIUM,
+        mode=PlaywrightBrowser.Mode.HEADLESS,
+        binary_path=" /opt/custom/chromium ",
+    )
+
+    launch_kwargs = {}
+
+    class DummyLauncher:
+        def launch(self, **kwargs):
+            launch_kwargs.update(kwargs)
+
+            class DummyBrowser:
+                def new_context(self):
+                    class DummyContext:
+                        def new_page(self):
+                            class DummyPage:
+                                pass
+
+                            return DummyPage()
+
+                    return DummyContext()
+
+            return DummyBrowser()
+
+    class DummyPlaywright:
+        chromium = DummyLauncher()
+        firefox = DummyLauncher()
+        webkit = DummyLauncher()
+
+        def stop(self):
+            return None
+
+    class DummyFactory:
+        def start(self):
+            return DummyPlaywright()
+
+    monkeypatch.setattr(playwright_models, "_load_sync_playwright", lambda: (lambda: DummyFactory()))
+
+    driver = browser.create_driver()
+    assert launch_kwargs["headless"] is True
+    assert launch_kwargs["executable_path"] == "/opt/custom/chromium"
+    driver.quit()
+
+
+def test_playwright_script_supports_legacy_url_preamble():
+    script = PlaywrightScript(
+        name="legacy",
+        start_url="",
+        script="\nhttps://example.com/path\n\nbrowser.click('button')\n",
+    )
+
+    start_url, body = script._resolved_start_url_and_body()
+
+    assert start_url == "https://example.com/path"
+    assert body == "browser.click('button')"
+
+
+@pytest.mark.django_db
+def test_sessioncookie_set_cookies_saves_unsaved_instance(group):
+    cookie = SessionCookie(name="new-cookie", group=group)
+
+    cookie.set_cookies([{"name": "session", "value": "abc"}])
+
+    assert cookie.pk is not None
+    cookie.refresh_from_db()
+    assert cookie.cookies == [{"name": "session", "value": "abc"}]
 
 
 @pytest.mark.django_db

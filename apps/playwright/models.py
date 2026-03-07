@@ -173,8 +173,11 @@ class PlaywrightBrowser(Entity):
         if launcher is None:
             playwright.stop()
             raise UnsupportedBrowserEngineError(f"Unsupported browser engine: {self.engine}")
+        launch_kwargs = {"headless": self._headless_mode()}
+        if self.binary_path.strip():
+            launch_kwargs["executable_path"] = self.binary_path.strip()
         try:
-            browser = launcher.launch(headless=self._headless_mode())
+            browser = launcher.launch(**launch_kwargs)
             context = browser.new_context()
             page = context.new_page()
         except Exception:
@@ -204,6 +207,21 @@ class PlaywrightScript(Entity):
     def _resolved_body(self, *, current=None) -> str:
         return resolve_sigils(self.script or "", current=current)
 
+    def _resolved_start_url_and_body(self, *, current=None) -> tuple[str, str]:
+        start_url = resolve_sigils(self.start_url or "", current=current).strip()
+        resolved_body = self._resolved_body(current=current)
+        body = resolved_body.strip()
+        for idx, raw_line in enumerate(resolved_body.splitlines()):
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith(("http://", "https://")):
+                if not start_url:
+                    start_url = stripped
+                body = "\n".join(resolved_body.splitlines()[idx + 1 :]).strip()
+            break
+        return start_url, body
+
     def _load_callable(self, *, current=None):
         path = resolve_sigils(self.python_path or "", current=current).strip()
         if not path:
@@ -218,14 +236,13 @@ class PlaywrightScript(Entity):
             raise PlaywrightBrowser.DoesNotExist("No default Playwright browser configured.")
         driver = active_browser.create_driver()
         try:
-            start_url = resolve_sigils(self.start_url or "", current=current).strip()
+            start_url, body = self._resolved_start_url_and_body(current=current)
             if start_url:
                 driver.get(start_url)
             callback = self._load_callable(current=current)
             if callback is not None:
                 callback(driver, script=self)
                 return
-            body = self._resolved_body(current=current)
             if body:
                 globals_map = {"browser": driver, "driver": driver, "script": self}
                 compiled = compile(body, f"<PlaywrightScript {self.name}>", "exec")
@@ -274,10 +291,16 @@ class SessionCookie(Ownable):
                 raise InvalidCookiePayloadError("Each cookie must include both 'name' and 'value' keys.")
         return payload
 
+    def _save_fields(self, fields: list[str]) -> None:
+        if self.pk is None:
+            self.save()
+            return
+        self.save(update_fields=fields)
+
     def set_cookies(self, payload: list[dict], *, save: bool = True) -> None:
         self.cookies = self.clean_cookie_payload(payload)
         if save:
-            self.save(update_fields=["cookies"])
+            self._save_fields(["cookies"])
 
     def mark_rejected(self, reason: str, *, save: bool = True) -> None:
         normalized_reason = reason.strip()
@@ -293,14 +316,14 @@ class SessionCookie(Ownable):
             return
         self.rejection_count += 1
         if save:
-            self.save(update_fields=["state", "rejection_count", "last_rejection_reason"])
+            self._save_fields(["state", "rejection_count", "last_rejection_reason"])
 
     def mark_used(self, *, save: bool = True) -> None:
         """Mark the cookie as recently used by an automation task."""
 
         self.last_used_at = timezone.now()
         if save:
-            self.save(update_fields=["last_used_at"])
+            self._save_fields(["last_used_at"])
 
     def mark_valid(self, *, save: bool = True) -> None:
         """Mark the session cookies as valid after successful use."""
@@ -309,7 +332,7 @@ class SessionCookie(Ownable):
         self.last_validated_at = timezone.now()
         self.last_rejection_reason = ""
         if save:
-            self.save(update_fields=["state", "last_validated_at", "last_rejection_reason"])
+            self._save_fields(["state", "last_validated_at", "last_rejection_reason"])
 
     def is_expired(self) -> bool:
         """Return ``True`` when the session cookie expiry has passed."""
