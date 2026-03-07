@@ -11,6 +11,17 @@ from typing import Any
 import pytest
 from django.db.utils import DatabaseError, OperationalError
 
+
+def _get_optional_pytest_django_fixture(
+    request: pytest.FixtureRequest, fixture_name: str
+) -> Any | None:
+    """Return a pytest-django fixture when available, otherwise ``None``."""
+
+    try:
+        return request.getfixturevalue(fixture_name)
+    except pytest.FixtureLookupError:
+        return None
+
 COLLECTED_RESULTS: dict[str, dict[str, Any]] = defaultdict(lambda: {"logs": []})
 DB_BLOCKER: Any = None
 
@@ -53,11 +64,11 @@ def store_result(report: pytest.TestReport, item: pytest.Item) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def capture_db_blocker(django_db_blocker: Any) -> None:
+def capture_db_blocker(request: pytest.FixtureRequest) -> None:
     """Capture ``django_db_blocker`` for use during session-finish result writes."""
 
     global DB_BLOCKER
-    DB_BLOCKER = django_db_blocker
+    DB_BLOCKER = _get_optional_pytest_django_fixture(request, "django_db_blocker")
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
