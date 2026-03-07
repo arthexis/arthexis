@@ -44,8 +44,8 @@ class SlackBotProfileAdminForm(forms.ModelForm):
     _placeholders = {
         "team_id": "T0123456789",
         "bot_user_id": "U0123456789",
-        "bot_token": "xoxb-1234567890-ABCDEFGHIJKL",
-        "signing_secret": "abcd1234efgh5678ijkl9012mnop3456",
+        "bot_token": "xoxb-your-slack-bot-token",
+        "signing_secret": "your-signing-secret",
         "default_channels": "[\"C01ABCDE\", \"C02FGHIJ\"]",
     }
 
