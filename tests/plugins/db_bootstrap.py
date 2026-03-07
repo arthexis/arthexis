@@ -35,6 +35,35 @@ def requires_db(item: pytest.Item) -> bool:
     return issubclass(test_class, TransactionTestCase)
 
 
+def _ensure_pytest_django_plugin_for_db_items(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Fail fast when database tests are collected without pytest-django.
+
+    Raising once at collection time avoids repeating the same fixture lookup
+    error for every database-backed test in the suite.
+    """
+
+    if not any(requires_db(item) for item in items):
+        return
+    if config.pluginmanager.hasplugin("django"):
+        return
+    raise pytest.UsageError(
+        "Database-backed tests require pytest-django. Install test dependencies "
+        "(for example: `pip install -r requirements-ci.txt`) before running pytest."
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Validate required pytest plugins once collection is complete."""
+
+    _ensure_pytest_django_plugin_for_db_items(config, items)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_db_for_django_tests(request: pytest.FixtureRequest) -> None:
     """Initialize the Django test database once for DB-backed tests."""
