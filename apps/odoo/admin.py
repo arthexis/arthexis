@@ -113,7 +113,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
                 raise PermissionDenied
             if not is_odoo_sync_integration_enabled(
                 ODOO_SYNC_DEPLOYMENT_DISCOVERY_FEATURE_SLUG,
-                default=True,
+                default=False,
             ):
                 self.message_user(
                     request,

@@ -10,7 +10,7 @@ ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG = "odoo-sync-employee-import"
 ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG = "odoo-sync-evergo-users"
 
 
-def is_odoo_sync_integration_enabled(integration_slug: str, *, default: bool = True) -> bool:
+def is_odoo_sync_integration_enabled(integration_slug: str, *, default: bool = False) -> bool:
     """Return whether the Odoo CRM sync suite and integration toggles are enabled."""
 
     suite_enabled = is_suite_feature_enabled(
@@ -29,4 +29,3 @@ __all__ = [
     "ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG",
     "is_odoo_sync_integration_enabled",
 ]
-

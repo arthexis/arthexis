@@ -151,10 +151,14 @@ class Command(BaseCommand):
     def _handle_sync_evergo_users_mode(self, options: dict[str, Any]) -> None:
         """Create missing Odoo users for discovered Evergo users."""
 
-        if not is_odoo_sync_integration_enabled(ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG, default=True):
+        if not is_odoo_sync_integration_enabled(ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG, default=False):
             raise CommandError(
                 "Odoo Evergo user sync integration is disabled by suite feature toggles."
             )
+
+        profile_id = options.get("profile_id")
+        if profile_id is None:
+            raise CommandError("--profile-id is required for --sync-evergo-users write operations.")
 
         profile = self._resolve_profile(options)
         if not profile.is_verified or profile.odoo_uid is None:
@@ -166,42 +170,53 @@ class Command(BaseCommand):
         skipped = 0
         errors = 0
 
-        for evergo_user in EvergoUser.objects.order_by("pk"):
+        for evergo_user in EvergoUser.objects.order_by("pk").iterator():
             email = str(evergo_user.email or evergo_user.evergo_email or "").strip().lower()
             if not email:
                 skipped += 1
                 continue
-            if OdooEmployee.objects.filter(host=profile.host, database=profile.database, email__iexact=email).exists():
+            if not evergo_user.user_id and not evergo_user.group_id:
                 skipped += 1
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"Skipping Evergo user id={evergo_user.pk} ({email}): owner is required (user/group)."
+                    )
+                )
                 continue
 
             try:
-                remote_uid = profile.execute(
-                    "res.users",
-                    "create",
-                    [
-                        {
-                            "name": evergo_user.name or email,
-                            "login": email,
-                            "email": email,
-                        }
-                    ],
-                )
+                remote_uid = self._resolve_remote_user_uid(profile, email)
+                if remote_uid is None:
+                    remote_uid = profile.execute(
+                        "res.users",
+                        "create",
+                        [
+                            {
+                                "name": evergo_user.name or email,
+                                "login": email,
+                                "email": email,
+                            }
+                        ],
+                    )
                 if not isinstance(remote_uid, int):
                     raise ValueError("Odoo did not return a valid integer user id.")
+
                 with transaction.atomic():
-                    OdooEmployee.objects.create(
-                        user=evergo_user.user,
-                        group=evergo_user.group,
+                    _, was_created = OdooEmployee.objects.update_or_create(
                         host=profile.host,
                         database=profile.database,
-                        username=email,
-                        password="",
                         odoo_uid=remote_uid,
-                        name=evergo_user.name or email,
-                        email=email,
+                        defaults={
+                            "user": evergo_user.user,
+                            "group": evergo_user.group,
+                            "username": email,
+                            "password": "",
+                            "name": evergo_user.name or email,
+                            "email": email,
+                        },
                     )
-                created += 1
+                created += int(was_created)
+                skipped += int(not was_created)
             except (IntegrityError, ValueError) as exc:
                 self.stderr.write(
                     self.style.WARNING(
@@ -216,6 +231,7 @@ class Command(BaseCommand):
                     )
                 )
                 errors += 1
+                break
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -223,6 +239,27 @@ class Command(BaseCommand):
                 f"created={created}, skipped={skipped}, errors={errors}"
             )
         )
+
+    def _resolve_remote_user_uid(self, profile: OdooEmployee, email: str) -> int | None:
+        """Return an existing remote Odoo user id for the given email/login, if present."""
+
+        users = profile.execute(
+            "res.users",
+            "search_read",
+            [
+                "|",
+                ("login", "=", email),
+                ("email", "=", email),
+            ],
+            fields=["id"],
+            limit=1,
+        )
+        if not users:
+            return None
+        candidate = users[0].get("id")
+        if not isinstance(candidate, int):
+            raise ValueError("Odoo search did not return a valid integer user id.")
+        return candidate
 
     def _resolve_profile(self, options: dict[str, Any]) -> OdooEmployee:
         """Return the chosen Odoo profile or the first verified profile."""

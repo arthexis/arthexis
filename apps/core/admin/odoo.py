@@ -262,7 +262,7 @@ class OdooEmployeeAdmin(
 
         if not is_odoo_sync_integration_enabled(
             ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
-            default=True,
+            default=False,
         ):
             self.message_user(
                 request,
