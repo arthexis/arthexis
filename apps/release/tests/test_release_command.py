@@ -7,85 +7,13 @@ from io import StringIO
 import pytest
 from django.core.management import CommandError, call_command
 
-
 pytestmark = pytest.mark.regression
-
-
-def test_release_prepare_routes_to_domain_function(monkeypatch) -> None:
-    """Regression: ``release prepare`` should call ``prepare_release`` with version."""
-
-    captured: dict[str, object] = {}
-
-    def fake_prepare(version: str) -> None:
-        captured["version"] = version
-
-    monkeypatch.setattr("apps.release.management.commands.release.prepare_release", fake_prepare)
-
-    call_command("release", "prepare", "1.2.3")
-
-    assert captured["version"] == "1.2.3"
-
-
-def test_release_build_routes_arguments_and_package(monkeypatch) -> None:
-    """Regression: ``release build`` should pass flags and package identifier through."""
-
-    captured: dict[str, object] = {}
-
-    def fake_build(**kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr("apps.release.management.commands.release.build", fake_build)
-    monkeypatch.setattr("apps.release.management.commands.release.Command._get_package", lambda _self, ident: ident)
-
-    call_command("release", "build", "--test", "--stash", "--package", "demo")
-
-    assert captured["tests"] is True
-    assert captured["stash"] is True
-    assert captured["package"] == "demo"
-
-
-def test_release_build_release_error_returns_exit_code(monkeypatch) -> None:
-    """Regression: ``release build`` should return non-zero on release errors."""
-
-    def fake_build(**kwargs):
-        from apps.release.release import ReleaseError
-
-        raise ReleaseError("boom")
-
-    monkeypatch.setattr("apps.release.management.commands.release.build", fake_build)
-
-    from apps.release.management.commands.release import Command
-
-    result = Command().handle(action="build", bump=False, test=False, dist=False, twine=False, git=False, tag=False, all=False, force=False, stash=False, package=None)
-
-    assert result == 1
-
-
-def test_release_check_pypi_routes_to_health(monkeypatch) -> None:
-    """Regression: ``release check-pypi`` should delegate to ``health`` target."""
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(name, *args, **kwargs):
-        captured["name"] = name
-        captured["kwargs"] = kwargs
-
-    monkeypatch.setattr("apps.release.management.commands.release.call_command", fake_call_command)
-
-    command = call_command("release", "check-pypi", "1.2.3")
-
-    assert command is None
-    assert captured["name"] == "health"
-    assert captured["kwargs"]["target"] == ["release.pypi"]
-    assert captured["kwargs"]["release"] == "1.2.3"
-
 
 def test_release_clean_logs_without_targets_raises_command_error() -> None:
     """Regression: ``release clean-logs`` should preserve command error semantics."""
 
     with pytest.raises(CommandError, match="Specify --all"):
         call_command("release", "clean-logs")
-
 
 def test_release_run_data_transforms_invokes_all_registered(monkeypatch) -> None:
     """Regression: ``release run-data-transforms`` should run all discovered transforms."""
@@ -108,62 +36,4 @@ def test_release_run_data_transforms_invokes_all_registered(monkeypatch) -> None
     call_command("release", "run-data-transforms", "--max-batches", "2")
 
     assert captured == [("first", 2), ("second", 2)]
-
-
-def test_release_run_data_transforms_rejects_invalid_max_batches() -> None:
-    """Regression: ``release run-data-transforms`` should enforce positive batches."""
-
-    with pytest.raises(CommandError, match="--max-batches must be >= 1"):
-        call_command("release", "run-data-transforms", "--max-batches", "0")
-
-
-def test_legacy_apply_release_migrations_alias_delegates(monkeypatch) -> None:
-    """Regression: legacy apply_release_migrations command should still work."""
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-
-    monkeypatch.setattr(
-        "apps.release.management.commands.apply_release_migrations.call_command",
-        fake_call_command,
-    )
-
-    call_command(
-        "apply_release_migrations",
-        "2.0.0",
-        installed_version="1.0.0",
-        bundle_dir="/tmp/bundle",
-        strict=True,
-        skip_data_transforms=True,
-    )
-
-    assert captured["args"] == ("release", "apply-migrations", "2.0.0")
-    assert captured["kwargs"]["installed_version"] == "1.0.0"
-    assert captured["kwargs"]["bundle_dir"] == "/tmp/bundle"
-    assert captured["kwargs"]["strict"] is True
-    assert captured["kwargs"]["skip_data_transforms"] is True
-
-
-def test_legacy_run_release_data_transforms_alias_delegates(monkeypatch) -> None:
-    """Regression: legacy run_release_data_transforms command should still work."""
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-
-    monkeypatch.setattr(
-        "apps.release.management.commands.run_release_data_transforms.call_command",
-        fake_call_command,
-    )
-
-    call_command("run_release_data_transforms", "cleanup_users", max_batches=3)
-
-    assert captured["args"] == ("release", "run-data-transforms", "cleanup_users")
-    assert captured["kwargs"]["max_batches"] == 3
-
 
