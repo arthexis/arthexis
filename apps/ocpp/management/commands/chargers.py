@@ -175,12 +175,14 @@ class Command(BaseCommand):
                     f"No chargers found matching charge point path '{cp_path}'."
                 )
 
-        if (enable_rfid or disable_rfid) and not (serial or cp_raw):
+        has_charger_selector = bool(serial) or connector_filter is not None or bool(cp_path)
+
+        if (enable_rfid or disable_rfid) and not has_charger_selector:
             raise CommandError(
                 "RFID toggles require selecting at least one charger with --sn and/or --cp."
             )
 
-        if (ws_auth_username or ws_auth_clear) and not (serial or cp_raw):
+        if (ws_auth_username or ws_auth_clear) and not has_charger_selector:
             raise CommandError(
                 "Websocket auth changes require selecting at least one charger with --sn and/or --cp."
             )
@@ -759,7 +761,7 @@ class Command(BaseCommand):
 
         user.set_password(password)
         update_fields = ["password"]
-        if created and hasattr(user, "is_active"):
+        if hasattr(user, "is_active") and not user.is_active:
             user.is_active = True
             update_fields.append("is_active")
         user.save(update_fields=update_fields)

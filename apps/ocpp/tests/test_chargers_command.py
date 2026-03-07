@@ -52,3 +52,43 @@ class ChargersCommandTests(TestCase):
 
         with self.assertRaisesMessage(CommandError, "requires --ws-auth-password"):
             call_command("chargers", "--sn", "CLI-WS-3", "--ws-auth-username", "cp-user")
+
+    def test_requires_effective_cp_selector_for_ws_auth_changes(self) -> None:
+        """Whitespace-only ``--cp`` values do not bypass selector validation."""
+
+        Charger.objects.create(charger_id="CLI-WS-4")
+
+        with self.assertRaisesMessage(CommandError, "Websocket auth changes require"):
+            call_command(
+                "chargers",
+                "--cp",
+                "   ",
+                "--ws-auth-clear",
+            )
+
+    def test_reactivates_existing_inactive_ws_auth_user(self) -> None:
+        """Updating existing websocket auth credentials reactivates the user."""
+
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username="inactive-user",
+            password="oldpass",
+            is_active=False,
+        )
+        charger = Charger.objects.create(charger_id="CLI-WS-5")
+
+        call_command(
+            "chargers",
+            "--sn",
+            charger.charger_id,
+            "--ws-auth-username",
+            user.username,
+            "--ws-auth-password",
+            "newpass123",
+        )
+
+        user.refresh_from_db()
+        charger.refresh_from_db()
+        self.assertEqual(charger.ws_auth_user_id, user.pk)
+        self.assertTrue(user.is_active)
+        self.assertTrue(user.check_password("newpass123"))
