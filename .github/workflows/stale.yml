@@ -13,11 +13,16 @@ jobs:
     steps:
       - uses: actions/stale@v10
         with:
-          days-before-stale: 2
-          days-before-close: 0
+          days-before-stale: 7
+          days-before-close: 3
           close-branch: true
           stale-pr-label: stale
+          exempt-pr-labels: in-progress,needs-review,blocked,security
           stale-pr-message: >
-            This PR has been open for more than 48 hours with no activity and will be closed automatically.
+            This PR has had no activity for 7 days and has been marked stale. To keep it open,
+            leave a comment, push new commits, or apply one of the exempt labels
+            (`in-progress`, `needs-review`, `blocked`, or `security`) within 3 days.
           close-pr-message: >
-            Closing PR and deleting branch due to inactivity.
+            Closing this stale PR after 3 additional days of inactivity. To reopen and continue,
+            comment, push new commits, or apply one of the exempt labels
+            (`in-progress`, `needs-review`, `blocked`, or `security`).
