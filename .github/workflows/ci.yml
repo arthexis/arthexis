@@ -27,8 +27,7 @@ on:
 
 jobs:
   install:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
-    needs: upgrade
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -440,7 +439,7 @@ jobs:
               else
                 echo "- Integration tests: skipped";
                 echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
-                echo "- Branch protection note: keep requiring the **upgrade** job so critical tests remain mandatory while integration executes conditionally.";
+                echo "- Branch protection note: require the **install** and **upgrade** jobs if you want both CI gates enforced while integration executes conditionally.";
               fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"

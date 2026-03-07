@@ -237,6 +237,7 @@ def test_call_command_with_sqlite_lock_retry_retries_and_succeeds(
             raise env_refresh_module.OperationalError("database is locked")
 
     monkeypatch.setattr(env_refresh_module, "call_command", _flaky_call)
+    monkeypatch.setattr(env_refresh_module, "close_old_connections", lambda: None)
 
     env_refresh_module._call_command_with_sqlite_lock_retry(
         "register_site_apps",
@@ -259,6 +260,7 @@ def test_call_command_with_sqlite_lock_retry_raises_after_max_attempts(
         raise env_refresh_module.OperationalError("database is locked")
 
     monkeypatch.setattr(env_refresh_module, "call_command", _always_locked)
+    monkeypatch.setattr(env_refresh_module, "close_old_connections", lambda: None)
 
     with pytest.raises(env_refresh_module.OperationalError, match="database is locked"):
         env_refresh_module._call_command_with_sqlite_lock_retry(

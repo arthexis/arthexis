@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import ast
+from importlib import import_module
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,7 +64,7 @@ def register_extension_with_os(extension: RegisteredExtension) -> RegistrationRe
             ),
         )
 
-    import winreg  # type: ignore[import-not-found]
+    winreg = import_module("winreg")
 
     prog_id = f"Arthexis.Desktop{extension.extension.lstrip('.').upper()}"
     command_value = build_windows_registry_command(extension)

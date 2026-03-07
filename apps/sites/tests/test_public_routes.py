@@ -49,7 +49,7 @@ def test_public_pages_render_for_anonymous(client):
     assert response.status_code == 200
     content = response.content.decode()
     assert reverse("pages:user-story-submit") in content
-    assert "Rate" in content
+    assert "Please rate" in content
     assert "this page" in content
 
     changelog_response = client.get(reverse("pages:changelog"))
