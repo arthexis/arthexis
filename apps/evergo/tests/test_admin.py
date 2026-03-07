@@ -80,6 +80,8 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
         "orders_updated": 0,
         "placeholders_created": 0,
         "unresolved": [],
+        "loaded_customer_ids": [101],
+        "loaded_order_ids": [202],
     }
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     profile = EvergoUser.objects.create(
@@ -97,7 +99,66 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
         {"profile": profile.pk, "raw_queries": "J00830, Customer Name"},
     )
     assert post_response.status_code == 302
+    assert post_response["Location"].endswith("/admin/evergo/evergoorder/?id__in=202")
     mock_load_customers.assert_called_once_with(raw_queries="J00830, Customer Name")
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_can_redirect_to_customers_with_selected_ids(
+    mock_load_customers, admin_client
+):
+    """Regression: wizard next-view selector should support customer destination with scoped IDs."""
+    mock_load_customers.return_value = {
+        "customers_loaded": 2,
+        "orders_created": 2,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+        "loaded_customer_ids": [12, 18],
+        "loaded_order_ids": [99],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="suite-tool-customers@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {
+            "profile": profile.pk,
+            "raw_queries": "J00830",
+            "next_view": "customers",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"].endswith("/admin/evergo/evergocustomer/?id__in=12,18")
+
+
+@pytest.mark.django_db
+def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_create(admin_client):
+    """Regression: wizard should prefill the current user's profile and include profile-create link."""
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="owned-profile@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.get(wizard_url)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f'value="{profile.pk}" selected' in content
+    assert reverse("admin:evergo_evergouser_add") in content
+    assert 'name="next_view"' in content
+    assert '<option value="orders" selected>Orders</option>' in content
+    assert 'class="button">Cancel</a>' in content
 
 
 @pytest.mark.django_db

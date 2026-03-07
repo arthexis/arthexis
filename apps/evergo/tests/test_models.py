@@ -292,6 +292,10 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
     assert customer.latest_so == "J00830"
     assert customer.phone_number == "+528115889790"
 
+    synced_order = profile.orders.get(remote_id=30161)
+    assert summary["loaded_order_ids"] == [synced_order.pk]
+    assert summary["loaded_customer_ids"] == [customer.pk]
+
     placeholder = EvergoOrder.objects.get(order_number="BAD999")
     assert placeholder.validation_state == EvergoOrder.VALIDATION_STATE_PLACEHOLDER
 
@@ -326,9 +330,10 @@ def test_upsert_order_extracts_contact_and_address_components():
         "updated_at": "2026-01-13T02:18:42.000000Z",
     }
 
-    created = profile._upsert_order(payload)
+    created, order = profile._upsert_order(payload)
 
     assert created is True
+    assert order.remote_id == 29545
     order = EvergoOrder.objects.get(remote_id=29545)
     assert order.site_name == "Chevrolet"
     assert order.phone_primary == "+528111852788"
@@ -370,9 +375,10 @@ def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
         },
     }
 
-    created = profile._upsert_customer_from_order(payload)
+    created, customer = profile._upsert_customer_from_order(payload)
 
     assert created is True
+    assert customer is not None
     customer = EvergoCustomer.objects.get(user=profile, remote_id=11002)
     assert "Monterrey" in customer.address
 
@@ -398,9 +404,10 @@ def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
         },
     }
 
-    created = profile._upsert_customer_from_order(payload)
+    created, customer = profile._upsert_customer_from_order(payload)
 
     assert created is True
+    assert customer is not None
     customer = EvergoCustomer.objects.get(user=profile, remote_id=11001)
     assert "Apodaca" in customer.address
     assert "Ciudad Apodaca" not in customer.address

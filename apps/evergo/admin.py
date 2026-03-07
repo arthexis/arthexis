@@ -22,10 +22,26 @@ from .forms import EvergoLoadCustomersForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
+def _parse_selected_ids_query_param(request) -> list[int]:
+    """Return validated integer IDs from a comma-separated ``id__in`` query parameter."""
+    raw_ids = (request.GET.get("id__in") or request.GET.get("ids") or "").strip()
+    if not raw_ids:
+        return []
+
+    selected_ids: list[int] = []
+    for value in raw_ids.split(","):
+        try:
+            selected_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return selected_ids
+
+
 def _load_customers_admin_view(admin_instance, request):
     """Render and process the shared Evergo customer-loading wizard."""
     opts = admin_instance.model._meta
     changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+    orders_changelist_url = reverse("admin:evergo_evergoorder_changelist")
 
     if request.method == "POST":
         if not admin_instance.has_change_permission(request):
@@ -73,7 +89,20 @@ def _load_customers_admin_view(admin_instance, request):
                         % {"items": ", ".join(summary["unresolved"])},
                         level=messages.WARNING,
                     )
-                return HttpResponseRedirect(changelist_url)
+                next_view = form.cleaned_data.get("next_view") or "orders"
+                selected_customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])]
+                selected_order_ids = [str(value) for value in summary.get("loaded_order_ids", [])]
+
+                if next_view == "customers":
+                    destination_url = changelist_url
+                    selected_ids = selected_customer_ids
+                else:
+                    destination_url = orders_changelist_url
+                    selected_ids = selected_order_ids
+
+                if selected_ids:
+                    return HttpResponseRedirect(f"{destination_url}?id__in={','.join(selected_ids)}")
+                return HttpResponseRedirect(destination_url)
     else:
         form = EvergoLoadCustomersForm(request_user=request.user)
 
@@ -380,6 +409,9 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
         queryset = super().get_queryset(request).prefetch_related(
             Prefetch("customers", queryset=EvergoCustomer.objects.order_by("pk"))
         )
+        selected_ids = _parse_selected_ids_query_param(request)
+        if selected_ids:
+            queryset = queryset.filter(pk__in=selected_ids)
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
@@ -673,6 +705,9 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
         queryset = super().get_queryset(request)
+        selected_ids = _parse_selected_ids_query_param(request)
+        if selected_ids:
+            queryset = queryset.filter(pk__in=selected_ids)
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
