@@ -33,6 +33,7 @@
     --user-story-contact-gap: var(--admin-ui-space-3, 0.75rem);
     --user-story-contact-optin-offset: var(--admin-ui-space-2, 0.5rem);
     --user-story-contact-breakpoint: 48rem;
+    --admin-chat-tablet-viewport-offset: calc(var(--admin-ui-space-4, 1rem) * 2);
 }
 
 .chat-widget {
@@ -1157,7 +1158,9 @@ body.user-story-open {
     .chat-drawer {
         width: 100%;
         max-width: none;
-        min-height: calc(100dvh - 2rem);
-        max-height: calc(100dvh - 2rem);
+        min-height: calc(100vh - var(--admin-chat-tablet-viewport-offset));
+        min-height: calc(100dvh - var(--admin-chat-tablet-viewport-offset));
+        max-height: calc(100vh - var(--admin-chat-tablet-viewport-offset));
+        max-height: calc(100dvh - var(--admin-chat-tablet-viewport-offset));
     }
 }
