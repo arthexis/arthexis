@@ -41,12 +41,18 @@ from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from webauthn.helpers.exceptions import InvalidAuthenticationResponse
 
 from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
 from apps.nodes.models import Node
 from apps.nodes.utils import ensure_feature_enabled
+from apps.users.models import PasskeyCredential
+from apps.users.passkeys import (
+    build_authentication_options,
+    verify_authentication_response,
+)
 from config.request_utils import is_https_request
 
 from ..forms import AuthenticatorLoginForm
@@ -54,6 +60,8 @@ from ..utils import get_original_referer
 from utils.sites import get_site
 
 logger = logging.getLogger(__name__)
+
+PASSKEY_CHALLENGE_SESSION_KEY = "passkey_login_challenge"
 
 
 class _GraphvizDeprecationFilter(logging.Filter):
@@ -474,6 +482,7 @@ class CustomLoginView(LoginView):
                 or had_rfid_feature
             )
         context["show_rfid_login"] = has_rfid_feature
+        context["show_passkey_login"] = True
         if has_rfid_feature:
             context["rfid_login_url"] = reverse("pages:rfid-login")
         return context
@@ -492,6 +501,96 @@ class CustomLoginView(LoginView):
 
 
 login_view = CustomLoginView.as_view()
+
+
+def _read_json_body(request) -> dict[str, Any]:
+    """Return JSON payload from the request body."""
+
+    if not request.body:
+        return {}
+    payload = json.loads(request.body.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("JSON request body must be an object.")
+    return payload
+
+
+@never_cache
+def passkey_login_options(request):
+    """Create and store a WebAuthn challenge for passkey authentication."""
+
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    options = build_authentication_options(request)
+    request.session[PASSKEY_CHALLENGE_SESSION_KEY] = options.challenge
+    return JsonResponse({"publicKey": options.data})
+
+
+def _resolve_login_redirect(request, redirect_target: str) -> str:
+    """Return a safe redirect URL after successful authentication."""
+
+    if redirect_target and url_has_allowed_host_and_scheme(
+        redirect_target,
+        allowed_hosts={request.get_host()},
+        require_https=is_https_request(request),
+    ):
+        return redirect_target
+    if request.user.is_staff:
+        return reverse("admin:index")
+    return "/"
+
+
+@never_cache
+def passkey_login_verify(request):
+    """Verify a passkey assertion and authenticate the matching user."""
+
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    challenge = request.session.get(PASSKEY_CHALLENGE_SESSION_KEY)
+    if not challenge:
+        return JsonResponse(
+            {"detail": _("Passkey challenge missing. Please try again.")},
+            status=400,
+        )
+
+    try:
+        payload = _read_json_body(request)
+        credential = payload["credential"]
+        credential_id = credential["id"]
+        stored_credential = PasskeyCredential.objects.select_related("user").get(
+            credential_id=credential_id
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"detail": _("Invalid passkey response payload.")}, status=400)
+    except PasskeyCredential.DoesNotExist:
+        return JsonResponse({"detail": _("Passkey is not registered.")}, status=400)
+
+    try:
+        verified = verify_authentication_response(
+            request,
+            credential,
+            expected_challenge=challenge,
+            credential_public_key=bytes(stored_credential.public_key),
+            credential_current_sign_count=stored_credential.sign_count,
+        )
+    except InvalidAuthenticationResponse:
+        return JsonResponse({"detail": _("Passkey verification failed.")}, status=400)
+
+    user = stored_credential.user
+    if not user.is_active:
+        return JsonResponse({"detail": _("User account is inactive.")}, status=403)
+
+    stored_credential.sign_count = verified.new_sign_count
+    stored_credential.last_used_at = timezone.now()
+    stored_credential.save(update_fields=["sign_count", "last_used_at", "updated_at"])
+
+    redirect_target = str(payload.get("next") or "").strip()
+
+    request.session.pop(PASSKEY_CHALLENGE_SESSION_KEY, None)
+    user.backend = "apps.users.backends.PasswordOrOTPBackend"
+    login(request, user)
+    return JsonResponse({"redirect_url": _resolve_login_redirect(request, redirect_target)})
 
 
 @ensure_csrf_cookie
