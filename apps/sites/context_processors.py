@@ -45,9 +45,7 @@ _ROLE_FAVICONS = {
 
 def nav_links(request):
     """Provide navigation links for the current site."""
-    explicit_badge_role = hasattr(request, "badge_role") and getattr(
-        request, "badge_role", None
-    ) is not None
+    explicit_badge_role = bool(getattr(request, "badge_role_explicit", False))
     site = getattr(request, "badge_site", None) or get_site(request)
     node = getattr(request, "badge_node", None)
     role = getattr(request, "badge_role", None)
