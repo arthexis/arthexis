@@ -12,16 +12,60 @@ def test_select_preferred_ip_prefers_global_address():
     assert Node._select_preferred_ip(addresses) == "8.8.8.8"
 
 
-def test_detect_auto_feature_uses_lock_file(tmp_path):
+@pytest.mark.parametrize(
+    ("slug", "systemctl_command", "lock_file", "expected"),
+    [
+        pytest.param("rfid-scanner", ["systemctl"], "rfid.lck", True, id="rfid-lock-requires-systemctl"),
+        pytest.param("celery-queue", [], "celery.lck", False, id="systemd-lock-blocked-without-systemctl"),
+        pytest.param("systemd-manager", ["systemctl"], None, True, id="systemd-manager-detected"),
+    ],
+)
+def test_detect_auto_feature_systemd_detection_matrix(
+    monkeypatch, tmp_path, slug, systemctl_command, lock_file, expected
+):
+    """Systemd-manager availability should gate lock-file based systemd detections."""
+
     node = Node(
         hostname="auto-feature-node",
         base_path=str(tmp_path),
         public_endpoint="auto-feature",
     )
 
-    locks_dir = tmp_path / ".locks"
-    locks_dir.mkdir()
-    (locks_dir / "rfid.lck").write_text("1")
+    if lock_file:
+        locks_dir = tmp_path / ".locks"
+        locks_dir.mkdir()
+        (locks_dir / lock_file).write_text("1")
+
+    monkeypatch.setattr(
+        "apps.nodes.models.features._systemctl_command", lambda: systemctl_command
+    )
+
+    result = node._detect_auto_feature(slug, base_dir=tmp_path, base_path=tmp_path)
+
+    assert result is expected
+
+
+def test_detect_auto_feature_allows_rfid_service_probe_without_systemctl(
+    monkeypatch, tmp_path
+):
+    """rfid-scanner fallback service probing should not require systemctl."""
+
+    node = Node(
+        hostname="rfid-node",
+        base_path=str(tmp_path),
+        public_endpoint="rfid-node",
+    )
+
+    monkeypatch.setattr("apps.nodes.models.features._systemctl_command", lambda: [])
+
+    import sys
+    import types
+
+    stub_rfid_service = types.SimpleNamespace(
+        rfid_service_enabled=lambda *, lock_dir: False,
+        service_available=lambda: True,
+    )
+    monkeypatch.setitem(sys.modules, "apps.cards.rfid_service", stub_rfid_service)
 
     result = node._detect_auto_feature(
         "rfid-scanner", base_dir=tmp_path, base_path=tmp_path
