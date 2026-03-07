@@ -6,8 +6,8 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from django.test.client import RequestFactory
 
-from apps.ocpp.admin import ChargerAdmin
-from apps.ocpp.models import Charger, Variable, MonitoringRule, MonitoringReport
+from apps.ocpp.admin import ChargerAdmin, ChargingStationAdmin
+from apps.ocpp.models import Charger, Variable, MonitoringRule, MonitoringReport, ChargingStation
 
 pytestmark = pytest.mark.django_db
 
@@ -42,6 +42,150 @@ def test_charger_admin_changelist_populates_quick_stats(client):
     assert stats["today_kw"] == 0.0
     assert stats["estimated_cost"] is None
     assert stats["availability_percentage"] is None
+
+
+def test_charger_admin_changelist_shows_station_column(client):
+    """Regression: include station display name separately from charge-point display name."""
+
+    User = get_user_model()
+    user = User.objects.create_superuser(
+        username="admin-station", password="pass", email="admin-station@example.com"
+    )
+    client.force_login(user)
+
+    station = ChargingStation.objects.create(station_id="STAT-1", display_name="Main Station")
+    Charger.objects.create(charger_id="CP-WITH-STATION", charging_station=station)
+
+    response = client.get(reverse("admin:ocpp_charger_changelist"))
+
+    assert response.status_code == 200
+    assert b"Station" in response.content
+    assert b"Main Station" in response.content
+
+
+def test_charger_admin_hides_station_root_charge_points_from_list():
+    """Regression: station root rows should not appear on the changelist queryset."""
+
+    station = ChargingStation.objects.create(station_id="STAT-HIDE")
+    root_cp = Charger.objects.create(
+        charger_id="CP-HIDE",
+        charging_station=station,
+        connector_id=None,
+    )
+    connector_cp = Charger.objects.create(
+        charger_id="CP-HIDE",
+        charging_station=station,
+        connector_id=1,
+    )
+    standalone_cp = Charger.objects.create(charger_id="CP-STANDALONE", connector_id=None)
+
+    admin = ChargerAdmin(Charger, AdminSite())
+    request = RequestFactory().get("/admin/ocpp/charger/")
+    request.resolver_match = type(
+        "ResolverMatch", (), {"url_name": "ocpp_charger_changelist"}
+    )()
+    queryset = admin.get_queryset(request)
+
+    assert root_cp not in queryset
+    assert connector_cp in queryset
+    assert standalone_cp in queryset
+
+
+def test_charger_admin_keeps_station_root_charge_points_in_detail_context():
+    """Regression: root rows should remain reachable for change/detail views."""
+
+    station = ChargingStation.objects.create(station_id="STAT-DETAIL")
+    root_cp = Charger.objects.create(
+        charger_id="CP-DETAIL",
+        charging_station=station,
+        connector_id=None,
+    )
+
+    admin = ChargerAdmin(Charger, AdminSite())
+    request = RequestFactory().get(f"/admin/ocpp/charger/{root_cp.pk}/change/")
+    request.resolver_match = type("ResolverMatch", (), {"url_name": "ocpp_charger_change"})()
+    queryset = admin.get_queryset(request)
+
+    assert root_cp in queryset
+
+
+def test_charger_admin_station_managed_fields_are_readonly():
+    """Regression: station-managed fields should be read-only in charge-point admin."""
+
+    station = ChargingStation.objects.create(station_id="STAT-RO")
+    charger = Charger.objects.create(charger_id="CP-RO", charging_station=station)
+    admin = ChargerAdmin(Charger, AdminSite())
+
+    readonly = admin.get_readonly_fields(request=RequestFactory().get("/"), obj=charger)
+
+    assert "display_name" in readonly
+    assert "public_display" in readonly
+    assert "language" in readonly
+    assert "preferred_ocpp_version" in readonly
+    assert "energy_unit" in readonly
+    assert "require_rfid" in readonly
+    assert "location" in readonly
+    assert "station_model" in readonly
+
+
+def test_charging_station_admin_syncs_station_managed_cp_fields():
+    """Regression: editing station admin should update linked charge-point settings."""
+
+    station = ChargingStation.objects.create(station_id="STAT-SYNC", display_name="Station Sync")
+    root_cp = Charger.objects.create(
+        charger_id="CP-SYNC",
+        charging_station=station,
+        connector_id=None,
+        public_display=False,
+        require_rfid=True,
+        energy_unit=Charger.EnergyUnit.W,
+        preferred_ocpp_version="1.6",
+    )
+    child_cp = Charger.objects.create(
+        charger_id="CP-SYNC",
+        charging_station=station,
+        connector_id=1,
+        public_display=False,
+        require_rfid=True,
+        energy_unit=Charger.EnergyUnit.W,
+    )
+    admin_user = get_user_model().objects.create_superuser(
+        username="admin-sync", password="pass", email="admin-sync@example.com"
+    )
+    request = RequestFactory().post("/")
+    request.user = admin_user
+
+    station.display_name = "Updated Station"
+    form = ChargingStationAdmin.form(
+        data={
+            "station_id": station.station_id,
+            "display_name": station.display_name,
+            "public_display": True,
+            "preferred_ocpp_version": "2.0.1",
+            "energy_unit": Charger.EnergyUnit.KW,
+            "require_rfid": False,
+            "owner_users": [],
+            "owner_groups": [],
+        },
+        instance=station,
+    )
+    assert form.is_valid(), form.errors
+
+    admin_instance = ChargingStationAdmin(ChargingStation, AdminSite())
+    admin_instance.save_model(request, station, form, change=True)
+
+    root_cp.refresh_from_db()
+    child_cp.refresh_from_db()
+    assert root_cp.display_name == "Updated Station"
+    assert child_cp.display_name == "Updated Station"
+    assert root_cp.public_display is True
+    assert child_cp.public_display is True
+    assert root_cp.preferred_ocpp_version == "2.0.1"
+    assert child_cp.preferred_ocpp_version == "2.0.1"
+    assert root_cp.energy_unit == Charger.EnergyUnit.KW
+    assert child_cp.energy_unit == Charger.EnergyUnit.KW
+    assert root_cp.require_rfid is False
+    assert child_cp.require_rfid is False
 
 
 def test_charger_admin_reports_validation_error(db):
