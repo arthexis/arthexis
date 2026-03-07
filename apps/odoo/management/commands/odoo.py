@@ -34,17 +34,21 @@ class Command(BaseCommand):
             type=int,
             help="Specific OdooEmployee profile ID to use for RPC checks.",
         )
-        parser.add_argument("--model", help="Odoo model name (for example: sale.order).")
-        parser.add_argument("--method", help="Odoo RPC method (for example: search_read).")
+        parser.add_argument(
+            "--model", help="Odoo model name (for example: sale.order)."
+        )
+        parser.add_argument(
+            "--method", help="Odoo RPC method (for example: search_read)."
+        )
         parser.add_argument(
             "--params",
             default="[]",
-            help="JSON list passed as *args to execute_kw. Example: '[[[\"state\",\"=\",\"sale\"]]]'",
+            help='JSON list passed as *args to execute_kw. Example: \'[[["state","=","sale"]]]\'',
         )
         parser.add_argument(
             "--kwargs",
             default="{}",
-            help="JSON object passed as **kwargs to execute_kw. Example: '{\"fields\":[\"name\"],\"limit\":5}'",
+            help='JSON object passed as **kwargs to execute_kw. Example: \'{"fields":["name"],"limit":5}\'',
         )
         parser.add_argument(
             "--sync-evergo-users",
@@ -98,7 +102,9 @@ class Command(BaseCommand):
             last_seen = timezone.localtime(latest_discovered).isoformat()
 
         self.stdout.write(self.style.MIGRATE_HEADING("Odoo Integration Status"))
-        self.stdout.write(f"Profiles: total={total_profiles}, verified={verified_profiles}")
+        self.stdout.write(
+            f"Profiles: total={total_profiles}, verified={verified_profiles}"
+        )
         self.stdout.write(
             f"Deployments: total={deployment_count}, last_discovered={last_seen}"
         )
@@ -121,8 +127,12 @@ class Command(BaseCommand):
         if not model_name or not method_name:
             raise CommandError("Both --model and --method are required for RPC mode.")
 
-        params = self._parse_json_list(options.get("params", "[]"), argument_name="--params")
-        kwargs = self._parse_json_dict(options.get("kwargs", "{}"), argument_name="--kwargs")
+        params = self._parse_json_list(
+            options.get("params", "[]"), argument_name="--params"
+        )
+        kwargs = self._parse_json_dict(
+            options.get("kwargs", "{}"), argument_name="--kwargs"
+        )
         profile = self._resolve_profile(options)
 
         if not profile.is_verified or profile.odoo_uid is None:
@@ -147,18 +157,21 @@ class Command(BaseCommand):
         }
         self.stdout.write(json.dumps(payload, default=str, indent=2, sort_keys=True))
 
-
     def _handle_sync_evergo_users_mode(self, options: dict[str, Any]) -> None:
         """Create missing Odoo users for discovered Evergo users."""
 
-        if not is_odoo_sync_integration_enabled(ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG, default=False):
+        if not is_odoo_sync_integration_enabled(
+            ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG, default=False
+        ):
             raise CommandError(
                 "Odoo Evergo user sync integration is disabled by suite feature toggles."
             )
 
         profile_id = options.get("profile_id")
         if profile_id is None:
-            raise CommandError("--profile-id is required for --sync-evergo-users write operations.")
+            raise CommandError(
+                "--profile-id is required for --sync-evergo-users write operations."
+            )
 
         profile = self._resolve_profile(options)
         if not profile.is_verified or profile.odoo_uid is None:
@@ -171,7 +184,9 @@ class Command(BaseCommand):
         errors = 0
 
         for evergo_user in EvergoUser.objects.order_by("pk").iterator():
-            email = str(evergo_user.email or evergo_user.evergo_email or "").strip().lower()
+            email = (
+                str(evergo_user.email or evergo_user.evergo_email or "").strip().lower()
+            )
             if not email:
                 skipped += 1
                 continue
@@ -190,13 +205,11 @@ class Command(BaseCommand):
                     remote_uid = profile.execute(
                         "res.users",
                         "create",
-                        [
-                            {
-                                "name": evergo_user.name or email,
-                                "login": email,
-                                "email": email,
-                            }
-                        ],
+                        {
+                            "name": evergo_user.name or email,
+                            "login": email,
+                            "email": email,
+                        },
                     )
                 if not isinstance(remote_uid, int):
                     raise ValueError("Odoo did not return a valid integer user id.")
@@ -273,7 +286,11 @@ class Command(BaseCommand):
                     f"Odoo profile id={profile_id} does not exist."
                 ) from exc
 
-        profile = OdooEmployee.objects.filter(verified_on__isnull=False).order_by("pk").first()
+        profile = (
+            OdooEmployee.objects.filter(verified_on__isnull=False)
+            .order_by("pk")
+            .first()
+        )
         if profile is None:
             raise CommandError(
                 "No verified Odoo profile is available. Use --profile-id with an existing record or verify credentials first."
@@ -286,9 +303,7 @@ class Command(BaseCommand):
         try:
             parsed = json.loads(raw_value)
         except json.JSONDecodeError as exc:
-            raise CommandError(
-                f"Invalid JSON for {argument_name}: {exc.msg}"
-            ) from exc
+            raise CommandError(f"Invalid JSON for {argument_name}: {exc.msg}") from exc
 
         if not isinstance(parsed, list):
             raise CommandError(f"{argument_name} must be a JSON list.")
@@ -300,9 +315,7 @@ class Command(BaseCommand):
         try:
             parsed = json.loads(raw_value)
         except json.JSONDecodeError as exc:
-            raise CommandError(
-                f"Invalid JSON for {argument_name}: {exc.msg}"
-            ) from exc
+            raise CommandError(f"Invalid JSON for {argument_name}: {exc.msg}") from exc
 
         if not isinstance(parsed, dict):
             raise CommandError(f"{argument_name} must be a JSON object.")

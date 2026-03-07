@@ -55,7 +55,12 @@ def landing(label=None):
 
 
 def user_in_site_operator_group(user) -> bool:
-    if not getattr(user, "is_authenticated", False):
+    """Return whether ``user`` belongs to the Site Operator group."""
+
+    if (
+        not getattr(user, "is_authenticated", False)
+        or getattr(user, "pk", None) is None
+    ):
         return False
     try:
         return user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
