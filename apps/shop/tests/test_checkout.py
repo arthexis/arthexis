@@ -2,6 +2,8 @@ from datetime import datetime, time
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -191,7 +193,7 @@ class ShopIndexTests(TestCase):
             response = self.client.get(reverse("shop:index"))
 
         self.assertContains(response, "Our shop is closed at the moment")
-        self.assertContains(response, "It will next open at")
+        self.assertContains(response, "It will next open at 09:00")
 
     def test_index_hides_closed_message_when_a_shop_is_currently_open(self):
         """When an in-hours shop exists, the shop should render instead of closed messaging."""
@@ -210,3 +212,102 @@ class ShopIndexTests(TestCase):
 
         self.assertContains(response, "Open Shop")
         self.assertNotContains(response, "Our shop is closed at the moment")
+
+
+class ShopBusinessHoursValidationTests(TestCase):
+    """Validation and constraint coverage for optional business hours."""
+
+    def test_shop_clean_rejects_half_configured_business_hours(self):
+        """Model validation should require opening and closing times as a pair."""
+
+        shop = Shop(name="Invalid Hours Shop", slug="invalid-hours", opening_time=time(9, 0), closing_time=None)
+
+        with self.assertRaises(ValidationError):
+            shop.clean()
+
+    def test_shop_constraint_rejects_half_configured_business_hours(self):
+        """Database constraint should reject records with only one business-hours field set."""
+
+        with self.assertRaises(IntegrityError):
+            Shop.objects.create(name="Invalid Constraint Shop", slug="invalid-constraint", opening_time=time(9, 0))
+
+
+class ShopHoursEnforcementTests(TestCase):
+    """Server-side order flow checks for closed shops."""
+
+    def test_add_to_cart_rejects_closed_shop(self):
+        """Adding to cart should be blocked when the target shop is currently closed."""
+
+        shop = Shop.objects.create(name="Night Shop", slug="night-shop", opening_time=time(22, 0), closing_time=time(5, 0))
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Moonlight Item",
+            sku="N-1",
+            unit_price=Decimal("10.00"),
+            stock_quantity=4,
+        )
+        current_timezone = timezone.get_current_timezone()
+        now = timezone.make_aware(datetime(2026, 1, 1, 12, 0), current_timezone)
+
+        with patch("apps.shop.views.timezone.localtime", return_value=now):
+            response = self.client.post(
+                reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+                {"quantity": 1},
+                follow=True,
+            )
+
+        self.assertContains(response, "currently closed and cannot accept orders")
+        self.assertEqual(self.client.session.get("shop_cart", {}), {})
+
+    def test_checkout_rejects_when_shop_is_closed(self):
+        """Checkout should fail for a stale cart when the shop has since closed."""
+
+        shop = Shop.objects.create(name="Day Shop", slug="day-shop", opening_time=time(9, 0), closing_time=time(17, 0))
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Desk Reader",
+            sku="D-1",
+            unit_price=Decimal("20.00"),
+            stock_quantity=6,
+        )
+
+        open_time = timezone.make_aware(datetime(2026, 1, 1, 10, 0), timezone.get_current_timezone())
+        with patch("apps.shop.views.timezone.localtime", return_value=open_time):
+            self.client.post(
+                reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+                {"quantity": 1},
+                follow=True,
+            )
+
+        closed_time = timezone.make_aware(datetime(2026, 1, 1, 20, 0), timezone.get_current_timezone())
+        with patch("apps.shop.views.timezone.localtime", return_value=closed_time):
+            response = self.client.post(
+                reverse("shop:checkout"),
+                {
+                    "customer_name": "Jane Buyer",
+                    "customer_email": "jane@example.com",
+                    "shipping_address_line1": "42 Main Street",
+                    "shipping_address_line2": "",
+                    "shipping_city": "Madrid",
+                    "shipping_postal_code": "28001",
+                    "shipping_country": "Spain",
+                },
+                follow=True,
+            )
+
+        self.assertContains(response, "currently closed and cannot accept orders")
+        self.assertEqual(ShopOrder.objects.count(), 0)
+
+
+class ShopNextOpeningDatetimeTests(TestCase):
+    """Edge cases for next-opening calculations."""
+
+    def test_next_opening_datetime_for_overnight_shop_after_midnight(self):
+        """Overnight shops should reopen on the next day once the current window is active."""
+
+        shop = Shop(name="Overnight", slug="overnight", opening_time=time(22, 0), closing_time=time(5, 0))
+        reference = timezone.make_aware(datetime(2026, 1, 2, 3, 0), timezone.get_current_timezone())
+
+        next_opening = shop.next_opening_datetime(reference)
+
+        self.assertEqual(next_opening, timezone.make_aware(datetime(2026, 1, 2, 22, 0), timezone.get_current_timezone()))

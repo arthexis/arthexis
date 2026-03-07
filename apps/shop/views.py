@@ -30,6 +30,17 @@ def _save_cart(request: HttpRequest, cart: dict) -> None:
     request.session.modified = True
 
 
+def _require_shop_open(shop: Shop) -> None:
+    """Raise CartValidationError when a shop is closed for the current local time."""
+
+    if not shop.is_active:
+        raise CartValidationError("This shop is currently unavailable.")
+
+    now = timezone.localtime()
+    if not shop.is_open_at(now.time()):
+        raise CartValidationError("This shop is currently closed and cannot accept orders.")
+
+
 def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopProduct]]:
     """Resolve cart entries to active products from a single shop."""
 
@@ -90,6 +101,12 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
 
     shop = get_object_or_404(Shop, slug=shop_slug, is_active=True)
     product = get_object_or_404(ShopProduct, id=product_id, shop=shop, is_active=True)
+
+    try:
+        _require_shop_open(shop)
+    except CartValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("shop:index")
 
     try:
         qty = int(request.POST.get("quantity", "1"))
@@ -178,6 +195,7 @@ def checkout(request: HttpRequest) -> HttpResponse:
 
     try:
         shop, products = _resolve_cart_products(entries)
+        _require_shop_open(shop)
     except CartValidationError as exc:
         messages.error(request, str(exc))
         return redirect("shop:cart")
