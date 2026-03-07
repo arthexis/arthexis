@@ -30,6 +30,9 @@
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.35);
     --user-story-alert-danger-fg: #b91c1c;
     --user-story-close-hover-bg: rgba(15, 23, 42, 0.08);
+    --user-story-contact-gap: var(--admin-ui-space-3, 0.75rem);
+    --user-story-contact-optin-offset: var(--admin-ui-space-2, 0.5rem);
+    --user-story-contact-breakpoint: 48rem;
 }
 
 .chat-widget {
@@ -1021,6 +1024,32 @@ body.user-story-open {
 
 .user-story-card .user-story-chat-optin .form-check-input {
     margin: 0;
+}
+
+.user-story-contact-row {
+    display: grid;
+    align-items: end;
+    gap: var(--user-story-contact-gap);
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.user-story-contact-name {
+    width: 100%;
+}
+
+.user-story-card .user-story-contact-optin {
+    margin-bottom: var(--user-story-contact-optin-offset);
+    white-space: nowrap;
+}
+
+@media (min-width: 48rem) {
+    .user-story-contact-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .user-story-card .user-story-contact-optin {
+        justify-self: end;
+    }
 }
 
 .user-story-clipboard {

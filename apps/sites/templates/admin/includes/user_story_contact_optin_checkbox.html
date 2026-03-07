@@ -1,0 +1,12 @@
+{% load i18n %}
+<label class="{{ checkbox_label_classes }}" for="user-story-contact-via-chat">
+  <input
+    class="form-check-input"
+    id="user-story-contact-via-chat"
+    name="contact_via_chat"
+    type="checkbox"
+    value="1"
+    {% if chat_opt_in_checked %}checked{% endif %}
+  >
+  {% trans 'You may contact me' %}
+</label>

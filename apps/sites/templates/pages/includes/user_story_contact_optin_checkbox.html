@@ -1,0 +1,14 @@
+{% load i18n %}
+<div class="form-check {{ checkbox_wrapper_classes|default:'user-story-chat-optin' }}">
+  <input
+    class="form-check-input"
+    type="checkbox"
+    value="1"
+    id="user-story-contact-via-chat"
+    name="contact_via_chat"
+    {% if chat_opt_in_checked %}checked{% endif %}
+  >
+  <label class="form-check-label" for="user-story-contact-via-chat">
+    {% trans 'You may contact me' %}
+  </label>
+</div>

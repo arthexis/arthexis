@@ -50,17 +50,20 @@
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
         <input type="hidden" name="messages" value="">
         {% if request.user.is_authenticated %}
-          <div class="user-story-field">
-            <label for="user-story-name" class="user-story-label">{% trans 'Username' %}</label>
-            <input
-              type="text"
-              class="user-story-input"
-              id="user-story-name"
-              name="name"
-              maxlength="40"
-              value="{{ request.user.username|slice:':40' }}"
-              readonly
-            >
+          <div class="user-story-field user-story-contact-row">
+            <div class="user-story-contact-name">
+              <label for="user-story-name" class="user-story-label">{% trans 'Username' %}</label>
+              <input
+                type="text"
+                class="user-story-input"
+                id="user-story-name"
+                name="name"
+                maxlength="40"
+                value="{{ request.user.username|slice:':40' }}"
+                readonly
+              >
+            </div>
+            {% include 'admin/includes/user_story_contact_optin_checkbox.html' with checkbox_label_classes='user-story-checkbox-label user-story-chat-optin user-story-contact-optin' %}
           </div>
         {% else %}
           <div class="user-story-field">
@@ -83,7 +86,7 @@
           <div class="user-story-rating-row">
             <span class="user-story-label" id="user-story-rating-group-label">
               {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
-                Rate {{ link_start }}this page{{ link_end }}
+                Please rate {{ link_start }}this page{{ link_end }}
               {% endblocktrans %}
             </span>
             <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
@@ -134,19 +137,11 @@
             {% endif %}
           {% endif %}
         </div>
-        <div class="user-story-field">
-          <label class="user-story-checkbox-label user-story-chat-optin" for="user-story-contact-via-chat">
-            <input
-              class="form-check-input"
-              id="user-story-contact-via-chat"
-              name="contact_via_chat"
-              type="checkbox"
-              value="1"
-              {% if chat_opt_in_checked %}checked{% endif %}
-            >
-            {% trans 'I would like to be contacted via chat' %}
-          </label>
-        </div>
+        {% if not request.user.is_authenticated %}
+          <div class="user-story-field">
+            {% include 'admin/includes/user_story_contact_optin_checkbox.html' with checkbox_label_classes='user-story-checkbox-label user-story-chat-optin' %}
+          </div>
+        {% endif %}
         <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
         </button>
