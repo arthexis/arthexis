@@ -187,7 +187,12 @@ class EmailCollector(Entity):
                         fail_silently=False,
                     )
                 except Exception:
-                    logger.exception("Failed email notification for collector %s", self.pk)
+                    logger.exception(
+                        "Failed email notification for collector %s; "
+                        "Failed to send notification for collector %s",
+                        self.pk,
+                        self.pk,
+                    )
 
         recipe = self.notification_recipe
         if recipe is None:

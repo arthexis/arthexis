@@ -5,7 +5,25 @@ import contextlib
 import logging
 from typing import Any
 
-from aiortc.mediastreams import VideoStreamTrack
+try:
+    from aiortc.mediastreams import VideoStreamTrack
+
+    AIORTC_AVAILABLE = True
+except ModuleNotFoundError:
+    AIORTC_AVAILABLE = False
+
+    class VideoStreamTrack:  # type: ignore[override]
+        """Fallback base class used when aiortc is not installed."""
+
+        async def next_timestamp(self) -> tuple[int, object]:
+            """Provide a stub timestamp API matching aiortc's track contract."""
+
+            return 0, 1
+
+        async def stop(self) -> None:
+            """Provide a no-op stop method for compatibility."""
+
+            return None
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer, AsyncWebsocketConsumer
 from django.conf import settings
@@ -213,6 +231,9 @@ class RedisStreamConsumer(AsyncWebsocketConsumer):
 
 class WebRTCSignalingConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self) -> None:
+        if not AIORTC_AVAILABLE:
+            await self.close(code=1013)
+            return
         slug = self.scope["url_route"]["kwargs"]["slug"]
         include_inactive = self.scope["url_route"]["kwargs"].get("admin", False)
         if include_inactive and not self.scope["user"].is_staff:

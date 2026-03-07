@@ -110,6 +110,20 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
                 reporter.write_line(warning, yellow=True)
             else:
                 print(warning, file=sys.stderr)
+        except RuntimeError as exc:  # pragma: no cover - best effort logging
+            reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+            message = str(exc)
+            if "Database access not allowed" in message:
+                warning = (
+                    "Skipping test result persistence because database access is "
+                    "blocked during pytest session finalization."
+                )
+            else:
+                warning = f"Unable to persist test results to primary database: {exc}"
+            if reporter:
+                reporter.write_line(warning, yellow=True)
+            else:
+                print(warning, file=sys.stderr)
         except DatabaseError as exc:  # pragma: no cover - best effort logging
             reporter = session.config.pluginmanager.get_plugin("terminalreporter")
             message = f"Unable to persist test results to primary database: {exc}"
