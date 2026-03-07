@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib import admin, messages
 from django.contrib.admin.utils import quote
+from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -192,6 +193,7 @@ class ChargerAdmin(
     )
     list_display = (
         "display_name_with_fallback",
+        "charging_station_display_name",
         "connector_number",
         "local_indicator",
         "require_rfid_display",
@@ -227,8 +229,30 @@ class ChargerAdmin(
         "delete_selected",
     ]
 
+    def get_queryset(self, request):
+        """Hide station root rows from CP admin once the station is configured."""
+
+        queryset = super().get_queryset(request)
+        return queryset.exclude(
+            Q(charging_station__isnull=False) & Q(connector_id__isnull=True)
+        )
+
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
+        if obj and obj.charging_station_id:
+            station_managed_fields = (
+                "display_name",
+                "public_display",
+                "language",
+                "preferred_ocpp_version",
+                "energy_unit",
+                "require_rfid",
+                "location",
+                "station_model",
+            )
+            for field in station_managed_fields:
+                if field not in readonly:
+                    readonly.append(field)
         if obj and not obj.is_local:
             for field in ("allow_remote", "export_transactions"):
                 if field not in readonly:
@@ -325,6 +349,13 @@ class ChargerAdmin(
     @admin.display(description="Display Name", ordering="display_name")
     def display_name_with_fallback(self, obj):
         return self._charger_display_name(obj)
+
+    @admin.display(description="Station", ordering="charging_station__display_name")
+    def charging_station_display_name(self, obj):
+        station = obj.charging_station
+        if not station:
+            return "-"
+        return station.display_name or station.station_id
 
     def _charger_display_name(self, obj):
         if obj.display_name:
