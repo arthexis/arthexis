@@ -265,7 +265,10 @@ def test_cp_simulator_default_serial_number_stays_stable_per_session(logged_in_c
     """HTMX refreshes keep the same default serial for one logged-in session."""
 
     first_response = logged_in_client.get(reverse("ocpp:cp-simulator"))
-    second_response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+    second_response = logged_in_client.get(
+        reverse("ocpp:cp-simulator"),
+        HTTP_HX_REQUEST="true",
+    )
 
     assert first_response.status_code == 200
     assert second_response.status_code == 200

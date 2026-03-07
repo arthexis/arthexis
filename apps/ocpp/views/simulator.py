@@ -155,7 +155,6 @@ def cp_simulator(request):
                 else default_params["ws_port"],
                 "cp_path": default_simulator.cp_path or default_params["cp_path"],
                 "serial_number": default_simulator.serial_number
-                or default_simulator.cp_path
                 or default_params["serial_number"],
                 "connector_id": default_simulator.connector_id or 1,
                 "rfid": default_simulator.rfid or default_params["rfid"],
