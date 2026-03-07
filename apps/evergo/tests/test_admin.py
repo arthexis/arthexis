@@ -128,6 +128,83 @@ def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_cu
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_evergo_admin_load_customers_wizard_load_all_submits_without_queries(
+    mock_load_customers, admin_client
+):
+    """Load-all mode should allow an empty query payload."""
+
+    mock_load_customers.return_value = {
+        "customers_loaded": 2,
+        "orders_created": 2,
+        "orders_updated": 0,
+        "placeholders_created": 0,
+        "unresolved": [],
+    }
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="wildcard-admin@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": "", "load_mode": "all"},
+    )
+
+    assert response.status_code == 302
+    mock_load_customers.assert_called_once_with(raw_queries="")
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_admin_load_customers_wizard_requires_queries_for_filtered_mode(admin_client):
+    """Filtered mode should require at least one query token."""
+
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="wildcard-validation@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": "", "load_mode": "filtered"},
+    )
+
+    assert response.status_code == 200
+    assert b"Enter at least one SO number or customer name." in response.content
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_admin_load_customers_wizard_limits_query_count(admin_client):
+    """Filtered mode should cap query fan-out at 100 submitted tokens."""
+
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="query-limit@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+
+    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
+    oversized = " ".join(f"SO{i:04d}" for i in range(101))
+    response = admin_client.post(
+        wizard_url,
+        {"profile": profile.pk, "raw_queries": oversized, "load_mode": "filtered"},
+    )
+
+    assert response.status_code == 200
+    assert b"Submit at most 100 values" in response.content
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.models.user.EvergoUser.test_login")
 def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
     """Change-form action should run login sync for a selected Evergo user."""
@@ -200,6 +277,43 @@ def test_evergo_customer_export_view_rejects_empty_column_selection(
 
     assert response.status_code == 400
     assert "Select at least one column" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_customer_export_view_post_scope_uses_hidden_selected_ids(
+    admin_client, evergo_customer_export_record
+):
+    """Selected export should remain scoped when IDs are carried by hidden POST fields."""
+
+    selected = evergo_customer_export_record(
+        username="suite-admin-export-hidden-selected-1",
+        email="suite-admin-export-hidden-selected-1@example.com",
+        remote_id=7301,
+        name="Hidden Selected",
+    )
+    evergo_customer_export_record(
+        username="suite-admin-export-hidden-selected-2",
+        email="suite-admin-export-hidden-selected-2@example.com",
+        remote_id=7302,
+        name="Hidden Unselected",
+    )
+
+    export_url = reverse("admin:evergo_evergocustomer_export")
+    response = admin_client.post(
+        export_url,
+        {
+            "format": "tsv",
+            "export_columns": ["remote_id", "name"],
+            "selected": [str(selected.pk)],
+            "export_scope_selected": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert "7301\tHidden Selected" in body
+    assert "7302\tHidden Unselected" not in body
 
 
 @pytest.mark.django_db
