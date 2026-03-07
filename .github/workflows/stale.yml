@@ -14,15 +14,15 @@ jobs:
       - uses: actions/stale@v10
         with:
           days-before-stale: 7
-          days-before-close: 3
+          days-before-close: 7
           close-branch: true
           stale-pr-label: stale
           exempt-pr-labels: in-progress,needs-review,blocked,security
           stale-pr-message: >
             This PR has had no activity for 7 days and has been marked stale. To keep it open,
             leave a comment, push new commits, or apply one of the exempt labels
-            (`in-progress`, `needs-review`, `blocked`, or `security`) within 3 days.
+            (`in-progress`, `needs-review`, `blocked`, or `security`) within 7 days.
           close-pr-message: >
-            Closing this stale PR after 3 additional days of inactivity. To reopen and continue,
+            Closing this stale PR after 7 additional days of inactivity. To reopen and continue,
             comment, push new commits, or apply one of the exempt labels
             (`in-progress`, `needs-review`, `blocked`, or `security`).
