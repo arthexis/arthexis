@@ -37,6 +37,7 @@ jobs:
         with:
           clean: false
       - uses: actions/setup-python@v6
+        id: setup-python
         with:
           python-version: '3.13'
       - name: Cache pip
@@ -50,7 +51,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
@@ -79,7 +80,7 @@ jobs:
           if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
             DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
           fi
-          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
+          echo "::add-mask::${DOCS_ADMIN_PASSWORD}"
           python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
       - name: Check import resolution
         run: |
@@ -93,6 +94,17 @@ jobs:
         run: |
           source .venv/bin/activate
           ruff check --select E9,F823 .
+      - name: Detect pytest xdist arguments
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(pytest --help)"
+          if grep -q -- '--dist' <<<"$pytest_help"; then
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
+          fi
       - name: Run install smoke tests
         run: |
           set -Eeuo pipefail
