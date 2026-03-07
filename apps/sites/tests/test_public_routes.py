@@ -1,7 +1,7 @@
 import datetime
 import json
-import re
 from pathlib import Path
+import re
 
 import pytest
 from django.contrib.auth import get_user_model
