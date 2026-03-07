@@ -205,15 +205,11 @@ class Command(BaseCommand):
                     remote_uid = profile.execute(
                         "res.users",
                         "create",
-                        [
-                            [
-                                {
-                                    "name": evergo_user.name or email,
-                                    "login": email,
-                                    "email": email,
-                                }
-                            ]
-                        ],
+                        {
+                            "name": evergo_user.name or email,
+                            "login": email,
+                            "email": email,
+                        },
                     )
                 if not isinstance(remote_uid, int):
                     raise ValueError("Odoo did not return a valid integer user id.")

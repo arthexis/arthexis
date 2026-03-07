@@ -598,7 +598,7 @@ def test_reload_customer_from_remote_rebuilds_customer_and_order(
     refreshed = profile.reload_customer_from_remote(customer=stale_customer)
 
     assert refreshed.name == "Fresh Customer"
-    assert refreshed.pk is not None
+    assert refreshed.pk != stale_customer_pk
     refreshed_order = EvergoOrder.objects.get(user=profile, remote_id=777)
     assert refreshed_order.status_name == "En Proceso"
     assert refreshed_order.pk != stale_order_pk
