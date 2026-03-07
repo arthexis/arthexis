@@ -131,7 +131,7 @@ class UserPhoneNumberInline(admin.TabularInline):
 class EmailCollectorInline(admin.TabularInline):
     model = EmailCollector
     extra = 0
-    fields = ("name", "subject", "sender", "notification_mode")
+    fields = ("name", "subject", "sender", "notification_mode", "notification_recipe")
 
 
 class CustomerAccountRFIDInline(admin.TabularInline):

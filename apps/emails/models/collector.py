@@ -67,6 +67,14 @@ class EmailCollector(Entity):
         blank=True,
         help_text="Comma-separated recipients used when notification mode is Email.",
     )
+    notification_recipe = models.ForeignKey(
+        "recipes.Recipe",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="email_collectors",
+        help_text="Optional recipe to execute after the selected notification action.",
+    )
 
     class Meta:
         verbose_name = _("Email Collector")
@@ -135,8 +143,6 @@ class EmailCollector(Entity):
     def _notify_for_message(self, msg: dict[str, str], sigils: dict[str, str]) -> None:
         """Dispatch collector notification according to ``notification_mode``."""
         mode = (self.notification_mode or self.NOTIFY_NONE).strip().lower()
-        if mode == self.NOTIFY_NONE:
-            return
 
         context = {
             "subject": msg.get("subject", ""),
@@ -156,26 +162,38 @@ class EmailCollector(Entity):
             from apps.core.notifications import notify_async
 
             notify_async(rendered_subject, rendered_message)
-            return
 
         if mode == self.NOTIFY_NET_MESSAGE:
             from apps.nodes.models import NetMessage
 
             NetMessage.broadcast(rendered_subject, rendered_message)
-            return
 
         if mode == self.NOTIFY_EMAIL:
             recipients = self._parse_recipients(self.notification_recipients)
-            if not recipients:
-                return
-            from apps.emails import mailer
+            if recipients:
+                from apps.emails import mailer
 
-            mailer.send(
-                subject=rendered_subject,
-                message=rendered_message,
-                recipient_list=recipients,
-                fail_silently=False,
-            )
+                mailer.send(
+                    subject=rendered_subject,
+                    message=rendered_message,
+                    recipient_list=recipients,
+                    fail_silently=False,
+                )
+
+        recipe = self.notification_recipe
+        if recipe is None:
+            return
+
+        recipe.execute(
+            rendered_subject,
+            rendered_message,
+            subject=rendered_subject,
+            message=rendered_message,
+            sender=context.get("sender", ""),
+            body=context.get("body", ""),
+            date=context.get("date", ""),
+            sigils=sigils,
+        )
 
     def collect(self, limit: int = 10) -> None:
         """Poll the inbox and store new artifacts until an existing one is found."""
