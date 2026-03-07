@@ -72,9 +72,18 @@ jobs:
               print('pip-audit JSON report missing.', file=sys.stderr)
               sys.exit(1)
 
-          data = json.loads(report_path.read_text() or '[]')
+          data = json.loads(report_path.read_text() or '{}')
+          if isinstance(data, dict):
+              dependencies = data.get('dependencies') or data.get('packages') or []
+          elif isinstance(data, list):
+              dependencies = data
+          else:
+              dependencies = []
+
           findings = []
-          for dependency in data:
+          for dependency in dependencies:
+              if not isinstance(dependency, dict):
+                  continue
               name = dependency.get('name', 'unknown-package')
               version = dependency.get('version', 'unknown-version')
               for vuln in dependency.get('vulns', []):
