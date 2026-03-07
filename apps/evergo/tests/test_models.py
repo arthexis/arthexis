@@ -9,16 +9,25 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 
 from apps.evergo.exceptions import EvergoAPIError
-from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
+from apps.evergo.models import (
+    EvergoCustomer,
+    EvergoOrder,
+    EvergoOrderFieldValue,
+    EvergoUser,
+)
+
 
 @pytest.mark.django_db
 def test_evergo_user_rejects_empty_email_at_database_level():
     """Database constraint should reject direct saves with an empty Evergo email."""
     User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-empty", email="suite-empty@example.com")
+    suite_user = User.objects.create_user(
+        username="suite-empty", email="suite-empty@example.com"
+    )
 
     with pytest.raises(IntegrityError, match="evergo_evergouser_email_non_empty"):
         EvergoUser.objects.create(user=suite_user, evergo_email="")
+
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
@@ -39,7 +48,7 @@ def test_test_login_populates_remote_fields(mock_session_cls):
         "name": "Reginaldo Gutiérrez",
         "email": "reginaldocts@evergo.com",
         "two_factor_secret": "s3cr3t",
-        "two_factor_recovery_codes": "[\"code-a\",\"code-b\"]",
+        "two_factor_recovery_codes": '["code-a","code-b"]',
         "two_factor_confirmed_at": "2025-12-15T21:00:00.000000Z",
         "two_fa_enabled": 0,
         "two_fa_authenticated": 1,
@@ -79,12 +88,15 @@ def test_test_login_populates_remote_fields(mock_session_cls):
     assert profile.evergo_updated_at is not None
     assert profile.last_login_test_at is not None
 
+
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
 def test_test_login_raises_specific_error_for_419(mock_session_cls):
     """Evergo login should surface a specific CSRF/session message when backend responds 419."""
     User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-419", email="suite-419@example.com")
+    suite_user = User.objects.create_user(
+        username="suite-419", email="suite-419@example.com"
+    )
     profile = EvergoUser.objects.create(
         user=suite_user,
         evergo_email="reginaldocts@evergo.com",
@@ -104,12 +116,15 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
     with pytest.raises(EvergoAPIError, match="status 419"):
         profile.test_login()
 
+
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
 def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_cls):
     """Load orders should upsert assigned orders and refresh learned dropdown field values."""
     User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-orders", email="suite-orders@example.com")
+    suite_user = User.objects.create_user(
+        username="suite-orders", email="suite-orders@example.com"
+    )
     profile = EvergoUser.objects.create(
         user=suite_user,
         evergo_email="reginaldocts@evergo.com",
@@ -175,13 +190,22 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
                             "updated_at": "2026-02-21T18:30:58.000000Z",
                             "sitio": {"id": 36, "nombre": "Geely"},
                             "estatus": {"id": 8, "nombre": "Orden concluida"},
-                            "preorden_tipo": {"id": 107, "nombre": "Geely - Instalación"},
+                            "preorden_tipo": {
+                                "id": 107,
+                                "nombre": "Geely - Instalación",
+                            },
                             "cliente": {"id": 64473, "name": "ALMA ROSA AGUIRRE"},
                             "orden_instalador": {
                                 "idIngeniero": 58642,
                                 "idCoordinador": 58642,
-                                "ingeniero": {"id": 58642, "name": "Reginaldo Gutiérrez"},
-                                "coordinador": {"id": 58642, "name": "Reginaldo Gutiérrez"},
+                                "ingeniero": {
+                                    "id": 58642,
+                                    "name": "Reginaldo Gutiérrez",
+                                },
+                                "coordinador": {
+                                    "id": 58642,
+                                    "name": "Reginaldo Gutiérrez",
+                                },
                             },
                             "cargadores": [{"id": 3553}],
                         },
@@ -213,17 +237,30 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
     assert order.phone_secondary == ""
 
     assert not EvergoOrder.objects.filter(remote_id=39759).exists()
-    assert EvergoOrderFieldValue.objects.filter(field_name="sitio", remote_id=36).exists()
-    assert EvergoOrderFieldValue.objects.filter(field_name="estatus", remote_id=8).exists()
-    assert EvergoOrderFieldValue.objects.filter(field_name="preorden_tipo", remote_id=107).exists()
-    assert EvergoOrderFieldValue.objects.filter(field_name="payment_by", remote_name="Brand").exists()
+    assert EvergoOrderFieldValue.objects.filter(
+        field_name="sitio", remote_id=36
+    ).exists()
+    assert EvergoOrderFieldValue.objects.filter(
+        field_name="estatus", remote_id=8
+    ).exists()
+    assert EvergoOrderFieldValue.objects.filter(
+        field_name="preorden_tipo", remote_id=107
+    ).exists()
+    assert EvergoOrderFieldValue.objects.filter(
+        field_name="payment_by", remote_name="Brand"
+    ).exists()
+
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
-def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock_session_cls):
+def test_load_customers_from_queries_creates_customer_and_placeholder_order(
+    mock_session_cls,
+):
     """Regression: customer wizard should create customer rows and provisional SO placeholders."""
     User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-customer", email="suite-customer@example.com")
+    suite_user = User.objects.create_user(
+        username="suite-customer", email="suite-customer@example.com"
+    )
     profile = EvergoUser.objects.create(
         user=suite_user,
         evergo_email="reginaldocts@evergo.com",
@@ -245,7 +282,9 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
 
     def request_side_effect(*, method, url, params=None, **kwargs):
         if url.endswith("/login"):
-            return _response({"id": 58642, "name": "Reginaldo", "email": "reginaldocts@evergo.com"})
+            return _response(
+                {"id": 58642, "name": "Reginaldo", "email": "reginaldocts@evergo.com"}
+            )
         if "ordenes/instalador-coordinador" in url:
             if params and params.get("numero") == "J00830":
                 return _response(
@@ -281,7 +320,9 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
 
     mock_session.request.side_effect = request_side_effect
 
-    summary = profile.load_customers_from_queries(raw_queries="J00830; BAD999; irma ravize")
+    summary = profile.load_customers_from_queries(
+        raw_queries="J00830; BAD999; irma ravize"
+    )
 
     assert summary["orders_created"] >= 1
     assert summary["placeholders_created"] == 1
@@ -299,12 +340,17 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(mock
     placeholder = EvergoOrder.objects.get(order_number="BAD999")
     assert placeholder.validation_state == EvergoOrder.VALIDATION_STATE_PLACEHOLDER
 
+
 @pytest.mark.django_db
 def test_upsert_order_extracts_contact_and_address_components():
     """Regression: order sync should persist phone and address pieces for admin usage."""
     User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-upsert", email="suite-upsert@example.com")
-    profile = EvergoUser.objects.create(user=suite_user, evergo_email="suite-upsert@evergo.example.com")
+    suite_user = User.objects.create_user(
+        username="suite-upsert", email="suite-upsert@example.com"
+    )
+    profile = EvergoUser.objects.create(
+        user=suite_user, evergo_email="suite-upsert@evergo.example.com"
+    )
 
     payload = {
         "id": 29545,
@@ -347,6 +393,7 @@ def test_upsert_order_extracts_contact_and_address_components():
     assert order.address_city == "Ciudad Apodaca"
     assert order.address_postal_code == "66647"
 
+
 @pytest.mark.django_db
 def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
     """Regression: whitespace municipio should not block a valid ciudad fallback in address composition."""
@@ -364,7 +411,11 @@ def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
         "id": 43121,
         "numero_orden": "SO-43121",
         "updated_at": "2026-01-13T02:18:42.000000Z",
-        "cliente": {"id": 11002, "name": "Ciudad Fallback", "email": "ciudad@example.com"},
+        "cliente": {
+            "id": 11002,
+            "name": "Ciudad Fallback",
+            "email": "ciudad@example.com",
+        },
         "orden_instalacion": {
             "calle": "santa barbara",
             "num_ext": "404",
@@ -382,18 +433,27 @@ def test_upsert_customer_ignores_blank_municipio_and_falls_back_to_ciudad():
     customer = EvergoCustomer.objects.get(user=profile, remote_id=11002)
     assert "Monterrey" in customer.address
 
+
 @pytest.mark.django_db
 def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
     """Regression: customer address fallback should avoid municipio/ciudad duplication by preferring municipio."""
     user_model = get_user_model()
-    suite_user = user_model.objects.create_user(username="suite-customer-locality", email="suite-customer-locality@example.com")
-    profile = EvergoUser.objects.create(user=suite_user, evergo_email="suite-customer-locality@evergo.example.com")
+    suite_user = user_model.objects.create_user(
+        username="suite-customer-locality", email="suite-customer-locality@example.com"
+    )
+    profile = EvergoUser.objects.create(
+        user=suite_user, evergo_email="suite-customer-locality@evergo.example.com"
+    )
 
     payload = {
         "id": 43120,
         "numero_orden": "SO-43120",
         "updated_at": "2026-01-13T02:18:42.000000Z",
-        "cliente": {"id": 11001, "name": "Municipio First", "email": "municipio@example.com"},
+        "cliente": {
+            "id": 11001,
+            "name": "Municipio First",
+            "email": "municipio@example.com",
+        },
         "orden_instalacion": {
             "calle": "santa barbara",
             "num_ext": "404",
@@ -415,10 +475,14 @@ def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.requests.Session")
-def test_load_customers_from_queries_without_filters_uses_access_scope(mock_session_cls):
+def test_load_customers_from_queries_without_filters_uses_access_scope(
+    mock_session_cls,
+):
     """Regression: empty query should request all accessible customers for the engineer profile."""
     user_model = get_user_model()
-    suite_user = user_model.objects.create_user(username="suite-load-all", email="suite-load-all@example.com")
+    suite_user = user_model.objects.create_user(
+        username="suite-load-all", email="suite-load-all@example.com"
+    )
     profile = EvergoUser.objects.create(
         user=suite_user,
         evergo_email="load-all@evergo.example.com",
@@ -440,7 +504,13 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(mock_sess
 
     def request_side_effect(*, method, url, params=None, **kwargs):
         if url.endswith("/login"):
-            return _response({"id": 58642, "name": "Load All User", "email": "load-all@evergo.example.com"})
+            return _response(
+                {
+                    "id": 58642,
+                    "name": "Load All User",
+                    "email": "load-all@evergo.example.com",
+                }
+            )
         if "ordenes/instalador-coordinador" in url:
             assert params is not None
             assert params.get("numero") == ""
@@ -455,7 +525,11 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(mock_sess
                             "numero_orden": "AA501",
                             "idCliente": 9001,
                             "user_tecnico_id": 58642,
-                            "cliente": {"id": 9001, "name": "All Scope Customer", "email": "all@example.com"},
+                            "cliente": {
+                                "id": 9001,
+                                "name": "All Scope Customer",
+                                "email": "all@example.com",
+                            },
                         }
                     ],
                 }
@@ -473,11 +547,16 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(mock_sess
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 @patch("apps.evergo.models.user.EvergoUser.fetch_order_detail")
-def test_reload_customer_from_remote_rebuilds_customer_and_order(mock_fetch_order_detail):
+def test_reload_customer_from_remote_rebuilds_customer_and_order(
+    mock_fetch_order_detail,
+):
     """Regression: reloading one customer should delete stale snapshots and recreate from remote payload."""
     user_model = get_user_model()
-    owner = user_model.objects.create_user(username="suite-reload-customer", email="suite-reload-customer@example.com")
+    owner = user_model.objects.create_user(
+        username="suite-reload-customer", email="suite-reload-customer@example.com"
+    )
     profile = EvergoUser.objects.create(
         user=owner,
         evergo_email="suite-reload-customer@evergo.example.com",
@@ -506,26 +585,40 @@ def test_reload_customer_from_remote_rebuilds_customer_and_order(mock_fetch_orde
         "updated_at": "2026-01-13T02:18:42.000000Z",
         "estatus": {"nombre": "En Proceso"},
         "cliente": {"id": 901, "name": "Fresh Customer", "email": "fresh@example.com"},
-        "orden_instalacion": {"municipio": "Apodaca", "calle": "Nueva", "num_ext": "15"},
+        "orden_instalacion": {
+            "municipio": "Apodaca",
+            "calle": "Nueva",
+            "num_ext": "15",
+        },
     }
+
+    stale_customer_pk = stale_customer.pk
+    stale_order_pk = stale_order.pk
 
     refreshed = profile.reload_customer_from_remote(customer=stale_customer)
 
-    assert refreshed.pk != stale_customer.pk
     assert refreshed.name == "Fresh Customer"
+    assert refreshed.pk is not None
     refreshed_order = EvergoOrder.objects.get(user=profile, remote_id=777)
-    assert refreshed_order.pk != stale_order.pk
     assert refreshed_order.status_name == "En Proceso"
-    assert not EvergoCustomer.objects.filter(pk=stale_customer.pk).exists()
-    assert not EvergoOrder.objects.filter(pk=stale_order.pk).exists()
+    assert refreshed_order.pk != stale_order_pk
+    assert not EvergoOrder.objects.filter(pk=stale_order_pk).exists()
+    assert not EvergoCustomer.objects.filter(
+        pk=stale_customer_pk, name="Old Customer"
+    ).exists()
 
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(mock_load_customers):
+def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(
+    mock_load_customers,
+):
     """Fallback reload should locate refreshed customer by original name when no latest order exists."""
     user_model = get_user_model()
-    owner = user_model.objects.create_user(username="suite-reload-customer-name", email="suite-reload-customer-name@example.com")
+    owner = user_model.objects.create_user(
+        username="suite-reload-customer-name",
+        email="suite-reload-customer-name@example.com",
+    )
     profile = EvergoUser.objects.create(
         user=owner,
         evergo_email="suite-reload-customer-name@evergo.example.com",
@@ -559,11 +652,15 @@ def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(
 
 
 @pytest.mark.django_db
+@pytest.mark.regression
 @patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_customers):
     """Customer snapshot should remain if remote fallback reload fails."""
     user_model = get_user_model()
-    owner = user_model.objects.create_user(username="suite-reload-customer-fail", email="suite-reload-customer-fail@example.com")
+    owner = user_model.objects.create_user(
+        username="suite-reload-customer-fail",
+        email="suite-reload-customer-fail@example.com",
+    )
     profile = EvergoUser.objects.create(
         user=owner,
         evergo_email="suite-reload-customer-fail@evergo.example.com",
@@ -579,7 +676,10 @@ def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_cust
     )
     mock_load_customers.return_value = {"customers_loaded": 0}
 
+    stale_pk = stale_customer.pk
+
     with pytest.raises(EvergoAPIError, match="did not return data"):
         profile.reload_customer_from_remote(customer=stale_customer)
 
-    assert EvergoCustomer.objects.filter(pk=stale_customer.pk).exists()
+    assert stale_pk is not None
+    assert EvergoCustomer.objects.filter(pk=stale_pk).exists()

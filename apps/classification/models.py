@@ -36,7 +36,8 @@ class ClassificationTag(Entity):
         ordering = ["name"]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(auto_dispatch=False) | models.Q(dispatch_route__gt=""),
+                condition=models.Q(auto_dispatch=False)
+                | models.Q(dispatch_route__gt=""),
                 name="classification_dispatch_route_required_when_auto_dispatch",
             )
         ]
@@ -72,7 +73,9 @@ class ImageClassifierModel(Entity):
         choices=ModelType.choices,
         default=ModelType.GENERAL_IMAGE,
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.DRAFT
+    )
     is_selected = models.BooleanField(
         default=False,
         help_text="When enabled, this model is used for new ingested content.",
@@ -130,17 +133,16 @@ class ImageClassifierModel(Entity):
 
     def save(self, *args, **kwargs):
         """Persist the model and enforce a single selected model."""
-
-        self.full_clean()
-        if self.is_selected and self.promoted_at is None:
-            self.promoted_at = timezone.now()
         with transaction.atomic():
             if self.is_selected:
+                if self.promoted_at is None:
+                    self.promoted_at = timezone.now()
                 type(self).objects.select_for_update().filter(
                     model_type=self.model_type,
                     is_selected=True,
                     is_deleted=False,
                 ).exclude(pk=self.pk).update(is_selected=False)
+            self.full_clean()
             super().save(*args, **kwargs)
 
 
@@ -161,7 +163,9 @@ class TrainingRun(Entity):
         on_delete=models.CASCADE,
         related_name="training_runs",
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.QUEUED
+    )
     initiated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -311,7 +315,9 @@ class ContentClassification(Entity):
         blank=True,
         related_name="classifications",
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
     confidence = models.DecimalField(
         max_digits=5,
         decimal_places=4,
