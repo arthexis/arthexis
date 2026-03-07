@@ -8,7 +8,7 @@ from django.test import RequestFactory
 
 from apps.features.models import Feature
 from apps.modules.models import Module
-from apps.nodes.models import NodeFeature
+from apps.nodes.models import NodeFeature, NodeRole
 from apps.sites.models import Landing
 from apps.sites import context_processors
 
@@ -81,6 +81,34 @@ def test_nav_links_hides_landings_with_disabled_required_features(monkeypatch):
     context = context_processors.nav_links(request)
 
     assert context["nav_modules"] == []
+
+
+@pytest.mark.django_db
+def test_nav_links_only_shows_terminal_scoped_module_for_terminal_role(monkeypatch):
+    """Regression: module pills scoped to Terminal should not appear for other node roles."""
+
+    monkeypatch.setattr(context_processors.Node, "get_local", staticmethod(lambda: None))
+
+    terminal_role = NodeRole.objects.create(name="Terminal")
+    control_role = NodeRole.objects.create(name="Control")
+
+    module = Module.objects.create(path="shop-terminal-scope-test", menu="Card Shop")
+    module.roles.add(terminal_role)
+    Landing.objects.create(module=module, path="/shop-terminal-scope-test/", label="RFID Card Shop")
+
+    terminal_request = RequestFactory().get("/shop-terminal-scope-test/")
+    terminal_request.badge_role = terminal_role
+    control_request = RequestFactory().get("/shop-terminal-scope-test/")
+    control_request.badge_role = control_role
+
+    terminal_context = context_processors.nav_links(terminal_request)
+    control_context = context_processors.nav_links(control_request)
+
+    terminal_paths = {m.path for m in terminal_context["nav_modules"]}
+    control_paths = {m.path for m in control_context["nav_modules"]}
+
+    assert "/shop-terminal-scope-test/" in terminal_paths
+    assert "/shop-terminal-scope-test/" not in control_paths
 
 
 @pytest.mark.django_db

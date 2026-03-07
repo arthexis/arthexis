@@ -105,5 +105,40 @@
       "track_leads": false,
       "description": ""
     }
+  },
+  {
+    "model": "modules.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [
+        [
+          "Terminal"
+        ]
+      ],
+      "application": [
+        "shop"
+      ],
+      "path": "/shop/",
+      "menu": "Card Shop",
+      "priority": 0,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/shop/"
+      ],
+      "path": "/shop/",
+      "label": "RFID Card Shop",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
   }
 ]
