@@ -1,6 +1,7 @@
 """Tests for public charger page connector-only navigation behavior."""
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.ocpp.models import Charger
@@ -51,3 +52,23 @@ def test_charger_page_renders_connector_switch_links_without_station_entry(clien
     ) in content
     station_href = f'href="{reverse("ocpp:charger-page", args=[first_connector.charger_id])}"'
     assert station_href not in content
+
+
+def test_charger_page_redirects_station_path_to_first_accessible_connector(client):
+    """Station redirect should skip connectors hidden from the current user."""
+
+    parent = Charger.objects.create(charger_id="REDIRECT-CP-3", connector_id=None)
+    hidden_connector = Charger.objects.create(charger_id=parent.charger_id, connector_id=1)
+    visible_connector = Charger.objects.create(charger_id=parent.charger_id, connector_id=2)
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username="connector-owner")
+    hidden_connector.owner_users.add(owner)
+
+    response = client.get(reverse("ocpp:charger-page", args=[parent.charger_id]))
+
+    assert response.status_code == 302
+    assert response.url == reverse(
+        "ocpp:charger-page-connector",
+        args=[parent.charger_id, visible_connector.connector_slug],
+    )

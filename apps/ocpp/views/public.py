@@ -97,14 +97,20 @@ def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
     _clear_stale_statuses_for_view()
     charger, connector_slug = _get_charger(cid, connector)
+    access_response = _ensure_charger_access(
+        request.user, charger, request=request
+    )
+    if access_response is not None:
+        return access_response
+
     if connector is None and charger.connector_id is None:
-        default_connector = (
-            Charger.objects.filter(
-                charger_id=charger.charger_id,
-                connector_id__isnull=False,
-            )
-            .order_by("connector_id", "pk")
-            .first()
+        default_connector = next(
+            (
+                sibling
+                for sibling in _connector_set(charger)
+                if sibling.connector_id is not None and sibling.is_visible_to(request.user)
+            ),
+            None,
         )
         if default_connector is not None:
             return redirect(
@@ -113,11 +119,6 @@ def charger_page(request, cid, connector=None):
                 default_connector.connector_slug,
             )
 
-    access_response = _ensure_charger_access(
-        request.user, charger, request=request
-    )
-    if access_response is not None:
-        return access_response
     connectors = _connector_set(charger)
     rfid_cache: dict[str, dict[str, str | None]] = {}
     overview = _connector_overview(
@@ -209,11 +210,10 @@ def charger_page(request, cid, connector=None):
     connector_prev_url = ""
     connector_next_url = ""
     if connector_switch_links:
-        active_index = 0
-        for idx, item in enumerate(connector_switch_links):
-            if item["active"]:
-                active_index = idx
-                break
+        active_index = next(
+            (idx for idx, item in enumerate(connector_switch_links) if item["active"]),
+            0,
+        )
         if len(connector_switch_links) > 1:
             connector_prev_url = connector_switch_links[
                 (active_index - 1) % len(connector_switch_links)
