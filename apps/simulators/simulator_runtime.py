@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from importlib.util import find_spec
 from typing import Mapping
 
-from apps.features.utils import is_suite_feature_enabled
+from apps.features.parameters import get_feature_parameter
 
 
-MOBILITY_HOUSE_SIMULATOR_FEATURE_SLUG = "ocpp-simulator-v2"
+OCPP_SIMULATOR_FEATURE_SLUG = "ocpp-simulator"
+ARTHEXIS_BACKEND_PARAMETER_KEY = "arthexis_backend"
+MOBILITY_HOUSE_BACKEND_PARAMETER_KEY = "mobilityhouse_backend"
 
 
 def _coerce_bool(value: object, *, default: bool = False) -> bool:
@@ -21,6 +23,17 @@ def _coerce_bool(value: object, *, default: bool = False) -> bool:
     if not text:
         return default
     return text in {"1", "true", "yes", "on", "enabled", "y"}
+
+
+def _is_simulator_backend_parameter_enabled(parameter_key: str, *, default: bool) -> bool:
+    """Return whether one simulator backend parameter is enabled."""
+
+    value = get_feature_parameter(
+        OCPP_SIMULATOR_FEATURE_SLUG,
+        parameter_key,
+        fallback="enabled" if default else "disabled",
+    )
+    return _coerce_bool(value, default=default)
 
 
 def _coerce_float(value: object, *, default: float) -> float:
@@ -234,23 +247,33 @@ def resolve_simulator_backend(
 ) -> SimulatorBackendSelection:
     """Return whether to use the Mobility House backend, with reasoning."""
 
-    feature_enabled = is_suite_feature_enabled(
-        MOBILITY_HOUSE_SIMULATOR_FEATURE_SLUG, default=False
+    arthexis_enabled = _is_simulator_backend_parameter_enabled(
+        ARTHEXIS_BACKEND_PARAMETER_KEY,
+        default=True,
+    )
+    mobility_house_enabled = _is_simulator_backend_parameter_enabled(
+        MOBILITY_HOUSE_BACKEND_PARAMETER_KEY,
+        default=False,
     )
     dependency_available = find_spec("ocpp") is not None
+    backend_available = arthexis_enabled or (
+        mobility_house_enabled and dependency_available
+    )
     backend_override = _normalize_backend_override(preferred_backend)
 
     if backend_override == "arthexis":
-        return SimulatorBackendSelection(
-            use_mobility_house=False,
-            backend="legacy",
-            reason="Arthexis backend selected from simulator controls.",
-            feature_enabled=feature_enabled,
-            dependency_available=dependency_available,
-        )
+        if arthexis_enabled:
+            return SimulatorBackendSelection(
+                use_mobility_house=False,
+                backend="legacy",
+                reason="Arthexis backend selected from simulator controls.",
+                feature_enabled=backend_available,
+                dependency_available=dependency_available,
+            )
+        backend_override = None
 
     if backend_override == "mobilityhouse":
-        if feature_enabled and dependency_available:
+        if mobility_house_enabled and dependency_available:
             return SimulatorBackendSelection(
                 use_mobility_house=True,
                 backend="mobility_house",
@@ -261,52 +284,62 @@ def resolve_simulator_backend(
                 feature_enabled=True,
                 dependency_available=True,
             )
+        backend_override = None
 
+    if mobility_house_enabled and dependency_available:
         return SimulatorBackendSelection(
-            use_mobility_house=False,
-            backend="legacy",
+            use_mobility_house=True,
+            backend="mobility_house",
             reason=(
-                "Mobility House backend was selected but is unavailable. "
-                "Falling back to Arthexis backend."
-            ),
-            feature_enabled=feature_enabled,
-            dependency_available=dependency_available,
-        )
-
-    if not feature_enabled:
-        return SimulatorBackendSelection(
-            use_mobility_house=False,
-            backend="legacy",
-            reason=(
-                f'Mobility House runtime is disabled. '
-                f'Enable feature "{MOBILITY_HOUSE_SIMULATOR_FEATURE_SLUG}" '
-                "to run v2 simulator."
-            ),
-            feature_enabled=False,
-            dependency_available=dependency_available,
-        )
-
-    if not dependency_available:
-        return SimulatorBackendSelection(
-            use_mobility_house=False,
-            backend="legacy",
-            reason=(
-                "Mobility House runtime requires the optional 'ocpp' package. "
-                "v2 backend unavailable; using legacy simulator."
+                "Mobility House runtime enabled and dependency available. "
+                f'Using v2 backend for slot {cp_idx}.'
             ),
             feature_enabled=True,
+            dependency_available=True,
+        )
+
+    if arthexis_enabled:
+        if mobility_house_enabled and not dependency_available:
+            reason = (
+                "Mobility House runtime requires the optional 'ocpp' package. "
+                "v2 backend unavailable; using legacy simulator."
+            )
+        elif not mobility_house_enabled:
+            reason = (
+                "Mobility House runtime is disabled via suite feature parameter. "
+                "Using Arthexis backend."
+            )
+        else:
+            reason = "Using Arthexis backend."
+        return SimulatorBackendSelection(
+            use_mobility_house=False,
+            backend="legacy",
+            reason=reason,
+            feature_enabled=backend_available,
+            dependency_available=dependency_available,
+        )
+
+    if mobility_house_enabled and not dependency_available:
+        return SimulatorBackendSelection(
+            use_mobility_house=False,
+            backend="legacy",
+            reason=(
+                "Mobility House backend is enabled, but the optional 'ocpp' package "
+                "is not installed. Install 'ocpp' or disable mobilityhouse_backend."
+            ),
+            feature_enabled=False,
             dependency_available=False,
         )
 
     return SimulatorBackendSelection(
-        use_mobility_house=True,
-        backend="mobility_house",
+        use_mobility_house=False,
+        backend="legacy",
         reason=(
-            "Mobility House runtime enabled and dependency available. "
-            f'Using v2 backend for slot {cp_idx}.'
+            "Simulator backends are disabled via suite feature parameters. "
+            "Enable Arthexis and/or Mobility House backend options."
         ),
-        feature_enabled=True,
-        dependency_available=True,
+        feature_enabled=backend_available,
+        dependency_available=dependency_available,
     )
 
 
@@ -369,7 +402,9 @@ def build_mobility_house_simulator_config(
 
 
 __all__ = [
-    "MOBILITY_HOUSE_SIMULATOR_FEATURE_SLUG",
+    "OCPP_SIMULATOR_FEATURE_SLUG",
+    "ARTHEXIS_BACKEND_PARAMETER_KEY",
+    "MOBILITY_HOUSE_BACKEND_PARAMETER_KEY",
     "NormalizedSimulatorParams",
     "SimulatorBackendSelection",
     "sanitize_simulator_params",
@@ -381,7 +416,3 @@ __all__ = [
     "build_legacy_simulator_config",
     "build_mobility_house_simulator_config",
 ]
-
-
-
-

@@ -33,7 +33,9 @@ def _resolve_request_host(request: HttpRequest) -> str:
     try:
         host_value = request.get_host()
     except DisallowedHost:
-        host_value = request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME", "")
+        host_value = request.META.get("HTTP_HOST") or request.META.get(
+            "SERVER_NAME", ""
+        )
 
     if host_value.startswith("["):
         host_value = host_value.split("]", 1)[0].lstrip("[")
@@ -167,7 +169,11 @@ def _visible_badges_for_user(*, user):
         queryset = AdminBadge.objects.filter(is_enabled=True, is_deleted=False)
     except (OperationalError, ProgrammingError):
         return []
-    if not user or not getattr(user, "is_authenticated", False):
+    if (
+        not user
+        or not getattr(user, "is_authenticated", False)
+        or getattr(user, "pk", None) is None
+    ):
         return []
     group_ids = list(user.groups.values_list("id", flat=True))
     visible = (
