@@ -12,6 +12,7 @@
   const card = overlay.querySelector('.user-story-card');
   const successAlert = document.getElementById('user-story-success');
   const errorAlert = document.getElementById('user-story-error');
+  const feedbackTextareas = form.querySelectorAll('textarea');
   const commentField = document.getElementById('user-story-comments');
   const counter = document.getElementById('user-story-char-count');
   const submitBtn = form.querySelector('button[type="submit"]');
@@ -41,6 +42,25 @@
     if (counter && commentField) {
       counter.textContent = commentField.value.length;
     }
+  };
+
+  const resizeTextarea = field => {
+    if (!field) {
+      return;
+    }
+    field.style.height = 'auto';
+    field.style.height = `${field.scrollHeight}px`;
+  };
+
+  const initializeTextareaAutoExpand = () => {
+    if (!feedbackTextareas.length) {
+      return;
+    }
+
+    feedbackTextareas.forEach(textarea => {
+      textarea.addEventListener('input', () => resizeTextarea(textarea));
+      resizeTextarea(textarea);
+    });
   };
 
   const setRatingHintText = ratingValue => {
@@ -145,6 +165,8 @@
     commentField.addEventListener('input', setCharCount);
     setCharCount();
   }
+
+  initializeTextareaAutoExpand();
 
   if (ratingInputs && ratingInputs.length) {
     ratingInputs.forEach(input => {
