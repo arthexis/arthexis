@@ -41,7 +41,6 @@ def setup_db_for_django_tests(request: pytest.FixtureRequest) -> None:
 
     if not any(requires_db(item) for item in request.session.items):
         return
-    _require_pytest_django_fixture(request, "django_db_blocker")
     _require_pytest_django_fixture(request, "django_db_setup")
 
 
