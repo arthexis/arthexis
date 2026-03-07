@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -19,6 +22,8 @@ class Shop(Entity):
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     default_payment_provider = models.CharField(max_length=80, blank=True)
+    opening_time = models.TimeField(null=True, blank=True)
+    closing_time = models.TimeField(null=True, blank=True)
     odoo_deployment = models.ForeignKey(
         "odoo.OdooDeployment",
         null=True,
@@ -29,6 +34,19 @@ class Shop(Entity):
 
     class Meta:
         ordering = ("name",)
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(opening_time__isnull=True, closing_time__isnull=True) | Q(opening_time__isnull=False, closing_time__isnull=False)),
+                name="shop_business_hours_both_set_or_null",
+            )
+        ]
+
+    def clean(self):
+        """Require opening and closing time fields to be configured as a pair."""
+
+        super().clean()
+        if (self.opening_time is None) != (self.closing_time is None):
+            raise ValidationError({"opening_time": "Opening and closing times must both be set or both left blank."})
 
     def save(self, *args, **kwargs):
         """Populate a slug from name when not explicitly provided."""
@@ -36,6 +54,45 @@ class Shop(Entity):
         if not self.slug:
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
+
+    def has_business_hours(self) -> bool:
+        """Return whether both opening and closing times are configured."""
+
+        return bool(self.opening_time and self.closing_time)
+
+    def is_open_at(self, current_time: time) -> bool:
+        """Return whether the shop is open for the supplied local time."""
+
+        if not self.has_business_hours():
+            return True
+
+        if self.opening_time == self.closing_time:
+            return True
+
+        if self.opening_time < self.closing_time:
+            return self.opening_time <= current_time < self.closing_time
+
+        return current_time >= self.opening_time or current_time < self.closing_time
+
+    def next_opening_datetime(self, reference: datetime) -> datetime | None:
+        """Return the next local opening datetime when business hours are configured."""
+
+        if not self.has_business_hours():
+            return None
+
+        if self.opening_time == self.closing_time:
+            return None
+
+        if self.opening_time < self.closing_time:
+            opening_date = (
+                reference.date() if reference.time() < self.opening_time else reference.date() + timedelta(days=1)
+            )
+            return datetime.combine(opening_date, self.opening_time, tzinfo=reference.tzinfo)
+
+        opening_date = reference.date()
+        if reference.time() >= self.opening_time:
+            opening_date += timedelta(days=1)
+        return datetime.combine(opening_date, self.opening_time, tzinfo=reference.tzinfo)
 
     def __str__(self) -> str:
         """Return a readable representation."""

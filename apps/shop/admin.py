@@ -14,8 +14,26 @@ class ShopProductInline(admin.TabularInline):
 class ShopAdmin(admin.ModelAdmin):
     """Admin configuration for storefront records."""
 
-    list_display = ("name", "slug", "is_active", "default_payment_provider", "odoo_deployment")
+    list_display = (
+        "name",
+        "slug",
+        "is_active",
+        "opening_time",
+        "closing_time",
+        "default_payment_provider",
+        "odoo_deployment",
+    )
     list_filter = ("is_active",)
+    fields = (
+        "name",
+        "slug",
+        "description",
+        "is_active",
+        "opening_time",
+        "closing_time",
+        "default_payment_provider",
+        "odoo_deployment",
+    )
     search_fields = ("name", "slug")
     inlines = (ShopProductInline,)
 

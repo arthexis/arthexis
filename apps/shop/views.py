@@ -7,6 +7,7 @@ from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .forms import CartQuantityForm, CheckoutForm
@@ -27,6 +28,17 @@ def _save_cart(request: HttpRequest, cart: dict) -> None:
 
     request.session[CART_SESSION_KEY] = cart
     request.session.modified = True
+
+
+def _require_shop_open(shop: Shop) -> None:
+    """Raise CartValidationError when a shop is closed for the current local time."""
+
+    if not shop.is_active:
+        raise CartValidationError("This shop is currently unavailable.")
+
+    now = timezone.localtime()
+    if not shop.is_open_at(now.time()):
+        raise CartValidationError("This shop is currently closed and cannot accept orders.")
 
 
 def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopProduct]]:
@@ -52,10 +64,25 @@ def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopPro
 
 @require_GET
 def shop_index(request: HttpRequest) -> HttpResponse:
-    """Render all active shops and their active products."""
+    """Render shops currently open and include closure timing hints when relevant."""
 
-    shops = Shop.objects.filter(is_active=True).prefetch_related("products")
-    return render(request, "shop/index.html", {"shops": shops})
+    now = timezone.localtime()
+    active_shops = list(Shop.objects.filter(is_active=True).prefetch_related("products"))
+
+    open_shops = [shop for shop in active_shops if shop.is_open_at(now.time())]
+    next_opening_candidates = [
+        shop.next_opening_datetime(now)
+        for shop in active_shops
+        if shop.has_business_hours() and not shop.is_open_at(now.time())
+    ]
+    next_opening_candidates = [candidate for candidate in next_opening_candidates if candidate is not None]
+
+    context = {
+        "shops": open_shops,
+        "all_shops_closed_for_time": bool(active_shops and not open_shops and next_opening_candidates),
+        "next_opening_at": min(next_opening_candidates) if next_opening_candidates else None,
+    }
+    return render(request, "shop/index.html", context)
 
 
 @require_GET
@@ -74,6 +101,12 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
 
     shop = get_object_or_404(Shop, slug=shop_slug, is_active=True)
     product = get_object_or_404(ShopProduct, id=product_id, shop=shop, is_active=True)
+
+    try:
+        _require_shop_open(shop)
+    except CartValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("shop:index")
 
     try:
         qty = int(request.POST.get("quantity", "1"))
@@ -162,6 +195,7 @@ def checkout(request: HttpRequest) -> HttpResponse:
 
     try:
         shop, products = _resolve_cart_products(entries)
+        _require_shop_open(shop)
     except CartValidationError as exc:
         messages.error(request, str(exc))
         return redirect("shop:cart")
