@@ -4,7 +4,10 @@ from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.sites.models import Site
+from django.template.loader import render_to_string
+from django.test import RequestFactory
 from django.urls import reverse
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
@@ -175,6 +178,36 @@ def test_user_story_submit_is_post_only(client):
 
     rejected = client.get(reverse("pages:user-story-submit"))
     assert rejected.status_code == 405
+
+
+@pytest.mark.parametrize(
+    ("user_fixture", "expected_flag"),
+    [
+        (None, "0"),
+        ("user", "0"),
+        ("staff_user", "1"),
+    ],
+)
+def test_feedback_copy_details_are_limited_to_staff(request, user_fixture, expected_flag):
+    """Regression: feedback copy behavior should only include full details for staff users."""
+
+    request_factory = RequestFactory()
+    req = request_factory.get("/")
+    req.user = request.getfixturevalue(user_fixture) if user_fixture else AnonymousUser()
+
+    admin_html = render_to_string(
+        "admin/includes/user_story_feedback.html",
+        {"request": req, "user_story_attachment_limit": 2},
+        request=req,
+    )
+    assert f'data-copy-staff-details="{expected_flag}"' in admin_html
+
+    public_html = render_to_string(
+        "pages/base.html",
+        {"request": req},
+        request=req,
+    )
+    assert f'data-copy-staff-details="{expected_flag}"' in public_html
 
 
 def test_release_checklist_requires_staff(client, user, staff_user):

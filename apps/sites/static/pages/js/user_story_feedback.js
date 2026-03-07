@@ -25,6 +25,7 @@
   const copySuccessMessage = form.dataset.copySuccess;
   const copyErrorMessage = form.dataset.copyError;
   const copyAriaLabel = form.dataset.copyAriaLabel;
+  const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const messageField = form.querySelector('input[name="messages"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
@@ -279,6 +280,9 @@
 
   const buildCopyValue = () => {
     const baseValue = getPageCopyValue();
+    if (!canCopyStaffDetails) {
+      return baseValue;
+    }
     const details = getFormDetails();
     const messages = getPageMessages();
     syncMessageField(messages);
