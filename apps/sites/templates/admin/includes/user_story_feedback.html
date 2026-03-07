@@ -45,6 +45,7 @@
         data-copy-success="{% trans 'Copied!' %}"
         data-copy-error="{% trans 'Copy failed. Please try again.' %}"
         data-copy-aria-label="{% trans 'Copy feedback details to clipboard' %}"
+        data-copy-staff-details="{% if request.user.is_staff %}1{% else %}0{% endif %}"
       >
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
