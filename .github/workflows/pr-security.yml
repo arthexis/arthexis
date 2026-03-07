@@ -103,6 +103,7 @@ jobs:
 
       - name: Run Bandit (apps + config)
         id: bandit
+        if: ${{ always() && !cancelled() }}
         run: |
           set -Eeuo pipefail
           mkdir -p security-reports
@@ -132,6 +133,7 @@ jobs:
 
           data = json.loads(report_path.read_text() or '{}')
           results = data.get('results', [])
+          errors = data.get('errors', [])
 
           lines = [f'Bandit findings: {len(results)} issue(s) with medium+ severity and confidence']
           for issue in results[:20]:
@@ -141,10 +143,20 @@ jobs:
               )
           if len(results) > 20:
               lines.append(f'- ... and {len(results) - 20} more')
+
+          lines.append(f'Bandit scan errors: {len(errors)}')
+          for error in errors[:20]:
+              lines.append(f'- {error}')
+          if len(errors) > 20:
+              lines.append(f'- ... and {len(errors) - 20} more')
+
           summary_path.write_text('\n'.join(lines) + '\n')
 
           if results:
               print('Security lint findings detected by Bandit.', file=sys.stderr)
+              sys.exit(1)
+          if errors:
+              print('Bandit reported scan errors.', file=sys.stderr)
               sys.exit(1)
           PY
 
