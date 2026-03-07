@@ -1,0 +1,169 @@
+name: PR Security Quick Checks
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - 'apps/**'
+      - 'config/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/pr-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-quick-checks:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install security tooling
+        run: |
+          set -Eeuo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit bandit
+
+      - name: Run pip-audit
+        id: pip_audit
+        run: |
+          set -Eeuo pipefail
+          mkdir -p security-reports
+
+          if ! pip-audit \
+            -r requirements.txt \
+            -r requirements-ci.txt \
+            --format json \
+            --output security-reports/pip-audit.json \
+            > security-reports/pip-audit.log 2>&1; then
+            echo "pip-audit reported vulnerabilities or execution errors." >> security-reports/pip-audit.log
+          fi
+
+          python - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report_path = pathlib.Path('security-reports/pip-audit.json')
+          summary_path = pathlib.Path('security-reports/pip-audit-summary.txt')
+
+          if not report_path.exists():
+              summary_path.write_text('pip-audit did not produce a JSON report. Review pip-audit.log for details.\n')
+              print('pip-audit JSON report missing.', file=sys.stderr)
+              sys.exit(1)
+
+          data = json.loads(report_path.read_text() or '[]')
+          findings = []
+          for dependency in data:
+              name = dependency.get('name', 'unknown-package')
+              version = dependency.get('version', 'unknown-version')
+              for vuln in dependency.get('vulns', []):
+                  findings.append((name, version, vuln.get('id', 'UNKNOWN')))
+
+          lines = [f'pip-audit findings: {len(findings)} vulnerability entries']
+          for name, version, vuln_id in findings[:20]:
+              lines.append(f'- {name}=={version}: {vuln_id}')
+          if len(findings) > 20:
+              lines.append(f'- ... and {len(findings) - 20} more')
+          summary_path.write_text('\n'.join(lines) + '\n')
+
+          if findings:
+              print('Vulnerabilities detected by pip-audit.', file=sys.stderr)
+              sys.exit(1)
+          PY
+
+      - name: Run Bandit (apps + config)
+        id: bandit
+        run: |
+          set -Eeuo pipefail
+          mkdir -p security-reports
+
+          if ! bandit \
+            -r apps config \
+            -f json \
+            -o security-reports/bandit.json \
+            --severity-level medium \
+            --confidence-level medium \
+            > security-reports/bandit.log 2>&1; then
+            echo "Bandit reported findings or execution errors." >> security-reports/bandit.log
+          fi
+
+          python - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report_path = pathlib.Path('security-reports/bandit.json')
+          summary_path = pathlib.Path('security-reports/bandit-summary.txt')
+
+          if not report_path.exists():
+              summary_path.write_text('Bandit did not produce a JSON report. Review bandit.log for details.\n')
+              print('Bandit JSON report missing.', file=sys.stderr)
+              sys.exit(1)
+
+          data = json.loads(report_path.read_text() or '{}')
+          results = data.get('results', [])
+
+          lines = [f'Bandit findings: {len(results)} issue(s) with medium+ severity and confidence']
+          for issue in results[:20]:
+              lines.append(
+                  f"- {issue.get('issue_severity', '?')}/{issue.get('issue_confidence', '?')} "
+                  f"{issue.get('test_id', 'B???')} at {issue.get('filename', '?')}:{issue.get('line_number', '?')}"
+              )
+          if len(results) > 20:
+              lines.append(f'- ... and {len(results) - 20} more')
+          summary_path.write_text('\n'.join(lines) + '\n')
+
+          if results:
+              print('Security lint findings detected by Bandit.', file=sys.stderr)
+              sys.exit(1)
+          PY
+
+      - name: Publish security summary
+        if: always()
+        run: |
+          {
+            echo '## PR security quick checks'
+            echo
+            echo '### pip-audit'
+            if [ -f security-reports/pip-audit-summary.txt ]; then
+              cat security-reports/pip-audit-summary.txt
+            else
+              echo '- No summary produced.'
+            fi
+            echo
+            echo '### Bandit'
+            if [ -f security-reports/bandit-summary.txt ]; then
+              cat security-reports/bandit-summary.txt
+            else
+              echo '- No summary produced.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr-security-reports
+          path: security-reports/
+          if-no-files-found: warn
