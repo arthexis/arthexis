@@ -17,7 +17,13 @@
             </div>
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
-                <label class="form-label" for="cp_path{{ idx }}">Serial Number</label>
+                <label class="form-label" for="serial_number{{ idx }}">Serial Number</label>
+                <input id="serial_number{{ idx }}" name="serial_number" value="{{ form_params.serial_number|default:'' }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="cp_path{{ idx }}">CP Path</label>
                 <input id="cp_path{{ idx }}" name="cp_path" value="{{ form_params.cp_path|default:'' }}" class="form-control form-control-sm">
               </div>
             </div>
@@ -118,7 +124,7 @@
       <div class="mt-3">
         <p class="small text-muted mb-1"><strong>How simulation works</strong></p>
         <p class="small text-muted mb-0">
-          When you click Start, the simulator opens a WebSocket connection to the Host (including port), registers using the Serial Number,
+          When you click Start, the simulator opens a WebSocket connection to the Host (including port), registers using Serial Number and CP Path,
           optionally waits for Charge Delay, and then sends periodic charging activity updates until Duration ends (or indefinitely when Repeat is Yes).
           Stop requests a graceful shutdown and updates the status panel with the latest phase, command, and messages.
         </p>

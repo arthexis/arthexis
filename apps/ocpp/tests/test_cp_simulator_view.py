@@ -5,6 +5,7 @@ from django.urls import reverse
 from apps.simulators import evcs
 from apps.simulators.evcs import _start_simulator, get_simulator_state
 from apps.ocpp.views import simulator as simulator_view
+from apps.ocpp.models import Simulator
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.slow]
@@ -116,6 +117,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
         "meter_interval": "12.5",
         "host": "example.com:9000",
         "cp_path": "CP-ALPHA",
+        "serial_number": "SERIAL-ALPHA",
         "connector_id": "2",
         "rfid": "RFIDA",
         "vin": "VINA",
@@ -146,7 +148,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert params["host"] == "example.com"
     assert params["ws_port"] == 9000
     assert params["cp_path"] == "CP-ALPHA"
-    assert params["serial_number"] == "CP-ALPHA"
+    assert params["serial_number"] == "SERIAL-ALPHA"
     assert params["connector_id"] == 2
     assert params["rfid"] == "RFIDA"
     assert params["vin"] == "VINA"
@@ -163,6 +165,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
         "simulator_slot": "2",
         "simulator_name": "Beta",
         "cp_path": "CP-BETA",
+        "serial_number": "SERIAL-BETA",
         "username": "bob",
         "password": "builder",
         "start_delay": "0.0",
@@ -186,7 +189,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert "username" not in params_two
     assert "password" not in params_two
     assert params_two["cp_path"] == "CP-BETA"
-    assert params_two["serial_number"] == "CP-BETA"
+    assert params_two["serial_number"] == "SERIAL-BETA"
     assert state_two["last_status"] == "Connection accepted"
 
 
@@ -243,5 +246,55 @@ def test_cp_simulator_form_uses_single_host_input(logged_in_client):
     assert "hx-preserve" in host_tag_match.group(0), "hx-preserve missing from host1 input"
 
     assert 'id="ws_port1"' not in content
+    assert 'id="serial_number1"' in content
+    assert 'for="cp_path1">CP Path<' in content
     assert 'Charge Delay (s)' in content
     assert 'How simulation works' in content
+
+
+def test_cp_simulator_host_without_port_clears_ws_port(logged_in_client, fake_simulate):
+    payload = {
+        "simulator_slot": "1",
+        "host": "example.com",
+        "cp_path": "CP-PLAIN",
+        "serial_number": "SERIAL-PLAIN",
+    }
+
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["host"] == "example.com"
+    assert params["ws_port"] is None
+
+
+def test_cp_simulator_accepts_ipv6_host_port(logged_in_client, fake_simulate):
+    payload = {
+        "simulator_slot": "1",
+        "host": "[::1]:9001",
+        "cp_path": "CP-IPV6",
+        "serial_number": "SERIAL-IPV6",
+    }
+
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["host"] == "::1"
+    assert params["ws_port"] == 9001
+
+
+def test_cp_simulator_form_prefers_default_simulator_host(logged_in_client):
+    Simulator.objects.create(
+        default=True,
+        host="remote.example",
+        ws_port=9443,
+        cp_path="CP-DEFAULT",
+        serial_number="SERIAL-DEFAULT",
+    )
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="host" value="remote.example:9443"' in content
