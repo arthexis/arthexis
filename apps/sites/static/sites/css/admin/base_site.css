@@ -1040,15 +1040,12 @@ body.user-story-open {
 .user-story-card .user-story-contact-optin {
     margin-bottom: var(--user-story-contact-optin-offset);
     white-space: nowrap;
+    justify-self: end;
 }
 
 @media (min-width: 48rem) {
     .user-story-contact-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .user-story-card .user-story-contact-optin {
-        justify-self: end;
     }
 }
 

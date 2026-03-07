@@ -49,8 +49,6 @@ def test_public_pages_render_for_anonymous(client):
     assert response.status_code == 200
     content = response.content.decode()
     assert reverse("pages:user-story-submit") in content
-    assert "Rate" in content
-    assert "this page" in content
 
     changelog_response = client.get(reverse("pages:changelog"))
     assert changelog_response.status_code == 200
@@ -61,6 +59,20 @@ def test_public_pages_render_for_anonymous(client):
     assert any(
         t.name == "pages/client_report.html" for t in client_report_response.templates
     )
+
+
+def test_public_feedback_renders_guest_contact_optin_beside_email(client):
+    """Regression: guest feedback should render a single contact opt-in beside the email field."""
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'class="user-story-contact-row mb-3"' in content
+    assert '<label for="user-story-name" class="form-label">Email address</label>' in content
+    assert content.count('name="contact_via_chat"') == 1
+    assert "You may contact me" in content
+    assert "We may contact you via email if your feedback is utilized." not in content
 
 
 def test_public_home_hides_feedback_button_when_feedback_ingestion_disabled(client):

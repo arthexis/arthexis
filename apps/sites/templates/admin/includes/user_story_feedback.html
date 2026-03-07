@@ -66,20 +66,22 @@
             {% include 'admin/includes/user_story_contact_optin_checkbox.html' with checkbox_label_classes='user-story-checkbox-label user-story-chat-optin user-story-contact-optin' %}
           </div>
         {% else %}
-          <div class="user-story-field">
-            <label for="user-story-name" class="user-story-label">{% trans 'Email address' %}</label>
-            <input
-              type="email"
-              class="user-story-input"
-              id="user-story-name"
-              name="name"
-              maxlength="40"
-              placeholder="{% trans 'name@example.com' %}"
-              autocomplete="email"
-              inputmode="email"
-              required
-            >
-            <div class="user-story-help">{% trans 'We may contact you via email if your feedback is utilized.' %}</div>
+          <div class="user-story-field user-story-contact-row">
+            <div class="user-story-contact-name">
+              <label for="user-story-name" class="user-story-label">{% trans 'Email address' %}</label>
+              <input
+                type="email"
+                class="user-story-input"
+                id="user-story-name"
+                name="name"
+                maxlength="40"
+                placeholder="{% trans 'name@example.com' %}"
+                autocomplete="email"
+                inputmode="email"
+                required
+              >
+            </div>
+            {% include 'admin/includes/user_story_contact_optin_checkbox.html' with checkbox_label_classes='user-story-checkbox-label user-story-chat-optin user-story-contact-optin' %}
           </div>
         {% endif %}
         <div class="user-story-field">
@@ -137,11 +139,6 @@
             {% endif %}
           {% endif %}
         </div>
-        {% if not request.user.is_authenticated %}
-          <div class="user-story-field">
-            {% include 'admin/includes/user_story_contact_optin_checkbox.html' with checkbox_label_classes='user-story-checkbox-label user-story-chat-optin' %}
-          </div>
-        {% endif %}
         <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
         </button>
