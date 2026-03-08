@@ -11,7 +11,11 @@ from django.core.management.base import CommandError
 from django.utils import timezone
 
 from apps.certs.models import CertbotCertificate, SelfSignedCertificate
-from apps.certs.services import CertbotChallengeError
+from apps.certs.services import (
+    CertbotChallengeError,
+    CertbotError,
+    ensure_certbot_available,
+)
 from apps.dns.models import DNSProviderCredential
 from apps.nginx.config_utils import slugify
 from apps.nginx.management.commands.https_parts.config_apply import _apply_config, _get_or_create_config
@@ -260,6 +264,11 @@ def _provision_certificate(
             subject_alt_names=["localhost", "127.0.0.1", "::1"],
         )
         return
+
+    try:
+        ensure_certbot_available(sudo=sudo)
+    except CertbotError as exc:
+        raise CommandError(str(exc)) from exc
 
     http01_bootstrapped = False
     if force_renewal:

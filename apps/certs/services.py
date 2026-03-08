@@ -63,6 +63,26 @@ def extract_live_certificate_paths_from_certbot_output(
     return Path(cert_match.group(1)), Path(key_match.group(1))
 
 
+
+
+def ensure_certbot_available(*, sudo: str = "sudo") -> None:
+    """Raise ``CertbotError`` with guidance when certbot is unavailable."""
+
+    command = _with_sudo(["certbot", "--version"], sudo)
+    try:
+        _run_command(command)
+    except FileNotFoundError as exc:  # pragma: no cover - thin wrapper
+        missing_binary = Path(exc.filename or command[0]).name
+        if missing_binary in {"certbot", "sudo"}:
+            message = str(exc) or f"{missing_binary}: command not found"
+            raise CertbotError(_build_missing_certbot_guidance(message)) from exc
+        raise CertbotError(str(exc)) from exc
+    except RuntimeError as exc:  # pragma: no cover - thin wrapper
+        error_message = str(exc)
+        if _is_missing_certbot_error(error_message):
+            raise CertbotError(_build_missing_certbot_guidance(error_message)) from exc
+        raise
+
 def request_certbot_certificate(
     *,
     domain: str,
