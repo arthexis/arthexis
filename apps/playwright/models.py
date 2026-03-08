@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
@@ -16,6 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from typing import TYPE_CHECKING
 
 from apps.content.models import ContentSample
+from apps.nodes.feature_checks import get_screenshot_runtime_capability
 from apps.content.utils import save_screenshot
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Ownable
@@ -152,10 +152,17 @@ class PlaywrightBrowser(Entity):
         return cls.objects.default()
 
     def _headless_mode(self) -> bool:
+        """Resolve browser mode using centralized screenshot runtime capability."""
+
         if self.mode == self.Mode.HEADLESS:
             return True
-        if not os.environ.get("DISPLAY"):
-            logger.warning("DISPLAY not set; forcing headless mode for %s", self)
+        capability = get_screenshot_runtime_capability()
+        if not capability.display_available:
+            logger.warning(
+                "DISPLAY not set; forcing headless mode for %s (%s)",
+                self,
+                "; ".join(capability.diagnostics),
+            )
             return True
         return False
 

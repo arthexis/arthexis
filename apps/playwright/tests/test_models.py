@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from apps.nodes.feature_checks import ScreenshotRuntimeCapability
 from apps.playwright import models as playwright_models
 from apps.playwright.models import PlaywrightBrowser, PlaywrightScript, SessionCookie, WebsiteScreenshotSchedule, schedule_pending_website_screenshots
 
@@ -155,3 +156,45 @@ def test_schedule_pending_website_screenshots_continues_after_failure(monkeypatc
     ran = schedule_pending_website_screenshots(now=now)
 
     assert ran == [succeeding.pk]
+
+
+def test_headless_mode_uses_centralized_runtime_capability(monkeypatch):
+    browser = PlaywrightBrowser(
+        name="headed-browser",
+        engine=PlaywrightBrowser.Engine.CHROMIUM,
+        mode=PlaywrightBrowser.Mode.HEADED,
+    )
+
+    monkeypatch.setattr(
+        playwright_models,
+        "get_screenshot_runtime_capability",
+        lambda: ScreenshotRuntimeCapability(
+            ready=True,
+            display_available=False,
+            diagnostics=("DISPLAY: not set (headless recommended)",),
+            level=20,
+        ),
+    )
+
+    assert browser._headless_mode() is True
+
+
+def test_headless_mode_keeps_headed_when_display_available(monkeypatch):
+    browser = PlaywrightBrowser(
+        name="headed-browser",
+        engine=PlaywrightBrowser.Engine.CHROMIUM,
+        mode=PlaywrightBrowser.Mode.HEADED,
+    )
+
+    monkeypatch.setattr(
+        playwright_models,
+        "get_screenshot_runtime_capability",
+        lambda: ScreenshotRuntimeCapability(
+            ready=True,
+            display_available=True,
+            diagnostics=("DISPLAY: set",),
+            level=20,
+        ),
+    )
+
+    assert browser._headless_mode() is False

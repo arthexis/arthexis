@@ -24,6 +24,28 @@ class FeatureCheckResult:
     level: int = messages.INFO
 
 
+@dataclass(frozen=True)
+class ScreenshotRuntimeCapability:
+    """Centralized Playwright screenshot runtime capability diagnostics."""
+
+    ready: bool
+    display_available: bool
+    diagnostics: tuple[str, ...]
+    error_message: str = ""
+    level: int = messages.INFO
+
+    def as_feature_result(self, feature_display: str) -> FeatureCheckResult:
+        """Convert capability diagnostics into a ``FeatureCheckResult`` payload."""
+
+        if not self.ready:
+            return FeatureCheckResult(False, self.error_message, self.level)
+        return FeatureCheckResult(
+            True,
+            f"{feature_display} prerequisites checked: " + "; ".join(self.diagnostics),
+            self.level,
+        )
+
+
 FeatureCheck = Callable[["NodeFeature", Optional["Node"]], Any]
 
 
@@ -95,6 +117,102 @@ class FeatureCheckRegistry:
 
 
 feature_checks = FeatureCheckRegistry()
+
+
+def get_screenshot_runtime_capability() -> ScreenshotRuntimeCapability:
+    """Evaluate screenshot/browser runtime readiness from one shared code path."""
+
+    diagnostics: list[str] = []
+    executable_path: Path | None = None
+    display_available = bool(os.environ.get("DISPLAY"))
+    diagnostics.append(
+        "DISPLAY: set" if display_available else "DISPLAY: not set (headless recommended)"
+    )
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        return ScreenshotRuntimeCapability(
+            ready=False,
+            display_available=display_available,
+            diagnostics=tuple(diagnostics),
+            error_message=(
+                "Screenshot Poll prerequisites failed: Playwright Python package is unavailable "
+                f"({exc}). Install it to enable screenshot capture."
+            ),
+            level=messages.ERROR,
+        )
+
+    diagnostics.append("Playwright package: ok")
+    browser_override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if browser_override:
+        diagnostics.append(f"PLAYWRIGHT_BROWSERS_PATH={browser_override}")
+
+    try:
+        with sync_playwright() as playwright:
+            executable_path = Path(playwright.chromium.executable_path)
+            if not executable_path.exists():
+                return ScreenshotRuntimeCapability(
+                    ready=False,
+                    display_available=display_available,
+                    diagnostics=tuple(diagnostics),
+                    error_message=(
+                        "Screenshot Poll prerequisites failed: Chromium executable is missing at "
+                        f"{executable_path}. Run `python -m playwright install chromium`."
+                    ),
+                    level=messages.ERROR,
+                )
+            if not os.access(executable_path, os.X_OK):
+                return ScreenshotRuntimeCapability(
+                    ready=False,
+                    display_available=display_available,
+                    diagnostics=tuple(diagnostics),
+                    error_message=(
+                        "Screenshot Poll prerequisites failed: Chromium executable is not executable at "
+                        f"{executable_path}."
+                    ),
+                    level=messages.ERROR,
+                )
+            browser = None
+            try:
+                browser = playwright.chromium.launch(headless=True)
+            finally:
+                if browser is not None:
+                    browser.close()
+    except Exception as exc:
+        return ScreenshotRuntimeCapability(
+            ready=False,
+            display_available=display_available,
+            diagnostics=tuple(diagnostics),
+            error_message=(
+                "Screenshot Poll prerequisites failed: Chromium could not be launched "
+                f"({exc}). Install Playwright browsers with `python -m playwright install chromium` "
+                "and verify runtime dependencies are present."
+            ),
+            level=messages.ERROR,
+        )
+
+    if executable_path is None:
+        return ScreenshotRuntimeCapability(
+            ready=False,
+            display_available=display_available,
+            diagnostics=tuple(diagnostics),
+            error_message=(
+                "Screenshot Poll prerequisites failed: Chromium executable path could not be resolved."
+            ),
+            level=messages.ERROR,
+        )
+
+    diagnostics.append(f"Chromium executable: {executable_path}")
+    diagnostics.append("Chromium launch: ok")
+    ffmpeg_path = shutil.which("ffmpeg")
+    diagnostics.append(f"ffmpeg: {ffmpeg_path or 'not found (optional)'}")
+    return ScreenshotRuntimeCapability(
+        ready=True,
+        display_available=display_available,
+        diagnostics=tuple(diagnostics),
+        level=messages.SUCCESS,
+    )
 
 
 @feature_checks.register("audio-capture")
@@ -283,83 +401,18 @@ def _check_screenshot_poll(feature: "NodeFeature", node: Optional["Node"]):
     """Validate Playwright screenshot runtime prerequisites."""
 
     del node
-    details: list[str] = []
-    executable_path: Path | None = None
-
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:
+    capability = get_screenshot_runtime_capability()
+    if not capability.ready:
         return FeatureCheckResult(
             False,
-            (
-                f"{feature.display} prerequisites failed: Playwright Python package is unavailable "
-                f"({exc}). Install it to enable screenshot capture."
-            ),
-            messages.ERROR,
+            capability.error_message.replace("Screenshot Poll", feature.display),
+            capability.level,
         )
-
-    details.append("Playwright package: ok")
-    browser_override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
-    if browser_override:
-        details.append(f"PLAYWRIGHT_BROWSERS_PATH={browser_override}")
-
-    try:
-        with sync_playwright() as playwright:
-            executable_path = Path(playwright.chromium.executable_path)
-            if not executable_path.exists():
-                return FeatureCheckResult(
-                    False,
-                    (
-                        f"{feature.display} prerequisites failed: Chromium executable is missing at "
-                        f"{executable_path}. Run `python -m playwright install chromium`."
-                    ),
-                    messages.ERROR,
-                )
-            if not os.access(executable_path, os.X_OK):
-                return FeatureCheckResult(
-                    False,
-                    (
-                        f"{feature.display} prerequisites failed: Chromium executable is not executable at "
-                        f"{executable_path}."
-                    ),
-                    messages.ERROR,
-                )
-            browser = None
-            try:
-                browser = playwright.chromium.launch(headless=True)
-            finally:
-                if browser is not None:
-                    browser.close()
-    except Exception as exc:
-        return FeatureCheckResult(
-            False,
-            (
-                f"{feature.display} prerequisites failed: Chromium could not be launched "
-                f"({exc}). Install Playwright browsers with `python -m playwright install chromium` "
-                "and verify runtime dependencies are present."
-            ),
-            messages.ERROR,
-        )
-
-    if executable_path is None:
-        return FeatureCheckResult(
-            False,
-            (
-                f"{feature.display} prerequisites failed: Chromium executable path could not be resolved."
-            ),
-            messages.ERROR,
-        )
-
-    details.append(f"Chromium executable: {executable_path}")
-    details.append("Chromium launch: ok")
-
-    ffmpeg_path = shutil.which("ffmpeg")
-    details.append(f"ffmpeg: {ffmpeg_path or 'not found (optional)'}")
-
     return FeatureCheckResult(
         True,
-        f"{feature.display} prerequisites checked: " + "; ".join(details),
-        messages.SUCCESS,
+        f"{feature.display} prerequisites checked: "
+        + "; ".join(capability.diagnostics),
+        capability.level,
     )
 
 
@@ -367,5 +420,7 @@ __all__ = [
     "FeatureCheck",
     "FeatureCheckRegistry",
     "FeatureCheckResult",
+    "ScreenshotRuntimeCapability",
     "feature_checks",
+    "get_screenshot_runtime_capability",
 ]

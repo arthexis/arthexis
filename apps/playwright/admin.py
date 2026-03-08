@@ -1,12 +1,11 @@
 import contextlib
 import logging
-import os
-import shutil
 
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.core.admin import OwnableAdminMixin
+from apps.nodes.feature_checks import get_screenshot_runtime_capability
 from .models import (
     PlaywrightBrowser,
     PlaywrightScript,
@@ -33,16 +32,37 @@ class PlaywrightBrowserAdmin(admin.ModelAdmin):
                 driver = browser.create_driver()
             except Exception as exc:  # pragma: no cover
                 logger.exception("Unable to start browser %s", browser)
-                self.message_user(request, _("Failed to start %(browser)s: %(error)s") % {"browser": browser, "error": exc}, level=messages.ERROR)
+                capability = get_screenshot_runtime_capability()
+                diagnostics = "; ".join(capability.diagnostics)
+                if not capability.ready:
+                    diagnostics = "; ".join(
+                        item for item in [diagnostics, capability.error_message] if item
+                    )
+                note = (
+                    " "
+                    + str(_("Diagnostics: %(diagnostics)s") % {"diagnostics": diagnostics})
+                    if diagnostics
+                    else ""
+                )
+                self.message_user(
+                    request,
+                    _("Failed to start %(browser)s: %(error)s")
+                    % {"browser": browser, "error": exc}
+                    + note,
+                    level=messages.ERROR,
+                )
                 continue
             with contextlib.suppress(Exception):
                 driver.quit()
             note = ""
-            if browser.mode == PlaywrightBrowser.Mode.HEADED and not os.environ.get("DISPLAY"):
-                note = " " + str(_("DISPLAY is not set; consider headless mode."))
-            if browser.binary_path and not shutil.which(browser.binary_path):
-                note += " " + str(_("Configured binary path was not found in PATH."))
-            self.message_user(request, _("%(browser)s started successfully.") % {"browser": browser} + note, level=messages.SUCCESS)
+            capability = get_screenshot_runtime_capability()
+            if capability.diagnostics:
+                note = " " + str(_("Diagnostics: %(diagnostics)s") % {"diagnostics": "; ".join(capability.diagnostics)})
+            self.message_user(
+                request,
+                _("%(browser)s started successfully.") % {"browser": browser} + note,
+                level=messages.SUCCESS,
+            )
 
 
 @admin.register(PlaywrightScript)
