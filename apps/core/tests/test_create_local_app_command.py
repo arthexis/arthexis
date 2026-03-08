@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 from importlib import util
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from django.conf import settings
@@ -18,7 +19,7 @@ def _create_apps_package(apps_dir: Path) -> None:
 
 
 
-def _load_module_from_path(module_name: str, path: Path):
+def _load_module_from_path(module_name: str, path: Path) -> ModuleType:
     """Load a module directly from a generated file path."""
 
     spec = util.spec_from_file_location(module_name, path)

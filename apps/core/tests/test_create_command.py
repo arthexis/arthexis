@@ -81,6 +81,41 @@ def test_create_model_requires_existing_app(tmp_path):
         call_command("create", "model", "unknown", "item")
 
 
+
+def test_create_model_extends_existing_urlpatterns_without_duplicate_imports(tmp_path):
+    """create model should append route entries instead of redefining urlpatterns/imports."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    call_command("create", "app", "support")
+
+    call_command("create", "model", "support", "ticket")
+
+    urls_text = (apps_dir / "support" / "urls.py").read_text(encoding="utf-8")
+    assert urls_text.count("from django.urls import path") == 1
+    assert urls_text.count("from . import views") == 1
+    assert urls_text.count("urlpatterns = [") == 1
+    assert 'name="support-item-list"' in urls_text
+    assert 'name="ticket-list"' in urls_text
+
+
+def test_create_model_updates_routes_with_whitespace_tolerant_empty_list(tmp_path):
+    """create model should populate ROOT_URLPATTERNS even with varied empty-list whitespace."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    app_dir = apps_dir / "support"
+    app_dir.mkdir(parents=True)
+
+    (app_dir / "routes.py").write_text(
+        'from django.urls import path\n\nROOT_URLPATTERNS = [ ]\n',
+        encoding="utf-8",
+    )
+
+    call_command("create", "model", "support", "ticket")
+
+    routes_text = (app_dir / "routes.py").read_text(encoding="utf-8")
+    assert "from django.urls import include, path" in routes_text
+    assert 'path("support/", include("apps.support.urls"))' in routes_text
+
 def test_create_local_app_delegates_to_create_app(tmp_path):
     """Legacy create_local_app should still scaffold by delegating to create app."""
 

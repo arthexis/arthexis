@@ -94,26 +94,28 @@ class Command(BaseCommand):
         if not app_dir.exists():
             raise CommandError(f"App does not exist: {app_dir}")
 
+        models_path = app_dir / "models.py"
         self._append_unique_block(
-            app_dir / "models.py",
+            models_path,
             marker=f"class {model_name}(models.Model)",
-            block=self._model_class_block(model_name, app_name, include_import=True),
+            block=self._model_class_block(model_name, app_name, include_import=not models_path.exists()),
         )
+
+        admin_path = app_dir / "admin.py"
         self._append_unique_block(
-            app_dir / "admin.py",
+            admin_path,
             marker=f"@admin.register({model_name})",
-            block=self._admin_registration_block(model_name, include_imports=True),
+            block=self._admin_registration_block(model_name, include_imports=not admin_path.exists()),
         )
+
+        views_path = app_dir / "views.py"
         self._append_unique_block(
-            app_dir / "views.py",
+            views_path,
             marker=f"class {model_name}ListView(ListView)",
-            block=self._views_block(app_name, model_name, include_imports=True),
+            block=self._views_block(app_name, model_name, include_imports=not views_path.exists()),
         )
-        self._append_unique_block(
-            app_dir / "urls.py",
-            marker=f"name=\"{self._model_slug(model_name)}-list\"",
-            block=self._urls_block(model_name, include_imports=True),
-        )
+
+        self._ensure_urls_include_model(app_dir / "urls.py", model_name)
         self._ensure_routes_include(app_dir / "routes.py", app_name)
 
         self.stdout.write(self.style.SUCCESS(f"Scaffolded model {model_name} in apps/{app_name}/"))
@@ -155,11 +157,12 @@ class Command(BaseCommand):
         marker = "ROOT_URLPATTERNS = [\n"
         if marker in content:
             content = content.replace(marker, marker + route_line + "\n", 1)
-        elif "ROOT_URLPATTERNS = []" in content:
-            content = content.replace(
-                "ROOT_URLPATTERNS = []",
+        elif re.search(r"ROOT_URLPATTERNS\s*=\s*\[\s*\]", content):
+            content = re.sub(
+                r"ROOT_URLPATTERNS\s*=\s*\[\s*\]",
                 "ROOT_URLPATTERNS = [\n" + route_line + "\n]",
-                1,
+                content,
+                count=1,
             )
         else:
             content += (
@@ -169,6 +172,37 @@ class Command(BaseCommand):
             )
 
         routes_path.write_text(content, encoding="utf-8")
+
+    def _ensure_urls_include_model(self, urls_path: Path, model_name: str) -> None:
+        marker = f'name="{self._model_slug(model_name)}-list"'
+        if not urls_path.exists():
+            self._append_unique_block(
+                urls_path,
+                marker=marker,
+                block=self._urls_block(model_name, include_imports=True),
+            )
+            return
+
+        content = urls_path.read_text(encoding="utf-8")
+        if marker in content:
+            raise CommandError(f"Refusing to modify {urls_path}: marker already exists ({marker}).")
+
+        import_lines = ["from django.urls import path", "from . import views"]
+        missing_imports = [line for line in import_lines if line not in content]
+        if missing_imports:
+            content = "\n".join(missing_imports) + "\n\n" + content.lstrip()
+
+        model_routes = self._urls_model_routes(model_name)
+        urlpatterns_match = re.search(r"urlpatterns\s*=\s*\[", content)
+        if urlpatterns_match:
+            insert_at = content.find("]", urlpatterns_match.end())
+            if insert_at != -1:
+                content = content[:insert_at].rstrip() + "\n" + model_routes + "\n" + content[insert_at:]
+                urls_path.write_text(content, encoding="utf-8")
+                return
+
+        content = content.rstrip() + "\n\nurlpatterns = [\n" + model_routes + "\n]\n"
+        urls_path.write_text(content, encoding="utf-8")
 
     def _validate_snake_case_name(self, value: str, noun: str) -> None:
         if not value:
@@ -269,21 +303,21 @@ class Command(BaseCommand):
         )
 
     def _urls_block(self, model_name: str, *, include_imports: bool) -> str:
-        slug = self._model_slug(model_name)
-        list_class = f"{model_name}ListView"
-        detail_class = f"{model_name}DetailView"
         import_block = (
             "from django.urls import path\n\n"
             "from . import views\n\n\n"
             if include_imports
             else ""
         )
+        return import_block + "urlpatterns = [\n" + self._urls_model_routes(model_name) + "\n]\n"
+
+    def _urls_model_routes(self, model_name: str) -> str:
+        slug = self._model_slug(model_name)
+        list_class = f"{model_name}ListView"
+        detail_class = f"{model_name}DetailView"
         return (
-            import_block
-            + "urlpatterns = [\n"
-            + f"    path(\"{slug}/\", views.{list_class}.as_view(), name=\"{slug}-list\"),\n"
-            + f"    path(\"{slug}/<int:pk>/\", views.{detail_class}.as_view(), name=\"{slug}-detail\"),\n"
-            + "]\n"
+            f"    path(\"{slug}/\", views.{list_class}.as_view(), name=\"{slug}-list\"),\n"
+            f"    path(\"{slug}/<int:pk>/\", views.{detail_class}.as_view(), name=\"{slug}-detail\"),"
         )
 
     def _manifest_py(self, app_name: str) -> str:
