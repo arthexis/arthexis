@@ -14,6 +14,9 @@ from .services import (
 )
 
 
+DEFAULT_DISCOVERY_TIMEOUT_S = 60
+
+
 @admin.register(BluetoothAdapter)
 class BluetoothAdapterAdmin(admin.ModelAdmin):
     """Admin configuration for Bluetooth adapters."""
@@ -112,7 +115,7 @@ class BluetoothDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         }
         if request.method == "POST":
             try:
-                timeout_s = int(request.POST.get("timeout_s", "4"))
+                timeout_s = int(request.POST.get("timeout_s", str(DEFAULT_DISCOVERY_TIMEOUT_S)))
                 timeout_s = max(0, min(timeout_s, 60))
                 result = discover_and_sync_devices(timeout_s=timeout_s)
             except (ValueError, BluetoothCommandError, BluetoothParseError) as exc:
