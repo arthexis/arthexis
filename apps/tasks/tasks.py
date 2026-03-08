@@ -55,6 +55,53 @@ def send_manual_task_notification(manual_task_id: int, trigger: str) -> None:
         )
 
 
+@shared_task(name="apps.tasks.tasks.create_manual_task_github_issue")
+def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | None:
+    """Create a GitHub issue for a manual task when ``trigger`` is eligible."""
+
+    from apps.repos.services.github import GitHubRepositoryError
+    from apps.tasks.models import ManualTaskRequest
+
+    task = ManualTaskRequest.objects.filter(pk=manual_task_id).first()
+    if task is None:
+        logger.debug(
+            "Manual task GitHub issue skipped; task %s not found", manual_task_id
+        )
+        return None
+    if not task.can_open_github_issue_for_trigger(trigger):
+        logger.debug(
+            "Manual task GitHub issue skipped; trigger %s is not eligible for %s",
+            trigger,
+            manual_task_id,
+        )
+        return task.github_issue_url or None
+    try:
+        issue_url = task.create_github_issue()
+    except GitHubRepositoryError as exc:
+        logger.warning(
+            "Manual task GitHub issue failed for %s using trigger %s: %s",
+            manual_task_id,
+            trigger,
+            exc,
+        )
+        return None
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception(
+            "Unexpected error while creating manual task GitHub issue for %s",
+            manual_task_id,
+        )
+        return None
+
+    if issue_url:
+        logger.info(
+            "Created GitHub issue %s for manual task %s using trigger %s",
+            issue_url,
+            manual_task_id,
+            trigger,
+        )
+    return issue_url
+
+
 @shared_task(name="apps.content.tasks.run_scheduled_web_samplers")
 def run_scheduled_web_samplers() -> list[int]:
     """Execute any web request samplers that are due."""
@@ -67,8 +114,6 @@ def run_scheduled_web_samplers() -> list[int]:
     return executed
 
 
-
-
 @shared_task(name="apps.playwright.tasks.run_scheduled_website_screenshots")
 def run_scheduled_website_screenshots() -> list[int]:
     """Execute due Playwright website screenshot schedules."""
@@ -79,6 +124,7 @@ def run_scheduled_website_screenshots() -> list[int]:
     if executed:
         logger.info("Executed %s scheduled website screenshots", len(executed))
     return executed
+
 
 @shared_task(name="apps.repos.tasks.report_exception_to_github")
 def report_exception_to_github(payload: dict[str, Any]) -> None:
@@ -128,13 +174,9 @@ def create_user_story_github_issue(user_story_id: int) -> str | None:
     issue_url = story.create_github_issue()
 
     if issue_url:
-        logger.info(
-            "Created GitHub issue %s for user story %s", issue_url, story.pk
-        )
+        logger.info("Created GitHub issue %s for user story %s", issue_url, story.pk)
     else:
-        logger.info(
-            "No GitHub issue created for user story %s", story.pk
-        )
+        logger.info("No GitHub issue created for user story %s", story.pk)
 
     return issue_url
 
@@ -236,7 +278,11 @@ class LocalLLMSummarizer:
                 continue
             if in_logs and line.strip():
                 log_lines.append(line)
-        sample = log_lines[-20:] if log_lines else [line for line in prompt.splitlines() if line]
+        sample = (
+            log_lines[-20:]
+            if log_lines
+            else [line for line in prompt.splitlines() if line]
+        )
         summary = []
         for idx in range(0, min(len(sample), 20), 2):
             subject = f"LOG {idx // 2 + 1}"
