@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 
 from django import forms
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -17,6 +17,7 @@ from apps.features.models import Feature
 from apps.release.models import Package
 from apps.release.release import DEFAULT_PACKAGE
 from apps.repos.github import parse_repository_url
+from apps.repos.services.github import get_github_issue_token
 
 
 @dataclass(frozen=True)
@@ -92,10 +93,10 @@ class FeedbackIssueConfigurationAdminMixin:
 
         feature = Feature.objects.filter(slug="feedback-ingestion").first()
         active_package = self._active_package()
-        token_configured = bool(
-            (os.environ.get("GITHUB_TOKEN") or "").strip()
-            or (os.environ.get("GH_TOKEN") or "").strip()
-        )
+        try:
+            token_configured = bool(get_github_issue_token())
+        except RuntimeError:
+            token_configured = False
         repository_url = (
             active_package.repository_url.strip()
             if active_package and active_package.repository_url
@@ -153,7 +154,9 @@ class FeedbackIssueConfigurationAdminMixin:
                 ok=token_configured,
                 detail=str(_("Configured") if token_configured else _("Missing")),
                 guidance=str(
-                    _("Set GITHUB_TOKEN (or GH_TOKEN) in the runtime environment.")
+                    _(
+                        "Set a package release token or GITHUB_TOKEN in the runtime environment."
+                    )
                 ),
                 editable=False,
             ),
@@ -229,7 +232,7 @@ class FeedbackIssueConfigurationAdminMixin:
         if obj is None:
             raise Http404(_("Object not found."))
         if not self.has_change_permission(request, obj):
-            raise Http404
+            raise PermissionDenied
 
         if request.method == "POST":
             form = FeedbackIssueConfigurationForm(request.POST)
