@@ -2046,6 +2046,14 @@ if [ -n "${PYTHON_BIN:-}" ]; then
   arthexis_timing_end "reconcile_node_features_services"
 fi
 
+if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  if camera_service_configured; then
+    arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+  else
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "camera-${SERVICE_NAME}.service"
+  fi
+fi
+
 if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
 elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then

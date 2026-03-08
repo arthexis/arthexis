@@ -132,11 +132,11 @@ def reconcile_feature_service_locks(base_dir: Path | None = None) -> None:
     locks = lock_dir(resolved_base)
     service_name = read_service_name(locks / SERVICE_NAME_LOCK)
 
-    for service in [
+    for service in (
         item
         for item in _iter_lifecycle_services()
         if item.activation == LifecycleService.Activation.FEATURE
-    ]:
+    ):
         enabled = service.is_configured(service_name=service_name, lock_dir=locks)
         for lock_name in service._safe_lock_names():
             _set_lock_file_state(locks / lock_name, enabled=enabled)
