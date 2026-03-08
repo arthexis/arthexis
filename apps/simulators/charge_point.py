@@ -483,7 +483,7 @@ class ChargePointSimulator:
 
         ws = None
         last_error: Exception | None = None
-        requested_subprotocol = "ocpp1.6"
+        requested_subprotocol = "ocpp1.6j"
         self._last_ws_subprotocol = requested_subprotocol
         try:
             self._unsupported_message = False

@@ -11,7 +11,12 @@ from django.contrib.auth import authenticate
 from apps.rates.models import RateLimit
 
 from .. import store
-from .constants import OCPP_VERSION_16, OCPP_VERSION_201, OCPP_VERSION_21
+from .constants import (
+    OCPP_SUBPROTOCOL_16J,
+    OCPP_VERSION_16,
+    OCPP_VERSION_201,
+    OCPP_VERSION_21,
+)
 from .ip_utils import _parse_ip
 
 
@@ -71,7 +76,7 @@ class SubprotocolConnectionMixin:
         normalized = str(value or "").strip().lower()
         if not normalized:
             return None
-        if normalized in {OCPP_VERSION_16, "ocpp1.6j"}:
+        if normalized in {OCPP_VERSION_16, OCPP_SUBPROTOCOL_16J}:
             return OCPP_VERSION_16
         if normalized == OCPP_VERSION_201:
             return OCPP_VERSION_201
@@ -96,10 +101,20 @@ class SubprotocolConnectionMixin:
             else:
                 proto_text = str(proto)
             proto_text = proto_text.strip()
-            if proto_text:
-                canonical = self._canonicalize_ocpp_subprotocol(proto_text)
-                if canonical:
-                    canonical_offered.setdefault(canonical, proto_text)
+            if not proto_text:
+                continue
+            canonical = self._canonicalize_ocpp_subprotocol(proto_text)
+            if not canonical:
+                continue
+            current = canonical_offered.get(canonical)
+            # Prefer the JSON-only OCPP 1.6 token when both 1.6 aliases are
+            # offered; keep first-seen ordering for all other versions.
+            if current is None or (
+                canonical == OCPP_VERSION_16
+                and proto_text.lower() == OCPP_SUBPROTOCOL_16J
+                and current.lower() != OCPP_SUBPROTOCOL_16J
+            ):
+                canonical_offered[canonical] = proto_text
         preferred_normalized = self._canonicalize_ocpp_subprotocol(preferred)
         if preferred_normalized and preferred_normalized in canonical_offered:
             return canonical_offered[preferred_normalized]
@@ -110,9 +125,9 @@ class SubprotocolConnectionMixin:
         if OCPP_VERSION_201 in canonical_offered:
             return canonical_offered[OCPP_VERSION_201]
         # Operational safeguard: never reject a charger solely because it omits
-        # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
-        # charger offers it, but otherwise continue without a subprotocol so we
-        # accept as many real-world stations as possible.
+        # or sends an unexpected subprotocol. We prefer the JSON 1.6 token
+        # (``ocpp1.6j``) when available, then accept the ``ocpp1.6`` alias, and
+        # otherwise continue without a negotiated token for compatibility.
         if OCPP_VERSION_16 in canonical_offered:
             return canonical_offered[OCPP_VERSION_16]
         return None

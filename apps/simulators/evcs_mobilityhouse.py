@@ -216,7 +216,7 @@ class MobilityHouseChargePointAdapter:
                             candidate,
                             1,
                         ),
-                        subprotocols=["ocpp1.6"],
+                        subprotocols=["ocpp1.6j"],
                         **connect_kwargs,
                     ),
                     timeout=10,

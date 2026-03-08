@@ -334,7 +334,7 @@ async def simulate_cp(
                 for attempt in range(2):
                     try:
                         ws = await websockets.connect(
-                            uri, subprotocols=["ocpp1.6"], **self.connect_kwargs
+                            uri, subprotocols=["ocpp1.6j"], **self.connect_kwargs
                         )
                         break
                     except Exception as exc:
