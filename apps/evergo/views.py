@@ -247,6 +247,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     if request.method == "POST":
         form = EvergoOrderTrackingForm(request.POST, request.FILES, charger_brands=brands)
         missing_images = [name for name in IMAGE_FIELD_NAMES if not form.files.get(name)]
+        remote_image_urls: dict[str, str] = {}
         if form.is_valid():
             if missing_images and request.POST.get("confirm_missing_images") != "1":
                 form.add_error(None, "Confirma que deseas continuar con imágenes faltantes.")
@@ -272,9 +273,17 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                     )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
     else:
-        remote_initial_data = _load_remote_phase_one_initial_data(profile=profile, order_id=order_id)
+        remote_initial_data, remote_prefill_errors, remote_image_urls = _load_remote_phase_one_initial_data(
+            profile=profile,
+            order_id=order_id,
+        )
         form = EvergoOrderTrackingForm(charger_brands=brands, initial=remote_initial_data)
+        for field_name, error_message in remote_prefill_errors.items():
+            if field_name in form.fields:
+                form.fields[field_name].help_text = error_message
         missing_images = []
+
+    image_field_rows = _build_image_field_rows(form=form, remote_image_urls=remote_image_urls)
 
     return render(
         request,
@@ -286,7 +295,8 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             "form": form,
             "missing_images": missing_images,
             "image_field_names": IMAGE_FIELD_NAMES,
-            "image_fields": [form[name] for name in IMAGE_FIELD_NAMES],
+            "image_field_rows_main": image_field_rows[:6],
+            "image_field_rows_extra": image_field_rows[6:],
             "collapsed_defaults": COLLAPSED_DEFAULT_FIELDS,
             "collapsed_fields": [form[name] for name in COLLAPSED_DEFAULT_FIELDS],
             "evergo_so_url": (
@@ -298,13 +308,81 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     )
 
 
-def _load_remote_phase_one_initial_data(*, profile: EvergoUser, order_id: int) -> dict[str, object]:
-    """Load and normalize phase-one defaults from the latest WS API order detail payload."""
+def _load_remote_phase_one_initial_data(
+    *, profile: EvergoUser, order_id: int
+) -> tuple[dict[str, object], dict[str, str], dict[str, str]]:
+    """Load phase-one defaults, field errors, and remote image URLs from order detail payload."""
     try:
         order_payload = profile.fetch_order_detail(order_id=order_id)
     except (EvergoAPIError, OSError):
+        return {}, {
+            field_name: "No se pudo cargar este dato desde Evergo API. Captúralo manualmente."
+            for field_name in TRACKING_PRIMARY_FIELDS
+        }, {}
+
+    initial_data = _extract_phase_one_initial_data(order_payload)
+    missing_prefill_errors = {
+        field_name: "Dato faltante en Evergo API. Captúralo manualmente."
+        for field_name in TRACKING_PRIMARY_FIELDS
+        if field_name not in initial_data
+    }
+    return initial_data, missing_prefill_errors, _extract_remote_tracking_image_urls(order_payload)
+
+
+def _build_image_field_rows(*, form: EvergoOrderTrackingForm, remote_image_urls: dict[str, str]) -> list[dict[str, object]]:
+    """Build template rows combining image fields with their remotely stored preview URLs."""
+    return [
+        {
+            "field": form[field_name],
+            "remote_url": remote_image_urls.get(field_name, ""),
+        }
+        for field_name in IMAGE_FIELD_NAMES
+    ]
+
+
+def _extract_remote_tracking_image_urls(order_payload: dict[str, object]) -> dict[str, str]:
+    """Extract safe HTTP(S) URLs for tracking image fields from variable Evergo payload shapes."""
+    if not isinstance(order_payload, dict):
         return {}
-    return _extract_phase_one_initial_data(order_payload)
+
+    candidate_sources: list[dict[str, object]] = []
+    for key in TRACKING_PREFILL_SOURCE_KEYS:
+        source = order_payload.get(key)
+        if isinstance(source, dict):
+            candidate_sources.append(source)
+    candidate_sources.append(order_payload)
+
+    remote_urls: dict[str, str] = {}
+    for field_name in IMAGE_FIELD_NAMES:
+        raw_value = _first_present_value(candidate_sources=candidate_sources, field_name=field_name)
+        normalized_url = _normalize_remote_image_url(value=raw_value)
+        if normalized_url:
+            remote_urls[field_name] = normalized_url
+    return remote_urls
+
+
+def _normalize_remote_image_url(*, value: object) -> str | None:
+    """Normalize remote image URL candidates to safe HTTP(S) absolute URLs."""
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate.startswith(("http://", "https://")):
+            return candidate
+        return None
+
+    if isinstance(value, dict):
+        for key in ("url", "file", "path", "imagen", "image", "foto", "archivo"):
+            normalized = _normalize_remote_image_url(value=value.get(key))
+            if normalized:
+                return normalized
+        return None
+
+    if isinstance(value, list):
+        for item in value:
+            normalized = _normalize_remote_image_url(value=item)
+            if normalized:
+                return normalized
+
+    return None
 
 
 def _extract_phase_one_initial_data(order_payload: dict[str, object]) -> dict[str, object]:
@@ -438,6 +516,20 @@ TRACKING_PREFILL_FIELDS = [
     "voltaje_fase_neutro",
     "voltaje_fase_tierra",
     "voltaje_neutro_tierra",
+]
+
+TRACKING_PRIMARY_FIELDS = [
+    "metraje_visita_tecnica",
+    "programacion_cargador",
+    "capacidad_itm_principal",
+    "fecha_visita",
+    "voltaje_fase_fase",
+    "voltaje_fase_tierra",
+    "voltaje_fase_neutro",
+    "voltaje_neutro_tierra",
+    "prueba_carga",
+    "marca_cargador",
+    "numero_serie",
 ]
 
 TRACKING_INT_FIELDS = {

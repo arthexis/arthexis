@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -213,6 +214,62 @@ def test_order_tracking_public_prefill_localizes_timezone_aware_datetime_values(
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
+def test_order_tracking_public_loads_remote_image_previews(mock_fetch_order_detail, client):
+    """Regression: tracking page should preload Evergo image URLs into preview elements."""
+    mock_fetch_order_detail.return_value = {
+        "reporte_visita": {
+            "foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg",
+        },
+        "foto_medidor": {"url": "https://cdn.evergo.example/fotos/medidor.jpg"},
+    }
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-images", email="owner-images@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-images@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30204, order_number="GM030204")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="preview-foto_tablero"' in content
+    assert 'src="https://cdn.evergo.example/fotos/tablero.jpg"' in content
+    assert 'src="https://cdn.evergo.example/fotos/medidor.jpg"' in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "javascript:alert(1)"})
+def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
+    """Security regression: preview images should only accept HTTP(S) URLs from Evergo."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-images-safe", email="owner-images-safe@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-images-safe@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30205, order_number="GM030205")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="preview-foto_tablero"' in content
+    assert 'src="javascript:alert(1)"' not in content
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
 def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, client, settings):
     """Regression: tracking view should expose feedback/chat quick actions when enabled by permissions."""
@@ -242,8 +299,10 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'href="#chat-widget"' in content
-    assert 'href="#user-story-toggle"' in content
+    assert 'id="chat-launch"' in content
+    assert 'id="user-story-toggle"' in content
+    assert 'id="chat-widget"' in content
+    assert 'id="user-story-overlay"' in content
 
 
 @pytest.mark.django_db
@@ -272,8 +331,54 @@ def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, cl
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'href="#chat-widget"' not in content
-    assert 'href="#user-story-toggle"' not in content
+    assert 'id="chat-launch"' not in content
+    assert 'id="user-story-toggle"' not in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", side_effect=OSError("timeout"))
+def test_order_tracking_public_shows_field_level_prefill_errors_when_remote_fetch_fails(_, client):
+    """Regression: remote prefill failures should be visible beside primary tracking inputs."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-prefill-errors", email="owner-prefill-errors@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-prefill-errors@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30202, order_number="GM030202")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "No se pudo cargar este dato desde Evergo API. Captúralo manualmente." in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"metraje_visita_tecnica": "31"}})
+def test_order_tracking_public_shows_missing_field_prefill_errors_when_payload_incomplete(_, client):
+    """Regression: incomplete prefill payloads should call out missing primary inputs."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-prefill-missing", email="owner-prefill-missing@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-prefill-missing@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30203, order_number="GM030203")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Dato faltante en Evergo API. Captúralo manualmente." in content
 
 
 @pytest.mark.django_db
