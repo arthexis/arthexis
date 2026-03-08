@@ -159,3 +159,40 @@ def test_report_creation_enqueues_completed_issue(
 
     assert len(calls) == 1
     assert calls[0][1] == (task.pk, "completed")
+
+
+def test_scheduled_start_trigger_rejects_stale_early_job() -> None:
+    """Scheduled-start trigger only opens at or after the current scheduled start."""
+
+    template = GitHubIssueTemplate.objects.create(
+        name="Task starts",
+        title_template="Start maintenance",
+        body_template="Handle this now.",
+    )
+    task = build_manual_task_request(
+        github_issue_template=template,
+        github_issue_trigger="scheduled_start",
+        scheduled_start=timezone.now() + timedelta(hours=2),
+        scheduled_end=timezone.now() + timedelta(hours=3),
+    )
+
+    assert not task.can_open_github_issue_for_trigger("scheduled_start")
+
+
+def test_overdue_trigger_rejects_stale_early_job() -> None:
+    """Overdue trigger only opens at or after the computed overdue threshold."""
+
+    template = GitHubIssueTemplate.objects.create(
+        name="Task overdue",
+        title_template="Overdue maintenance",
+        body_template="Handle this now.",
+    )
+    task = build_manual_task_request(
+        github_issue_template=template,
+        github_issue_trigger="overdue",
+        github_issue_overdue_after=timedelta(hours=4),
+        scheduled_start=timezone.now() - timedelta(hours=1),
+        scheduled_end=timezone.now() + timedelta(hours=1),
+    )
+
+    assert not task.can_open_github_issue_for_trigger("overdue")

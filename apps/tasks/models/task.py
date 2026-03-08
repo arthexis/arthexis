@@ -511,9 +511,24 @@ class ManualTaskRequest(Entity):
             return False
         if self.github_issue_trigger != trigger:
             return False
+
+        now = timezone.now()
+        scheduled_start = self.scheduled_start
+        if timezone.is_naive(scheduled_start):
+            scheduled_start = timezone.make_aware(
+                scheduled_start, timezone.get_current_timezone()
+            )
+
+        if trigger == GitHubIssueTrigger.SCHEDULED_START:
+            return now >= scheduled_start
         if trigger == GitHubIssueTrigger.COMPLETED:
             return self.reports.exists()
         if trigger == GitHubIssueTrigger.OVERDUE:
+            if not self.github_issue_overdue_after:
+                return False
+            overdue_at = scheduled_start + self.github_issue_overdue_after
+            if now < overdue_at:
+                return False
             return not self.reports.exists()
         return True
 
