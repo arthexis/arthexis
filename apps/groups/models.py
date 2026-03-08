@@ -4,6 +4,13 @@ from django.utils.translation import gettext_lazy as _
 
 
 class SecurityGroup(Group):
+    app = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name=_("App"),
+        help_text=_("Owning app label for this security group."),
+    )
     parent = models.ForeignKey(
         "self",
         null=True,

@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.ocpp.models import Charger
 from apps.groups.models import SecurityGroup
-from apps.sites.utils import SITE_OPERATOR_GROUP_NAME
+from apps.sites.utils import CHARGE_STATION_MANAGER_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 from apps.nodes.models import Node
 
 
@@ -91,3 +91,39 @@ def test_offline_notification_source_prefers_connector_settings():
     assert source.pk == connector.pk
     assert connector.maintenance_email_value() == "connector@example.com"
     assert connector.email_when_offline_value() is True
+
+
+def test_charge_station_manager_can_view_owner_scoped_charger(django_user_model):
+    manager_group, _ = SecurityGroup.objects.get_or_create(
+        name=CHARGE_STATION_MANAGER_GROUP_NAME
+    )
+    manager = django_user_model.objects.create_user(
+        username="charger-manager", password="secret"
+    )
+    manager.groups.add(manager_group)
+
+    owner = django_user_model.objects.create_user(username="owner", password="secret")
+    charger = Charger.objects.create(charger_id="CH-OWNER")
+    charger.owner_users.add(owner)
+
+    assert charger.is_visible_to(manager) is True
+
+
+def test_charge_station_manager_is_authorized_for_ws_auth(django_user_model):
+    manager_group, _ = SecurityGroup.objects.get_or_create(
+        name=CHARGE_STATION_MANAGER_GROUP_NAME
+    )
+    manager = django_user_model.objects.create_user(
+        username="charger-manager-auth", password="secret"
+    )
+    manager.groups.add(manager_group)
+
+    designated_user = django_user_model.objects.create_user(
+        username="designated", password="secret"
+    )
+    charger = Charger.objects.create(
+        charger_id="CH-AUTH-MANAGER",
+        ws_auth_user=designated_user,
+    )
+
+    assert charger.is_ws_user_authorized(manager) is True
