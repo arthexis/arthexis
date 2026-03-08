@@ -9,7 +9,7 @@ from django.urls import reverse
 from PIL import Image
 
 from apps.cards.models import CardFace, get_cardface_bucket
-from apps.media.models import MediaBucket, MediaFile
+from apps.content.storage.models import MediaBucket, MediaFile
 
 
 def _image_file(mode="1", size=(64, 64), name="bg.png"):

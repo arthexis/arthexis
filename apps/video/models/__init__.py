@@ -1,28 +1,3 @@
-"""Video app model exports.
+"""Compatibility wrapper for ``apps.content.video.models.__init__``."""
 
-This package preserves compatibility with imports such as
-``from apps.video.models import VideoDevice``.
-"""
-
-from apps.video.models.device import DetectedVideoDevice, VideoDevice
-from apps.video.models.recording import VideoRecording
-from apps.video.models.snapshot import VideoSnapshot
-from apps.video.models.stream import (
-    MjpegDependencyError,
-    MjpegDeviceUnavailableError,
-    MjpegStream,
-    VideoStream,
-)
-from apps.video.models.youtube import YoutubeChannel
-
-__all__ = [
-    "DetectedVideoDevice",
-    "MjpegDependencyError",
-    "MjpegDeviceUnavailableError",
-    "MjpegStream",
-    "VideoDevice",
-    "VideoRecording",
-    "VideoSnapshot",
-    "VideoStream",
-    "YoutubeChannel",
-]
+from apps.content.video.models.__init__ import *  # noqa: F401,F403

@@ -1,6 +1,6 @@
 from django.db import migrations, models
 
-from apps.media.migrations_utils import copy_to_media
+from apps.content.storage.migrations_utils import copy_to_media
 
 SSH_KEY_BUCKET_SLUG = "credentials-ssh-keys"
 SSH_KEY_ALLOWED_PATTERNS = "\n".join(["id_*", "*.pem", "*.pub", "*.key", "*.ppk"])

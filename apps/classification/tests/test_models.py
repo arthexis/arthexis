@@ -13,7 +13,7 @@ from apps.classification.models import (
     ImageClassifierModel,
 )
 from apps.classification.services import apply_model_predictions
-from apps.media.models import MediaBucket, MediaFile
+from apps.content.storage.models import MediaBucket, MediaFile
 
 @pytest.mark.django_db
 def test_selected_classifier_must_be_ready():

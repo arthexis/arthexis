@@ -121,7 +121,7 @@ def check_node_feature(
 
         return supports_gui_toast()
     if slug == "video-cam":
-        from apps.video import has_rpi_camera_stack
+        from apps.content.video import has_rpi_camera_stack
 
         return has_rpi_camera_stack()
     if slug == "ap-router":

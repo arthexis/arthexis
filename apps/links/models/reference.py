@@ -12,8 +12,8 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager
-from apps.media.models import MediaFile
-from apps.media.utils import create_media_file, ensure_media_bucket
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import create_media_file, ensure_media_bucket
 
 
 class ReferenceManager(EntityManager):

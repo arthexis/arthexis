@@ -1,7 +1,7 @@
 from django.urls import include, path
 
 from . import views
-from apps.media import views as media_views
+from apps.content.storage import views as media_views
 
 app_name = "ocpp"
 

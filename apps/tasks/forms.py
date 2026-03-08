@@ -5,8 +5,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.maps.models import Location
-from apps.media.models import MediaFile
-from apps.media.utils import create_media_file
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import create_media_file
 from apps.tasks.models import ManualTaskRequest, TaskCategory, get_task_category_bucket
 
 

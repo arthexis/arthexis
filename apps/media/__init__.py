@@ -1,3 +1,3 @@
-"""Media management app."""
+"""Compatibility wrapper for ``apps.content.storage``."""
 
-default_app_config = "apps.media.apps.MediaConfig"
+from apps.content.storage import *  # noqa: F401,F403

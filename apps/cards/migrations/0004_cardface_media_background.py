@@ -1,6 +1,6 @@
 from django.db import migrations, models
 
-from apps.media.migrations_utils import copy_to_media
+from apps.content.storage.migrations_utils import copy_to_media
 
 CARD_FACE_BUCKET_SLUG = "cards-cardface-backgrounds"
 CARD_FACE_ALLOWED_PATTERNS = "\n".join(["*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff"])

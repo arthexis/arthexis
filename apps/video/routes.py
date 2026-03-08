@@ -3,5 +3,5 @@
 from django.urls import include, path
 
 ROOT_URLPATTERNS = [
-    path("video/", include("apps.video.urls")),
+    path("video/", include("apps.content.video.urls")),
 ]

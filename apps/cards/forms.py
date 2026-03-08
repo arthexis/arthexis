@@ -6,8 +6,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.cards import mse
 from apps.cards.models import CardFace, CardSet, get_cardface_bucket
-from apps.media.models import MediaFile
-from apps.media.utils import create_media_file
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import create_media_file
 
 
 class CardFacePreviewForm(forms.Form):

@@ -4,8 +4,8 @@ from django.contrib.sites.models import Site
 from django.db import models
 
 from apps.core.entity import Entity
-from apps.media.models import MediaFile
-from apps.media.utils import ensure_media_bucket
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import ensure_media_bucket
 
 
 class SiteBadge(Entity):

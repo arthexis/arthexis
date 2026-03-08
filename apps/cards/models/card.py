@@ -14,8 +14,8 @@ from django.utils.translation import gettext_lazy as _
 from PIL import Image, ImageDraw, ImageFont
 
 from apps.base.models import Entity
-from apps.media.models import MediaFile
-from apps.media.utils import ensure_media_bucket
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import ensure_media_bucket
 
 __all__ = ["CardFace"]
 

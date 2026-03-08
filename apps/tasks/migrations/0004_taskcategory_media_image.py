@@ -1,6 +1,6 @@
 from django.db import migrations, models
 
-from apps.media.migrations_utils import copy_to_media
+from apps.content.storage.migrations_utils import copy_to_media
 
 TASK_CATEGORY_BUCKET_SLUG = "tasks-category-images"
 TASK_CATEGORY_ALLOWED_PATTERNS = "\n".join(["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"])

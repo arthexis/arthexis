@@ -1,6 +1,6 @@
 """Backward-compatible Raspberry Pi camera helpers."""
 
-from apps.video.utils import (  # noqa: F401
+from apps.content.video.utils import (  # noqa: F401
     CAMERA_DIR,
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,

@@ -1,6 +1,6 @@
 """Backward compatibility shims for the legacy camera module."""
 
-from apps.video import (
+from apps.content.video import (
     CAMERA_DIR,
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,

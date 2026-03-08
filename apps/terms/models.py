@@ -12,8 +12,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.links.models import Reference
-from apps.media.models import MediaFile
-from apps.media.utils import ensure_media_bucket
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import ensure_media_bucket
 
 TERMS_DOCUMENT_BUCKET_SLUG = "terms-documents"
 TERMS_ACCEPTANCE_BUCKET_SLUG = "terms-acceptance-documents"

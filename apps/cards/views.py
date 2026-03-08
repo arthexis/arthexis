@@ -20,7 +20,7 @@ from .scanner import enable_deep_read_mode, poll_scan_attempt, record_scan_attem
 from .reader import validate_rfid_value
 from apps.cards.models import RFID, RFIDAttempt
 from .utils import build_mode_toggle
-from apps.video.rfid import scan_camera_qr
+from apps.content.video.rfid import scan_camera_qr
 
 logger = logging.getLogger(__name__)
 

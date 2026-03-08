@@ -1,4 +1,4 @@
-"""Manifest entries for Django app loading."""
+"""Legacy manifest for the video app wrapper."""
 
 DJANGO_APPS = [
     "apps.video",

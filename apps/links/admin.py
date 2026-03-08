@@ -12,8 +12,8 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.locals.user_data import EntityModelAdmin
-from apps.media.models import MediaFile
-from apps.media.utils import create_media_file
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import create_media_file
 from .models import (
     ExperienceReference,
     QRRedirect,

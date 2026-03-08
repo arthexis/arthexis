@@ -1,7 +1,10 @@
-from django.apps import AppConfig
+"""Legacy app config forwarding to ``apps.content.audio``."""
+
+from pathlib import Path
+
+from apps.content.audio.apps import AudioConfig as ContentAudioConfig
 
 
-class AudioConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
+class AudioConfig(ContentAudioConfig):
     name = "apps.audio"
-    label = "audio"
+    path = str(Path(__file__).resolve().parents[1] / "content" / "audio")

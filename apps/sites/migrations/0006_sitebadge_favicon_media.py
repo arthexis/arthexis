@@ -1,6 +1,6 @@
 from django.db import migrations, models
 
-from apps.media.migrations_utils import copy_to_media
+from apps.content.storage.migrations_utils import copy_to_media
 
 SITE_BADGE_FAVICON_BUCKET_SLUG = "sites-badge-favicons"
 SITE_BADGE_FAVICON_ALLOWED_PATTERNS = "\n".join(["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"])

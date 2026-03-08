@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from apps.audio.models import RecordingDevice
+from apps.content.audio.models import RecordingDevice
 from apps.nodes.device_sync import sync_detected_devices
 from apps.nodes.models import Node
 

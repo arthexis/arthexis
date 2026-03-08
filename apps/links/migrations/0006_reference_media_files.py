@@ -1,6 +1,6 @@
 from django.db import migrations, models
 
-from apps.media.migrations_utils import copy_to_media
+from apps.content.storage.migrations_utils import copy_to_media
 
 REFERENCE_FILE_BUCKET_SLUG = "links-reference-files"
 REFERENCE_FILE_ALLOWED_PATTERNS = "\n".join(

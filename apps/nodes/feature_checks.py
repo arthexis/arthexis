@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Iterable, Optional
 
 from django.contrib import messages
 from django.conf import settings
-from apps.audio.utils import has_audio_capture_device
+from apps.content.audio.utils import has_audio_capture_device
 from apps.clocks.utils import has_clock_device
 
 if False:  # pragma: no cover - typing imports only

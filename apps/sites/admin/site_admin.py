@@ -15,8 +15,8 @@ from django.conf import settings
 
 from apps.locals.user_data import EntityModelAdmin
 
-from apps.media.models import MediaFile
-from apps.media.utils import create_media_file
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import create_media_file
 from ..models import SiteBadge, SiteTemplate, SiteProxy, get_site_badge_favicon_bucket
 from ..site_config import ensure_site_fields
 from .filters import ManagedSiteListFilter, RequireHttpsListFilter

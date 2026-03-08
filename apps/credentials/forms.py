@@ -1,8 +1,8 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from apps.media.models import MediaFile
-from apps.media.utils import create_media_file
+from apps.content.storage.models import MediaFile
+from apps.content.storage.utils import create_media_file
 
 from .models import SSHAccount, get_ssh_key_bucket
 

@@ -10,7 +10,7 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from parler.admin import TranslatableAdmin, TranslatableTabularInline
 
-from apps.audio.models import AudioSample
+from apps.content.audio.models import AudioSample
 from apps.content.models import (
     ContentClassification,
     ContentClassifier,
@@ -25,8 +25,8 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.core.admin import OwnableAdminMixin
 from apps.nodes.models import Node, NodeFeature
 from apps.content.utils import capture_screenshot, save_screenshot
-from apps.video.models import VideoDevice
-from apps.video.utils import (
+from apps.content.video.models import VideoDevice
+from apps.content.video.utils import (
     DEFAULT_CAMERA_RESOLUTION,
     capture_rpi_snapshot,
 )

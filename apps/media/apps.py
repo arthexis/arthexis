@@ -1,7 +1,10 @@
-from django.apps import AppConfig
+"""Legacy app config forwarding to ``apps.content.storage``."""
+
+from pathlib import Path
+
+from apps.content.storage.apps import MediaConfig as ContentMediaConfig
 
 
-class MediaConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
+class MediaConfig(ContentMediaConfig):
     name = "apps.media"
-    label = "media"
+    path = str(Path(__file__).resolve().parents[1] / "content" / "storage")

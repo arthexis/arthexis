@@ -3,7 +3,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from apps.media.models import MediaFile
+from apps.content.storage.models import MediaFile
 
 from .services import enqueue_media_for_classification
 

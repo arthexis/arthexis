@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.media.models import MediaFile
+from apps.content.storage.models import MediaFile
 
 from .models import (
     RegistrationSubmission,
