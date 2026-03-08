@@ -8,27 +8,12 @@ from celery.schedules import crontab
 from apps.celery.utils import resolve_celery_shutdown_timeout
 
 from .base import NODE_ROLE
+from .broker import resolve_celery_broker_url
 from .i18n import TIME_ZONE
 from .logging import LOGGING
 
 
-def _resolve_celery_broker_url() -> str:
-    """Resolve the Celery broker URL with role-aware and legacy fallbacks."""
-
-    explicit_broker_url = (
-        os.environ.get("CELERY_BROKER_URL", "").strip()
-        or os.environ.get("BROKER_URL", "").strip()
-    )
-    if explicit_broker_url:
-        return explicit_broker_url
-
-    if str(NODE_ROLE or "").strip().lower() != "terminal":
-        return "redis://localhost:6379/0"
-
-    return "memory://localhost/"
-
-
-CELERY_BROKER_URL = _resolve_celery_broker_url()
+CELERY_BROKER_URL = resolve_celery_broker_url(node_role=NODE_ROLE)
 # Legacy alias retained for older deployments that still export BROKER_URL.
 BROKER_URL = CELERY_BROKER_URL
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
