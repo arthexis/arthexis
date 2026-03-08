@@ -18,7 +18,11 @@ def _resolve_node_role(node_role: str | None) -> str:
         return normalized
 
     role_lock = Path(__file__).resolve().parents[2] / ".locks" / "role.lck"
-    return role_lock.read_text().strip() if role_lock.exists() else "Terminal"
+    try:
+        normalized = role_lock.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return "Terminal"
+    return normalized or "Terminal"
 
 
 def resolve_celery_broker_url(*, node_role: str | None = None) -> str:
