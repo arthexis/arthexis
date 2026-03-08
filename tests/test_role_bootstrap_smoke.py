@@ -25,7 +25,11 @@ _ROLE_SPECIFIC_SETTINGS = tuple(sorted({key for _, extra_env in _ROLE_TEST_CASES
 def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     """Run a clean subprocess that imports settings and Celery for a specific node role."""
 
-    env = os.environ.copy()
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in {"PATH", "HOME", "LANG", "LC_ALL", "PYTHONPATH"}
+    }
     env.update(
         {
             "DJANGO_SETTINGS_MODULE": "config.settings",
@@ -40,17 +44,25 @@ def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = No
     if extra_env:
         env.update(extra_env)
 
-    return subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import importlib; importlib.import_module('config.settings'); importlib.import_module('config.celery')",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
+    try:
+        return subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import importlib; importlib.import_module('config.settings'); importlib.import_module('config.celery')",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        pytest.fail(
+            f"{node_role} bootstrap timed out after 30s\n"
+            f"stdout:\n{exc.stdout or ''}\n"
+            f"stderr:\n{exc.stderr or ''}"
+        )
 
 
 @pytest.mark.parametrize(
