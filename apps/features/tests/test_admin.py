@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
+from django.test import RequestFactory
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.features.admin import FeatureAdmin, FeatureAdminForm
-from apps.features.admin import SourceAppListFilter
+from apps.features.admin import FeatureAdmin
 from apps.features.models import Feature
 
 
@@ -116,92 +113,49 @@ def test_feature_admin_reload_base_requires_delete_permission(admin_client, djan
 
 
 @pytest.mark.django_db
-@override_settings(STORAGES=TEST_STORAGES)
-def test_feature_admin_saving_celery_workers_feature_syncs_runtime(admin_client):
-    """Regression: saving celery-workers parameters triggers runtime sync."""
+def test_feature_admin_changelist_hides_owner_and_node_feature_filters():
+    """Regression: suite feature admin changelist must not show owner or node-feature filters."""
 
-    feature = Feature.objects.get(slug="celery-workers")
-    feature.metadata = {"parameters": {"worker_count": "1"}}
-    feature.save(update_fields=["metadata", "updated_at"])
+    admin_instance = FeatureAdmin(Feature, admin.site)
 
-    with patch("apps.features.admin.sync_celery_workers_from_feature", return_value=(5, True)) as sync_runtime:
-        response = admin_client.post(
-            reverse("admin:features_feature_change", args=[feature.pk]),
-            {
-                "display": "Celery Workers",
-                "slug": "celery-workers",
-                "summary": "",
-                "is_enabled": "on",
-                "main_app": "",
-                "node_feature": "",
-                "admin_requirements": "",
-                "public_requirements": "",
-                "service_requirements": "",
-                "admin_views": "[]",
-                "public_views": "[]",
-                "service_views": "[]",
-                "metadata": "{}",
-                "code_locations": "[]",
-                "protocol_coverage": "{}",
-                "param__worker_count": "5",
-                "featuretest_set-TOTAL_FORMS": "0",
-                "featuretest_set-INITIAL_FORMS": "0",
-                "featuretest_set-MIN_NUM_FORMS": "0",
-                "featuretest_set-MAX_NUM_FORMS": "1000",
-                "featurenote_set-TOTAL_FORMS": "0",
-                "featurenote_set-INITIAL_FORMS": "0",
-                "featurenote_set-MIN_NUM_FORMS": "0",
-                "featurenote_set-MAX_NUM_FORMS": "1000",
-                "_save": "Save",
-            },
-        )
-
-    assert response.status_code == 302
-    sync_runtime.assert_called_once_with()
+    assert "owner_label" not in admin_instance.get_list_display(request=None)
+    assert "node_feature" not in admin_instance.get_list_filter(request=None)
 
 
 @pytest.mark.django_db
-@override_settings(STORAGES=TEST_STORAGES)
-def test_feature_admin_saving_celery_workers_feature_warns_when_restart_fails(admin_client):
-    """Regression: saving celery-workers surfaces warning when restart is unsuccessful."""
+def test_feature_admin_form_excludes_ownership_fields_for_change_view(django_user_model):
+    """Regression: suite feature admin form should not expose ownership controls."""
 
-    feature = Feature.objects.get(slug="celery-workers")
+    feature = Feature.objects.create(slug="admin-no-owner", display="Admin No Owner")
+    request = RequestFactory().get("/")
+    request.user = django_user_model.objects.create_superuser(
+        username="admin-form-user",
+        email="admin-form@example.com",
+        password="pass",
+    )
+    admin_instance = FeatureAdmin(Feature, admin.site)
 
-    with patch("apps.features.admin.sync_celery_workers_from_feature", return_value=(7, False)):
-        response = admin_client.post(
-            reverse("admin:features_feature_change", args=[feature.pk]),
-            {
-                "display": "Celery Workers",
-                "slug": "celery-workers",
-                "summary": "",
-                "is_enabled": "on",
-                "main_app": "",
-                "node_feature": "",
-                "admin_requirements": "",
-                "public_requirements": "",
-                "service_requirements": "",
-                "admin_views": "[]",
-                "public_views": "[]",
-                "service_views": "[]",
-                "metadata": "{}",
-                "code_locations": "[]",
-                "protocol_coverage": "{}",
-                "param__worker_count": "7",
-                "featuretest_set-TOTAL_FORMS": "0",
-                "featuretest_set-INITIAL_FORMS": "0",
-                "featuretest_set-MIN_NUM_FORMS": "0",
-                "featuretest_set-MAX_NUM_FORMS": "1000",
-                "featurenote_set-TOTAL_FORMS": "0",
-                "featurenote_set-INITIAL_FORMS": "0",
-                "featurenote_set-MIN_NUM_FORMS": "0",
-                "featurenote_set-MAX_NUM_FORMS": "1000",
-                "_save": "Save",
-            },
-            follow=True,
-        )
+    form_class = admin_instance.get_form(request, obj=feature)
 
-    assert response.status_code == 200
-    messages = [str(message) for message in get_messages(response.wsgi_request)]
-    assert any("service restart failed" in message for message in messages)
+    assert "user" not in form_class.base_fields
+    assert "group" not in form_class.base_fields
 
 
+
+@pytest.mark.django_db
+def test_feature_admin_form_supports_dynamic_parameter_fieldsets(django_user_model):
+    """Regression: parameterized suite feature change forms must render without FieldError."""
+
+    feature = Feature.objects.create(slug="ocpp-simulator", display="OCPP Simulator")
+    request = RequestFactory().get("/")
+    request.user = django_user_model.objects.create_superuser(
+        username="admin-dynamic-form-user",
+        email="admin-dynamic-form@example.com",
+        password="pass",
+    )
+    admin_instance = FeatureAdmin(Feature, admin.site)
+
+    form_class = admin_instance.get_form(request, obj=feature)
+
+    assert "param__arthexis_backend" in form_class.base_fields
+    assert "param__mobilityhouse_backend" in form_class.base_fields

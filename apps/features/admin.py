@@ -3,7 +3,8 @@ from pathlib import Path
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.contrib.admin.utils import flatten_fieldsets
+from django.core.exceptions import FieldError, PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import models
@@ -15,8 +16,6 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
-from apps.app.models import Application
-from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.services.celery_workers import (
     CELERY_WORKERS_FEATURE_SLUG,
@@ -158,7 +157,7 @@ class FeatureAdminForm(forms.ModelForm):
 
 
 @admin.register(Feature)
-class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
+class FeatureAdmin(DjangoObjectActions, EntityModelAdmin):
     form = FeatureAdminForm
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
@@ -171,9 +170,8 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         "is_enabled",
         "main_app",
         "node_feature",
-        "owner_label",
     )
-    list_filter = ("source", "is_enabled", SourceAppListFilter, "node_feature")
+    list_filter = ("source", "is_enabled", SourceAppListFilter)
     search_fields = ("display", "slug", "summary")
     readonly_fields = ("source",)
     fieldsets = (
@@ -190,10 +188,6 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
                     "node_feature",
                 )
             },
-        ),
-        (
-            _("Ownership"),
-            {"fields": ("user", "group")},
         ),
         (
             _("Feature surfaces"),
@@ -427,6 +421,26 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if parameter_fields:
             fieldsets.append((_("Feature parameters"), {"fields": tuple(parameter_fields)}))
         return fieldsets
+
+    def get_form(self, request, obj=None, **kwargs):
+        """Return a form class that tolerates dynamic parameter fields in fieldsets."""
+
+        model_field_names = {field.name for field in self.model._meta.get_fields()}
+        form_class = kwargs.get("form") or getattr(self, "form", None)
+        declared_field_names = set(getattr(form_class, "declared_fields", {}).keys())
+        allowed_fields = model_field_names | declared_field_names
+
+        field_names = kwargs.get("fields")
+        if field_names is None:
+            field_names = flatten_fieldsets(self.get_fieldsets(request, obj))
+        if field_names:
+            kwargs["fields"] = [name for name in field_names if name in allowed_fields]
+
+        try:
+            return super().get_form(request, obj, **kwargs)
+        except FieldError:
+            kwargs.pop("fields", None)
+            return super().get_form(request, obj, **kwargs)
 
     def get_formsets_with_inlines(self, request, obj=None):
         """Skip inline formsets on POST when no inline management payload is submitted."""
