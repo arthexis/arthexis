@@ -31,7 +31,9 @@ class TaskCategoryAdminForm(forms.ModelForm):
         upload = self.cleaned_data.get("image_upload")
         if upload:
             bucket = get_task_category_bucket()
-            instance.image_media = create_media_file(bucket=bucket, uploaded_file=upload)
+            instance.image_media = create_media_file(
+                bucket=bucket, uploaded_file=upload
+            )
         if commit:
             instance.save()
             self.save_m2m()
@@ -73,22 +75,24 @@ class MaintenanceRequestForm(forms.ModelForm):
             "period",
             "period_deadline",
             "enable_notifications",
+            "github_issue_template",
+            "github_issue_trigger",
+            "github_issue_overdue_after",
         ]
         widgets = {
             "category": forms.Select(attrs={"class": "form-select"}),
-            "description": forms.Textarea(
-                attrs={"rows": 4, "class": "form-control"}
-            ),
+            "description": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
             "duration": forms.TextInput(attrs={"class": "form-control"}),
             "location": forms.Select(attrs={"class": "form-select"}),
             "enable_notifications": forms.CheckboxInput(
                 attrs={"class": "form-check-input"}
             ),
-            "is_periodic": forms.CheckboxInput(
-                attrs={"class": "form-check-input"}
-            ),
+            "is_periodic": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "period": forms.TextInput(attrs={"class": "form-control"}),
-            "period_deadline": forms.TextInput(
+            "period_deadline": forms.TextInput(attrs={"class": "form-control"}),
+            "github_issue_template": forms.Select(attrs={"class": "form-select"}),
+            "github_issue_trigger": forms.Select(attrs={"class": "form-select"}),
+            "github_issue_overdue_after": forms.TextInput(
                 attrs={"class": "form-control"}
             ),
         }
@@ -99,13 +103,14 @@ class MaintenanceRequestForm(forms.ModelForm):
         self.fields["location"].queryset = Location.objects.order_by("name")
         self.fields["category"].required = True
         self.fields["category"].empty_label = None
-        self.fields["category"].queryset = TaskCategory.objects.exclude(name="").order_by(
-            "name"
-        )
+        self.fields["category"].queryset = TaskCategory.objects.exclude(
+            name=""
+        ).order_by("name")
         self.fields["description"].label = _("Requestor Comments")
-        self.fields["scheduled_start"].widget.attrs.setdefault(
-            "class", "form-control"
-        )
+        self.fields["github_issue_template"].required = False
+        self.fields["github_issue_template"].empty_label = _("No GitHub issue")
+        self.fields["github_issue_trigger"].required = False
+        self.fields["scheduled_start"].widget.attrs.setdefault("class", "form-control")
         self.fields["scheduled_end"].widget.attrs.setdefault("class", "form-control")
         if not self.is_bound:
             locations = self.fields["location"].queryset
@@ -119,5 +124,7 @@ class MaintenanceRequestForm(forms.ModelForm):
     def clean_location(self):
         location = self.cleaned_data.get("location")
         if location is None:
-            raise forms.ValidationError(_("Select a location for this maintenance request."))
+            raise forms.ValidationError(
+                _("Select a location for this maintenance request.")
+            )
         return location
