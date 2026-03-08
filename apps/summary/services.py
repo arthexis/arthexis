@@ -12,6 +12,7 @@ from typing import Iterable
 from django.conf import settings
 from django.utils import timezone
 
+from apps.features.utils import is_suite_feature_enabled
 from apps.screens.startup_notifications import render_lcd_lock_file
 
 from .models import LLMSummaryConfig
@@ -228,7 +229,7 @@ def render_lcd_payload(subject: str, body: str) -> str:
     return render_lcd_lock_file(subject=subject, body=body)
 
 
-def execute_log_summary_generation() -> str:
+def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
     """Generate LCD log summary output and persist latest run metadata."""
 
     from apps.nodes.models import Node
@@ -242,6 +243,16 @@ def execute_log_summary_generation() -> str:
     node = Node.get_local()
     if not node:
         return "skipped:no-node"
+
+    if (
+        not ignore_suite_feature_gate
+        and not is_suite_feature_enabled("llm-summary-automation", default=False)
+    ):
+        logger.info(
+            "Skipping LCD summary automation because suite feature '%s' is disabled.",
+            "llm-summary-automation",
+        )
+        return "skipped:suite-feature-disabled"
 
     if not node.has_feature("llm-summary"):
         return "skipped:feature-disabled"

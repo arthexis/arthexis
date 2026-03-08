@@ -5,6 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.screens.lcd_screen import locks as lcd_locks
 from apps.screens.startup_notifications import (
@@ -43,6 +44,14 @@ class Command(BaseCommand):
             action="store_true",
             help="Generate the LCD summary immediately before printing status.",
         )
+        parser.add_argument(
+            "--allow-disabled-feature",
+            action="store_true",
+            help=(
+                "Allow manual --run-now execution even when llm-summary-automation suite "
+                "feature is disabled."
+            ),
+        )
 
     def handle(self, *args, **options) -> None:
         """Render status output and apply optional auto-enable actions."""
@@ -59,7 +68,26 @@ class Command(BaseCommand):
             self._enable_prerequisites(node=node, config=config, base_dir=base_dir)
 
         if options["run_now"]:
-            run_status = self._run_summary_task_now()
+            if not is_suite_feature_enabled("llm-summary-automation", default=False):
+                if options["allow_disabled_feature"]:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "Suite feature 'llm-summary-automation' is disabled; "
+                            "running manual override via --allow-disabled-feature."
+                        )
+                    )
+                    run_status = self._run_summary_task_now(ignore_suite_feature_gate=True)
+                else:
+                    run_status = "skipped:suite-feature-disabled"
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "Suite feature 'llm-summary-automation' is disabled; "
+                            "skipping automated summary run. Re-run with "
+                            "--allow-disabled-feature for one-off operator execution."
+                        )
+                    )
+            else:
+                run_status = self._run_summary_task_now()
             self.stdout.write(f"Run now: {run_status}")
             # The task updates summary config fields on its own model instance,
             # so reload to report the run that just completed.
@@ -159,6 +187,8 @@ class Command(BaseCommand):
         except Exception:
             return []
 
-    def _run_summary_task_now(self) -> str:
+    def _run_summary_task_now(self, *, ignore_suite_feature_gate: bool = False) -> str:
         """Execute the summary task inline and return the resulting status string."""
-        return execute_log_summary_generation()
+        return execute_log_summary_generation(
+            ignore_suite_feature_gate=ignore_suite_feature_gate,
+        )
