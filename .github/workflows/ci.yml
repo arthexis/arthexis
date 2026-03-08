@@ -231,6 +231,15 @@ jobs:
       - name: Validate generated requirements (PR)
         run: |
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+      - name: Install CI dependencies before upgrade checks
+        run: |
+          source .venv/bin/activate
+          python -m pip install -r requirements-ci.txt
+      - name: Pre-upgrade role bootstrap smoke tests
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest tests/test_role_bootstrap_smoke.py -q
       - name: Apply upgrade
         run: |
           set -Eeuo pipefail
