@@ -10,9 +10,10 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
-from django.urls import NoReverseMatch, path, reverse
+from django.urls import NoReverseMatch, URLPattern, URLResolver, path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import urlencode
 from django.utils.translation import gettext_lazy as _
 
 from apps.actions.models import StaffTask, StaffTaskPreference
@@ -150,6 +151,94 @@ def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]
         "is_active": result.returncode == 0,
     }
 
+
+
+def _collect_admin_report_routes() -> list[dict[str, str]]:
+    """Return reverseable admin routes that appear to be report views."""
+
+    routes: list[dict[str, str]] = []
+
+    def _walk(patterns: list[URLPattern | URLResolver]) -> None:
+        for pattern in patterns:
+            if isinstance(pattern, URLResolver):
+                _walk(pattern.url_patterns)
+                continue
+
+            route_name = pattern.name
+            if not route_name or "report" not in route_name:
+                continue
+            if route_name.endswith("-data"):
+                continue
+
+            try:
+                route_url = reverse(f"admin:{route_name}")
+            except NoReverseMatch:
+                continue
+
+            route_label = route_name.replace("-", " ").replace("_", " ").title()
+            routes.append(
+                {
+                    "name": route_name,
+                    "label": route_label,
+                    "url": route_url,
+                }
+            )
+
+    _walk(admin.site.get_urls())
+    return sorted(routes, key=lambda item: item["label"])
+
+
+def _system_reports_view(request):
+    """Render and launch the unified report runner for admin reports."""
+
+    report_routes = _collect_admin_report_routes()
+    selected_report = request.GET.get("report", "")
+    params_value = request.GET.get("params", "")
+
+    if request.method == "POST":
+        selected_report = (request.POST.get("report") or "").strip()
+        params_value = (request.POST.get("params") or "").strip()
+
+        if not selected_report:
+            messages.error(request, _("Choose a report to run."))
+        else:
+            try:
+                base_url = reverse(f"admin:{selected_report}")
+            except NoReverseMatch:
+                messages.error(request, _("The selected report is unavailable."))
+            else:
+                query_params: list[tuple[str, str]] = []
+                for pair in params_value.split("&"):
+                    raw_pair = pair.strip()
+                    if not raw_pair:
+                        continue
+                    if "=" not in raw_pair:
+                        messages.warning(
+                            request,
+                            _("Ignored malformed parameter: %(param)s")
+                            % {"param": raw_pair},
+                        )
+                        continue
+                    key, value = raw_pair.split("=", 1)
+                    key = key.strip()
+                    if not key:
+                        continue
+                    query_params.append((key, value.strip()))
+
+                if query_params:
+                    return HttpResponseRedirect(f"{base_url}?{urlencode(query_params)}")
+                return HttpResponseRedirect(base_url)
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Reports"),
+            "report_routes": report_routes,
+            "selected_report": selected_report,
+            "params_value": params_value,
+        }
+    )
+    return TemplateResponse(request, "admin/system_reports.html", context)
 
 def _system_details_view(request):
     """Render system details and privileged server restart actions."""
@@ -472,6 +561,11 @@ def patch_admin_system_view() -> None:
                 "admin-notices/<int:notice_id>/dismiss/",
                 admin.site.admin_view(_dismiss_admin_notice_view),
                 name="dismiss-admin-notice",
+            ),
+            path(
+                "system/reports/",
+                admin.site.admin_view(_system_reports_view),
+                name="system-reports",
             ),
             path(
                 "system/startup-report/",

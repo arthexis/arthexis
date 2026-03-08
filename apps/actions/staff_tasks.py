@@ -58,6 +58,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 70,
     },
     {
+        "slug": "reports",
+        "label": "Reports",
+        "description": "Run system reports and provide query parameters.",
+        "admin_url_name": "admin:system-reports",
+        "order": 75,
+    },
+    {
         "slug": "seed",
         "label": "Seed",
         "description": "Load baseline data into the system.",
@@ -102,10 +109,8 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
     if not getattr(user, "is_staff", False):
         return []
 
+    ensure_default_staff_tasks_exist()
     tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
-    if not tasks:
-        ensure_default_staff_tasks_exist()
-        tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
     if not tasks:
         return []
 
@@ -132,11 +137,12 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
 
 
 def ensure_default_staff_tasks_exist() -> None:
-    """Backfill default staff tasks when the table is empty."""
+    """Backfill missing default staff tasks in existing and new environments."""
 
-    if StaffTask.objects.exists():
-        return
+    existing_slugs = set(StaffTask.objects.values_list("slug", flat=True))
     for task in DEFAULT_STAFF_TASKS:
+        if task["slug"] in existing_slugs:
+            continue
         StaffTask.objects.create(
             slug=task["slug"],
             label=task["label"],

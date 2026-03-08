@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory
 
@@ -27,6 +29,8 @@ def test_sql_report_product_inline_has_no_add_permission():
     """SQLReport admin inline must not allow manual SQLReportProduct creation."""
 
     model_admin = SQLReportAdmin(SQLReport, AdminSite())
-    inline = model_admin.get_inline_instances(RequestFactory().get("/admin/reports/sqlreport/"))[0]
+    request = RequestFactory().get("/admin/reports/sqlreport/")
+    request.user = Mock(has_perm=lambda _perm: True, is_active=True, is_staff=True)
+    inline = model_admin.get_inline_instances(request)[0]
 
-    assert inline.has_add_permission(RequestFactory().get("/admin/reports/sqlreport/")) is False
+    assert inline.has_add_permission(request) is False
