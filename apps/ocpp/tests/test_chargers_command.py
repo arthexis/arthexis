@@ -1,10 +1,14 @@
 """Tests for the ``chargers`` management command websocket auth options."""
 
+import json
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from apps.ocpp import store
 from apps.ocpp.models import Charger
 
 
@@ -92,3 +96,61 @@ class ChargersCommandTests(TestCase):
         self.assertEqual(charger.ws_auth_user_id, user.pk)
         self.assertTrue(user.is_active)
         self.assertTrue(user.check_password("newpass123"))
+
+    def test_rename_base_charger_renames_connectors_automatically(self) -> None:
+        """Renaming a base charger updates connector names with letter suffixes."""
+
+        Charger.objects.create(charger_id="CLI-REN-1", connector_id=None, display_name="Old")
+        connector_a = Charger.objects.create(
+            charger_id="CLI-REN-1", connector_id=1, display_name="Old A"
+        )
+        connector_b = Charger.objects.create(
+            charger_id="CLI-REN-1", connector_id=2, display_name="Old B"
+        )
+
+        call_command("chargers", "--sn", "CLI-REN-1", "--rename", "Main Hub")
+
+        connector_a.refresh_from_db()
+        connector_b.refresh_from_db()
+        self.assertEqual(connector_a.display_name, "Main Hub A")
+        self.assertEqual(connector_b.display_name, "Main Hub B")
+
+    def test_send_restart_registers_pending_call(self) -> None:
+        """Restart requests send Reset and register timeout-tracked pending metadata."""
+
+        charger = Charger.objects.create(charger_id="CLI-RST-1", connector_id=1)
+
+        class DummyWs:
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, payload: str) -> None:
+                self.messages.append(payload)
+
+        ws = DummyWs()
+
+        with (
+            patch("apps.ocpp.management.commands.chargers.store.get_connection", return_value=ws),
+            patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
+        ):
+            call_command("chargers", "--sn", "CLI-RST-1", "--cp", "A", "--send-restart")
+
+        self.assertEqual(len(ws.messages), 1)
+        frame = json.loads(ws.messages[0])
+        self.assertEqual(frame[2], "Reset")
+
+        metadata = store.pop_pending_call(frame[1])
+        self.assertIsNotNone(metadata)
+        assert metadata is not None
+        self.assertEqual(metadata.get("action"), "Reset")
+
+    def test_charger_alias_defaults_to_base_charger(self) -> None:
+        """The ``charger`` alias selects the default base charger without selectors."""
+
+        base = Charger.objects.create(charger_id="CLI-ALIAS-1", connector_id=None)
+        Charger.objects.create(charger_id="CLI-ALIAS-1", connector_id=1)
+
+        call_command("charger", "--rename", "Alias Name")
+
+        base.refresh_from_db()
+        self.assertEqual(base.display_name, "Alias Name")
