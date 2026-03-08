@@ -44,6 +44,7 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "nginx": "Nginx configuration and reverse proxy helpers.",
     "odoo": "Odoo integrations and ERP data sync helpers.",
     "payments": "Payment gateways and billing helpers.",
+    "playwright": "Playwright browser automation and scheduled screenshot capture.",
     "pages": "User QA, Continuity Design and Chaos Testing.",
     "pyxel": "Pyxel game tooling and pixel-art helpers.",
     "protocols": "Protocol helpers and shared interfaces.",

@@ -13,7 +13,7 @@ from django.conf import settings
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .models import ContentSample
-from apps.selenium.playwright import normalize_playwright_cookies
+from apps.playwright.playwright import normalize_playwright_cookies
 
 logger = logging.getLogger(__name__)
 
