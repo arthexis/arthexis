@@ -150,6 +150,23 @@
                 <p class="help">{{ sql_report_form.query.help_text }}</p>
               {% endif %}
             </div>
+
+            <div class="form-row">
+              {{ sql_report_form.html_template_name.errors }}
+              {{ sql_report_form.html_template_name.label_tag }} {{ sql_report_form.html_template_name }}
+            </div>
+            <div class="form-row">
+              {{ sql_report_form.schedule_enabled.errors }}
+              {{ sql_report_form.schedule_enabled.label_tag }} {{ sql_report_form.schedule_enabled }}
+            </div>
+            <div class="form-row">
+              {{ sql_report_form.schedule_interval_minutes.errors }}
+              {{ sql_report_form.schedule_interval_minutes.label_tag }} {{ sql_report_form.schedule_interval_minutes }}
+            </div>
+            <div class="form-row">
+              {{ sql_report_form.next_scheduled_run_at.errors }}
+              {{ sql_report_form.next_scheduled_run_at.label_tag }} {{ sql_report_form.next_scheduled_run_at }}
+            </div>
           </fieldset>
           <div class="submit-row">
             <button type="submit" name="_validate_sigils">{% trans "Validate sigils" %}</button>
