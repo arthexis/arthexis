@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
@@ -36,6 +38,11 @@ from config.roles import validate_role_settings
             "DEBUG": False,
             "NODE_ROLE": "Watchtower",
             "CELERY_BROKER_URL": "redis://localhost:6379/3",
+        },
+        {
+            "DEBUG": False,
+            "NODE_ROLE": "Watchtower",
+            "BROKER_URL": "redis://localhost:6379/4",
         },
     ],
 )
@@ -93,6 +100,21 @@ def test_role_profiles_reject_invalid_configuration(
     with pytest.raises(ImproperlyConfigured, match=expected_message):
         validate_role_settings(settings_values)
 
+
+def test_watchtower_rejects_non_redis_channel_layer_decision() -> None:
+    """Watchtower requires the resolved channel backend to use Redis when available."""
+
+    with pytest.raises(ImproperlyConfigured, match="Watchtower role validation failed"):
+        validate_role_settings(
+            {
+                "DEBUG": False,
+                "NODE_ROLE": "Watchtower",
+                "BROKER_URL": "redis://localhost:6379/4",
+                "CHANNEL_LAYER_DECISION": SimpleNamespace(
+                    backend="channels.layers.InMemoryChannelLayer"
+                ),
+            }
+        )
 
 def test_role_validation_is_relaxed_in_debug_mode() -> None:
     """Development defaults skip strict role validation while DEBUG is enabled."""

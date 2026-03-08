@@ -13,7 +13,7 @@ _WATCHTOWER_REDIS_SOURCES: tuple[str, ...] = (
     "CHANNEL_REDIS_URL",
     "OCPP_STATE_REDIS_URL",
 )
-_WATCHTOWER_CELERY_BROKER_SETTING = "CELERY_BROKER_URL"
+_WATCHTOWER_CELERY_BROKER_SETTINGS: tuple[str, ...] = ("CELERY_BROKER_URL", "BROKER_URL")
 _REDIS_URL_SCHEMES = ("redis://", "rediss://")
 
 
@@ -33,12 +33,22 @@ def _value_present(value: Any) -> bool:
 
 
 def _watchtower_channel_backend_configured(values: Mapping[str, Any]) -> bool:
-    """Return whether Watchtower has any supported Redis source configured."""
+    """Return whether Watchtower has an effective Redis-backed channel backend."""
+
+    channel_layer_decision = values.get("CHANNEL_LAYER_DECISION")
+    decision_backend = str(getattr(channel_layer_decision, "backend", "")).strip().lower()
+    if decision_backend:
+        return "redis" in decision_backend
 
     if any(_value_present(values.get(setting_name)) for setting_name in _WATCHTOWER_REDIS_SOURCES):
         return True
 
-    broker_url = str(values.get(_WATCHTOWER_CELERY_BROKER_SETTING, "")).strip().lower()
+    broker_url = ""
+    for setting_name in _WATCHTOWER_CELERY_BROKER_SETTINGS:
+        broker_url = str(values.get(setting_name, "")).strip().lower()
+        if broker_url:
+            break
+
     return broker_url.startswith(_REDIS_URL_SCHEMES)
 
 
@@ -84,7 +94,7 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
         required=(
             (
                 _watchtower_channel_backend_configured,
-                "Watchtower requires one of CHANNEL_REDIS_URL, OCPP_STATE_REDIS_URL, or CELERY_BROKER_URL.",
+                "Watchtower requires a Redis-backed Channels configuration (CHANNEL_REDIS_URL, OCPP_STATE_REDIS_URL, CELERY_BROKER_URL, or BROKER_URL).",
             ),
         ),
         forbidden=(),
