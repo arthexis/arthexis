@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
@@ -107,3 +108,22 @@ class PasswordCommandTests(TestCase):
             f"No user found for identifier '{identifier}'. Use --create to add one.",
         ):
             call_command("password", identifier)
+
+    def test_assigns_group_with_group_option(self):
+        """A user should be assignable to existing groups from the password command."""
+
+        user = get_user_model().objects.create_user(username="group-user", email="group@example.com")
+        Group.objects.create(name="operators")
+
+        call_command("password", user.username, password="valid-pass-123", group="operators")
+
+        user.refresh_from_db()
+        assert user.groups.filter(name="operators").exists()
+
+    def test_group_option_requires_existing_group(self):
+        """A clear error should be raised when --group references an unknown group."""
+
+        user = get_user_model().objects.create_user(username="missing-group", email="missing@example.com")
+
+        with self.assertRaisesMessage(CommandError, "Unknown groups: missing"):
+            call_command("password", user.username, password="valid-pass-123", group="missing")
