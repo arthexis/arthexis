@@ -11,7 +11,9 @@ CHANNEL_REDIS_URL = os.environ.get("CHANNEL_REDIS_URL", "").strip()
 OCPP_STATE_REDIS_URL = os.environ.get("OCPP_STATE_REDIS_URL", "").strip()
 if not OCPP_STATE_REDIS_URL:
     OCPP_STATE_REDIS_URL = (
-        CHANNEL_REDIS_URL or os.environ.get("CELERY_BROKER_URL", "").strip()
+        CHANNEL_REDIS_URL
+        or os.environ.get("CELERY_BROKER_URL", "").strip()
+        or os.environ.get("BROKER_URL", "").strip()
     )
 
 CHANNEL_LAYERS, CHANNEL_LAYER_DECISION = resolve_channel_layers(
