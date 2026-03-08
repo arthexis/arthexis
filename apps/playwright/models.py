@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
@@ -17,9 +16,10 @@ from typing import TYPE_CHECKING
 
 from apps.content.models import ContentSample
 from apps.content.utils import save_screenshot
-from apps.nodes.feature_detection import is_feature_active_for_node
+from apps.core.ui import has_graphical_display
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Ownable
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.sigils.sigil_resolver import resolve_sigils
 from .playwright import normalize_playwright_cookie
 
@@ -155,8 +155,8 @@ class PlaywrightBrowser(Entity):
     def _headless_mode(self) -> bool:
         if self.mode == self.Mode.HEADLESS:
             return True
-        if not os.environ.get("DISPLAY"):
-            logger.warning("DISPLAY not set; forcing headless mode for %s", self)
+        if not has_graphical_display():
+            logger.warning("No graphical display available; forcing headless mode for %s", self)
             return True
         return False
 
