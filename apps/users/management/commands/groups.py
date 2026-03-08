@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.users.management.commands.utils import coerce_option_list
+
 
 class Command(BaseCommand):
     """List groups and manage group memberships."""
@@ -33,9 +35,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         group_name = options.get("group")
-        add_usernames = self._normalize_usernames(self._coerce_option_list(options.get("add_usernames")))
+        add_usernames = self._normalize_usernames(coerce_option_list(options.get("add_usernames")))
         remove_usernames = self._normalize_usernames(
-            self._coerce_option_list(options.get("remove_usernames"))
+            coerce_option_list(options.get("remove_usernames"))
         )
 
         if add_usernames or remove_usernames:
@@ -59,17 +61,13 @@ class Command(BaseCommand):
             normalized.append(candidate)
         return normalized
 
-    def _coerce_option_list(self, value) -> list[str]:
-        """Normalize argparse/list-like option values into clean string lists."""
-
-        if value is None:
-            return []
-        if isinstance(value, str):
-            return [value]
-        return list(value)
-
     def _manage_members(self, group_name: str, add_usernames: list[str], remove_usernames: list[str]) -> None:
         """Add and remove users for a single group in one command execution."""
+
+        overlapping_usernames = sorted(set(add_usernames) & set(remove_usernames))
+        if overlapping_usernames:
+            conflicts = ", ".join(overlapping_usernames)
+            raise CommandError(f"Cannot add and remove the same users: {conflicts}")
 
         group = Group.objects.filter(name=group_name).first()
         if group is None:

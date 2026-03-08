@@ -40,6 +40,19 @@ class GroupsCommandTests(TestCase):
         assert operators.user_set.filter(username="alice").exists()
         assert not operators.user_set.filter(username="bob").exists()
 
+    def test_cannot_add_and_remove_same_user_in_one_call(self):
+        """Conflicting membership operations should raise a clear command error."""
+
+        user_model = get_user_model()
+        user_model.objects.create_user(username="alice")
+        Group.objects.create(name="operators")
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "Cannot add and remove the same users: alice",
+        ):
+            call_command("groups", "operators", add="alice", remove="alice")
+
     def test_membership_changes_require_group_name(self):
         """Missing group name should raise a command error for membership edits."""
 

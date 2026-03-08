@@ -109,6 +109,14 @@ class PasswordCommandTests(TestCase):
         ):
             call_command("password", identifier)
 
+    def test_group_option_requires_identifier(self):
+        """Group assignment should fail fast when no target user identifier is provided."""
+
+        Group.objects.create(name="operators")
+
+        with self.assertRaisesMessage(CommandError, "identifier is required when using --group."):
+            call_command("password", group="operators")
+
     def test_assigns_group_with_group_option(self):
         """A user should be assignable to existing groups from the password command."""
 

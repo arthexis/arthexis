@@ -11,6 +11,7 @@ from django.db.utils import OperationalError
 from django.utils import timezone
 
 from apps.users import temp_passwords
+from apps.users.management.commands.utils import coerce_option_list
 
 
 class Command(BaseCommand):
@@ -117,7 +118,7 @@ class Command(BaseCommand):
         allow_change = bool(options.get("allow_change"))
         raw_password = options.get("raw_password")
         force_change = options.get("force_change")
-        groups = self._coerce_option_list(options.get("groups"))
+        groups = coerce_option_list(options.get("groups"))
 
         if delete_password and raw_password:
             raise CommandError("--password cannot be used together with --delete.")
@@ -131,6 +132,8 @@ class Command(BaseCommand):
         if identifier is None:
             if delete_password:
                 raise CommandError("identifier is required when using --delete.")
+            if groups:
+                raise CommandError("identifier is required when using --group.")
             generated_password = raw_password or temp_passwords.generate_password()
             self.stdout.write(f"Generated password: {generated_password}")
             self.stdout.write(self.style.SUCCESS("Password generated."))
@@ -291,17 +294,6 @@ class Command(BaseCommand):
             raise CommandError(f"Unknown groups: {missing_names}")
 
         user.groups.add(*[existing_groups[name] for name in groups])
-
-    def _coerce_option_list(self, value) -> list[str]:
-        """Normalize argparse/list-like option values into clean string lists."""
-
-        if value is None:
-            return []
-        if isinstance(value, str):
-            candidates = [value]
-        else:
-            candidates = list(value)
-        return [candidate.strip() for candidate in candidates if isinstance(candidate, str) and candidate.strip()]
 
     def _set_force_password_change(self, user, force_change: bool) -> None:
         if user.force_password_change == force_change:
