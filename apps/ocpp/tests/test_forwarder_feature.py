@@ -26,6 +26,14 @@ def test_setup_forwarders_skips_sync_when_suite_feature_disabled(monkeypatch) ->
 
     Feature.objects.filter(slug=OCPP_FORWARDER_FEATURE_SLUG).update(is_enabled=False)
     clear_calls: list[str] = []
+    update_calls: list[set[int]] = []
+
+    class _DummyManager:
+        def update_running_state(self, active_ids):
+            update_calls.append(set(active_ids))
+
+    class _DummyCPForwarder:
+        objects = _DummyManager()
 
     monkeypatch.setattr(
         "apps.ocpp.tasks.forwarding.forwarder.sync_forwarded_charge_points",
@@ -35,9 +43,11 @@ def test_setup_forwarders_skips_sync_when_suite_feature_disabled(monkeypatch) ->
         "apps.ocpp.tasks.forwarding.forwarder.clear_sessions",
         lambda: clear_calls.append("cleared"),
     )
+    monkeypatch.setattr("apps.ocpp.models.CPForwarder", _DummyCPForwarder)
 
     assert setup_forwarders() == 0
     assert clear_calls == ["cleared"]
+    assert update_calls == [set()]
 
 
 def test_sync_forwarded_charge_points_clears_sessions_when_feature_disabled(monkeypatch) -> None:

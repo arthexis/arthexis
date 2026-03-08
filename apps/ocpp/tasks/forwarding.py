@@ -15,7 +15,10 @@ def setup_forwarders() -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 
     if not ocpp_forwarder_enabled(default=True):
+        from apps.ocpp.models import CPForwarder
+
         forwarder.clear_sessions()
+        CPForwarder.objects.update_running_state(set())
         logger.debug(
             "Forwarding synchronization skipped because OCPP Forwarder is disabled"
         )
