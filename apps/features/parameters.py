@@ -62,6 +62,35 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             default="disabled",
         ),
     ),
+    "odoo-crm-sync": (
+        FeatureParameterDefinition(
+            key="deployment_discovery",
+            label=_("Deployment discovery"),
+            help_text=_(
+                "Enable or disable discovery sync of local Odoo deployments."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
+        ),
+        FeatureParameterDefinition(
+            key="employee_import",
+            label=_("Employee import"),
+            help_text=_(
+                "Enable or disable importing missing local Odoo employee profiles."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
+        ),
+        FeatureParameterDefinition(
+            key="evergo_users",
+            label=_("Evergo users"),
+            help_text=_(
+                "Enable or disable provisioning Odoo users from Evergo users."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
+        ),
+    ),
     "operator-site-interface": (
         FeatureParameterDefinition(
             key="default_language",
