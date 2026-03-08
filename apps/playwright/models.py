@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from apps.content.models import ContentSample
 from apps.content.utils import save_screenshot
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Ownable
 from apps.sigils.sigil_resolver import resolve_sigils
@@ -401,7 +402,10 @@ class WebsiteScreenshotSchedule(Entity):
         available = [
             engine
             for engine in deduped
-            if local.has_feature(feature_map[engine])
+            if is_feature_active_for_node(
+                node=local,
+                slug=feature_map[engine],
+            )
         ]
         return available or deduped or [PlaywrightBrowser.Engine.CHROMIUM]
 

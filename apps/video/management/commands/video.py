@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import time
@@ -12,8 +13,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, Q
 from django.utils import timezone as django_timezone
 from django.utils.dateparse import parse_datetime
-import logging
 
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.video.frame_cache import (
     CachedFrame,
@@ -334,8 +335,8 @@ class Command(BaseCommand):
         if options["enable"]:
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
             self.stdout.write(self.style.SUCCESS("Enabled the Video Camera feature for the node."))
-            if not has_rpi_camera_stack():
-                self.stdout.write(self.style.WARNING("Raspberry Pi camera stack not detected; enabling anyway."))
+            if node is not None and not is_feature_active_for_node(node=node, slug="video-cam"):
+                self.stdout.write(self.style.WARNING("Video Camera feature not auto-detected; enabling anyway."))
 
         if options["disable"]:
             deleted, _ = NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
@@ -360,8 +361,8 @@ class Command(BaseCommand):
         if feature is not None and not feature.is_enabled and not options["enable"]:
             self.stdout.write(self.style.WARNING("Video Camera feature is currently disabled."))
 
-        if not has_rpi_camera_stack():
-            self.stdout.write(self.style.WARNING("Raspberry Pi camera stack not detected; capture may fail."))
+        if node is not None and not is_feature_active_for_node(node=node, slug="video-cam"):
+            self.stdout.write(self.style.WARNING("Video Camera feature not auto-detected; capture may fail."))
 
         device = self._resolve_video_device(node, options.get("device"))
         if device is None:
@@ -382,10 +383,10 @@ class Command(BaseCommand):
             return
 
         if auto_enable:
-            if not has_rpi_camera_stack():
+            if not is_feature_active_for_node(node=node, slug="video-cam"):
                 self.stdout.write(
                     self.style.WARNING(
-                        "Raspberry Pi camera stack not detected; enabling anyway."
+                        "Video Camera feature not auto-detected; enabling anyway."
                     )
                 )
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
@@ -420,10 +421,10 @@ class Command(BaseCommand):
         if device is None:
             raise CommandError("No video device is available for snapshot capture.")
 
-        if not has_rpi_camera_stack():
+        if node is not None and not is_feature_active_for_node(node=node, slug="video-cam"):
             self.stdout.write(
                 self.style.WARNING(
-                    "Raspberry Pi camera stack not detected; snapshot may fail."
+                    "Video Camera feature not auto-detected; snapshot may fail."
                 )
             )
 
@@ -532,8 +533,11 @@ class Command(BaseCommand):
                 f"Video Camera feature: {status_label} ({assignment_label})"
             )
 
+        feature_available = bool(node and is_feature_active_for_node(node=node, slug="video-cam"))
+        feature_status = "available" if feature_available else "missing"
+        self.stdout.write(f"Video feature detection: {feature_status}")
         camera_stack = "available" if has_rpi_camera_stack() else "missing"
-        self.stdout.write(f"Camera stack: {camera_stack}")
+        self.stdout.write(f"Camera stack probe: {camera_stack}")
 
         self._report_devices(node)
         self._report_streams()

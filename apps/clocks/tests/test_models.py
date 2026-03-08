@@ -65,3 +65,27 @@ def test_public_clock_view_renders(client):
 
     assert response.status_code == 200
     assert "Active" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_refresh_from_system_skips_when_gpio_feature_inactive(monkeypatch):
+    """Local sync should not probe hardware when gpio-rtc is inactive."""
+
+    node = Node.objects.create(
+        hostname="local-gated",
+        current_relation=Node.Relation.SELF,
+        mac_address=Node.get_current_mac(),
+    )
+
+    monkeypatch.setattr(
+        "apps.clocks.models.is_feature_active_for_node",
+        lambda *, node, slug: False,
+    )
+
+    def _scanner(_bus: int) -> str:
+        raise AssertionError("scanner should not run when feature is inactive")
+
+    created, updated = ClockDevice.refresh_from_system(node=node, scanner=_scanner)
+
+    assert (created, updated) == (0, 0)
+    assert ClockDevice.objects.filter(node=node).count() == 0

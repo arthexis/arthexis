@@ -19,10 +19,13 @@ from apps.cards.detect import detect_scanner
 from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
 from apps.cards.rfid_import_export import account_column_for_field, parse_accounts, serialize_accounts
+from apps.cards.node_features import RFID_SCANNER_SLUG
 from apps.cards.rfid_service import rfid_service_enabled, run_service, service_available, service_endpoint
 from apps.cards.scanner import scan_sources
 from apps.cards.utils import drain_stdin, user_requested_stop
 from apps.loggers.handlers import RFIDFileHandler
+from apps.nodes.feature_detection import is_feature_active_for_node
+from apps.nodes.models import Node
 
 
 class Command(BaseCommand):
@@ -99,8 +102,18 @@ class Command(BaseCommand):
         parser.add_argument("--no-irq", action="store_true", help="Bypass IRQ/background-reader path and force direct polling for a scan.")
         parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response.")
 
+    def _scanner_feature_available(self) -> bool:
+        """Return whether rfid-scanner should be available on the local node."""
+
+        node = Node.get_local()
+        if node is None:
+            return True
+        return is_feature_active_for_node(node=node, slug=RFID_SCANNER_SLUG)
+
     def _handle_check(self, options):
         if options.get("scan"):
+            if not self._scanner_feature_available():
+                raise CommandError("rfid-scanner feature is not active on this node")
             result = self._scan(options)
         elif options.get("label"):
             result = self._validate_label(options["label"])
@@ -207,6 +220,10 @@ class Command(BaseCommand):
             stop()
             self.stdout.write(self.style.SUCCESS("RFID watch disabled"))
             return
+
+        if not self._scanner_feature_available():
+            raise CommandError("rfid-scanner feature is not active on this node")
+
         start()
         state = "enabled" if is_running() else "disabled"
         self.stdout.write(self.style.SUCCESS(f"RFID watch {state}"))
@@ -218,6 +235,8 @@ class Command(BaseCommand):
         parser.add_argument("--debug", action=argparse.BooleanOptionalAction, default=False, help="Enable or disable debug logging for interactive troubleshooting")
 
     def _handle_service(self, options):
+        if not self._scanner_feature_available():
+            raise CommandError("rfid-scanner feature is not active on this node")
         host = options.get("host")
         port = options.get("port")
         debug_enabled = options.get("debug", False)

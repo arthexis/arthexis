@@ -64,10 +64,11 @@ Eligibility runs also report whether a feature can be enabled manually. The help
 Auto-managed features discover their enablement and lifecycle through app-level hooks:
 
 - Add a `node_features.py` module to an app.
-- Export `check_node_feature(slug, *, node)` to return `True` when a feature could be meaningfully enabled on the provided node. Return `None` when the slug is unknown to the module.
-- Export `setup_node_feature(slug, *, node)` for any setup or side-effects the feature needs during auto-detection (returning `True`/`False` mirrors `check_node_feature`).
+- Export `check_node_feature(slug, *, node, base_dir=None, base_path=None)` to return `True` when a feature could be meaningfully enabled on the provided node. Return `None` when the slug is unknown to the module.
+- Export `setup_node_feature(slug, *, node, base_dir=None, base_path=None)` for any setup or side-effects the feature needs during auto-detection (returning `True`/`False` mirrors `check_node_feature`).
+- Export `register_node_feature_detection(registry)` and register one detector per feature slug using `registry.register(slug, check=..., setup=...)`.
 
-The nodes app loads these hooks from every installed app so features can own their own detection logic instead of being hard-coded in `apps.nodes.models.Node`.
+The nodes app discovers and orchestrates these detectors from every installed app so each feature can own its own auto-detection lifecycle.
 
 ## Enabling features manually
 

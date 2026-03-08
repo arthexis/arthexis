@@ -131,3 +131,20 @@ def test_lcd_write_sigil_resolution_modes(
     assert lock_payload is not None
     assert lock_payload.subject == expected_subject
     assert lock_payload.body == "Body"
+
+
+def test_restart_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
+    """Restart should be gated by lcd-screen feature availability."""
+
+    monkeypatch.setattr(
+        "apps.screens.management.commands.lcd_actions.write.is_local_node_feature_active",
+        lambda slug: False,
+    )
+
+    lock_path = temp_base_dir / ".locks" / LCD_LOW_LOCK_FILE
+
+    with override_settings(BASE_DIR=temp_base_dir):
+        with pytest.raises(CommandError, match="lcd-screen feature is not active"):
+            call_command("lcd", "write", restart=True, service_name="demo")
+
+    assert not lock_path.exists()

@@ -85,3 +85,16 @@ def test_restart_requires_service_name(temp_base_dir: Path):
         pytest.raises(CommandError, match="Service name is required"),
     ):
         call_command("lcd", "calibrate", restart=True)
+
+
+def test_calibrate_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
+    """Calibration should fail fast when lcd-screen is inactive."""
+
+    monkeypatch.setattr(
+        "apps.screens.management.commands.lcd_actions.calibrate.is_local_node_feature_active",
+        lambda slug: False,
+    )
+
+    with override_settings(BASE_DIR=temp_base_dir):
+        with pytest.raises(CommandError, match="lcd-screen feature is not active"):
+            call_command("lcd", "calibrate")
