@@ -15,6 +15,8 @@ from django.db.models import Q
 from django.utils import timezone
 from websocket import WebSocketException, create_connection
 
+from apps.ocpp.forwarder_feature import ocpp_forwarder_enabled
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,6 +172,9 @@ class Forwarder:
         Returns the created session or ``None`` when all connection attempts fail.
         """
 
+        if not ocpp_forwarder_enabled(default=True):
+            return None
+
         if getattr(charger, "pk", None) is None:
             return None
 
@@ -215,6 +220,10 @@ class Forwarder:
 
     def keepalive_sessions(self, *, idle_seconds: int = 60) -> int:
         """Send ping frames on idle sessions to keep forwarding sockets open."""
+
+        if not ocpp_forwarder_enabled(default=True):
+            self.clear_sessions()
+            return 0
 
         if idle_seconds <= 0:
             return 0
@@ -503,6 +512,11 @@ class Forwarder:
         from apps.nodes.models import Node
         from apps.ocpp.models import CPForwarder
         from ..models import Charger
+
+        if not ocpp_forwarder_enabled(default=True):
+            self.clear_sessions()
+            CPForwarder.objects.update_running_state(set())
+            return 0
 
         local = Node.get_local()
         if not local:
