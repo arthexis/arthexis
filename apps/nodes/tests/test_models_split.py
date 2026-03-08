@@ -149,33 +149,35 @@ def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(monk
 
 
 @pytest.fixture
-def llm_summary_node_with_locks(tmp_path):
-    """Provide a node with lock files required for llm-summary detection."""
-    from apps.screens.startup_notifications import LCD_RUNTIME_LOCK_FILE
+def llm_summary_node_with_prereq_features(tmp_path):
+    """Provide a node with prerequisite feature assignments for llm-summary."""
 
-    node = Node(
+    node = Node.objects.create(
         hostname="summary-node",
         base_path=str(tmp_path),
         public_endpoint="summary-node",
     )
 
-    locks_dir = tmp_path / ".locks"
-    locks_dir.mkdir()
-    (locks_dir / "celery.lck").write_text("1")
-    (locks_dir / LCD_RUNTIME_LOCK_FILE).write_text("1")
+    celery_feature, _ = NodeFeature.objects.get_or_create(
+        slug="celery-queue", defaults={"display": "Celery Queue"}
+    )
+    lcd_feature, _ = NodeFeature.objects.get_or_create(
+        slug="lcd-screen", defaults={"display": "LCD Screen"}
+    )
+    node.features.add(celery_feature, lcd_feature)
 
     return node, tmp_path
 
 
 @pytest.mark.django_db
 def test_detect_auto_feature_enables_llm_summary_when_prereqs_met(
-    llm_summary_node_with_locks,
+    llm_summary_node_with_prereq_features,
 ):
-    """llm-summary auto-detection should pass when locks and config are active."""
+    """llm-summary auto-detection should pass when feature prereqs/config are active."""
 
     from apps.summary.services import get_summary_config
 
-    node, tmp_path = llm_summary_node_with_locks
+    node, tmp_path = llm_summary_node_with_prereq_features
 
     config = get_summary_config()
     config.is_active = True
@@ -190,13 +192,13 @@ def test_detect_auto_feature_enables_llm_summary_when_prereqs_met(
 
 @pytest.mark.django_db
 def test_detect_auto_feature_disables_llm_summary_when_config_inactive(
-    llm_summary_node_with_locks,
+    llm_summary_node_with_prereq_features,
 ):
     """llm-summary auto-detection should fail when config is inactive."""
 
     from apps.summary.services import get_summary_config
 
-    node, tmp_path = llm_summary_node_with_locks
+    node, tmp_path = llm_summary_node_with_prereq_features
 
     config = get_summary_config()
     config.is_active = False

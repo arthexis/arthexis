@@ -53,7 +53,6 @@ class Command(BaseCommand):
 
         config = get_summary_config()
         base_dir = Path(settings.BASE_DIR)
-        base_path = node.get_base_path()
 
         if options["enabled"]:
             self._enable_prerequisites(node=node, config=config, base_dir=base_dir)
@@ -65,7 +64,7 @@ class Command(BaseCommand):
             # so reload to report the run that just completed.
             config = get_summary_config()
 
-        prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
+        prereqs = get_llm_summary_prereq_state(node=node, base_dir=base_dir)
         current_message = read_lcd_lock_file(base_dir / ".locks" / lcd_locks.LOW_LOCK_FILE.name)
         planned_screens = normalize_screens(parse_screens(config.last_output))
         current_pair = (

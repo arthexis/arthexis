@@ -432,10 +432,7 @@ class NodeFeatureMixin:
                 return False
 
             try:
-                prereqs = get_llm_summary_prereq_state(
-                    base_dir=base_dir,
-                    base_path=base_path,
-                )
+                prereqs = get_llm_summary_prereq_state(node=self)
                 if not (prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")):
                     return False
                 config = get_summary_config()

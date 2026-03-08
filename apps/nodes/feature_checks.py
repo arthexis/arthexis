@@ -241,11 +241,7 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
             messages.WARNING,
         )
 
-    base_dir = Path(settings.BASE_DIR)
-    base_path = target.get_base_path()
-    prereqs = get_llm_summary_prereq_state(
-        base_dir=base_dir, base_path=base_path
-    )
+    prereqs = get_llm_summary_prereq_state(node=target)
     config = get_summary_config()
     model_path = resolve_model_path(config)
     model_path_exists = model_path.exists()
@@ -256,8 +252,8 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     )
 
     details = [
-        f"LCD lock: {'ok' if prereqs['lcd_enabled'] else 'missing'}",
-        f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
+        f"LCD feature: {'enabled' if prereqs['lcd_enabled'] else 'disabled'}",
+        f"Celery feature: {'enabled' if prereqs['celery_enabled'] else 'disabled'}",
         f"Config active: {'yes' if config.is_active else 'no'}",
         f"Model path: {model_path} ({'found' if model_path_exists else 'missing'})",
         "Model command: "
