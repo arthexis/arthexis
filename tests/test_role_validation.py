@@ -32,6 +32,11 @@ from config.roles import validate_role_settings
             "NODE_ROLE": "Watchtower",
             "CHANNEL_REDIS_URL": "redis://localhost:6379/2",
         },
+        {
+            "DEBUG": False,
+            "NODE_ROLE": "Watchtower",
+            "CELERY_BROKER_URL": "redis://localhost:6379/3",
+        },
     ],
 )
 def test_role_profiles_accept_valid_configuration(settings_values: dict[str, object]) -> None:
@@ -73,6 +78,8 @@ def test_role_profiles_accept_valid_configuration(settings_values: dict[str, obj
                 "DEBUG": False,
                 "NODE_ROLE": "Watchtower",
                 "CHANNEL_REDIS_URL": "",
+                "OCPP_STATE_REDIS_URL": "",
+                "CELERY_BROKER_URL": "memory://localhost/",
             },
             "Watchtower role validation failed",
         ),
