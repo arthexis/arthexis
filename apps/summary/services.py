@@ -15,6 +15,7 @@ from django.utils import timezone
 from apps.features.utils import is_suite_feature_enabled
 from apps.screens.startup_notifications import render_lcd_lock_file
 
+from .constants import LLM_SUMMARY_AUTOMATION_FEATURE_SLUG
 from .models import LLMSummaryConfig
 
 logger = logging.getLogger(__name__)
@@ -246,11 +247,11 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
 
     if (
         not ignore_suite_feature_gate
-        and not is_suite_feature_enabled("llm-summary-automation", default=False)
+        and not is_suite_feature_enabled(LLM_SUMMARY_AUTOMATION_FEATURE_SLUG, default=False)
     ):
         logger.info(
             "Skipping LCD summary automation because suite feature '%s' is disabled.",
-            "llm-summary-automation",
+            LLM_SUMMARY_AUTOMATION_FEATURE_SLUG,
         )
         return "skipped:suite-feature-disabled"
 
