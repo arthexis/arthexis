@@ -1,6 +1,8 @@
 from django.apps import apps as django_apps
 from django.contrib import admin
 from django.contrib.auth.models import Group
+from django.core.exceptions import FieldError
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -86,11 +88,62 @@ def _include_site_template_add(fieldsets):
     return tuple(updated)
 
 
+
+def _parse_prefilter_id_values(raw_value):
+    """Return normalized selected primary-key values from query-string input."""
+    if not raw_value:
+        return []
+    values = []
+    for value in str(raw_value).split(","):
+        normalized = value.strip()
+        if normalized:
+            values.append(normalized)
+    return values
+
+
+def _parse_prefilter_lookups(raw_value):
+    """Return allowed relation lookup paths from query-string input."""
+    if not raw_value:
+        return []
+    lookups = []
+    for value in str(raw_value).split(","):
+        lookup = value.strip()
+        if lookup.endswith("__id__in") and lookup:
+            lookups.append(lookup)
+    return list(dict.fromkeys(lookups))
+
+
+def _get_related_selection_prefilter_query(request):
+    """Build a queryset filter for related-model prefilter query parameters."""
+    selected_ids = _parse_prefilter_id_values(request.GET.get("__selected_ids"))
+    relation_lookups = _parse_prefilter_lookups(
+        request.GET.get("__relation_lookups")
+    )
+    if not selected_ids or not relation_lookups:
+        return None
+    prefilter_query = Q()
+    for lookup in relation_lookups:
+        prefilter_query |= Q(**{lookup: selected_ids})
+    return prefilter_query
+
+
 original_changelist_view = admin.ModelAdmin.changelist_view
 
 
 def changelist_view_with_object_links(self, request, extra_context=None):
     extra_context = extra_context or {}
+
+    if any(
+        key in request.GET
+        for key in ("__selected_ids", "__relation_lookups", "__source_model")
+    ):
+        cleaned_query = request.GET.copy()
+        cleaned_query.pop("__selected_ids", None)
+        cleaned_query.pop("__relation_lookups", None)
+        cleaned_query.pop("__source_model", None)
+        request.GET = cleaned_query
+        request.META["QUERY_STRING"] = cleaned_query.urlencode()
+
     count = self.model._default_manager.count()
     if 1 <= count <= 4:
         links = []
@@ -186,3 +239,21 @@ def get_app_list_with_protocol_forwarder(self, request, app_label=None):
 
 
 admin.AdminSite.get_app_list = get_app_list_with_protocol_forwarder
+
+_original_get_queryset = admin.ModelAdmin.get_queryset
+
+
+def get_queryset_with_related_selection_prefilter(self, request):
+    """Filter changelist querysets using selected related-record context parameters."""
+    queryset = _original_get_queryset(self, request)
+    prefilter_query = _get_related_selection_prefilter_query(request)
+    if prefilter_query is None:
+        return queryset
+    try:
+        return queryset.filter(prefilter_query).distinct()
+    except (FieldError, TypeError, ValueError):
+        return queryset.none()
+
+
+admin.ModelAdmin.get_queryset = get_queryset_with_related_selection_prefilter
+

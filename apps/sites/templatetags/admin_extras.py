@@ -658,6 +658,42 @@ def related_admin_models(opts):
             return "N:N", _("Many-to-many relationship")
         return "—", _("Related model")
 
+    def relation_lookup_name(field):
+        if getattr(field, "auto_created", False) and not getattr(field, "concrete", False):
+            related_query_name = getattr(field, "related_query_name", None)
+            if callable(related_query_name):
+                return related_query_name()
+            return related_query_name
+        return getattr(field, "name", None)
+
+    def target_filter_lookups(target_model_cls):
+        lookups = []
+        source_labels = set(current_labels)
+        source_concrete = getattr(model._meta, "concrete_model", None)
+        if source_concrete is not None:
+            source_labels.add(source_concrete._meta.label_lower)
+
+        for field in target_model_cls._meta.get_fields(include_hidden=True):
+            if not getattr(field, "is_relation", False):
+                continue
+            related_model = getattr(field, "related_model", None)
+            if related_model is None:
+                continue
+
+            related_labels = {related_model._meta.label_lower}
+            related_concrete = getattr(related_model._meta, "concrete_model", None)
+            if related_concrete is not None:
+                related_labels.add(related_concrete._meta.label_lower)
+
+            if source_labels.isdisjoint(related_labels):
+                continue
+
+            relation_name = relation_lookup_name(field)
+            if relation_name:
+                lookups.append(f"{relation_name}__id__in")
+
+        return sorted(set(lookups))
+
     def add_model(model_cls, relation_type: str, relation_title: str):
         registered_model = get_registered(model_cls)
         if registered_model is None:
@@ -680,6 +716,8 @@ def related_admin_models(opts):
             "url": url,
             "relation_type": relation_type,
             "relation_title": relation_title,
+            "filter_lookups": target_filter_lookups(registered_model),
+            "source_model_label": opts.label_lower,
         })
         seen.add(label_lower)
 
