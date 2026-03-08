@@ -6,6 +6,7 @@ import json
 import logging
 
 from django.conf import settings
+from django.db.utils import OperationalError, ProgrammingError
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
@@ -112,6 +113,47 @@ def _read_extra_systemd_units(lock_path: Path) -> list[str]:
         return []
 
 
+def _set_lock_file_state(lock_path: Path, *, enabled: bool) -> None:
+    """Create or remove a lock file based on the requested enabled state."""
+
+    try:
+        if enabled:
+            lock_path.touch(exist_ok=True)
+        elif lock_path.exists():
+            lock_path.unlink()
+    except OSError:
+        logger.warning("Unable to reconcile lock file %s", lock_path, exc_info=True)
+
+
+def reconcile_feature_service_locks(base_dir: Path | None = None) -> None:
+    """Align feature-activated service lock files with current feature state."""
+
+    resolved_base = Path(base_dir or settings.BASE_DIR)
+    locks = lock_dir(resolved_base)
+    service_name = read_service_name(locks / SERVICE_NAME_LOCK)
+
+    for service in (
+        item
+        for item in _iter_lifecycle_services()
+        if item.activation == LifecycleService.Activation.FEATURE
+    ):
+        enabled = service.is_configured(service_name=service_name, lock_dir=locks)
+        for lock_name in service._safe_lock_names():
+            _set_lock_file_state(locks / lock_name, enabled=enabled)
+
+
+
+
+def _iter_lifecycle_services() -> list[LifecycleService]:
+    """Return lifecycle services, tolerating unapplied database migrations."""
+
+    try:
+        return list(LifecycleService.objects.all())
+    except (OperationalError, ProgrammingError):
+        logger.warning("Lifecycle services table unavailable during reconciliation", exc_info=True)
+        return []
+
+
 def build_lifecycle_service_units(base_dir: Path | None = None) -> list[dict[str, object]]:
     """Build a list of configured lifecycle service units."""
     resolved_base = Path(base_dir or settings.BASE_DIR)
@@ -121,7 +163,7 @@ def build_lifecycle_service_units(base_dir: Path | None = None) -> list[dict[str
 
     service_units: list[dict[str, object]] = []
 
-    for service in LifecycleService.objects.all():
+    for service in _iter_lifecycle_services():
         unit_name = service.unit_template.format(service=service_name_placeholder)
         configured = service.is_configured(service_name=service_name, lock_dir=locks)
         _add_unit(
@@ -174,6 +216,7 @@ def write_lifecycle_config(base_dir: Path | None = None) -> LifecycleConfig:
     """Write lifecycle configuration and lock files to disk."""
     resolved_base = Path(base_dir or settings.BASE_DIR)
     locks = lock_dir(resolved_base)
+    reconcile_feature_service_locks(resolved_base)
     config = build_lifecycle_config(resolved_base)
 
     payload = {
@@ -195,3 +238,20 @@ def write_lifecycle_config(base_dir: Path | None = None) -> LifecycleConfig:
         logger.warning("Unable to write systemd services lock", exc_info=True)
 
     return config
+
+
+def reconcile_node_features_and_services(base_dir: Path | None = None) -> LifecycleConfig:
+    """Refresh local auto-detected node features and lifecycle service artifacts."""
+
+    resolved_base = Path(base_dir or settings.BASE_DIR)
+
+    try:
+        from apps.nodes.models import Node
+    except ImportError:
+        logger.warning("Unable to import Node for lifecycle reconciliation", exc_info=True)
+    else:
+        node = Node.get_local()
+        if node is not None:
+            node.refresh_features()
+
+    return write_lifecycle_config(resolved_base)
