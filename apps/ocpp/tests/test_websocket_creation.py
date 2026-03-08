@@ -233,6 +233,7 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
         ),
         (([OCPP_VERSION_16], None), OCPP_VERSION_16),
         ((["ocpp1.6J"], None), "ocpp1.6J"),
+        (([OCPP_VERSION_16, "ocpp1.6j"], None), "ocpp1.6j"),
         ((["unexpected"], None), None),
     ]
 
@@ -541,7 +542,7 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
                 "Live websocket handshake did not complete in this environment."
             )
 
-        assert cp_simulator._last_ws_subprotocol == "ocpp1.6"
+        assert cp_simulator._last_ws_subprotocol == "ocpp1.6j"
         assert cp_simulator._last_close_code == 1000
         assert cp_simulator._last_close_reason in ("", None)
         assert cp_simulator._connected.is_set()

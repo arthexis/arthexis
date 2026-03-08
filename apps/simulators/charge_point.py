@@ -16,6 +16,12 @@ from apps.ocpp.utils import resolve_ws_scheme
 from apps.simulators.network import validate_simulator_endpoint
 
 
+def _ocpp_subprotocol_16j() -> str:
+    from apps.ocpp.consumers.constants import OCPP_SUBPROTOCOL_16J
+
+    return OCPP_SUBPROTOCOL_16J
+
+
 class UnsupportedMessageError(RuntimeError):
     """Raised when the simulator receives a CSMS message it does not support."""
 
@@ -483,8 +489,7 @@ class ChargePointSimulator:
 
         ws = None
         last_error: Exception | None = None
-        requested_subprotocol = "ocpp1.6"
-        self._last_ws_subprotocol = requested_subprotocol
+        requested_subprotocol = _ocpp_subprotocol_16j()
         try:
             self._unsupported_message = False
             self._unsupported_message_reason = ""
@@ -549,10 +554,10 @@ class ChargePointSimulator:
                     "Unable to establish simulator websocket connection"
                 )
 
-            negotiated_subprotocol = ws.subprotocol or requested_subprotocol
+            negotiated_subprotocol = ws.subprotocol
             store.add_log(
                 cfg.cp_path,
-                f"Connected (subprotocol={negotiated_subprotocol})",
+                f"Connected (subprotocol={negotiated_subprotocol or 'none'})",
                 log_type="simulator",
             )
             self._last_ws_subprotocol = negotiated_subprotocol

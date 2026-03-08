@@ -65,6 +65,12 @@ from apps.simulators.simulator_runtime import (
 # ---------------------------------------------------------------------------
 
 
+def _ocpp_subprotocol_16j() -> str:
+    from apps.ocpp.consumers.constants import OCPP_SUBPROTOCOL_16J
+
+    return OCPP_SUBPROTOCOL_16J
+
+
 def parse_repeat(repeat: object) -> float:
     """Return the number of times a session should be repeated.
 
@@ -334,7 +340,7 @@ async def simulate_cp(
                 for attempt in range(2):
                     try:
                         ws = await websockets.connect(
-                            uri, subprotocols=["ocpp1.6"], **self.connect_kwargs
+                            uri, subprotocols=[_ocpp_subprotocol_16j()], **self.connect_kwargs
                         )
                         break
                     except Exception as exc:
