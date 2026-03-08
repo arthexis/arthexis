@@ -125,7 +125,13 @@ def run_sql_report(sql_report: SQLReport) -> tuple[SQLExecutionResult, SQLReport
     )
     sql_report.refresh_from_db(fields=["last_run_at", "last_run_duration"])
 
-    product = render_report_product(sql_report, result)
+    try:
+        product = render_report_product(sql_report, result)
+    except Exception as exc:  # pragma: no cover - defensive path
+        logger.exception("Unable to render SQL report product", extra={"report_id": sql_report.pk})
+        result.error = str(exc)
+        return result, None
+
     return result, product
 
 

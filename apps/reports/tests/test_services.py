@@ -59,3 +59,51 @@ def test_run_due_scheduled_reports_runs_due_only():
 
     due.refresh_from_db()
     assert due.next_scheduled_run_at == now + timedelta(minutes=30)
+
+
+@pytest.mark.django_db
+def test_run_sql_report_template_render_failure_returns_error():
+    """Template errors should be captured as execution errors instead of raising."""
+
+    report = SQLReport.objects.create(
+        name="Broken template report",
+        database_alias="default",
+        query="SELECT 1 AS sample_value",
+        html_template_name="reports/sql/missing_template.html",
+    )
+
+    result, product = run_sql_report(report)
+
+    assert product is None
+    assert result.error is not None
+    assert "missing_template.html" in result.error
+
+
+@pytest.mark.django_db
+def test_run_due_scheduled_reports_continues_when_render_fails():
+    """Scheduler should continue processing even if one report fails rendering."""
+
+    now = timezone.now()
+    broken = SQLReport.objects.create(
+        name="Broken report",
+        database_alias="default",
+        query="SELECT 1",
+        html_template_name="reports/sql/missing_template.html",
+        schedule_enabled=True,
+        schedule_interval_minutes=30,
+        next_scheduled_run_at=now - timedelta(minutes=1),
+    )
+    healthy = SQLReport.objects.create(
+        name="Healthy report",
+        database_alias="default",
+        query="SELECT 2",
+        schedule_enabled=True,
+        schedule_interval_minutes=30,
+        next_scheduled_run_at=now - timedelta(minutes=1),
+    )
+
+    processed = run_due_scheduled_reports(now=now)
+
+    assert processed == 1
+    assert not SQLReportProduct.objects.filter(report=broken).exists()
+    assert SQLReportProduct.objects.filter(report=healthy).exists()

@@ -98,5 +98,8 @@ class SQLReportProductAdmin(admin.ModelAdmin):
         "created_at",
     )
 
+    def has_add_permission(self, request):  # pragma: no cover - admin hook
+        return False
+
 
 __all__ = ["SQLReportAdmin", "SQLReportProductAdmin"]
