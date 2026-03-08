@@ -47,10 +47,11 @@ arthexis_desktop_shortcut_start_unit() {
     if [ -z "$unit" ]; then
         return 1
     fi
-    local start_cmd=(systemctl start "$unit")
     if ! command -v systemctl >/dev/null 2>&1; then
         return 1
     fi
+
+    local start_cmd=(systemctl start "$unit")
     if command -v sudo >/dev/null 2>&1; then
         start_cmd=(sudo "${start_cmd[@]}")
     fi
@@ -58,65 +59,33 @@ arthexis_desktop_shortcut_start_unit() {
     return 0
 }
 
-arthexis_desktop_shortcut_detect_port() {
-    local base_dir="$1"
-    local default_port="$(arthexis_detect_backend_port "$base_dir")"
 
-    local service_lock="$base_dir/.locks/service.lck"
-    local service_name=""
-    if [ -f "$service_lock" ]; then
-        service_name="$(tr -d '\r\n' < "$service_lock" 2>/dev/null)"
+arthexis_desktop_shortcut_open_url_fallback() {
+    local url="$1"
+    local browser=""
+    if command -v xdg-open >/dev/null 2>&1; then
+        browser="xdg-open"
+    elif command -v sensible-browser >/dev/null 2>&1; then
+        browser="sensible-browser"
+    elif command -v firefox >/dev/null 2>&1; then
+        browser="firefox"
     fi
 
-    if [ -n "$service_name" ]; then
-        local unit_file="/etc/systemd/system/${service_name}.service"
-        if [ -f "$unit_file" ]; then
-            local exec_line
-            exec_line="$(grep -E '^ExecStart=' "$unit_file" 2>/dev/null | head -n1)"
-            if [ -n "$exec_line" ]; then
-                exec_line="${exec_line#ExecStart=}"
-                local port
-                port="$(printf '%s\n' "$exec_line" | sed -n 's/.*0\\.0\\.0\\.0:\([0-9]\{2,5\}\).*/\1/p')"
-                if [ -z "$port" ]; then
-                    port="$(printf '%s\n' "$exec_line" | sed -n 's/.*--port[= ]\([0-9]\{2,5\}\).*/\1/p')"
-                fi
-                if [ -n "$port" ]; then
-                    printf '%s' "$port"
-                    return 0
-                fi
-            fi
-        fi
+    if [ -z "$browser" ]; then
+        echo "No suitable browser found to open $url" >&2
+        return 1
     fi
 
-    if command -v pgrep >/dev/null 2>&1; then
-        local runserver_line
-        runserver_line="$(pgrep -af "manage.py runserver" 2>/dev/null | head -n1)"
-        if [ -n "$runserver_line" ]; then
-            local port
-            port="$(printf '%s\n' "$runserver_line" | sed -n 's/.*0\\.0\\.0\\.0:\([0-9]\{2,5\}\).*/\1/p')"
-            if [ -z "$port" ]; then
-                port="$(printf '%s\n' "$runserver_line" | sed -n 's/.*--port[= ]\([0-9]\{2,5\}\).*/\1/p')"
-            fi
-            if [ -n "$port" ]; then
-                printf '%s' "$port"
-                return 0
-            fi
-        fi
-    fi
-
-    printf '%s' "$default_port"
-    return 0
+    "$browser" "$url" &
 }
+
 
 arthexis_desktop_shortcut_launch() {
     local shortcut="$1"
     local base_dir
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-    local locks_dir="$base_dir/.locks"
-    local service_name=""
-    local url=""
-    local port_suffix="/"
 
+    local port_suffix="/"
     case "$shortcut" in
         public)
             port_suffix="/"
@@ -130,61 +99,86 @@ arthexis_desktop_shortcut_launch() {
             ;;
     esac
 
-    local port
-    port="$(arthexis_desktop_shortcut_detect_port "$base_dir")"
+    local python_exec="$base_dir/.venv/bin/python"
+    if [ ! -x "$python_exec" ]; then
+        python_exec="python3"
+    fi
+
+    local capability_json=""
+    capability_json="$("$python_exec" "$base_dir/manage.py" desktop_launch_capabilities --base-dir "$base_dir" 2>/dev/null || true)"
+
+    if [ -z "$capability_json" ]; then
+        local fallback_port
+        fallback_port="$(arthexis_detect_backend_port "$base_dir")"
+        if [ -z "$fallback_port" ]; then
+            fallback_port="8000"
+        fi
+        arthexis_desktop_shortcut_open_url_fallback "http://localhost:${fallback_port}${port_suffix}"
+        return $?
+    fi
+
+    local resolved
+    resolved="$(CAPABILITY_JSON="$capability_json" python3 - <<'PY'
+import json
+import os
+
+raw = os.environ.get("CAPABILITY_JSON", "")
+
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    print("invalid")
+    raise SystemExit(0)
+
+port = int(data.get("backend_port") or 8000)
+service_name = str(data.get("service_name") or "").strip()
+opener = str(data.get("browser_opener_command") or "").strip()
+metadata = bool(data.get("metadata_available"))
+systemd = bool(data.get("systemd_control_available"))
+print(f"{port}\n{service_name}\n{opener}\n{1 if metadata else 0}\n{1 if systemd else 0}")
+PY
+)"
+
+    if [ -z "$resolved" ] || [ "$resolved" = "invalid" ]; then
+        local fallback_port
+        fallback_port="$(arthexis_detect_backend_port "$base_dir")"
+        if [ -z "$fallback_port" ]; then
+            fallback_port="8000"
+        fi
+        arthexis_desktop_shortcut_open_url_fallback "http://localhost:${fallback_port}${port_suffix}"
+        return $?
+    fi
+
+    local port service_name opener metadata_available systemd_available
+    port="$(printf '%s\n' "$resolved" | sed -n '1p')"
+    service_name="$(printf '%s\n' "$resolved" | sed -n '2p')"
+    opener="$(printf '%s\n' "$resolved" | sed -n '3p')"
+    metadata_available="$(printf '%s\n' "$resolved" | sed -n '4p')"
+    systemd_available="$(printf '%s\n' "$resolved" | sed -n '5p')"
+
     if [ -z "$port" ]; then
         port="8000"
     fi
-    url="http://localhost:${port}${port_suffix}"
 
-    if [ -f "$locks_dir/service.lck" ]; then
-        service_name="$(cat "$locks_dir/service.lck" 2>/dev/null)"
+    local url="http://localhost:${port}${port_suffix}"
+
+    if [ "$metadata_available" != "1" ]; then
+        arthexis_desktop_shortcut_open_url_fallback "$url"
+        return $?
     fi
 
-    local started=false
-    if [ -n "$service_name" ] && command -v systemctl >/dev/null 2>&1; then
+    if [ "$systemd_available" = "1" ] && [ -n "$service_name" ] && command -v systemctl >/dev/null 2>&1; then
         if ! systemctl is-active --quiet "$service_name"; then
-            if arthexis_desktop_shortcut_start_unit "$service_name"; then
-                started=true
-            fi
-            if [ -f "$locks_dir/celery.lck" ]; then
-                arthexis_desktop_shortcut_start_unit "celery-$service_name" || true
-                arthexis_desktop_shortcut_start_unit "celery-beat-$service_name" || true
-            fi
-            if [ -f "$locks_dir/lcd_screen.lck" ]; then
-                first_line=$(head -n 1 "$locks_dir/lcd_screen.lck" 2>/dev/null | tr -d '\r\n')
-                if ! printf '%s' "$first_line" | grep -iq '^state=disabled'; then
-                    arthexis_desktop_shortcut_start_unit "lcd-$service_name" || true
-                fi
-            fi
-        fi
-        if [ "$started" = true ]; then
-            local attempt
-            for attempt in 1 2 3 4 5; do
-                if systemctl is-active --quiet "$service_name"; then
-                    break
-                fi
-                sleep 1
-            done
-            sleep 1
+            arthexis_desktop_shortcut_start_unit "$service_name" || true
         fi
     fi
 
-    local browser=""
-    if command -v firefox >/dev/null 2>&1; then
-        browser="firefox"
-    elif command -v xdg-open >/dev/null 2>&1; then
-        browser="xdg-open"
-    elif command -v sensible-browser >/dev/null 2>&1; then
-        browser="sensible-browser"
+    if [ -n "$opener" ] && command -v "$opener" >/dev/null 2>&1; then
+        "$opener" "$url" &
+        return 0
     fi
 
-    if [ -z "$browser" ]; then
-        echo "No suitable browser found to open $url" >&2
-        return 1
-    fi
-
-    "${browser}" "$url" &
+    arthexis_desktop_shortcut_open_url_fallback "$url"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

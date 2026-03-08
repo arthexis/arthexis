@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import ast
+import json
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 import shlex
@@ -34,6 +36,99 @@ class DesktopSyncResult:
     installed: int = 0
     skipped: int = 0
     removed: int = 0
+
+
+@dataclass(slots=True)
+class DesktopLaunchCapabilities:
+    """Resolved desktop-launch capabilities derived from node feature state."""
+
+    desktop_context_ready: bool
+    systemd_control_available: bool
+    browser_opener_available: bool
+    browser_opener_command: str
+    backend_port: int
+    service_name: str
+
+    @property
+    def metadata_available(self) -> bool:
+        """Whether enough feature metadata is available for managed launching."""
+
+        return self.desktop_context_ready and self.browser_opener_available
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize capability values for command and shell callers."""
+
+        return {
+            "desktop_context_ready": self.desktop_context_ready,
+            "systemd_control_available": self.systemd_control_available,
+            "browser_opener_available": self.browser_opener_available,
+            "browser_opener_command": self.browser_opener_command,
+            "backend_port": self.backend_port,
+            "service_name": self.service_name,
+            "metadata_available": self.metadata_available,
+        }
+
+
+def resolve_browser_opener() -> str:
+    """Resolve preferred command used to open desktop URLs."""
+
+    for opener in ("firefox", "xdg-open", "sensible-browser"):
+        if shutil.which(opener):
+            return opener
+    return ""
+
+
+def read_backend_port(base_dir: Path, fallback: int = 8000) -> int:
+    """Read backend port from ``.locks/backend_port.lck`` when present."""
+
+    lock_file = base_dir / ".locks" / "backend_port.lck"
+    try:
+        value = lock_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return fallback
+    if value.isdigit() and 1 <= int(value) <= 65535:
+        return int(value)
+    return fallback
+
+
+def read_service_name(base_dir: Path) -> str:
+    """Read the configured service name from lock metadata when available."""
+
+    lock_file = base_dir / ".locks" / "service.lck"
+    try:
+        return lock_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def get_desktop_launch_capabilities(*, base_dir: Path) -> DesktopLaunchCapabilities:
+    """Resolve desktop-launch capabilities for local shortcut helpers."""
+
+    local_node = Node.get_local()
+    desktop_context_ready = False
+    systemd_control_available = False
+    if local_node is not None:
+        desktop_context_ready = bool(
+            local_node.has_feature("user-desktop") and is_desktop_ui_available()
+        )
+        systemd_control_available = bool(local_node.has_feature("systemd-manager"))
+    opener_command = resolve_browser_opener()
+    return DesktopLaunchCapabilities(
+        desktop_context_ready=desktop_context_ready,
+        systemd_control_available=systemd_control_available,
+        browser_opener_available=bool(opener_command),
+        browser_opener_command=opener_command,
+        backend_port=read_backend_port(base_dir),
+        service_name=read_service_name(base_dir),
+    )
+
+
+def serialize_desktop_launch_capabilities(*, base_dir: Path) -> str:
+    """Return a JSON document with resolved desktop-launch capabilities."""
+
+    return json.dumps(
+        get_desktop_launch_capabilities(base_dir=base_dir).as_dict(), sort_keys=True
+    )
 
 
 def build_windows_registry_command(extension: RegisteredExtension) -> str:
@@ -68,26 +163,44 @@ def register_extension_with_os(extension: RegisteredExtension) -> RegistrationRe
     prog_id = f"Arthexis.Desktop{extension.extension.lstrip('.').upper()}"
     command_value = build_windows_registry_command(extension)
 
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, fr"Software\Classes\{extension.extension}") as ext_key:
+    with winreg.CreateKey(
+        winreg.HKEY_CURRENT_USER, rf"Software\Classes\{extension.extension}"
+    ) as ext_key:
         winreg.SetValueEx(ext_key, "", 0, winreg.REG_SZ, prog_id)
 
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, fr"Software\Classes\{prog_id}") as progid_key:
-        winreg.SetValueEx(progid_key, "", 0, winreg.REG_SZ, f"Arthexis handler for {extension.extension}")
+    with winreg.CreateKey(
+        winreg.HKEY_CURRENT_USER, rf"Software\Classes\{prog_id}"
+    ) as progid_key:
+        winreg.SetValueEx(
+            progid_key,
+            "",
+            0,
+            winreg.REG_SZ,
+            f"Arthexis handler for {extension.extension}",
+        )
 
     with winreg.CreateKey(
         winreg.HKEY_CURRENT_USER,
-        fr"Software\Classes\{prog_id}\shell\open\command",
+        rf"Software\Classes\{prog_id}\shell\open\command",
     ) as command_key:
         winreg.SetValueEx(command_key, "", 0, winreg.REG_SZ, command_value)
 
-    return RegistrationResult(True, f"Registered {extension.extension} with command: {command_value}")
+    return RegistrationResult(
+        True, f"Registered {extension.extension} with command: {command_value}"
+    )
 
 
-def run_registered_extension(extension: RegisteredExtension, filename: str | None) -> subprocess.CompletedProcess:
+def run_registered_extension(
+    extension: RegisteredExtension, filename: str | None
+) -> subprocess.CompletedProcess:
     """Execute the configured Django command for a registered extension."""
 
     command_parts, input_data = extension.build_runtime_command(filename)
-    full_command = [sys.executable, str(Path(settings.BASE_DIR) / "manage.py"), *command_parts]
+    full_command = [
+        sys.executable,
+        str(Path(settings.BASE_DIR) / "manage.py"),
+        *command_parts,
+    ]
     return subprocess.run(
         full_command,
         input=(input_data or ""),
@@ -198,7 +311,13 @@ def _evaluate_expression(expression: str, context: dict[str, object]) -> bool:
                 return False
 
     try:
-        return bool(eval(compile(tree, "<shortcut-condition>", "eval"), {"__builtins__": {}}, context))
+        return bool(
+            eval(
+                compile(tree, "<shortcut-condition>", "eval"),
+                {"__builtins__": {}},
+                context,
+            )
+        )
     except (NameError, TypeError, ValueError):
         return False
 
@@ -288,7 +407,11 @@ def should_install_shortcut(
             command_parts,
             check=False,
             cwd=base_dir,
-            env={**os.environ, "ARTHEXIS_SHORTCUT_SLUG": shortcut.slug, "ARTHEXIS_USERNAME": username},
+            env={
+                **os.environ,
+                "ARTHEXIS_SHORTCUT_SLUG": shortcut.slug,
+                "ARTHEXIS_USERNAME": username,
+            },
         )
         if result.returncode != 0:
             return False
@@ -296,7 +419,9 @@ def should_install_shortcut(
     return True
 
 
-def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str, icon_value: str) -> str:
+def render_shortcut_desktop_entry(
+    shortcut: DesktopShortcut, *, exec_value: str, icon_value: str
+) -> str:
     """Render the .desktop file body for ``shortcut``."""
 
     def _sanitize_desktop_value(value: object) -> str:
@@ -321,7 +446,9 @@ def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str,
     return "\n".join(lines) + "\n"
 
 
-def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_stale: bool = True) -> DesktopSyncResult:
+def sync_desktop_shortcuts(
+    *, base_dir: Path, username: str, port: int, remove_stale: bool = True
+) -> DesktopSyncResult:
     """Synchronize desktop shortcut files from ``DesktopShortcut`` records."""
 
     desktop_dir = detect_desktop_dir(base_dir, username)
@@ -331,7 +458,9 @@ def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_s
     installed_files: set[Path] = set()
     result = DesktopSyncResult()
 
-    shortcuts = DesktopShortcut.objects.prefetch_related("required_features", "required_groups")
+    shortcuts = DesktopShortcut.objects.prefetch_related(
+        "required_features", "required_groups"
+    )
     for shortcut in shortcuts:
         target = desktop_dir / f"{shortcut.desktop_filename}.desktop"
         if not should_install_shortcut(shortcut, base_dir=base_dir, username=username):
@@ -343,7 +472,9 @@ def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_s
 
         exec_value = _build_exec(shortcut, port)
         icon_value = _icon_value(shortcut, username)
-        rendered = render_shortcut_desktop_entry(shortcut, exec_value=exec_value, icon_value=icon_value)
+        rendered = render_shortcut_desktop_entry(
+            shortcut, exec_value=exec_value, icon_value=icon_value
+        )
         target.write_text(rendered, encoding="utf-8")
         target.chmod(0o755)
         installed_files.add(target)
@@ -352,14 +483,19 @@ def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_s
     if remove_stale:
         for stale in desktop_dir.glob("*.desktop"):
             try:
-                is_managed = "X-Arthexis-Managed=true" in stale.read_text(encoding="utf-8")
+                is_managed = "X-Arthexis-Managed=true" in stale.read_text(
+                    encoding="utf-8"
+                )
             except OSError:
                 is_managed = False
             if not is_managed:
                 continue
-            if stale not in installed_files and not DesktopShortcut.objects.filter(
-                desktop_filename=stale.stem
-            ).exists():
+            if (
+                stale not in installed_files
+                and not DesktopShortcut.objects.filter(
+                    desktop_filename=stale.stem
+                ).exists()
+            ):
                 stale.unlink(missing_ok=True)
                 result.removed += 1
 

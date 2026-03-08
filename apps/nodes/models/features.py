@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
 import json
 import logging
 from pathlib import Path
 import shutil
 import subprocess
-from typing import TYPE_CHECKING
 
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -21,15 +19,10 @@ from apps.audio.utils import has_audio_capture_device
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from apps.clocks.utils import has_clock_device
-from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
-
-if TYPE_CHECKING:  # pragma: no cover - used for type checking
-    from .core.node import Node
-
 
 logger = logging.getLogger(__name__)
 
@@ -366,11 +359,20 @@ class NodeFeatureMixin:
         self, slug: str, *, base_dir: Path, base_path: Path
     ) -> bool:
         """Detect whether an auto-managed feature is active for the node."""
-        if slug == "systemd-manager":
-            return bool(_systemctl_command())
+        if slug in {"systemd-manager", "user-desktop"}:
+            try:
+                from apps.desktop.node_features import check_node_feature
+            except Exception:
+                logger.exception("Desktop node feature detection import failed")
+                return False
+            result = check_node_feature(slug, node=self)
+            return bool(result) if result is not None else False
 
-        if slug in self.SYSTEMD_DEPENDENT_FEATURE_SLUGS and not self._detect_auto_feature(
-            "systemd-manager", base_dir=base_dir, base_path=base_path
+        if (
+            slug in self.SYSTEMD_DEPENDENT_FEATURE_SLUGS
+            and not self._detect_auto_feature(
+                "systemd-manager", base_dir=base_dir, base_path=base_path
+            )
         ):
             return False
 
@@ -514,10 +516,14 @@ class NodeFeatureMixin:
         if screenshot_enabled:
             from apps.nodes.feature_checks import feature_checks
 
-            screenshot_feature = NodeFeature.objects.filter(slug="screenshot-poll").first()
+            screenshot_feature = NodeFeature.objects.filter(
+                slug="screenshot-poll"
+            ).first()
             if screenshot_feature is not None:
                 screenshot_result = feature_checks.run(screenshot_feature, node=self)
-                screenshot_enabled = bool(screenshot_result and screenshot_result.success)
+                screenshot_enabled = bool(
+                    screenshot_result and screenshot_result.success
+                )
             else:
                 screenshot_enabled = False
         celery_enabled = self.is_local and self.has_feature("celery-queue")

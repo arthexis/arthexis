@@ -7,23 +7,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.desktop.services import sync_desktop_shortcuts
-
-
-def _read_port_from_lock(base_dir: Path, fallback: int = 8888) -> int:
-    """Read backend port from ``.locks/backend_port.lck`` when available."""
-
-    lock_file = base_dir / ".locks" / "backend_port.lck"
-    try:
-        raw_value = lock_file.read_text(encoding="utf-8").strip()
-    except OSError:
-        return fallback
-
-    if raw_value.isdigit():
-        port = int(raw_value)
-        if 1 <= port <= 65535:
-            return port
-    return fallback
+from apps.desktop.services import read_backend_port, sync_desktop_shortcuts
 
 
 class Command(BaseCommand):
@@ -48,11 +32,13 @@ class Command(BaseCommand):
             try:
                 username = base_dir.parts[2]
             except IndexError as exc:
-                raise CommandError("Unable to infer username from base-dir path.") from exc
+                raise CommandError(
+                    "Unable to infer username from base-dir path."
+                ) from exc
 
         port = options["port"]
         if port <= 0:
-            port = _read_port_from_lock(base_dir)
+            port = read_backend_port(base_dir, fallback=8888)
 
         result = sync_desktop_shortcuts(
             base_dir=base_dir,

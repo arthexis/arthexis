@@ -79,19 +79,15 @@ class FeatureCheckRegistry:
             )
         if isinstance(result, tuple) and len(result) >= 2:
             success, message, *rest = result
-            level = rest[0] if rest else (
-                messages.SUCCESS if success else messages.ERROR
+            level = (
+                rest[0] if rest else (messages.SUCCESS if success else messages.ERROR)
             )
             return FeatureCheckResult(bool(success), str(message), int(level))
         if isinstance(result, bool):
-            message = (
-                f"{feature.display} check {'passed' if result else 'failed'}."
-            )
+            message = f"{feature.display} check {'passed' if result else 'failed'}."
             level = messages.SUCCESS if result else messages.ERROR
             return FeatureCheckResult(result, message, level)
-        raise TypeError(
-            f"Unsupported feature check result type: {type(result)!r}"
-        )
+        raise TypeError(f"Unsupported feature check result type: {type(result)!r}")
 
 
 feature_checks = FeatureCheckRegistry()
@@ -191,14 +187,12 @@ def _default_feature_check(
     )
 
 
-
-
 @feature_checks.register("user-desktop")
 def _check_user_desktop(feature: "NodeFeature", node: Optional["Node"]):
-    """Validate whether desktop UI access appears available on this node."""
+    """Validate whether desktop launch context prerequisites are available."""
 
     from .models import Node
-    from apps.desktop.services import is_desktop_ui_available
+    from apps.desktop.node_features import get_desktop_launch_prereq_state
 
     target: Optional["Node"] = node or Node.get_local()
     if target is None:
@@ -208,25 +202,71 @@ def _check_user_desktop(feature: "NodeFeature", node: Optional["Node"]):
             messages.WARNING,
         )
 
-    if not is_desktop_ui_available():
+    base_dir = Path(settings.BASE_DIR)
+    prereqs = get_desktop_launch_prereq_state(
+        base_dir=base_dir,
+        base_path=target.get_base_path(),
+    )
+    if not prereqs["desktop_context_ready"]:
         return FeatureCheckResult(
             False,
-            f"Desktop UI access is unavailable on {target.hostname} for {feature.display}.",
+            f"Desktop context is unavailable on {target.hostname} for {feature.display}.",
             messages.WARNING,
         )
+
+    details = [
+        f"desktop context: {'ok' if prereqs['desktop_context_ready'] else 'missing'}",
+        f"systemd control: {'ok' if prereqs['systemd_control_available'] else 'missing'}",
+        f"browser opener: {'ok' if prereqs['browser_opener_available'] else 'missing'}",
+    ]
 
     if target.has_feature("user-desktop"):
         return FeatureCheckResult(
             True,
-            f"{feature.display} is enabled on {target.hostname} and desktop UI access is available.",
+            f"{feature.display} is enabled on {target.hostname}; " + "; ".join(details),
             messages.SUCCESS,
         )
 
     return FeatureCheckResult(
         True,
-        f"{feature.display} is eligible on {target.hostname}; desktop UI access is available.",
+        f"{feature.display} is eligible on {target.hostname}; " + "; ".join(details),
         messages.INFO,
     )
+
+
+@feature_checks.register("systemd-manager")
+def _check_systemd_manager(feature: "NodeFeature", node: Optional["Node"]):
+    """Validate whether systemd control is available for managed desktop launch."""
+
+    from .models import Node
+    from apps.desktop.node_features import get_desktop_launch_prereq_state
+
+    target: Optional["Node"] = node or Node.get_local()
+    if target is None:
+        return FeatureCheckResult(
+            False,
+            f"No local node is registered; cannot verify {feature.display}.",
+            messages.WARNING,
+        )
+
+    prereqs = get_desktop_launch_prereq_state(
+        base_dir=Path(settings.BASE_DIR),
+        base_path=target.get_base_path(),
+    )
+    if not prereqs["systemd_control_available"]:
+        return FeatureCheckResult(
+            False,
+            f"Systemd control is unavailable on {target.hostname} for {feature.display}.",
+            messages.WARNING,
+        )
+
+    return FeatureCheckResult(
+        True,
+        f"{feature.display} prerequisites checked: systemd control available on {target.hostname}.",
+        messages.SUCCESS,
+    )
+
+
 @feature_checks.register("llm-summary")
 def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     from .models import Node
@@ -243,16 +283,12 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
 
     base_dir = Path(settings.BASE_DIR)
     base_path = target.get_base_path()
-    prereqs = get_llm_summary_prereq_state(
-        base_dir=base_dir, base_path=base_path
-    )
+    prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
     config = get_summary_config()
     model_path = resolve_model_path(config)
     model_path_exists = model_path.exists()
     model_command = (
-        config.model_command
-        or getattr(settings, "LLM_SUMMARY_COMMAND", "")
-        or None
+        config.model_command or getattr(settings, "LLM_SUMMARY_COMMAND", "") or None
     )
 
     details = [
@@ -264,9 +300,7 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         + (model_command if model_command else "unset (fallback summarizer)"),
     ]
 
-    success = (
-        prereqs["lcd_enabled"] and prereqs["celery_enabled"] and config.is_active
-    )
+    success = prereqs["lcd_enabled"] and prereqs["celery_enabled"] and config.is_active
     if success and model_path_exists:
         level = messages.SUCCESS
     else:

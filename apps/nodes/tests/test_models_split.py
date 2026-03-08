@@ -15,9 +15,23 @@ def test_select_preferred_ip_prefers_global_address():
 @pytest.mark.parametrize(
     ("slug", "systemctl_command", "lock_file", "expected"),
     [
-        pytest.param("rfid-scanner", ["systemctl"], "rfid.lck", True, id="rfid-lock-requires-systemctl"),
-        pytest.param("celery-queue", [], "celery.lck", False, id="systemd-lock-blocked-without-systemctl"),
-        pytest.param("systemd-manager", ["systemctl"], None, True, id="systemd-manager-detected"),
+        pytest.param(
+            "rfid-scanner",
+            ["systemctl"],
+            "rfid.lck",
+            True,
+            id="rfid-lock-requires-systemctl",
+        ),
+        pytest.param(
+            "celery-queue",
+            [],
+            "celery.lck",
+            False,
+            id="systemd-lock-blocked-without-systemctl",
+        ),
+        pytest.param(
+            "systemd-manager", ["systemctl"], None, True, id="systemd-manager-detected"
+        ),
     ],
 )
 def test_detect_auto_feature_systemd_detection_matrix(
@@ -43,6 +57,36 @@ def test_detect_auto_feature_systemd_detection_matrix(
     result = node._detect_auto_feature(slug, base_dir=tmp_path, base_path=tmp_path)
 
     assert result is expected
+
+
+def test_detect_auto_feature_delegates_desktop_hooks(monkeypatch, tmp_path):
+    """Desktop-related features should delegate detection to desktop node feature hooks."""
+
+    node = Node(
+        hostname="desktop-feature-node",
+        base_path=str(tmp_path),
+        public_endpoint="desktop-feature-node",
+    )
+
+    def _check_node_feature(slug: str, *, node):
+        del node
+        return slug == "systemd-manager"
+
+    monkeypatch.setattr(
+        "apps.desktop.node_features.check_node_feature",
+        _check_node_feature,
+    )
+
+    assert (
+        node._detect_auto_feature(
+            "systemd-manager", base_dir=tmp_path, base_path=tmp_path
+        )
+        is True
+    )
+    assert (
+        node._detect_auto_feature("user-desktop", base_dir=tmp_path, base_path=tmp_path)
+        is False
+    )
 
 
 def test_detect_auto_feature_allows_rfid_service_probe_without_systemctl(
@@ -75,7 +119,9 @@ def test_detect_auto_feature_allows_rfid_service_probe_without_systemctl(
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(monkeypatch, tmp_path):
+def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(
+    monkeypatch, tmp_path
+):
     """gpio-rtc auto-detection should defer to the clock-device probe."""
 
     node = Node(
@@ -93,7 +139,9 @@ def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(monkeypa
 
 
 @pytest.mark.django_db
-def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(monkeypatch, tmp_path):
+def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(
+    monkeypatch, tmp_path
+):
     """Feature refresh should auto-assign gpio-rtc when an RTC is detected."""
 
     node = Node.objects.create(
@@ -110,8 +158,11 @@ def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(monkeypatch
 
     assert node.features.filter(pk=feature.pk).exists()
 
+
 @pytest.mark.django_db
-def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(monkeypatch, tmp_path):
+def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(
+    monkeypatch, tmp_path
+):
     """gpio-rtc auto-detection should not trigger when no clock device is present."""
 
     node = Node(
@@ -129,7 +180,9 @@ def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(m
 
 
 @pytest.mark.django_db
-def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(monkeypatch, tmp_path):
+def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(
+    monkeypatch, tmp_path
+):
     """Feature refresh should not auto-assign gpio-rtc when no RTC is detected."""
 
     node = Node.objects.create(
@@ -145,7 +198,6 @@ def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(monk
     node.refresh_features()
 
     assert not node.features.filter(pk=feature.pk).exists()
-
 
 
 @pytest.fixture
@@ -270,9 +322,10 @@ def test_refresh_features_does_not_auto_assign_heavy_feature(tmp_path):
     locks_dir.mkdir()
     (locks_dir / "celery.lck").write_text("1")
 
-    assert node._detect_auto_feature(
-        "celery-queue", base_dir=tmp_path, base_path=tmp_path
-    ) is True
+    assert (
+        node._detect_auto_feature("celery-queue", base_dir=tmp_path, base_path=tmp_path)
+        is True
+    )
 
     node.refresh_features()
 
@@ -303,6 +356,8 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
     class _ReleaseModels:
         PackageRelease = _PackageRelease
 
-    monkeypatch.setattr(node_utils.importlib, "import_module", lambda _name: _ReleaseModels)
+    monkeypatch.setattr(
+        node_utils.importlib, "import_module", lambda _name: _ReleaseModels
+    )
 
     assert node_utils._format_upgrade_body("1.2.3", "abcdef1234") == "v1.2.3 ref1234"
