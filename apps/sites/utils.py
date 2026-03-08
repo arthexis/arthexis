@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - fallback when constant is unavailable
 logger = logging.getLogger(__name__)
 
 SITE_OPERATOR_GROUP_NAME = "Site Operator"
+CHARGE_STATION_MANAGER_GROUP_NAME = "Charge Station Manager"
 
 
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
@@ -59,6 +60,17 @@ def user_in_site_operator_group(user) -> bool:
         return False
     try:
         return user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
+    except (OperationalError, ProgrammingError):
+        return False
+
+
+def user_in_charge_station_manager_group(user) -> bool:
+    """Return ``True`` when ``user`` belongs to the Charge Station Manager group."""
+
+    if not getattr(user, "is_authenticated", False):
+        return False
+    try:
+        return user.groups.filter(name=CHARGE_STATION_MANAGER_GROUP_NAME).exists()
     except (OperationalError, ProgrammingError):
         return False
 

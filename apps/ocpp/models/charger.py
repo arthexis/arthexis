@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.urls import NoReverseMatch
 
 from apps.locale.models import Language
-from apps.sites.utils import SITE_OPERATOR_GROUP_NAME
+from apps.sites.utils import SITE_OPERATOR_GROUP_NAME, user_in_charge_station_manager_group
 
 from .. import store
 from .base import *
@@ -399,6 +399,8 @@ class Charger(Ownable):
         qs = cls.objects.filter(public_display=True)
         if getattr(user, "is_superuser", False):
             return qs
+        if cls._user_is_charge_station_manager(user):
+            return qs
         if not getattr(user, "is_authenticated", False):
             return qs.filter(
                 owner_users__isnull=True, owner_groups__isnull=True
@@ -416,10 +418,18 @@ class Charger(Ownable):
 
         return self.owner_users.exists() or self.owner_groups.exists()
 
+    @staticmethod
+    def _user_is_charge_station_manager(user) -> bool:
+        """Return ``True`` when ``user`` can manage chargers for the local node."""
+
+        return user_in_charge_station_manager_group(user)
+
     def is_visible_to(self, user) -> bool:
         """Return ``True`` when ``user`` may view this charger."""
 
         if getattr(user, "is_superuser", False):
+            return True
+        if self._user_is_charge_station_manager(user):
             return True
         if not self.has_owner_scope():
             return True
@@ -440,6 +450,8 @@ class Charger(Ownable):
         """Return ``True`` when ``user`` satisfies the websocket auth rules."""
 
         if not self.requires_ws_auth:
+            return True
+        if self._user_is_charge_station_manager(user):
             return True
         if self.ws_auth_user_id:
             return getattr(user, "pk", None) == self.ws_auth_user_id
