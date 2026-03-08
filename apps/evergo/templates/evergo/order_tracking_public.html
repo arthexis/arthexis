@@ -4,6 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Tracking {{ order.order_number|default:order.remote_id }}</title>
+    <script>
+        (() => {
+            const themeStorageKey = 'evergo.orderTracking.theme';
+            const fallbackTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            let resolvedTheme = fallbackTheme;
+
+            try {
+                const storedTheme = localStorage.getItem(themeStorageKey);
+                if (storedTheme === 'light' || storedTheme === 'dark') {
+                    resolvedTheme = storedTheme;
+                }
+            } catch (error) {
+                // Ignore storage access failures (e.g., strict privacy modes).
+            }
+
+            document.documentElement.setAttribute('data-theme', resolvedTheme);
+        })();
+    </script>
     <style>
         :root {
             color-scheme: light dark;
@@ -17,6 +35,9 @@
             --quick-icon-border: #6b7280;
             --button-background: #0b5ed7;
             --button-foreground: #ffffff;
+            --success-foreground: #0a7f39;
+            --warning-foreground: #a86100;
+            --error-foreground: #a30000;
         }
         :root[data-theme="dark"] {
             --page-background: #0f172a;
@@ -29,6 +50,9 @@
             --quick-icon-border: #94a3b8;
             --button-background: #2563eb;
             --button-foreground: #ffffff;
+            --success-foreground: #34d399;
+            --warning-foreground: #f59e0b;
+            --error-foreground: #f87171;
         }
         body { font-family: Inter, Arial, sans-serif; margin: 1.2rem auto; max-width: 960px; padding: 0 1rem; background: var(--page-background); color: var(--page-foreground); }
         a { color: var(--link-color); }
@@ -45,10 +69,10 @@
         .quick-actions { display:flex; align-items:center; gap:.45rem; }
         .quick-icon { display:inline-flex; align-items:center; justify-content:center; width:2.2rem; height:2.2rem; border-radius:999px; border:1px solid var(--quick-icon-border); text-decoration:none; font-size:1.15rem; background: var(--quick-icon-background); color: inherit; cursor: pointer; }
         button { padding: .7rem 1rem; border: 0; border-radius: 8px; background:var(--button-background); color:var(--button-foreground); }
-        .messages { color: #0a7f39; }
-        .messages .warning { color:#a86100; }
-        .errorlist { color: #a30000; margin: .3rem 0 0; padding-left: 1rem; }
-        .prefill-error { color: #a86100; font-size: .86rem; margin-top: .2rem; }
+        .messages { color: var(--success-foreground); }
+        .messages .warning { color: var(--warning-foreground); }
+        .errorlist { color: var(--error-foreground); margin: .3rem 0 0; padding-left: 1rem; }
+        .prefill-error { color: var(--warning-foreground); font-size: .86rem; margin-top: .2rem; }
         @media (max-width: 860px) {
             .grid { gap: 1rem; }
             .grid > .field { padding-inline: .3rem; }
@@ -242,24 +266,39 @@
 
       const themeStorageKey = 'evergo.orderTracking.theme';
       const themeToggle = document.getElementById('theme-toggle');
+      const getStoredTheme = () => {
+        try {
+          const theme = localStorage.getItem(themeStorageKey);
+          return theme === 'light' || theme === 'dark' ? theme : null;
+        } catch (error) {
+          return null;
+        }
+      };
+      const setStoredTheme = (theme) => {
+        try {
+          localStorage.setItem(themeStorageKey, theme);
+        } catch (error) {
+          // Ignore storage access failures (e.g., strict privacy modes).
+        }
+      };
       const setTheme = (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
         if (themeToggle) {
           const isDark = theme === 'dark';
           themeToggle.textContent = isDark ? '🌙' : '☀️';
           themeToggle.setAttribute('aria-label', isDark ? 'Activar modo claro' : 'Activar modo oscuro');
-          themeToggle.setAttribute('title', isDark ? 'Modo oscuro activo' : 'Modo claro activo');
+          themeToggle.setAttribute('title', isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
         }
       };
 
-      const savedTheme = localStorage.getItem(themeStorageKey);
+      const savedTheme = getStoredTheme();
       const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
       setTheme(savedTheme || (systemPrefersDark ? 'dark' : 'light'));
 
       themeToggle?.addEventListener('click', () => {
         const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
         const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        localStorage.setItem(themeStorageKey, nextTheme);
+        setStoredTheme(nextTheme);
         setTheme(nextTheme);
       });
 
