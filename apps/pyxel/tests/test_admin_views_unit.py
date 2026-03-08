@@ -6,6 +6,7 @@ import itertools
 
 import pytest
 
+from apps.core import ui as core_ui
 from apps.pyxel import admin_views
 
 
@@ -58,7 +59,7 @@ def test_launch_viewport_subprocess_detects_late_startup_failure(monkeypatch):
 def test_has_graphical_display(monkeypatch, platform_name, display_vars, expected):
     """Graphical display detection should cover Linux and non-Linux server platforms."""
 
-    monkeypatch.setattr(admin_views.sys, "platform", platform_name)
+    monkeypatch.setattr(core_ui.sys, "platform", platform_name)
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     for key, value in display_vars.items():
