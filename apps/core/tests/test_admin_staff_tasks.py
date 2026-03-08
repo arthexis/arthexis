@@ -24,7 +24,7 @@ class AdminStaffTasksTests(TestCase):
         self.client.force_login(self.user)
 
     def test_admin_dashboard_uses_tasks_button_labels(self):
-        """Dashboard should surface Tasks and Rules buttons using staff task records."""
+        """Dashboard should surface task buttons from configurable staff task records."""
 
         response = self.client.get(reverse("admin:index"))
 
@@ -33,7 +33,7 @@ class AdminStaffTasksTests(TestCase):
         self.assertIn(">Tasks<", content)
         self.assertIn(">Rules<", content)
         self.assertIn(">System<", content)
-        self.assertNotIn(">Reports<", content)
+        self.assertIn(">Reports<", content)
 
     def test_staff_member_can_toggle_dashboard_task_visibility(self):
         """Staff users can hide a dashboard task from their own top-button row."""
@@ -83,3 +83,37 @@ class AdminStaffTasksTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(any("restart" in " ".join(call.args[0]) for call in mocked_run.call_args_list))
+
+
+    def test_reports_runner_lists_known_report_routes(self):
+        """Reports runner should include existing report views that can be launched."""
+
+        response = self.client.get(reverse("admin:system-reports"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "System Startup Report")
+        self.assertContains(response, "System Sql Report")
+
+    def test_reports_runner_redirects_to_selected_report_with_params(self):
+        """Reports runner should redirect to selected report route with query parameters."""
+
+        response = self.client.post(
+            reverse("admin:system-reports"),
+            {"report": "system-startup-report", "params": "limit=25"},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('admin:system-startup-report')}?limit=25")
+
+    def test_reports_runner_does_not_double_encode_query_values(self):
+        """Reports runner should normalize encoded query values without double-encoding."""
+
+        response = self.client.post(
+            reverse("admin:system-reports"),
+            {"report": "system-startup-report", "params": "q=hello%20world"},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('admin:system-startup-report')}?q=hello+world")
