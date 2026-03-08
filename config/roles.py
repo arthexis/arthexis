@@ -9,6 +9,14 @@ from typing import Any, Callable
 from django.core.exceptions import ImproperlyConfigured
 
 
+_WATCHTOWER_REDIS_SOURCES: tuple[str, ...] = (
+    "CHANNEL_REDIS_URL",
+    "OCPP_STATE_REDIS_URL",
+)
+_WATCHTOWER_CELERY_BROKER_SETTING = "CELERY_BROKER_URL"
+_REDIS_URL_SCHEMES = ("redis://", "rediss://")
+
+
 @dataclass(frozen=True)
 class RoleProfile:
     """Validation profile describing required and forbidden settings for a role."""
@@ -27,14 +35,11 @@ def _value_present(value: Any) -> bool:
 def _watchtower_channel_backend_configured(values: Mapping[str, Any]) -> bool:
     """Return whether Watchtower has any supported Redis source configured."""
 
-    return any(
-        _value_present(values.get(setting_name))
-        for setting_name in (
-            "CHANNEL_REDIS_URL",
-            "OCPP_STATE_REDIS_URL",
-            "CELERY_BROKER_URL",
-        )
-    )
+    if any(_value_present(values.get(setting_name)) for setting_name in _WATCHTOWER_REDIS_SOURCES):
+        return True
+
+    broker_url = str(values.get(_WATCHTOWER_CELERY_BROKER_SETTING, "")).strip().lower()
+    return broker_url.startswith(_REDIS_URL_SCHEMES)
 
 
 ROLE_ALIASES: dict[str, str] = {

@@ -79,7 +79,7 @@ def test_role_profiles_accept_valid_configuration(settings_values: dict[str, obj
                 "NODE_ROLE": "Watchtower",
                 "CHANNEL_REDIS_URL": "",
                 "OCPP_STATE_REDIS_URL": "",
-                "CELERY_BROKER_URL": "",
+                "CELERY_BROKER_URL": "memory://localhost/",
             },
             "Watchtower role validation failed",
         ),
