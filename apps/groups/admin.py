@@ -41,10 +41,11 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     change_form_template = "admin/groups/securitygroup/change_form.html"
     fieldsets = (
-        (None, {"fields": ("name", "parent", "site_template", "users", "permissions")}),
+        (None, {"fields": ("name", "app", "parent", "site_template", "users", "permissions")}),
     )
     filter_horizontal = ("permissions",)
-    search_fields = ("name", "parent__name")
+    list_display = ("name", "app", "parent", "site_template")
+    search_fields = ("name", "app", "parent__name")
 
     def get_readonly_fields(self, request, obj=None):
         if obj is not None and obj.pk == request.user.groups.first():  # type: ignore[comparison-overlap]

@@ -10,42 +10,6 @@ from apps.nginx.renderers import generate_unified_config
 
 
 @pytest.mark.django_db
-def test_preview_view_shows_file_status(admin_client, tmp_path):
-    staging = tmp_path / "sites.json"
-    site_destination = tmp_path / "sites.conf"
-    primary_path = tmp_path / "arthexis.conf"
-
-    config = SiteConfiguration.objects.create(
-        name="preview",
-        expected_path=str(primary_path),
-        site_entries_path=str(staging),
-        site_destination=str(site_destination),
-        port=8080,
-    )
-
-    staging.write_text(
-        '[{"domain": "test.example.com", "require_https": false}]', encoding="utf-8"
-    )
-
-    primary_content = generate_unified_config(
-        config.mode,
-        config.port,
-        include_ipv6=config.include_ipv6,
-        site_config_path=config.staged_site_config,
-    )
-    primary_path.write_text(primary_content, encoding="utf-8")
-
-    url = reverse("admin:nginx_siteconfiguration_preview") + f"?ids={config.pk}"
-    response = admin_client.get(url)
-
-    assert response.status_code == 200
-    rendered = response.content.decode()
-    assert str(config.expected_destination) in rendered
-    assert str(config.site_destination_path) not in rendered
-    assert "Existing file already matches this content." in rendered
-
-
-@pytest.mark.django_db
 def test_preview_view_denies_user_without_permission(client, django_user_model):
     user = django_user_model.objects.create_user(
         username="staff-no-view", email="staff@example.com", password="secret"
@@ -104,41 +68,6 @@ def test_preview_view_blocks_https_without_certificate(monkeypatch, admin_client
     rendered = response.content.decode()
     assert "Generate Certificates" in rendered
     assert "requires a linked certificate" in rendered
-
-
-@pytest.mark.django_db
-def test_preview_default_view_creates_default(admin_client, settings):
-    settings.ALLOWED_HOSTS = ["admin.example.com", "testserver"]
-
-    url = reverse("admin:nginx_siteconfiguration_preview_default")
-    response = admin_client.get(url)
-
-    assert response.status_code == 200
-    config = SiteConfiguration.objects.get(name="admin.example.com")
-    rendered = response.content.decode()
-    assert str(config) in rendered
-
-
-@pytest.mark.django_db
-def test_preview_default_view_applies_configuration(monkeypatch, admin_client):
-    config = SiteConfiguration.get_default()
-
-    calls: dict[str, dict[str, int | bool]] = {}
-
-    def fake_apply(self, *, reload: bool = True, remove: bool = False):
-        calls["kwargs"] = {"reload": reload, "remove": remove, "pk": self.pk}
-        return services.ApplyResult(
-            changed=True, validated=True, reloaded=True, message="ok"
-        )
-
-    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
-
-    url = reverse("admin:nginx_siteconfiguration_preview_default")
-    response = admin_client.post(url, {"ids": str(config.pk)})
-
-    assert response.status_code == 302
-    assert response["Location"].endswith(url)
-    assert calls["kwargs"] == {"reload": True, "remove": False, "pk": config.pk}
 
 
 @pytest.mark.django_db

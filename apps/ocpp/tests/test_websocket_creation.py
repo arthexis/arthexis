@@ -1,6 +1,6 @@
 import asyncio
-import json
 import base64
+import json
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -26,6 +26,7 @@ from apps.ocpp.consumers import (
 from apps.ocpp.models import Charger, Simulator
 from apps.simulators import ChargePointSimulator
 from apps.rates.models import RateLimit
+from apps.sites.utils import CHARGE_STATION_MANAGER_GROUP_NAME
 from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -744,6 +745,38 @@ def test_basic_auth_accepts_authorized_user():
         assert any("Connected" in entry for entry in entries)
     else:
         assert auth_entries or connection_result.get("close_code") != 4003
+
+
+@pytest.mark.slow
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_accepts_charge_station_manager_user():
+    authorized = get_user_model().objects.create_user(
+        username="auth-designated", password="secret"
+    )
+    manager = get_user_model().objects.create_user(
+        username="auth-manager", password="secret"
+    )
+    manager.groups.create(name=CHARGE_STATION_MANAGER_GROUP_NAME)
+    charger = Charger.objects.create(
+        charger_id="AUTH-MANAGER", connector_id=None, ws_auth_user=authorized
+    )
+
+    connection_result: dict[str, object] = {}
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application,
+            f"/{charger.charger_id}",
+            headers=_auth_header("auth-manager", "secret"),
+        )
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        connection_result["connected"] = connected
+        connection_result["close_code"] = close_code
+        await _finalize_communicator(communicator)
+
+    async_to_sync(run_scenario)()
+
+    assert connection_result["connected"] is True
 
 
 @pytest.mark.slow
