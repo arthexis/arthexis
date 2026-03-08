@@ -25,6 +25,9 @@ class PyxelViewportLaunchError(RuntimeError):
     """Raised when the Pyxel viewport process cannot be started."""
 
 
+VIEWPORT_STARTUP_GRACE_SECONDS = 3.0
+
+
 @require_POST
 def open_live_stats_view(request):
     """Launch the local Pyxel live-stats window for local-only admin requests."""
@@ -57,7 +60,7 @@ def launch_viewport_subprocess(*, viewport_slug: str | None = None) -> subproces
             text=True,
             start_new_session=True,
         )
-        startup_deadline = time.monotonic() + 1.0
+        startup_deadline = time.monotonic() + VIEWPORT_STARTUP_GRACE_SECONDS
         while time.monotonic() < startup_deadline:
             if process.poll() is not None:
                 _, stderr_output = process.communicate()
