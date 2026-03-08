@@ -115,5 +115,49 @@ def test_feature_admin_reload_base_requires_delete_permission(admin_client, djan
     assert response.status_code == 403
 
 
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_saving_celery_workers_feature_syncs_runtime(admin_client):
+    """Regression: saving celery-workers parameters triggers runtime sync."""
+
+    feature = Feature.objects.get(slug="celery-workers")
+    feature.metadata = {"parameters": {"worker_count": "1"}}
+    feature.save(update_fields=["metadata", "updated_at"])
+
+    with patch("apps.features.admin.sync_celery_workers_from_feature") as sync_runtime:
+        response = admin_client.post(
+            reverse("admin:features_feature_change", args=[feature.pk]),
+            {
+                "display": "Celery Workers",
+                "slug": "celery-workers",
+                "summary": "",
+                "is_enabled": "on",
+                "main_app": "",
+                "node_feature": "",
+                "admin_requirements": "",
+                "public_requirements": "",
+                "service_requirements": "",
+                "admin_views": "[]",
+                "public_views": "[]",
+                "service_views": "[]",
+                "metadata": "{}",
+                "code_locations": "[]",
+                "protocol_coverage": "{}",
+                "param__worker_count": "5",
+                "featuretest_set-TOTAL_FORMS": "0",
+                "featuretest_set-INITIAL_FORMS": "0",
+                "featuretest_set-MIN_NUM_FORMS": "0",
+                "featuretest_set-MAX_NUM_FORMS": "1000",
+                "featurenote_set-TOTAL_FORMS": "0",
+                "featurenote_set-INITIAL_FORMS": "0",
+                "featurenote_set-MIN_NUM_FORMS": "0",
+                "featurenote_set-MAX_NUM_FORMS": "1000",
+                "_save": "Save",
+            },
+        )
+
+    assert response.status_code == 302
+    sync_runtime.assert_called_once_with()
+
 
 

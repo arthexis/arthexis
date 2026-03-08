@@ -46,6 +46,17 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "celery-workers": (
+        FeatureParameterDefinition(
+            key="worker_count",
+            label=_("Worker count"),
+            help_text=_(
+                "Number of Celery worker processes to run for the local suite service."
+            ),
+            choices=tuple((str(value), str(value)) for value in range(1, 17)),
+            default="1",
+        ),
+    ),
     "ocpp-simulator": (
         FeatureParameterDefinition(
             key="arthexis_backend",

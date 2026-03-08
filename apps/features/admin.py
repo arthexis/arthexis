@@ -15,9 +15,13 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
+from apps.app.models import Application
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
-from apps.app.models import Application
+from apps.services.celery_workers import (
+    CELERY_WORKERS_FEATURE_SLUG,
+    sync_celery_workers_from_feature,
+)
 
 from .models import Feature, FeatureNote, FeatureTest
 from .parameters import get_feature_parameter_definitions, set_feature_parameter_values
@@ -440,6 +444,8 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if isinstance(form, FeatureAdminForm):
             set_feature_parameter_values(obj, form.cleaned_parameter_values())
         super().save_model(request, obj, form, change)
+        if obj.slug == CELERY_WORKERS_FEATURE_SLUG:
+            sync_celery_workers_from_feature()
 
     def toggle_feature(self, request, feature_id: int):
         feature = self.get_object(request, feature_id)
