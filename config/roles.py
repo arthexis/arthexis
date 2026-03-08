@@ -24,6 +24,19 @@ def _value_present(value: Any) -> bool:
     return bool(str(value).strip()) if isinstance(value, str) else bool(value)
 
 
+def _watchtower_channel_backend_configured(values: Mapping[str, Any]) -> bool:
+    """Return whether Watchtower has any supported Redis source configured."""
+
+    return any(
+        _value_present(values.get(setting_name))
+        for setting_name in (
+            "CHANNEL_REDIS_URL",
+            "OCPP_STATE_REDIS_URL",
+            "CELERY_BROKER_URL",
+        )
+    )
+
+
 ROLE_ALIASES: dict[str, str] = {
     "constellation": "Watchtower",
 }
@@ -65,8 +78,8 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
         name="Watchtower",
         required=(
             (
-                lambda values: _value_present(values.get("CHANNEL_REDIS_URL")),
-                "CHANNEL_REDIS_URL is required for Watchtower nodes.",
+                _watchtower_channel_backend_configured,
+                "Watchtower requires one of CHANNEL_REDIS_URL, OCPP_STATE_REDIS_URL, or CELERY_BROKER_URL.",
             ),
         ),
         forbidden=(),
