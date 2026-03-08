@@ -212,15 +212,15 @@
   }
   .status-guidance.tone-warning {
     border-left-color: var(--warning-fg, #c09853);
-    background: rgba(255, 193, 7, 0.12);
+    background: rgba(var(--warning-rgb, 192, 152, 83), 0.12);
   }
   .status-guidance.tone-error {
     border-left-color: var(--error-fg, #ba2121);
-    background: rgba(186, 33, 33, 0.08);
+    background: rgba(var(--error-rgb, 186, 33, 33), 0.08);
   }
   .status-guidance.tone-success {
     border-left-color: var(--success-fg, #198754);
-    background: rgba(25, 135, 84, 0.1);
+    background: rgba(var(--success-rgb, 25, 135, 84), 0.1);
   }
 </style>
 {% endblock %}
