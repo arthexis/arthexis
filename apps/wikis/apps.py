@@ -1,11 +1,3 @@
-from django.apps import AppConfig
+"""Compatibility wrapper for ``apps.publish.wikis.apps``."""
 
-
-class WikisConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.wikis"
-    label = "wikis"
-    verbose_name = "Wikis"
-
-    def ready(self):  # pragma: no cover - import for side effects
-        from . import widgets  # noqa: F401
+from apps.publish.wikis.apps import *  # noqa: F401,F403

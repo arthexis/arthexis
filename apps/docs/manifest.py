@@ -1,5 +1,3 @@
-"""Manifest entries for Django app loading."""
+"""Compatibility wrapper for ``apps.publish.docs.manifest``."""
 
-DJANGO_APPS = [
-    "apps.docs",
-]
+from apps.publish.docs.manifest import *  # noqa: F401,F403

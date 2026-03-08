@@ -1,7 +1,3 @@
-"""Root route provider for blog pages."""
+"""Compatibility wrapper for ``apps.publish.blog.routes``."""
 
-from django.urls import include, path
-
-ROOT_URLPATTERNS = [
-    path("", include("apps.blog.urls")),
-]
+from apps.publish.blog.routes import *  # noqa: F401,F403

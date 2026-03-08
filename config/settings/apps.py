@@ -43,6 +43,9 @@ def _is_django_app_dir(path: Path) -> bool:
     if not (path / "__init__.py").exists():
         return False
 
+    if path.parent == APPS_DIR and (APPS_DIR / "publish" / path.name).exists():
+        return False
+
     if (path / "apps.py").exists():
         return True
 

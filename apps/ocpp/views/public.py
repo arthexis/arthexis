@@ -10,7 +10,7 @@ from django.utils import translation
 from django.utils.translation import gettext as _
 
 from apps.maps.models import Location
-from apps.docs import rendering
+from apps.publish.docs import rendering
 from apps.locale.models import Language
 from apps.sites.utils import get_request_language_code, require_site_operator_or_staff
 

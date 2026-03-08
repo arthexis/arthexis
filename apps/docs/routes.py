@@ -1,7 +1,3 @@
-"""Root route provider for docs pages."""
+"""Compatibility wrapper for ``apps.publish.docs.routes``."""
 
-from django.urls import include, path
-
-ROOT_URLPATTERNS = [
-    path("", include("apps.docs.urls")),
-]
+from apps.publish.docs.routes import *  # noqa: F401,F403

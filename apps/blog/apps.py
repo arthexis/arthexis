@@ -1,7 +1,3 @@
-from django.apps import AppConfig
+"""Compatibility wrapper for ``apps.publish.blog.apps``."""
 
-
-class BlogConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.blog"
-    verbose_name = "Development Blog"
+from apps.publish.blog.apps import *  # noqa: F401,F403

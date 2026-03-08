@@ -1,5 +1,3 @@
-"""Manifest entries for Django app loading."""
+"""Compatibility wrapper for ``apps.publish.wikis.manifest``."""
 
-DJANGO_APPS = [
-    "apps.wikis",
-]
+from apps.publish.wikis.manifest import *  # noqa: F401,F403

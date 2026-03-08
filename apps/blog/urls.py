@@ -1,8 +1,3 @@
-from django.urls import path
+"""Compatibility wrapper for ``apps.publish.blog.urls``."""
 
-from apps.blog.views import BlogArticleDetailView, BlogArticleListView
-
-urlpatterns = [
-    path("engineering/blog/", BlogArticleListView.as_view(), name="blog-list"),
-    path("engineering/blog/<slug:slug>/", BlogArticleDetailView.as_view(), name="blog-detail"),
-]
+from apps.publish.blog.urls import *  # noqa: F401,F403

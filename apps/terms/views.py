@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
-from apps.docs import rendering
+from apps.publish.docs import rendering
 from .forms import RegistrationForm, TermAcceptanceForm
 from .models import RegistrationSubmission, Term
 

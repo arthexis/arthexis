@@ -1,3 +1,3 @@
-from django.contrib import admin
+"""Compatibility wrapper for ``apps.publish.docs.admin``."""
 
-__all__ = ["admin"]
+from apps.publish.docs.admin import *  # noqa: F401,F403

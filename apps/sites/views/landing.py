@@ -15,9 +15,9 @@ from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 
 from apps.core import changelog
-from apps.docs import views as docs_views
+from apps.publish.docs import views as docs_views
 from apps.features.utils import is_suite_feature_enabled
-from apps.docs import rendering
+from apps.publish.docs import rendering
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node

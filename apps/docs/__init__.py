@@ -1,1 +1,1 @@
-"""Documentation domain models and helpers."""
+"""Compatibility package for ``apps.docs`` moved to ``apps.publish.docs``."""

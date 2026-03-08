@@ -52,7 +52,7 @@ def test_refresh_enabled_apps_lock_keeps_manifest_apps_without_rows(monkeypatch,
     Application.objects.filter(name__in=["enabled-core", "blog"]).delete()
     monkeypatch.setattr(
         "apps.app.models._load_manifest_app_entries",
-        lambda: {"apps.blog", "apps.sites"},
+        lambda: {"apps.publish.blog", "apps.sites"},
     )
 
     Application.objects.create(name="enabled-core", enabled=True)
@@ -61,7 +61,7 @@ def test_refresh_enabled_apps_lock_keeps_manifest_apps_without_rows(monkeypatch,
     ).splitlines()
 
     assert "enabled-core" in lock_entries
-    assert "apps.blog" in lock_entries
+    assert "apps.publish.blog" in lock_entries
 
 
 @pytest.mark.django_db
@@ -72,7 +72,7 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(monkeypatch
     Application.objects.filter(name__in=["enabled-core", "blog"]).delete()
     monkeypatch.setattr(
         "apps.app.models._load_manifest_app_entries",
-        lambda: {"apps.blog", "apps.sites"},
+        lambda: {"apps.publish.blog", "apps.sites"},
     )
 
     Application.objects.create(name="blog", enabled=False)
@@ -81,5 +81,5 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(monkeypatch
         encoding="utf-8"
     ).splitlines()
 
-    assert "apps.blog" not in lock_entries
+    assert "apps.publish.blog" not in lock_entries
     assert "enabled-core" in lock_entries

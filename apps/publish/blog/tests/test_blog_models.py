@@ -3,8 +3,8 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.blog.models import BlogArticle, BlogCodeReference, BlogSigilShortcut
-from apps.blog.sigils import resolve_blog_article_sigils
+from apps.publish.blog.models import BlogArticle, BlogCodeReference, BlogSigilShortcut
+from apps.publish.blog.sigils import resolve_blog_article_sigils
 
 
 @pytest.mark.django_db

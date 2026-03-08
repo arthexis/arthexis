@@ -1,6 +1,3 @@
-from django.apps import AppConfig as BaseAppConfig
+"""Compatibility wrapper for ``apps.publish.docs.apps``."""
 
-
-class DocsConfig(BaseAppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.docs"
+from apps.publish.docs.apps import *  # noqa: F401,F403

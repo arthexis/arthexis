@@ -1,3 +1,1 @@
-"""Helpers for retrieving and caching Wikimedia content."""
-
-__all__ = []
+"""Compatibility package for ``apps.wikis`` moved to ``apps.publish.wikis``."""
