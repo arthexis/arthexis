@@ -361,3 +361,38 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
     )
 
     assert node_utils._format_upgrade_body("1.2.3", "abcdef1234") == "v1.2.3 ref1234"
+
+
+@pytest.mark.django_db
+def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
+    """Auto-detection should defer to app-provided node feature hook modules."""
+
+    node = Node(
+        hostname="hook-node",
+        base_path=str(tmp_path),
+        public_endpoint="hook-node",
+    )
+
+    import apps.cards.node_features as cards_node_features
+
+    setup_calls: list[str] = []
+
+    monkeypatch.setattr(
+        cards_node_features,
+        "check_node_feature",
+        lambda slug, *, node: True if slug == "rfid-scanner" else None,
+    )
+
+    def _setup(slug, *, node):
+        if slug == "rfid-scanner":
+            setup_calls.append(slug)
+            return True
+        return None
+
+    monkeypatch.setattr(cards_node_features, "setup_node_feature", _setup)
+
+    assert (
+        node._detect_auto_feature("rfid-scanner", base_dir=tmp_path, base_path=tmp_path)
+        is True
+    )
+    assert setup_calls == ["rfid-scanner"]

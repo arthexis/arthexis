@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-import logging
 import re
-from datetime import timedelta
-from time import perf_counter
-from typing import Any
 
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
-from django.db import DatabaseError, connections
 from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.urls import path
@@ -17,10 +12,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.reports.models import SQLReport
+from apps.reports.services import run_sql_report
 from apps.sigils.models import SigilRoot
-from apps.sigils.sigil_resolver import resolve_sigils
-
-logger = logging.getLogger(__name__)
 
 
 def _database_choices() -> list[tuple[str, str]]:
@@ -49,11 +42,23 @@ class SQLReportForm(forms.ModelForm):
 
     class Meta:
         model = SQLReport
-        fields = ["name", "database_alias", "query"]
+        fields = [
+            "name",
+            "database_alias",
+            "query",
+            "html_template_name",
+            "schedule_enabled",
+            "schedule_interval_minutes",
+            "next_scheduled_run_at",
+        ]
         labels = {
             "name": _("Name"),
             "database_alias": _("Database"),
             "query": _("SQL query"),
+            "html_template_name": _("HTML template"),
+            "schedule_enabled": _("Enable schedule"),
+            "schedule_interval_minutes": _("Schedule interval (minutes)"),
+            "next_scheduled_run_at": _("Next scheduled run"),
         }
         help_texts = {
             "query": _(
@@ -64,6 +69,7 @@ class SQLReportForm(forms.ModelForm):
             "query": forms.Textarea(
                 attrs={"rows": 12, "spellcheck": "false", "class": "vLargeTextField"}
             ),
+            "next_scheduled_run_at": forms.DateTimeInput(attrs={"type": "datetime-local"}),
         }
 
     def __init__(self, *args, database_choices: list[tuple[str, str]] | None = None, **kwargs):
@@ -84,45 +90,19 @@ class SQLReportForm(forms.ModelForm):
             raise forms.ValidationError(_("Unknown database alias."))
         return alias
 
-
-def _execute_sql_report_query(resolved_sql: str, database_alias: str) -> dict[str, Any]:
-    executed_at = timezone.now()
-    alias = database_alias if database_alias in connections else "default"
-
-    result: dict[str, Any] = {
-        "columns": [],
-        "rows": [],
-        "row_count": 0,
-        "resolved_sql": resolved_sql,
-        "database_alias": alias,
-        "executed_at": executed_at,
-        "duration_ms": None,
-        "error": None,
-    }
-
-    try:
-        with connections[alias].cursor() as cursor:
-            started = perf_counter()
-            cursor.execute(resolved_sql)
-            duration_seconds = perf_counter() - started
-
-            result["duration_ms"] = duration_seconds * 1000
-
-            if cursor.description:
-                result["columns"] = [col[0] for col in cursor.description]
-                result["rows"] = cursor.fetchall()
-                result["row_count"] = len(result["rows"])
-            else:
-                rowcount = cursor.rowcount
-                if rowcount and rowcount > 0:
-                    result["row_count"] = rowcount
-    except DatabaseError as exc:
-        result["error"] = str(exc)
-    except Exception as exc:  # pragma: no cover - unexpected failure
-        logger.exception("Unexpected error executing SQL report")
-        result["error"] = str(exc)
-
-    return result
+    def clean(self):
+        cleaned = super().clean()
+        enabled = cleaned.get("schedule_enabled")
+        interval = cleaned.get("schedule_interval_minutes") or 0
+        next_run = cleaned.get("next_scheduled_run_at")
+        if enabled and interval <= 0:
+            self.add_error(
+                "schedule_interval_minutes",
+                _("Set a positive interval when scheduling is enabled."),
+            )
+        if enabled and not next_run:
+            cleaned["next_scheduled_run_at"] = timezone.now()
+        return cleaned
 
 
 def _validate_query_sigils(query: str) -> tuple[bool, str]:
@@ -174,27 +154,21 @@ def _system_sql_report_view(request: HttpRequest):
             messages.add_message(request, level, feedback)
         elif form.is_valid():
             sql_report = form.save()
-
-            resolved_sql = resolve_sigils(sql_report.query)
-            query_result = _execute_sql_report_query(resolved_sql, sql_report.database_alias)
+            result, product = run_sql_report(sql_report)
+            query_result = result.as_dict()
             selected_report = sql_report
 
-            if query_result.get("error"):
+            if result.error:
                 messages.error(
                     request,
-                    _("Unable to run the SQL report: %(error)s")
-                    % {"error": query_result["error"]},
+                    _("Unable to run the SQL report: %(error)s") % {"error": result.error},
                 )
             else:
-                SQLReport.objects.filter(pk=sql_report.pk).update(
-                    last_run_at=query_result["executed_at"],
-                    last_run_duration=timedelta(
-                        milliseconds=query_result.get("duration_ms") or 0
-                    ),
-                    updated_at=timezone.now(),
+                messages.success(
+                    request,
+                    _("Query executed successfully. Products generated: %(id)s")
+                    % {"id": product.pk if product else "-"},
                 )
-                sql_report.refresh_from_db(fields=["last_run_at", "last_run_duration"])
-                messages.success(request, _("Query executed successfully."))
     else:
         form = SQLReportForm(
             instance=selected_report,
