@@ -2122,6 +2122,17 @@ def release_progress(request, pk: int, action: str):
     dry_run_active = bool(ctx.get("dry_run"))
     dry_run_toggle_enabled = not is_running and not done and not ctx.get("error")
 
+    status_guidance = build_release_guidance(
+        done=done,
+        error=ctx.get("error"),
+        started=bool(ctx.get("started", False)),
+        paused=paused,
+        publish_pending=publish_pending,
+        github_token_required=bool(ctx.get("github_token_required", False)),
+        step_count=step_count,
+        total_steps=len(steps),
+    )
+
     context = {
         "release": release,
         "action": "publish",
@@ -2160,6 +2171,7 @@ def release_progress(request, pk: int, action: str):
         "manual_git_push_error": ctx.get("pending_git_push_error"),
         "publish_pending": publish_pending,
         "publish_workflow_url": ctx.get("publish_workflow_url", ""),
+        "status_guidance": status_guidance,
     }
     if done or ctx.get("error"):
         _store_release_context(request, session_key, ctx)
@@ -2226,3 +2238,79 @@ def _dedupe_preserve_order(values):
         seen.add(value)
         result.append(value)
     return result
+
+
+def build_release_guidance(
+    *,
+    done: bool,
+    error: str | None,
+    started: bool,
+    paused: bool,
+    publish_pending: bool,
+    github_token_required: bool,
+    step_count: int,
+    total_steps: int,
+) -> dict[str, str]:
+    """Build user-facing status guidance for the release progress screen."""
+
+    if done:
+        return {
+            "tone": "success",
+            "title": _("Publish completed"),
+            "message": _(
+                "All release steps finished successfully. You can now share the package URLs below."
+            ),
+        }
+
+    if error:
+        return {
+            "tone": "error",
+            "title": _("Publish needs attention"),
+            "message": _(
+                "Resolve the error below, then continue to retry the current step."
+            ),
+        }
+
+    if not started:
+        return {
+            "tone": "info",
+            "title": _("Ready to publish"),
+            "message": _(
+                "Review credentials and click Start Publish when you are ready."
+            ),
+        }
+
+    if paused and github_token_required:
+        return {
+            "tone": "warning",
+            "title": _("GitHub token required"),
+            "message": _(
+                "Publishing is paused until a GitHub token is provided for this session."
+            ),
+        }
+
+    if paused and publish_pending:
+        return {
+            "tone": "warning",
+            "title": _("Waiting for GitHub Actions"),
+            "message": _(
+                "The publish workflow is still running on GitHub. This page will keep checking automatically."
+            ),
+        }
+
+    if paused:
+        return {
+            "tone": "warning",
+            "title": _("Publishing paused"),
+            "message": _("Press Continue Publish to proceed from the current step."),
+        }
+
+    return {
+        "tone": "info",
+        "title": _("Publishing in progress"),
+        "message": _("Step %(current)s of %(total)s is running.")
+        % {
+            "current": min(step_count + 1, total_steps),
+            "total": total_steps,
+        },
+    }
