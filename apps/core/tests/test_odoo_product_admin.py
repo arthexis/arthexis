@@ -8,12 +8,20 @@ import pytest
 
 from apps.features.models import Feature
 from apps.odoo.models import OdooEmployee, OdooProduct
-from apps.odoo.sync_features import (
-    ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-    ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
-)
+from apps.odoo.sync_features import ODOO_CRM_SYNC_SUITE_FEATURE_SLUG
 from apps.users.models import User
 
+
+def _odoo_sync_metadata(*, employee_import: str = "enabled") -> dict[str, dict[str, str]]:
+    """Build Odoo CRM sync metadata parameters for tests."""
+
+    return {
+        "parameters": {
+            "deployment_discovery": "enabled",
+            "employee_import": employee_import,
+            "evergo_users": "enabled",
+        }
+    }
 
 @pytest.mark.django_db
 def test_search_orders_for_selected_action_renders_matching_orders(
@@ -267,32 +275,24 @@ def test_load_employees_action_creates_missing_odoo_profiles(admin_client, admin
 
 @pytest.mark.integration
 @pytest.mark.django_db
-@pytest.mark.parametrize(
-    "feature_slug",
-    [
-        ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
-        ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-    ],
-)
+@pytest.mark.parametrize("disable_suite", [True, False])
 def test_load_employees_action_respects_sync_feature_toggle(
     admin_client,
     admin_user,
     monkeypatch,
-    feature_slug,
+    disable_suite,
 ):
     """Employee import should be skipped when an Odoo sync feature toggle is off."""
 
     Feature.objects.update_or_create(
         slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
-    )
-    Feature.objects.update_or_create(
-        slug=ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
-        defaults={"display": "Odoo Sync: Employee Import", "is_enabled": True},
-    )
-    Feature.objects.update_or_create(
-        slug=feature_slug,
-        defaults={"is_enabled": False},
+        defaults={
+            "display": "Odoo CRM Sync",
+            "is_enabled": not disable_suite,
+            "metadata": _odoo_sync_metadata(
+                employee_import="enabled" if disable_suite else "disabled"
+            ),
+        },
     )
 
     OdooEmployee.objects.create(
