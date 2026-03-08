@@ -652,6 +652,53 @@ def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
+def test_reload_customer_from_remote_renames_stale_snapshot_before_name_fallback(
+    mock_load_customers,
+):
+    """Fallback reload should prevent the stale row from being reused by name-only upserts."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="suite-reload-customer-name-stale",
+        email="suite-reload-customer-name-stale@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="suite-reload-customer-name-stale@evergo.example.com",
+        evergo_password="top-secret",  # noqa: S106
+        evergo_user_id=58642,
+    )
+    stale_customer = EvergoCustomer.objects.create(
+        user=profile,
+        remote_id=None,
+        name="Customer Name Match",
+        latest_so="GLY12345",
+        latest_order=None,
+    )
+
+    def load_side_effect(*, raw_queries, timeout=20):
+        assert "GLY12345" in raw_queries
+        profile._upsert_customer_from_order(
+            {
+                "id": 87001,
+                "numero_orden": "GLY12345",
+                "updated_at": "2026-01-13T02:18:42.000000Z",
+                "cliente": {"name": "Customer Name Match"},
+                "orden_instalacion": {"nombre_completo": "Customer Name Match"},
+            }
+        )
+        return {"customers_loaded": 0}
+
+    mock_load_customers.side_effect = load_side_effect
+
+    refreshed = profile.reload_customer_from_remote(customer=stale_customer)
+
+    assert refreshed.pk != stale_customer.pk
+    assert refreshed.name == "Customer Name Match"
+    assert not EvergoCustomer.objects.filter(pk=stale_customer.pk).exists()
+
+
+@pytest.mark.django_db
 @pytest.mark.regression
 @patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_customers):

@@ -445,6 +445,9 @@ class EvergoUser(Profile):
             if customer.latest_order_id is not None:
                 customer.latest_order = None
                 updates.append("latest_order")
+            if stale_customer_name and customer.name == stale_customer_name:
+                customer.name = f"__stale_customer__{stale_customer_pk}"
+                updates.append("name")
             if updates:
                 customer.save(update_fields=updates)
 
@@ -476,8 +479,6 @@ class EvergoUser(Profile):
         with transaction.atomic():
             _detach_stale_customer()
             summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
-            if summary["customers_loaded"] <= 0:
-                raise EvergoAPIError("Evergo did not return data for the selected customer.")
 
             refreshed_candidates = EvergoCustomer.objects.filter(user=self).exclude(pk=stale_customer_pk)
             refreshed_customer = None
@@ -490,6 +491,8 @@ class EvergoUser(Profile):
                     name__iexact=stale_customer_name
                 ).order_by("-latest_order_updated_at", "pk").first()
             if refreshed_customer is None:
+                if summary["customers_loaded"] <= 0:
+                    raise EvergoAPIError("Evergo did not return data for the selected customer.")
                 raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
             _delete_stale_customer()
             return refreshed_customer
