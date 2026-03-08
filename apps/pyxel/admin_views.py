@@ -15,6 +15,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from apps.core.ui import has_graphical_display
 from apps.pyxel.live_stats import (
     PyxelLiveStatsLaunchError,
     is_local_request,
@@ -30,14 +31,6 @@ class PyxelViewportLaunchError(RuntimeError):
 VIEWPORT_STARTUP_GRACE_SECONDS = 3.0
 
 
-def has_graphical_display() -> bool:
-    """Return ``True`` when the server environment can open GUI windows."""
-
-    if not sys.platform.startswith("linux"):
-        return True
-    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-
-
 def viewport_opened_message(viewport_name: str) -> str:
     """Build a success message that clarifies where the viewport appears."""
 
@@ -49,6 +42,12 @@ def viewport_opened_message(viewport_name: str) -> str:
     if "microsoft" in release or os.environ.get("WSL_DISTRO_NAME"):
         return f"{message} In WSL, it appears in the Linux desktop session (WSLg/X11)."
     return message
+
+
+def _redirect_after_viewport_action(pk: int | None):
+    if pk is None:
+        return redirect(reverse("admin:pyxel_pyxelviewport_changelist"))
+    return redirect(reverse("admin:pyxel_pyxelviewport_change", args=[pk]))
 
 
 @require_POST
@@ -114,9 +113,7 @@ def open_viewport_view(request, pk: int | None = None):
             "Unable to launch Pyxel viewport: no graphical display is configured "
             "for this server process (DISPLAY/WAYLAND_DISPLAY).",
         )
-        if pk is None:
-            return redirect(reverse("admin:pyxel_pyxelviewport_changelist"))
-        return redirect(reverse("admin:pyxel_pyxelviewport_change", args=[pk]))
+        return _redirect_after_viewport_action(pk)
 
     target_viewport: PyxelViewport
     if pk is None:
@@ -142,6 +139,4 @@ def open_viewport_view(request, pk: int | None = None):
     else:
         messages.success(request, viewport_opened_message(target_viewport.name))
 
-    if pk is None:
-        return redirect(reverse("admin:pyxel_pyxelviewport_changelist"))
-    return redirect(reverse("admin:pyxel_pyxelviewport_change", args=[pk]))
+    return _redirect_after_viewport_action(pk)

@@ -45,19 +45,53 @@ def test_launch_viewport_subprocess_detects_late_startup_failure(monkeypatch):
         admin_views.launch_viewport_subprocess(viewport_slug="phone-portrait")
 
 
-def test_has_graphical_display_requires_display_variable_on_linux(monkeypatch):
-    """Linux environments should require DISPLAY or WAYLAND_DISPLAY for GUI launch."""
+@pytest.mark.parametrize(
+    ("platform_name", "display_vars", "expected"),
+    [
+        pytest.param("linux", {}, False, id="linux-no-display"),
+        pytest.param("linux", {"DISPLAY": ":0"}, True, id="linux-with-display"),
+        pytest.param("linux", {"WAYLAND_DISPLAY": "wayland-0"}, True, id="linux-with-wayland"),
+        pytest.param("win32", {}, True, id="windows"),
+        pytest.param("darwin", {}, True, id="macos"),
+    ],
+)
+def test_has_graphical_display(monkeypatch, platform_name, display_vars, expected):
+    """Graphical display detection should cover Linux and non-Linux server platforms."""
 
-    monkeypatch.setattr(admin_views.sys, "platform", "linux")
+    monkeypatch.setattr(admin_views.sys, "platform", platform_name)
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    for key, value in display_vars.items():
+        monkeypatch.setenv(key, value)
 
-    assert admin_views.has_graphical_display() is False
+    assert admin_views.has_graphical_display() is expected
 
 
-def test_viewport_opened_message_mentions_server_desktop():
-    """Success messages should explain that viewport windows are server-side."""
+@pytest.mark.parametrize(
+    ("is_wsl_by_release", "is_wsl_by_env", "should_have_wsl_text"),
+    [
+        pytest.param(False, False, False, id="non-wsl"),
+        pytest.param(True, False, True, id="wsl-by-release"),
+        pytest.param(False, True, True, id="wsl-by-env"),
+    ],
+)
+def test_viewport_opened_message(monkeypatch, is_wsl_by_release, is_wsl_by_env, should_have_wsl_text):
+    """Viewport success text should include WSL guidance only when WSL is detected."""
+
+    monkeypatch.setattr(
+        admin_views.platform,
+        "release",
+        lambda: "5.10.16.3-microsoft-standard-WSL2" if is_wsl_by_release else "5.15.0-48-generic",
+    )
+    if is_wsl_by_env:
+        monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    else:
+        monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
 
     message = admin_views.viewport_opened_message("Phone Portrait")
 
     assert "server desktop" in message
+    if should_have_wsl_text:
+        assert "In WSL, it appears in the Linux desktop session (WSLg/X11)." in message
+    else:
+        assert "In WSL" not in message

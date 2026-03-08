@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-import sys
 import webbrowser
 
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.core.ui import has_graphical_display
+
 
 def _ui_available() -> bool:
-    if sys.platform.startswith(("win", "darwin")):
-        return True
-    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    return has_graphical_display()
 
 
 def _build_site_url(site: Site) -> str:
