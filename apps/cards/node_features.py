@@ -47,7 +47,8 @@ def _lockfile_status(
     except Exception:  # pragma: no cover - defensive import fallback
         lock_file_active = None
 
-    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
+    default_base_dir = Path(settings.BASE_DIR)
+    resolved_base_dir = base_dir or default_base_dir
 
     for path in _lock_paths(node=node, base_dir=resolved_base_dir, base_path=base_path):
         try:
@@ -56,7 +57,11 @@ def _lockfile_status(
         except OSError:
             continue
 
-        if lock_file_active is not None and path == resolved_base_dir / ".locks" / RFID_LOCK_NAME:
+        if (
+            lock_file_active is not None
+            and resolved_base_dir == default_base_dir
+            and path == resolved_base_dir / ".locks" / RFID_LOCK_NAME
+        ):
             try:
                 is_active, active_path = lock_file_active()
             except Exception:

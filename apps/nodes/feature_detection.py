@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import importlib
 import logging
 from pathlib import Path
+from threading import RLock
 from typing import TYPE_CHECKING
 
 from django.apps import apps as django_apps
@@ -75,12 +76,13 @@ class NodeFeatureDetectionRegistry:
     def __init__(self) -> None:
         self._detectors: dict[str, list[NodeFeatureDetector]] = {}
         self._discovered = False
+        self._lock = RLock()
 
     def reset(self) -> None:
         """Reset discovered registrations for fresh discovery."""
-
-        self._detectors.clear()
-        self._discovered = False
+        with self._lock:
+            self._detectors.clear()
+            self._discovered = False
 
     def register(
         self,
@@ -90,48 +92,51 @@ class NodeFeatureDetectionRegistry:
         setup: DetectionCallable | None = None,
     ) -> None:
         """Register a detector pair for ``slug``."""
-
         detector = NodeFeatureDetector(slug=slug, check=check, setup=setup)
-        self._detectors.setdefault(slug, []).append(detector)
+        with self._lock:
+            self._detectors.setdefault(slug, []).append(detector)
 
     def discover(self) -> None:
         """Load detector registration from installed apps."""
+        with self._lock:
+            if self._discovered:
+                return
 
-        if self._discovered:
-            return
+            self._detectors.clear()
 
-        self._detectors.clear()
-
-        for app_config in django_apps.get_app_configs():
-            module_name = f"{app_config.name}.node_features"
-            try:
-                module = importlib.import_module(module_name)
-            except ModuleNotFoundError as exc:
-                if exc.name != module_name:
+            for app_config in django_apps.get_app_configs():
+                module_name = f"{app_config.name}.node_features"
+                try:
+                    module = importlib.import_module(module_name)
+                except ModuleNotFoundError as exc:
+                    if exc.name != module_name:
+                        logger.exception(
+                            "Node feature detector import failed for %s", module_name
+                        )
+                    continue
+                except Exception:
                     logger.exception(
                         "Node feature detector import failed for %s", module_name
                     )
-                continue
-            except Exception:
-                logger.exception("Node feature detector import failed for %s", module_name)
-                continue
+                    continue
 
-            register = getattr(module, "register_node_feature_detection", None)
-            if callable(register):
-                try:
-                    register(self)
-                except Exception:
-                    logger.exception(
-                        "Node feature detector registration failed for %s", module_name
-                    )
-                continue
+                register = getattr(module, "register_node_feature_detection", None)
+                if callable(register):
+                    try:
+                        register(self)
+                    except Exception:
+                        logger.exception(
+                            "Node feature detector registration failed for %s",
+                            module_name,
+                        )
+                    continue
 
-            check = getattr(module, "check_node_feature", None)
-            setup = getattr(module, "setup_node_feature", None)
-            if callable(check) or callable(setup):
-                self.register("*", check=check, setup=setup)
+                check = getattr(module, "check_node_feature", None)
+                setup = getattr(module, "setup_node_feature", None)
+                if callable(check) or callable(setup):
+                    self.register("*", check=check, setup=setup)
 
-        self._discovered = True
+            self._discovered = True
 
     def detect(
         self,
@@ -142,12 +147,12 @@ class NodeFeatureDetectionRegistry:
         base_path: Path,
     ) -> bool | None:
         """Run detectors for ``slug`` in registration order."""
-
         self.discover()
-        detectors = [
-            *self._detectors.get(slug, []),
-            *self._detectors.get("*", []),
-        ]
+        with self._lock:
+            detectors = [
+                *self._detectors.get(slug, []),
+                *self._detectors.get("*", []),
+            ]
 
         for detector in detectors:
             try:
