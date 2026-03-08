@@ -539,3 +539,52 @@ def test_verify_certificate_handles_permission_error():
         "Certificate key path is not accessible" in message
         for message in result.messages
     )
+
+
+def test_ensure_certbot_available_missing_sudo_reports_sudo_guidance(monkeypatch):
+    """Missing sudo binary should return sudo-specific guidance."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise FileNotFoundError(2, "No such file or directory", "sudo")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+
+    with pytest.raises(services.CertbotError) as exc_info:
+        services.ensure_certbot_available()
+
+    message = str(exc_info.value)
+    assert "No such file or directory" in message
+    assert "configured sudo executable is not available" in message
+    assert "apt install -y certbot" not in message
+
+
+def test_ensure_certbot_available_runtime_errors_are_wrapped(monkeypatch):
+    """Non-missing-certbot runtime errors should still raise CertbotError."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("sudo: a password is required")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+
+    with pytest.raises(services.CertbotError, match="sudo: a password is required"):
+        services.ensure_certbot_available()
+
+def test_ensure_certbot_available_missing_certbot_includes_supported_os_guidance(monkeypatch):
+    """Missing certbot preflight checks should provide actionable install guidance."""
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        raise RuntimeError("sudo: certbot: command not found")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "_read_os_release_fields",
+        lambda: {"ID": "ubuntu", "PRETTY_NAME": "Ubuntu 24.04 LTS"},
+    )
+
+    with pytest.raises(services.CertbotError) as exc_info:
+        services.ensure_certbot_available()
+
+    message = str(exc_info.value)
+    assert "sudo: certbot: command not found" in message
+    assert "apt install -y certbot" in message
