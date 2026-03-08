@@ -7,11 +7,30 @@ from celery.schedules import crontab
 
 from apps.celery.utils import resolve_celery_shutdown_timeout
 
+from .base import NODE_ROLE
 from .i18n import TIME_ZONE
 from .logging import LOGGING
 
-_ENV_CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "").strip()
-CELERY_BROKER_URL = _ENV_CELERY_BROKER_URL or "memory://localhost/"
+
+def _resolve_celery_broker_url() -> str:
+    """Resolve the Celery broker URL with role-aware and legacy fallbacks."""
+
+    explicit_broker_url = (
+        os.environ.get("CELERY_BROKER_URL", "").strip()
+        or os.environ.get("BROKER_URL", "").strip()
+    )
+    if explicit_broker_url:
+        return explicit_broker_url
+
+    if str(NODE_ROLE or "").strip().lower() != "terminal":
+        return "redis://localhost:6379/0"
+
+    return "memory://localhost/"
+
+
+CELERY_BROKER_URL = _resolve_celery_broker_url()
+# Legacy alias retained for older deployments that still export BROKER_URL.
+BROKER_URL = CELERY_BROKER_URL
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 # Keep Celery Beat schedules in memory to avoid database-backed scheduling
 # (e.g., django-celery-beat), which can contend with migrations.

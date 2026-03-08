@@ -37,6 +37,11 @@ from config.roles import validate_role_settings
             "NODE_ROLE": "Watchtower",
             "CELERY_BROKER_URL": "redis://localhost:6379/3",
         },
+        {
+            "DEBUG": False,
+            "NODE_ROLE": "Watchtower",
+            "BROKER_URL": "redis://localhost:6379/4",
+        },
     ],
 )
 def test_role_profiles_accept_valid_configuration(settings_values: dict[str, object]) -> None:
