@@ -454,36 +454,74 @@ def test_execute_markdown_bash_blocks_quote_arg_sigils(monkeypatch):
     assert captured[0] == "echo 'hello; cat /etc/passwd'"
 
 
-def test_execute_external_language_lua_uses_lua_command(monkeypatch):
-    """Lua scripts execute through the Lua interpreter command mapping."""
+@pytest.mark.parametrize("language", ["lua", "luajit"])
+def test_execute_external_language_uses_lua_family_command(monkeypatch, language):
+    """Lua/LuaJIT scripts execute through the correct interpreter command mapping."""
 
-    recipe = Recipe(slug="lua-check", display="Lua Check", script="")
+    recipe = Recipe(slug=f"{language}-check", display="Lua Check", script="")
     captured: list[list[str]] = []
 
-    def fake_run(command, **_kwargs):
+    def fake_run(command, **kwargs):
         captured.append(command)
-        return subprocess.CompletedProcess(command, 0, stdout="hello from lua\n", stderr="")
+        env = kwargs["env"]
+        assert env["RECIPE_ARGS_COUNT"] == "1"
+        assert env["RECIPE_ARG_0"] == "semi;colon"
+        assert env["RECIPE_KW_COLOR"] == "blue sky"
+        assert env["RECIPE_KW_WEIRD_KEY"] == "value"
+        return subprocess.CompletedProcess(command, 0, stdout=f"hello from {language}\n", stderr="")
 
     monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
 
-    result = recipe._execute_external_language(language="lua", code='print("hello from lua")')
+    result = recipe._execute_external_language(
+        language=language,
+        code=f'print("hello from {language}")',
+        args=("semi;colon",),
+        kwargs={"color": "blue sky", "weird-key": "value"},
+    )
 
-    assert result == "hello from lua"
-    assert captured[0][:2] == ["lua", "-e"]
+    assert result == f"hello from {language}"
+    assert captured[0][:2] == [language, "-e"]
 
 
-def test_execute_external_language_lua_reports_missing_interpreter(monkeypatch):
-    """Lua execution surfaces a clear interpreter-not-available error."""
+@pytest.mark.parametrize("language", ["lua", "luajit"])
+def test_execute_external_language_reports_missing_interpreter(monkeypatch, language):
+    """Lua/LuaJIT execution surfaces a clear interpreter-not-available error."""
 
-    recipe = Recipe(slug="lua-missing", display="Lua Missing", script="")
+    recipe = Recipe(slug=f"{language}-missing", display="Lua Missing", script="")
 
     def fake_run(command, **_kwargs):
         raise FileNotFoundError(command[0])
 
     monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
 
-    with pytest.raises(RuntimeError, match="interpreter 'lua' is not available"):
-        recipe._execute_external_language(language="lua", code='print("hello")')
+    with pytest.raises(RuntimeError, match=f"interpreter '{language}' is not available"):
+        recipe._execute_external_language(language=language, code='print("hello")', args=(), kwargs={})
+
+
+def test_execute_external_language_does_not_template_arg_sigils(monkeypatch):
+    """External interpreters keep arg sigils in code and receive args via env vars."""
+
+    recipe = Recipe(slug="lua-sigils", display="Lua Sigils", script="")
+    captured: dict[str, Any] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    result = recipe._execute_language_block(
+        language="lua",
+        code='print("[ARG.0]")',
+        args=('\"); os.execute("id"); --',),
+        kwargs={},
+        result_variable="result",
+    )
+
+    assert result == "ok"
+    assert captured["command"] == ["lua", "-e", 'print("[ARG.0]")']
+    assert captured["env"]["RECIPE_ARG_0"] == '"); os.execute("id"); --'
 
 def test_recipe_product_admin_disables_delete_permission():
     """Recipe product admin remains read-only by denying delete permissions."""

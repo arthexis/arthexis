@@ -428,10 +428,21 @@ class Recipe(Ownable):
             )
             return execution.result
 
-        resolved_code = resolve_arg_sigils(code, args, kwargs)
-        return self._execute_external_language(language=language, code=resolved_code)
+        return self._execute_external_language(
+            language=language,
+            code=code,
+            args=args,
+            kwargs=kwargs,
+        )
 
-    def _execute_external_language(self, *, language: str, code: str) -> str:
+    def _execute_external_language(
+        self,
+        *,
+        language: str,
+        code: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> str:
         """Execute an external interpreter command and return captured stdout."""
 
         commands_by_language = {
@@ -446,6 +457,13 @@ class Recipe(Ownable):
             "powershell": ["powershell", "-Command", code],
         }
         command = commands_by_language.get(language, [language, "-c", code])
+        execution_env = os.environ.copy()
+        execution_env["RECIPE_ARGS_COUNT"] = str(len(args))
+        for index, value in enumerate(args):
+            execution_env[f"RECIPE_ARG_{index}"] = str(value)
+        for key, value in kwargs.items():
+            env_key = re.sub(r"[^A-Za-z0-9_]", "_", key).upper()
+            execution_env[f"RECIPE_KW_{env_key}"] = str(value)
 
         try:
             completed = subprocess.run(
@@ -453,6 +471,7 @@ class Recipe(Ownable):
                 capture_output=True,
                 text=True,
                 check=True,
+                env=execution_env,
             )
         except FileNotFoundError as exc:
             raise RecipeExecutionError(
