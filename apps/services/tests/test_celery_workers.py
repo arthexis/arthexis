@@ -61,3 +61,21 @@ def test_sync_celery_workers_without_systemctl_still_writes_lock(tmp_path):
     assert worker_count == 3
     assert restarted is False
     assert (tmp_path / ".locks" / "celery_workers.lck").read_text(encoding="utf-8") == "3\n"
+
+
+def test_restart_celery_service_returns_false_when_command_fails(monkeypatch, tmp_path):
+    """Regression: restart helper must fail when systemctl exits with a non-zero code."""
+
+    lock_path = tmp_path / ".locks" / "service.lck"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("demo\n", encoding="utf-8")
+
+    monkeypatch.setattr("apps.services.celery_workers._systemctl_command", lambda: ["systemctl"])
+
+    def _fake_run(command, **kwargs):
+        del command, kwargs
+        return type("Result", (), {"returncode": 1, "stderr": "boom\n"})()
+
+    monkeypatch.setattr("apps.services.celery_workers.subprocess.run", _fake_run)
+
+    assert celery_workers.restart_celery_service(base_dir=tmp_path) is False

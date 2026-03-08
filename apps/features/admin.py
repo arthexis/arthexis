@@ -445,7 +445,21 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             set_feature_parameter_values(obj, form.cleaned_parameter_values())
         super().save_model(request, obj, form, change)
         if obj.slug == CELERY_WORKERS_FEATURE_SLUG:
-            sync_celery_workers_from_feature()
+            worker_count, restarted = sync_celery_workers_from_feature()
+            if restarted:
+                self.message_user(
+                    request,
+                    _("Celery worker count updated to %(count)d and service restarted.")
+                    % {"count": worker_count},
+                    level=messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    _("Celery worker count updated to %(count)d, but service restart failed.")
+                    % {"count": worker_count},
+                    level=messages.WARNING,
+                )
 
     def toggle_feature(self, request, feature_id: int):
         feature = self.get_object(request, feature_id)

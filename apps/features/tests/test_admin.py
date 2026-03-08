@@ -124,7 +124,7 @@ def test_feature_admin_saving_celery_workers_feature_syncs_runtime(admin_client)
     feature.metadata = {"parameters": {"worker_count": "1"}}
     feature.save(update_fields=["metadata", "updated_at"])
 
-    with patch("apps.features.admin.sync_celery_workers_from_feature") as sync_runtime:
+    with patch("apps.features.admin.sync_celery_workers_from_feature", return_value=(5, True)) as sync_runtime:
         response = admin_client.post(
             reverse("admin:features_feature_change", args=[feature.pk]),
             {
@@ -159,5 +159,49 @@ def test_feature_admin_saving_celery_workers_feature_syncs_runtime(admin_client)
     assert response.status_code == 302
     sync_runtime.assert_called_once_with()
 
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_saving_celery_workers_feature_warns_when_restart_fails(admin_client):
+    """Regression: saving celery-workers surfaces warning when restart is unsuccessful."""
+
+    feature = Feature.objects.get(slug="celery-workers")
+
+    with patch("apps.features.admin.sync_celery_workers_from_feature", return_value=(7, False)):
+        response = admin_client.post(
+            reverse("admin:features_feature_change", args=[feature.pk]),
+            {
+                "display": "Celery Workers",
+                "slug": "celery-workers",
+                "summary": "",
+                "is_enabled": "on",
+                "main_app": "",
+                "node_feature": "",
+                "admin_requirements": "",
+                "public_requirements": "",
+                "service_requirements": "",
+                "admin_views": "[]",
+                "public_views": "[]",
+                "service_views": "[]",
+                "metadata": "{}",
+                "code_locations": "[]",
+                "protocol_coverage": "{}",
+                "param__worker_count": "7",
+                "featuretest_set-TOTAL_FORMS": "0",
+                "featuretest_set-INITIAL_FORMS": "0",
+                "featuretest_set-MIN_NUM_FORMS": "0",
+                "featuretest_set-MAX_NUM_FORMS": "1000",
+                "featurenote_set-TOTAL_FORMS": "0",
+                "featurenote_set-INITIAL_FORMS": "0",
+                "featurenote_set-MIN_NUM_FORMS": "0",
+                "featurenote_set-MAX_NUM_FORMS": "1000",
+                "_save": "Save",
+            },
+            follow=True,
+        )
+
+    assert response.status_code == 200
+    messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("service restart failed" in message for message in messages)
 
 
