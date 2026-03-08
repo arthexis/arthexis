@@ -2,6 +2,8 @@ from django.urls import reverse
 
 import pytest
 
+from apps.bluetooth.admin import DEFAULT_DISCOVERY_TIMEOUT_S
+
 
 @pytest.mark.django_db
 def test_discover_page_defaults_timeout_to_60_seconds(admin_client):
@@ -11,7 +13,7 @@ def test_discover_page_defaults_timeout_to_60_seconds(admin_client):
 
     assert response.status_code == 200
     assert b'name="timeout_s"' in response.content
-    assert b'value="60"' in response.content
+    assert f'value="{DEFAULT_DISCOVERY_TIMEOUT_S}"'.encode() in response.content
 
 
 @pytest.mark.django_db
@@ -32,4 +34,4 @@ def test_discover_post_uses_60_seconds_when_timeout_missing(admin_client, monkey
     response = admin_client.post(reverse("admin:bluetooth_bluetoothdevice_discover"), {})
 
     assert response.status_code == 200
-    assert captured_timeout["value"] == 60
+    assert captured_timeout["value"] == DEFAULT_DISCOVERY_TIMEOUT_S

@@ -111,12 +111,13 @@ class BluetoothDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
             "title": _("Discover"),
             "scan_url": self._discover_url(),
             "changelist_url": reverse("admin:bluetooth_bluetoothdevice_changelist"),
+            "default_timeout": DEFAULT_DISCOVERY_TIMEOUT_S,
             "result": None,
         }
         if request.method == "POST":
             try:
                 timeout_s = int(request.POST.get("timeout_s", str(DEFAULT_DISCOVERY_TIMEOUT_S)))
-                timeout_s = max(0, min(timeout_s, 60))
+                timeout_s = max(0, min(timeout_s, DEFAULT_DISCOVERY_TIMEOUT_S))
                 result = discover_and_sync_devices(timeout_s=timeout_s)
             except (ValueError, BluetoothCommandError, BluetoothParseError) as exc:
                 context["error"] = str(exc)
