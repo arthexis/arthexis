@@ -23,7 +23,6 @@ import requests
 from packaging.version import InvalidVersion, Version
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.template.loader import get_template
@@ -1901,8 +1900,7 @@ PUBLISH_STEPS = [
 ]
 
 
-@staff_member_required
-def release_progress(request, pk: int, action: str):
+def release_progress_impl(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
     if error_response:
         return error_response
