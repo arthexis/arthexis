@@ -140,3 +140,22 @@ def test_feature_admin_form_excludes_ownership_fields_for_change_view(django_use
     assert "user" not in form_class.base_fields
     assert "group" not in form_class.base_fields
 
+
+
+@pytest.mark.django_db
+def test_feature_admin_form_supports_dynamic_parameter_fieldsets(django_user_model):
+    """Regression: parameterized suite feature change forms must render without FieldError."""
+
+    feature = Feature.objects.create(slug="ocpp-simulator", display="OCPP Simulator")
+    request = RequestFactory().get("/")
+    request.user = django_user_model.objects.create_superuser(
+        username="admin-dynamic-form-user",
+        email="admin-dynamic-form@example.com",
+        password="pass",
+    )
+    admin_instance = FeatureAdmin(Feature, admin.site)
+
+    form_class = admin_instance.get_form(request, obj=feature)
+
+    assert "param__arthexis_backend" in form_class.base_fields
+    assert "param__mobilityhouse_backend" in form_class.base_fields

@@ -3,7 +3,8 @@ from pathlib import Path
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.contrib.admin.utils import flatten_fieldsets
+from django.core.exceptions import FieldError, PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import models
@@ -417,6 +418,26 @@ class FeatureAdmin(DjangoObjectActions, EntityModelAdmin):
         if parameter_fields:
             fieldsets.append((_("Feature parameters"), {"fields": tuple(parameter_fields)}))
         return fieldsets
+
+    def get_form(self, request, obj=None, **kwargs):
+        """Return a form class that tolerates dynamic parameter fields in fieldsets."""
+
+        model_field_names = {field.name for field in self.model._meta.get_fields()}
+        form_class = kwargs.get("form") or getattr(self, "form", None)
+        declared_field_names = set(getattr(form_class, "declared_fields", {}).keys())
+        allowed_fields = model_field_names | declared_field_names
+
+        field_names = kwargs.get("fields")
+        if field_names is None:
+            field_names = flatten_fieldsets(self.get_fieldsets(request, obj))
+        if field_names:
+            kwargs["fields"] = [name for name in field_names if name in allowed_fields]
+
+        try:
+            return super().get_form(request, obj, **kwargs)
+        except FieldError:
+            kwargs.pop("fields", None)
+            return super().get_form(request, obj, **kwargs)
 
     def get_formsets_with_inlines(self, request, obj=None):
         """Skip inline formsets on POST when no inline management payload is submitted."""
