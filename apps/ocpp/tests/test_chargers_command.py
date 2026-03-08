@@ -40,7 +40,9 @@ class ChargersCommandTests(TestCase):
         """Clearing websocket auth removes both user and group protection fields."""
 
         user_model = get_user_model()
-        user = user_model.objects.create_user(username="bound-user", password="startpass")
+        user = user_model.objects.create_user(
+            username="bound-user", password="startpass"
+        )
         charger = Charger.objects.create(charger_id="CLI-WS-2", ws_auth_user=user)
 
         call_command("chargers", "--sn", charger.charger_id, "--ws-auth-clear")
@@ -55,7 +57,9 @@ class ChargersCommandTests(TestCase):
         Charger.objects.create(charger_id="CLI-WS-3")
 
         with self.assertRaisesMessage(CommandError, "requires --ws-auth-password"):
-            call_command("chargers", "--sn", "CLI-WS-3", "--ws-auth-username", "cp-user")
+            call_command(
+                "chargers", "--sn", "CLI-WS-3", "--ws-auth-username", "cp-user"
+            )
 
     def test_requires_effective_cp_selector_for_ws_auth_changes(self) -> None:
         """Whitespace-only ``--cp`` values do not bypass selector validation."""
@@ -100,7 +104,9 @@ class ChargersCommandTests(TestCase):
     def test_rename_base_charger_renames_connectors_automatically(self) -> None:
         """Renaming a base charger updates connector names with letter suffixes."""
 
-        Charger.objects.create(charger_id="CLI-REN-1", connector_id=None, display_name="Old")
+        Charger.objects.create(
+            charger_id="CLI-REN-1", connector_id=None, display_name="Old"
+        )
         connector_a = Charger.objects.create(
             charger_id="CLI-REN-1", connector_id=1, display_name="Old A"
         )
@@ -130,7 +136,10 @@ class ChargersCommandTests(TestCase):
         ws = DummyWs()
 
         with (
-            patch("apps.ocpp.management.commands.chargers.store.get_connection", return_value=ws),
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_connection",
+                return_value=ws,
+            ),
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
             call_command("chargers", "--sn", "CLI-RST-1", "--cp", "A", "--send-restart")
@@ -143,6 +152,99 @@ class ChargersCommandTests(TestCase):
         self.assertIsNotNone(metadata)
         assert metadata is not None
         self.assertEqual(metadata.get("action"), "Reset")
+
+    def test_send_stop_for_station_targets_each_active_connector(self) -> None:
+        """Remote stop keeps multi-connector selections and dispatches each active session."""
+
+        Charger.objects.create(charger_id="CLI-STOP-1", connector_id=1)
+        Charger.objects.create(charger_id="CLI-STOP-1", connector_id=2)
+
+        class DummyWs:
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, payload: str) -> None:
+                self.messages.append(payload)
+
+        class DummyTx:
+            def __init__(self, pk: int) -> None:
+                self.pk = pk
+
+        ws_a = DummyWs()
+        ws_b = DummyWs()
+
+        def fake_get_connection(charger_id: str, connector_id: int | None):
+            return ws_a if connector_id == 1 else ws_b if connector_id == 2 else None
+
+        def fake_get_transaction(charger_id: str, connector_id: int | None):
+            if connector_id == 1:
+                return DummyTx(101)
+            if connector_id == 2:
+                return DummyTx(202)
+            return None
+
+        with (
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_connection",
+                side_effect=fake_get_connection,
+            ),
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_transaction",
+                side_effect=fake_get_transaction,
+            ),
+            patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
+        ):
+            call_command("chargers", "--sn", "CLI-STOP-1", "--send-stop")
+
+        frame_a = json.loads(ws_a.messages[0])
+        frame_b = json.loads(ws_b.messages[0])
+        self.assertEqual(frame_a[2], "RemoteStopTransaction")
+        self.assertEqual(frame_b[2], "RemoteStopTransaction")
+        self.assertEqual(frame_a[3]["transactionId"], 101)
+        self.assertEqual(frame_b[3]["transactionId"], 202)
+
+    def test_send_stop_skips_chargers_without_active_transaction(self) -> None:
+        """Remote stop continues processing when one selected charger has no active session."""
+
+        Charger.objects.create(charger_id="CLI-STOP-2", connector_id=1)
+        Charger.objects.create(charger_id="CLI-STOP-2", connector_id=2)
+
+        class DummyWs:
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, payload: str) -> None:
+                self.messages.append(payload)
+
+        class DummyTx:
+            def __init__(self, pk: int) -> None:
+                self.pk = pk
+
+        ws_a = DummyWs()
+
+        def fake_get_connection(charger_id: str, connector_id: int | None):
+            return ws_a if connector_id == 1 else None
+
+        def fake_get_transaction(charger_id: str, connector_id: int | None):
+            return DummyTx(303) if connector_id == 1 else None
+
+        with (
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_connection",
+                side_effect=fake_get_connection,
+            ),
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_transaction",
+                side_effect=fake_get_transaction,
+            ),
+            patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
+        ):
+            call_command("chargers", "--sn", "CLI-STOP-2", "--send-stop")
+
+        self.assertEqual(len(ws_a.messages), 1)
+        frame = json.loads(ws_a.messages[0])
+        self.assertEqual(frame[2], "RemoteStopTransaction")
+        self.assertEqual(frame[3]["transactionId"], 303)
 
     def test_charger_alias_defaults_to_base_charger(self) -> None:
         """The ``charger`` alias selects the default base charger without selectors."""

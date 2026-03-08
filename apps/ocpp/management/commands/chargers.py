@@ -142,28 +142,17 @@ class Command(BaseCommand):
         send_restart = bool(options.get("send_restart"))
         use_default_base = bool(options.get("default_base"))
 
-        if enable_rfid and disable_rfid:
-            raise CommandError("Use either --rfid-enable or --rfid-disable, not both.")
-
-        if ws_auth_username and not ws_auth_password:
-            raise CommandError("--ws-auth-username requires --ws-auth-password.")
-
-        if ws_auth_password and not ws_auth_username:
-            raise CommandError("--ws-auth-password requires --ws-auth-username.")
-
-        if ws_auth_clear and ws_auth_username:
-            raise CommandError(
-                "Use either --ws-auth-clear or --ws-auth-username/--ws-auth-password, not both."
-            )
-
-        if send_stop and send_restart:
-            raise CommandError("Use either --send-stop or --send-restart, not both.")
-
-        if tail is not None and tail <= 0:
-            raise CommandError("--tail requires a positive number of log entries.")
-
-        if sessions is not None and sessions <= 0:
-            raise CommandError("--sessions requires a positive number of sessions.")
+        self._validate_option_combinations(
+            enable_rfid=enable_rfid,
+            disable_rfid=disable_rfid,
+            ws_auth_username=ws_auth_username,
+            ws_auth_password=ws_auth_password,
+            ws_auth_clear=ws_auth_clear,
+            send_stop=send_stop,
+            send_restart=send_restart,
+            tail=tail,
+            sessions=sessions,
+        )
 
         queryset = (
             Charger.objects.all()
@@ -199,9 +188,7 @@ class Command(BaseCommand):
                     raise CommandError(
                         "No charge points found matching station connector selector 'all'."
                     )
-                raise CommandError(
-                    f"No chargers found matching connector '{cp_raw}'."
-                )
+                raise CommandError(f"No chargers found matching connector '{cp_raw}'.")
             if match_count > 1:
                 self.stdout.write(
                     self.style.WARNING(
@@ -216,107 +203,39 @@ class Command(BaseCommand):
                     f"No chargers found matching charge point path '{cp_path}'."
                 )
 
-        has_charger_selector = bool(serial) or connector_filter is not None or bool(cp_path)
+        has_charger_selector = (
+            bool(serial) or connector_filter is not None or bool(cp_path)
+        )
 
-        if (enable_rfid or disable_rfid) and not has_charger_selector:
-            raise CommandError(
-                "RFID toggles require selecting at least one charger with --sn and/or --cp."
-            )
-
-        if (ws_auth_username or ws_auth_clear) and not has_charger_selector:
-            raise CommandError(
-                "Websocket auth changes require selecting at least one charger with --sn and/or --cp."
-            )
-
-        if (rename_value is not None or send_stop or send_restart) and not has_charger_selector:
-            raise CommandError(
-                "This action requires selecting at least one charger with --sn and/or --cp."
-            )
+        self._validate_selector_requirements(
+            has_charger_selector=has_charger_selector,
+            enable_rfid=enable_rfid,
+            disable_rfid=disable_rfid,
+            ws_auth_username=ws_auth_username,
+            ws_auth_clear=ws_auth_clear,
+            rename_value=rename_value,
+            send_stop=send_stop,
+            send_restart=send_restart,
+        )
 
         chargers = list(queryset.order_by("charger_id", "connector_id"))
-
-        if rename_value is not None or send_stop or send_restart:
-            aggregate_selection = self._select_aggregate_charger(chargers)
-            if aggregate_selection is not None:
-                chargers = [aggregate_selection]
-                queryset = Charger.objects.filter(pk=aggregate_selection.pk)
 
         if not chargers:
             self.stdout.write("No chargers found.")
             return
 
-        if enable_rfid or disable_rfid:
-            new_value = bool(enable_rfid)
-            updated = queryset.update(require_rfid=new_value)
-            verb = "Enabled" if new_value else "Disabled"
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"{verb} RFID authentication on {updated} charger(s)."
-                )
-            )
-            # Refresh to reflect the updated state for output below.
-            chargers = list(
-                Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
-                    "location", "manager_node"
-                )
-            )
-
-        if ws_auth_username:
-            ws_auth_user = self._upsert_ws_auth_user(
-                username=ws_auth_username,
-                password=ws_auth_password,
-            )
-            updated = queryset.update(ws_auth_user=ws_auth_user, ws_auth_group=None)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Enabled websocket auth on {updated} charger(s) with user '{ws_auth_username}'."
-                )
-            )
-            chargers = list(
-                Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
-                    "location", "manager_node"
-                )
-            )
-
-        if ws_auth_clear:
-            updated = queryset.update(ws_auth_user=None, ws_auth_group=None)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Cleared websocket auth protection on {updated} charger(s)."
-                )
-            )
-            chargers = list(
-                Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
-                    "location", "manager_node"
-                )
-            )
-
-        if rename_value is not None:
-            if len(chargers) != 1:
-                raise CommandError(
-                    "--rename requires selecting exactly one charger using --sn and/or --cp."
-                )
-            renamed = self._rename_charger(
-                chargers[0],
-                rename_value,
-                interactive=rename_value == "",
-            )
-            self.stdout.write(self.style.SUCCESS(f"Renamed charger to '{renamed.display_name}'."))
-            chargers = [renamed]
-
-        if send_stop:
-            sent = self._send_stop(chargers)
-            self.stdout.write(
-                self.style.SUCCESS(f"Sent remote stop request to {sent} charger(s).")
-            )
-
-        if send_restart:
-            sent = self._send_restart(chargers)
-            self.stdout.write(
-                self.style.SUCCESS(f"Sent reset request to {sent} charger(s).")
-            )
-
-        if rename_value is not None or send_stop or send_restart:
+        if self._handle_mutating_actions(
+            chargers=chargers,
+            queryset=queryset,
+            enable_rfid=enable_rfid,
+            disable_rfid=disable_rfid,
+            ws_auth_username=ws_auth_username,
+            ws_auth_password=ws_auth_password,
+            ws_auth_clear=ws_auth_clear,
+            rename_value=rename_value,
+            send_stop=send_stop,
+            send_restart=send_restart,
+        ):
             return
 
         if tail is not None:
@@ -336,6 +255,175 @@ class Command(BaseCommand):
             self._render_details(chargers)
         else:
             self._render_table(chargers)
+
+    def _validate_option_combinations(
+        self,
+        *,
+        enable_rfid: bool,
+        disable_rfid: bool,
+        ws_auth_username: str,
+        ws_auth_password: str | None,
+        ws_auth_clear: bool,
+        send_stop: bool,
+        send_restart: bool,
+        tail: int | None,
+        sessions: int | None,
+    ) -> None:
+        if enable_rfid and disable_rfid:
+            raise CommandError("Use either --rfid-enable or --rfid-disable, not both.")
+
+        if ws_auth_username and not ws_auth_password:
+            raise CommandError("--ws-auth-username requires --ws-auth-password.")
+
+        if ws_auth_password and not ws_auth_username:
+            raise CommandError("--ws-auth-password requires --ws-auth-username.")
+
+        if ws_auth_clear and ws_auth_username:
+            raise CommandError(
+                "Use either --ws-auth-clear or --ws-auth-username/--ws-auth-password, not both."
+            )
+
+        if send_stop and send_restart:
+            raise CommandError("Use either --send-stop or --send-restart, not both.")
+
+        if tail is not None and tail <= 0:
+            raise CommandError("--tail requires a positive number of log entries.")
+
+        if sessions is not None and sessions <= 0:
+            raise CommandError("--sessions requires a positive number of sessions.")
+
+    def _validate_selector_requirements(
+        self,
+        *,
+        has_charger_selector: bool,
+        enable_rfid: bool,
+        disable_rfid: bool,
+        ws_auth_username: str,
+        ws_auth_clear: bool,
+        rename_value: str | None,
+        send_stop: bool,
+        send_restart: bool,
+    ) -> None:
+        if (enable_rfid or disable_rfid) and not has_charger_selector:
+            raise CommandError(
+                "RFID toggles require selecting at least one charger with --sn and/or --cp."
+            )
+
+        if (ws_auth_username or ws_auth_clear) and not has_charger_selector:
+            raise CommandError(
+                "Websocket auth changes require selecting at least one charger with --sn and/or --cp."
+            )
+
+        if (
+            rename_value is not None or send_stop or send_restart
+        ) and not has_charger_selector:
+            raise CommandError(
+                "This action requires selecting at least one charger with --sn and/or --cp."
+            )
+
+    def _handle_mutating_actions(
+        self,
+        *,
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        enable_rfid: bool,
+        disable_rfid: bool,
+        ws_auth_username: str,
+        ws_auth_password: str | None,
+        ws_auth_clear: bool,
+        rename_value: str | None,
+        send_stop: bool,
+        send_restart: bool,
+    ) -> bool:
+        if not (
+            enable_rfid
+            or disable_rfid
+            or ws_auth_username
+            or ws_auth_clear
+            or rename_value is not None
+            or send_stop
+            or send_restart
+        ):
+            return False
+
+        selected_chargers = chargers
+        selected_queryset = queryset
+
+        if rename_value is not None or send_restart:
+            aggregate_selection = self._select_aggregate_charger(chargers)
+            if aggregate_selection is not None:
+                selected_chargers = [aggregate_selection]
+                selected_queryset = Charger.objects.filter(pk=aggregate_selection.pk)
+
+        if enable_rfid or disable_rfid:
+            new_value = bool(enable_rfid)
+            updated = selected_queryset.update(require_rfid=new_value)
+            verb = "Enabled" if new_value else "Disabled"
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"{verb} RFID authentication on {updated} charger(s)."
+                )
+            )
+            selected_chargers = self._reload_chargers(selected_chargers)
+
+        if ws_auth_username:
+            ws_auth_user = self._upsert_ws_auth_user(
+                username=ws_auth_username,
+                password=ws_auth_password,
+            )
+            updated = selected_queryset.update(
+                ws_auth_user=ws_auth_user, ws_auth_group=None
+            )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Enabled websocket auth on {updated} charger(s) with user '{ws_auth_username}'."
+                )
+            )
+            selected_chargers = self._reload_chargers(selected_chargers)
+
+        if ws_auth_clear:
+            updated = selected_queryset.update(ws_auth_user=None, ws_auth_group=None)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Cleared websocket auth protection on {updated} charger(s)."
+                )
+            )
+            selected_chargers = self._reload_chargers(selected_chargers)
+
+        if rename_value is not None:
+            if len(selected_chargers) != 1:
+                raise CommandError(
+                    "--rename requires selecting exactly one charger using --sn and/or --cp."
+                )
+            renamed = self._rename_charger(
+                selected_chargers[0],
+                rename_value,
+                interactive=rename_value == "",
+            )
+            self.stdout.write(
+                self.style.SUCCESS(f"Renamed charger to '{renamed.display_name}'.")
+            )
+
+        if send_stop:
+            sent = self._send_stop(chargers)
+            self.stdout.write(
+                self.style.SUCCESS(f"Sent remote stop request to {sent} charger(s).")
+            )
+
+        if send_restart:
+            sent = self._send_restart(selected_chargers)
+            self.stdout.write(
+                self.style.SUCCESS(f"Sent reset request to {sent} charger(s).")
+            )
+
+        return True
+
+    def _reload_chargers(self, chargers: list[Charger]) -> list[Charger]:
+        return list(
+            Charger.objects.filter(pk__in=[c.pk for c in chargers]).select_related(
+                "location", "manager_node"
+            )
+        )
 
     def _filter_by_serial(
         self, queryset: QuerySet[Charger], serial: str
@@ -415,13 +503,13 @@ class Command(BaseCommand):
             return None, normalized
 
         if connector <= 0:
-            raise CommandError(
-                "--cp requires a connector identifier (A, B, ...)."
-            )
+            raise CommandError("--cp requires a connector identifier (A, B, ...).")
 
         return connector, None
 
-    def _resolve_default_base_charger(self, queryset: QuerySet[Charger]) -> Charger | None:
+    def _resolve_default_base_charger(
+        self, queryset: QuerySet[Charger]
+    ) -> Charger | None:
         """Return a default base charger for singular ``charger`` command usage."""
 
         base = queryset.filter(connector_id__isnull=True).order_by("charger_id").first()
@@ -470,15 +558,14 @@ class Command(BaseCommand):
         """Rename connector display names for a base charger when requested."""
 
         connectors = list(
-            Charger.objects.filter(charger_id=charger.charger_id, connector_id__isnull=False)
-            .order_by("connector_id")
+            Charger.objects.filter(
+                charger_id=charger.charger_id, connector_id__isnull=False
+            ).order_by("connector_id")
         )
         if not connectors:
             return
 
-        prompt = (
-            f"Rename {len(connectors)} connector(s) to '{station_name} <letter>' automatically? [Y/n]: "
-        )
+        prompt = f"Rename {len(connectors)} connector(s) to '{station_name} <letter>' automatically? [Y/n]: "
         auto_rename = True
         if interactive:
             auto_rename = self._stdin_confirm(prompt=prompt, default=True)
@@ -510,7 +597,10 @@ class Command(BaseCommand):
         for charger in chargers:
             tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
             if tx_obj is None:
-                raise CommandError(f"{charger}: no active transaction")
+                self.stderr.write(
+                    self.style.ERROR(f"{charger}: no active transaction, skipping.")
+                )
+                continue
             self._send_control_call(
                 charger,
                 action="RemoteStopTransaction",
@@ -519,6 +609,10 @@ class Command(BaseCommand):
                 timeout_message="RemoteStopTransaction request timed out",
             )
             sent += 1
+
+        if sent == 0:
+            raise CommandError("No active transactions found for selected charger(s).")
+
         return sent
 
     def _send_restart(self, chargers: list[Charger]) -> int:
@@ -700,8 +794,9 @@ class Command(BaseCommand):
                 Prefetch(
                     "meter_values",
                     queryset=(
-                        MeterValue.objects.filter(energy__isnull=False)
-                        .order_by("timestamp")
+                        MeterValue.objects.filter(energy__isnull=False).order_by(
+                            "timestamp"
+                        )
                     ),
                     to_attr="energy_values",
                 )
@@ -777,10 +872,7 @@ class Command(BaseCommand):
         rows: list[dict[str, str]] = []
         for charger in chargers:
             total = totals.get(charger.pk, 0.0)
-            if (
-                charger.connector_id is None
-                and charger.charger_id in aggregate_sources
-            ):
+            if charger.connector_id is None and charger.charger_id in aggregate_sources:
                 total = aggregate_totals.get(charger.charger_id, total)
             status_label = self._status_label(charger)
             rfid_value = "on" if charger.require_rfid else "off"
@@ -788,9 +880,7 @@ class Command(BaseCommand):
                 charger.connector_id is not None
                 and status_label.casefold() == "charging"
             ):
-                tx_obj = store.get_transaction(
-                    charger.charger_id, charger.connector_id
-                )
+                tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
                 if tx_obj is not None:
                     active_rfid = str(getattr(tx_obj, "rfid", "") or "").strip()
                     if active_rfid:
@@ -834,9 +924,7 @@ class Command(BaseCommand):
         self.stdout.write(header_line)
         self.stdout.write(separator)
         for row in rows:
-            self.stdout.write(
-                "  ".join(row[key].ljust(widths[key]) for key in headers)
-            )
+            self.stdout.write("  ".join(row[key].ljust(widths[key]) for key in headers))
 
     def _render_details(self, chargers: Iterable[Charger]) -> None:
         for idx, charger in enumerate(chargers):
@@ -852,9 +940,11 @@ class Command(BaseCommand):
                 ("Serial", charger.charger_id),
                 (
                     "Connected",
-                    "Yes"
-                    if store.is_connected(charger.charger_id, charger.connector_id)
-                    else "No",
+                    (
+                        "Yes"
+                        if store.is_connected(charger.charger_id, charger.connector_id)
+                        else "No"
+                    ),
                 ),
                 ("Require RFID", "Yes" if charger.require_rfid else "No"),
                 ("Public Display", "Yes" if charger.public_display else "No"),
@@ -907,7 +997,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"{label}: {value}")
 
             if charger.last_status_vendor_info:
-                vendor_info = json.dumps(charger.last_status_vendor_info, indent=2, sort_keys=True)
+                vendor_info = json.dumps(
+                    charger.last_status_vendor_info, indent=2, sort_keys=True
+                )
                 self.stdout.write("Vendor Info:")
                 self.stdout.write(vendor_info)
 
@@ -955,7 +1047,9 @@ class Command(BaseCommand):
             return
         measurand = sample.get("measurand") or "Value"
         value_text = self._format_sample_value(sample.get("value"), sample.get("unit"))
-        meta_text = self._format_sample_meta(sample.get("context"), sample.get("location"))
+        meta_text = self._format_sample_meta(
+            sample.get("context"), sample.get("location")
+        )
         self.stdout.write(f"  - {measurand}: {value_text}{meta_text}")
 
     @staticmethod
