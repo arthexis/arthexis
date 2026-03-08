@@ -21,18 +21,22 @@ class UpgradePolicyAdmin(EntityModelAdmin):
 
     actions = ("activate_selected_policies", "deactivate_selected_policies")
 
-    @admin.display(description="Interval")
+    @admin.display(description="Interval", ordering="interval_minutes")
     def interval_display(self, obj: UpgradePolicy) -> str:
         """Return the policy interval in a human-readable format."""
 
         interval_minutes = int(obj.interval_minutes or 0)
         if interval_minutes <= 0:
             return "-"
-        if interval_minutes % 1440 == 0:
-            days = interval_minutes // 1440
+
+        minutes_per_day = 1440
+        minutes_per_hour = 60
+
+        if interval_minutes % minutes_per_day == 0:
+            days = interval_minutes // minutes_per_day
             return ngettext("%(count)d day", "%(count)d days", days) % {"count": days}
-        if interval_minutes % 60 == 0:
-            hours = interval_minutes // 60
+        if interval_minutes % minutes_per_hour == 0:
+            hours = interval_minutes // minutes_per_hour
             return ngettext("%(count)d hour", "%(count)d hours", hours) % {"count": hours}
         return ngettext("%(count)d minute", "%(count)d minutes", interval_minutes) % {
             "count": interval_minutes

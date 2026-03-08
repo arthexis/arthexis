@@ -1,33 +1,32 @@
 """Tests for upgrade policy admin list display formatting."""
 
+import pytest
 from django.contrib import admin
+from django.utils import translation
 
 from apps.nodes.admin.upgrade_policy_admin import UpgradePolicyAdmin
 from apps.nodes.models import UpgradePolicy
 
 
-def test_interval_display_formats_minutes():
-    """Render non-hour intervals as minutes."""
+@pytest.mark.parametrize(
+    ("minutes", "expected"),
+    [
+        (None, "-"),
+        (-10, "-"),
+        (0, "-"),
+        (1, "1 minute"),
+        (15, "15 minutes"),
+        (60, "1 hour"),
+        (120, "2 hours"),
+        (1440, "1 day"),
+        (2880, "2 days"),
+    ],
+)
+def test_interval_display_formats(minutes, expected):
+    """Render interval values as localized, human-readable units."""
 
-    policy = UpgradePolicy(name="Minute", interval_minutes=15)
+    policy = UpgradePolicy(name="Policy", interval_minutes=minutes)
     model_admin = UpgradePolicyAdmin(UpgradePolicy, admin.site)
 
-    assert model_admin.interval_display(policy) == "15 minutes"
-
-
-def test_interval_display_formats_hours():
-    """Render exact hour intervals as hours."""
-
-    policy = UpgradePolicy(name="Hour", interval_minutes=120)
-    model_admin = UpgradePolicyAdmin(UpgradePolicy, admin.site)
-
-    assert model_admin.interval_display(policy) == "2 hours"
-
-
-def test_interval_display_formats_days():
-    """Render exact day intervals as days."""
-
-    policy = UpgradePolicy(name="Day", interval_minutes=2880)
-    model_admin = UpgradePolicyAdmin(UpgradePolicy, admin.site)
-
-    assert model_admin.interval_display(policy) == "2 days"
+    with translation.override("en"):
+        assert model_admin.interval_display(policy) == expected
