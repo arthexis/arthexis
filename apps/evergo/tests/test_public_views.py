@@ -303,6 +303,7 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
     assert 'id="user-story-toggle"' in content
     assert 'id="chat-widget"' in content
     assert 'id="user-story-overlay"' in content
+    assert 'id="theme-toggle"' in content
 
 
 @pytest.mark.django_db
