@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import platform
 import subprocess
 import sys
 import time
@@ -26,6 +28,27 @@ class PyxelViewportLaunchError(RuntimeError):
 
 
 VIEWPORT_STARTUP_GRACE_SECONDS = 3.0
+
+
+def has_graphical_display() -> bool:
+    """Return ``True`` when the server environment can open GUI windows."""
+
+    if not sys.platform.startswith("linux"):
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def viewport_opened_message(viewport_name: str) -> str:
+    """Build a success message that clarifies where the viewport appears."""
+
+    message = (
+        f"Opened Pyxel viewport '{viewport_name}'. "
+        "The window opens on the server desktop, not inside this browser."
+    )
+    release = platform.release().lower()
+    if "microsoft" in release or os.environ.get("WSL_DISTRO_NAME"):
+        return f"{message} In WSL, it appears in the Linux desktop session (WSLg/X11)."
+    return message
 
 
 @require_POST
@@ -85,6 +108,16 @@ def open_viewport_view(request, pk: int | None = None):
     if not is_local_request(request):
         raise PermissionDenied("Pyxel viewport is only available from local server addresses")
 
+    if not has_graphical_display():
+        messages.error(
+            request,
+            "Unable to launch Pyxel viewport: no graphical display is configured "
+            "for this server process (DISPLAY/WAYLAND_DISPLAY).",
+        )
+        if pk is None:
+            return redirect(reverse("admin:pyxel_pyxelviewport_changelist"))
+        return redirect(reverse("admin:pyxel_pyxelviewport_change", args=[pk]))
+
     target_viewport: PyxelViewport
     if pk is None:
         try:
@@ -107,7 +140,7 @@ def open_viewport_view(request, pk: int | None = None):
     except PyxelViewportLaunchError as exc:
         messages.error(request, str(exc))
     else:
-        messages.success(request, f"Opened Pyxel viewport '{target_viewport.name}'")
+        messages.success(request, viewport_opened_message(target_viewport.name))
 
     if pk is None:
         return redirect(reverse("admin:pyxel_pyxelviewport_changelist"))
