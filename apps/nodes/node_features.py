@@ -4,11 +4,6 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from apps.clocks.utils import has_clock_device
-from apps.core.notifications import supports_gui_toast
-from apps.core.systemctl import _systemctl_command
-from apps.video import has_rpi_camera_stack
-
 from .feature_detection import NodeFeatureDetectionRegistry
 
 
@@ -28,12 +23,8 @@ def _lock_detected(*, slug: str, base_dir: Path, base_path: Path) -> bool:
     if not lock:
         return False
 
-    lock_dirs = [base_path / ".locks", base_dir / ".locks"]
-    unique_dirs: list[Path] = []
-    for lock_dir in lock_dirs:
-        if lock_dir not in unique_dirs:
-            unique_dirs.append(lock_dir)
-    return any((lock_dir / lock).exists() for lock_dir in unique_dirs)
+    lock_dirs = {base_path / ".locks", base_dir / ".locks"}
+    return any(lock_dir.joinpath(lock).exists() for lock_dir in lock_dirs)
 
 
 def _hosts_gelectriic_ap() -> bool:
@@ -115,18 +106,29 @@ def check_node_feature(
 
     del node
     if slug == "systemd-manager":
+        from apps.core.systemctl import _systemctl_command
+
         return bool(_systemctl_command())
-    if slug in SYSTEMD_DEPENDENT_FEATURE_SLUGS and not bool(_systemctl_command()):
-        return False
+    if slug in SYSTEMD_DEPENDENT_FEATURE_SLUGS:
+        from apps.core.systemctl import _systemctl_command
+
+        if not bool(_systemctl_command()):
+            return False
     if slug in FEATURE_LOCK_MAP:
         return _lock_detected(slug=slug, base_dir=base_dir, base_path=base_path)
     if slug == "gui-toast":
+        from apps.core.notifications import supports_gui_toast
+
         return supports_gui_toast()
     if slug == "video-cam":
+        from apps.video import has_rpi_camera_stack
+
         return has_rpi_camera_stack()
     if slug == "ap-router":
         return _hosts_gelectriic_ap()
     if slug == "gpio-rtc":
+        from apps.clocks.utils import has_clock_device
+
         return has_clock_device()
     return None
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from django.conf import settings
-from django.db.utils import OperationalError
+from django.db.utils import OperationalError, ProgrammingError
 
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
@@ -42,7 +42,7 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
 
     try:
         config = get_summary_config()
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         return False
 
     return bool(config.is_active)

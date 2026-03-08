@@ -141,6 +141,10 @@ def test_restart_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
         lambda slug: False,
     )
 
+    lock_path = temp_base_dir / ".locks" / LCD_LOW_LOCK_FILE
+
     with override_settings(BASE_DIR=temp_base_dir):
         with pytest.raises(CommandError, match="lcd-screen feature is not active"):
             call_command("lcd", "write", restart=True, service_name="demo")
+
+    assert not lock_path.exists()

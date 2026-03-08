@@ -52,6 +52,8 @@ class Command(BaseCommand):
                 )
             )
 
+        feature_active = is_feature_active_for_node(node=node, slug="audio-capture")
+
         created, updated = RecordingDevice.refresh_from_system(node=node)
         if created or updated:
             self.stdout.write(
@@ -60,7 +62,11 @@ class Command(BaseCommand):
                 )
             )
 
-        if not is_feature_active_for_node(node=node, slug="audio-capture"):
+        has_capture_device = RecordingDevice.objects.filter(
+            node=node,
+            capture_channels__gt=0,
+        ).exists()
+        if not feature_active or not has_capture_device:
             raise CommandError("No audio recording devices were detected on this node.")
 
         sample_rate = options["sample_rate"]

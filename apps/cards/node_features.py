@@ -15,20 +15,31 @@ RFID_SCANNER_SLUG = "rfid-scanner"
 RFID_LOCK_NAME = "rfid.lck"
 
 
-def _lock_paths(*, node: "Node" | None) -> list[Path]:
+def _lock_paths(
+    *,
+    node: "Node" | None,
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> list[Path]:
     """Return lock-file locations that can represent scanner availability."""
 
     lock_paths: list[Path] = []
-    base_dir = Path(settings.BASE_DIR)
-    lock_paths.append(base_dir / ".locks" / RFID_LOCK_NAME)
+    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
+    lock_paths.append(resolved_base_dir / ".locks" / RFID_LOCK_NAME)
     if node is not None:
-        node_lock = node.get_base_path() / ".locks" / RFID_LOCK_NAME
+        resolved_base_path = base_path or node.get_base_path()
+        node_lock = resolved_base_path / ".locks" / RFID_LOCK_NAME
         if node_lock not in lock_paths:
             lock_paths.append(node_lock)
     return lock_paths
 
 
-def _lockfile_status(*, node: "Node" | None) -> tuple[bool, Path | None]:
+def _lockfile_status(
+    *,
+    node: "Node" | None,
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> tuple[bool, Path | None]:
     """Return whether a compatibility RFID lock file already exists."""
 
     try:
@@ -36,14 +47,16 @@ def _lockfile_status(*, node: "Node" | None) -> tuple[bool, Path | None]:
     except Exception:  # pragma: no cover - defensive import fallback
         lock_file_active = None
 
-    for path in _lock_paths(node=node):
+    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
+
+    for path in _lock_paths(node=node, base_dir=resolved_base_dir, base_path=base_path):
         try:
             if not path.exists():
                 continue
         except OSError:
             continue
 
-        if lock_file_active is not None and path == Path(settings.BASE_DIR) / ".locks" / RFID_LOCK_NAME:
+        if lock_file_active is not None and path == resolved_base_dir / ".locks" / RFID_LOCK_NAME:
             try:
                 is_active, active_path = lock_file_active()
             except Exception:
@@ -67,7 +80,7 @@ def _assume_detected(reason: str | None, lock: Path | None) -> dict[str, Any]:
     return payload
 
 
-def _service_detection() -> dict[str, Any]:
+def _service_detection(*, base_dir: Path | None = None) -> dict[str, Any]:
     """Probe the RFID service fallback used on systemd-based installations."""
 
     try:
@@ -75,7 +88,8 @@ def _service_detection() -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - unexpected import errors
         return {"detected": False, "reason": str(exc)}
 
-    lock_dir = Path(settings.BASE_DIR) / ".locks"
+    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
+    lock_dir = resolved_base_dir / ".locks"
     if rfid_service_enabled(lock_dir=lock_dir):
         return {"detected": True, "assumed": True, "reason": "RFID service enabled"}
     try:
@@ -86,10 +100,19 @@ def _service_detection() -> dict[str, Any]:
     return {"detected": False, "reason": "RFID scanner not detected"}
 
 
-def detect_scanner_capability(*, node: "Node" | None = None) -> dict[str, Any]:
+def detect_scanner_capability(
+    *,
+    node: "Node" | None = None,
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> dict[str, Any]:
     """Return detection metadata for the RFID scanner node feature."""
 
-    has_lock, lock_path = _lockfile_status(node=node)
+    has_lock, lock_path = _lockfile_status(
+        node=node,
+        base_dir=base_dir,
+        base_path=base_path,
+    )
     if has_lock:
         return _assume_detected(None, lock_path)
 
@@ -114,7 +137,7 @@ def detect_scanner_capability(*, node: "Node" | None = None) -> dict[str, Any]:
                 payload["errno"] = irq_result["errno"]
         return payload
 
-    service_result = _service_detection()
+    service_result = _service_detection(base_dir=base_dir)
     if service_result.get("detected"):
         return service_result
 
@@ -130,16 +153,28 @@ def check_node_feature(
 ) -> bool | None:
     """Return feature eligibility for the RFID scanner hook."""
 
-    del base_dir, base_path
     if slug != RFID_SCANNER_SLUG:
         return None
-    return bool(detect_scanner_capability(node=node).get("detected"))
+    return bool(
+        detect_scanner_capability(
+            node=node,
+            base_dir=base_dir,
+            base_path=base_path,
+        ).get("detected")
+    )
 
 
-def _write_compatibility_lock(*, node: "Node") -> None:
+def _write_compatibility_lock(
+    *,
+    node: "Node",
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> None:
     """Persist lock files for compatibility with existing runtime checks."""
 
-    for path in _lock_paths(node=node):
+    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
+
+    for path in _lock_paths(node=node, base_dir=resolved_base_dir, base_path=base_path):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
@@ -156,13 +191,22 @@ def setup_node_feature(
 ) -> bool | None:
     """Perform RFID setup work and report whether the feature is available."""
 
-    del base_dir, base_path
     if slug != RFID_SCANNER_SLUG:
         return None
 
-    detected = bool(detect_scanner_capability(node=node).get("detected"))
+    detected = bool(
+        detect_scanner_capability(
+            node=node,
+            base_dir=base_dir,
+            base_path=base_path,
+        ).get("detected")
+    )
     if detected:
-        _write_compatibility_lock(node=node)
+        _write_compatibility_lock(
+            node=node,
+            base_dir=base_dir,
+            base_path=base_path,
+        )
     return detected
 
 

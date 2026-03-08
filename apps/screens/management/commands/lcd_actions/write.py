@@ -57,6 +57,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if options["restart"]:
+            self._ensure_lcd_feature_active()
+
         base_dir = Path(settings.BASE_DIR)
         lock_dir = base_dir / ".locks"
         target_name = LCD_HIGH_LOCK_FILE if options.get("sticky") else LCD_LOW_LOCK_FILE
@@ -108,7 +111,6 @@ class Command(BaseCommand):
         return LcdMessage(subject="", body="")
 
     def _restart_service(self, *, base_dir: Path, service_name: str | None) -> None:
-        self._ensure_lcd_feature_active()
         resolved_service = service_name or self._read_service_name(base_dir)
         if not resolved_service:
             raise CommandError("Service name is required to restart the lcd updater")

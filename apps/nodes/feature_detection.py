@@ -29,6 +29,7 @@ class NodeFeatureDetector:
 
     def run(
         self,
+        slug: str,
         *,
         node: Node,
         base_dir: Path,
@@ -39,7 +40,7 @@ class NodeFeatureDetector:
         result: bool | None = None
         if callable(self.check):
             result = self.check(
-                self.slug,
+                slug,
                 node=node,
                 base_dir=base_dir,
                 base_path=base_path,
@@ -47,7 +48,7 @@ class NodeFeatureDetector:
 
         if result is None and callable(self.setup):
             return self.setup(
-                self.slug,
+                slug,
                 node=node,
                 base_dir=base_dir,
                 base_path=base_path,
@@ -55,7 +56,7 @@ class NodeFeatureDetector:
 
         if result and callable(self.setup):
             setup_result = self.setup(
-                self.slug,
+                slug,
                 node=node,
                 base_dir=base_dir,
                 base_path=base_path,
@@ -151,6 +152,7 @@ class NodeFeatureDetectionRegistry:
         for detector in detectors:
             try:
                 result = detector.run(
+                    slug,
                     node=node,
                     base_dir=base_dir,
                     base_path=base_path,
@@ -178,7 +180,7 @@ def is_feature_active_for_node(
 
     is_local_attr = getattr(node, "is_local", None)
     if is_local_attr is not None and not bool(is_local_attr):
-        return True
+        return False
 
     resolved_base_dir = base_dir or Path(settings.BASE_DIR)
     get_base_path = getattr(node, "get_base_path", None)
@@ -209,4 +211,3 @@ def is_local_node_feature_active(slug: str) -> bool:
 
 
 node_feature_detection_registry = NodeFeatureDetectionRegistry()
-

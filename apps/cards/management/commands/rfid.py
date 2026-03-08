@@ -19,6 +19,7 @@ from apps.cards.detect import detect_scanner
 from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
 from apps.cards.rfid_import_export import account_column_for_field, parse_accounts, serialize_accounts
+from apps.cards.node_features import RFID_SCANNER_SLUG
 from apps.cards.rfid_service import rfid_service_enabled, run_service, service_available, service_endpoint
 from apps.cards.scanner import scan_sources
 from apps.cards.utils import drain_stdin, user_requested_stop
@@ -107,7 +108,7 @@ class Command(BaseCommand):
         node = Node.get_local()
         if node is None:
             return True
-        return is_feature_active_for_node(node=node, slug="rfid-scanner")
+        return is_feature_active_for_node(node=node, slug=RFID_SCANNER_SLUG)
 
     def _handle_check(self, options):
         if options.get("scan"):
@@ -213,14 +214,16 @@ class Command(BaseCommand):
                 return {"rfid": None, "label_id": None}
 
     def _handle_watch(self, options):
-        if not self._scanner_feature_available():
-            raise CommandError("rfid-scanner feature is not active on this node")
         from apps.cards.always_on import is_running, start, stop
 
         if options["stop"]:
             stop()
             self.stdout.write(self.style.SUCCESS("RFID watch disabled"))
             return
+
+        if not self._scanner_feature_available():
+            raise CommandError("rfid-scanner feature is not active on this node")
+
         start()
         state = "enabled" if is_running() else "disabled"
         self.stdout.write(self.style.SUCCESS(f"RFID watch {state}"))

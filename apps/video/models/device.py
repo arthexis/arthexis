@@ -126,15 +126,9 @@ class VideoDevice(Ownable):
     ) -> tuple[int, int] | tuple[int, int, list["VideoDevice"], list["VideoDevice"]]:
         """Synchronize :class:`VideoDevice` entries for ``node``."""
 
-        if not is_feature_active_for_node(node=node, slug="video-cam"):
-            empty: tuple[int, int] | tuple[int, int, list["VideoDevice"], list["VideoDevice"]]
-            if return_objects:
-                empty = (0, 0, [], [])
-            else:
-                empty = (0, 0)
-            return empty
-
-        detected = cls.detect_devices()
+        detected: list[DetectedVideoDevice] = []
+        if is_feature_active_for_node(node=node, slug="video-cam"):
+            detected = cls.detect_devices()
         return sync_detected_devices(
             model_cls=cls,
             node=node,
