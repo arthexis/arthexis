@@ -454,6 +454,37 @@ def test_execute_markdown_bash_blocks_quote_arg_sigils(monkeypatch):
     assert captured[0] == "echo 'hello; cat /etc/passwd'"
 
 
+def test_execute_external_language_lua_uses_lua_command(monkeypatch):
+    """Lua scripts execute through the Lua interpreter command mapping."""
+
+    recipe = Recipe(slug="lua-check", display="Lua Check", script="")
+    captured: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        captured.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="hello from lua\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    result = recipe._execute_external_language(language="lua", code='print("hello from lua")')
+
+    assert result == "hello from lua"
+    assert captured[0][:2] == ["lua", "-e"]
+
+
+def test_execute_external_language_lua_reports_missing_interpreter(monkeypatch):
+    """Lua execution surfaces a clear interpreter-not-available error."""
+
+    recipe = Recipe(slug="lua-missing", display="Lua Missing", script="")
+
+    def fake_run(command, **_kwargs):
+        raise FileNotFoundError(command[0])
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="interpreter 'lua' is not available"):
+        recipe._execute_external_language(language="lua", code='print("hello")')
+
 def test_recipe_product_admin_disables_delete_permission():
     """Recipe product admin remains read-only by denying delete permissions."""
 

@@ -437,6 +437,8 @@ class Recipe(Ownable):
         commands_by_language = {
             "javascript": ["node", "-e", code],
             "js": ["node", "-e", code],
+            "lua": ["lua", "-e", code],
+            "luajit": ["luajit", "-e", code],
             "ruby": ["ruby", "-e", code],
             "rb": ["ruby", "-e", code],
             "perl": ["perl", "-e", code],
