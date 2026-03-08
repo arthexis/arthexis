@@ -381,6 +381,78 @@ def test_order_tracking_public_shows_missing_field_prefill_errors_when_payload_i
     assert "Dato faltante en Evergo API. Captúralo manualmente." in content
 
 
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg"})
+def test_order_tracking_public_preserves_remote_previews_on_invalid_post(_, client):
+    """Regression: invalid POST re-renders should keep remote image previews for operator context."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-invalid-post", email="owner-invalid-post@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-invalid-post@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30206, order_number="GM030206")
+    client.force_login(owner)
+
+    response = client.post(
+        reverse("evergo:order-tracking-public", args=[order.remote_id]),
+        data={
+            "metraje_visita_tecnica": 10,
+            "voltaje_fase_fase": "220",
+            "voltaje_fase_tierra": "120",
+            "voltaje_fase_neutro": "120",
+            "voltaje_neutro_tierra": "1",
+            "capacidad_itm_principal": 60,
+            "programacion_cargador": "32A",
+            "fecha_visita": "2026-02-26T13:00",
+            "marca_cargador": "",
+            "numero_serie": "SER-1",
+            "prueba_carga": "Sin prueba",
+            # Do not confirm missing images to force non-redirect invalid form path.
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'src="https://cdn.evergo.example/fotos/tablero.jpg"' in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
+def test_order_tracking_public_remote_image_lookup_uses_fallback_sources_after_invalid_candidate(
+    mock_fetch_order_detail,
+    client,
+):
+    """Regression: invalid values in earlier sources should not block valid fallback image URLs."""
+    mock_fetch_order_detail.return_value = {
+        "reporte_visita": {"foto_tablero": {"placeholder": "not-a-url"}},
+        "foto_tablero": "https://cdn.evergo.example/fotos/tablero-fallback.jpg",
+    }
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-image-fallback", email="owner-image-fallback@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-image-fallback@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30207, order_number="GM030207")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'src="https://cdn.evergo.example/fotos/tablero-fallback.jpg"' in content
+
+
 @pytest.mark.django_db
 def test_order_tracking_public_normalizes_common_status_text_artifacts(client):
     """Regression: tracking page should normalize known status encoding artifacts for display."""

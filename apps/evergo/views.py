@@ -243,11 +243,11 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     )
     profile = order.user
     brands = profile.fetch_charger_brand_options()
+    remote_image_urls: dict[str, str] = {}
 
     if request.method == "POST":
         form = EvergoOrderTrackingForm(request.POST, request.FILES, charger_brands=brands)
         missing_images = [name for name in IMAGE_FIELD_NAMES if not form.files.get(name)]
-        remote_image_urls: dict[str, str] = {}
         if form.is_valid():
             if missing_images and request.POST.get("confirm_missing_images") != "1":
                 form.add_error(None, "Confirma que deseas continuar con imágenes faltantes.")
@@ -272,6 +272,11 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                         f"Orden enviada correctamente. {completed_steps}/4 pasos completados.",
                     )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
+        if form.errors:
+            _, _, remote_image_urls = _load_remote_phase_one_initial_data(
+                profile=profile,
+                order_id=order_id,
+            )
     else:
         remote_initial_data, remote_prefill_errors, remote_image_urls = _load_remote_phase_one_initial_data(
             profile=profile,
@@ -354,10 +359,11 @@ def _extract_remote_tracking_image_urls(order_payload: dict[str, object]) -> dic
 
     remote_urls: dict[str, str] = {}
     for field_name in IMAGE_FIELD_NAMES:
-        raw_value = _first_present_value(candidate_sources=candidate_sources, field_name=field_name)
-        normalized_url = _normalize_remote_image_url(value=raw_value)
-        if normalized_url:
-            remote_urls[field_name] = normalized_url
+        for source in candidate_sources:
+            normalized_url = _normalize_remote_image_url(value=source.get(field_name))
+            if normalized_url:
+                remote_urls[field_name] = normalized_url
+                break
     return remote_urls
 
 
