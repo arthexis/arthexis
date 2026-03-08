@@ -46,6 +46,17 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "celery-workers": (
+        FeatureParameterDefinition(
+            key="worker_count",
+            label=_("Worker count"),
+            help_text=_(
+                "Number of Celery worker processes to run for the local suite service."
+            ),
+            choices=tuple((str(value), str(value)) for value in range(1, 17)),
+            default="1",
+        ),
+    ),
     "ocpp-simulator": (
         FeatureParameterDefinition(
             key="arthexis_backend",
@@ -60,6 +71,35 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             help_text=_("Enable or disable the Mobility House simulator backend."),
             choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
             default="disabled",
+        ),
+    ),
+    "odoo-crm-sync": (
+        FeatureParameterDefinition(
+            key="deployment_discovery",
+            label=_("Deployment discovery"),
+            help_text=_(
+                "Enable or disable discovery sync of local Odoo deployments."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
+        ),
+        FeatureParameterDefinition(
+            key="employee_import",
+            label=_("Employee import"),
+            help_text=_(
+                "Enable or disable importing missing local Odoo employee profiles."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
+        ),
+        FeatureParameterDefinition(
+            key="evergo_users",
+            label=_("Evergo users"),
+            help_text=_(
+                "Enable or disable provisioning Odoo users from Evergo users."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
         ),
     ),
     "operator-site-interface": (

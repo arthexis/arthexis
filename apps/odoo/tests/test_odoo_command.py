@@ -14,8 +14,8 @@ from apps.features.models import Feature
 from apps.odoo.models import OdooDeployment, OdooEmployee
 from apps.odoo.sync_features import (
     ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-    ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
 )
+from apps.odoo.tests.helpers import odoo_sync_metadata
 
 
 @pytest.mark.django_db
@@ -241,11 +241,7 @@ def test_odoo_command_sync_evergo_users_creates_missing_odoo_users(admin_user, m
 
     Feature.objects.update_or_create(
         slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
-    )
-    Feature.objects.update_or_create(
-        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
-        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True, "metadata": odoo_sync_metadata()},
     )
 
     profile = OdooEmployee.objects.create(
@@ -298,11 +294,7 @@ def test_odoo_command_sync_evergo_users_respects_feature_toggles(admin_user):
 
     Feature.objects.update_or_create(
         slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-        defaults={"display": "Odoo CRM Sync", "is_enabled": False},
-    )
-    Feature.objects.update_or_create(
-        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
-        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True, "metadata": odoo_sync_metadata(evergo_users="disabled")},
     )
 
     profile = OdooEmployee.objects.create(
@@ -328,11 +320,7 @@ def test_odoo_command_sync_evergo_users_requires_profile_id(admin_user):
 
     Feature.objects.update_or_create(
         slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
-    )
-    Feature.objects.update_or_create(
-        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
-        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True, "metadata": odoo_sync_metadata()},
     )
 
     with pytest.raises(CommandError, match=r"--profile-id is required"):
@@ -345,11 +333,7 @@ def test_odoo_command_sync_evergo_users_reuses_existing_remote_uid(admin_user, m
 
     Feature.objects.update_or_create(
         slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG,
-        defaults={"display": "Odoo CRM Sync", "is_enabled": True},
-    )
-    Feature.objects.update_or_create(
-        slug=ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
-        defaults={"display": "Odoo Sync: Evergo Users", "is_enabled": True},
+        defaults={"display": "Odoo CRM Sync", "is_enabled": True, "metadata": odoo_sync_metadata()},
     )
 
     profile = OdooEmployee.objects.create(

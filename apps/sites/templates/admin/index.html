@@ -45,6 +45,7 @@
     <div id="content-main" class="dashboard-main">
     {% include "admin/dashboard_app_list.html" with app_list=app_list enable_app_visibility_controls=True %}
     </div>
+    {% if app_list %}
     <div class="dashboard-side" id="recent-boxes">
       <div
         id="admin-dashboard-widgets"
@@ -63,6 +64,7 @@
         </a>
       </p>
   </div>
+    {% endif %}
 </div>
 {% endblock %}
 
