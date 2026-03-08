@@ -16,7 +16,6 @@ from apps.features.admin import FeatureAdmin, FeatureAdminForm
 from apps.features.admin import SourceAppListFilter
 from apps.features.models import Feature
 
-
 TEST_STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
@@ -60,10 +59,14 @@ def test_feature_admin_toggle_selected_feature_action_flips_enabled_state(admin_
 
 @pytest.mark.django_db
 @override_settings(STORAGES=TEST_STORAGES)
-def test_feature_admin_toggle_selected_feature_requires_change_permission(admin_client, django_user_model):
+def test_feature_admin_toggle_selected_feature_requires_change_permission(
+    admin_client, django_user_model
+):
     """Regression: bulk toggle action must not execute for view-only admins."""
 
-    feature = Feature.objects.create(slug="view-only-target", display="View Only Target", is_enabled=True)
+    feature = Feature.objects.create(
+        slug="view-only-target", display="View Only Target", is_enabled=True
+    )
 
     user = django_user_model.objects.create_user(
         username="view-only-admin",
@@ -71,7 +74,9 @@ def test_feature_admin_toggle_selected_feature_requires_change_permission(admin_
         password="pass",
         is_staff=True,
     )
-    view_perm = Permission.objects.get(codename="view_feature", content_type__app_label="features")
+    view_perm = Permission.objects.get(
+        codename="view_feature", content_type__app_label="features"
+    )
     user.user_permissions.set([view_perm])
     admin_client.force_login(user)
 
@@ -94,7 +99,9 @@ def test_feature_admin_toggle_selected_feature_requires_change_permission(admin_
 
 
 @pytest.mark.django_db
-def test_feature_admin_reload_base_requires_delete_permission(admin_client, django_user_model):
+def test_feature_admin_reload_base_requires_delete_permission(
+    admin_client, django_user_model
+):
     """Regression: reload-all must enforce model delete permission."""
 
     user = django_user_model.objects.create_user(
@@ -104,7 +111,8 @@ def test_feature_admin_reload_base_requires_delete_permission(admin_client, djan
         is_staff=True,
     )
     perms = Permission.objects.filter(
-        codename__in=["view_feature", "change_feature"], content_type__app_label="features"
+        codename__in=["view_feature", "change_feature"],
+        content_type__app_label="features",
     )
     user.user_permissions.set(perms)
     admin_client.force_login(user)
@@ -124,7 +132,9 @@ def test_feature_admin_saving_celery_workers_feature_syncs_runtime(admin_client)
     feature.metadata = {"parameters": {"worker_count": "1"}}
     feature.save(update_fields=["metadata", "updated_at"])
 
-    with patch("apps.features.admin.sync_celery_workers_from_feature") as sync_runtime:
+    with patch(
+        "apps.features.admin.sync_celery_workers_from_feature", return_value=(5, True)
+    ) as sync_runtime:
         response = admin_client.post(
             reverse("admin:features_feature_change", args=[feature.pk]),
             {
@@ -160,4 +170,52 @@ def test_feature_admin_saving_celery_workers_feature_syncs_runtime(admin_client)
     sync_runtime.assert_called_once_with()
 
 
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_feature_admin_saving_celery_workers_feature_shows_warning_when_restart_fails(
+    admin_client,
+):
+    """Regression: admin save reports restart failure for celery-workers runtime sync."""
 
+    feature = Feature.objects.get(slug="celery-workers")
+
+    with patch(
+        "apps.features.admin.sync_celery_workers_from_feature", return_value=(2, False)
+    ):
+        response = admin_client.post(
+            reverse("admin:features_feature_change", args=[feature.pk]),
+            {
+                "display": "Celery Workers",
+                "slug": "celery-workers",
+                "summary": "",
+                "is_enabled": "on",
+                "main_app": "",
+                "node_feature": "",
+                "admin_requirements": "",
+                "public_requirements": "",
+                "service_requirements": "",
+                "admin_views": "[]",
+                "public_views": "[]",
+                "service_views": "[]",
+                "metadata": "{}",
+                "code_locations": "[]",
+                "protocol_coverage": "{}",
+                "param__worker_count": "2",
+                "featuretest_set-TOTAL_FORMS": "0",
+                "featuretest_set-INITIAL_FORMS": "0",
+                "featuretest_set-MIN_NUM_FORMS": "0",
+                "featuretest_set-MAX_NUM_FORMS": "1000",
+                "featurenote_set-TOTAL_FORMS": "0",
+                "featurenote_set-INITIAL_FORMS": "0",
+                "featurenote_set-MIN_NUM_FORMS": "0",
+                "featurenote_set-MAX_NUM_FORMS": "1000",
+                "_save": "Save",
+            },
+            follow=True,
+        )
+
+    assert response.status_code == 200
+    assert any(
+        "service restart failed" in str(message).lower()
+        for message in get_messages(response.wsgi_request)
+    )

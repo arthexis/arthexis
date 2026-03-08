@@ -10,10 +10,9 @@ from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.core.systemctl import _systemctl_command
-from apps.features.parameters import get_feature_parameter_value
+from apps.features.parameters import get_feature_parameter
 
 from .lifecycle import lock_dir, read_service_name
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +34,14 @@ def parse_worker_count(raw_value: object, *, default: int = 1) -> int:
 def configured_worker_count(*, default: int = 1) -> int:
     """Return the configured Celery worker count from suite feature parameters."""
 
-    from apps.features.models import Feature
-
     try:
-        feature = Feature.objects.filter(slug=CELERY_WORKERS_FEATURE_SLUG).only("metadata").first()
+        raw_value = get_feature_parameter(
+            CELERY_WORKERS_FEATURE_SLUG,
+            CELERY_WORKERS_PARAM_KEY,
+            fallback=str(default),
+        )
     except (OperationalError, ProgrammingError):
-        feature = None
-    raw_value = get_feature_parameter_value(feature, CELERY_WORKERS_PARAM_KEY, default=str(default))
+        raw_value = str(default)
     return parse_worker_count(raw_value, default=default)
 
 
@@ -73,14 +73,29 @@ def restart_celery_service(*, base_dir: Path | None = None) -> bool:
 
     unit_name = f"celery-{service_name}.service"
     try:
-        subprocess.run([*command, "restart", unit_name], check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            [*command, "restart", unit_name],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "Failed to restart celery service %s (exit code %d). stderr: %s",
+                unit_name,
+                result.returncode,
+                result.stderr.strip(),
+            )
+            return False
     except OSError:
         logger.warning("Unable to restart celery service %s", unit_name, exc_info=True)
         return False
     return True
 
 
-def sync_celery_workers_from_feature(*, base_dir: Path | None = None) -> tuple[int, bool]:
+def sync_celery_workers_from_feature(
+    *, base_dir: Path | None = None
+) -> tuple[int, bool]:
     """Persist worker count from suite feature parameters and restart Celery service."""
 
     worker_count = configured_worker_count()

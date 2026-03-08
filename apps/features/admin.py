@@ -63,7 +63,9 @@ class SourceAppListFilter(admin.SimpleListFilter):
 
         apps = (
             Application.objects.filter(
-                features__in=model_admin.get_queryset(request).exclude(main_app__isnull=True)
+                features__in=model_admin.get_queryset(request).exclude(
+                    main_app__isnull=True
+                )
             )
             .distinct()
             .order_by("name")
@@ -100,7 +102,9 @@ class FeatureAdminForm(forms.ModelForm):
         known_dynamic_field_names = {
             name for name in self.fields if name.startswith(self.PARAM_FIELD_PREFIX)
         }
-        metadata = self.instance.metadata if isinstance(self.instance.metadata, dict) else {}
+        metadata = (
+            self.instance.metadata if isinstance(self.instance.metadata, dict) else {}
+        )
         parameters = metadata.get("parameters")
         if not isinstance(parameters, dict):
             parameters = {}
@@ -140,7 +144,9 @@ class FeatureAdminForm(forms.ModelForm):
             if field_name not in self.fields:
                 continue
             try:
-                cleaned_data[field_name] = definition.normalize(cleaned_data.get(field_name))
+                cleaned_data[field_name] = definition.normalize(
+                    cleaned_data.get(field_name)
+                )
             except ValueError as exc:
                 self.add_error(field_name, str(exc))
 
@@ -238,7 +244,9 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         """Build the preview context for the reload-all confirmation view."""
 
         fixture_paths = self._mainstream_fixture_paths()
-        feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
+        feature_manager = getattr(
+            self.model, "all_objects", self.model._default_manager
+        )
         active_feature_count = feature_manager.filter(is_deleted=False).count()
         fixture_names = [path.name for path in fixture_paths]
         return {
@@ -269,16 +277,24 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
 
         fixture_paths = preview_context["fixture_paths"]
         if not fixture_paths:
-            self.message_user(request, _("No feature fixtures found."), level=messages.WARNING)
+            self.message_user(
+                request, _("No feature fixtures found."), level=messages.WARNING
+            )
             return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
         deleted_count = preview_context["active_feature_count"]
         try:
-            feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
+            feature_manager = getattr(
+                self.model, "all_objects", self.model._default_manager
+            )
             with transaction.atomic():
                 feature_manager.update(is_seed_data=False, is_enabled=False)
                 feature_manager.all().delete()
-                call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
+                call_command(
+                    "load_user_data",
+                    *(str(path) for path in fixture_paths),
+                    verbosity=0,
+                )
         except CommandError as exc:
             self.message_user(
                 request,
@@ -315,7 +331,6 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     reload_base.requires_queryset = False
     reload_base.methods = ("GET", "POST")
 
-
     def response_action(self, request, queryset):
         """Handle denied bulk actions with explicit admin feedback."""
 
@@ -336,7 +351,9 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     def changelist_view(self, request, extra_context=None):
         """Emit feedback when a posted bulk action is not permitted."""
 
-        selected_action = request.POST.get("action") if request.method == "POST" else None
+        selected_action = (
+            request.POST.get("action") if request.method == "POST" else None
+        )
         if (
             selected_action == "toggle_selected_feature"
             and not self.has_change_permission(request)
@@ -425,7 +442,9 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             for definition in get_feature_parameter_definitions(obj.slug)
         ]
         if parameter_fields:
-            fieldsets.append((_("Feature parameters"), {"fields": tuple(parameter_fields)}))
+            fieldsets.append(
+                (_("Feature parameters"), {"fields": tuple(parameter_fields)})
+            )
         return fieldsets
 
     def get_formsets_with_inlines(self, request, obj=None):
@@ -445,7 +464,23 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             set_feature_parameter_values(obj, form.cleaned_parameter_values())
         super().save_model(request, obj, form, change)
         if obj.slug == CELERY_WORKERS_FEATURE_SLUG:
-            sync_celery_workers_from_feature()
+            worker_count, restarted = sync_celery_workers_from_feature()
+            if restarted:
+                self.message_user(
+                    request,
+                    _("Celery worker count updated to %(count)d and service restarted.")
+                    % {"count": worker_count},
+                    level=messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    _(
+                        "Celery worker count updated to %(count)d, but service restart failed."
+                    )
+                    % {"count": worker_count},
+                    level=messages.WARNING,
+                )
 
     def toggle_feature(self, request, feature_id: int):
         feature = self.get_object(request, feature_id)
@@ -454,7 +489,9 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if not self.has_change_permission(request, obj=feature):
             raise PermissionDenied
         if request.method != "POST":
-            return HttpResponseRedirect(reverse("admin:features_feature_change", args=[feature.pk]))
+            return HttpResponseRedirect(
+                reverse("admin:features_feature_change", args=[feature.pk])
+            )
 
         feature.set_enabled(not feature.is_enabled)
         status = _("enabled") if feature.is_enabled else _("disabled")

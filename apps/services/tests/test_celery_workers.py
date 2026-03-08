@@ -10,7 +10,9 @@ from apps.services import celery_workers
 
 
 @pytest.mark.django_db
-def test_sync_celery_workers_from_feature_persists_lock_and_restarts(monkeypatch, tmp_path):
+def test_sync_celery_workers_from_feature_persists_lock_and_restarts(
+    monkeypatch, tmp_path
+):
     """Regression: syncing celery workers writes lock file and restarts celery service."""
 
     Feature.objects.update_or_create(
@@ -25,7 +27,9 @@ def test_sync_celery_workers_from_feature_persists_lock_and_restarts(monkeypatch
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text("demo\n", encoding="utf-8")
 
-    monkeypatch.setattr("apps.services.celery_workers._systemctl_command", lambda: ["systemctl"])
+    monkeypatch.setattr(
+        "apps.services.celery_workers._systemctl_command", lambda: ["systemctl"]
+    )
 
     calls: list[list[str]] = []
 
@@ -35,11 +39,15 @@ def test_sync_celery_workers_from_feature_persists_lock_and_restarts(monkeypatch
 
     monkeypatch.setattr("apps.services.celery_workers.subprocess.run", _fake_run)
 
-    worker_count, restarted = celery_workers.sync_celery_workers_from_feature(base_dir=tmp_path)
+    worker_count, restarted = celery_workers.sync_celery_workers_from_feature(
+        base_dir=tmp_path
+    )
 
     assert worker_count == 4
     assert restarted is True
-    assert (tmp_path / ".locks" / "celery_workers.lck").read_text(encoding="utf-8") == "4\n"
+    assert (tmp_path / ".locks" / "celery_workers.lck").read_text(
+        encoding="utf-8"
+    ) == "4\n"
     assert calls == [["systemctl", "restart", "celery-demo.service"]]
 
 
@@ -56,8 +64,32 @@ def test_sync_celery_workers_without_systemctl_still_writes_lock(tmp_path):
         },
     )
 
-    worker_count, restarted = celery_workers.sync_celery_workers_from_feature(base_dir=tmp_path)
+    worker_count, restarted = celery_workers.sync_celery_workers_from_feature(
+        base_dir=tmp_path
+    )
 
     assert worker_count == 3
     assert restarted is False
-    assert (tmp_path / ".locks" / "celery_workers.lck").read_text(encoding="utf-8") == "3\n"
+    assert (tmp_path / ".locks" / "celery_workers.lck").read_text(
+        encoding="utf-8"
+    ) == "3\n"
+
+
+@pytest.mark.django_db
+def test_restart_celery_service_returns_false_on_non_zero_exit(monkeypatch, tmp_path):
+    """Regression: restart helper reports failure when systemctl exits non-zero."""
+
+    lock_path = tmp_path / ".locks" / "service.lck"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("demo\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "apps.services.celery_workers._systemctl_command", lambda: ["systemctl"]
+    )
+
+    def _fake_run(command, **kwargs):
+        return type("Result", (), {"returncode": 1, "stderr": "permission denied"})()
+
+    monkeypatch.setattr("apps.services.celery_workers.subprocess.run", _fake_run)
+
+    assert celery_workers.restart_celery_service(base_dir=tmp_path) is False
