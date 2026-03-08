@@ -73,15 +73,21 @@ def ensure_certbot_available(*, sudo: str = "sudo") -> None:
         _run_command(command)
     except FileNotFoundError as exc:  # pragma: no cover - thin wrapper
         missing_binary = Path(exc.filename or command[0]).name
-        if missing_binary in {"certbot", "sudo"}:
-            message = str(exc) or f"{missing_binary}: command not found"
+        message = str(exc) or f"{missing_binary}: command not found"
+        if missing_binary == "certbot":
             raise CertbotError(_build_missing_certbot_guidance(message)) from exc
+        if missing_binary == "sudo":
+            raise CertbotError(
+                f"{message}\n"
+                "The configured sudo executable is not available. "
+                "Install sudo or rerun with sudo disabled if this process already has root access."
+            ) from exc
         raise CertbotError(str(exc)) from exc
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         error_message = str(exc)
         if _is_missing_certbot_error(error_message):
             raise CertbotError(_build_missing_certbot_guidance(error_message)) from exc
-        raise
+        raise CertbotError(error_message) from exc
 
 def request_certbot_certificate(
     *,

@@ -62,4 +62,9 @@ def test_run_command_forwards_celery_flag(monkeypatch):
     )
 
     assert result == 0
-    assert "--celery" in captured["command"]
+    assert captured["command"] == [
+        command_api.sys.executable,
+        "manage.py",
+        "--celery",
+        "summary",
+    ]
