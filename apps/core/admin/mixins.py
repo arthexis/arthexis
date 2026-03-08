@@ -86,8 +86,6 @@ class OwnableAdminMixin:
         allowed_fields = model_field_names | declared_field_names
 
         field_names = kwargs.get("fields")
-        if field_names is None:
-            field_names = flatten_fieldsets(self.get_fieldsets(request, obj))
         if field_names:
             kwargs["fields"] = [name for name in field_names if name in allowed_fields]
 
