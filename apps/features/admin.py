@@ -15,7 +15,6 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
-from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.app.models import Application
 
@@ -154,7 +153,7 @@ class FeatureAdminForm(forms.ModelForm):
 
 
 @admin.register(Feature)
-class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
+class FeatureAdmin(DjangoObjectActions, EntityModelAdmin):
     form = FeatureAdminForm
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
@@ -167,9 +166,8 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         "is_enabled",
         "main_app",
         "node_feature",
-        "owner_label",
     )
-    list_filter = ("source", "is_enabled", SourceAppListFilter, "node_feature")
+    list_filter = ("source", "is_enabled", SourceAppListFilter)
     search_fields = ("display", "slug", "summary")
     readonly_fields = ("source",)
     fieldsets = (
@@ -186,10 +184,6 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
                     "node_feature",
                 )
             },
-        ),
-        (
-            _("Ownership"),
-            {"fields": ("user", "group")},
         ),
         (
             _("Feature surfaces"),

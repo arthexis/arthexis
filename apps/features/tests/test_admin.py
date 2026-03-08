@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
+from django.test import RequestFactory
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.features.admin import FeatureAdmin, FeatureAdminForm
-from apps.features.admin import SourceAppListFilter
+from apps.features.admin import FeatureAdmin
 from apps.features.models import Feature
 
 
@@ -115,5 +112,31 @@ def test_feature_admin_reload_base_requires_delete_permission(admin_client, djan
     assert response.status_code == 403
 
 
+@pytest.mark.django_db
+def test_feature_admin_changelist_hides_owner_and_node_feature_filters():
+    """Regression: suite feature admin changelist must not show owner or node-feature filters."""
 
+    admin_instance = FeatureAdmin(Feature, admin.site)
+
+    assert "owner_label" not in admin_instance.get_list_display(request=None)
+    assert "node_feature" not in admin_instance.get_list_filter(request=None)
+
+
+@pytest.mark.django_db
+def test_feature_admin_form_excludes_ownership_fields_for_change_view(django_user_model):
+    """Regression: suite feature admin form should not expose ownership controls."""
+
+    feature = Feature.objects.create(slug="admin-no-owner", display="Admin No Owner")
+    request = RequestFactory().get("/")
+    request.user = django_user_model.objects.create_superuser(
+        username="admin-form-user",
+        email="admin-form@example.com",
+        password="pass",
+    )
+    admin_instance = FeatureAdmin(Feature, admin.site)
+
+    form_class = admin_instance.get_form(request, obj=feature)
+
+    assert "user" not in form_class.base_fields
+    assert "group" not in form_class.base_fields
 
