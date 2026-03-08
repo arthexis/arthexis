@@ -7,16 +7,32 @@ from unittest.mock import patch
 import pytest
 from django.core.management import call_command
 from django.test import override_settings
-
 from django.utils import timezone
 
+from apps.features.models import Feature
 from apps.nodes.models import Node
 from apps.screens.startup_notifications import (
     LCD_CHANNELS_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
     LCD_RUNTIME_LOCK_FILE,
 )
+from apps.summary.constants import LLM_SUMMARY_AUTOMATION_FEATURE_SLUG
 from apps.summary.services import get_summary_config
+
+
+@pytest.fixture
+def llm_summary_automation_feature_enabled() -> Feature:
+    """Enable the suite gate used by summary automation tests."""
+
+    feature, _ = Feature.objects.update_or_create(
+        slug=LLM_SUMMARY_AUTOMATION_FEATURE_SLUG,
+        defaults={
+            "display": "LLM Summary Automation",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": True,
+        },
+    )
+    return feature
 
 
 @pytest.mark.django_db
@@ -75,7 +91,9 @@ def test_summary_command_enabled_turns_on_prereqs(tmp_path: Path) -> None:
 
 
 @pytest.mark.django_db
-def test_summary_command_run_now_executes_task_before_status(tmp_path: Path) -> None:
+def test_summary_command_run_now_executes_task_before_status(
+    tmp_path: Path, llm_summary_automation_feature_enabled: Feature
+) -> None:
     """The --run-now flag should execute the summary task before status output."""
 
     Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
@@ -97,7 +115,9 @@ def test_summary_command_run_now_executes_task_before_status(tmp_path: Path) -> 
 
 
 @pytest.mark.django_db
-def test_summary_command_run_now_refreshes_config_before_reporting(tmp_path: Path) -> None:
+def test_summary_command_run_now_refreshes_config_before_reporting(
+    tmp_path: Path, llm_summary_automation_feature_enabled: Feature
+) -> None:
     """The --run-now flag should print refreshed config fields updated by the task."""
 
     Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
@@ -126,4 +146,69 @@ def test_summary_command_run_now_refreshes_config_before_reporting(tmp_path: Pat
     output = out.getvalue()
     assert "Run now: wrote:1" in output
     assert f"Last run: {refreshed_run_at.isoformat()}" in output
+    run_now.assert_called_once_with()
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_skips_when_suite_feature_disabled(tmp_path: Path) -> None:
+    """Regression: run-now should short-circuit when suite automation gate is disabled."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch("apps.summary.management.commands.summary.Command._run_summary_task_now") as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert f"Suite feature '{LLM_SUMMARY_AUTOMATION_FEATURE_SLUG}' is disabled" in output
+    assert "Run now: skipped:suite-feature-disabled" in output
+    run_now.assert_not_called()
+
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_override_when_suite_feature_disabled(tmp_path: Path) -> None:
+    """The --allow-disabled-feature flag should bypass the suite gate."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            return_value="wrote:1",
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", "--allow-disabled-feature", stdout=out)
+
+    output = out.getvalue()
+    assert "running manual override via --allow-disabled-feature" in output
+    assert "Run now: wrote:1" in output
+    run_now.assert_called_once_with(ignore_suite_feature_gate=True)
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_executes_when_suite_feature_enabled(
+    tmp_path: Path, llm_summary_automation_feature_enabled: Feature
+) -> None:
+    """Regression: enabling suite automation gate should restore run-now execution."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            return_value="wrote:2",
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert "Run now: wrote:2" in output
     run_now.assert_called_once_with()
