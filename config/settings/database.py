@@ -87,17 +87,30 @@ else:
     else:
         SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
 
+    def _sqlite_parent_is_writable(path: Path) -> bool:
+        """Return whether ``path.parent`` supports SQLite sidecar writes."""
+
+        parent = path.parent
+        try:
+            parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=parent):
+                pass
+        except OSError:
+            return False
+        return True
+
     _sqlite_test_override = os.environ.get("ARTHEXIS_SQLITE_TEST_PATH")
     if _sqlite_test_override:
         SQLITE_TEST_DB_PATH = Path(_sqlite_test_override)
     else:
-        _shm = Path("/dev/shm")
-        if _shm.is_dir() and os.access(_shm, os.W_OK):
-            SQLITE_TEST_DB_PATH = _shm / "arthexis" / "test_db.sqlite3"
-        else:
-            SQLITE_TEST_DB_PATH = (
-                Path(tempfile.gettempdir()) / "arthexis" / "test_db.sqlite3"
-            )
+        _shm_candidate = Path("/dev/shm") / "arthexis" / "test_db.sqlite3"
+        _tmp_candidate = Path(tempfile.gettempdir()) / "arthexis" / "test_db.sqlite3"
+        SQLITE_TEST_DB_PATH = (
+            _shm_candidate
+            if _sqlite_parent_is_writable(_shm_candidate)
+            else _tmp_candidate
+        )
+
     SQLITE_TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     DATABASES = {

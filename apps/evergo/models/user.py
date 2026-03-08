@@ -430,30 +430,71 @@ class EvergoUser(Profile):
         if customer.user_id != self.pk:
             raise EvergoAPIError("Customer does not belong to this Evergo profile.")
 
-        if customer.latest_order and customer.latest_order.remote_id is not None:
-            refreshed_order = self.reload_order_from_remote(order=customer.latest_order, timeout=timeout)
-            refreshed_customer = EvergoCustomer.objects.filter(user=self, latest_order=refreshed_order).order_by("pk").first()
-            if refreshed_customer is None:
-                raise EvergoAPIError("Reload succeeded but no customer snapshot was linked to the refreshed order.")
-            return refreshed_customer
+        stale_customer_pk = customer.pk
+        stale_customer_name = customer.name
+        stale_customer_remote_id = customer.remote_id
+        stale_latest_order = customer.latest_order
+
+        def _detach_stale_customer() -> None:
+            """Free unique customer keys so reload creates a replacement snapshot row."""
+
+            updates: list[str] = []
+            if customer.remote_id is not None:
+                customer.remote_id = None
+                updates.append("remote_id")
+            if customer.latest_order_id is not None:
+                customer.latest_order = None
+                updates.append("latest_order")
+            if stale_customer_name and customer.name == stale_customer_name:
+                customer.name = f"__stale_customer__{stale_customer_pk}"
+                updates.append("name")
+            if updates:
+                customer.save(update_fields=updates)
+
+        def _delete_stale_customer() -> None:
+            """Delete the stale customer snapshot once a replacement has been created."""
+
+            EvergoCustomer.objects.filter(pk=stale_customer_pk).delete()
+
+        if stale_latest_order and stale_latest_order.remote_id is not None:
+            with transaction.atomic():
+                _detach_stale_customer()
+                refreshed_order = self.reload_order_from_remote(order=stale_latest_order, timeout=timeout)
+                refreshed_customer = (
+                    EvergoCustomer.objects.filter(user=self, latest_order=refreshed_order)
+                    .exclude(pk=stale_customer_pk)
+                    .order_by("pk")
+                    .first()
+                )
+                if refreshed_customer is None:
+                    raise EvergoAPIError(
+                        "Reload succeeded but no replacement customer snapshot was linked to the refreshed order."
+                    )
+                _delete_stale_customer()
+                return refreshed_customer
 
         queries = [token for token in [customer.latest_so, customer.name] if token]
         if not queries:
             raise EvergoAPIError("Customer has no lookup data (SO or name) for Evergo reload.")
-
-        customer_name = customer.name
         with transaction.atomic():
-            customer.delete()
+            _detach_stale_customer()
             summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
-            if summary["customers_loaded"] <= 0:
-                raise EvergoAPIError("Evergo did not return data for the selected customer.")
 
-            refreshed_customer = EvergoCustomer.objects.filter(
-                user=self,
-                name__iexact=customer_name,
-            ).order_by("-latest_order_updated_at", "pk").first()
+            refreshed_candidates = EvergoCustomer.objects.filter(user=self).exclude(pk=stale_customer_pk)
+            refreshed_customer = None
+            if stale_customer_remote_id is not None:
+                refreshed_customer = refreshed_candidates.filter(
+                    remote_id=stale_customer_remote_id
+                ).order_by("-latest_order_updated_at", "pk").first()
             if refreshed_customer is None:
+                refreshed_customer = refreshed_candidates.filter(
+                    name__iexact=stale_customer_name
+                ).order_by("-latest_order_updated_at", "pk").first()
+            if refreshed_customer is None:
+                if summary["customers_loaded"] <= 0:
+                    raise EvergoAPIError("Evergo did not return data for the selected customer.")
                 raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
+            _delete_stale_customer()
             return refreshed_customer
 
     @staticmethod

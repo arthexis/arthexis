@@ -113,7 +113,7 @@ def test_missing_assets_return_404(client) -> None:
 def test_extension_catalog_and_download_archive(client) -> None:
     """Expose extension catalog and downloadable archive for enabled extensions."""
     extension = JsExtension.objects.create(
-        slug="github-resolve-open-comments",
+        slug="github-resolve-open-comments-test",
         name="GitHub Resolve Open Comments",
         description="Resolve helper",
         version="1.0.0",
@@ -134,9 +134,9 @@ def test_extension_catalog_and_download_archive(client) -> None:
     catalog_response = client.get(reverse("extensions:catalog"))
     assert catalog_response.status_code == 200
     catalog_payload = catalog_response.json()
-    assert len(catalog_payload["extensions"]) == 1
-    entry = catalog_payload["extensions"][0]
-    assert entry["slug"] == extension.slug
+    matching_entries = [entry for entry in catalog_payload["extensions"] if entry["slug"] == extension.slug]
+    assert len(matching_entries) == 1
+    entry = matching_entries[0]
     assert entry["download_url"].endswith(f"/extensions/{extension.slug}/download.zip")
 
     download_response = client.get(
@@ -144,15 +144,38 @@ def test_extension_catalog_and_download_archive(client) -> None:
     )
     assert download_response.status_code == 200
     assert (
-        'attachment; filename="github-resolve-open-comments-1.0.0.zip"'
+        'attachment; filename="github-resolve-open-comments-test-1.0.0.zip"'
         in download_response["Content-Disposition"]
     )
 
     with zipfile.ZipFile(io.BytesIO(download_response.content)) as archive:
         names = sorted(archive.namelist())
-        assert names == ["content.js", "manifest.json", "options.html", "options.js"]
+        assert names == ["content.js", "manifest.json", "options.html"]
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["name"] == "GitHub Resolve Open Comments"
+
+
+def test_seeded_slug_archive_includes_options_script(client) -> None:
+    """Ensure seeded GitHub extension slug includes special options.js archive file."""
+    extension = JsExtension.objects.create(
+        slug="github-resolve-open-comments",
+        name="GitHub Resolve Open Comments",
+        description="Resolve helper",
+        version="1.0.0",
+        manifest_version=3,
+        matches="https://github.com/*",
+        content_script="console.log('x');",
+        options_page="<html><body>Options</body></html>",
+        permissions="storage",
+        host_permissions="https://github.com/*",
+    )
+
+    download_response = client.get(reverse("extensions:download", args=[extension.slug]))
+    assert download_response.status_code == 200
+
+    with zipfile.ZipFile(io.BytesIO(download_response.content)) as archive:
+        names = sorted(archive.namelist())
+        assert names == ["content.js", "manifest.json", "options.html", "options.js"]
 
 
 def test_github_seeded_extension_templates_expose_bulk_actions() -> None:
