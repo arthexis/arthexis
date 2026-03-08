@@ -29,12 +29,28 @@ def _lock_paths(*, node: "Node" | None) -> list[Path]:
 def _lockfile_status(*, node: "Node" | None) -> tuple[bool, Path | None]:
     """Return whether a compatibility RFID lock file already exists."""
 
+    try:
+        from apps.cards.background_reader import lock_file_active
+    except Exception:  # pragma: no cover - defensive import fallback
+        lock_file_active = None
+
     for path in _lock_paths(node=node):
         try:
-            if path.exists():
-                return True, path
+            if not path.exists():
+                continue
         except OSError:
             continue
+
+        if lock_file_active is not None and path == Path(settings.BASE_DIR) / ".locks" / RFID_LOCK_NAME:
+            try:
+                is_active, active_path = lock_file_active()
+            except Exception:
+                continue
+            if is_active:
+                return True, active_path
+            continue
+
+        return True, path
     return False, None
 
 
@@ -98,12 +114,8 @@ def detect_scanner_capability(*, node: "Node" | None = None) -> dict[str, Any]:
 
     service_result = _service_detection()
     if service_result.get("detected"):
-        if lock_path is not None:
-            service_result.setdefault("lockfile", str(lock_path))
         return service_result
 
-    if has_lock:
-        return _assume_detected(irq_result.get("error"), lock_path)
     return {"detected": False, "reason": irq_result.get("error") or service_result.get("reason")}
 
 

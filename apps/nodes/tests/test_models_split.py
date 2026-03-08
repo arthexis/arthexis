@@ -320,10 +320,24 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
 
     import apps.cards.node_features as cards_node_features
 
+    setup_calls: list[str] = []
+
     monkeypatch.setattr(
         cards_node_features,
         "check_node_feature",
         lambda slug, *, node: True if slug == "rfid-scanner" else None,
     )
 
-    assert node._detect_auto_feature("rfid-scanner", base_dir=tmp_path, base_path=tmp_path) is True
+    def _setup(slug, *, node):
+        if slug == "rfid-scanner":
+            setup_calls.append(slug)
+            return True
+        return None
+
+    monkeypatch.setattr(cards_node_features, "setup_node_feature", _setup)
+
+    assert (
+        node._detect_auto_feature("rfid-scanner", base_dir=tmp_path, base_path=tmp_path)
+        is True
+    )
+    assert setup_calls == ["rfid-scanner"]

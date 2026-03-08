@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
 import importlib
 import json
 import logging
 from pathlib import Path
 import shutil
 import subprocess
-from typing import TYPE_CHECKING
 
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -27,10 +25,6 @@ from apps.emails import mailer
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
-
-if TYPE_CHECKING:  # pragma: no cover - used for type checking
-    from .core.node import Node
-
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +394,14 @@ class NodeFeatureMixin:
                 except Exception:
                     logger.exception("Node feature setup hook failed for %s", slug)
                     continue
+            elif result and callable(setup_hook):
+                try:
+                    setup_result = setup_hook(slug, node=self)
+                except Exception:
+                    logger.exception("Node feature setup hook failed for %s", slug)
+                    continue
+                if setup_result is not None:
+                    result = setup_result
             if result is None:
                 continue
             return bool(result)
