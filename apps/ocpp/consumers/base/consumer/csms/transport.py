@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from apps.nodes.models import Node
 from apps.ocpp.forwarder import forwarder
+from apps.ocpp.forwarder_feature import ocpp_forwarder_enabled
 from apps.ocpp.models import Charger
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ class CSMSTransportMixin:
         self, charger
     ) -> tuple[tuple[str, ...], int | None] | None:
         """Return forwarding configuration for ``charger`` when available."""
+        if not await database_sync_to_async(ocpp_forwarder_enabled)(default=True):
+            return None
         if not charger or not getattr(charger, "forwarded_to_id", None):
             return None
 
@@ -104,6 +107,8 @@ class CSMSTransportMixin:
 
     async def _forward_charge_point_message_legacy(self, action: str, raw: str) -> None:
         """Forward an OCPP message to the configured remote node when permitted."""
+        if not await database_sync_to_async(ocpp_forwarder_enabled)(default=True):
+            return
         if not action or not raw:
             return
 
@@ -191,6 +196,8 @@ class CSMSTransportMixin:
 
     async def _forward_charge_point_reply_legacy(self, message_id: str, raw: str) -> None:
         """Forward a call result or error back to the remote node when needed."""
+        if not await database_sync_to_async(ocpp_forwarder_enabled)(default=True):
+            return
         if not message_id or not raw:
             return
         charger = self.aggregate_charger or self.charger

@@ -12,6 +12,7 @@ from apps.nodes.models import Node
 
 from .... import store
 from ....forwarder import forwarder
+from ....forwarder_feature import ocpp_forwarder_enabled
 from ....models import Charger, ChargingStation, Transaction
 from ...connection import RateLimitedConnectionMixin
 from ..identity import _register_log_names_for_identity, _resolve_client_ip
@@ -173,13 +174,16 @@ class ConnectionFlowMixin:
                 log_type="charger",
             )
 
-        if not created:
-            await database_sync_to_async(forwarder.sync_forwarded_charge_points)(
-                refresh_forwarders=False
+        if await database_sync_to_async(ocpp_forwarder_enabled)(default=True):
+            if not created:
+                await database_sync_to_async(forwarder.sync_forwarded_charge_points)(
+                    refresh_forwarders=False
+                )
+            forwarder.ensure_keepalive_task(
+                idle_seconds=int(getattr(settings, "OCPP_FORWARDER_PING_INTERVAL", 60))
             )
-        forwarder.ensure_keepalive_task(
-            idle_seconds=int(getattr(settings, "OCPP_FORWARDER_PING_INTERVAL", 60))
-        )
+        else:
+            await database_sync_to_async(forwarder.clear_sessions)()
 
     async def disconnect(self, close_code):
         """Release connection resources even when connect rejected early."""
