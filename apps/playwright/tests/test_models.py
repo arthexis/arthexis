@@ -125,3 +125,33 @@ def test_schedule_pending_website_screenshots_executes_due_schedules(monkeypatch
 
     assert ran == [schedule.pk]
     assert executed_ids == [schedule.pk]
+
+
+@pytest.mark.django_db
+def test_schedule_pending_website_screenshots_continues_after_failure(monkeypatch):
+    now = timezone.now()
+    failing = WebsiteScreenshotSchedule.objects.create(
+        slug="failing",
+        label="Failing",
+        url="https://example.com/failing",
+        sampling_period_minutes=5,
+        last_sampled_at=now - timedelta(minutes=8),
+    )
+    succeeding = WebsiteScreenshotSchedule.objects.create(
+        slug="succeeding",
+        label="Succeeding",
+        url="https://example.com/succeeding",
+        sampling_period_minutes=5,
+        last_sampled_at=now - timedelta(minutes=8),
+    )
+
+    def fake_execute(target, *, user=None):
+        del user
+        if target.pk == failing.pk:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(playwright_models, "execute_website_screenshot_schedule", fake_execute)
+
+    ran = schedule_pending_website_screenshots(now=now)
+
+    assert ran == [succeeding.pk]

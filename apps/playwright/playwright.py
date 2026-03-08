@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Iterable
+
 
 def normalize_playwright_cookie(cookie: dict) -> dict:
     """Return a Playwright-compatible cookie payload with an inferred ``url``."""
@@ -12,7 +14,7 @@ def normalize_playwright_cookie(cookie: dict) -> dict:
     return payload
 
 
-def normalize_playwright_cookies(cookies) -> list[dict]:
+def normalize_playwright_cookies(cookies: Iterable[dict]) -> list[dict]:
     """Normalize an iterable of cookie mappings for ``BrowserContext.add_cookies``."""
 
     return [normalize_playwright_cookie(cookie) for cookie in cookies]

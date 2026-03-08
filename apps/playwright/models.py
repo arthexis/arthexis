@@ -4,7 +4,7 @@ import contextlib
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -176,11 +176,19 @@ class PlaywrightBrowser(Entity):
         launch_kwargs = {"headless": self._headless_mode()}
         if self.binary_path.strip():
             launch_kwargs["executable_path"] = self.binary_path.strip()
+        browser = None
+        context = None
         try:
             browser = launcher.launch(**launch_kwargs)
             context = browser.new_context()
             page = context.new_page()
         except Exception:
+            if context is not None:
+                with contextlib.suppress(Exception):
+                    context.close()
+            if browser is not None:
+                with contextlib.suppress(Exception):
+                    browser.close()
             playwright.stop()
             raise
         return PlaywrightDriver(playwright=playwright, browser=browser, context=context, page=page)
@@ -417,7 +425,7 @@ def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, 
 
     sync_playwright = _load_sync_playwright()
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    filename = SCREENSHOT_DIR / f"{schedule.slug}-{datetime.utcnow():%Y%m%d%H%M%S}.png"
+    filename = SCREENSHOT_DIR / f"{schedule.slug}-{datetime.now(dt_timezone.utc):%Y%m%d%H%M%S}.png"
 
     errors: dict[str, str] = {}
     for engine in schedule.browser_engine_candidates():
@@ -428,18 +436,7 @@ def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, 
                 context = browser.new_context(viewport={"width": schedule.viewport_width, "height": schedule.viewport_height})
                 page = context.new_page()
                 page.goto(schedule.url, timeout=schedule.timeout_ms, wait_until="networkidle")
-                for command in schedule.pre_commands:
-                    if not isinstance(command, dict):
-                        continue
-                    action = command.get("action")
-                    if action == "click":
-                        page.locator(command["selector"]).click()
-                    elif action == "fill":
-                        page.locator(command["selector"]).fill(command.get("value", ""))
-                    elif action == "wait_for_selector":
-                        page.wait_for_selector(command["selector"], timeout=command.get("timeout_ms", schedule.timeout_ms))
-                    elif action == "wait_for_timeout":
-                        page.wait_for_timeout(int(command.get("ms", 250)))
+                _run_pre_commands(page, schedule.pre_commands, default_timeout_ms=schedule.timeout_ms)
                 if schedule.post_navigation_delay_ms:
                     page.wait_for_timeout(schedule.post_navigation_delay_ms)
                 page.screenshot(path=str(filename), full_page=schedule.full_page)
@@ -460,6 +457,26 @@ def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, 
     raise RuntimeError(f"All browser engines failed for schedule {schedule.slug}: {errors}")
 
 
+def _run_pre_commands(page, pre_commands, *, default_timeout_ms: int) -> None:
+    """Execute supported pre-navigation commands against a Playwright page."""
+
+    for command in pre_commands:
+        if not isinstance(command, dict):
+            continue
+        action = command.get("action")
+        selector = command.get("selector")
+        if action in {"click", "fill", "wait_for_selector"} and not selector:
+            raise ValueError(f"Missing selector for pre-command action: {action}")
+        if action == "click":
+            page.locator(selector).click()
+        elif action == "fill":
+            page.locator(selector).fill(command.get("value", ""))
+        elif action == "wait_for_selector":
+            page.wait_for_selector(selector, timeout=command.get("timeout_ms", default_timeout_ms))
+        elif action == "wait_for_timeout":
+            page.wait_for_timeout(int(command.get("ms", 250)))
+
+
 def schedule_pending_website_screenshots(now=None) -> list[int]:
     """Execute screenshot schedules that are due."""
 
@@ -471,6 +488,9 @@ def schedule_pending_website_screenshots(now=None) -> list[int]:
         due_at = schedule.last_sampled_at or (now - timedelta(minutes=schedule.sampling_period_minutes + 1))
         if now < due_at + timedelta(minutes=schedule.sampling_period_minutes):
             continue
-        execute_website_screenshot_schedule(schedule)
-        executed.append(schedule.pk)
+        try:
+            execute_website_screenshot_schedule(schedule)
+            executed.append(schedule.pk)
+        except Exception:
+            logger.exception("Failed to execute screenshot schedule %s", schedule.pk)
     return executed

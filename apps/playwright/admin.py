@@ -94,15 +94,19 @@ class WebsiteScreenshotScheduleAdmin(admin.ModelAdmin):
     inlines = (WebsiteScreenshotRunInline,)
     actions = ("run_now",)
 
-    @admin.action(description="Run screenshot schedule now")
+    @admin.action(description=_("Run screenshot schedule now"))
     def run_now(self, request, queryset):
         successes = 0
         for schedule in queryset:
             try:
                 execute_website_screenshot_schedule(schedule, user=request.user)
             except Exception as exc:
-                self.message_user(request, f"Failed {schedule.slug}: {exc}", level=messages.ERROR)
+                self.message_user(request, _("Failed %(slug)s: %(error)s") % {"slug": schedule.slug, "error": exc}, level=messages.ERROR)
                 continue
             successes += 1
         if successes:
-            self.message_user(request, f"Executed {successes} schedule(s).", level=messages.SUCCESS)
+            self.message_user(
+                request,
+                ngettext("Executed %(count)d schedule.", "Executed %(count)d schedules.", successes) % {"count": successes},
+                level=messages.SUCCESS,
+            )
