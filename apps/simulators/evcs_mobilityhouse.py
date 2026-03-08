@@ -22,6 +22,12 @@ from apps.simulators.network import validate_simulator_endpoint
 from apps.simulators.simulator_runtime import normalize_simulator_params
 
 
+def _ocpp_subprotocol_16j() -> str:
+    from apps.ocpp.consumers.constants import OCPP_SUBPROTOCOL_16J
+
+    return OCPP_SUBPROTOCOL_16J
+
+
 class MobilityHouseOcppUnavailableError(ModuleNotFoundError):
     """Raised when the optional `ocpp` package is not installed."""
 
@@ -216,12 +222,12 @@ class MobilityHouseChargePointAdapter:
                             candidate,
                             1,
                         ),
-                        subprotocols=["ocpp1.6j"],
+                        subprotocols=[_ocpp_subprotocol_16j()],
                         **connect_kwargs,
                     ),
                     timeout=10,
                 )
-                self._log(f"Connected (subprotocol={candidate})")
+                self._log(f"Connected (subprotocol={ws.subprotocol or 'none'})")
                 return ws
             except Exception as exc:  # pragma: no cover - network dependent
                 last_error = exc
@@ -238,6 +244,7 @@ class MobilityHouseChargePointAdapter:
                     ),
                     timeout=10,
                 )
+                self._log(f"Connected (subprotocol={ws.subprotocol or 'none'})")
                 return ws
             except Exception as exc:  # pragma: no cover - network dependent
                 last_error = exc

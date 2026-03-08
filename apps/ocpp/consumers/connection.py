@@ -82,7 +82,7 @@ class SubprotocolConnectionMixin:
             return OCPP_VERSION_201
         if normalized == OCPP_VERSION_21:
             return OCPP_VERSION_21
-        return normalized
+        return None
 
     def _select_subprotocol(
         self, offered: list[str] | tuple[str, ...], preferred: str | None
