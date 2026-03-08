@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
+import importlib
 import json
 import logging
 from pathlib import Path
 import shutil
 import subprocess
-from typing import TYPE_CHECKING
 
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -26,10 +25,6 @@ from apps.emails import mailer
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
-
-if TYPE_CHECKING:  # pragma: no cover - used for type checking
-    from .core.node import Node
-
 
 logger = logging.getLogger(__name__)
 
@@ -362,10 +357,64 @@ class NodeFeatureMixin:
                 return True
         return False
 
+    def _iter_node_feature_hooks(self):
+        """Yield app hook callables for node feature checks and setup."""
+
+        for app_config in django_apps.get_app_configs():
+            module_name = f"{app_config.name}.node_features"
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError as exc:
+                if exc.name != module_name:
+                    logger.exception("Node feature hook import failed for %s", module_name)
+                continue
+            except Exception:
+                logger.exception("Node feature hook import failed for %s", module_name)
+                continue
+
+            check = getattr(module, "check_node_feature", None)
+            setup = getattr(module, "setup_node_feature", None)
+            if callable(check) or callable(setup):
+                yield check, setup
+
+    def _detect_feature_via_hooks(self, slug: str) -> bool | None:
+        """Run app-level node feature hooks for ``slug`` when available."""
+
+        for check_hook, setup_hook in self._iter_node_feature_hooks():
+            result = None
+            if callable(check_hook):
+                try:
+                    result = check_hook(slug, node=self)
+                except Exception:
+                    logger.exception("Node feature check hook failed for %s", slug)
+                    continue
+            if result is None and callable(setup_hook):
+                try:
+                    result = setup_hook(slug, node=self)
+                except Exception:
+                    logger.exception("Node feature setup hook failed for %s", slug)
+                    continue
+            elif result and callable(setup_hook):
+                try:
+                    setup_result = setup_hook(slug, node=self)
+                except Exception:
+                    logger.exception("Node feature setup hook failed for %s", slug)
+                    continue
+                if setup_result is not None:
+                    result = setup_result
+            if result is None:
+                continue
+            return bool(result)
+        return None
+
     def _detect_auto_feature(
         self, slug: str, *, base_dir: Path, base_path: Path
     ) -> bool:
         """Detect whether an auto-managed feature is active for the node."""
+        hook_result = self._detect_feature_via_hooks(slug)
+        if hook_result is not None:
+            return hook_result
+
         if slug == "systemd-manager":
             return bool(_systemctl_command())
 
