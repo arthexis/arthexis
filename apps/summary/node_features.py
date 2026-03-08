@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.db.utils import OperationalError
 
+from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -12,6 +14,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 
 CELERY_LOCK_NAME = "celery.lck"
+LLM_SUMMARY_SLUG = "llm-summary"
 
 
 def _celery_lock_enabled(base_dir: Path, base_path: Path) -> bool:
@@ -25,34 +28,86 @@ def _celery_lock_enabled(base_dir: Path, base_path: Path) -> bool:
     return False
 
 
-def check_node_feature(slug: str, *, node: "Node") -> bool | None:
-    if slug != "llm-summary":
-        return None
+def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
+    """Return whether llm-summary runtime requirements are met."""
 
-    base_dir = Path(settings.BASE_DIR)
-    base_path = node.get_base_path()
-    if not lcd_feature_enabled_for_paths(base_dir, base_path):
+    try:
+        from apps.summary.services import get_summary_config
+    except ImportError:
         return False
-    return _celery_lock_enabled(base_dir, base_path)
+
+    prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
+    if not (prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")):
+        return False
+
+    try:
+        config = get_summary_config()
+    except OperationalError:
+        return False
+
+    return bool(config.is_active)
 
 
-def setup_node_feature(slug: str, *, node: "Node") -> bool | None:
-    if slug != "llm-summary":
+def check_node_feature(
+    slug: str,
+    *,
+    node: "Node",
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> bool | None:
+    """Return whether llm-summary can be auto-enabled for ``node``."""
+
+    if slug != LLM_SUMMARY_SLUG:
         return None
-    return check_node_feature(slug, node=node)
+
+    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
+    resolved_base_path = base_path or node.get_base_path()
+    return _is_llm_summary_active(base_dir=resolved_base_dir, base_path=resolved_base_path)
+
+
+def setup_node_feature(
+    slug: str,
+    *,
+    node: "Node",
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> bool | None:
+    """Allow the summary app to own llm-summary auto-detection."""
+
+    if slug != LLM_SUMMARY_SLUG:
+        return None
+    return check_node_feature(
+        slug,
+        node=node,
+        base_dir=base_dir,
+        base_path=base_path,
+    )
 
 
 def get_llm_summary_prereq_state(
     *, base_dir: Path, base_path: Path
 ) -> dict[str, bool]:
+    """Return lock- and screen-based prerequisites for llm-summary."""
+
     return {
         "lcd_enabled": lcd_feature_enabled_for_paths(base_dir, base_path),
         "celery_enabled": _celery_lock_enabled(base_dir, base_path),
     }
 
 
+def register_node_feature_detection(registry: NodeFeatureDetectionRegistry) -> None:
+    """Register summary app feature auto-detection callbacks."""
+
+    registry.register(
+        LLM_SUMMARY_SLUG,
+        check=check_node_feature,
+        setup=setup_node_feature,
+    )
+
+
 __all__ = [
     "check_node_feature",
     "get_llm_summary_prereq_state",
+    "register_node_feature_detection",
     "setup_node_feature",
 ]

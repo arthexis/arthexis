@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.content.utils import save_screenshot
 from apps.core.models.ownable import Ownable
 from apps.nodes.device_sync import sync_detected_devices
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.video.services.capture import apply_image_rotation
 from apps.video.utils import (
     RPI_CAMERA_BINARIES,
@@ -124,6 +125,14 @@ class VideoDevice(Ownable):
         cls, *, node, return_objects: bool = False
     ) -> tuple[int, int] | tuple[int, int, list["VideoDevice"], list["VideoDevice"]]:
         """Synchronize :class:`VideoDevice` entries for ``node``."""
+
+        if not is_feature_active_for_node(node=node, slug="video-cam"):
+            empty: tuple[int, int] | tuple[int, int, list["VideoDevice"], list["VideoDevice"]]
+            if return_objects:
+                empty = (0, 0, [], [])
+            else:
+                empty = (0, 0)
+            return empty
 
         detected = cls.detect_devices()
         return sync_detected_devices(

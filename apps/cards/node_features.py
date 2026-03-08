@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 
+from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from apps.nodes.models import Node
 
@@ -119,9 +121,16 @@ def detect_scanner_capability(*, node: "Node" | None = None) -> dict[str, Any]:
     return {"detected": False, "reason": irq_result.get("error") or service_result.get("reason")}
 
 
-def check_node_feature(slug: str, *, node: "Node") -> bool | None:
+def check_node_feature(
+    slug: str,
+    *,
+    node: "Node",
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> bool | None:
     """Return feature eligibility for the RFID scanner hook."""
 
+    del base_dir, base_path
     if slug != RFID_SCANNER_SLUG:
         return None
     return bool(detect_scanner_capability(node=node).get("detected"))
@@ -138,9 +147,16 @@ def _write_compatibility_lock(*, node: "Node") -> None:
             continue
 
 
-def setup_node_feature(slug: str, *, node: "Node") -> bool | None:
+def setup_node_feature(
+    slug: str,
+    *,
+    node: "Node",
+    base_dir: Path | None = None,
+    base_path: Path | None = None,
+) -> bool | None:
     """Perform RFID setup work and report whether the feature is available."""
 
+    del base_dir, base_path
     if slug != RFID_SCANNER_SLUG:
         return None
 
@@ -150,8 +166,19 @@ def setup_node_feature(slug: str, *, node: "Node") -> bool | None:
     return detected
 
 
+def register_node_feature_detection(registry: NodeFeatureDetectionRegistry) -> None:
+    """Register card app feature auto-detection callbacks."""
+
+    registry.register(
+        RFID_SCANNER_SLUG,
+        check=check_node_feature,
+        setup=setup_node_feature,
+    )
+
+
 __all__ = [
     "check_node_feature",
     "detect_scanner_capability",
+    "register_node_feature_detection",
     "setup_node_feature",
 ]

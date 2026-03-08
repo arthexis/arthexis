@@ -23,6 +23,8 @@ from apps.cards.rfid_service import rfid_service_enabled, run_service, service_a
 from apps.cards.scanner import scan_sources
 from apps.cards.utils import drain_stdin, user_requested_stop
 from apps.loggers.handlers import RFIDFileHandler
+from apps.nodes.feature_detection import is_feature_active_for_node
+from apps.nodes.models import Node
 
 
 class Command(BaseCommand):
@@ -99,8 +101,18 @@ class Command(BaseCommand):
         parser.add_argument("--no-irq", action="store_true", help="Bypass IRQ/background-reader path and force direct polling for a scan.")
         parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response.")
 
+    def _scanner_feature_available(self) -> bool:
+        """Return whether rfid-scanner should be available on the local node."""
+
+        node = Node.get_local()
+        if node is None:
+            return True
+        return is_feature_active_for_node(node=node, slug="rfid-scanner")
+
     def _handle_check(self, options):
         if options.get("scan"):
+            if not self._scanner_feature_available():
+                raise CommandError("rfid-scanner feature is not active on this node")
             result = self._scan(options)
         elif options.get("label"):
             result = self._validate_label(options["label"])
@@ -201,6 +213,8 @@ class Command(BaseCommand):
                 return {"rfid": None, "label_id": None}
 
     def _handle_watch(self, options):
+        if not self._scanner_feature_available():
+            raise CommandError("rfid-scanner feature is not active on this node")
         from apps.cards.always_on import is_running, start, stop
 
         if options["stop"]:
@@ -218,6 +232,8 @@ class Command(BaseCommand):
         parser.add_argument("--debug", action=argparse.BooleanOptionalAction, default=False, help="Enable or disable debug logging for interactive troubleshooting")
 
     def _handle_service(self, options):
+        if not self._scanner_feature_available():
+            raise CommandError("rfid-scanner feature is not active on this node")
         host = options.get("host")
         port = options.get("port")
         debug_enabled = options.get("debug", False)

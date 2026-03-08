@@ -6,6 +6,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+from apps.nodes.feature_detection import is_feature_active_for_node
 
 
 class ClockDevice(Entity):
@@ -57,6 +58,11 @@ class ClockDevice(Entity):
         """
 
         from .utils import discover_clock_devices
+
+        if not is_feature_active_for_node(node=node, slug="gpio-rtc"):
+            if return_objects:
+                return 0, 0, [], []
+            return 0, 0
 
         detected = discover_clock_devices(
             bus_numbers=bus_numbers or (1,), scanner=scanner

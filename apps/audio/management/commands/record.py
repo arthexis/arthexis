@@ -9,8 +9,9 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.audio.utils import AUDIO_DIR, has_audio_capture_device, save_audio_sample
+from apps.audio.utils import AUDIO_DIR, save_audio_sample
 from apps.audio.models import RecordingDevice
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 
@@ -59,7 +60,7 @@ class Command(BaseCommand):
                 )
             )
 
-        if not has_audio_capture_device():
+        if not is_feature_active_for_node(node=node, slug="audio-capture"):
             raise CommandError("No audio recording devices were detected on this node.")
 
         sample_rate = options["sample_rate"]

@@ -6,6 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.nodes.feature_detection import is_local_node_feature_active
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
@@ -70,6 +71,12 @@ class Command(BaseCommand):
             self._restart_service(base_dir=base_dir, service_name=options.get("service_name"))
 
     # ------------------------------------------------------------------
+    def _ensure_lcd_feature_active(self) -> None:
+        """Raise when lcd-screen is unavailable for this node."""
+
+        if not is_local_node_feature_active("lcd-screen"):
+            raise CommandError("lcd-screen feature is not active on this node")
+
     def _delete_lock_file(self, lock_file: Path) -> None:
         if lock_file.exists():
             lock_file.unlink()
@@ -101,6 +108,7 @@ class Command(BaseCommand):
         return LcdMessage(subject="", body="")
 
     def _restart_service(self, *, base_dir: Path, service_name: str | None) -> None:
+        self._ensure_lcd_feature_active()
         resolved_service = service_name or self._read_service_name(base_dir)
         if not resolved_service:
             raise CommandError("Service name is required to restart the lcd updater")

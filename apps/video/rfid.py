@@ -9,10 +9,12 @@ from typing import Any
 from django.db import close_old_connections
 from django.utils import timezone
 
-from apps.nodes.models import Node, NodeFeature
+from apps.content.utils import save_screenshot
+from apps.nodes.feature_detection import is_local_node_feature_active
+from apps.nodes.models import Node
+
 from .models import VideoDevice
 from .utils import capture_rpi_snapshot
-from apps.content.utils import save_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +23,7 @@ def is_video_camera_feature_active() -> bool:
     """Return ``True`` if the Video Camera feature is active."""
 
     try:
-        feature = NodeFeature.objects.filter(slug="video-cam").first()
-    except Exception:  # pragma: no cover - database may be unavailable early
-        logger.debug(
-            "RFID snapshot skipped: unable to query node features", exc_info=True
-        )
-        return False
-    if not feature:
-        return False
-    try:
-        return bool(feature.is_enabled)
+        return is_local_node_feature_active("video-cam")
     except Exception:  # pragma: no cover - defensive guard
         logger.debug("RFID snapshot skipped: feature state unavailable", exc_info=True)
         return False
