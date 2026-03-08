@@ -68,7 +68,9 @@
   };
 
   const resizeFeedbackTextareas = options => {
-    feedbackTextareas.forEach(textarea => resizeTextarea(textarea, options));
+    feedbackTextareas.forEach(textarea => {
+      resizeTextarea(textarea, options);
+    });
   };
 
   const initializeTextareaAutoExpand = () => {
