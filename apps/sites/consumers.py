@@ -12,7 +12,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from django.utils.translation import gettext
 
-from apps.chats.models import ChatMessage, ChatSession
+from apps.comms.chats.models import ChatMessage, ChatSession
 from apps.core.channel_metrics import websocket_connected, websocket_disconnected
 
 

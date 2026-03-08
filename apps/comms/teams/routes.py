@@ -3,5 +3,5 @@
 from django.urls import include, path
 
 ROOT_URLPATTERNS = [
-    path("teams/", include("apps.teams.urls")),
+    path("teams/", include("apps.comms.teams.urls")),
 ]

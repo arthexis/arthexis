@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from apps.chats.models import ChatAvatar
+from apps.comms.chats.models import ChatAvatar
 from apps.core.admin.mixins import OwnableAdminMixin
 from apps.core.models import (
     get_owned_objects_for_group,

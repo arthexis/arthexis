@@ -13,7 +13,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext
 from django.views.decorators.debug import sensitive_variables
 
-from apps.chats.models import ChatAvatar
+from apps.comms.chats.models import ChatAvatar
 from apps.groups.models import SecurityGroup
 from apps.users.models import ChatProfile
 

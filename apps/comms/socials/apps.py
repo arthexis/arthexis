@@ -3,5 +3,5 @@ from django.apps import AppConfig
 
 class SocialsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.socials"
+    name = "apps.comms.socials"
     verbose_name = "Social Integrations"

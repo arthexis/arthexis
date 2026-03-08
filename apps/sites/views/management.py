@@ -47,7 +47,7 @@ from webauthn.helpers.exceptions import (
     InvalidJSONStructure,
 )
 
-from apps.chats.models import ChatSession
+from apps.comms.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
 from apps.nodes.models import Node

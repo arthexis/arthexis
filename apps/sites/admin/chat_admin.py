@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from apps.chats.models import ChatMessage, ChatSession
+from apps.comms.chats.models import ChatMessage, ChatSession
 from apps.locals.user_data import EntityModelAdmin
 
 

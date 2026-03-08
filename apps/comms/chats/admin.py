@@ -2,9 +2,9 @@ from django import forms
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
-from apps.chats.models import ChatAvatar
+from apps.comms.chats.models import ChatAvatar
 from apps.core.admin import OwnableAdminMixin, ProfileFormMixin, ProfileInlineFormSet
-from apps.socials.models import BlueskyProfile, DiscordProfile
+from apps.comms.socials.models import BlueskyProfile, DiscordProfile
 
 
 class BlueskyProfileInlineForm(ProfileFormMixin, forms.ModelForm):

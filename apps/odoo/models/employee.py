@@ -9,7 +9,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.chats.models import ChatAvatar
+from apps.comms.chats.models import ChatAvatar
 from apps.users.models import Profile
 from apps.sigils.fields import SigilShortAutoField
 

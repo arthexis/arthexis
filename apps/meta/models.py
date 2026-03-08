@@ -14,7 +14,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils.translation import gettext, gettext_lazy as _
 
-from apps.chats.models import ChatBridge, ChatBridgeManager
+from apps.comms.chats.models import ChatBridge, ChatBridgeManager
 from apps.core.entity import Entity
 
 
