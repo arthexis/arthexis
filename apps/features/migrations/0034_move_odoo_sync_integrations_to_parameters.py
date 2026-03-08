@@ -18,7 +18,7 @@ def _normalize_metadata(metadata: object) -> dict:
 
 
 def forward(apps, schema_editor):
-    """Persist integration states as parameters and remove child features."""
+    """Persist integration states as parameters while preserving legacy feature rows."""
 
     del schema_editor
     Feature = apps.get_model("features", "Feature")
@@ -52,17 +52,14 @@ def forward(apps, schema_editor):
         suite_feature.metadata = metadata
         suite_feature.save(update_fields=["metadata", "updated_at"])
 
-    Feature.objects.filter(
-        slug__in=[
-            DEPLOYMENT_DISCOVERY_FEATURE_SLUG,
-            EMPLOYEE_IMPORT_FEATURE_SLUG,
-            EVERGO_USERS_FEATURE_SLUG,
-        ]
-    ).delete()
+    # Keep the legacy feature rows to avoid cascading deletes of related
+    # records (e.g. notes/tests) that may exist in long-lived environments.
+    # Runtime gating now reads suite parameters, so these rows are effectively
+    # deprecated but intentionally preserved for reversibility and data safety.
 
 
 def reverse(apps, schema_editor):
-    """Recreate legacy integration features from suite parameters."""
+    """Restore legacy integration feature flags from suite parameters."""
 
     del schema_editor
     Feature = apps.get_model("features", "Feature")

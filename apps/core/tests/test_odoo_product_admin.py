@@ -9,19 +9,9 @@ import pytest
 from apps.features.models import Feature
 from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.odoo.sync_features import ODOO_CRM_SYNC_SUITE_FEATURE_SLUG
+from apps.odoo.tests.helpers import odoo_sync_metadata
 from apps.users.models import User
 
-
-def _odoo_sync_metadata(*, employee_import: str = "enabled") -> dict[str, dict[str, str]]:
-    """Build Odoo CRM sync metadata parameters for tests."""
-
-    return {
-        "parameters": {
-            "deployment_discovery": "enabled",
-            "employee_import": employee_import,
-            "evergo_users": "enabled",
-        }
-    }
 
 @pytest.mark.django_db
 def test_search_orders_for_selected_action_renders_matching_orders(
@@ -289,7 +279,7 @@ def test_load_employees_action_respects_sync_feature_toggle(
         defaults={
             "display": "Odoo CRM Sync",
             "is_enabled": not disable_suite,
-            "metadata": _odoo_sync_metadata(
+            "metadata": odoo_sync_metadata(
                 employee_import="enabled" if disable_suite else "disabled"
             ),
         },
