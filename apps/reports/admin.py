@@ -13,6 +13,9 @@ class SQLReportProductInline(admin.TabularInline):
     fields = ("created_at", "database_alias", "row_count", "duration_ms")
     readonly_fields = fields
 
+    def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
+        return False
+
 
 @admin.register(SQLReport)
 class SQLReportAdmin(admin.ModelAdmin):
@@ -99,6 +102,9 @@ class SQLReportProductAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):  # pragma: no cover - admin hook
+        return False
+
+    def has_delete_permission(self, request, obj=None):  # pragma: no cover - admin hook
         return False
 
 
