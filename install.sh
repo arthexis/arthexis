@@ -495,11 +495,6 @@ else
     rm -f "$CONTROL_LOCK"
 fi
 
-RFID_LOCK="$LOCK_DIR/rfid.lck"
-if [ "$ENABLE_CONTROL" != true ]; then
-    rm -f "$RFID_LOCK"
-fi
-
 
 collect_requirement_files() {
     local -n out_array="$1"
@@ -630,17 +625,6 @@ run_env_refresh "${env_refresh_args[@]}"
 arthexis_timing_end "requirements_install" "refreshed"
 
 
-if [ "$ENABLE_CONTROL" = true ]; then
-    echo "Checking for RFID scanner hardware..."
-if python -m apps.cards.detect; then
-        touch "$RFID_LOCK"
-        echo "Enabled node feature 'rfid-scanner' based on detected hardware."
-    else
-        rm -f "$RFID_LOCK"
-        echo "Skipped enabling 'rfid-scanner'; hardware not detected during install."
-    fi
-fi
-
 # Apply database migrations for a ready-to-run schema.
 arthexis_timing_start "django_migrate"
 run_migration=false
@@ -679,6 +663,9 @@ else
     run_env_refresh
 fi
 arthexis_timing_end "env_refresh"
+
+# Ensure auto-managed node features are refreshed via NodeFeatureAssignment lifecycle.
+python manage.py shell -c "from apps.nodes.models import Node; node = Node.get_local(); node.refresh_features() if node else None"
 
 deactivate
 
