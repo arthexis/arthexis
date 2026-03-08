@@ -33,7 +33,7 @@ def test_launch_viewport_subprocess_detects_late_startup_failure(monkeypatch):
     """Regression: launcher should surface process failures during the startup grace window."""
 
     process = _EventuallyExitedProcess(exit_after_polls=5)
-    monotonic_values = iter([0.0, 0.5, 1.0, 1.5, 2.0, 2.5])
+    monotonic_values = itertools.count(0.0, 0.5)
 
     monkeypatch.setattr(admin_views.subprocess, "Popen", lambda *args, **kwargs: process)
     monkeypatch.setattr(admin_views.time, "monotonic", lambda: next(monotonic_values))
