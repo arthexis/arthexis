@@ -89,7 +89,7 @@ def test_admin_feedback_template_guest_contact_optin_scoped_to_contact_row():
     """Regression: admin guest feedback template should render contact opt-in once inside the contact row."""
 
     request = RequestFactory().get("/")
-    request.user = get_user_model()()
+    request.user = AnonymousUser()
 
     template_html = render_to_string("admin/includes/user_story_feedback.html", request=request)
     document = parse_html(template_html)
