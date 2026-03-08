@@ -68,22 +68,18 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Dispatch to the selected upgrade command action."""
 
-        action = str(options["action"])
-        if action == "show":
-            self._handle_show(options)
+        action = options["action"]
+        handler = getattr(self, f"_handle_{action}", None)
+        if handler and callable(handler):
+            handler(options)
             return
-        if action == "check":
-            self._handle_check(options)
-            return
-        if action == "channel":
-            self._handle_channel(options)
-            return
+
         raise CommandError(f"Unsupported upgrade action: {action}")
 
     def _handle_show(self, options: dict[str, object]) -> None:
         """Print a text summary of the admin upgrade report data."""
 
-        limit = int(options.get("log_limit") or 15)
+        limit = options["log_limit"]
         if limit <= 0:
             raise CommandError("--log-limit must be a positive integer.")
 
@@ -128,7 +124,7 @@ class Command(BaseCommand):
     def _handle_check(self, options: dict[str, object]) -> None:
         """Trigger an upgrade check with optional per-run channel override."""
 
-        requested_channel = str(options.get("channel") or "stable").strip().lower()
+        requested_channel = options["channel"].strip().lower()
         channel_choice = UPGRADE_CHANNEL_CHOICES.get(requested_channel)
         if not channel_choice:
             available_channels = ", ".join(sorted(UPGRADE_CHANNEL_CHOICES.keys()))
@@ -138,10 +134,10 @@ class Command(BaseCommand):
 
         override_value = channel_choice.get("override")
         channel_override = override_value if isinstance(override_value, str) else None
-        if requested_channel == "stable":
+        if channel_override == "stable":
             channel_override = None
 
-        if not bool(options.get("keep_skip_revisions")):
+        if not options["keep_skip_revisions"]:
             _clear_auto_upgrade_skip_revisions(Path(settings.BASE_DIR))
 
         queued = _trigger_upgrade_check(channel_override=channel_override)
@@ -153,7 +149,7 @@ class Command(BaseCommand):
     def _handle_channel(self, options: dict[str, object]) -> None:
         """Persist a channel change for local-node assigned upgrade policies."""
 
-        requested_channel = str(options.get("channel") or "").strip().lower()
+        requested_channel = options["channel"].strip().lower()
         result = _set_upgrade_policy_channel(requested_channel)
         if not bool(result.get("ok")):
             message = str(result.get("message") or "Unable to update upgrade channel.")

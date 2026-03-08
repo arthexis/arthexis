@@ -64,6 +64,24 @@ def test_upgrade_check_uses_channel_override(monkeypatch, settings, tmp_path):
 
 
 @pytest.mark.django_db
+def test_upgrade_check_treats_stable_alias_as_no_override(monkeypatch, settings, tmp_path):
+    """Stable aliases should not force manual override semantics."""
+
+    settings.BASE_DIR = tmp_path
+    seen: dict[str, object] = {}
+
+    def _record_trigger(*, channel_override=None):
+        seen["channel_override"] = channel_override
+        return True
+
+    monkeypatch.setattr(command_module, "_trigger_upgrade_check", _record_trigger)
+
+    call_command("upgrade", "check", "--channel", "normal")
+
+    assert seen["channel_override"] is None
+
+
+@pytest.mark.django_db
 def test_upgrade_channel_updates_assigned_policy_channel(monkeypatch):
     """Channel action should update local-node assigned upgrade policies."""
 
