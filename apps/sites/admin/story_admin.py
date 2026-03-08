@@ -3,11 +3,12 @@ import logging
 from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _, ngettext
+from django_object_actions import DjangoObjectActions
 
 from apps.locals.user_data import EntityModelAdmin
+from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
 
 from ..models import UserStory, UserStoryAttachment
-
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,12 @@ class UserStoryAttachmentInline(admin.TabularInline):
 
 
 @admin.register(UserStory)
-class UserStoryAdmin(EntityModelAdmin):
+class UserStoryAdmin(
+    FeedbackIssueConfigurationAdminMixin, DjangoObjectActions, EntityModelAdmin
+):
     date_hierarchy = "submitted_at"
     actions = ["create_github_issues", "mark_selected_as_spam"]
+    change_actions = ("configure_action",)
     list_display = (
         "name",
         "language_code",
@@ -114,16 +118,19 @@ class UserStoryAdmin(EntityModelAdmin):
             try:
                 issue_url = story.create_github_issue()
             except Exception as exc:  # pragma: no cover - network/runtime errors
-                logger.exception("Failed to create GitHub issue for UserStory %s", story.pk)
-                message = _("Unable to create a GitHub issue for %(story)s: %(error)s") % {
+                logger.exception(
+                    "Failed to create GitHub issue for UserStory %s", story.pk
+                )
+                message = _(
+                    "Unable to create a GitHub issue for %(story)s: %(error)s"
+                ) % {
                     "story": story,
                     "error": exc,
                 }
 
-                if (
-                    isinstance(exc, RuntimeError)
-                    and "GitHub token is not configured" in str(exc)
-                ):
+                if isinstance(
+                    exc, RuntimeError
+                ) and "GitHub token is not configured" in str(exc):
                     message = format_html(
                         "{} {}",
                         message,
