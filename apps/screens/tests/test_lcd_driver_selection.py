@@ -45,23 +45,39 @@ def test_prepare_lcd_controller_falls_back_when_auto_driver_fails(monkeypatch):
             if self.fail:
                 raise RuntimeError("init failed")
 
-    def fake_scan() -> list[str]:
-        return ["3e", "20"]
-
     def fake_create(*, preference: str | None = None, **_kwargs):
         calls.append(f"create:{preference}")
         if preference == "aip31068":
             return FakeLCD("aip", True)
         return FakeLCD("pcf", False)
 
-    monkeypatch.setattr(lcd, "scan_i2c_addresses", fake_scan)
     monkeypatch.setattr(lcd, "create_lcd_controller", fake_create)
 
     controller = lcd.prepare_lcd_controller(preference="auto")
 
     assert isinstance(controller, FakeLCD)
     assert controller.name == "pcf"
-    assert calls == ["create:aip31068", "init:aip", "create:pcf8574", "init:pcf"]
+    assert calls == ["create:pcf8574", "init:pcf"]
+
+
+def test_prepare_lcd_controller_uses_scan_for_explicit_diagnostics(monkeypatch):
+    calls: list[str] = []
+
+    class FakeLCD:
+        def init_lcd(self) -> None:
+            calls.append("init")
+
+    def fake_scan() -> list[str]:
+        calls.append("scan")
+        return ["3e", "20"]
+
+    monkeypatch.setattr(lcd, "scan_i2c_addresses", fake_scan)
+    monkeypatch.setattr(lcd, "create_lcd_controller", lambda **_kwargs: FakeLCD())
+
+    controller = lcd.prepare_lcd_controller(preference="auto", diagnostics=True)
+
+    assert isinstance(controller, FakeLCD)
+    assert calls == ["scan", "init"]
 
 
 def test_prepare_lcd_controller_does_not_fallback_on_explicit_preference(monkeypatch):

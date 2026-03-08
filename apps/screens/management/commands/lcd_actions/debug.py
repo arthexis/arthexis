@@ -303,7 +303,7 @@ class Command(BaseCommand):
             lines.append("- skipped (LCD_SKIP_PROBE is set)")
             return lines
         try:
-            lcd = prepare_lcd_controller(base_dir=base_dir)
+            lcd = prepare_lcd_controller(base_dir=base_dir, diagnostics=True)
         except LCDUnavailableError as exc:
             lines.append(f"- lcd init failed: {exc}")
             return lines

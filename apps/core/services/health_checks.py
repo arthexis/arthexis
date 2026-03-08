@@ -434,7 +434,7 @@ def run_check_lcd_service(*, stdout, style, lcd_confirmed: bool = False, **_kwar
         stdout.write(style.WARNING("Service lock file missing; cannot determine LCD service"))
 
     try:
-        prepare_lcd_controller(base_dir=base_dir)
+        prepare_lcd_controller(base_dir=base_dir, diagnostics=True)
         stdout.write(style.SUCCESS("I2C communication with LCD succeeded"))
     except LCDUnavailableError:
         stdout.write(style.ERROR("LCDUnavailableError: cannot access I2C bus"))

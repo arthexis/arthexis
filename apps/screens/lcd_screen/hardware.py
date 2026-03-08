@@ -156,5 +156,22 @@ def _blank_display(lcd: LCDController | None) -> None:
         logger.debug("Failed to blank LCD during shutdown", exc_info=True)
 
 
-def _initialize_lcd() -> LCDController:
-    return prepare_lcd_controller()
+
+def _node_has_lcd_capability() -> bool:
+    """Return whether the local node is assigned an LCD-related capability."""
+
+    from apps.nodes.models import Node
+
+    node = Node.get_local()
+    if node is None:
+        return False
+    return node.has_feature("lcd-screen") or node.has_feature("gpio-rtc")
+
+
+def _initialize_lcd(*, diagnostics: bool = False) -> LCDController | None:
+    """Initialize LCD controller when node feature assignments permit runtime LCD use."""
+
+    if not _node_has_lcd_capability():
+        logger.info("Skipping LCD init: local node lacks lcd-screen/gpio-rtc capability assignment")
+        return None
+    return prepare_lcd_controller(diagnostics=diagnostics)

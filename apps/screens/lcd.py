@@ -345,9 +345,10 @@ def prepare_lcd_controller(
     *,
     preference: str | None = None,
     base_dir: Path | None = None,
+    diagnostics: bool = False,
 ) -> LCDController:
     driver_preference = _normalize_driver_preference(preference)
-    addresses = scan_i2c_addresses()
+    addresses = scan_i2c_addresses() if diagnostics else []
     resolved = _resolve_driver(driver_preference, addresses=addresses)
     lcd = create_lcd_controller(
         preference=resolved,
@@ -443,22 +444,10 @@ class CharLCD1602:
     def init_lcd(self, addr: int | None = None, bl: int = 1) -> None:
         self.BLEN = 1 if bl else 0
         if addr is None:
-            try:
-                found = self.i2c_scan()
-            except Exception:  # pragma: no cover - i2c detection issues
-                found = []
-            found_lower = {token.lower() for token in found}
-            if "3f" in found_lower:
-                self.LCD_ADDR = self.PCF8574A_ADDRESS
-            elif "3e" in found_lower:
-                self.LCD_ADDR = self.PCF8574A_ALT_ADDRESS
-            else:
-                # Default to the common PCF8574 address (0x27) when detection
-                # fails or returns no recognised addresses. This mirrors the
-                # behaviour prior to introducing automatic address detection and
-                # prevents the display from remaining uninitialised on systems
-                # without ``i2c-tools``.
-                self.LCD_ADDR = self.PCF8574_ADDRESS
+            # Default to the common PCF8574 address (0x27). Runtime LCD flows
+            # should avoid direct hardware probing for capability checks; use
+            # ``scan_i2c_addresses`` only for explicit diagnostics.
+            self.LCD_ADDR = self.PCF8574_ADDRESS
         else:
             self.LCD_ADDR = addr
 
