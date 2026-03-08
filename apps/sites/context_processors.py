@@ -63,6 +63,7 @@ def nav_links(request):
 
     user = getattr(request, "user", None)
     user_is_authenticated = getattr(user, "is_authenticated", False)
+    user_has_pk = getattr(user, "pk", None) is not None
     user_is_staff = getattr(user, "is_staff", False)
     user_is_superuser = getattr(user, "is_superuser", False)
     is_site_operator = user_in_site_operator_group(user)
@@ -118,7 +119,7 @@ def nav_links(request):
 
     valid_modules = []
     current_module = None
-    if user_is_authenticated:
+    if user_is_authenticated and user_has_pk:
         user_group_names = set(user.groups.values_list("name", flat=True))
         user_group_ids = set(user.groups.values_list("id", flat=True))
     else:
@@ -277,14 +278,16 @@ def nav_links(request):
 
     site_public_chat_enabled = bool(getattr(site, "enable_public_chat", False))
     user_chat_opt_in = False
-    if user_is_authenticated:
+    if user_is_authenticated and user_has_pk:
         try:
             profile = user.get_profile(apps.get_model("users", "ChatProfile"))
         except (LookupError, ObjectDoesNotExist, AttributeError):
             profile = None
         user_chat_opt_in = bool(profile and profile.contact_via_chat)
 
-    staff_chat_bridge_allowed = user_is_authenticated and (user_is_staff or user_is_superuser)
+    staff_chat_bridge_allowed = user_is_authenticated and (
+        user_is_staff or user_is_superuser
+    )
 
     chat_enabled = bool(
         pages_chat_enabled
@@ -294,7 +297,7 @@ def nav_links(request):
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
     site_template = None
-    if user_is_authenticated:
+    if user_is_authenticated and user_has_pk:
         try:
             site_template = getattr(user, "site_template", None)
         except Exception:

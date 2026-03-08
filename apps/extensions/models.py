@@ -7,6 +7,12 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+from apps.extensions.defaults import (
+    github_resolve_comments_content_script as default_github_resolve_comments_content_script,
+    github_resolve_comments_extension_defaults as default_github_resolve_comments_extension_defaults,
+    github_resolve_comments_options_page as default_github_resolve_comments_options_page,
+    github_resolve_comments_options_script as default_github_resolve_comments_options_script,
+)
 
 
 class JsExtension(Entity):
@@ -116,6 +122,29 @@ class JsExtension(Entity):
 
         return manifest
 
+    @classmethod
+    def github_resolve_comments_extension_defaults(cls) -> dict[str, str | int]:
+        """Return default values for the GitHub resolve-comments helper extension."""
+        defaults = default_github_resolve_comments_extension_defaults()
+        defaults["content_script"] = cls.github_resolve_comments_content_script()
+        defaults["options_page"] = cls.github_resolve_comments_options_page()
+        return defaults
+
+    @staticmethod
+    def github_resolve_comments_content_script() -> str:
+        """Return content script that resolves all open GitHub comment threads."""
+        return default_github_resolve_comments_content_script()
+
+    @staticmethod
+    def github_resolve_comments_options_page() -> str:
+        """Return options page used to configure resolve-comment text."""
+        return default_github_resolve_comments_options_page()
+
+    @staticmethod
+    def github_resolve_comments_options_script() -> str:
+        """Return options-page script used to configure resolve-comment text."""
+        return default_github_resolve_comments_options_script()
+
     def build_content_script_payload(self) -> str:
         """Return the content script with Arthexis-detection bootstrap code."""
         bootstrap_script = """
@@ -202,6 +231,8 @@ class JsExtension(Entity):
             files["background.js"] = self.background_script
         if self.options_page.strip():
             files["options.html"] = self.options_page
+            if self.slug == "github-resolve-open-comments":
+                files["options.js"] = self.github_resolve_comments_options_script()
 
         return files
 

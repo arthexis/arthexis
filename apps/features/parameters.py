@@ -46,6 +46,22 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "ocpp-simulator": (
+        FeatureParameterDefinition(
+            key="arthexis_backend",
+            label=_("Arthexis backend"),
+            help_text=_("Enable or disable the legacy Arthexis simulator backend."),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="enabled",
+        ),
+        FeatureParameterDefinition(
+            key="mobilityhouse_backend",
+            label=_("Mobility House backend"),
+            help_text=_("Enable or disable the Mobility House simulator backend."),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="disabled",
+        ),
+    ),
     "operator-site-interface": (
         FeatureParameterDefinition(
             key="default_language",

@@ -8,9 +8,9 @@ import secrets
 import uuid
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.conf import settings
 from django.db import models
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -219,6 +219,63 @@ class DashboardAction(models.Model):
             "is_discover": self.label.strip().lower() == "discover",
             "caller_sigil": self.caller_sigil,
         }
+
+
+class StaffTask(models.Model):
+    """Configurable dashboard task shown as a top admin button."""
+
+    slug = models.SlugField(max_length=80, unique=True)
+    label = models.CharField(max_length=120)
+    description = models.CharField(max_length=255, blank=True)
+    admin_url_name = models.CharField(max_length=200)
+    order = models.PositiveIntegerField(default=0)
+    default_enabled = models.BooleanField(default=True)
+    staff_only = models.BooleanField(default=True)
+    superuser_only = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("order", "label")
+        verbose_name = _("Staff Task")
+        verbose_name_plural = _("Staff Tasks")
+
+    def __str__(self) -> str:
+        """Return the display label used in admin controls."""
+
+        return self.label
+
+
+class StaffTaskPreference(models.Model):
+    """Per-user visibility override for a staff task dashboard button."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="staff_task_preferences",
+    )
+    task = models.ForeignKey(
+        StaffTask,
+        on_delete=models.CASCADE,
+        related_name="user_preferences",
+    )
+    is_enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("task__order", "task__label")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "task"),
+                name="actions_stafftaskpreference_unique_user_task",
+            )
+        ]
+        verbose_name = _("Staff Task Preference")
+        verbose_name_plural = _("Staff Task Preferences")
+
+    def __str__(self) -> str:
+        """Return a readable preference description."""
+
+        return f"{self.user} · {self.task}"
 
 
 class RemoteActionToken(models.Model):

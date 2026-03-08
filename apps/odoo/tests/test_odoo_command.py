@@ -287,7 +287,7 @@ def test_odoo_command_sync_evergo_users_creates_missing_odoo_users(admin_user, m
     assert mock_execute.call_args_list[1].args == (
         "res.users",
         "create",
-        [[{"name": "Tech Example", "login": "tech@example.com", "email": "tech@example.com"}]],
+        {"name": "Tech Example", "login": "tech@example.com", "email": "tech@example.com"},
     )
     assert mock_execute.call_args_list[1].kwargs == {}
 

@@ -76,7 +76,7 @@ def _load_local_apps() -> list[str]:
 LOCAL_APPS = _load_local_apps()
 
 INSTALLED_APPS = [
-    "whitenoise.runserver_nostatic",
+    "apps.whitenoise",
     "django.contrib.admin",
     "django.contrib.admindocs",
     "config.auth_app.AuthConfig",

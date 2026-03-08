@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 from django.conf import settings
@@ -8,6 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import transaction
 
+from apps.app.models import Application
 from apps.features.models import Feature
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
@@ -63,7 +65,9 @@ def set_feature_enabled(*, slug: str, enabled: bool, kind: str | None = None) ->
             raise CommandError(f"Unknown node feature: {slug}")
         node = Node.get_local()
         if node is None:
-            raise CommandError("No local node is registered for node feature operations.")
+            raise CommandError(
+                "No local node is registered for node feature operations."
+            )
         if enabled:
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
         else:
@@ -89,7 +93,9 @@ def get_feature_state(*, slug: str, kind: str | None = None) -> tuple[str, bool]
     node = Node.get_local()
     if node is None:
         return resolved_kind, False
-    enabled = NodeFeatureAssignment.objects.filter(node=node, feature=node_feature).exists()
+    enabled = NodeFeatureAssignment.objects.filter(
+        node=node, feature=node_feature
+    ).exists()
     return resolved_kind, enabled
 
 
@@ -117,6 +123,33 @@ def list_node_features(*, enabled: bool | None = True) -> list[tuple[str, bool]]
     return [(feature.slug, feature.slug in assigned) for feature in queryset]
 
 
+def _ensure_fixture_applications_exist(*, fixture_paths: list[Path]) -> None:
+    """Ensure fixture-referenced ``Application`` rows exist before fixture loading."""
+
+    labels: set[str] = set()
+    for fixture_path in fixture_paths:
+        try:
+            payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+
+        if not isinstance(payload, list):
+            continue
+
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            fields = item.get("fields")
+            if not isinstance(fields, dict):
+                continue
+            main_app = fields.get("main_app")
+            if isinstance(main_app, list) and main_app:
+                main_app = main_app[0]
+            if isinstance(main_app, str) and main_app.strip():
+                labels.add(main_app.strip())
+
+    for label in sorted(labels):
+        Application.objects.get_or_create(name=label)
 
 
 def _ensure_reset_baseline_features() -> None:
@@ -129,6 +162,7 @@ def _ensure_reset_baseline_features() -> None:
             "is_enabled": True,
         },
     )
+
 
 def reset_all_suite_features() -> tuple[int, int]:
     """Reload mainstream suite feature fixtures.
@@ -150,6 +184,9 @@ def reset_all_suite_features() -> tuple[int, int]:
     with transaction.atomic():
         feature_manager.update(is_seed_data=False, is_enabled=False)
         feature_manager.all().delete()
-        call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
+        _ensure_fixture_applications_exist(fixture_paths=fixture_paths)
+        call_command(
+            "load_user_data", *(str(path) for path in fixture_paths), verbosity=0
+        )
         _ensure_reset_baseline_features()
     return deleted_count, len(fixture_paths)

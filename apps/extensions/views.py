@@ -4,13 +4,42 @@ from __future__ import annotations
 
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 
+from apps.extensions.archive import build_extension_archive_response
 from apps.extensions.models import JsExtension
 
 
 def _get_enabled_extension(slug: str) -> JsExtension:
     """Return the enabled extension matching the given slug."""
     return get_object_or_404(JsExtension, slug=slug, is_enabled=True)
+
+
+def extension_catalog(request: HttpRequest) -> JsonResponse:
+    """Return metadata for all enabled extensions."""
+    payload = [
+        {
+            "slug": extension.slug,
+            "name": extension.name,
+            "description": extension.description,
+            "version": extension.version,
+            "manifest_version": extension.manifest_version,
+            "manifest_url": request.build_absolute_uri(
+                reverse("extensions:manifest", args=[extension.slug])
+            ),
+            "download_url": request.build_absolute_uri(
+                reverse("extensions:download", args=[extension.slug])
+            ),
+        }
+        for extension in JsExtension.objects.filter(is_enabled=True).order_by("name")
+    ]
+    return JsonResponse({"extensions": payload})
+
+
+def extension_download_archive(request: HttpRequest, slug: str) -> HttpResponse:
+    """Return a ZIP archive containing extension files for installation."""
+    extension = _get_enabled_extension(slug)
+    return build_extension_archive_response(extension)
 
 
 def extension_manifest(request: HttpRequest, slug: str) -> JsonResponse:
@@ -35,7 +64,9 @@ def extension_background_script(request: HttpRequest, slug: str) -> HttpResponse
     extension = _get_enabled_extension(slug)
     if not extension.background_script:
         raise Http404("Background script not available.")
-    return HttpResponse(extension.background_script, content_type="application/javascript")
+    return HttpResponse(
+        extension.background_script, content_type="application/javascript"
+    )
 
 
 def extension_options_page(request: HttpRequest, slug: str) -> HttpResponse:
