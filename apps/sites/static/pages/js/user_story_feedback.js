@@ -44,12 +44,31 @@
     }
   };
 
-  const resizeTextarea = field => {
+  const resizeTextarea = (field, { force = false } = {}) => {
     if (!field) {
       return;
     }
+
+    if (!force && overlay.hasAttribute('hidden')) {
+      return;
+    }
+
     field.style.height = 'auto';
-    field.style.height = `${field.scrollHeight}px`;
+
+    const computed = window.getComputedStyle(field);
+    const borderTop = parseFloat(computed.borderTopWidth) || 0;
+    const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
+    const nextHeight = field.scrollHeight + borderTop + borderBottom;
+
+    if (!force && nextHeight === 0) {
+      return;
+    }
+
+    field.style.height = `${nextHeight}px`;
+  };
+
+  const resizeFeedbackTextareas = options => {
+    feedbackTextareas.forEach(textarea => resizeTextarea(textarea, options));
   };
 
   const initializeTextareaAutoExpand = () => {
@@ -59,7 +78,6 @@
 
     feedbackTextareas.forEach(textarea => {
       textarea.addEventListener('input', () => resizeTextarea(textarea));
-      resizeTextarea(textarea);
     });
   };
 
@@ -106,6 +124,7 @@
       overlay.classList.add('show');
       document.body.classList.add('user-story-open');
       toggle.setAttribute('aria-expanded', 'true');
+      resizeFeedbackTextareas();
       if (card) {
         card.focus();
       }
@@ -370,6 +389,7 @@
         form.reset();
         setCharCount();
         setRatingHint();
+        resizeFeedbackTextareas({ force: true });
         if (successAlert) {
           successAlert.textContent = defaultSuccessMessage;
           successAlert.classList.remove('is-hidden');
