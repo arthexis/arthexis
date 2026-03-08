@@ -12,6 +12,16 @@ import pytest
 pytestmark = [pytest.mark.critical, pytest.mark.regression]
 
 
+_ROLE_TEST_CASES = [
+    ("Terminal", {}),
+    ("Control", {"CELERY_BROKER_URL": "redis://localhost:6379/0"}),
+    ("Satellite", {"OCPP_STATE_REDIS_URL": "redis://localhost:6379/1"}),
+    ("Watchtower", {"CHANNEL_REDIS_URL": "redis://localhost:6379/2"}),
+]
+
+_ROLE_SPECIFIC_SETTINGS = tuple(sorted({key for _, extra_env in _ROLE_TEST_CASES for key in extra_env}))
+
+
 def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     """Run a clean subprocess that imports settings and Celery for a specific node role."""
 
@@ -24,7 +34,7 @@ def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = No
         }
     )
 
-    for setting_name in ("CHANNEL_REDIS_URL", "OCPP_STATE_REDIS_URL", "CELERY_BROKER_URL"):
+    for setting_name in _ROLE_SPECIFIC_SETTINGS:
         env.pop(setting_name, None)
 
     if extra_env:
@@ -45,12 +55,7 @@ def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = No
 
 @pytest.mark.parametrize(
     ("node_role", "extra_env"),
-    [
-        ("Terminal", {}),
-        ("Control", {"CELERY_BROKER_URL": "redis://localhost:6379/0"}),
-        ("Satellite", {"OCPP_STATE_REDIS_URL": "redis://localhost:6379/1"}),
-        ("Watchtower", {"CHANNEL_REDIS_URL": "redis://localhost:6379/2"}),
-    ],
+    _ROLE_TEST_CASES,
 )
 def test_role_bootstrap_imports_succeed_with_minimum_required_environment(
     node_role: str, extra_env: dict[str, str]
@@ -64,4 +69,3 @@ def test_role_bootstrap_imports_succeed_with_minimum_required_environment(
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
-
