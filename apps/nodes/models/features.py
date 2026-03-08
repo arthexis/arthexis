@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from django.apps import apps as django_apps
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
@@ -188,9 +188,22 @@ class NodeFeatureAssignment(Entity):
         return f"{self.node} -> {self.feature}"
 
     def save(self, *args, **kwargs):
-        """Persist the assignment and resync node feature tasks."""
+        """Persist the assignment and resync node feature tasks and service locks."""
         super().save(*args, **kwargs)
         self.node.sync_feature_tasks()
+        transaction.on_commit(_reconcile_lifecycle_services)
+
+
+def _reconcile_lifecycle_services() -> None:
+    """Reconcile lifecycle lock and unit records after feature assignment changes."""
+
+    try:
+        from apps.services.lifecycle import write_lifecycle_config
+    except ImportError:
+        logger.debug("Lifecycle reconciliation import failed", exc_info=True)
+        return
+
+    write_lifecycle_config()
 
 
 @receiver(post_delete, sender=NodeFeatureAssignment)
@@ -205,6 +218,7 @@ def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
     node = NodeModel.objects.filter(pk=node_id).first()
     if node:
         node.sync_feature_tasks()
+    transaction.on_commit(_reconcile_lifecycle_services)
 
 
 class NodeFeatureMixin:
