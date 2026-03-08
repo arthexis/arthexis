@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 import subprocess
+from urllib.parse import parse_qsl
 
 from django.conf import settings
 from django.contrib import admin, messages
@@ -207,23 +208,11 @@ def _system_reports_view(request):
             except NoReverseMatch:
                 messages.error(request, _("The selected report is unavailable."))
             else:
-                query_params: list[tuple[str, str]] = []
-                for pair in params_value.split("&"):
-                    raw_pair = pair.strip()
-                    if not raw_pair:
-                        continue
-                    if "=" not in raw_pair:
-                        messages.warning(
-                            request,
-                            _("Ignored malformed parameter: %(param)s")
-                            % {"param": raw_pair},
-                        )
-                        continue
-                    key, value = raw_pair.split("=", 1)
-                    key = key.strip()
-                    if not key:
-                        continue
-                    query_params.append((key, value.strip()))
+                query_params = [
+                    (key.strip(), value.strip())
+                    for key, value in parse_qsl(params_value, keep_blank_values=True)
+                    if key.strip()
+                ]
 
                 if query_params:
                     return HttpResponseRedirect(f"{base_url}?{urlencode(query_params)}")

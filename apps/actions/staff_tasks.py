@@ -139,18 +139,17 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
 def ensure_default_staff_tasks_exist() -> None:
     """Backfill missing default staff tasks in existing and new environments."""
 
-    existing_slugs = set(StaffTask.objects.values_list("slug", flat=True))
     for task in DEFAULT_STAFF_TASKS:
-        if task["slug"] in existing_slugs:
-            continue
-        StaffTask.objects.create(
+        StaffTask.objects.get_or_create(
             slug=task["slug"],
-            label=task["label"],
-            description=task["description"],
-            admin_url_name=task["admin_url_name"],
-            order=task["order"],
-            default_enabled=True,
-            staff_only=True,
-            superuser_only=bool(task.get("superuser_only", False)),
-            is_active=True,
+            defaults={
+                "label": task["label"],
+                "description": task["description"],
+                "admin_url_name": task["admin_url_name"],
+                "order": task["order"],
+                "default_enabled": True,
+                "staff_only": True,
+                "superuser_only": bool(task.get("superuser_only", False)),
+                "is_active": True,
+            },
         )

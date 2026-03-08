@@ -105,3 +105,15 @@ class AdminStaffTasksTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], f"{reverse('admin:system-startup-report')}?limit=25")
+
+    def test_reports_runner_does_not_double_encode_query_values(self):
+        """Reports runner should normalize encoded query values without double-encoding."""
+
+        response = self.client.post(
+            reverse("admin:system-reports"),
+            {"report": "system-startup-report", "params": "q=hello%20world"},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('admin:system-startup-report')}?q=hello+world")
