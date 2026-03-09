@@ -145,6 +145,11 @@ class ImportCollector(ast.NodeVisitor):
         for alias in node.names:
             if alias.name == "*":
                 continue
+            if (target_dir / "__init__.py").exists():
+                # ``from . import symbol`` can legally re-export names defined in the
+                # package ``__init__`` without a sibling module of the same name.
+                # Treat those imports as resolvable to avoid false positives.
+                continue
             module_path = target_dir / Path(alias.name.replace(".", "/"))
             if not self._path_exists(module_path):
                 alt_module_path = target_dir.parent / Path(alias.name.replace(".", "/"))
