@@ -53,6 +53,45 @@ def test_submission_rejected_when_feedback_ingestion_feature_disabled(client, se
     assert response.json()["success"] is False
 
 
+def test_feedback_submission_marks_javascript_disabled_by_default(client, settings):
+    """Feedback submissions without a JavaScript marker should store disabled status."""
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={
+            "rating": 4,
+            "comments": "No script submit",
+            "path": "/",
+        },
+    )
+
+    assert response.status_code == 200
+    story = UserStory.objects.latest("submitted_at")
+    assert story.javascript_enabled is False
+
+
+def test_feedback_submission_marks_javascript_enabled_when_flag_is_set(client, settings):
+    """Feedback submissions should persist JavaScript-enabled marker from form data."""
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={
+            "rating": 4,
+            "comments": "Script submit",
+            "path": "/",
+            "javascript_enabled": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    story = UserStory.objects.latest("submitted_at")
+    assert story.javascript_enabled is True
+
+
 def test_authenticated_non_staff_feedback_limits_files(settings):
     """Non-staff authenticated users should be limited to configured attachment count."""
 

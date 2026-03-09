@@ -372,6 +372,7 @@ def submit_user_story(request):
         if not story.name:
             story.name = str(_("Anonymous"))[:40]
         story.path = (story.path or request.get_full_path())[:500]
+        story.javascript_enabled = data.get("javascript_enabled") == "1"
         story.referer = get_original_referer(request)
         story.user_agent = request.META.get("HTTP_USER_AGENT", "")
         story.ip_address = client_ip or None
