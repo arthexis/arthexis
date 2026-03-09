@@ -258,6 +258,30 @@ def test_mcp_tools_call_rejects_when_missing_api_key() -> None:
 
 
 @pytest.mark.django_db
+def test_authenticate_key_uses_secret_key_fallbacks_and_upgrades_hash(settings) -> None:
+    """Keys derived with a fallback secret should still authenticate and migrate."""
+
+    settings.SECRET_KEY = "current-secret"
+    settings.SECRET_KEY_FALLBACKS = ["previous-secret"]
+
+    user = get_user_model().objects.create_user(username="fallback-secret-user")
+    key, plain_key = McpApiKey.objects.create_for_user(user=user, label="tests")
+
+    fallback_hash = McpApiKey.objects._build_key_hash(
+        plain_key, secret_key="previous-secret"
+    )
+    key.key_hash = fallback_hash
+    key.save(update_fields=["key_hash"])
+
+    authenticated = McpApiKey.objects.authenticate_key(plain_key)
+
+    assert authenticated is not None
+    key.refresh_from_db()
+    assert key.key_hash != fallback_hash
+    assert key.key_hash == McpApiKey.objects._build_key_hash(plain_key)
+
+
+@pytest.mark.django_db
 def test_authenticate_key_migrates_legacy_sha256_hash() -> None:
     """Authenticating a legacy key should transparently upgrade its stored hash."""
 
