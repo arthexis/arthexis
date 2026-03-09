@@ -285,17 +285,21 @@ const setupShareModal = () => {
     modal.show();
   });
   modalEl.addEventListener('shown.bs.modal', () => {
-    const currentUrl = window.location.href;
+    const currentPageUrl = window.location.href;
     if (shortUrlInput && !shortUrlInput.value) {
-      shortUrlInput.value = currentUrl;
+      shortUrlInput.value = currentPageUrl;
     }
-    if (thumbnailFrame && thumbnailFrame.src !== currentUrl) {
-      thumbnailFrame.src = currentUrl;
+    if (thumbnailFrame) {
+      const previewUrl = new URL(currentPageUrl);
+      previewUrl.searchParams.set('djdt', 'share-preview');
+      if (thumbnailFrame.src !== previewUrl.toString()) {
+        thumbnailFrame.src = previewUrl.toString();
+      }
     }
   });
   modalEl.addEventListener('hidden.bs.modal', () => {
     if (thumbnailFrame) {
-      thumbnailFrame.src = '';
+      thumbnailFrame.src = 'about:blank';
     }
   });
   if (copyButton && shortUrlInput) {

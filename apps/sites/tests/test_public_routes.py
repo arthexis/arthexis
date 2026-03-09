@@ -74,6 +74,8 @@ def test_share_modal_renders_page_thumbnail_instead_of_helper_copy(client):
     assert response.status_code == 200
     content = response.content.decode()
     assert 'id="share-page-thumbnail"' in content
+    assert 'src="about:blank"' in content
+    assert 'sandbox="allow-same-origin"' in content
     assert "Share this page using the short link below." not in content
 
 
