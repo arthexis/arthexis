@@ -22,6 +22,21 @@ if TYPE_CHECKING:
 local_registration_logger = get_register_local_node_logger()
 
 
+def _resolve_local_role_name() -> str:
+    """Resolve the local node role from settings, environment, lock file, then default."""
+    configured_role = str(getattr(settings, "NODE_ROLE", "") or os.environ.get("NODE_ROLE", "")).strip()
+    if configured_role:
+        return configured_role
+
+    role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
+    if role_lock.exists():
+        locked_role = role_lock.read_text().strip()
+        if locked_role:
+            return locked_role
+
+    return "Terminal"
+
+
 def register_current(node_model: type["Node"], notify_peers: bool = True) -> tuple["Node", bool]:
     """Create or update the local node entry for ``node_model``."""
     hostname_override = (os.environ.get("NODE_HOSTNAME") or os.environ.get("HOSTNAME") or "").strip()
@@ -108,8 +123,7 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
     if managed_site:
         defaults["base_site"] = managed_site
 
-    role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
-    role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
+    role_name = _resolve_local_role_name()
     role_name = ROLE_RENAMES.get(role_name, role_name)
     desired_role = NodeRole.objects.filter(name=role_name).first()
 

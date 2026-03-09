@@ -9,6 +9,7 @@ from django.test import RequestFactory
 import pytest
 
 from apps.nodes.models import Node, NodeRole
+from apps.nodes.services import registration
 from apps.nodes.views import node_info, register_node
 
 
@@ -208,6 +209,77 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
     assert node.address == "arthexis.com"
     assert node.base_site_id == site.id
     assert node.port == 443
+
+
+@pytest.mark.django_db
+def test_register_current_prefers_node_role_from_env_when_settings_missing(settings, monkeypatch, tmp_path):
+    """Registration should use NODE_ROLE env value before lock-file fallback."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.setenv("NODE_ROLE", "Control")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_uses_role_lock_when_node_role_is_missing(settings, monkeypatch, tmp_path):
+    """Registration should honor legacy lock-file role resolution when NODE_ROLE is unset."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_path):
+    """Registration should default to Terminal when no role configuration exists."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == terminal_role.id
 
 @pytest.mark.django_db
 def test_node_info_prefers_base_site_domain(monkeypatch):
