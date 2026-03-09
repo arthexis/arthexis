@@ -104,17 +104,18 @@ class WhatsAppChatBridgeAdmin(EntityModelAdmin):
             total_alias="total_avatars",
             enabled_alias="enabled_avatars",
         )
-        queryset = queryset.annotate(
-            normalized_webhook_timestamp=Case(
-                When(
-                    webhook__messages__timestamp__gt=100_000_000_000,
-                    then=F("webhook__messages__timestamp") / Value(1000),
-                ),
-                default=F("webhook__messages__timestamp"),
-                output_field=BigIntegerField(),
+        return queryset.annotate(
+            last_webhook_timestamp=Max(
+                Case(
+                    When(
+                        webhook__messages__timestamp__gt=100_000_000_000,
+                        then=F("webhook__messages__timestamp") / Value(1000),
+                    ),
+                    default=F("webhook__messages__timestamp"),
+                    output_field=BigIntegerField(),
+                )
             )
         )
-        return queryset.annotate(last_webhook_timestamp=Max("normalized_webhook_timestamp"))
 
     @admin.display(description=_("Avatars"), ordering="enabled_avatars")
     def avatar_count(self, obj):
