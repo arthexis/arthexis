@@ -1,16 +1,22 @@
 from django.db import migrations
 
 
+ACRONYM_UPDATES = {
+    "Terminal": ("TERM", "TRMN"),
+    "Satellite": ("SATL", "STLT"),
+}
+
+
 def forward_update_acronyms(apps, schema_editor):
     NodeRole = apps.get_model("nodes", "NodeRole")
-    NodeRole.objects.filter(name="Terminal", acronym="TERM").update(acronym="TRMN")
-    NodeRole.objects.filter(name="Satellite", acronym="SATL").update(acronym="STLT")
+    for name, (old_acronym, new_acronym) in ACRONYM_UPDATES.items():
+        NodeRole.objects.filter(name=name, acronym=old_acronym).update(acronym=new_acronym)
 
 
 def reverse_update_acronyms(apps, schema_editor):
     NodeRole = apps.get_model("nodes", "NodeRole")
-    NodeRole.objects.filter(name="Terminal", acronym="TRMN").update(acronym="TERM")
-    NodeRole.objects.filter(name="Satellite", acronym="STLT").update(acronym="SATL")
+    for name, (old_acronym, new_acronym) in ACRONYM_UPDATES.items():
+        NodeRole.objects.filter(name=name, acronym=new_acronym).update(acronym=old_acronym)
 
 
 class Migration(migrations.Migration):
