@@ -1,0 +1,11 @@
+[importlinter]
+root_package = apps
+include_external_packages = True
+
+[importlinter:contract:apps-do-not-import-tests]
+name = Local app modules must not import test modules
+type = forbidden
+source_modules =
+    apps
+forbidden_modules =
+    tests
