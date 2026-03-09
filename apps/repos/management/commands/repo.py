@@ -121,17 +121,16 @@ class Command(BaseCommand):
 
         cleaned = raw_repo.strip()
         if cleaned:
-            if "://" in cleaned or cleaned.startswith("git@"):
-                try:
-                    owner, name = parse_repository_url(cleaned)
-                except ValueError as exc:
-                    raise CommandError(str(exc)) from exc
-            else:
-                parts = cleaned.split("/", 1)
-                if len(parts) != 2 or not parts[0] or not parts[1]:
-                    raise CommandError("Repository must be in owner/name format")
-                owner, name = parts[0].strip(), parts[1].strip()
+            if "/" not in cleaned:
+                raise CommandError("Repository must be in owner/name format")
+            try:
+                owner, name = parse_repository_url(cleaned)
+            except ValueError as exc:
+                raise CommandError(str(exc)) from exc
             return RepositoryRef(owner=owner, name=name)
 
-        active = resolve_active_repository()
+        try:
+            active = resolve_active_repository()
+        except ValueError as exc:
+            raise CommandError(str(exc)) from exc
         return RepositoryRef(owner=active.owner, name=active.name)

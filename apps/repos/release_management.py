@@ -57,21 +57,13 @@ class ReleaseManagementClient:
 
     @staticmethod
     def _feature_mode() -> str:
-        from apps.features.models import Feature
+        from apps.features.parameters import get_feature_parameter
 
-        feature = Feature.objects.filter(slug=RELEASE_MANAGEMENT_FEATURE_SLUG).only("metadata").first()
-        if feature is None:
-            return EXECUTION_MODE_SUITE
-
-        metadata = getattr(feature, "metadata", {}) or {}
-        if not isinstance(metadata, dict):
-            return EXECUTION_MODE_SUITE
-        parameters = metadata.get("parameters", {})
-        if not isinstance(parameters, dict):
-            return EXECUTION_MODE_SUITE
-        configured = parameters.get(EXECUTION_MODE_KEY)
-        if configured is None:
-            return EXECUTION_MODE_SUITE
+        configured = get_feature_parameter(
+            RELEASE_MANAGEMENT_FEATURE_SLUG,
+            EXECUTION_MODE_KEY,
+            fallback=EXECUTION_MODE_SUITE,
+        )
         normalized = str(configured).strip().lower()
         if normalized in {EXECUTION_MODE_SUITE, EXECUTION_MODE_BINARY}:
             return normalized
@@ -91,15 +83,16 @@ class ReleaseManagementClient:
         if self._token:
             return self._token
 
+        try:
+            token = github_service.get_github_issue_token()
+        except RuntimeError:
+            token = None
+        if token:
+            return token
+
         env_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         cleaned = env_token.strip() if isinstance(env_token, str) else ""
-        if cleaned:
-            return cleaned
-
-        try:
-            return github_service.get_github_issue_token()
-        except RuntimeError:
-            return None
+        return cleaned or None
 
     @staticmethod
     def _ensure_gh_available() -> None:
@@ -143,7 +136,7 @@ class ReleaseManagementClient:
         """List issues using suite API first unless binary mode is selected."""
 
         token = self._resolve_token()
-        if not self._should_use_binary_first() and token:
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
             issues = list(
                 github_service.fetch_repository_issues(
                     token=token,
@@ -173,7 +166,7 @@ class ReleaseManagementClient:
         """Create an issue through suite API with binary fallback."""
 
         token = self._resolve_token()
-        if not self._should_use_binary_first() and token:
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
             response = github_service.create_issue(
                 repository.owner,
                 repository.name,
@@ -196,10 +189,6 @@ class ReleaseManagementClient:
                 title,
                 "--body",
                 body,
-                "--json",
-                "url",
-                "--jq",
-                ".url",
             ]
         )
 
@@ -207,7 +196,7 @@ class ReleaseManagementClient:
         """List pull requests through suite API with gh fallback."""
 
         token = self._resolve_token()
-        if not self._should_use_binary_first() and token:
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
             return list(
                 github_service.fetch_repository_pull_requests(
                     token=token,
@@ -230,14 +219,14 @@ class ReleaseManagementClient:
             [
                 "release",
                 "create",
-                "--",
-                tag,
                 "--repo",
                 repository.slug,
                 "--title",
                 title,
                 "--notes",
                 notes,
+                "--",
+                tag,
             ]
         )
 

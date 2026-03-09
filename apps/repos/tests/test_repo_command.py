@@ -45,3 +45,11 @@ def test_repo_command_wraps_malformed_repo_url_as_command_error():
 
     with pytest.raises(CommandError):
         call_command("repo", "--repo", "https://github.com/owner", "issues", "list")
+
+
+@pytest.mark.django_db
+def test_repo_command_rejects_extra_path_segments_in_repo_option():
+    """repo command should reject owner/name values with extra segments."""
+
+    with pytest.raises(CommandError, match="owner/name"):
+        call_command("repo", "--repo", "owner/name/extra", "issues", "list")

@@ -155,4 +155,57 @@ def test_release_create_uses_double_dash_before_tag(monkeypatch):
     )
 
     assert result == "ok"
-    assert captured["args"][0:4] == ["release", "create", "--", "-nasty"]
+    assert captured["args"][0:2] == ["release", "create"]
+    assert captured["args"][-2:] == ["--", "-nasty"]
+
+
+@pytest.mark.django_db
+def test_release_management_prefers_suite_token_before_environment(monkeypatch):
+    """Token resolution should prefer suite-managed token over env vars."""
+
+    monkeypatch.setenv("GITHUB_TOKEN", "env-token")
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(github_service, "get_github_issue_token", lambda: "suite-token")
+
+    client = ReleaseManagementClient()
+
+    assert client._resolve_token() == "suite-token"
+
+
+@pytest.mark.django_db
+def test_release_management_disabled_feature_forces_gh_fallback(monkeypatch):
+    """Disabled feature should prevent suite API routing even when token exists."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_feature_enabled",
+        staticmethod(lambda: False),
+    )
+
+    called: dict[str, Any] = {}
+
+    def fake_gh(self, args: list[str]) -> list[dict[str, Any]]:
+        called["args"] = args
+        return [{"number": 9, "title": "Fallback issue", "state": "open"}]
+
+    def fail_suite(**kwargs):  # pragma: no cover - explicit failure branch
+        raise AssertionError(f"suite API should not run, got {kwargs}")
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh_json", fake_gh)
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(github_service, "fetch_repository_issues", fail_suite)
+
+    client = ReleaseManagementClient()
+    rows = client.list_issues(RepositoryRef(owner="octo", name="demo"))
+
+    assert rows[0]["number"] == 9
+    assert called["args"][0:2] == ["issue", "list"]
