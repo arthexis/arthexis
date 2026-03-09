@@ -1,0 +1,23 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+  <form method="post">{% csrf_token %}
+    <div>
+      <label for="id_project">{% trans "Project" %}</label>
+      <select id="id_project" name="project" required>
+        <option value="">{% trans "Select a project" %}</option>
+        {% for project in projects %}
+          <option value="{{ project.pk }}">{{ project.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% for obj in objects %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="add_selected_to_project">
+    <input type="hidden" name="apply" value="1">
+    <button type="submit" class="default">{% trans "Add selected to Project" %}</button>
+  </form>
+{% endblock %}

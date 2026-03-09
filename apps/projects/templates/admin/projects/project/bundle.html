@@ -1,0 +1,150 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .projects-bundle-stack {
+      display: grid;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .projects-bundle-section {
+      padding: 1rem;
+    }
+
+    .projects-bundle-details {
+      border: 1px solid var(--hairline-color, #d9d9d9);
+      border-radius: 8px;
+      background: linear-gradient(180deg, var(--darkened-bg, #f7f7f7), var(--body-bg, #fff));
+      padding: 1rem;
+    }
+
+    .projects-bundle-details-grid {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 0.75rem;
+    }
+
+    .projects-bundle-detail-card {
+      border: 1px solid var(--hairline-color, #d9d9d9);
+      border-radius: 6px;
+      background: var(--body-bg, #fff);
+      padding: 0.75rem;
+    }
+
+    .projects-bundle-detail-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      color: var(--body-quiet-color, #666);
+    }
+
+    .projects-bundle-actions .button {
+      margin-right: 0.5rem;
+    }
+  </style>
+{% endblock %}
+
+{% block content_title %}
+  <h1>{{ title }}</h1>
+{% endblock %}
+
+{% block content %}
+  <div class="submit-row projects-bundle-actions" style="margin-top: 0;">
+    <a class="button" href="{{ change_url }}">
+      {% blocktrans with project_name=project.name %}Back to project: {{ project_name }}{% endblocktrans %}
+    </a>
+  </div>
+
+  <div class="projects-bundle-stack">
+    <fieldset class="module aligned projects-bundle-section">
+      <h2>{% trans "Project details" %}</h2>
+      <div class="projects-bundle-details">
+        <div class="projects-bundle-details-grid">
+          <div class="projects-bundle-detail-card">
+            <span class="projects-bundle-detail-label">{% trans "Name" %}</span>
+            <div>{{ project.name }}</div>
+          </div>
+          <div class="projects-bundle-detail-card">
+            <span class="projects-bundle-detail-label">{% trans "Description" %}</span>
+            <div>{{ project.description|default:"-" }}</div>
+          </div>
+          <div class="projects-bundle-detail-card">
+            <span class="projects-bundle-detail-label">{% trans "Bundle item count" %}</span>
+            <div>{{ items|length }}</div>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="module aligned projects-bundle-section">
+      <h2>{% trans "Import bundle" %}</h2>
+      <form action="{{ import_url }}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-row">
+          <div>
+            <label for="id_bundle_file">{% trans "ZIP archive" %}</label>
+            <input id="id_bundle_file" type="file" name="bundle_file" accept=".zip" required>
+          </div>
+        </div>
+        <div class="submit-row">
+          <input type="submit" class="default" value="{% trans 'Import bundle' %}">
+        </div>
+      </form>
+    </fieldset>
+
+    <fieldset class="module projects-bundle-section">
+      <h2>{% trans "Bundle items" %}</h2>
+      <form action="{{ bundle_url }}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="_bundle_selection" value="1">
+        <table id="result_list">
+          <thead>
+            <tr>
+              <th scope="col" class="action-checkbox-column">
+                <div class="text"><span>{% trans "Include" %}</span></div>
+              </th>
+              <th scope="col"><div class="text"><span>{% trans "Model" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% trans "Object ID" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% trans "Object" %}</span></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td class="action-checkbox">
+                  <input type="checkbox" name="selected_items" value="{{ item.pk }}" checked>
+                </td>
+                <td>{{ item.content_type.app_label }}.{{ item.content_type.model }}</td>
+                <td>{{ item.object_id }}</td>
+                <td>{{ item.content_object|default:"(missing)" }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4">{% trans "No items in this project yet." %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="submit-row">
+          <input type="submit" class="default" value="{% trans 'Update bundle' %}">
+        </div>
+      </form>
+    </fieldset>
+
+    <fieldset class="module aligned projects-bundle-section">
+      <h2>{% trans "Export bundle" %}</h2>
+      <div class="form-row">
+        <div class="readonly">
+          {% trans "Download the current bundle as a ZIP archive." %}
+        </div>
+      </div>
+      <div class="submit-row">
+        <a class="button default" href="{{ export_url }}">{% trans "Export bundle" %}</a>
+      </div>
+    </fieldset>
+  </div>
+{% endblock %}
