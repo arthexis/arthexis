@@ -16,7 +16,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity, EntityManager
 from apps.core.fixtures import ensure_seed_data_flags
-from apps.locals import user_data
+from apps.locals.user_fixtures import delete_user_fixture
 from utils import revision as revision_utils
 
 from ..release import Credentials, Package as ReleasePackage, RepositoryTarget
@@ -159,7 +159,7 @@ class PackageRelease(Entity):
                 old_path.unlink()
 
     def delete(self, using=None, keep_parents=False):
-        user_data.delete_user_fixture(self)
+        delete_user_fixture(self)
         super().delete(using=using, keep_parents=keep_parents)
 
     def __str__(self) -> str:  # pragma: no cover - trivial

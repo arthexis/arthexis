@@ -5,7 +5,7 @@ from django.contrib.auth.signals import user_logged_in
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .fixtures import load_shared_user_fixtures, load_user_fixtures
+from apps.locals.user_fixtures import load_shared_user_fixtures, load_user_fixtures
 
 
 @receiver(user_logged_in)

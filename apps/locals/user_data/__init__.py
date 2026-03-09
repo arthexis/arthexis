@@ -1,6 +1,10 @@
-"""Transitional import shim for ``apps.locals.user_data``.
+"""Backward-compatible imports for local user data helpers."""
 
-Import from ``apps.locals`` or ``apps.locals.api`` instead.
-"""
+from apps.locals.seeds import load_local_seed_zips
+from apps.locals.user_fixtures import load_shared_user_fixtures, load_user_fixtures
 
-from apps.locals.api import *  # noqa: F403
+__all__ = [
+    "load_local_seed_zips",
+    "load_shared_user_fixtures",
+    "load_user_fixtures",
+]
