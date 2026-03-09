@@ -110,6 +110,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:video_videodevice_take_snapshot",
             ),
         ),
+        "llm-summary": (
+            NodeFeatureDefaultAction(
+                label=_("Configure"),
+                url_name="admin:summary_llmsummaryconfig_wizard",
+            ),
+        ),
         "user-desktop": (
             NodeFeatureDefaultAction(
                 label=_("Desktop shortcuts"),
@@ -371,8 +377,13 @@ class NodeFeatureMixin:
                 screenshot_enabled = bool(screenshot_result and screenshot_result.success)
             else:
                 screenshot_enabled = False
+        llm_summary_suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
         celery_enabled = self.is_local and self.has_feature("celery-queue")
-        llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
+        llm_summary_enabled = (
+            llm_summary_suite_enabled
+            and celery_enabled
+            and self.has_feature("llm-summary")
+        )
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
