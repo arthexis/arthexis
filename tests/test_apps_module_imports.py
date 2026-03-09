@@ -32,10 +32,7 @@ def _iter_non_test_apps_modules() -> list[str]:
     modules: list[str] = []
     for module_info in pkgutil.walk_packages(apps.__path__, prefix="apps."):
         module_name = module_info.name
-        module_leaf_name = module_name.rsplit(".", 1)[-1]
         if ".tests." in module_name or module_name.endswith(".tests"):
-            continue
-        if module_leaf_name.startswith("test"):
             continue
         modules.append(module_name)
     return modules
