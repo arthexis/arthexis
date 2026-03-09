@@ -280,12 +280,22 @@ const setupShareModal = () => {
   const modal = new window.bootstrap.Modal(modalEl);
   const shortUrlInput = document.getElementById('share-short-url');
   const copyButton = document.getElementById('copy-short-url');
+  const thumbnailFrame = document.getElementById('share-page-thumbnail');
   btn.addEventListener('click', () => {
     modal.show();
   });
   modalEl.addEventListener('shown.bs.modal', () => {
+    const currentUrl = window.location.href;
     if (shortUrlInput && !shortUrlInput.value) {
-      shortUrlInput.value = window.location.href;
+      shortUrlInput.value = currentUrl;
+    }
+    if (thumbnailFrame && thumbnailFrame.src !== currentUrl) {
+      thumbnailFrame.src = currentUrl;
+    }
+  });
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    if (thumbnailFrame) {
+      thumbnailFrame.src = '';
     }
   });
   if (copyButton && shortUrlInput) {
