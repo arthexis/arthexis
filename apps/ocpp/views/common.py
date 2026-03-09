@@ -391,8 +391,21 @@ def _collect_status_events(
 
     connector_id = connector.connector_id
     serial = connector.charger_id
-    keys = [store.identity_key(serial, connector_id)]
-    if connector_id is not None:
+    keys: list[str] = []
+    if connector_id is None:
+        keys.append(store.identity_key(serial, None))
+        connector_ids = (
+            Charger.objects.filter(charger_id=serial)
+            .exclude(connector_id__isnull=True)
+            .values_list("connector_id", flat=True)
+        )
+        keys.extend(
+            store.identity_key(serial, sibling_connector_id)
+            for sibling_connector_id in connector_ids
+        )
+        keys.append(store.pending_key(serial))
+    else:
+        keys.append(store.identity_key(serial, connector_id))
         keys.append(store.identity_key(serial, None))
         keys.append(store.pending_key(serial))
 
@@ -473,8 +486,21 @@ def _important_non_transaction_events(
 
     connector_id = connector.connector_id
     serial = charger.charger_id
-    keys = [store.identity_key(serial, connector_id)]
-    if connector_id is not None:
+    keys: list[str] = []
+    if connector_id is None:
+        keys.append(store.identity_key(serial, None))
+        connector_ids = (
+            Charger.objects.filter(charger_id=serial)
+            .exclude(connector_id__isnull=True)
+            .values_list("connector_id", flat=True)
+        )
+        keys.extend(
+            store.identity_key(serial, sibling_connector_id)
+            for sibling_connector_id in connector_ids
+        )
+        keys.append(store.pending_key(serial))
+    else:
+        keys.append(store.identity_key(serial, connector_id))
         keys.append(store.identity_key(serial, None))
         keys.append(store.pending_key(serial))
 

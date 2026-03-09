@@ -62,10 +62,22 @@ urlpatterns = [
     ),
     path("c/<str:cid>/status/", views.charger_status, name="charger-status"),
     path(
+        "charger/<str:cid>/status/", views.charger_status, name="charger-status-legacy"
+    ),
+    path(
+        "charger/<str:cid>/connector/<slug:connector>/status/",
+        views.charger_status,
+        name="charger-status-connector-legacy",
+    ),
+    path(
         "c/<str:cid>/connector/<slug:connector>/status/",
         views.charger_status,
         name="charger-status-connector",
     ),
     path("rfid/validator/", include("apps.cards.urls")),
-    path("media/<slug:slug>/", media_views.media_bucket_upload, name="media-bucket-upload"),
+    path(
+        "media/<slug:slug>/",
+        media_views.media_bucket_upload,
+        name="media-bucket-upload",
+    ),
 ]

@@ -390,7 +390,7 @@
         <td>
           {% if event.event_id %}
             {% if can_view_transaction_links %}
-            <a class="link-secondary" href="{% url 'admin:ocpp_transaction_change' event.event_id %}">{{ event.event_id }}</a>
+            <a class="link-secondary" href="{{ transactions_admin_url }}{{ event.event_id }}/change/">{{ event.event_id }}</a>
             {% else %}
             {{ event.event_id }}
             {% endif %}
