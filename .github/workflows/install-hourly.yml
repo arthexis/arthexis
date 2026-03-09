@@ -94,6 +94,10 @@ jobs:
         run: |
           source .venv/bin/activate
           ruff check --select E9,F823 .
+      - name: Run import contracts
+        run: |
+          source .venv/bin/activate
+          lint-imports
       - name: Detect pytest xdist arguments
         run: |
           set -Eeuo pipefail
@@ -113,7 +117,7 @@ jobs:
           pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
       - name: Upload pytest log
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: install-hourly-pytest-log
           path: pytest.log

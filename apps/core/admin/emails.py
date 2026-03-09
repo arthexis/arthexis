@@ -14,6 +14,9 @@ from .inlines import EmailCollectorInline
 from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
+SETUP_COLLECTOR_TEXT = _("Setup Collector")
+
+
 class EmailCollectorAdmin(EntityModelAdmin):
     list_display = (
         "name",

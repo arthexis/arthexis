@@ -220,7 +220,7 @@ jobs:
           node artifacts/capture.js
 
       - name: Upload dashboard screenshot
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: admin-dashboard
           path: artifacts/admin-dashboard.png
@@ -255,7 +255,7 @@ jobs:
 
       - name: Upload public screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: public-site
           path: artifacts/public-site.png
@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload OCPP dashboard screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-dashboard.png
@@ -342,7 +342,7 @@ jobs:
 
       - name: Upload EVCS public screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: evcs-public
           path: artifacts/evcs-public.png

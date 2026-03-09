@@ -10,7 +10,7 @@ attrs==25.3.0
 autobahn==24.4.2
 Automat==25.4.16
 billiard==4.2.4
-black==26.1.0
+black==26.3.0
 bleach==6.3.0
 boto3==1.36.23
 botocore==1.36.23
@@ -52,6 +52,7 @@ httpcore==1.0.9
 httpx==0.28.1
 hyperlink==21.0.0
 idna==3.11
+import-linter==2.5
 incremental==24.11.0
 jmespath==1.0.1
 kombu==5.5.4

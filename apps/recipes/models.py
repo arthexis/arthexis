@@ -42,6 +42,7 @@ class Recipe(Ownable):
     """Executable recipe definition with selectable script runtime."""
 
     objects = RecipeManager()
+    PRODUCT_REDACTION_PLACEHOLDER = "[REDACTED]"
 
     class BodyType(models.TextChoices):
         """Supported runtimes for a recipe body."""
@@ -493,16 +494,18 @@ class Recipe(Ownable):
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> None:
-        """Persist execution outputs and inputs as a RecipeProduct record."""
+        """Persist execution outputs without storing sensitive script/input values."""
 
         RecipeProduct.objects.create(
             recipe=self,
             format_detected=self.detect_format(),
-            input_args=[str(value) for value in args],
-            input_kwargs={key: str(value) for key, value in kwargs.items()},
+            input_args=[self.PRODUCT_REDACTION_PLACEHOLDER for _ in args],
+            input_kwargs={
+                key: self.PRODUCT_REDACTION_PLACEHOLDER for key in kwargs
+            },
             result=serialize_recipe_result(execution.result),
             result_variable=execution.result_variable,
-            resolved_script=execution.resolved_script,
+            resolved_script=self.PRODUCT_REDACTION_PLACEHOLDER,
         )
 
     @staticmethod
