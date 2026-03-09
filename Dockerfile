@@ -24,8 +24,10 @@ RUN python -m pip install --upgrade pip \
 
 COPY --chown=appuser:appuser . .
 
+RUN chmod +x scripts/docker-entrypoint.sh
+
 USER appuser
 
 EXPOSE 8888
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]
+ENTRYPOINT ["scripts/docker-entrypoint.sh"]
