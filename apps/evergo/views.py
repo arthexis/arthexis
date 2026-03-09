@@ -254,9 +254,15 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
                 files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
+                step_completion = _compute_tracking_step_completion(form.cleaned_data)
                 messages.info(request, "Inicio de envío: 0/4 pasos completados.")
                 try:
-                    result = profile.submit_tracking_phase_one(order_id=order_id, payload=payload, files=files)
+                    result = profile.submit_tracking_phase_one(
+                        order_id=order_id,
+                        payload=payload,
+                        files=files,
+                        step_completion=step_completion,
+                    )
                 except EvergoPhaseSubmissionError as exc:
                     messages.warning(
                         request,
@@ -289,6 +295,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
         missing_images = []
 
     image_field_rows = _build_image_field_rows(form=form, remote_image_urls=remote_image_urls)
+    step_statuses = _build_tracking_step_statuses(form.cleaned_data if form.is_bound else form.initial)
 
     return render(
         request,
@@ -304,6 +311,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             "image_field_rows_extra": image_field_rows[6:],
             "collapsed_defaults": COLLAPSED_DEFAULT_FIELDS,
             "collapsed_fields": [form[name] for name in COLLAPSED_DEFAULT_FIELDS],
+            "step_statuses": step_statuses,
             "evergo_so_url": (
                 EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id)
                 if order.remote_id is not None
@@ -538,6 +546,36 @@ TRACKING_PRIMARY_FIELDS = [
     "numero_serie",
 ]
 
+STEP_VISITA_REQUIRED_FIELDS = TRACKING_PRIMARY_FIELDS
+
+STEP_ASSIGN_REQUIRED_FIELDS = [
+    "fecha_visita",
+]
+
+STEP_INSTALL_REQUIRED_FIELDS = TRACKING_PRIMARY_FIELDS + [
+    "foto_tablero",
+    "foto_medidor",
+    "foto_tierra",
+    "foto_ruta_cableado",
+    "foto_ubicacion_cargador",
+    "foto_general",
+    "foto_hoja_visita",
+    "foto_interruptor_principal",
+]
+
+STEP_MONTAJE_REQUIRED_FIELDS = STEP_INSTALL_REQUIRED_FIELDS + [
+    "foto_panoramica_estacion",
+    "foto_numero_serie_cargador",
+    "foto_interruptor_instalado",
+    "foto_conexion_cargador",
+    "foto_preparacion_cfe",
+    "foto_hoja_reporte_instalacion",
+    "foto_voltaje_fase_fase",
+    "foto_voltaje_fase_tierra",
+    "foto_voltaje_fase_neutro",
+    "foto_voltaje_neutro_tierra",
+]
+
 TRACKING_INT_FIELDS = {
     "metraje_visita_tecnica",
     "capacidad_itm_principal",
@@ -549,6 +587,51 @@ TRACKING_DECIMAL_FIELDS = {
     "voltaje_fase_neutro",
     "voltaje_neutro_tierra",
 }
+
+
+def _has_tracking_value(value: object) -> bool:
+    """Return True when a tracking form value should count as filled."""
+    return value not in (None, "")
+
+
+def _is_step_complete(*, values: dict[str, object], required_fields: list[str]) -> bool:
+    """Return whether all required fields for a step are present in current values."""
+    return all(_has_tracking_value(values.get(field_name)) for field_name in required_fields)
+
+
+def _compute_tracking_step_completion(cleaned_data: dict[str, object]) -> dict[str, bool]:
+    """Compute submit-time step completion gates based on current form payload."""
+    visita_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_VISITA_REQUIRED_FIELDS)
+    assign_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_ASSIGN_REQUIRED_FIELDS)
+    install_fields_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_INSTALL_REQUIRED_FIELDS)
+    install_complete = visita_complete and install_fields_complete
+    montage_fields_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_MONTAJE_REQUIRED_FIELDS)
+    montage_complete = install_complete and montage_fields_complete
+    return {
+        "visita": visita_complete,
+        "assign": assign_complete,
+        "install": install_complete,
+        "montage": montage_complete,
+    }
+
+
+def _build_tracking_step_statuses(values: dict[str, object]) -> list[dict[str, object]]:
+    """Build UI metadata describing which integration steps are currently complete."""
+    completion = _compute_tracking_step_completion(values)
+    steps = [
+        ("visita", "1. Visita técnica"),
+        ("assign", "2. Asignar técnico"),
+        ("install", "3. Reporte de instalación"),
+        ("montage", "4. Montaje-Conexión"),
+    ]
+    return [
+        {
+            "key": key,
+            "label": label,
+            "complete": completion[key],
+        }
+        for key, label in steps
+    ]
 
 
 def _build_phase_one_payload(cleaned_data: dict[str, object]) -> dict[str, object]:

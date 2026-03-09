@@ -11,6 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.views import _compute_tracking_step_completion
 from apps.features.models import Feature
 
 
@@ -545,6 +546,76 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
     assert mock_submit.called
     assert "4/4 pasos completados" in response.content.decode()
 
+
+
+
+def test_compute_tracking_step_completion_allows_assign_without_visita_completion():
+    """Regression: assign step can be complete independently while install still requires visita completion."""
+    completion = _compute_tracking_step_completion(
+        {
+            "fecha_visita": "2026-03-09T10:00",
+            "programacion_cargador": "32A",
+        }
+    )
+
+    assert completion["visita"] is False
+    assert completion["assign"] is True
+    assert completion["install"] is False
+    assert completion["montage"] is False
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 0})
+def test_order_tracking_public_allows_partial_submission_without_required_primary_fields(mock_submit, client):
+    """Regression: operators can submit partial progress and continue later without completing every field."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-partial", email="owner-partial@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-partial@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30314, order_number="GM030314")
+    client.force_login(owner)
+
+    response = client.post(
+        reverse("evergo:order-tracking-public", args=[order.remote_id]),
+        data={
+            "metraje_visita_tecnica": 10,
+            "confirm_missing_images": "1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert mock_submit.called
+    assert "0/4 pasos completados" in response.content.decode()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"metraje_visita_tecnica": "31"}})
+def test_order_tracking_public_shows_step_progress_with_incomplete_prefill(_, client):
+    """Regression: step summary should keep later steps pending when required fields remain missing."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-step-status", email="owner-step-status@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-step-status@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30315, order_number="GM030315")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Estado de pasos" in content
+    assert "🕓 1. Visita técnica" in content
 
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):
