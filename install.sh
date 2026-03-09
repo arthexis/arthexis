@@ -44,7 +44,7 @@ AUTO_UPGRADE=false
 CHANNEL="stable"
 UPGRADE=false
 ENABLE_CELERY=false
-SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+SERVICE_MANAGEMENT_MODE=""
 SERVICE_MANAGEMENT_MODE_FLAG=false
 START_FLAG=false
 ENABLE_LCD_SCREEN=false
@@ -149,7 +149,8 @@ clean_previous_installation_state() {
           "$LOCK_DIR/migrations.md5" \
           "$LOCK_DIR/fixtures.md5" \
           "$BASE_DIR/redis.env" \
-          "$BASE_DIR/debug.env"
+          "$BASE_DIR/debug.env" \
+          "$BASE_DIR/migration.env"
 
     rm -rf "$LOCK_DIR"
 }
@@ -171,6 +172,28 @@ reset_service_units_for_repair() {
     fi
 }
 
+write_redis_env() {
+    local role="$1"
+
+    cat > "$BASE_DIR/redis.env" <<'EOF'
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+EOF
+
+    case "${role,,}" in
+        satellite)
+            cat >> "$BASE_DIR/redis.env" <<'EOF'
+OCPP_STATE_REDIS_URL=redis://localhost:6379/0
+EOF
+            ;;
+        watchtower)
+            cat >> "$BASE_DIR/redis.env" <<'EOF'
+CHANNEL_REDIS_URL=redis://localhost:6379/0
+EOF
+            ;;
+    esac
+}
+
 require_redis() {
     if ! command -v redis-cli >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but is not installed."
@@ -184,10 +207,8 @@ require_redis() {
         echo "  sudo systemctl start redis-server"
         exit 1
     fi
-    cat > "$BASE_DIR/redis.env" <<'EOF'
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
-EOF
+
+    write_redis_env "$1"
 }
 
 # Hardware support utilities.
@@ -243,7 +264,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --embedded)
-            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+            SERVICE_MANAGEMENT_MODE=""
             SERVICE_MANAGEMENT_MODE_FLAG=true
             shift
             ;;
@@ -341,6 +362,17 @@ done
 
 if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
     REQUIRES_REDIS=true
+fi
+
+if [ "$SERVICE_MANAGEMENT_MODE_FLAG" = false ]; then
+    case "${NODE_ROLE,,}" in
+        satellite|watchtower)
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+            ;;
+        *)
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+            ;;
+    esac
 fi
 
 if [ "$REPAIR" = true ]; then
@@ -569,6 +601,19 @@ fi
 
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
+
+if [ -z "${ARTHEXIS_MIGRATION_POLICY:-}" ]; then
+    case "${NODE_ROLE,,}" in
+        satellite|watchtower)
+            ARTHEXIS_MIGRATION_POLICY="check"
+            ;;
+        *)
+            ARTHEXIS_MIGRATION_POLICY="apply"
+            ;;
+    esac
+fi
+
+echo "ARTHEXIS_MIGRATION_POLICY=${ARTHEXIS_MIGRATION_POLICY}" > "$BASE_DIR/migration.env"
 
 source .venv/bin/activate
 arthexis_timing_start "pip_bootstrap"
