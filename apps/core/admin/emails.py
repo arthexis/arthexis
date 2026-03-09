@@ -196,7 +196,7 @@ class EmailInboxAdmin(
                 self.message_user(request, f"{inbox}: {exc}", level=messages.ERROR)
 
     def _test_collectors(self, request, inbox):
-        for collector in inbox.collectors.all():
+        for collector in inbox.collectors.filter(is_enabled=True):
             before = collector.artifacts.count()
             try:
                 collector.collect(limit=1)
