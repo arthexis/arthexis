@@ -467,7 +467,17 @@
             </button>
           </div>
           <div class="modal-body">
-            <p class="mb-3">{% trans 'Share this page using the short link below.' %}</p>
+            <div class="share-thumbnail mb-3" aria-hidden="true">
+              <iframe
+                id="share-page-thumbnail"
+                class="share-thumbnail-frame"
+                src="about:blank"
+                sandbox="allow-same-origin"
+                loading="lazy"
+                title="{% trans 'Page thumbnail preview' %}"
+                tabindex="-1"
+              ></iframe>
+            </div>
             <div class="mb-3">
               <label class="form-label" for="share-short-url">{% trans 'Short URL' %}</label>
               <div class="input-group">

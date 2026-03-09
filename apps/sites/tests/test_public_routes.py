@@ -66,6 +66,19 @@ def test_public_pages_render_for_anonymous(client):
     )
 
 
+def test_share_modal_renders_page_thumbnail_instead_of_helper_copy(client):
+    """Share modal should show a page thumbnail preview instead of helper text."""
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="share-page-thumbnail"' in content
+    assert 'src="about:blank"' in content
+    assert 'sandbox="allow-same-origin"' in content
+    assert "Share this page using the short link below." not in content
+
+
 def test_public_feedback_renders_guest_contact_optin_beside_email(client):
     """Regression: guest feedback should render a single contact opt-in beside the email field."""
 
