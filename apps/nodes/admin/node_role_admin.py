@@ -1,3 +1,4 @@
+import re
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from apps.locals.user_data import EntityModelAdmin
 
 from ..models import NodeRole, Node
 from .forms import NodeRoleAdminForm
+
+_VALID_UNIT_NAME = re.compile(r"^[\w@.-]+(?:\.service)?$")
 
 
 @admin.register(NodeRole)
@@ -59,6 +62,7 @@ class NodeRoleAdmin(EntityModelAdmin):
         return ", ".join(features) if features else "—"
 
     def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
         obj.node_set.set(form.cleaned_data.get("nodes", []))
 
     def get_actions(self, request):
@@ -77,14 +81,15 @@ class NodeRoleAdmin(EntityModelAdmin):
         self._switch_selected_role(request=request, queryset=queryset, restart=True)
 
     def _switch_selected_role(self, *, request, queryset, restart):
-        role = queryset.first() if queryset.count() == 1 else None
-        if role is None:
+        roles = list(queryset[:2])
+        if len(roles) != 1:
             self.message_user(
                 request,
                 _("Select exactly one role to switch this node."),
                 level=messages.ERROR,
             )
             return
+        role = roles[0]
 
         local_node = Node.get_local() or Node.objects.filter(
             current_relation=Node.Relation.SELF
@@ -125,6 +130,14 @@ class NodeRoleAdmin(EntityModelAdmin):
                 request,
                 _("Systemd controls are unavailable on this node."),
                 level=messages.WARNING,
+            )
+            return
+
+        if not _VALID_UNIT_NAME.fullmatch(unit_name):
+            self.message_user(
+                request,
+                _("Invalid configured suite service name: %(unit)s.") % {"unit": unit_name},
+                level=messages.ERROR,
             )
             return
 

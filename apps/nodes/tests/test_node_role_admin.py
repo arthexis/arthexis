@@ -99,3 +99,5 @@ def test_switch_and_restart_action_restarts_suite_service(admin_client, monkeypa
     assert response.status_code == 200
     assert node.role_id == new_role.pk
     assert calls == [["systemctl", "restart", "suite-demo"]]
+    messages = [message.message for message in get_messages(response.wsgi_request)]
+    assert any("Restart requested for suite-demo." in message for message in messages)
