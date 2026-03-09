@@ -23,6 +23,7 @@ from .models import UserStory, UserStoryAttachment
 ANONYMOUS_ATTACHMENT_LIMIT = 0
 AUTHENTICATED_ATTACHMENT_LIMIT = 3
 DEFAULT_MAX_ATTACHMENT_FILE_SIZE = 5 * 1024 * 1024
+DEFAULT_MAX_SCREENSHOT_FILE_SIZE = 5 * 1024 * 1024
 DEFAULT_ALLOWED_ATTACHMENT_EXTENSIONS = (
     "txt",
     "csv",
@@ -37,6 +38,19 @@ DEFAULT_ALLOWED_ATTACHMENT_EXTENSIONS = (
     "docx",
     "xls",
     "xlsx",
+)
+DEFAULT_ALLOWED_SCREENSHOT_EXTENSIONS = (
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+)
+DEFAULT_ALLOWED_SCREENSHOT_CONTENT_TYPES = (
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
 )
 
 
@@ -190,6 +204,33 @@ class UserStoryForm(forms.ModelForm):
             getattr(settings, "USER_STORY_ATTACHMENT_MAX_BYTES", DEFAULT_MAX_ATTACHMENT_FILE_SIZE)
         )
 
+    def get_allowed_screenshot_extensions(self) -> tuple[str, ...]:
+        """Return normalized set of extensions accepted by screenshot uploads."""
+
+        configured = getattr(
+            settings,
+            "USER_STORY_SCREENSHOT_ALLOWED_EXTENSIONS",
+            DEFAULT_ALLOWED_SCREENSHOT_EXTENSIONS,
+        )
+        return tuple(ext.lower().lstrip(".") for ext in configured)
+
+    def get_allowed_screenshot_content_types(self) -> tuple[str, ...]:
+        """Return the list of allowed screenshot MIME types."""
+
+        configured = getattr(
+            settings,
+            "USER_STORY_SCREENSHOT_ALLOWED_CONTENT_TYPES",
+            DEFAULT_ALLOWED_SCREENSHOT_CONTENT_TYPES,
+        )
+        return tuple(content_type.lower() for content_type in configured)
+
+    def get_max_screenshot_file_size(self) -> int:
+        """Return maximum screenshot size in bytes."""
+
+        return int(
+            getattr(settings, "USER_STORY_SCREENSHOT_MAX_BYTES", DEFAULT_MAX_SCREENSHOT_FILE_SIZE)
+        )
+
     def clean_comments(self):
         """Validate comments length according to role-based limits."""
 
@@ -244,6 +285,39 @@ class UserStoryForm(forms.ModelForm):
             )
         return name
 
+    def clean_screenshot(self):
+        """Validate screenshot uploads against size/type allow-lists."""
+
+        screenshot = self.cleaned_data.get("screenshot")
+        if not screenshot:
+            return screenshot
+
+        extension = Path(screenshot.name).suffix.lstrip(".").lower()
+        allowed_extensions = self.get_allowed_screenshot_extensions()
+        if allowed_extensions and extension not in allowed_extensions:
+            raise forms.ValidationError(
+                _("Unsupported screenshot type: %(extension)s.") % {"extension": extension or _("unknown")},
+                code="invalid_screenshot_type",
+            )
+
+        content_type = (getattr(screenshot, "content_type", "") or "").lower()
+        allowed_content_types = self.get_allowed_screenshot_content_types()
+        if allowed_content_types and content_type not in allowed_content_types:
+            raise forms.ValidationError(
+                _("Unsupported screenshot content type: %(content_type)s.")
+                % {"content_type": content_type or _("unknown")},
+                code="invalid_screenshot_content_type",
+            )
+
+        max_file_size = self.get_max_screenshot_file_size()
+        if screenshot.size > max_file_size:
+            raise forms.ValidationError(
+                _("Screenshot must be %(size)s MB or smaller.")
+                % {"size": max_file_size // (1024 * 1024)},
+                code="screenshot_too_large",
+            )
+        return screenshot
+
     def clean_path(self):
         return (self.cleaned_data.get("path") or "").strip()
 
@@ -275,7 +349,7 @@ class UserStoryForm(forms.ModelForm):
         if self.user is not None and self.user.is_authenticated:
             instance.user = self.user
         instance.contact_via_chat = bool(self.cleaned_data.get("contact_via_chat"))
-        instance.javascript_enabled = bool(self.cleaned_data.get("javascript_enabled"))
+        instance.javascript_enabled = self.cleaned_data.get("javascript_enabled") == "1"
         screenshot_file = self.cleaned_data.get("screenshot")
         if screenshot_file:
             instance.screenshot = screenshot_file

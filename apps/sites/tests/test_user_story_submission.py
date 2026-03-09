@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
+
 import pytest
+from PIL import Image
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -14,6 +17,16 @@ from apps.sites.models import UserStory, UserStoryAttachment
 from apps.features.models import Feature
 
 pytestmark = [pytest.mark.django_db]
+
+
+def make_png_bytes() -> bytes:
+    """Create an in-memory PNG for upload tests."""
+
+    image = Image.new("RGB", (1, 1), color=(255, 0, 0))
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
 
 
 def test_anonymous_user_cannot_upload_feedback_files(client, settings):
@@ -284,6 +297,107 @@ def test_form_rejects_oversized_attachments(settings):
 
 
 
+def test_form_rejects_invalid_screenshot_extension(settings):
+    """Screenshot uploads should reject disallowed extensions."""
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile("screenshot.html", b"<html></html>", content_type="text/html"),
+                ]
+            }
+        ),
+    )
+
+    assert not form.is_valid()
+    assert "screenshot" in form.errors
+    assert "Unsupported screenshot type" in form.errors["screenshot"][0]
+
+
+def test_form_rejects_invalid_screenshot_content_type(settings):
+    """Screenshot uploads should reject disallowed content types."""
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile("screenshot.png", b"fake", content_type="text/plain"),
+                ]
+            }
+        ),
+    )
+
+    assert not form.is_valid()
+    assert "screenshot" in form.errors
+    assert "Unsupported screenshot content type" in form.errors["screenshot"][0]
+
+
+def test_form_rejects_oversized_screenshot(settings):
+    """Screenshot uploads larger than configured maximum should be rejected."""
+
+    settings.USER_STORY_SCREENSHOT_MAX_BYTES = 1024
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile("screenshot.png", make_png_bytes() * 2048, content_type="image/png"),
+                ]
+            }
+        ),
+    )
+
+    assert not form.is_valid()
+    assert "screenshot" in form.errors
+    assert "Screenshot must be" in form.errors["screenshot"][0]
+
+
+def test_form_accepts_valid_screenshot_upload(settings):
+    """Screenshot uploads should be accepted when extension/type/size are valid."""
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+            "javascript_enabled": "1",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile("screenshot.png", make_png_bytes(), content_type="image/png"),
+                ]
+            }
+        ),
+    )
+
+    assert form.is_valid(), form.errors
+
+
 
 def test_feedback_submission_tracks_javascript_disabled_by_default(client, settings):
     """Feedback submissions without the JS marker should be recorded as JavaScript-disabled."""
@@ -296,6 +410,7 @@ def test_feedback_submission_tracks_javascript_disabled_by_default(client, setti
             "rating": 4,
             "comments": "No JS marker",
             "path": "/",
+            "javascript_enabled": "0",
         },
     )
 

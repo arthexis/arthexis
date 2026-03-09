@@ -39,7 +39,7 @@ class UserStory(Lead):
         db_default=False,
         help_text=_("Whether JavaScript was enabled when feedback was submitted."),
     )
-    screenshot = models.FileField(
+    screenshot = models.ImageField(
         upload_to="sites/user_story_screenshots/",
         blank=True,
         help_text=_("Optional screenshot captured while submitting feedback."),
