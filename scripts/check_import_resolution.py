@@ -78,6 +78,7 @@ class ImportCollector(ast.NodeVisitor):
         self.type_checking_stack: list[bool] = []
         self.optional_import_stack: list[bool] = []
         self.issues: list[ImportIssue] = []
+        self._package_exports_cache: dict[Path, set[str]] = {}
 
     def visit_If(self, node: ast.If) -> None:
         condition = self._is_type_checking(node.test)
@@ -147,6 +148,9 @@ class ImportCollector(ast.NodeVisitor):
         for alias in node.names:
             if alias.name == "*":
                 continue
+            init_exports = self._package_exports(target_dir)
+            if alias.name in init_exports:
+                continue
             module_path = target_dir / Path(alias.name.replace(".", "/"))
             if not self._path_exists(module_path):
                 alt_module_path = target_dir.parent / Path(alias.name.replace(".", "/"))
@@ -154,6 +158,60 @@ class ImportCollector(ast.NodeVisitor):
                     self.issues.append(
                         ImportIssue(alias.name, self.file_path, node.lineno, "unable to resolve relative import")
                     )
+
+    def _package_exports(self, package_dir: Path) -> set[str]:
+        cached = self._package_exports_cache.get(package_dir)
+        if cached is not None:
+            return cached
+
+        init_path = package_dir / "__init__.py"
+        if not init_path.exists():
+            self._package_exports_cache[package_dir] = set()
+            return set()
+
+        try:
+            tree = ast.parse(init_path.read_text(encoding="utf-8"))
+        except Exception:
+            self._package_exports_cache[package_dir] = set()
+            return set()
+
+        exported_names: set[str] = set()
+        explicit_all: set[str] | None = None
+
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                exported_names.add(node.name)
+                continue
+            if isinstance(node, ast.Import):
+                for import_alias in node.names:
+                    exported_names.add(import_alias.asname or import_alias.name.split(".")[-1])
+                continue
+            if isinstance(node, ast.ImportFrom):
+                for import_alias in node.names:
+                    if import_alias.name == "*":
+                        continue
+                    exported_names.add(import_alias.asname or import_alias.name)
+                continue
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        exported_names.add(target.id)
+                        if target.id == "__all__":
+                            explicit_all = self._extract_all_names(node.value)
+
+        result = explicit_all if explicit_all is not None else exported_names
+        self._package_exports_cache[package_dir] = result
+        return result
+
+    @staticmethod
+    def _extract_all_names(node: ast.expr) -> set[str]:
+        if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return set()
+        values: set[str] = set()
+        for element in node.elts:
+            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                values.add(element.value)
+        return values
 
     @staticmethod
     def _path_exists(path: Path) -> bool:
