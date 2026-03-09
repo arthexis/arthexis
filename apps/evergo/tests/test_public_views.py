@@ -247,6 +247,64 @@ def test_order_tracking_public_loads_remote_image_previews(mock_fetch_order_deta
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
+def test_order_tracking_public_counts_remote_images_for_step_status(mock_fetch_order_detail, client):
+    """Regression: persisted remote images should count toward install/montage completion display."""
+    mock_fetch_order_detail.return_value = {
+        "reporte_visita": {
+            "metraje_visita_tecnica": "10",
+            "programacion_cargador": "32A",
+            "capacidad_itm_principal": "60",
+            "fecha_visita": "2026-02-26 13:00:00",
+            "voltaje_fase_fase": "220",
+            "voltaje_fase_tierra": "120",
+            "voltaje_fase_neutro": "120",
+            "voltaje_neutro_tierra": "1",
+            "prueba_carga": "Sin prueba",
+            "marca_cargador": "Marca",
+            "numero_serie": "SER-1",
+            "foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg",
+            "foto_medidor": "https://cdn.evergo.example/fotos/medidor.jpg",
+            "foto_tierra": "https://cdn.evergo.example/fotos/tierra.jpg",
+            "foto_ruta_cableado": "https://cdn.evergo.example/fotos/ruta.jpg",
+            "foto_ubicacion_cargador": "https://cdn.evergo.example/fotos/ubicacion.jpg",
+            "foto_general": "https://cdn.evergo.example/fotos/general.jpg",
+            "foto_hoja_visita": "https://cdn.evergo.example/fotos/hoja-visita.jpg",
+            "foto_interruptor_principal": "https://cdn.evergo.example/fotos/interruptor-principal.jpg",
+            "foto_panoramica_estacion": "https://cdn.evergo.example/fotos/panoramica.jpg",
+            "foto_numero_serie_cargador": "https://cdn.evergo.example/fotos/serie-cargador.jpg",
+            "foto_interruptor_instalado": "https://cdn.evergo.example/fotos/interruptor-instalado.jpg",
+            "foto_conexion_cargador": "https://cdn.evergo.example/fotos/conexion.jpg",
+            "foto_preparacion_cfe": "https://cdn.evergo.example/fotos/preparacion-cfe.jpg",
+            "foto_hoja_reporte_instalacion": "https://cdn.evergo.example/fotos/hoja-reporte.jpg",
+            "foto_voltaje_fase_fase": "https://cdn.evergo.example/fotos/vff.jpg",
+            "foto_voltaje_fase_tierra": "https://cdn.evergo.example/fotos/vft.jpg",
+            "foto_voltaje_fase_neutro": "https://cdn.evergo.example/fotos/vfn.jpg",
+            "foto_voltaje_neutro_tierra": "https://cdn.evergo.example/fotos/vnt.jpg",
+        }
+    }
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-images-steps", email="owner-images-steps@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-images-steps@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30206, order_number="GM030206")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "✅ 3. Reporte de instalación" in content
+    assert "✅ 4. Montaje-Conexión" in content
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "javascript:alert(1)"})
 def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
     """Security regression: preview images should only accept HTTP(S) URLs from Evergo."""

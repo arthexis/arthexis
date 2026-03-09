@@ -295,7 +295,11 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
         missing_images = []
 
     image_field_rows = _build_image_field_rows(form=form, remote_image_urls=remote_image_urls)
-    step_statuses = _build_tracking_step_statuses(form.cleaned_data if form.is_bound else form.initial)
+    step_status_values = _build_tracking_step_values(
+        values=form.cleaned_data if form.is_bound else form.initial,
+        remote_image_urls=remote_image_urls,
+    )
+    step_statuses = _build_tracking_step_statuses(step_status_values)
 
     return render(
         request,
@@ -351,6 +355,13 @@ def _build_image_field_rows(*, form: EvergoOrderTrackingForm, remote_image_urls:
         }
         for field_name in IMAGE_FIELD_NAMES
     ]
+
+
+def _build_tracking_step_values(*, values: dict[str, object], remote_image_urls: dict[str, str]) -> dict[str, object]:
+    """Merge current form values with persisted remote image URLs for step completion display."""
+    step_values = dict(values)
+    step_values.update({field_name: url for field_name, url in remote_image_urls.items() if url})
+    return step_values
 
 
 def _extract_remote_tracking_image_urls(order_payload: dict[str, object]) -> dict[str, str]:

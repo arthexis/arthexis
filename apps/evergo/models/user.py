@@ -546,16 +546,17 @@ class EvergoUser(Profile):
             completion = step_completion or {"visita": True, "assign": True, "install": True, "montage": True}
             completed_steps = 0
 
-            self._rewind_uploads(files.values())
-            visita_response = session.post(
-                self.API_SAVE_VISITA_URL_TEMPLATE.format(order_id=order_id),
-                data=payload,
-                files=files,
-                timeout=timeout,
-            )
-            if visita_response.status_code >= 400:
-                raise EvergoPhaseSubmissionError("Visita Tecnica", visita_response.status_code, 0)
+            visita_response = None
             if completion.get("visita"):
+                self._rewind_uploads(files.values())
+                visita_response = session.post(
+                    self.API_SAVE_VISITA_URL_TEMPLATE.format(order_id=order_id),
+                    data=payload,
+                    files=files,
+                    timeout=timeout,
+                )
+                if visita_response.status_code >= 400:
+                    raise EvergoPhaseSubmissionError("Visita Tecnica", visita_response.status_code, 0)
                 completed_steps += 1
 
             assign_response = None
@@ -618,8 +619,8 @@ class EvergoUser(Profile):
 
             return {
                 "order_payload": order_payload,
-                "phase_1_status": visita_response.status_code,
-                "phase_1_payload": visita_response.json() if visita_response.content else {},
+                "phase_1_status": visita_response.status_code if visita_response is not None else None,
+                "phase_1_payload": visita_response.json() if visita_response is not None and visita_response.content else {},
                 "assign_status": assign_response.status_code if assign_response is not None else None,
                 "assign_payload": assign_response.json() if assign_response is not None and assign_response.content else {},
                 "install_status": install_response.status_code if install_response is not None else None,
