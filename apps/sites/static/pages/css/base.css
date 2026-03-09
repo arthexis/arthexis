@@ -148,9 +148,6 @@ nav.toc a:hover {
 }
 
 .reader-qr-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 0.5rem;
 }
 
