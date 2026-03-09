@@ -100,11 +100,12 @@ class UserStoryForm(forms.ModelForm):
 
     class Meta:
         model = UserStory
-        fields = ("name", "rating", "comments", "path", "messages", "contact_via_chat")
+        fields = ("name", "rating", "comments", "path", "messages", "contact_via_chat", "javascript_enabled", "screenshot")
         widgets = {
             "path": forms.HiddenInput(),
             "comments": forms.Textarea(attrs={"rows": 4}),
             "messages": forms.HiddenInput(),
+            "javascript_enabled": forms.HiddenInput(),
         }
 
     def __init__(self, *args, user=None, files=None, **kwargs):
@@ -274,6 +275,10 @@ class UserStoryForm(forms.ModelForm):
         if self.user is not None and self.user.is_authenticated:
             instance.user = self.user
         instance.contact_via_chat = bool(self.cleaned_data.get("contact_via_chat"))
+        instance.javascript_enabled = bool(self.cleaned_data.get("javascript_enabled"))
+        screenshot_file = self.cleaned_data.get("screenshot")
+        if screenshot_file:
+            instance.screenshot = screenshot_file
         if commit:
             instance.save()
             self.save_attachments()

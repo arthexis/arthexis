@@ -283,6 +283,46 @@ def test_form_rejects_oversized_attachments(settings):
     assert "MB or smaller" in form.errors["attachments"][0]
 
 
+
+
+def test_feedback_submission_tracks_javascript_disabled_by_default(client, settings):
+    """Feedback submissions without the JS marker should be recorded as JavaScript-disabled."""
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={
+            "rating": 4,
+            "comments": "No JS marker",
+            "path": "/",
+        },
+    )
+
+    assert response.status_code == 200
+    story = UserStory.objects.latest("submitted_at")
+    assert story.javascript_enabled is False
+
+
+def test_feedback_submission_tracks_javascript_enabled_from_form(client, settings):
+    """Feedback submissions with the JS marker should be recorded as JavaScript-enabled."""
+
+    settings.USER_STORY_THROTTLE_SECONDS = 0
+
+    response = client.post(
+        reverse("pages:user-story-submit"),
+        data={
+            "rating": 4,
+            "comments": "With JS marker",
+            "path": "/",
+            "javascript_enabled": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    story = UserStory.objects.latest("submitted_at")
+    assert story.javascript_enabled is True
+
 def test_feedback_submission_updates_chat_profile_preference(client, settings):
     """Regression: feedback submissions should persist chat preference for authenticated users."""
 

@@ -34,6 +34,16 @@ class UserStory(Lead):
         db_default=False,
         help_text=_("Whether the submitter opted into chat follow-up during feedback."),
     )
+    javascript_enabled = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=_("Whether JavaScript was enabled when feedback was submitted."),
+    )
+    screenshot = models.FileField(
+        upload_to="sites/user_story_screenshots/",
+        blank=True,
+        help_text=_("Optional screenshot captured while submitting feedback."),
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -105,7 +115,10 @@ class UserStory(Lead):
             f"**Rating:** {self.rating}/5",
             f"**Name:** {name}",
             f"**Contact via chat:** {'Yes' if self.contact_via_chat else 'No'}",
+            f"**JavaScript enabled:** {'Yes' if self.javascript_enabled else 'No'}",
         ]
+        if self.screenshot:
+            lines.append("**Screenshot:** Provided (see admin attachments).")
 
         language_code = (self.language_code or "").strip()
         if language_code:
