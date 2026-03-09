@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import importlib.util
 from pathlib import Path
 import re
 import subprocess
@@ -89,15 +90,15 @@ def build_prototype_env_for_base(
     values: OrderedDict[str, str] = OrderedDict()
     values["ARTHEXIS_ACTIVE_PROTOTYPE"] = prototype.slug
     values["ARTHEXIS_PROTOTYPE_APP"] = prototype.scaffold_module
-    values["ARTHEXIS_SQLITE_PATH"] = str(
-        prototype.resolved_sqlite_path(base_dir=resolved_base_dir)
-    )
-    values["ARTHEXIS_SQLITE_TEST_PATH"] = str(
-        prototype.resolved_sqlite_test_path(base_dir=resolved_base_dir)
-    )
-    values["DJANGO_CACHE_DIR"] = str(
-        prototype.resolved_cache_dir(base_dir=resolved_base_dir)
-    )
+    sqlite_path = prototype.resolved_sqlite_path(base_dir=resolved_base_dir)
+    sqlite_test_path = prototype.resolved_sqlite_test_path(base_dir=resolved_base_dir)
+    cache_dir = prototype.resolved_cache_dir(base_dir=resolved_base_dir)
+    if sqlite_path is not None:
+        values["ARTHEXIS_SQLITE_PATH"] = str(sqlite_path)
+    if sqlite_test_path is not None:
+        values["ARTHEXIS_SQLITE_TEST_PATH"] = str(sqlite_test_path)
+    if cache_dir is not None:
+        values["DJANGO_CACHE_DIR"] = str(cache_dir)
     for key in sorted(prototype.env_overrides):
         values[key] = prototype.env_overrides[key]
     return values
@@ -107,16 +108,16 @@ def activate_prototype(prototype: Prototype, *, base_dir: Path | None = None) ->
     """Persist activation state for *prototype* without restarting the suite."""
 
     resolved_base_dir = _base_dir(base_dir)
-    prototype.resolved_sqlite_path(base_dir=resolved_base_dir).parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    prototype.resolved_sqlite_test_path(base_dir=resolved_base_dir).parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    prototype.resolved_cache_dir(base_dir=resolved_base_dir).mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    sqlite_path = prototype.resolved_sqlite_path(base_dir=resolved_base_dir)
+    sqlite_test_path = prototype.resolved_sqlite_test_path(base_dir=resolved_base_dir)
+    cache_dir = prototype.resolved_cache_dir(base_dir=resolved_base_dir)
+
+    if sqlite_path is not None:
+        sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    if sqlite_test_path is not None:
+        sqlite_test_path.parent.mkdir(parents=True, exist_ok=True)
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
 
     _rewrite_managed_env_block(
         env_path(resolved_base_dir),
@@ -177,17 +178,37 @@ def scaffold_app_dir(prototype: Prototype, *, base_dir: Path | None = None) -> P
     return scaffold_package_root(base_dir) / prototype.slug
 
 
+def prototype_app_dir(prototype: Prototype, *, base_dir: Path | None = None) -> Path:
+    """Return the directory for the active prototype app module."""
+
+    if prototype.uses_hidden_scaffold:
+        return scaffold_app_dir(prototype, base_dir=base_dir)
+
+    module_name = prototype.scaffold_module
+    if module_name.startswith("apps."):
+        relative_parts = module_name.split(".")[1:]
+        return _apps_dir(base_dir).joinpath(*relative_parts)
+
+    spec = importlib.util.find_spec(module_name)
+    if spec is None or spec.origin is None:
+        raise FileNotFoundError(f"Unable to resolve prototype app directory for {module_name}")
+    return Path(spec.origin).resolve().parent
+
+
 def _camelize(value: str) -> str:
     return "".join(part.capitalize() for part in value.split("_"))
 
 
 def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None) -> Path:
-    """Create a hidden local Django app scaffold for *prototype* if missing."""
+    """Create a hidden local Django app scaffold for *prototype* if needed."""
 
     resolved_base_dir = _base_dir(base_dir)
+    if not prototype.uses_hidden_scaffold:
+        return prototype_app_dir(prototype, base_dir=resolved_base_dir)
+
     apps_dir = _apps_dir(resolved_base_dir)
     hidden_root = scaffold_package_root(resolved_base_dir)
-    app_dir = scaffold_app_dir(prototype, base_dir=resolved_base_dir)
+    app_dir = prototype_app_dir(prototype, base_dir=resolved_base_dir)
     if app_dir.exists():
         return app_dir
 

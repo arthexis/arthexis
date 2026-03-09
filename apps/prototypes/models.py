@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from django.apps import AppConfig
+from django.core.exceptions import ImproperlyConfigured
 import re
 from pathlib import Path
 
@@ -46,13 +48,19 @@ class Prototype(Entity):
         max_length=255,
         unique=True,
         blank=True,
-        help_text="Installed module path for the hidden prototype app.",
+        help_text=(
+            "Installed module path for this prototype. Leave blank to scaffold a hidden "
+            "app under apps._prototypes."
+        ),
     )
     app_label = models.CharField(
         max_length=100,
         unique=True,
         blank=True,
-        help_text="Django app label used when the prototype app is active.",
+        help_text=(
+            "Django app label used when the prototype app is active. Existing apps default "
+            "to their AppConfig label."
+        ),
     )
     port = models.PositiveIntegerField(
         default=8890,
@@ -61,17 +69,17 @@ class Prototype(Entity):
     sqlite_path = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Relative or absolute SQLite path for this prototype.",
+        help_text="Optional SQLite path override for this prototype.",
     )
     sqlite_test_path = models.CharField(
         max_length=255,
         blank=True,
-        help_text="SQLite test database path for this prototype.",
+        help_text="Optional SQLite test database override for this prototype.",
     )
     cache_dir = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Cache directory written to DJANGO_CACHE_DIR for this prototype.",
+        help_text="Optional cache directory override written to DJANGO_CACHE_DIR.",
     )
     env_overrides = models.JSONField(
         default=dict,
@@ -95,12 +103,24 @@ class Prototype(Entity):
         return self.STATE_ROOT / self.slug
 
     @property
+    def default_app_module(self) -> str:
+        return f"{self.PROTOTYPE_PACKAGE_ROOT}.{self.slug}"
+
+    @property
+    def default_app_label(self) -> str:
+        return f"prototype_{self.slug}"
+
+    @property
     def scaffold_module(self) -> str:
-        return self.app_module or f"{self.PROTOTYPE_PACKAGE_ROOT}.{self.slug}"
+        return self.app_module or self.default_app_module
 
     @property
     def scaffold_label(self) -> str:
-        return self.app_label or f"prototype_{self.slug}"
+        return self.app_label or self.default_app_label
+
+    @property
+    def uses_hidden_scaffold(self) -> bool:
+        return self.scaffold_module == self.default_app_module
 
     def default_sqlite_path(self) -> str:
         return str(self.state_root / "db.sqlite3")
@@ -119,23 +139,50 @@ class Prototype(Entity):
 
         return Path(base_dir or settings.BASE_DIR) / path
 
-    def resolved_sqlite_path(self, *, base_dir: Path | None = None) -> Path:
-        return self.resolve_path(
-            self.sqlite_path or self.default_sqlite_path(),
-            base_dir=base_dir,
-        )
+    def resolved_sqlite_path(
+        self,
+        *,
+        base_dir: Path | None = None,
+        default_to_isolated: bool = False,
+    ) -> Path | None:
+        if self.sqlite_path:
+            return self.resolve_path(self.sqlite_path, base_dir=base_dir)
+        if default_to_isolated:
+            return self.resolve_path(self.default_sqlite_path(), base_dir=base_dir)
+        return None
 
-    def resolved_sqlite_test_path(self, *, base_dir: Path | None = None) -> Path:
-        return self.resolve_path(
-            self.sqlite_test_path or self.default_sqlite_test_path(),
-            base_dir=base_dir,
-        )
+    def resolved_sqlite_test_path(
+        self,
+        *,
+        base_dir: Path | None = None,
+        default_to_isolated: bool = False,
+    ) -> Path | None:
+        if self.sqlite_test_path:
+            return self.resolve_path(self.sqlite_test_path, base_dir=base_dir)
+        if default_to_isolated:
+            return self.resolve_path(self.default_sqlite_test_path(), base_dir=base_dir)
+        return None
 
-    def resolved_cache_dir(self, *, base_dir: Path | None = None) -> Path:
-        return self.resolve_path(
-            self.cache_dir or self.default_cache_dir(),
-            base_dir=base_dir,
-        )
+    def resolved_cache_dir(
+        self,
+        *,
+        base_dir: Path | None = None,
+        default_to_isolated: bool = False,
+    ) -> Path | None:
+        if self.cache_dir:
+            return self.resolve_path(self.cache_dir, base_dir=base_dir)
+        if default_to_isolated:
+            return self.resolve_path(self.default_cache_dir(), base_dir=base_dir)
+        return None
+
+    @staticmethod
+    def _resolve_existing_app_label(module_name: str) -> str:
+        try:
+            return AppConfig.create(module_name).label
+        except (ImproperlyConfigured, ImportError, ModuleNotFoundError, ValueError) as exc:
+            raise ValidationError(
+                {"app_module": f"Installed app module could not be loaded: {module_name}"}
+            ) from exc
 
     def clean(self) -> None:
         """Normalize derived fields and validate custom env overrides."""
@@ -144,16 +191,30 @@ class Prototype(Entity):
         if self.slug and not _SLUG_RE.match(self.slug):
             raise ValidationError({"slug": "Use lowercase snake_case starting with a letter."})
 
+        self.app_module = (self.app_module or "").strip()
+        self.app_label = (self.app_label or "").strip()
+        self.sqlite_path = (self.sqlite_path or "").strip()
+        self.sqlite_test_path = (self.sqlite_test_path or "").strip()
+        self.cache_dir = (self.cache_dir or "").strip()
+
         if not self.app_module:
-            self.app_module = f"{self.PROTOTYPE_PACKAGE_ROOT}.{self.slug}"
-        if not self.app_label:
-            self.app_label = f"prototype_{self.slug}"
-        if not self.sqlite_path:
-            self.sqlite_path = self.default_sqlite_path()
-        if not self.sqlite_test_path:
-            self.sqlite_test_path = self.default_sqlite_test_path()
-        if not self.cache_dir:
-            self.cache_dir = self.default_cache_dir()
+            self.app_module = self.default_app_module
+
+        if self.uses_hidden_scaffold:
+            if not self.app_label:
+                self.app_label = self.default_app_label
+        else:
+            resolved_label = self._resolve_existing_app_label(self.app_module)
+            if self.app_label and self.app_label != resolved_label:
+                raise ValidationError(
+                    {
+                        "app_label": (
+                            f"Installed app {self.app_module} uses label {resolved_label!r}; "
+                            "leave app_label blank or match that label."
+                        )
+                    }
+                )
+            self.app_label = resolved_label
 
         overrides = self.env_overrides or {}
         if not isinstance(overrides, dict):

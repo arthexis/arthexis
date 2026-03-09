@@ -21,7 +21,7 @@ class PrototypeAdmin(EntityModelAdmin):
         "sqlite_path",
     )
     list_filter = ("is_active", "is_deleted", "is_seed_data", "is_user_data")
-    readonly_fields = ("is_active", "app_module", "app_label")
+    readonly_fields = ("is_active",)
     search_fields = ("slug", "name", "description", "app_module")
     actions = ("activate_selected", "deactivate_selected")
 

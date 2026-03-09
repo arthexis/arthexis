@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.core.ui import build_graphical_subprocess_env, has_graphical_display
 from apps.pyxel.models import PyxelUnavailableError, PyxelViewport
 
 
@@ -30,6 +33,12 @@ class Command(BaseCommand):
         return viewport
 
     def handle(self, *args, **options):
+        if not has_graphical_display():
+            raise CommandError(
+                "No graphical display is configured for this shell. In WSL, ensure WSLg/X11 is available."
+            )
+
+        os.environ.update(build_graphical_subprocess_env())
         viewport = self._resolve_viewport(options.get("viewport"))
         self.stdout.write(f"Opening viewport '{viewport.name}' ({viewport.slug})")
         try:

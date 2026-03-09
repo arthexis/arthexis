@@ -15,7 +15,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from apps.core.ui import has_graphical_display
+from apps.core.ui import build_graphical_subprocess_env, has_graphical_display
 from apps.pyxel.live_stats import (
     PyxelLiveStatsLaunchError,
     is_local_request,
@@ -77,6 +77,7 @@ def launch_viewport_subprocess(*, viewport_slug: str | None = None) -> subproces
         process = subprocess.Popen(
             command,
             cwd=str(settings.BASE_DIR),
+            env=build_graphical_subprocess_env(),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
@@ -111,7 +112,7 @@ def open_viewport_view(request, pk: int | None = None):
         messages.error(
             request,
             "Unable to launch Pyxel viewport: no graphical display is configured "
-            "for this server process (DISPLAY/WAYLAND_DISPLAY).",
+            "for this server process (DISPLAY/WAYLAND_DISPLAY, WSLg/X11).",
         )
         return _redirect_after_viewport_action(pk)
 

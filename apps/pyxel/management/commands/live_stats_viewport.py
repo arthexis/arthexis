@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.core.ui import build_graphical_subprocess_env, has_graphical_display
 from apps.pyxel.live_stats import collect_suite_stats
 
 class Command(BaseCommand):
@@ -13,6 +16,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """Start the Pyxel render loop and keep it running until the window closes."""
+
+        if not has_graphical_display():
+            raise CommandError(
+                "No graphical display is configured for this shell. In WSL, ensure WSLg/X11 is available."
+            )
+
+        os.environ.update(build_graphical_subprocess_env())
 
         try:
             import pyxel

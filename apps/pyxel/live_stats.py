@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from django.conf import settings
 from django.utils import timezone
 
+from apps.core.ui import build_graphical_subprocess_env
+
 
 class PyxelLiveStatsLaunchError(RuntimeError):
     """Raised when the Pyxel live-stats process cannot be started."""
@@ -96,6 +98,7 @@ def launch_live_stats_subprocess() -> subprocess.Popen:
         process = subprocess.Popen(
             command,
             cwd=str(settings.BASE_DIR),
+            env=build_graphical_subprocess_env(),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,

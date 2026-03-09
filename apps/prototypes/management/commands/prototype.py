@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import connection
 
+from apps.core.ui import graphical_env_snapshot, recommended_graphical_env
 from apps.prototypes import prototype_ops
 from apps.prototypes.models import Prototype
 
@@ -25,9 +27,44 @@ class Command(BaseCommand):
         create_parser.add_argument("--name", help="Display name. Defaults to a title-cased slug.")
         create_parser.add_argument("--description", default="", help="Optional description text.")
         create_parser.add_argument(
+            "--app-module",
+            help="Existing installed app module to activate for this prototype.",
+        )
+        create_parser.add_argument(
+            "--app-label",
+            help="Optional app label override. Existing apps must match their AppConfig label.",
+        )
+        create_parser.add_argument(
             "--port",
             type=int,
             help="Backend port reserved for this prototype.",
+        )
+        create_parser.add_argument(
+            "--sqlite-path",
+            help="Optional SQLite path override for this prototype.",
+        )
+        create_parser.add_argument(
+            "--sqlite-test-path",
+            help="Optional SQLite test database override for this prototype.",
+        )
+        create_parser.add_argument(
+            "--cache-dir",
+            help="Optional cache directory override for this prototype.",
+        )
+        create_parser.add_argument(
+            "--isolated-state",
+            action="store_true",
+            help="Use the prototype's default isolated SQLite and cache directories.",
+        )
+        create_parser.add_argument(
+            "--capture-display-env",
+            action="store_true",
+            help="Store the current graphical DISPLAY/WAYLAND/XDG env in env_overrides.",
+        )
+        create_parser.add_argument(
+            "--wslg-display",
+            action="store_true",
+            help="Store recommended WSLg graphical env overrides for this prototype.",
         )
         create_parser.add_argument(
             "--set",
@@ -89,6 +126,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        self._ensure_prototype_table()
         action = options["action"]
         handler = getattr(self, f"_handle_{action}", None)
         if handler is None:
@@ -101,21 +139,40 @@ class Command(BaseCommand):
             raise CommandError(f"Prototype already exists: {slug}")
 
         env_overrides = dict(options.get("set") or [])
+        if options.get("capture_display_env"):
+            env_overrides = {**graphical_env_snapshot(), **env_overrides}
+        if options.get("wslg_display"):
+            wslg_env = recommended_graphical_env()
+            if not wslg_env:
+                raise CommandError("WSLg graphical environment could not be detected.")
+            env_overrides = {**wslg_env, **env_overrides}
+
         prototype = Prototype(
             slug=slug,
             name=options.get("name") or slug.replace("_", " ").title(),
             description=options.get("description") or "",
+            app_module=options.get("app_module") or "",
+            app_label=options.get("app_label") or "",
             port=options.get("port") or self._default_port(),
+            sqlite_path=options.get("sqlite_path") or "",
+            sqlite_test_path=options.get("sqlite_test_path") or "",
+            cache_dir=options.get("cache_dir") or "",
             env_overrides=env_overrides,
         )
+        self._apply_isolated_state_defaults(prototype, isolated_state=bool(options.get("isolated_state")))
         prototype.save()
 
         app_dir = prototype_ops.scaffold_prototype_app(prototype)
         self.stdout.write(self.style.SUCCESS(f"Created prototype {prototype.slug}"))
+        self.stdout.write(
+            f"- mode: {'hidden scaffold' if prototype.uses_hidden_scaffold else 'existing app'}"
+        )
         self.stdout.write(f"- app: {prototype.scaffold_module}")
-        self.stdout.write(f"- scaffold: {app_dir}")
-        self.stdout.write(f"- sqlite: {prototype.resolved_sqlite_path()}")
-        self.stdout.write(f"- cache: {prototype.resolved_cache_dir()}")
+        self.stdout.write(f"- app dir: {app_dir}")
+        self.stdout.write(f"- sqlite: {self._describe_runtime_path(prototype.resolved_sqlite_path())}")
+        self.stdout.write(
+            f"- cache: {self._describe_runtime_path(prototype.resolved_cache_dir())}"
+        )
 
         if options.get("activate"):
             self._activate_and_maybe_restart(
@@ -164,7 +221,8 @@ class Command(BaseCommand):
         for prototype in rows:
             marker = "*" if prototype.is_active else "-"
             self.stdout.write(
-                f"{marker} {prototype.slug} | port={prototype.port} | app={prototype.scaffold_module}"
+                f"{marker} {prototype.slug} | port={prototype.port} | app={prototype.scaffold_module} "
+                f"| sqlite={self._describe_runtime_path(prototype.resolved_sqlite_path())}"
             )
 
     def _activate_and_maybe_restart(
@@ -193,3 +251,28 @@ class Command(BaseCommand):
         if highest_port is None:
             return 8890
         return max(int(highest_port) + 1, 8890)
+
+    @staticmethod
+    def _describe_runtime_path(path) -> str:
+        return str(path) if path is not None else "current"
+
+    @staticmethod
+    def _apply_isolated_state_defaults(prototype: Prototype, *, isolated_state: bool) -> None:
+        if not isolated_state:
+            return
+        if not prototype.sqlite_path:
+            prototype.sqlite_path = prototype.default_sqlite_path()
+        if not prototype.sqlite_test_path:
+            prototype.sqlite_test_path = prototype.default_sqlite_test_path()
+        if not prototype.cache_dir:
+            prototype.cache_dir = prototype.default_cache_dir()
+
+    @staticmethod
+    def _ensure_prototype_table() -> None:
+        with connection.cursor() as cursor:
+            table_names = connection.introspection.table_names(cursor)
+        if Prototype._meta.db_table in table_names:
+            return
+        raise CommandError(
+            "Prototype records are not migrated yet. Run `python manage.py migrate prototypes` first."
+        )
