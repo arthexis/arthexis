@@ -1,5 +1,6 @@
 """Tests for the ``chargers`` management command websocket auth options."""
 
+import io
 import json
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from apps.ocpp import store
+from apps.ocpp.management.commands.chargers import Command as ChargersCommand
 from apps.ocpp.models import Charger
 
 
@@ -202,6 +204,8 @@ class ChargersCommandTests(TestCase):
         self.assertEqual(frame_b[2], "RemoteStopTransaction")
         self.assertEqual(frame_a[3]["transactionId"], 101)
         self.assertEqual(frame_b[3]["transactionId"], 202)
+        self.assertIsNotNone(store.pop_pending_call(frame_a[1]))
+        self.assertIsNotNone(store.pop_pending_call(frame_b[1]))
 
     def test_send_stop_skips_chargers_without_active_transaction(self) -> None:
         """Remote stop continues processing when one selected charger has no active session."""
@@ -245,6 +249,69 @@ class ChargersCommandTests(TestCase):
         frame = json.loads(ws_a.messages[0])
         self.assertEqual(frame[2], "RemoteStopTransaction")
         self.assertEqual(frame[3]["transactionId"], 303)
+        self.assertIsNotNone(store.pop_pending_call(frame[1]))
+
+    def test_restart_for_cp_all_targets_single_base_charger(self) -> None:
+        """Restart collapses connector-only station selections to one base reset call."""
+
+        Charger.objects.create(charger_id="CLI-RST-ALL-1", connector_id=None)
+        Charger.objects.create(charger_id="CLI-RST-ALL-1", connector_id=1)
+        Charger.objects.create(charger_id="CLI-RST-ALL-1", connector_id=2)
+
+        class DummyWs:
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, payload: str) -> None:
+                self.messages.append(payload)
+
+        ws_base = DummyWs()
+
+        with (
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_connection",
+                return_value=ws_base,
+            ),
+            patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
+        ):
+            call_command(
+                "chargers", "--sn", "CLI-RST-ALL-1", "--cp", "all", "--send-restart"
+            )
+
+        self.assertEqual(len(ws_base.messages), 1)
+        frame = json.loads(ws_base.messages[0])
+        self.assertEqual(frame[2], "Reset")
+        self.assertIsNotNone(store.pop_pending_call(frame[1]))
+
+    def test_rename_requires_tty_when_value_not_provided(self) -> None:
+        """Valueless rename fails fast outside interactive terminals."""
+
+        charger = Charger.objects.create(
+            charger_id="CLI-REN-NONTTY-1", connector_id=None
+        )
+        command = ChargersCommand()
+        command.stdin = io.StringIO()
+
+        with self.assertRaisesMessage(CommandError, "interactive terminal"):
+            command._rename_charger(charger, "", interactive=True)
+
+    def test_send_restart_reports_transport_error_as_command_error(self) -> None:
+        """Restart send failures are surfaced as controlled command errors."""
+
+        Charger.objects.create(charger_id="CLI-RST-ERR-1", connector_id=1)
+
+        class DummyWs:
+            async def send(self, payload: str) -> None:
+                raise RuntimeError("socket down")
+
+        with patch(
+            "apps.ocpp.management.commands.chargers.store.get_connection",
+            return_value=DummyWs(),
+        ):
+            with self.assertRaisesMessage(CommandError, "failed to send Reset"):
+                call_command(
+                    "chargers", "--sn", "CLI-RST-ERR-1", "--cp", "A", "--send-restart"
+                )
 
     def test_charger_alias_defaults_to_base_charger(self) -> None:
         """The ``charger`` alias selects the default base charger without selectors."""

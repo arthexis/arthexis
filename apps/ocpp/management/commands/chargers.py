@@ -348,12 +348,10 @@ class Command(BaseCommand):
 
         selected_chargers = chargers
         selected_queryset = queryset
+        aggregate_target: Charger | None = None
 
         if rename_value is not None or send_restart:
-            aggregate_selection = self._select_aggregate_charger(chargers)
-            if aggregate_selection is not None:
-                selected_chargers = [aggregate_selection]
-                selected_queryset = Charger.objects.filter(pk=aggregate_selection.pk)
+            aggregate_target = self._resolve_aggregate_charger(chargers)
 
         if enable_rfid or disable_rfid:
             new_value = bool(enable_rfid)
@@ -391,12 +389,15 @@ class Command(BaseCommand):
             selected_chargers = self._reload_chargers(selected_chargers)
 
         if rename_value is not None:
-            if len(selected_chargers) != 1:
+            rename_targets = (
+                [aggregate_target] if aggregate_target is not None else chargers
+            )
+            if len(rename_targets) != 1:
                 raise CommandError(
                     "--rename requires selecting exactly one charger using --sn and/or --cp."
                 )
             renamed = self._rename_charger(
-                selected_chargers[0],
+                rename_targets[0],
                 rename_value,
                 interactive=rename_value == "",
             )
@@ -411,7 +412,10 @@ class Command(BaseCommand):
             )
 
         if send_restart:
-            sent = self._send_restart(selected_chargers)
+            restart_targets = (
+                [aggregate_target] if aggregate_target is not None else chargers
+            )
+            sent = self._send_restart(restart_targets)
             self.stdout.write(
                 self.style.SUCCESS(f"Sent reset request to {sent} charger(s).")
             )
@@ -530,6 +534,19 @@ class Command(BaseCommand):
                 return item
         return None
 
+    def _resolve_aggregate_charger(self, chargers: list[Charger]) -> Charger | None:
+        """Return an aggregate charger for single-station selections when available."""
+
+        aggregate = self._select_aggregate_charger(chargers)
+        if aggregate is not None:
+            return aggregate
+        serials = {item.charger_id for item in chargers}
+        if len(serials) != 1:
+            return None
+        return Charger.objects.filter(
+            charger_id=next(iter(serials)), connector_id__isnull=True
+        ).first()
+
     def _rename_charger(
         self, charger: Charger, rename_value: str, *, interactive: bool
     ) -> Charger:
@@ -537,6 +554,10 @@ class Command(BaseCommand):
 
         new_name = (rename_value or "").strip()
         if not new_name:
+            if interactive and not self.stdin.isatty():
+                raise CommandError(
+                    "--rename without a value requires an interactive terminal."
+                )
             new_name = self._prompt_text(
                 f"New display name for {charger.charger_id}",
                 default=charger.display_name or charger.charger_id,
@@ -647,7 +668,12 @@ class Command(BaseCommand):
 
         message_id = uuid.uuid4().hex
         msg = json.dumps([2, message_id, action, payload])
-        async_to_sync(ws.send)(msg)
+        try:
+            async_to_sync(ws.send)(msg)
+        except Exception as exc:  # pragma: no cover - transport error
+            raise CommandError(
+                f"{charger}: failed to send {action} ({message_id}): {exc}"
+            ) from exc
 
         log_key = store.identity_key(charger.charger_id, charger.connector_id)
         store.register_pending_call(
