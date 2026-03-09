@@ -20,6 +20,43 @@ logger = logging.getLogger(__name__)
 DetectionCallable = Callable[..., bool | None]
 
 
+def _invoke_detector(
+    callback: DetectionCallable,
+    slug: str,
+    *,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
+) -> bool | None:
+    """Invoke detector callbacks with backwards-compatible call signatures."""
+
+    try:
+        return callback(
+            slug,
+            node=node,
+            base_dir=base_dir,
+            base_path=base_path,
+        )
+    except TypeError as exc:
+        message = str(exc)
+        if "unexpected keyword argument" not in message:
+            raise
+
+    for kwargs in (
+        {"node": node, "base_dir": base_dir},
+        {"node": node},
+        {},
+    ):
+        try:
+            return callback(slug, **kwargs)
+        except TypeError as exc:
+            message = str(exc)
+            if "unexpected keyword argument" in message:
+                continue
+            raise
+    return callback(slug)
+
+
 @dataclass(frozen=True)
 class NodeFeatureDetector:
     """Detection callbacks for a single feature slug."""
@@ -40,7 +77,8 @@ class NodeFeatureDetector:
 
         result: bool | None = None
         if callable(self.check):
-            result = self.check(
+            result = _invoke_detector(
+                self.check,
                 slug,
                 node=node,
                 base_dir=base_dir,
@@ -48,7 +86,8 @@ class NodeFeatureDetector:
             )
 
         if result is None and callable(self.setup):
-            return self.setup(
+            return _invoke_detector(
+                self.setup,
                 slug,
                 node=node,
                 base_dir=base_dir,
@@ -56,7 +95,8 @@ class NodeFeatureDetector:
             )
 
         if result and callable(self.setup):
-            setup_result = self.setup(
+            setup_result = _invoke_detector(
+                self.setup,
                 slug,
                 node=node,
                 base_dir=base_dir,
