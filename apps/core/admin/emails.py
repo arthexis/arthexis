@@ -154,7 +154,17 @@ class EmailInboxAdmin(
     def setup_collector(self, request, queryset=None):
         """Open the collector setup wizard for a selected inbox."""
 
-        inbox = queryset.first() if queryset is not None else None
+        selected_ids = request.POST.getlist("_selected_action")
+        if len(selected_ids) > 1:
+            self.message_user(request, _("Select exactly one inbox to start setup."), messages.ERROR)
+            return redirect(reverse("admin:emails_emailinbox_changelist"))
+
+        inbox = None
+        if len(selected_ids) == 1:
+            inbox = EmailInbox.objects.filter(pk=selected_ids[0]).first()
+        elif queryset is not None:
+            inbox = queryset.first()
+
         if inbox is None:
             self.message_user(request, _("Select one inbox to start setup."), messages.ERROR)
             return redirect(reverse("admin:emails_emailinbox_changelist"))
@@ -198,6 +208,8 @@ class EmailInboxAdmin(
                         else:
                             self.message_user(request, _("Collector test found no matching emails."), messages.WARNING)
                     except ValidationError as exc:
+                        self.message_user(request, str(exc), messages.ERROR)
+                    except Exception as exc:  # pragma: no cover - admin feedback
                         self.message_user(request, str(exc), messages.ERROR)
                 collector = configured_collector
         else:

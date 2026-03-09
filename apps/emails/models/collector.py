@@ -223,23 +223,31 @@ class EmailCollector(Entity):
 
     def collect(self, limit: int = 10) -> None:
         """Poll the inbox and store new artifacts until an existing one is found."""
-        messages = self.search_messages(limit=limit)
-        for msg in messages:
-            fp = EmailArtifact.fingerprint_for(
-                msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
+        inboxes = [self.inbox, *self.additional_inboxes.all()]
+        for inbox in inboxes:
+            messages = inbox.search_messages(
+                subject=self.subject,
+                from_address=self.sender,
+                body=self.body,
+                limit=limit,
+                use_regular_expressions=self.use_regular_expressions,
             )
-            if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
-                break
-            sigils = self._parse_sigils(msg.get("body", ""))
-            EmailArtifact.objects.create(
-                collector=self,
-                subject=msg.get("subject", ""),
-                sender=msg.get("from", ""),
-                body=msg.get("body", ""),
-                sigils=sigils,
-                fingerprint=fp,
-            )
-            try:
-                self._notify_for_message(msg, sigils)
-            except Exception:
-                logger.exception("Failed to send notification for collector %s", self.pk)
+            for msg in messages:
+                fp = EmailArtifact.fingerprint_for(
+                    msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
+                )
+                if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
+                    break
+                sigils = self._parse_sigils(msg.get("body", ""))
+                EmailArtifact.objects.create(
+                    collector=self,
+                    subject=msg.get("subject", ""),
+                    sender=msg.get("from", ""),
+                    body=msg.get("body", ""),
+                    sigils=sigils,
+                    fingerprint=fp,
+                )
+                try:
+                    self._notify_for_message(msg, sigils)
+                except Exception:
+                    logger.exception("Failed to send notification for collector %s", self.pk)
