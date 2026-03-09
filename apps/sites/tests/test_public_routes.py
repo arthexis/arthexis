@@ -291,6 +291,27 @@ def test_feedback_copy_details_are_limited_to_staff(request, user_fixture, expec
     assert f'data-copy-staff-details="{expected_flag}"' in public_html
 
 
+@pytest.mark.parametrize(
+    "template_name",
+    [
+        "admin/includes/user_story_feedback.html",
+        "pages/base.html",
+    ],
+)
+def test_feedback_rating_labels_match_updated_severity_scale(template_name):
+    """Regression: feedback star hints should expose the updated severity scale."""
+
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    rendered = render_to_string(template_name, {"request": request}, request=request)
+
+    assert "data-rating-message-1=\"Complete loss of function\"" in rendered
+    assert "data-rating-message-2=\"Partial loss of function\"" in rendered
+    assert "data-rating-message-3=\"Negative user experience\"" in rendered
+    assert "data-rating-message-4=\"Potential for improvement\"" in rendered
+    assert "data-rating-message-5=\"Meets all expectations\"" in rendered
+
 def test_release_checklist_requires_staff(client, user, staff_user):
     """Release checklist access should be limited to staff users."""
 
