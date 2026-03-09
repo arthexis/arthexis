@@ -26,6 +26,7 @@ from apps.actions.models import DashboardAction
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
+from apps.counters.dashboard_rules import DEFAULT_SUCCESS_MESSAGE
 from apps.counters.models import DashboardRule
 
 register = template.Library()
@@ -512,7 +513,12 @@ def dashboard_model_status(app_label: str, model_name: str) -> dict | None:
         return None
 
     try:
-        return DashboardRule.get_cached_value(content_type, rule.evaluate)
+        status = DashboardRule.get_cached_value(content_type, rule.evaluate)
+        if isinstance(status, dict) and status.get("success") and "is_default_message" not in status:
+            status["is_default_message"] = status.get("message") == str(
+                DEFAULT_SUCCESS_MESSAGE
+            )
+        return status
     except Exception:
         logger.exception("Unable to evaluate dashboard rule for %s", content_type)
         return None
@@ -581,9 +587,12 @@ def dashboard_model_status_map(app_list: list[Any]) -> dict[int, dict]:
     for rule in rules:
         content_type = rule.content_type
         try:
-            status_map[content_type.id] = DashboardRule.get_cached_value(
-                content_type, rule.evaluate
-            )
+            status = DashboardRule.get_cached_value(content_type, rule.evaluate)
+            if isinstance(status, dict) and status.get("success") and "is_default_message" not in status:
+                status["is_default_message"] = status.get("message") == str(
+                    DEFAULT_SUCCESS_MESSAGE
+                )
+            status_map[content_type.id] = status
         except Exception:
             logger.exception(
                 "Unable to evaluate dashboard rule for %s", content_type

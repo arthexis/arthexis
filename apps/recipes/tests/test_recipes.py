@@ -92,7 +92,6 @@ def test_parse_recipe_arguments_splits_kwargs():
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_supports_bash_body_type():
     """Regression: bash recipes execute successfully on Windows and POSIX shells."""
 
@@ -128,7 +127,6 @@ def test_execute_raises_for_failing_bash_script():
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_supports_bash_safe_normalized_kwarg_names(monkeypatch):
     """Regression: normalized bash kwarg env vars resolve across shell backends."""
 
@@ -167,7 +165,6 @@ def test_execute_supports_bash_safe_normalized_kwarg_names(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
     """Regression: Windows WSL bash launcher failures fall back to sh."""
 
@@ -208,7 +205,6 @@ def test_execute_supports_windows_bash_launcher_fallback(monkeypatch):
     assert execution.result == "hello-green"
 
 
-@pytest.mark.regression
 def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkeypatch):
     """Regression: NUL-delimited launcher diagnostics are normalized before matching."""
 
@@ -225,7 +221,6 @@ def test_is_windows_bash_launcher_failure_normalizes_nul_delimited_output(monkey
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_supports_windows_git_bash_fallback(monkeypatch):
     """Regression: Windows recipes fall back to Git Bash paths when WSL bash fails."""
 
@@ -258,7 +253,6 @@ def test_execute_supports_windows_git_bash_fallback(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_execute_recognizes_missing_windows_shell_paths(monkeypatch):
     """Regression: missing Git/MSYS shell paths report runtime errors consistently."""
 
@@ -394,14 +388,18 @@ def test_execute_creates_recipe_product():
         script="result = {'ok': True}",
     )
 
-    execution = recipe.execute("alpha", mode="fast")
+    execution = recipe.execute("alpha", "beta", mode="fast")
 
     product = RecipeProduct.objects.get(recipe=recipe)
     assert execution.result == {"ok": True}
-    assert product.input_args == ["alpha"]
-    assert product.input_kwargs == {"mode": "fast"}
+    assert product.input_args == [
+        Recipe.PRODUCT_REDACTION_PLACEHOLDER,
+        Recipe.PRODUCT_REDACTION_PLACEHOLDER,
+    ]
+    assert product.input_kwargs == {"mode": Recipe.PRODUCT_REDACTION_PLACEHOLDER}
     assert product.result == '{"ok": true}'
     assert product.format_detected == Recipe.RecipeFormat.PYTHON
+    assert product.resolved_script == Recipe.PRODUCT_REDACTION_PLACEHOLDER
 
 
 @pytest.mark.django_db

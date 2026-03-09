@@ -27,12 +27,12 @@ from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
 from .ui import (
     STARTUP_REPORT_DEFAULT_LIMIT,
-    _build_nginx_report,
-    _build_services_report,
+    build_nginx_report,
+    build_services_report,
     _build_system_fields,
     _build_uptime_report,
     _gather_info,
-    _read_startup_report,
+    read_startup_report,
 )
 from .upgrade import (
     UPGRADE_CHANNEL_CHOICES,
@@ -154,10 +154,13 @@ def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]
 
 
 
-def _collect_admin_report_routes() -> list[dict[str, str]]:
+def _collect_admin_report_routes(user) -> list[dict[str, str]]:
     """Return reverseable admin routes that appear to be report views."""
 
     routes: list[dict[str, str]] = []
+    restricted_routes = set(
+        StaffTask.objects.filter(superuser_only=True).values_list("admin_url_name", flat=True)
+    )
 
     def _walk(patterns: list[URLPattern | URLResolver]) -> None:
         for pattern in patterns:
@@ -169,6 +172,8 @@ def _collect_admin_report_routes() -> list[dict[str, str]]:
             if not route_name or "report" not in route_name:
                 continue
             if route_name.endswith("-data"):
+                continue
+            if f"admin:{route_name}" in restricted_routes and not user.is_superuser:
                 continue
 
             try:
@@ -192,7 +197,8 @@ def _collect_admin_report_routes() -> list[dict[str, str]]:
 def _system_reports_view(request):
     """Render and launch the unified report runner for admin reports."""
 
-    report_routes = _collect_admin_report_routes()
+    report_routes = _collect_admin_report_routes(request.user)
+    available_report_names = {route["name"] for route in report_routes}
     selected_report = request.GET.get("report", "")
     params_value = request.GET.get("params", "")
 
@@ -202,6 +208,8 @@ def _system_reports_view(request):
 
         if not selected_report:
             messages.error(request, _("Choose a report to run."))
+        elif selected_report not in available_report_names:
+            messages.error(request, _("You do not have access to the selected report."))
         else:
             try:
                 base_url = reverse(f"admin:{selected_report}")
@@ -303,7 +311,7 @@ def _system_startup_report_view(request):
     context.update(
         {
             "title": _("Startup Report"),
-            "startup_report": _read_startup_report(limit=limit),
+            "startup_report": read_startup_report(limit=limit),
             "startup_report_limit": limit,
             "startup_report_options": (10, 25, 50, 100, 200),
         }
@@ -327,7 +335,7 @@ def _system_services_report_view(request):
     context.update(
         {
             "title": _("Suite Services Report"),
-            "services_report": _build_services_report(),
+            "services_report": build_services_report(),
         }
     )
     return TemplateResponse(request, "admin/system_services_report.html", context)
@@ -338,7 +346,7 @@ def _system_nginx_report_view(request):
     context.update(
         {
             "title": _("NGINX Report"),
-            "nginx_report": _build_nginx_report(),
+            "nginx_report": build_nginx_report(),
         }
     )
     return TemplateResponse(request, "admin/system_nginx_report.html", context)

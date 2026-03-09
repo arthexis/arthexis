@@ -7,8 +7,6 @@ from io import StringIO
 import pytest
 from django.core.management import CommandError, call_command
 
-pytestmark = pytest.mark.regression
-
 def test_release_clean_logs_without_targets_raises_command_error() -> None:
     """Regression: ``release clean-logs`` should preserve command error semantics."""
 

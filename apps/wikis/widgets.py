@@ -7,9 +7,12 @@ from urllib.parse import unquote, urlparse
 from django.apps import apps as django_apps
 from django.utils.translation import gettext_lazy as _
 
+from apps.features.utils import is_suite_feature_enabled
 from apps.widgets import register_widget
 from apps.widgets.models import WidgetZone
 from apps.wikis.services import fetch_wiki_summary
+
+WIKIPEDIA_COMPANION_FEATURE_SLUG = "wikipedia-companion"
 
 
 def _app_name(app: Any) -> str:
@@ -49,6 +52,9 @@ def _wiki_title_from_url(url: str) -> str:
     description=_("Show a Wikipedia description for the current application."),
 )
 def wikipedia_summary_widget(*, app=None, **_kwargs):
+    if not is_suite_feature_enabled(WIKIPEDIA_COMPANION_FEATURE_SLUG, default=False):
+        return None
+
     topic = (_app_name(app) or "").strip()
     wiki_url = ""
     app_label = (_app_label(app) or "").strip()

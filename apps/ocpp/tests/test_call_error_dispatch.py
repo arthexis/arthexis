@@ -67,7 +67,7 @@ def test_dispatch_registry_preserves_action_mapping() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_dispatch_firmware_domain_regression() -> None:
+async def test_dispatch_firmware_domain() -> None:
     firmware_obj = await database_sync_to_async(CPFirmware.objects.create)(name="FW", payload_json={})
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-FW-1")
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.create)(
@@ -96,7 +96,7 @@ async def test_dispatch_firmware_domain_regression() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_dispatch_configuration_domain_regression() -> None:
+async def test_dispatch_configuration_domain() -> None:
     """Regression: UnlockConnector call errors should update availability state."""
 
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-CFG-1", connector_id=1)
@@ -121,7 +121,7 @@ async def test_dispatch_configuration_domain_regression() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_dispatch_reservation_domain_regression() -> None:
+async def test_dispatch_reservation_domain() -> None:
     location = await database_sync_to_async(Location.objects.create)(name="ERR-RES")
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-RES-1", connector_id=1, location=location)
     item = await database_sync_to_async(CPReservation.objects.create)(
@@ -150,7 +150,7 @@ async def test_dispatch_reservation_domain_regression() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_dispatch_certificates_domain_regression() -> None:
+async def test_dispatch_certificates_domain() -> None:
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-CERT-1")
     op = await database_sync_to_async(CertificateOperation.objects.create)(
         charger=charger,
@@ -178,7 +178,7 @@ async def test_dispatch_certificates_domain_regression() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_dispatch_profiles_domain_regression() -> None:
+async def test_dispatch_profiles_domain() -> None:
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-PROF-1")
     await database_sync_to_async(ChargingProfile.objects.create)(
         charger=charger,
@@ -207,7 +207,7 @@ async def test_dispatch_profiles_domain_regression() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_dispatch_data_transfer_domain_regression() -> None:
+async def test_dispatch_data_transfer_domain() -> None:
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="ERR-DATA-1")
     message = await database_sync_to_async(DataTransferMessage.objects.create)(
         charger=charger,

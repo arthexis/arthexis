@@ -1,0 +1,45 @@
+{% load i18n %}
+<div class="module security-alerts-widget">
+  <h2>{% trans "Security Alerts" %}</h2>
+  {% if alerts %}
+    <ul>
+      {% for alert in alerts %}
+        <li class="security-alert security-alert--{{ alert.severity }}">
+          <strong class="security-alert__severity security-alert__severity--{{ alert.severity }}">
+            {% if alert.severity == "error" %}{% trans "Error" %}
+            {% elif alert.severity == "warning" %}{% trans "Warning" %}
+            {% elif alert.severity == "info" %}{% trans "Info" %}
+            {% else %}{{ alert.severity|title }}{% endif %}
+          </strong>: {{ alert.message }}
+          <a href="{{ alert.remediation_url }}">{% trans "View" %}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="help">{% trans "No active security alerts." %}</p>
+  {% endif %}
+</div>
+<style>
+  .security-alert__severity {
+    border-radius: 999px;
+    color: #fff;
+    display: inline-block;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    margin-right: 0.35rem;
+    padding: 0.2rem 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .security-alert__severity--error {
+    background-color: #b91c1c;
+  }
+
+  .security-alert__severity--warning {
+    background-color: #b45309;
+  }
+
+  .security-alert__severity--info {
+    background-color: #1d4ed8;
+  }
+</style>

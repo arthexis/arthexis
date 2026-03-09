@@ -14,7 +14,7 @@ from apps.screens.startup_notifications import (
     read_lcd_lock_file,
 )
 from apps.summary.node_features import get_llm_summary_prereq_state
-from apps.summary.constants import LLM_SUMMARY_AUTOMATION_FEATURE_SLUG
+from apps.summary.constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from apps.summary.models import LLMSummaryConfig
 from apps.summary.services import (
     ensure_local_model,
@@ -49,7 +49,7 @@ class Command(BaseCommand):
             "--allow-disabled-feature",
             action="store_true",
             help=(
-                f"Allow manual --run-now execution even when {LLM_SUMMARY_AUTOMATION_FEATURE_SLUG} suite "
+                f"Allow manual --run-now execution even when {LLM_SUMMARY_SUITE_FEATURE_SLUG} suite "
                 "feature is disabled."
             ),
         )
@@ -69,11 +69,11 @@ class Command(BaseCommand):
             self._enable_prerequisites(node=node, config=config, base_dir=base_dir)
 
         if options["run_now"]:
-            if not is_suite_feature_enabled(LLM_SUMMARY_AUTOMATION_FEATURE_SLUG, default=False):
+            if not is_suite_feature_enabled(LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True):
                 if options["allow_disabled_feature"]:
                     self.stdout.write(
                         self.style.WARNING(
-                            f"Suite feature '{LLM_SUMMARY_AUTOMATION_FEATURE_SLUG}' is disabled; "
+                            f"Suite feature '{LLM_SUMMARY_SUITE_FEATURE_SLUG}' is disabled; "
                             "running manual override via --allow-disabled-feature."
                         )
                     )
@@ -82,7 +82,7 @@ class Command(BaseCommand):
                     run_status = "skipped:suite-feature-disabled"
                     self.stdout.write(
                         self.style.WARNING(
-                            f"Suite feature '{LLM_SUMMARY_AUTOMATION_FEATURE_SLUG}' is disabled; "
+                            f"Suite feature '{LLM_SUMMARY_SUITE_FEATURE_SLUG}' is disabled; "
                             "skipping automated summary run. Re-run with "
                             "--allow-disabled-feature for one-off operator execution."
                         )

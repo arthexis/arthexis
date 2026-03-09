@@ -16,7 +16,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.cards.models import RFID
 from apps.cards.sync import serialize_rfid
-from apps.core.system.ui import _systemd_unit_status
+from apps.core.system_ui import systemd_unit_status
 from apps.ocpp.models import CPForwarder, Charger
 
 from ..models import NetMessage, Node
@@ -541,7 +541,7 @@ def validate_service_active(modeladmin, request, queryset):
             modeladmin.message_user(request, message, level=messages.WARNING)
             continue
 
-        status = _systemd_unit_status(unit_name)
+        status = systemd_unit_status(unit_name)
         unit_status = status.get("status") or str(_("unknown"))
         enabled_state = status.get("enabled") or ""
         if status.get("missing"):

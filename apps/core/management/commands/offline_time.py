@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.timesince import timesince
 
-from apps.core.system.ui import (
+from apps.core.system_ui import (
     build_uptime_segments,
     format_datetime,
     load_shutdown_periods,

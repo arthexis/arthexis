@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from .core.node import (
-    NetMessage,
-    Node,
-    PendingNetMessage,
-    User,
-    node_information_updated,
-)
-from .core.platform import Platform
-from .core.role import NodeRole, NodeRoleManager, get_terminal_role
-from .core.utils import (
+from .net_message import NetMessage, PendingNetMessage
+from .node import Node, User, node_information_updated
+from .platform import Platform
+from .role import NodeRole, NodeRoleManager, get_terminal_role
+from .utils import (
     ROLE_ACRONYMS,
     ROLE_RENAMES,
     _format_upgrade_body,

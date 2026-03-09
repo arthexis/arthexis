@@ -39,6 +39,18 @@ class McpApiKeyQuerySet(models.QuerySet["McpApiKey"]):
 class McpApiKeyManager(models.Manager["McpApiKey"]):
     """Manager utilities for key generation and authentication."""
 
+    _HASH_ALGORITHM = "sha256"
+    _HASH_ITERATIONS = 260_000
+
+    @staticmethod
+    def _get_secret_key_fallbacks() -> tuple[str, ...]:
+        """Return SECRET_KEY fallback values used during key-rotation windows."""
+
+        fallbacks = getattr(settings, "SECRET_KEY_FALLBACKS", ())
+        if not isinstance(fallbacks, (list, tuple)):
+            return ()
+        return tuple(secret for secret in fallbacks if isinstance(secret, str))
+
     def get_queryset(self) -> McpApiKeyQuerySet:
         """Return the typed MCP API key queryset."""
 
@@ -50,12 +62,31 @@ class McpApiKeyManager(models.Manager["McpApiKey"]):
 
         token = secrets.token_urlsafe(36)
         plain_key = f"mcp_{token}"
-        key_hash = hashlib.sha256(plain_key.encode("utf-8")).hexdigest()
+        key_hash = McpApiKeyManager._build_key_hash(plain_key)
         return GeneratedMcpApiKey(
             plain_key=plain_key,
             key_prefix=plain_key[:12],
             key_hash=key_hash,
         )
+
+    @classmethod
+    def _build_key_hash(cls, plain_key: str, *, secret_key: str | None = None) -> str:
+        """Build a deterministic PBKDF2 hash for an API key value."""
+
+        salt = secret_key or settings.SECRET_KEY
+
+        return hashlib.pbkdf2_hmac(
+            cls._HASH_ALGORITHM,
+            plain_key.encode("utf-8"),
+            salt.encode("utf-8"),
+            cls._HASH_ITERATIONS,
+        ).hex()
+
+    @staticmethod
+    def _build_legacy_hash(plain_key: str) -> str:
+        """Build the legacy SHA-256 hash used before PBKDF2 migration."""
+
+        return hashlib.sha256(plain_key.encode("utf-8")).hexdigest()
 
     def create_for_user(
         self,
@@ -82,14 +113,36 @@ class McpApiKeyManager(models.Manager["McpApiKey"]):
         if not isinstance(plain_key, str) or not plain_key.strip():
             return None
 
-        key_hash = hashlib.sha256(plain_key.encode("utf-8")).hexdigest()
-        return (
+        active_keys = self.get_queryset().active().select_related("user")
+        current_key_hash = self._build_key_hash(plain_key)
+        key = active_keys.filter(key_hash=current_key_hash).first()
+        if key is not None:
+            return key
+
+        for fallback_secret in self._get_secret_key_fallbacks():
+            fallback_hash = self._build_key_hash(plain_key, secret_key=fallback_secret)
+            fallback_key = active_keys.filter(key_hash=fallback_hash).first()
+            if fallback_key is None:
+                continue
+
+            fallback_key.key_hash = current_key_hash
+            fallback_key.save(update_fields=["key_hash"])
+            return fallback_key
+
+        legacy_key_hash = self._build_legacy_hash(plain_key)
+        legacy_key = (
             self.get_queryset()
             .active()
             .select_related("user")
-            .filter(key_hash=key_hash)
+            .filter(key_hash=legacy_key_hash)
             .first()
         )
+        if legacy_key is None:
+            return None
+
+        legacy_key.key_hash = current_key_hash
+        legacy_key.save(update_fields=["key_hash"])
+        return legacy_key
 
 
 class McpApiKey(models.Model):

@@ -15,6 +15,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
+from apps.clocks.utils import has_clock_device
+from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.nodes.feature_detection import node_feature_detection_registry
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
@@ -108,6 +110,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
             NodeFeatureDefaultAction(
                 label="Take Snapshot",
                 url_name="admin:video_videodevice_take_snapshot",
+            ),
+        ),
+        "llm-summary": (
+            NodeFeatureDefaultAction(
+                label=_("Configure"),
+                url_name="admin:summary_llmsummaryconfig_wizard",
             ),
         ),
         "user-desktop": (
@@ -371,8 +379,13 @@ class NodeFeatureMixin:
                 screenshot_enabled = bool(screenshot_result and screenshot_result.success)
             else:
                 screenshot_enabled = False
+        llm_summary_suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
         celery_enabled = self.is_local and self.has_feature("celery-queue")
-        llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
+        llm_summary_enabled = (
+            llm_summary_suite_enabled
+            and celery_enabled
+            and self.has_feature("llm-summary")
+        )
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)

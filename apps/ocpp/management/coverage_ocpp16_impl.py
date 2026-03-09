@@ -57,9 +57,12 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
             app_dir / "consumers" / "base" / "dispatch.py",
             app_dir / "consumers" / "base" / "consumer.py",
             app_dir / "consumers" / "base.py",
-            app_dir / "consumers" / "base" / "consumer" / "routing.py",
-            app_dir / "consumers" / "base" / "consumer" / "csms" / "consumer.py",
-            app_dir / "consumers" / "base" / "consumer" / "csms" / "dispatch.py",
+            app_dir / "consumers" / "base" / "routing.py",
+            app_dir / "consumers" / "csms" / "consumer.py",
+            app_dir / "consumers" / "csms" / "dispatch.py",
+            app_dir / "consumers" / "csms" / "handlers" / "status.py",
+            app_dir / "consumers" / "csms" / "handlers" / "metering.py",
+            app_dir / "consumers" / "csms" / "handlers" / "notifications.py",
         )
         if candidate.exists()
     ]

@@ -12,12 +12,12 @@ from django.conf import settings
 from django.utils.text import slugify
 
 from apps.nodes.logging import get_register_local_node_logger
-from apps.nodes.models.core.role import NodeRole
-from apps.nodes.models.core.utils import ROLE_RENAMES
+from apps.nodes.models.role import NodeRole
+from apps.nodes.models.utils import ROLE_RENAMES
 from utils import revision
 
 if TYPE_CHECKING:
-    from apps.nodes.models.core.node import Node
+    from apps.nodes.models.node import Node
 
 local_registration_logger = get_register_local_node_logger()
 

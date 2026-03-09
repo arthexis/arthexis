@@ -4,7 +4,7 @@ from django.db import models
 
 from apps.base.models import Entity, EntityManager
 
-from ..release import DEFAULT_PACKAGE, Package as ReleasePackage
+from .. import DEFAULT_PACKAGE, Package as ReleasePackage
 
 
 class PackageManager(EntityManager):

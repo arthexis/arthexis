@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
+from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 
 from apps.features.models import Feature
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_enabled_suite_feature_cannot_be_deleted() -> None:
     """Regression: enabled suite features must be disabled before deletion."""
 
@@ -49,3 +51,50 @@ def test_set_enabled_persists_when_update_fields_is_empty() -> None:
 
     feature.refresh_from_db()
     assert feature.is_enabled is False
+
+
+@pytest.mark.django_db
+def test_wikipedia_companion_seed_migration_does_not_overwrite_custom_feature() -> None:
+    """Regression: seed migration must not overwrite pre-existing custom feature rows."""
+
+    migration = importlib.import_module(
+        "apps.features.migrations.0037_seed_wikipedia_companion_suite_feature"
+    )
+    custom_feature, _ = Feature.objects.update_or_create(
+        slug="wikipedia-companion",
+        defaults={
+            "display": "Custom Wikipedia Companion",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": True,
+            "is_deleted": False,
+        },
+    )
+
+    migration.seed_wikipedia_companion_suite_feature(django_apps, None)
+
+    custom_feature.refresh_from_db()
+    assert custom_feature.display == "Custom Wikipedia Companion"
+    assert custom_feature.source == Feature.Source.CUSTOM
+    assert custom_feature.is_enabled is True
+
+
+@pytest.mark.django_db
+def test_wikipedia_companion_unseed_migration_only_removes_mainstream_row() -> None:
+    """Regression: rollback helper should only delete mainstream seeded rows for the slug."""
+
+    migration = importlib.import_module(
+        "apps.features.migrations.0037_seed_wikipedia_companion_suite_feature"
+    )
+    mainstream_feature, _ = Feature.objects.update_or_create(
+        slug="wikipedia-companion",
+        defaults={
+            "display": "Wikipedia Companion",
+            "source": Feature.Source.MAINSTREAM,
+            "is_enabled": True,
+            "is_deleted": False,
+        },
+    )
+
+    migration.unseed_wikipedia_companion_suite_feature(django_apps, None)
+
+    assert not Feature.all_objects.filter(pk=mainstream_feature.pk).exists()

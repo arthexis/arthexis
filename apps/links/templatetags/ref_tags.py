@@ -13,7 +13,7 @@ from apps.release.models import PackageRelease
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from apps.modules.models import Module
-from apps.release.release import DEFAULT_PACKAGE
+from apps.release import DEFAULT_PACKAGE
 from utils import revision
 
 register = template.Library()

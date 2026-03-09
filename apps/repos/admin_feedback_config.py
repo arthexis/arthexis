@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import is_celery_enabled
 from apps.features.models import Feature
 from apps.release.models import Package
-from apps.release.release import DEFAULT_PACKAGE
+from apps.release import DEFAULT_PACKAGE
 from apps.repos.github import parse_repository_url
 from apps.repos.services.github import get_github_issue_token
 

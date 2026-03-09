@@ -108,7 +108,7 @@ class PackageRepository(Entity):
         return self.name
 
     def to_target(self):
-        from apps.release.release import Credentials, RepositoryTarget
+        from apps.release import Credentials, RepositoryTarget
 
         token = (self.token or "").strip()
         username = (self.username or "").strip()

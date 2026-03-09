@@ -13,7 +13,6 @@ from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_feature_command_toggles_single_suite_feature_with_positional_slug() -> None:
     """Regression: singular command should toggle suite state via positional slug."""
 

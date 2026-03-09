@@ -11,9 +11,6 @@ import pytest
 from django.core.management import call_command
 
 
-pytestmark = pytest.mark.regression
-
-
 def _write_bundle(base_dir: Path, target_version: str, installed_version: str) -> Path:
     """Create a minimal release migration bundle fixture on disk."""
 

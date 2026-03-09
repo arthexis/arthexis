@@ -3,7 +3,7 @@ import pytest
 from django.contrib.sites.models import Site
 
 from apps.nodes.models import Node, NodeFeature
-from apps.nodes.models.core import utils as node_utils
+from apps.nodes.models import utils as node_utils
 
 
 def test_select_preferred_ip_prefers_global_address():
@@ -341,3 +341,16 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
         is True
     )
     assert setup_calls == ["rfid-scanner"]
+
+
+@pytest.mark.django_db
+def test_llm_summary_default_action_points_to_configure_wizard() -> None:
+    """LLM Summary node feature should expose a Configure admin action."""
+
+    feature = NodeFeature.objects.create(slug="llm-summary", display="LLM Summary")
+
+    action = feature.get_default_action()
+
+    assert action is not None
+    assert action.label == "Configure"
+    assert action.url_name == "admin:summary_llmsummaryconfig_wizard"

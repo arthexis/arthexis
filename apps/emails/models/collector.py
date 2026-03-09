@@ -25,6 +25,12 @@ class EmailCollector(Entity):
         related_name="collectors",
         on_delete=models.CASCADE,
     )
+    additional_inboxes = models.ManyToManyField(
+        EmailInbox,
+        related_name="secondary_collectors",
+        blank=True,
+        help_text="Optional additional inbox accounts monitored by this collector.",
+    )
     subject = models.CharField(max_length=255, blank=True)
     sender = models.CharField(max_length=255, blank=True)
     body = models.CharField(max_length=255, blank=True)
@@ -115,13 +121,21 @@ class EmailCollector(Entity):
         return " – ".join(parts)
 
     def search_messages(self, limit: int = 10):
-        return self.inbox.search_messages(
-            subject=self.subject,
-            from_address=self.sender,
-            body=self.body,
-            limit=limit,
-            use_regular_expressions=self.use_regular_expressions,
-        )
+        inboxes = [self.inbox, *self.additional_inboxes.all()]
+        messages = []
+        for inbox in inboxes:
+            messages.extend(
+                inbox.search_messages(
+                    subject=self.subject,
+                    from_address=self.sender,
+                    body=self.body,
+                    limit=limit,
+                    use_regular_expressions=self.use_regular_expressions,
+                )
+            )
+            if len(messages) >= limit:
+                return messages[:limit]
+        return messages
 
     @staticmethod
     def _render_notification_template(template: str, context: dict[str, str]) -> str:
@@ -220,18 +234,22 @@ class EmailCollector(Entity):
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
-            if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
-                break
-            sigils = self._parse_sigils(msg.get("body", ""))
-            EmailArtifact.objects.create(
-                collector=self,
-                subject=msg.get("subject", ""),
-                sender=msg.get("from", ""),
-                body=msg.get("body", ""),
-                sigils=sigils,
-                fingerprint=fp,
-            )
-            try:
-                self._notify_for_message(msg, sigils)
-            except Exception:
-                logger.exception("Failed to send notification for collector %s", self.pk)
+            for msg in messages:
+                fp = EmailArtifact.fingerprint_for(
+                    msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
+                )
+                if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
+                    break
+                sigils = self._parse_sigils(msg.get("body", ""))
+                EmailArtifact.objects.create(
+                    collector=self,
+                    subject=msg.get("subject", ""),
+                    sender=msg.get("from", ""),
+                    body=msg.get("body", ""),
+                    sigils=sigils,
+                    fingerprint=fp,
+                )
+                try:
+                    self._notify_for_message(msg, sigils)
+                except Exception:
+                    logger.exception("Failed to send notification for collector %s", self.pk)

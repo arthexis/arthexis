@@ -55,7 +55,6 @@ def test_admin_badges_ignore_unauthorized_callable_path(django_user_model):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_admin_badges_handle_non_dict_payload(monkeypatch, django_user_model):
     """Regression: non-dict badge payloads degrade gracefully to Unknown."""
     user = django_user_model.objects.create_user(username="staff-2", is_staff=True)

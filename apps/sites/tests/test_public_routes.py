@@ -403,7 +403,6 @@ def test_whatsapp_webhook_post_payload_validation(
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_operator_site_interface_disabled_returns_operator_notice(client):
     """Regression: home should render the OCPP notice when interface mode is disabled."""
 
