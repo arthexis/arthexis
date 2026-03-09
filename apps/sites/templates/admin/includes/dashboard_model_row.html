@@ -28,7 +28,9 @@
                 {% if model_status.icon %}
                   <span class="dashboard-model-status__icon">{{ model_status.icon }}</span>
                 {% endif %}
-                <span class="dashboard-model-status__message">{{ model_status.message }}</span>
+                {% if not model_status.success or model_status.message != _("All rules met.") %}
+                  <span class="dashboard-model-status__message">{{ model_status.message }}</span>
+                {% endif %}
               </span>
             {% endif %}
           {% endwith %}
