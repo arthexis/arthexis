@@ -46,7 +46,7 @@ dependencies = [
   "django-otp==1.7.0",
   "django-parler==2.3",
   "django-timezone-field==7.2.1",
-  "Django==5.2.11",
+  "Django==5.2.12",
   "dnspython==2.7.0",
   "filelock==3.25.0",
   "graphene-django==3.2.3",
