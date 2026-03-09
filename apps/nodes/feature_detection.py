@@ -43,6 +43,7 @@ def _invoke_detector(
             raise
 
     for kwargs in (
+        {"node": node, "base_path": base_path},
         {"node": node, "base_dir": base_dir},
         {"node": node},
         {},
