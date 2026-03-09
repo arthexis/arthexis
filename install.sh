@@ -264,7 +264,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --embedded)
-            SERVICE_MANAGEMENT_MODE=""
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
             SERVICE_MANAGEMENT_MODE_FLAG=true
             shift
             ;;
@@ -613,7 +613,23 @@ if [ -z "${ARTHEXIS_MIGRATION_POLICY:-}" ]; then
     esac
 fi
 
-echo "ARTHEXIS_MIGRATION_POLICY=${ARTHEXIS_MIGRATION_POLICY}" > "$BASE_DIR/migration.env"
+case "${ARTHEXIS_MIGRATION_POLICY,,}" in
+    apply|check|skip)
+        ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY,,}"
+        ;;
+    *)
+        case "${NODE_ROLE,,}" in
+            satellite|watchtower)
+                ARTHEXIS_MIGRATION_POLICY="check"
+                ;;
+            *)
+                ARTHEXIS_MIGRATION_POLICY="apply"
+                ;;
+        esac
+        ;;
+esac
+
+printf 'ARTHEXIS_MIGRATION_POLICY=%s\n' "$ARTHEXIS_MIGRATION_POLICY" > "$BASE_DIR/migration.env"
 
 source .venv/bin/activate
 arthexis_timing_start "pip_bootstrap"
