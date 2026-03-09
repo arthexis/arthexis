@@ -8,7 +8,7 @@ from apps.apis.models import APIExplorer, ResourceMethod
 
 
 @pytest.mark.django_db
-def test_resource_method_requires_leading_slash_regression() -> None:
+def test_resource_method_requires_leading_slash() -> None:
     """Regression: resource paths should always be relative and slash-prefixed."""
 
     api = APIExplorer.objects.create(name="Billing", base_url="https://api.example.com")
@@ -24,7 +24,7 @@ def test_resource_method_requires_leading_slash_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_resource_method_unique_operation_per_api_regression() -> None:
+def test_resource_method_unique_operation_per_api() -> None:
     """Regression: duplicate operation definitions should be rejected per API."""
 
     api = APIExplorer.objects.create(name="Users", base_url="https://users.example.com")
@@ -45,7 +45,7 @@ def test_resource_method_unique_operation_per_api_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_resource_method_str_includes_operation_context_regression() -> None:
+def test_resource_method_str_includes_operation_context() -> None:
     """Regression: resource methods should render with API, verb, path, and operation."""
 
     api = APIExplorer.objects.create(name="Inventory", base_url="https://inventory.example.com")
@@ -60,7 +60,7 @@ def test_resource_method_str_includes_operation_context_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_resource_method_coerces_empty_json_structures_regression() -> None:
+def test_resource_method_coerces_empty_json_structures() -> None:
     """Regression: empty structure values should normalize to empty objects."""
 
     api = APIExplorer.objects.create(name="Orders", base_url="https://orders.example.com")
@@ -80,7 +80,7 @@ def test_resource_method_coerces_empty_json_structures_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_apiexplorer_natural_key_roundtrip_regression() -> None:
+def test_apiexplorer_natural_key_roundtrip() -> None:
     """Regression: API explorers should resolve from fixture natural keys."""
 
     api = APIExplorer.objects.create(name="Evergo API Regression", base_url="https://portal.example.com")

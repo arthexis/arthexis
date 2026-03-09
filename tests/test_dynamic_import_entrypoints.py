@@ -15,7 +15,7 @@ from django.conf import settings
 from apps.content.classifiers import registry as classifier_registry
 from config import context_processors
 
-pytestmark = [pytest.mark.critical, pytest.mark.regression]
+pytestmark = [pytest.mark.critical]
 
 
 @dataclass(frozen=True)

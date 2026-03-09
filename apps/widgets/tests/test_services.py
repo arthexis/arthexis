@@ -81,7 +81,6 @@ def test_render_zone_widgets_respects_required_node_feature(monkeypatch):
     assert rendered and "feature-visible" in rendered[0].html
 
 
-@pytest.mark.regression
 def test_sync_registered_widgets_preserves_existing_required_feature_when_slug_missing():
     """Regression: widget feature binding persists when the configured slug stops resolving."""
     feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
