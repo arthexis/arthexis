@@ -39,3 +39,28 @@ def test_collector_search_messages_reads_from_primary_and_additional_inboxes(mon
     messages = collector.search_messages(limit=10)
 
     assert [item["subject"] for item in messages] == ["invoice-a", "invoice-b"]
+
+
+@pytest.mark.django_db
+def test_collector_search_messages_handles_unsaved_collector(monkeypatch):
+    """Unsaved collectors can still search using only their primary inbox."""
+
+    owner = User.objects.create_user(username="collector-unsaved-owner")
+    primary = EmailInbox.objects.create(
+        user=owner,
+        username="unsaved-primary@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+
+    collector = EmailCollector(inbox=primary, subject="invoice")
+
+    def fake_search(self, **kwargs):
+        return [{"subject": "invoice-unsaved", "from": "sender@example.com", "body": "A"}]
+
+    monkeypatch.setattr(EmailInbox, "search_messages", fake_search)
+
+    messages = collector.search_messages(limit=10)
+
+    assert [item["subject"] for item in messages] == ["invoice-unsaved"]

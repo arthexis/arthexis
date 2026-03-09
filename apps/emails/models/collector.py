@@ -117,7 +117,9 @@ class EmailCollector(Entity):
         return " – ".join(parts)
 
     def search_messages(self, limit: int = 10):
-        inboxes = [self.inbox, *self.additional_inboxes.all()]
+        inboxes = [self.inbox]
+        if self.pk:
+            inboxes.extend(self.additional_inboxes.all())
         messages = []
         for inbox in inboxes:
             messages.extend(
