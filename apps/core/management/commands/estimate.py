@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -63,7 +63,7 @@ class Command(BaseCommand):
         if not migration_files:
             raise CommandError(f"No migration files found in {apps_dir}")
 
-        file_dates = self._resolve_file_dates(migration_files)
+        file_dates = self._resolve_file_dates(migration_files=migration_files, apps_dir=apps_dir)
         snapshots = self._build_snapshots(
             migration_files=migration_files,
             file_dates=file_dates,
@@ -71,7 +71,7 @@ class Command(BaseCommand):
         )
 
         if options["format"] == "json":
-            self.stdout.write(json.dumps([snapshot.__dict__ for snapshot in snapshots], indent=2))
+            self.stdout.write(json.dumps([asdict(snapshot) for snapshot in snapshots], indent=2))
             return
 
         self._write_table(snapshots)
@@ -85,15 +85,15 @@ class Command(BaseCommand):
             if path.name != "__init__.py"
         )
 
-    def _resolve_file_dates(self, migration_files: list[Path]) -> dict[Path, datetime]:
+    def _resolve_file_dates(self, migration_files: list[Path], apps_dir: Path) -> dict[Path, datetime]:
         """Resolve creation timestamps for migration files from git history."""
 
         repo_root = Path(settings.BASE_DIR)
-        git_dates = self._load_git_created_dates(repo_root)
+        git_dates = self._load_git_created_dates(repo_root=repo_root, apps_dir=apps_dir)
         file_dates: dict[Path, datetime] = {}
 
         for migration_path in migration_files:
-            relative = migration_path.relative_to(repo_root).as_posix()
+            relative = migration_path.resolve().relative_to(apps_dir.resolve()).as_posix()
             if relative in git_dates:
                 file_dates[migration_path] = git_dates[relative]
                 continue
@@ -108,8 +108,15 @@ class Command(BaseCommand):
 
         return file_dates
 
-    def _load_git_created_dates(self, repo_root: Path) -> dict[str, datetime]:
+    def _load_git_created_dates(self, repo_root: Path, apps_dir: Path) -> dict[str, datetime]:
         """Load migration creation dates from git ``--diff-filter=A`` history."""
+
+        resolved_apps_dir = apps_dir.resolve()
+        resolved_repo_root = repo_root.resolve()
+        try:
+            apps_relative = resolved_apps_dir.relative_to(resolved_repo_root).as_posix()
+        except ValueError:
+            return {}
 
         command = [
             "git",
@@ -118,7 +125,7 @@ class Command(BaseCommand):
             "--format=%aI",
             "--name-only",
             "--",
-            "apps",
+            apps_relative,
         ]
         try:
             result = subprocess.run(
@@ -129,7 +136,13 @@ class Command(BaseCommand):
                 cwd=repo_root,
             )
         except subprocess.CalledProcessError as exc:
-            raise CommandError(f"Unable to inspect git history: {exc.stderr.strip()}") from exc
+            self.stderr.write(
+                self.style.WARNING(
+                    "Unable to inspect git history; using file mtime for migration dates. "
+                    f"git log failed with: {exc.stderr.strip() or exc}"
+                )
+            )
+            return {}
 
         creation_dates: dict[str, datetime] = {}
         current_date: datetime | None = None
@@ -138,14 +151,20 @@ class Command(BaseCommand):
             line = raw_line.strip()
             if not line:
                 continue
-            if "T" in line and line.count("-") >= 2:
+            try:
                 current_date = datetime.fromisoformat(line.replace("Z", "+00:00"))
                 continue
+            except ValueError:
+                pass
             if current_date is None:
                 continue
             if not line.endswith(".py") or "/migrations/" not in line or line.endswith("/__init__.py"):
                 continue
-            creation_dates.setdefault(line, current_date)
+            try:
+                relative_to_apps = (resolved_repo_root / line).resolve().relative_to(resolved_apps_dir).as_posix()
+            except ValueError:
+                continue
+            creation_dates.setdefault(relative_to_apps, current_date)
 
         return creation_dates
 
