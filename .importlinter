@@ -49,6 +49,7 @@ type = independence
 modules =
     apps.blog.apps
     apps.payments.apps
+    apps.recipes.apps
     apps.socials.apps
 
 [importlinter:contract:emails-admin-boundary]
