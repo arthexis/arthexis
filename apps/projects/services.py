@@ -73,18 +73,17 @@ def build_project_bundle_response(project: Project) -> HttpResponse:
 
 
 @transaction.atomic
-def import_project_bundle(project: Project, bundle_file) -> tuple[int, int]:
+def import_project_bundle(
+    project: Project,
+    bundle_file,
+    *,
+    allowed_models: set[str],
+) -> tuple[int, int]:
     """Import a project archive into ``project`` and return (objects, links) counts."""
 
     with zipfile.ZipFile(bundle_file) as bundle:
         objects_payload = json.loads(bundle.read(ARCHIVE_OBJECTS_FILE).decode("utf-8"))
         items_payload = json.loads(bundle.read(ARCHIVE_ITEMS_FILE).decode("utf-8"))
-
-    allowed_models = {
-        item_data.get("model", "")
-        for item_data in items_payload
-        if isinstance(item_data, dict) and "." in item_data.get("model", "")
-    }
 
     imported_objects = 0
     pk_remap: dict[tuple[str, str], str] = {}
@@ -103,6 +102,8 @@ def import_project_bundle(project: Project, bundle_file) -> tuple[int, int]:
         model_label = item_data.get("model", "")
         if "." not in model_label:
             continue
+        if model_label not in allowed_models:
+            raise ValidationError(f"Unsupported model in bundle: {model_label}")
         app_label, model_name = model_label.split(".", 1)
         try:
             content_type = ContentType.objects.get_by_natural_key(app_label, model_name)
