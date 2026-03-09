@@ -12,7 +12,11 @@ from apps.screens.startup_notifications import format_lcd_lines
 
 from .common import *  # noqa: F401,F403
 from apps.simulators.evcs import _start_simulator, _stop_simulator, parse_repeat
-from apps.simulators.simulator_runtime import get_simulator_backend_choices
+from apps.simulators.simulator_runtime import (
+    ARTHEXIS_BACKEND,
+    MOBILITY_HOUSE_BACKEND,
+    get_simulator_backend_choices,
+)
 
 REPEAT_TRUE_STRINGS = {
     "true",
@@ -227,15 +231,51 @@ def cp_simulator(request):
     dashboard_link: str | None = None
     backend_choices = get_simulator_backend_choices()
     backend_values = {value for value, _label in backend_choices}
-    preferred_default_backend = "mobilityhouse" if "mobilityhouse" in backend_values else "arthexis"
+    if MOBILITY_HOUSE_BACKEND in backend_values:
+        preferred_default_backend = MOBILITY_HOUSE_BACKEND
+    elif ARTHEXIS_BACKEND in backend_values:
+        preferred_default_backend = ARTHEXIS_BACKEND
+    else:
+        preferred_default_backend = ""
     session_backend = str(request.session.get("cp_simulator_backend") or "").strip().lower()
     selected_backend = session_backend if session_backend in backend_values else preferred_default_backend
+    backends_available = bool(backend_choices)
+    if not backends_available:
+        message = _("No simulator backends are enabled. Enable one in feature parameters.")
     if request.method == "POST":
         action = request.POST.get("action")
         requested_backend = str(request.POST.get("simulator_backend") or selected_backend).strip().lower()
+        if requested_backend not in backend_values:
+            requested_backend = selected_backend
         if requested_backend in backend_values:
             selected_backend = requested_backend
             request.session["cp_simulator_backend"] = selected_backend
+
+        if not backends_available:
+            refresh_state = is_htmx or request.method == "POST"
+            state = get_simulator_state(cp=simulator_slot, refresh_file=refresh_state)
+            state_params = state.get("params") or {}
+            form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
+            if "host" in state_params or "ws_port" in state_params:
+                form_params["host"] = _format_host_with_port(
+                    state_params.get("host", default_host),
+                    state_params.get("ws_port"),
+                )
+            form_params["repeat"] = _normalize_repeat(form_params.get("repeat"))
+            form_params["password"] = ""
+            context = {
+                "message": message,
+                "dashboard_link": dashboard_link,
+                "state": state,
+                "form_params": form_params,
+                "simulator_slot": simulator_slot,
+                "default_simulator": default_simulator,
+                "selected_backend": selected_backend,
+                "backend_choices": backend_choices,
+                "backends_available": backends_available,
+            }
+            template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
+            return render(request, template, context)
         repeat_value = _normalize_repeat(request.POST.get("repeat"))
         normalized_host, normalized_port = _host_and_port_from_input(
             request.POST.get("host")
@@ -338,6 +378,7 @@ def cp_simulator(request):
         "default_simulator": default_simulator,
         "selected_backend": selected_backend,
         "backend_choices": backend_choices,
+        "backends_available": backends_available,
     }
 
     template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"

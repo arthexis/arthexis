@@ -191,3 +191,22 @@ def test_backend_choices_include_mobilityhouse_when_enabled(monkeypatch: pytest.
     choices = simulator_runtime.get_simulator_backend_choices()
 
     assert choices == (("arthexis", "arthexis"), ("mobilityhouse", "mobilityhouse"))
+
+
+def test_backend_choices_empty_when_all_backends_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dropdown choices should be empty when all backends are disabled."""
+
+    monkeypatch.setattr(
+        simulator_runtime,
+        "get_feature_parameter",
+        _mock_feature_parameters(
+            {
+                simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "disabled",
+                simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY: "disabled",
+            }
+        ),
+    )
+
+    choices = simulator_runtime.get_simulator_backend_choices()
+
+    assert choices == ()
