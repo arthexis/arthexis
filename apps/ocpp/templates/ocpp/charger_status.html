@@ -329,30 +329,35 @@
   <table class="table">
     <thead>
       <tr>
+        <th>{% trans "Start" %}</th>
         {% if charger.connector_id is None %}
         <th>{% trans "Connector" %}</th>
         {% endif %}
-        <th>{% trans "ID" %}</th>
-        <th>{% trans "Start" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
         <th>{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
+        <th>{% trans "ID" %}</th>
         <th>{% trans "Stop reason" %}</th>
         <th>{% trans "Energy (kW)" %}</th>
       </tr>
     </thead>
     <tbody>
       {% for tx in transactions %}
-      <tr>
+      <tr class="text-body-secondary">
+        {% if date_view == "received" %}
+        <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
+        {% else %}
+        <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
+        {% endif %}
         {% if charger.connector_id is None %}
         <td>{{ tx.charger.connector_label|default:tx.charger.connector_letter|default:tx.charger.connector_id }}</td>
         {% endif %}
-        <td><a href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a></td>
-        {% if date_view == "received" %}
-        <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
-        <td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>
-        {% else %}
-        <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
-        <td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>
-        {% endif %}
+        {% if date_view == "received" %}<td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% else %}<td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% endif %}
+        <td>
+          {% if can_view_transaction_links %}
+          <a class="link-secondary" href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a>
+          {% else %}
+          {{ tx.id }}
+          {% endif %}
+        </td>
         <td>{{ tx.stop_reason|default:"-" }}</td>
         <td>{{ tx.kw|floatformat:2 }}</td>
       </tr>
@@ -361,23 +366,54 @@
       {% endfor %}
     </tbody>
   </table>
-  <div class="d-flex justify-content-between align-items-center">
-    {% if page_obj.has_previous %}
-    <a href="?page={{ page_obj.previous_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">{% trans "Previous 10" %}</a>
-    {% else %}
-    <span></span>
+  <h2>{% trans "Events" %}</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{% trans "Date" %}</th>
+        <th>{% trans "Severity" %}</th>
+        <th>{% trans "ID" %}</th>
+        <th>{% trans "Event" %}</th>
+        <th>{% trans "Details" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in non_transaction_events %}
+      <tr class="text-body-secondary">
+        <td>{{ event.timestamp|date:"Y-m-d H:i" }}</td>
+        <td>
+          <span class="d-inline-flex align-items-center gap-2">
+            <span aria-hidden="true" style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background-color: {{ event.severity_color }};"></span>
+            <span>{{ event.severity_label }}</span>
+          </span>
+        </td>
+        <td>
+          {% if event.event_id %}
+            {% if can_view_transaction_links %}
+            <a class="link-secondary" href="{{ transactions_admin_url }}{{ event.event_id }}/change/">{{ event.event_id }}</a>
+            {% else %}
+            {{ event.event_id }}
+            {% endif %}
+          {% else %}
+          -
+          {% endif %}
+        </td>
+        <td>{{ event.event }}</td>
+        <td>{{ event.details }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">{% trans "No events found." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ page_url }}">{% trans "Landing page" %}</a>
+    <a href="{{ search_url }}">{% trans "Search" %}</a>
+    {% if configuration_url %}
+    <a href="{{ configuration_url }}">{% trans "Configuration" %}</a>
     {% endif %}
-    <div class="d-flex align-items-center gap-3">
-      <a href="{{ page_url }}">{% trans "Landing page" %}</a>
-      <a href="{{ search_url }}">{% trans "Search" %}</a>
-      {% if configuration_url %}
-      <a href="{{ configuration_url }}">{% trans "Configuration" %}</a>
-      {% endif %}
-    </div>
-    {% if page_obj.has_next %}
-    <a href="?page={{ page_obj.next_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">{% trans "Next 10" %}</a>
-    {% else %}
-    <span></span>
+    {% if transactions_admin_url %}
+    <a href="{{ transactions_admin_url }}">{% trans "Transactions" %}</a>
     {% endif %}
   </div>
  </div>
