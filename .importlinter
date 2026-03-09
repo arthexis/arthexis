@@ -9,3 +9,57 @@ source_modules =
     apps
 forbidden_modules =
     tests
+
+[importlinter:contract:service-layer-no-admin-imports]
+name = Service modules must not import admin internals
+type = forbidden
+source_modules =
+    apps.core.services
+    apps.discovery.services
+    apps.energy.services
+    apps.nodes.services
+    apps.ocpp.services
+    apps.reports.services
+forbidden_modules =
+    apps.actions.admin
+    apps.energy.admin
+    apps.nodes.admin
+    apps.ocpp.admin
+    apps.reports.admin
+allow_indirect_imports = True
+
+[importlinter:contract:leaf-apps-no-domain-admin-imports]
+name = Leaf apps cannot import unrelated domain admin internals
+type = forbidden
+source_modules =
+    apps.blog
+    apps.payments
+    apps.recipes
+    apps.socials
+forbidden_modules =
+    apps.energy.admin
+    apps.nodes.admin
+    apps.ocpp.admin
+    apps.reports.admin
+allow_indirect_imports = True
+
+[importlinter:contract:leaf-app-config-modules-are-independent]
+name = Leaf app config modules stay independent
+type = independence
+modules =
+    apps.blog.apps
+    apps.payments.apps
+    apps.recipes.apps
+    apps.socials.apps
+
+[importlinter:contract:emails-admin-boundary]
+name = Emails admin should not depend on nodes admin internals
+type = forbidden
+source_modules =
+    apps.emails.admin
+forbidden_modules =
+    apps.nodes.admin
+allow_indirect_imports = True
+ignore_imports =
+    # Legacy coupling in apps.emails.admin; remove once EmailOutbox admin is moved out of nodes.
+    apps.emails.admin -> apps.nodes.admin

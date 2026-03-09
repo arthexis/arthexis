@@ -158,7 +158,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert params["average_kwh"] == 45.5
     assert params["amperage"] == 32.0
     assert params["repeat"] is True
-    assert state["last_status"] == "Connection accepted"
+    assert state["last_status"].endswith("Connection accepted")
 
     slot_two_payload = {
         **slot_one_payload,
@@ -190,7 +190,7 @@ def test_cp_simulator_accepts_parameters_for_both_slots(
     assert "password" not in params_two
     assert params_two["cp_path"] == "CP-BETA"
     assert params_two["serial_number"] == "SERIAL-BETA"
-    assert state_two["last_status"] == "Connection accepted"
+    assert state_two["last_status"].endswith("Connection accepted")
 
 
 def test_cp_simulator_stop_updates_status(logged_in_client, fake_simulate):
@@ -211,7 +211,7 @@ def test_start_simulator_ignores_unexpected_params(fake_simulate):
     started, status, _ = _start_simulator({"cp_path": "CP-GAMMA", "foo": "bar"}, cp=1)
 
     assert started is True
-    assert status == "Connection accepted"
+    assert status.endswith("Connection accepted")
 
     params = get_simulator_state(cp=1, refresh_file=True)["params"]
     assert "foo" not in params

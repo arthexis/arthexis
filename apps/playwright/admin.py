@@ -78,6 +78,7 @@ class SessionCookieAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = ("name", "owner_display", "source", "state", "last_used_at", "last_validated_at", "rejection_count")
     list_filter = ("state", "source")
     search_fields = ("name", "source", "last_rejection_reason")
+    exclude = ("cookies",)
 
 
 class WebsiteScreenshotRunInline(admin.TabularInline):

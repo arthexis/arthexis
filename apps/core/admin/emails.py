@@ -14,6 +14,9 @@ from .inlines import EmailCollectorInline
 from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
+SETUP_COLLECTOR_TEXT = _("Setup Collector")
+
+
 class EmailCollectorAdmin(EntityModelAdmin):
     list_display = (
         "name",
@@ -84,14 +87,45 @@ class EmailSearchForm(forms.Form):
     )
 
 
+class EmailCollectorSetupForm(forms.ModelForm):
+    """Wizard-style setup form used by the inbox admin tool action."""
+
+    test_now = forms.BooleanField(
+        required=False,
+        initial=True,
+        label=_("Run a live test after saving"),
+    )
+
+    class Meta:
+        model = EmailCollector
+        fields = (
+            "name",
+            "subject",
+            "sender",
+            "body",
+            "fragment",
+            "use_regular_expressions",
+            "notification_mode",
+            "notification_subject",
+            "notification_message",
+            "notification_recipients",
+            "notification_recipe",
+            "additional_inboxes",
+        )
+
+
 class EmailInboxAdmin(
     OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
     form = EmailInboxAdminForm
     list_display = ("owner_label", "username", "host", "protocol", "is_enabled")
     actions = ["test_connection", "search_inbox", "test_collectors"]
-    change_actions = ["test_collectors_action", "my_profile_action"]
-    changelist_actions = ["my_profile"]
+    change_actions = [
+        "setup_collector_action",
+        "test_collectors_action",
+        "my_profile_action",
+    ]
+    changelist_actions = ["setup_collector", "my_profile"]
     change_form_template = "admin/core/emailinbox/change_form.html"
     inlines = [EmailCollectorInline]
 
@@ -102,9 +136,89 @@ class EmailInboxAdmin(
                 "<path:object_id>/test/",
                 self.admin_site.admin_view(self.test_inbox),
                 name="emails_emailinbox_test",
-            )
+            ),
+            path(
+                "<path:object_id>/collector-setup/",
+                self.admin_site.admin_view(self.setup_collector_view),
+                name="emails_emailinbox_setup_collector",
+            ),
         ]
         return custom + urls
+
+    def _setup_collector_url(self, inbox) -> str:
+        """Return the setup collector URL for the provided inbox."""
+
+        return reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
+
+    @admin.action(description=SETUP_COLLECTOR_TEXT)
+    def setup_collector(self, request, queryset=None):
+        """Open the collector setup wizard for a selected inbox."""
+
+        if queryset is None or queryset.count() != 1:
+            self.message_user(
+                request,
+                _("Select exactly one inbox to start setup."),
+                messages.ERROR,
+            )
+            return redirect(reverse("admin:emails_emailinbox_changelist"))
+        inbox = queryset.first()
+        return redirect(self._setup_collector_url(inbox))
+
+    setup_collector.label = SETUP_COLLECTOR_TEXT
+    setup_collector.short_description = SETUP_COLLECTOR_TEXT
+    setup_collector.requires_queryset = False
+
+    def setup_collector_action(self, request, obj):
+        """Open the collector setup wizard from the inbox change form."""
+
+        return redirect(self._setup_collector_url(obj))
+
+    setup_collector_action.label = SETUP_COLLECTOR_TEXT
+    setup_collector_action.short_description = SETUP_COLLECTOR_TEXT
+
+    def setup_collector_view(self, request, object_id):
+        """Render and process the interactive collector setup wizard."""
+
+        inbox = self.get_object(request, object_id)
+        if not inbox:
+            self.message_user(request, _("Unknown inbox."), messages.ERROR)
+            return redirect("..")
+
+        collector = inbox.collectors.order_by("id").first() or EmailCollector(inbox=inbox)
+        results = []
+        if request.method == "POST":
+            form = EmailCollectorSetupForm(request.POST, instance=collector)
+            form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(pk=inbox.pk)
+            if form.is_valid():
+                configured_collector = form.save(commit=False)
+                configured_collector.inbox = inbox
+                configured_collector.save()
+                form.save_m2m()
+                if form.cleaned_data.get("test_now"):
+                    try:
+                        results = configured_collector.search_messages(limit=5)
+                        if results:
+                            self.message_user(request, _("Collector test found matching emails."), messages.SUCCESS)
+                        else:
+                            self.message_user(request, _("Collector test found no matching emails."), messages.WARNING)
+                    except ValidationError as exc:
+                        self.message_user(request, str(exc), messages.ERROR)
+                collector = configured_collector
+        else:
+            form = EmailCollectorSetupForm(instance=collector)
+            form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(pk=inbox.pk)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": inbox,
+            "title": SETUP_COLLECTOR_TEXT,
+            "form": form,
+            "collector": collector,
+            "results": results,
+            "change_url": reverse("admin:emails_emailinbox_change", args=[inbox.pk]),
+        }
+        return TemplateResponse(request, "admin/core/emailinbox/setup_collector.html", context)
 
     def test_inbox(self, request, object_id):
         inbox = self.get_object(request, object_id)

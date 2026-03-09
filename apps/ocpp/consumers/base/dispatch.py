@@ -6,7 +6,7 @@ from ... import store
 from ...call_error_handlers import dispatch_call_error
 from ...call_result_handlers import dispatch_call_result
 from ...models import Charger
-from .consumer.routing import ActionRouter
+from .routing import ActionRouter
 
 
 class DispatchMixin:

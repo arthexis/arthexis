@@ -44,8 +44,8 @@ def seed_ocpp_forwarder_suite_feature(apps, schema_editor):
             "code_locations": [
                 "apps/ocpp/forwarder/__init__.py",
                 "apps/ocpp/tasks/forwarding.py",
-                "apps/ocpp/consumers/base/consumer/csms/transport.py",
-                "apps/ocpp/consumers/base/consumer/connection_flow.py",
+                "apps/ocpp/consumers/csms/transport.py",
+                "apps/ocpp/consumers/base/connection_flow.py",
             ],
             "protocol_coverage": {
                 "ocpp16": {
