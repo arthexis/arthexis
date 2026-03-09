@@ -102,6 +102,13 @@ class DesktopShortcut(Entity):
         URL = "url", "URL"
         COMMAND = "command", "Command"
 
+    class InstallLocation(models.TextChoices):
+        """Filesystem locations where launcher files should be written."""
+
+        DESKTOP = "desktop", "Desktop"
+        APPLICATIONS = "applications", "Applications menu"
+        BOTH = "both", "Desktop and Applications menu"
+
     slug = models.SlugField(max_length=80, unique=True)
     desktop_filename = models.CharField(
         max_length=128,
@@ -124,6 +131,12 @@ class DesktopShortcut(Entity):
         max_length=512,
         blank=True,
         help_text="Command to execute when launch mode is command.",
+    )
+    install_location = models.CharField(
+        max_length=16,
+        choices=InstallLocation.choices,
+        default=InstallLocation.DESKTOP,
+        help_text="Where the .desktop launcher file should be installed.",
     )
     icon_name = models.CharField(
         max_length=128,
