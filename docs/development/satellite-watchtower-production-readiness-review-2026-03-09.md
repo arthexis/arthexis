@@ -1,6 +1,6 @@
 # Satellite and Watchtower production readiness review (2026-03-09)
 
-This review evaluates Arthexis production readiness for a deployment model where Satellite nodes are the highest-criticality systems, each running one charger-local server with SQLite, while Watchtower remains a lower-criticality informational and orchestration node. The main conclusion is that SQLite is acceptable under those assumptions; the material production concerns are Redis, restart behavior, process supervision, and how quickly runtime state recovers after a restart.
+This review evaluates Arthexis production readiness for a deployment model where Satellite nodes are the highest-criticality systems, each running one charger-local server with SQLite, while Watchtower remains a lower-criticality informational and orchestration node. The main conclusion is that SQLite is acceptable under those assumptions; the key production concerns are Redis, restart behavior, process supervision, and how quickly runtime state recovers after a restart.
 
 The repository already contains most of the pieces needed for this model, but the defaults are still more developer-friendly than appliance-strict. In particular, Satellite is close to viable for controlled production use now, while Watchtower is acceptable for lower-criticality deployment with clearer public-role configuration.
 
@@ -276,7 +276,7 @@ Recommended for all production-oriented work:
 - keep release automation compatible with branch protection rather than exempting it.
 
 This is especially important here because a large share of the production risk
-surface lives in installer scripts, settings defaults, and role-specific runtime
+is concentrated in installer scripts, settings defaults, and role-specific runtime
 behavior. Those are exactly the kinds of changes that benefit from PR-only
 review and protected-branch enforcement.
 
@@ -284,10 +284,12 @@ review and protected-branch enforcement.
 
 Recommended defaults:
 
+Role bundles should materialize concrete env vars (listed below):
+
 - `NODE_ROLE=Satellite`
-- `OCPP_STATE_REDIS_URL` written explicitly
-- `CELERY_BROKER_URL` written explicitly
-- `CELERY_RESULT_BACKEND` written explicitly
+- `OCPP_STATE_REDIS_URL`
+- `CELERY_BROKER_URL`
+- `CELERY_RESULT_BACKEND`
 - split `systemd` supervision by default
 - fixed/manual upgrades by default
 - startup migration policy set to `check`
@@ -302,9 +304,11 @@ Nice-to-have additions:
 
 Recommended defaults:
 
+Role bundles should materialize concrete env vars (listed below):
+
 - `NODE_ROLE=Watchtower`
-- `CHANNEL_REDIS_URL` written explicitly
-- `CELERY_BROKER_URL` written explicitly
+- `CHANNEL_REDIS_URL`
+- `CELERY_BROKER_URL`
 - public HTTPS proxy expectations documented and bundled
 - split `systemd` supervision by default
 - public-role cookie and HSTS settings enabled when HTTPS is expected
@@ -334,15 +338,6 @@ Nice-to-have additions:
 1. Add public-role HTTPS security bundle for Watchtower.
 2. Add role-specific post-install verification commands and documentation shortcuts.
 3. Reduce implicit settings fallbacks where production behavior is currently "smart" but not obvious.
-
-## Verification performed during this review
-
-The following checks were run successfully during this review:
-
-- `python manage.py check`
-- `pytest tests/test_role_bootstrap_smoke.py tests/test_route_providers.py tests/test_installed_apps_manifests.py -q`
-
-Additional targeted DB-backed pytest runs for OCPP reconnect and status-reset behavior were attempted, but the local test harness could not create a writable SQLite test database in this workspace. The observed failures were test-database setup issues (`readonly` / `unable to open database file`), not a confirmed failure of the Satellite logic itself.
 
 ## Final recommendation
 
