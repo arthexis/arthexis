@@ -391,8 +391,20 @@ def _collect_status_events(
 
     connector_id = connector.connector_id
     serial = connector.charger_id
-    keys = [store.identity_key(serial, connector_id)]
-    if connector_id is not None:
+    keys: list[str] = []
+    if connector_id is None:
+        keys.append(store.identity_key(serial, None))
+        connector_ids = (
+            Charger.objects.filter(charger_id=serial)
+            .exclude(connector_id__isnull=True)
+            .values_list("connector_id", flat=True)
+        )
+        keys.extend(
+            store.identity_key(serial, sibling_connector_id)
+            for sibling_connector_id in connector_ids
+        )
+    else:
+        keys.append(store.identity_key(serial, connector_id))
         keys.append(store.identity_key(serial, None))
         keys.append(store.pending_key(serial))
 
@@ -461,6 +473,144 @@ def _collect_status_events(
         deduped_events.append((event_time, state))
 
     return deduped_events, latest_before_window
+
+
+def _important_non_transaction_events(
+    charger: Charger,
+    connector: Charger,
+    *,
+    limit: int = 5,
+) -> list[dict[str, str | int | datetime | None]]:
+    """Return recent notable non-transaction events for the status page."""
+
+    connector_id = connector.connector_id
+    serial = charger.charger_id
+    keys: list[str] = []
+    if connector_id is None:
+        keys.append(store.identity_key(serial, None))
+        connector_ids = (
+            Charger.objects.filter(charger_id=serial)
+            .exclude(connector_id__isnull=True)
+            .values_list("connector_id", flat=True)
+        )
+        keys.extend(
+            store.identity_key(serial, sibling_connector_id)
+            for sibling_connector_id in connector_ids
+        )
+    else:
+        keys.append(store.identity_key(serial, connector_id))
+        keys.append(store.identity_key(serial, None))
+        keys.append(store.pending_key(serial))
+
+    status_prefix = "StatusNotification processed:"
+    excluded_prefixes = (
+        "TransactionEvent received:",
+        "StartTransaction processed:",
+        "StopTransaction processed:",
+        "MeterValues processed:",
+        "MeterValues queued:",
+        "MeterValues received:",
+    )
+    important_prefixes = (
+        "Connected",
+        "Closed",
+        "Heartbeat",
+        "BootNotification",
+        "Authorize",
+        "DiagnosticsStatusNotification",
+        "FirmwareStatusNotification",
+        "SecurityEventNotification",
+    )
+
+    warning_statuses = {"faulted", "suspendedev", "suspendedevse", "unavailable"}
+    error_statuses = {"error", "offline", "closed", "rejected"}
+
+    def _event_meta(
+        event_name: str,
+        details: str,
+    ) -> tuple[str, str, str]:
+        """Return severity metadata for a normalized event row."""
+
+        text = f"{event_name} {details}".casefold()
+        if any(token in text for token in {"error", "fault", "rejected", "closed"}):
+            return "error", "#dc3545", "Error"
+        if "status" in event_name.casefold():
+            status_token = details.casefold().strip()
+            if status_token in error_statuses:
+                return "error", "#dc3545", "Error"
+            if status_token in warning_statuses:
+                return "warning", "#ffc107", "Warning"
+        if any(token in text for token in {"unavailable", "timeout", "retry"}):
+            return "warning", "#ffc107", "Warning"
+        return "info", "#0d6efd", "Info"
+
+    def _transaction_id_from_payload(payload: dict[str, object]) -> int | None:
+        """Extract a transaction identifier from log payloads when present."""
+
+        for key in ("transactionId", "transaction_id", "txId", "tx_id"):
+            value = payload.get(key)
+            try:
+                normalized = int(value)
+            except (TypeError, ValueError):
+                continue
+            if normalized > 0:
+                return normalized
+        return None
+
+    events: list[dict[str, str | int | datetime | None]] = []
+    for entry in store.iter_log_entries(keys, log_type="charger"):
+        if len(entry.text) < 24:
+            continue
+        message = entry.text[24:].strip()
+        if message.startswith(excluded_prefixes):
+            continue
+        if message.startswith(status_prefix):
+            payload_text = message.split(":", 1)[1].strip()
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                continue
+            if connector_id is not None:
+                try:
+                    payload_connector_id = int(payload.get("connectorId"))
+                except (TypeError, ValueError):
+                    payload_connector_id = None
+                if payload_connector_id not in {None, connector_id}:
+                    continue
+            status_value = str(payload.get("status") or "").strip()
+            if not status_value:
+                continue
+            severity, severity_color, severity_label = _event_meta("Status", status_value)
+            events.append(
+                {
+                    "timestamp": entry.timestamp,
+                    "event": "Status",
+                    "details": status_value,
+                    "severity": severity,
+                    "severity_color": severity_color,
+                    "severity_label": severity_label,
+                    "event_id": _transaction_id_from_payload(payload),
+                }
+            )
+            continue
+        if not message.startswith(important_prefixes):
+            continue
+        event_name, _, detail_text = message.partition(":")
+        details = detail_text.strip() or "-"
+        severity, severity_color, severity_label = _event_meta(event_name, details)
+        events.append(
+            {
+                "timestamp": entry.timestamp,
+                "event": event_name.strip(),
+                "details": details,
+                "severity": severity,
+                "severity_color": severity_color,
+                "severity_label": severity_label,
+                "event_id": None,
+            }
+        )
+
+    return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
 
 def _usage_timeline(
