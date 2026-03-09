@@ -31,4 +31,3 @@ USER appuser
 EXPOSE 8888
 
 ENTRYPOINT ["scripts/docker-entrypoint.sh"]
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]

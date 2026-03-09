@@ -75,7 +75,14 @@ printf '%s\n' "$effective_role" > "$BASE_DIR/.locks/role.lck"
 printf '%s\n' "${PORT:-8888}" > "$BASE_DIR/.locks/backend_port.lck"
 
 cd "$BASE_DIR"
-python manage.py migrate
+case "${SKIP_MIGRATIONS:-false}" in
+    true|TRUE|1)
+        echo "Skipping migrations because SKIP_MIGRATIONS=${SKIP_MIGRATIONS}"
+        ;;
+    *)
+        python manage.py migrate
+        ;;
+esac
 
 if [ "$#" -gt 0 ]; then
     exec "$@"
