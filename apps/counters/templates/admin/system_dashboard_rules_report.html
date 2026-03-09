@@ -37,7 +37,7 @@
               <td>
                 {% if entry.status %}
                   <span class="dashboard-rule-status {% if entry.status.success %}is-success{% else %}is-failure{% endif %}">
-                    {{ entry.status.icon }}{% if not entry.status.success or entry.status.message != _("All rules met.") %} {{ entry.status.message }}{% endif %}
+                    {{ entry.status.icon }}{% if not entry.status.success or not entry.status.is_default_message %} {{ entry.status.message }}{% endif %}
                   </span>
                 {% else %}
                   <span class="help">{% trans "No result available." %}</span>

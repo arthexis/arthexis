@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+
+from apps.counters.dashboard_rules import DEFAULT_SUCCESS_MESSAGE
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import RequestFactory
@@ -49,14 +51,19 @@ def test_dashboard_model_status_hides_default_success_message():
             "show_changelinks": False,
             "show_model_badges": True,
             "model_statuses": {
-                1: {"success": True, "icon": "✓", "message": "All rules met."}
+                1: {
+                    "success": True,
+                    "icon": "✓",
+                    "message": str(DEFAULT_SUCCESS_MESSAGE),
+                    "is_default_message": True,
+                }
             },
         },
     )
 
     assert "dashboard-model-status__icon" in content
     assert "✓" in content
-    assert "All rules met." not in content
+    assert str(DEFAULT_SUCCESS_MESSAGE) not in content
 
 
 def test_dashboard_model_status_keeps_failure_message_visible():
