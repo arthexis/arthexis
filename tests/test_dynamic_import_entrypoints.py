@@ -69,6 +69,16 @@ def _collect_module_import_failures(
     for source, module_name in module_names:
         try:
             _import_module_if_present(module_name)
+        except ModuleNotFoundError as exc:
+            missing_name = exc.name or ""
+            if missing_name.startswith(("apps.", "config.")):
+                failures.append(
+                    ResolutionFailure(
+                        entrypoint=module_name,
+                        source=source,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                )
         except (ImportError, AttributeError, ValueError, TypeError) as exc:
             failures.append(
                 ResolutionFailure(
