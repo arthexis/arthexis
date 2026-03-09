@@ -14,6 +14,9 @@ from .inlines import EmailCollectorInline
 from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
+SETUP_COLLECTOR_TEXT = _("Setup Collector")
+
+
 class EmailCollectorAdmin(EntityModelAdmin):
     list_display = (
         "name",
@@ -147,7 +150,7 @@ class EmailInboxAdmin(
 
         return reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
 
-    @admin.action(description=_("Setup Collector"))
+    @admin.action(description=SETUP_COLLECTOR_TEXT)
     def setup_collector(self, request, queryset=None):
         """Open the collector setup wizard for a selected inbox."""
 
@@ -161,8 +164,8 @@ class EmailInboxAdmin(
         inbox = queryset.first()
         return redirect(self._setup_collector_url(inbox))
 
-    setup_collector.label = _("Setup Collector")
-    setup_collector.short_description = _("Setup Collector")
+    setup_collector.label = SETUP_COLLECTOR_TEXT
+    setup_collector.short_description = SETUP_COLLECTOR_TEXT
     setup_collector.requires_queryset = False
 
     def setup_collector_action(self, request, obj):
@@ -170,8 +173,8 @@ class EmailInboxAdmin(
 
         return redirect(self._setup_collector_url(obj))
 
-    setup_collector_action.label = _("Setup Collector")
-    setup_collector_action.short_description = _("Setup Collector")
+    setup_collector_action.label = SETUP_COLLECTOR_TEXT
+    setup_collector_action.short_description = SETUP_COLLECTOR_TEXT
 
     def setup_collector_view(self, request, object_id):
         """Render and process the interactive collector setup wizard."""
@@ -209,7 +212,7 @@ class EmailInboxAdmin(
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
             "original": inbox,
-            "title": _("Setup Collector"),
+            "title": SETUP_COLLECTOR_TEXT,
             "form": form,
             "collector": collector,
             "results": results,
