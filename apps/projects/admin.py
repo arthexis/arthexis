@@ -6,6 +6,7 @@ import json
 import zipfile
 
 from django.contrib import admin, messages
+from django.contrib.auth import get_permission_codename
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -141,8 +142,20 @@ class ProjectAdmin(EntityModelAdmin):
         if bundle_file is None:
             self.message_user(request, _("Select a ZIP file to import."), level=messages.ERROR)
             return redirect(BUNDLE_VIEW_NAME, object_id)
+        allowed_models = {
+            f"{model._meta.app_label}.{model._meta.model_name}"
+            for model in ProjectItem.get_bundle_model_classes()
+            if request.user.has_perm(
+                f"{model._meta.app_label}.{get_permission_codename('add', model._meta)}"
+            )
+        }
+
         try:
-            imported_objects, linked = import_project_bundle(project, bundle_file)
+            imported_objects, linked = import_project_bundle(
+                project,
+                bundle_file,
+                allowed_models=allowed_models,
+            )
         except (ValidationError, ValueError, KeyError, zipfile.BadZipFile, json.JSONDecodeError):
             self.message_user(
                 request,

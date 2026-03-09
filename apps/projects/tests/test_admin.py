@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -132,6 +134,80 @@ class ProjectBundleTests(TestCase):
         self.assertEqual(import_response.status_code, 200)
         self.assertEqual(imported_project.items.count(), 1)
 
+
+    def test_bundle_import_rejects_models_without_add_permission(self):
+        """Regression: import must reject models the user cannot add."""
+
+        restricted_user = get_user_model().objects.create_user(
+            username="bundleeditor",
+            email="bundleeditor@example.com",
+            password="password",
+            is_staff=True,
+            is_superuser=False,
+        )
+        permission_models = {
+            "change_project": Project,
+            "view_project": Project,
+            "view_projectitem": ProjectItem,
+            "add_projectitem": ProjectItem,
+        }
+        for codename, model in permission_models.items():
+            restricted_user.user_permissions.add(
+                Permission.objects.get(
+                    codename=codename,
+                    content_type=ContentType.objects.get_for_model(model),
+                )
+            )
+        self.client.force_login(restricted_user)
+
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "objects.json",
+                json.dumps(
+                    [
+                        {
+                            "model": "auth.user",
+                            "pk": 999,
+                            "fields": {
+                                "password": "pbkdf2_sha256$720000$fake$hash",
+                                "last_login": None,
+                                "is_superuser": True,
+                                "username": "haxor",
+                                "first_name": "",
+                                "last_name": "",
+                                "email": "haxor@example.com",
+                                "is_staff": True,
+                                "is_active": True,
+                                "date_joined": "2024-01-01T00:00:00Z",
+                                "groups": [],
+                                "user_permissions": [],
+                            },
+                        }
+                    ]
+                ),
+            )
+            archive.writestr(
+                "items.json",
+                json.dumps([{"model": "auth.user", "object_id": "999", "note": ""}]),
+            )
+
+        payload.seek(0)
+        response = self.client.post(
+            reverse("admin:projects_project_bundle_import", args=[self.project.pk]),
+            {
+                "bundle_file": SimpleUploadedFile(
+                    "bundle.zip",
+                    payload.read(),
+                    content_type="application/zip",
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unable to import project bundle")
+        self.assertFalse(get_user_model().objects.filter(username="haxor").exists())
 
     def test_bundle_import_invalid_zip_shows_error(self):
         """Regression: invalid archives should not raise 500 errors."""
