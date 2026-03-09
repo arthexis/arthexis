@@ -13,7 +13,10 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.features.models import Feature
-from apps.features.parameters import set_feature_parameter_values
+from apps.features.parameters import (
+    get_feature_parameter,
+    set_feature_parameter_values,
+)
 
 from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
@@ -113,7 +116,11 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
                 "model_choice": initial_choice,
                 "model_path": config.model_path or str(resolved_path),
                 "model_command": config.model_command,
-                "timeout_seconds": "240",
+                "timeout_seconds": get_feature_parameter(
+                    LLM_SUMMARY_SUITE_FEATURE_SLUG,
+                    "timeout_seconds",
+                    fallback="240",
+                ),
             },
         )
 
@@ -127,7 +134,14 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
                 config.model_path = form.cleaned_data.get("model_path", "").strip()
             config.model_command = model_command
             if form.cleaned_data.get("install_model"):
-                model_dir = ensure_local_model(config)
+                model_dir = ensure_local_model(
+                    config,
+                    preferred_path=(
+                        config.model_path
+                        if model_choice == LLMSummaryWizardForm.MODEL_CUSTOM
+                        else None
+                    ),
+                )
                 if model_choice == LLMSummaryWizardForm.MODEL_DEFAULT:
                     config.model_path = ""
                 installed_message = _("Model directory is ready at %(path)s.") % {

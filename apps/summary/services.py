@@ -71,8 +71,13 @@ def resolve_model_path(config: LLMSummaryConfig) -> Path:
     return _resolve_model_path(config)
 
 
-def ensure_local_model(config: LLMSummaryConfig) -> Path:
-    model_dir = _resolve_model_path(config)
+def ensure_local_model(
+    config: LLMSummaryConfig, *, preferred_path: str | Path | None = None
+) -> Path:
+    if preferred_path:
+        model_dir = Path(preferred_path)
+    else:
+        model_dir = _resolve_model_path(config)
     model_dir.mkdir(parents=True, exist_ok=True)
     sentinel = model_dir / DEFAULT_MODEL_FILE
     if not sentinel.exists():
