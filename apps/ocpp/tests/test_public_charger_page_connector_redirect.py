@@ -89,5 +89,9 @@ def test_public_charger_page_loads_brand_font_pair(client):
     assert response.status_code == 200
     content = response.content.decode("utf-8")
     assert "fonts.googleapis.com" in content
-    assert "family=Space+Grotesk" in content
-    assert "family=Instrument+Sans" in content
+    font_url_params = (
+        "family=Space+Grotesk:wght@500;600;700"
+        "&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400"
+        "&display=swap"
+    )
+    assert font_url_params in content

@@ -73,9 +73,13 @@ def test_public_pages_load_brand_font_pair(client):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert "fonts.googleapis.com" in content
-    assert "family=Space+Grotesk" in content
-    assert "family=Instrument+Sans" in content
+    document = parse_html(content)
+    font_url = (
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700"
+        "&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+    )
+    font_links = _find_all_elements(document, "link", href=font_url)
+    assert len(font_links) == 1, "Expected to find one link tag for the branded font pair."
 
 def test_public_feedback_renders_guest_contact_optin_beside_email(client):
     """Regression: guest feedback should render a single contact opt-in beside the email field."""
