@@ -117,12 +117,26 @@ class Command(BaseCommand):
         raise CommandError(f"Unsupported command: {resource} {action}")
 
     def _resolve_repository(self, raw_repo: str) -> RepositoryRef:
+        from urllib.parse import urlparse
+
         from apps.repos.github import parse_repository_url, resolve_active_repository
 
         cleaned = raw_repo.strip()
         if cleaned:
-            if "/" not in cleaned:
+            if cleaned.startswith("git@"):
+                raw_path = cleaned.partition(":")[2]
+            elif "://" in cleaned:
+                raw_path = urlparse(cleaned).path
+            else:
+                raw_path = cleaned
+
+            normalized_path = raw_path.strip("/")
+            if normalized_path.endswith(".git"):
+                normalized_path = normalized_path[:-4]
+            segments = [part.strip() for part in normalized_path.split("/") if part.strip()]
+            if len(segments) != 2:
                 raise CommandError("Repository must be in owner/name format")
+
             try:
                 owner, name = parse_repository_url(cleaned)
             except ValueError as exc:

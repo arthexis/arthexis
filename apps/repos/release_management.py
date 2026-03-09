@@ -130,13 +130,29 @@ class ReleaseManagementClient:
         return resolved == EXECUTION_MODE_BINARY
 
     def _can_use_suite_api(self) -> bool:
-        return bool(self._resolve_token()) and self._feature_enabled()
+        return self._feature_enabled()
 
     def list_issues(self, repository: RepositoryRef, *, state: str = "open") -> list[dict[str, Any]]:
         """List issues using suite API first unless binary mode is selected."""
 
+        if self._should_use_binary_first():
+            query = "number,title,state,url,author"
+            rows = self._run_gh_json(
+                [
+                    "issue",
+                    "list",
+                    "--repo",
+                    repository.slug,
+                    "--state",
+                    state,
+                    "--json",
+                    query,
+                ]
+            )
+            return rows if isinstance(rows, list) else []
+
         token = self._resolve_token()
-        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+        if token and self._can_use_suite_api():
             issues = list(
                 github_service.fetch_repository_issues(
                     token=token,
@@ -165,8 +181,22 @@ class ReleaseManagementClient:
     def create_issue(self, repository: RepositoryRef, *, title: str, body: str) -> str:
         """Create an issue through suite API with binary fallback."""
 
+        if self._should_use_binary_first():
+            return self._run_gh(
+                [
+                    "issue",
+                    "create",
+                    "--repo",
+                    repository.slug,
+                    "--title",
+                    title,
+                    "--body",
+                    body,
+                ]
+            )
+
         token = self._resolve_token()
-        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+        if token and self._can_use_suite_api():
             response = github_service.create_issue(
                 repository.owner,
                 repository.name,
@@ -195,8 +225,15 @@ class ReleaseManagementClient:
     def list_pull_requests(self, repository: RepositoryRef, *, state: str = "open") -> list[dict[str, Any]]:
         """List pull requests through suite API with gh fallback."""
 
+        if self._should_use_binary_first():
+            query = "number,title,state,url,isDraft"
+            rows = self._run_gh_json(
+                ["pr", "list", "--repo", repository.slug, "--state", state, "--json", query]
+            )
+            return rows if isinstance(rows, list) else []
+
         token = self._resolve_token()
-        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+        if token and self._can_use_suite_api():
             return list(
                 github_service.fetch_repository_pull_requests(
                     token=token,

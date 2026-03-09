@@ -209,3 +209,23 @@ def test_release_management_disabled_feature_forces_gh_fallback(monkeypatch):
 
     assert rows[0]["number"] == 9
     assert called["args"][0:2] == ["issue", "list"]
+
+
+@pytest.mark.django_db
+def test_binary_mode_does_not_resolve_suite_token(monkeypatch):
+    """Binary mode should not invoke suite token resolution paths."""
+
+    def fail_resolve(self):  # pragma: no cover - explicit failure branch
+        raise AssertionError("_resolve_token should not be called in binary mode")
+
+    monkeypatch.setattr(ReleaseManagementClient, "_resolve_token", fail_resolve)
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_run_gh_json",
+        lambda self, args: [{"number": 1, "title": "ok", "state": "open"}],
+    )
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    rows = client.list_issues(RepositoryRef(owner="octo", name="demo"))
+
+    assert rows[0]["number"] == 1
