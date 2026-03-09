@@ -1,4 +1,6 @@
 :root {
+  --site-font-heading: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --site-font-body: "Instrument Sans", "Inter", "Segoe UI", sans-serif;
   --site-primary: #0d6efd;
   --site-primary-strong: #0b5ed7;
   --site-primary-rgb: 13, 110, 253;
@@ -44,6 +46,30 @@ html[data-bs-theme='light'] {
 
 html {
   font-size: clamp(16px, 1.2vw, 24px);
+}
+
+
+body {
+  font-family: var(--site-font-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.navbar-brand,
+.module-pill-nav .badge,
+.reader-sidebar nav.toc h4,
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-family: var(--site-font-heading);
+  letter-spacing: 0.01em;
 }
 
 @media (min-width: 1600px) {

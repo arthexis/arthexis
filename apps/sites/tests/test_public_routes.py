@@ -66,6 +66,17 @@ def test_public_pages_render_for_anonymous(client):
     )
 
 
+def test_public_pages_load_brand_font_pair(client):
+    """Public base template should preload the branded heading/body font pair."""
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "fonts.googleapis.com" in content
+    assert "family=Space+Grotesk" in content
+    assert "family=Instrument+Sans" in content
+
 def test_public_feedback_renders_guest_contact_optin_beside_email(client):
     """Regression: guest feedback should render a single contact opt-in beside the email field."""
 

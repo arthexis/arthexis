@@ -72,3 +72,22 @@ def test_charger_page_redirects_station_path_to_first_accessible_connector(clien
         "ocpp:charger-page-connector",
         args=[parent.charger_id, visible_connector.connector_slug],
     )
+
+
+def test_public_charger_page_loads_brand_font_pair(client):
+    """Public OCPP landing should include the branded heading/body font pair."""
+
+    charger = Charger.objects.create(charger_id="REDIRECT-CP-4", connector_id=1)
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-page-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "fonts.googleapis.com" in content
+    assert "family=Space+Grotesk" in content
+    assert "family=Instrument+Sans" in content
