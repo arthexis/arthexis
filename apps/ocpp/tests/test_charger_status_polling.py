@@ -122,7 +122,7 @@ def test_status_view_limits_sessions_to_5_entries(client):
 
 @pytest.mark.django_db
 def test_status_view_aggregate_includes_events_from_all_connectors(client):
-    """Aggregate status view should include notable events from all connectors."""
+    """Regression: aggregate status view includes notable events from all connectors."""
 
     user = get_user_model().objects.create_user(
         username="status-events-all-connectors", password="pass"
@@ -144,9 +144,28 @@ def test_status_view_aggregate_includes_events_from_all_connectors(client):
 
     assert response.status_code == 200
     events = response.context["non_transaction_events"]
-    details = {item["details"] for item in events}
-    assert "connector-a" in details
-    assert "connector-b" in details
+    names = {item["event"] for item in events}
+    assert "Connected connector-a" in names
+    assert "Connected connector-b" in names
+
+
+@pytest.mark.django_db
+def test_status_view_aggregate_includes_pending_events(client):
+    """Regression: aggregate status view includes notable pending-key events."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-pending", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-ALL-PENDING")
+    Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
+    store.add_log(store.pending_key(charger.charger_id), "Connected: pending")
+
+    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    assert any(item["details"] == "pending" for item in events)
 
 
 @pytest.mark.django_db
@@ -191,3 +210,20 @@ def test_status_view_disables_event_admin_links_when_admin_urls_missing(
     html = response.content.decode()
     assert "1234" in html
     assert "admin/ocpp/transaction/1234/change/" not in html
+
+
+@pytest.mark.django_db
+def test_status_view_legacy_status_path_is_available(client):
+    """Regression: legacy charger status path should render instead of 404."""
+
+    user = get_user_model().objects.create_user(
+        username="status-legacy-path", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-LEGACY-PATH")
+
+    response = client.get(
+        reverse("ocpp:charger-status-legacy", args=[charger.charger_id])
+    )
+
+    assert response.status_code == 200

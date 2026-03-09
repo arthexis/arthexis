@@ -403,6 +403,7 @@ def _collect_status_events(
             store.identity_key(serial, sibling_connector_id)
             for sibling_connector_id in connector_ids
         )
+        keys.append(store.pending_key(serial))
     else:
         keys.append(store.identity_key(serial, connector_id))
         keys.append(store.identity_key(serial, None))
@@ -497,6 +498,7 @@ def _important_non_transaction_events(
             store.identity_key(serial, sibling_connector_id)
             for sibling_connector_id in connector_ids
         )
+        keys.append(store.pending_key(serial))
     else:
         keys.append(store.identity_key(serial, connector_id))
         keys.append(store.identity_key(serial, None))
