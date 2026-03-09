@@ -3,6 +3,8 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import Max
 from django.shortcuts import redirect
+from django.template import TemplateDoesNotExist
+from django.template.loader import select_template
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
@@ -68,9 +70,22 @@ class EmailCollectorAdmin(EntityModelAdmin):
             "opts": self.model._meta,
             "queryset": queryset,
         }
-        return TemplateResponse(
-            request, "admin/core/emailcollector/preview.html", context
-        )
+        try:
+            template_name = select_template(
+                [
+                    f"admin/{self.model._meta.app_label}/{self.model._meta.model_name}/preview.html",
+                    "admin/core/emailcollector/preview.html",
+                ]
+            ).template.name
+        except TemplateDoesNotExist:
+            self.message_user(
+                request,
+                _("Preview template is not configured for Email Collectors."),
+                messages.ERROR,
+            )
+            return redirect("..")
+
+        return TemplateResponse(request, template_name, context)
 
 
 class EmailSearchForm(forms.Form):

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.test import RequestFactory
 from django.utils import timezone
 
-from apps.core.admin import EmailInboxAdmin
+from apps.core.admin import EmailCollectorAdmin, EmailInboxAdmin
 from apps.core.models import EmailTransaction
 from apps.emails.models import EmailBridge, EmailCollector, EmailInbox, EmailOutbox
 from apps.nodes.admin import EmailOutboxAdmin
@@ -94,3 +94,17 @@ def test_email_outbox_admin_columns_and_annotations(db):
     )
     assert model_admin.collector_count(row) == "1/2"
     assert model_admin.last_used_at(row) != "-"
+
+
+def test_email_collector_preview_template_renders(db):
+    """Collector preview action should render without template lookup failures."""
+    owner = _create_owner("collector-owner")
+    inbox = _create_inbox(owner, "collector@example.com")
+    collector = EmailCollector.objects.create(inbox=inbox, name="preview")
+
+    model_admin = EmailCollectorAdmin(EmailCollector, admin.site)
+    request = RequestFactory().get("/admin/emails/emailcollector/")
+    response = model_admin.preview_messages(request, EmailCollector.objects.filter(pk=collector.pk))
+
+    response.render()
+    assert response.status_code == 200
