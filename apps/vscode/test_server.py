@@ -68,22 +68,22 @@ def send_desktop_notification(return_code: int) -> None:
     if system == "Linux":
         if shutil.which("notify-send"):
             _run_notification_command(["notify-send", title, message])
-        return
-
-    if system == "Darwin":
-        script = f'display notification "{message}" with title "{title}"'
+    elif system == "Darwin":
+        safe_message = message.replace('"', '\\"')
+        safe_title = title.replace('"', '\\"')
+        script = f'display notification "{safe_message}" with title "{safe_title}"'
         _run_notification_command(["osascript", "-e", script])
-        return
-
-    if system == "Windows":
+    elif system == "Windows":
         if shutil.which("powershell"):
+            safe_title = title.replace('"', '`"')
+            safe_message = message.replace('"', '`"')
             command = (
                 "Add-Type -AssemblyName System.Windows.Forms; "
                 "$n = New-Object System.Windows.Forms.NotifyIcon; "
                 "$n.Icon = [System.Drawing.SystemIcons]::Information; "
                 "$n.Visible = $true; "
-                f'$n.BalloonTipTitle = "{title}"; '
-                f'$n.BalloonTipText = "{message}"; '
+                f'$n.BalloonTipTitle = "{safe_title}"; '
+                f'$n.BalloonTipText = "{safe_message}"; '
                 "$n.ShowBalloonTip(3000); Start-Sleep -Seconds 4; $n.Dispose();"
             )
             _run_notification_command(["powershell", "-NoProfile", "-Command", command])
