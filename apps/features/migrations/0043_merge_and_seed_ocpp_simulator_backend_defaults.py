@@ -7,6 +7,7 @@ OCPP_SIMULATOR_FEATURE_SLUG = "ocpp-simulator"
 SIMULATOR_PARAMETERS_KEY = "parameters"
 MOBILITY_HOUSE_BACKEND_PARAMETER_KEY = "mobilityhouse_backend"
 ARTHEXIS_BACKEND_PARAMETER_KEY = "arthexis_backend"
+MIGRATION_MARKER_KEY = "_seeded_by_0043_ocpp_backend_defaults"
 
 
 def seed_ocpp_simulator_backend_defaults(apps, schema_editor):
@@ -24,18 +25,19 @@ def seed_ocpp_simulator_backend_defaults(apps, schema_editor):
     if not isinstance(parameters, dict):
         parameters = {}
 
-    changed = False
+    seeded_keys = []
     if feature.is_enabled and MOBILITY_HOUSE_BACKEND_PARAMETER_KEY not in parameters:
         parameters[MOBILITY_HOUSE_BACKEND_PARAMETER_KEY] = "enabled"
-        changed = True
+        seeded_keys.append(MOBILITY_HOUSE_BACKEND_PARAMETER_KEY)
     if ARTHEXIS_BACKEND_PARAMETER_KEY not in parameters:
         parameters[ARTHEXIS_BACKEND_PARAMETER_KEY] = "enabled"
-        changed = True
+        seeded_keys.append(ARTHEXIS_BACKEND_PARAMETER_KEY)
 
-    if not changed:
+    if not seeded_keys:
         return
 
     metadata[SIMULATOR_PARAMETERS_KEY] = parameters
+    metadata[MIGRATION_MARKER_KEY] = seeded_keys
     feature.metadata = metadata
     feature.save(update_fields=["metadata"])
 
@@ -55,15 +57,25 @@ def unseed_ocpp_simulator_backend_defaults(apps, schema_editor):
     if not isinstance(parameters, dict):
         return
 
+    seeded_keys = metadata.get(MIGRATION_MARKER_KEY)
+    if not isinstance(seeded_keys, list):
+        return
+
     changed = False
-    if parameters.get(MOBILITY_HOUSE_BACKEND_PARAMETER_KEY) == "enabled":
-        parameters.pop(MOBILITY_HOUSE_BACKEND_PARAMETER_KEY, None)
-        changed = True
-    if parameters.get(ARTHEXIS_BACKEND_PARAMETER_KEY) == "enabled":
-        parameters.pop(ARTHEXIS_BACKEND_PARAMETER_KEY, None)
-        changed = True
+    for key in seeded_keys:
+        if key in {MOBILITY_HOUSE_BACKEND_PARAMETER_KEY, ARTHEXIS_BACKEND_PARAMETER_KEY} and parameters.get(key) == "enabled":
+            parameters.pop(key, None)
+            changed = True
+
+    metadata.pop(MIGRATION_MARKER_KEY, None)
 
     if not changed:
+        if parameters:
+            metadata[SIMULATOR_PARAMETERS_KEY] = parameters
+        else:
+            metadata.pop(SIMULATOR_PARAMETERS_KEY, None)
+        feature.metadata = metadata
+        feature.save(update_fields=["metadata"])
         return
 
     if parameters:
