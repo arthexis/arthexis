@@ -106,11 +106,11 @@ def check_node_feature(
 
     del node
     if slug == "systemd-manager":
-        from apps.core.systemctl import _systemctl_command
+        from apps.nodes.models.features import _systemctl_command
 
         return bool(_systemctl_command())
     if slug in SYSTEMD_DEPENDENT_FEATURE_SLUGS:
-        from apps.core.systemctl import _systemctl_command
+        from apps.nodes.models.features import _systemctl_command
 
         if not bool(_systemctl_command()):
             return False
@@ -127,7 +127,7 @@ def check_node_feature(
     if slug == "ap-router":
         return _hosts_gelectriic_ap()
     if slug == "gpio-rtc":
-        from apps.clocks.utils import has_clock_device
+        from apps.nodes.models.features import has_clock_device
 
         return has_clock_device()
     return None
