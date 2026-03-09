@@ -179,4 +179,4 @@ def test_email_inbox_change_form_includes_setup_collector_link(admin_client, adm
 
     assert response.status_code == 200
     setup_url = reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
-    assert setup_url in response.rendered_content
+    assert f'href="{setup_url}"' in response.rendered_content
