@@ -242,6 +242,25 @@ def _normalize_backend_override(value: object) -> str | None:
     return None
 
 
+def get_simulator_backend_choices() -> tuple[tuple[str, str], ...]:
+    """Return backend dropdown choices filtered by enabled feature parameters."""
+
+    choices: list[tuple[str, str]] = []
+    if _is_simulator_backend_parameter_enabled(
+        ARTHEXIS_BACKEND_PARAMETER_KEY,
+        default=True,
+    ):
+        choices.append(("arthexis", "arthexis"))
+    if _is_simulator_backend_parameter_enabled(
+        MOBILITY_HOUSE_BACKEND_PARAMETER_KEY,
+        default=False,
+    ):
+        choices.append(("mobilityhouse", "mobilityhouse"))
+    if choices:
+        return tuple(choices)
+    return (("arthexis", "arthexis"),)
+
+
 def resolve_simulator_backend(
     *, cp_idx: int = 1, preferred_backend: str | None = None
 ) -> SimulatorBackendSelection:
@@ -408,6 +427,7 @@ __all__ = [
     "NormalizedSimulatorParams",
     "SimulatorBackendSelection",
     "sanitize_simulator_params",
+    "get_simulator_backend_choices",
     "resolve_simulator_backend",
     "should_use_mobility_house_backend",
     "normalize_simulator_params",

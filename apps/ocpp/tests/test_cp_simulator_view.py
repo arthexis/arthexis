@@ -218,6 +218,36 @@ def test_start_simulator_ignores_unexpected_params(fake_simulate):
     assert params["cp_path"] == "CP-GAMMA"
 
 
+def test_cp_simulator_hides_disabled_backends_from_dropdown(logged_in_client, monkeypatch):
+    """Backend dropdown should only include runtime-enabled choices."""
+
+    monkeypatch.setattr(
+        "apps.ocpp.views.simulator.get_simulator_backend_choices",
+        lambda: (("arthexis", "arthexis"),),
+    )
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'value="arthexis"' in content
+    assert 'value="mobilityhouse"' not in content
+
+
+def test_cp_simulator_defaults_to_mobilityhouse_when_available(logged_in_client, monkeypatch):
+    """Default backend should prefer Mobility House when the option is enabled."""
+
+    monkeypatch.setattr(
+        "apps.ocpp.views.simulator.get_simulator_backend_choices",
+        lambda: (("arthexis", "arthexis"), ("mobilityhouse", "mobilityhouse")),
+    )
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    assert response.context["selected_backend"] == "mobilityhouse"
+
+
 def test_cp_simulator_backend_selection_persists_in_session(logged_in_client):
     """Backend dropdown updates the stored backend preference without starting a simulator."""
 

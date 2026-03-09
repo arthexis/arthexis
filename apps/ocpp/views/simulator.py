@@ -12,6 +12,7 @@ from apps.screens.startup_notifications import format_lcd_lines
 
 from .common import *  # noqa: F401,F403
 from apps.simulators.evcs import _start_simulator, _stop_simulator, parse_repeat
+from apps.simulators.simulator_runtime import get_simulator_backend_choices
 
 REPEAT_TRUE_STRINGS = {
     "true",
@@ -22,12 +23,6 @@ REPEAT_TRUE_STRINGS = {
     "infinite",
     "loop",
 }
-
-SIMULATOR_BACKEND_CHOICES: tuple[tuple[str, str], ...] = (
-    ("arthexis", "arthexis"),
-    ("mobilityhouse", "mobilityhouse"),
-)
-
 
 @landing("Charge Point Simulator")
 def cp_simulator(request):
@@ -230,9 +225,11 @@ def cp_simulator(request):
     is_htmx = request.headers.get("HX-Request") == "true"
     message = ""
     dashboard_link: str | None = None
-    session_backend = str(request.session.get("cp_simulator_backend") or "arthexis").strip().lower()
-    backend_values = {value for value, _label in SIMULATOR_BACKEND_CHOICES}
-    selected_backend = session_backend if session_backend in backend_values else "arthexis"
+    backend_choices = get_simulator_backend_choices()
+    backend_values = {value for value, _label in backend_choices}
+    preferred_default_backend = "mobilityhouse" if "mobilityhouse" in backend_values else "arthexis"
+    session_backend = str(request.session.get("cp_simulator_backend") or "").strip().lower()
+    selected_backend = session_backend if session_backend in backend_values else preferred_default_backend
     if request.method == "POST":
         action = request.POST.get("action")
         requested_backend = str(request.POST.get("simulator_backend") or selected_backend).strip().lower()
@@ -340,7 +337,7 @@ def cp_simulator(request):
         "simulator_slot": simulator_slot,
         "default_simulator": default_simulator,
         "selected_backend": selected_backend,
-        "backend_choices": SIMULATOR_BACKEND_CHOICES,
+        "backend_choices": backend_choices,
     }
 
     template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
