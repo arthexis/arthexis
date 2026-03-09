@@ -1,0 +1,268 @@
+"""Release Management integration for GitHub repository workflows."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from dataclasses import dataclass
+from typing import Any
+
+from apps.features.utils import is_suite_feature_enabled
+from apps.repos.services import github as github_service
+
+RELEASE_MANAGEMENT_FEATURE_SLUG = "release-management"
+EXECUTION_MODE_KEY = "execution_mode"
+EXECUTION_MODE_SUITE = "suite"
+EXECUTION_MODE_BINARY = "binary"
+
+
+class ReleaseManagementError(RuntimeError):
+    """Raised when Release Management operations fail."""
+
+
+@dataclass(slots=True, frozen=True)
+class RepositoryRef:
+    """Repository identity used by Release Management operations."""
+
+    owner: str
+    name: str
+
+    @property
+    def slug(self) -> str:
+        """Return owner/name slug for command and API operations."""
+
+        return f"{self.owner}/{self.name}".strip("/")
+
+
+class ReleaseManagementClient:
+    """Coordinate suite/API and GitHub CLI repository operations."""
+
+    def __init__(self, *, token: str | None = None, mode: str | None = None) -> None:
+        """Create client with optional explicit auth token and execution mode."""
+
+        self._token = (token or "").strip() or None
+        self._mode = self._normalize_mode(mode)
+
+    @staticmethod
+    def _normalize_mode(mode: str | None) -> str:
+        value = (mode or "").strip().lower()
+        if value in {EXECUTION_MODE_BINARY, EXECUTION_MODE_SUITE}:
+            return value
+        return EXECUTION_MODE_SUITE
+
+    @staticmethod
+    def _feature_enabled() -> bool:
+        return is_suite_feature_enabled(RELEASE_MANAGEMENT_FEATURE_SLUG, default=True)
+
+    @staticmethod
+    def _feature_mode() -> str:
+        from apps.features.models import Feature
+
+        feature = Feature.objects.filter(slug=RELEASE_MANAGEMENT_FEATURE_SLUG).only("metadata").first()
+        if feature is None:
+            return EXECUTION_MODE_SUITE
+
+        metadata = getattr(feature, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            return EXECUTION_MODE_SUITE
+        parameters = metadata.get("parameters", {})
+        if not isinstance(parameters, dict):
+            return EXECUTION_MODE_SUITE
+        configured = parameters.get(EXECUTION_MODE_KEY)
+        if configured is None:
+            return EXECUTION_MODE_SUITE
+        normalized = str(configured).strip().lower()
+        if normalized in {EXECUTION_MODE_SUITE, EXECUTION_MODE_BINARY}:
+            return normalized
+        return EXECUTION_MODE_SUITE
+
+    @classmethod
+    def resolve_execution_mode(cls, explicit_mode: str | None = None) -> str:
+        """Resolve operation mode from explicit value, then feature metadata."""
+
+        if explicit_mode:
+            normalized = str(explicit_mode).strip().lower()
+            if normalized in {EXECUTION_MODE_SUITE, EXECUTION_MODE_BINARY}:
+                return normalized
+        return cls._feature_mode()
+
+    def _resolve_token(self) -> str | None:
+        if self._token:
+            return self._token
+
+        env_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        cleaned = env_token.strip() if isinstance(env_token, str) else ""
+        if cleaned:
+            return cleaned
+
+        try:
+            return github_service.get_github_issue_token()
+        except RuntimeError:
+            return None
+
+    @staticmethod
+    def _ensure_gh_available() -> None:
+        try:
+            subprocess.run(["gh", "--version"], check=True, capture_output=True, text=True)
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            raise ReleaseManagementError("GitHub CLI is unavailable; install/authenticate gh first") from exc
+
+    def _run_gh_json(self, args: list[str]) -> Any:
+        self._ensure_gh_available()
+        completed = subprocess.run(
+            ["gh", *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip() or "gh command failed"
+            raise ReleaseManagementError(message)
+        output = completed.stdout.strip()
+        if not output:
+            return []
+        return json.loads(output)
+
+    def _run_gh(self, args: list[str]) -> str:
+        self._ensure_gh_available()
+        completed = subprocess.run(["gh", *args], check=False, capture_output=True, text=True)
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip() or "gh command failed"
+            raise ReleaseManagementError(message)
+        return completed.stdout.strip()
+
+    def _should_use_binary_first(self) -> bool:
+        resolved = self.resolve_execution_mode(self._mode)
+        return resolved == EXECUTION_MODE_BINARY
+
+    def _can_use_suite_api(self) -> bool:
+        return bool(self._resolve_token()) and self._feature_enabled()
+
+    def list_issues(self, repository: RepositoryRef, *, state: str = "open") -> list[dict[str, Any]]:
+        """List issues using suite API first unless binary mode is selected."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token:
+            issues = list(
+                github_service.fetch_repository_issues(
+                    token=token,
+                    owner=repository.owner,
+                    name=repository.name,
+                    state=state,
+                )
+            )
+            return [item for item in issues if "pull_request" not in item]
+
+        query = "number,title,state,url,author"
+        rows = self._run_gh_json(
+            [
+                "issue",
+                "list",
+                "--repo",
+                repository.slug,
+                "--state",
+                state,
+                "--json",
+                query,
+            ]
+        )
+        return rows if isinstance(rows, list) else []
+
+    def create_issue(self, repository: RepositoryRef, *, title: str, body: str) -> str:
+        """Create an issue through suite API with binary fallback."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token:
+            response = github_service.create_issue(
+                repository.owner,
+                repository.name,
+                token=token,
+                title=title,
+                body=body,
+            )
+            if response is not None:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    return str(payload.get("html_url") or payload.get("url") or "")
+
+        return self._run_gh(
+            [
+                "issue",
+                "create",
+                "--repo",
+                repository.slug,
+                "--title",
+                title,
+                "--body",
+                body,
+                "--json",
+                "url",
+                "--jq",
+                ".url",
+            ]
+        )
+
+    def list_pull_requests(self, repository: RepositoryRef, *, state: str = "open") -> list[dict[str, Any]]:
+        """List pull requests through suite API with gh fallback."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token:
+            return list(
+                github_service.fetch_repository_pull_requests(
+                    token=token,
+                    owner=repository.owner,
+                    name=repository.name,
+                    state=state,
+                )
+            )
+
+        query = "number,title,state,url,isDraft"
+        rows = self._run_gh_json(
+            ["pr", "list", "--repo", repository.slug, "--state", state, "--json", query]
+        )
+        return rows if isinstance(rows, list) else []
+
+    def create_release(self, repository: RepositoryRef, *, tag: str, title: str, notes: str) -> str:
+        """Create a GitHub release via gh CLI."""
+
+        return self._run_gh(
+            [
+                "release",
+                "create",
+                tag,
+                "--repo",
+                repository.slug,
+                "--title",
+                title,
+                "--notes",
+                notes,
+            ]
+        )
+
+    def list_releases(self, repository: RepositoryRef, *, limit: int = 20) -> list[dict[str, Any]]:
+        """List releases via gh CLI JSON output."""
+
+        rows = self._run_gh_json(
+            [
+                "release",
+                "list",
+                "--repo",
+                repository.slug,
+                "--limit",
+                str(limit),
+                "--json",
+                "tagName,name,isDraft,isLatest,publishedAt,url",
+            ]
+        )
+        return rows if isinstance(rows, list) else []
+
+
+__all__ = [
+    "EXECUTION_MODE_BINARY",
+    "EXECUTION_MODE_SUITE",
+    "RELEASE_MANAGEMENT_FEATURE_SLUG",
+    "ReleaseManagementClient",
+    "ReleaseManagementError",
+    "RepositoryRef",
+]
