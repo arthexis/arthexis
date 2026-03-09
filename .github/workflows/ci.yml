@@ -284,6 +284,11 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           ruff check --select E9,F823 .
+      - name: Run import contracts on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          lint-imports
       - name: Decide whether to run integration tests
         id: integration_gate
         uses: actions/github-script@v8
