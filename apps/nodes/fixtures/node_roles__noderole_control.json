@@ -8,7 +8,7 @@
       "acronym": "CTRL",
       "description": "Single-Device Testing & Special Task Appliances",
       "default_upgrade_policy": [
-        "Fast Lane"
+        "Stable"
       ]
     }
   }
