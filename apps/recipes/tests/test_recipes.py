@@ -394,14 +394,18 @@ def test_execute_creates_recipe_product():
         script="result = {'ok': True}",
     )
 
-    execution = recipe.execute("alpha", mode="fast")
+    execution = recipe.execute("alpha", "beta", mode="fast")
 
     product = RecipeProduct.objects.get(recipe=recipe)
     assert execution.result == {"ok": True}
-    assert product.input_args == ["alpha"]
-    assert product.input_kwargs == {"mode": "fast"}
+    assert product.input_args == [
+        Recipe.PRODUCT_REDACTION_PLACEHOLDER,
+        Recipe.PRODUCT_REDACTION_PLACEHOLDER,
+    ]
+    assert product.input_kwargs == {"mode": Recipe.PRODUCT_REDACTION_PLACEHOLDER}
     assert product.result == '{"ok": true}'
     assert product.format_detected == Recipe.RecipeFormat.PYTHON
+    assert product.resolved_script == Recipe.PRODUCT_REDACTION_PLACEHOLDER
 
 
 @pytest.mark.django_db
