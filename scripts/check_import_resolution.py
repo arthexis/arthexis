@@ -25,6 +25,8 @@ OPTIONAL_MODULES = {
     "pwd",
     "resource",
 }
+OPTIONAL_IMPORT_MARKER = "optional-import"
+OPTIONAL_IMPORT_HELPERS = {"optional_import", "optional_import_block"}
 
 
 def _prepare_django() -> None:
@@ -84,7 +86,7 @@ class ImportCollector(ast.NodeVisitor):
         self.type_checking_stack.pop()
 
     def visit_Try(self, node: ast.Try) -> None:
-        optional = any(self._is_import_error_handler(handler) for handler in node.handlers)
+        optional = self._is_explicit_optional_try(node)
         self.optional_import_stack.append(optional)
         self.generic_visit(node)
         self.optional_import_stack.pop()
@@ -159,6 +161,32 @@ class ImportCollector(ast.NodeVisitor):
 
     def _skip_node(self) -> bool:
         return any(self.type_checking_stack) or any(self.optional_import_stack)
+
+    def _is_explicit_optional_try(self, node: ast.Try) -> bool:
+        """Return ``True`` when a ``try`` block explicitly marks optional imports."""
+
+        has_import_error_handler = any(self._is_import_error_handler(handler) for handler in node.handlers)
+        if not has_import_error_handler:
+            return False
+        return any(self._is_optional_marker_statement(statement) for statement in node.body)
+
+    @staticmethod
+    def _is_optional_marker_statement(statement: ast.stmt) -> bool:
+        """Return ``True`` if a statement marks the enclosing ``try`` as optional."""
+
+        if not isinstance(statement, ast.Expr):
+            return False
+
+        if isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str):
+            return OPTIONAL_IMPORT_MARKER in statement.value.value
+
+        if not isinstance(statement.value, ast.Call):
+            return False
+
+        func = statement.value.func
+        if isinstance(func, ast.Name):
+            return func.id in OPTIONAL_IMPORT_HELPERS
+        return False
 
     @staticmethod
     def _is_type_checking(node: ast.expr) -> bool:
