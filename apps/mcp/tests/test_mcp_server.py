@@ -258,6 +258,25 @@ def test_mcp_tools_call_rejects_when_missing_api_key() -> None:
 
 
 @pytest.mark.django_db
+def test_authenticate_key_migrates_legacy_sha256_hash() -> None:
+    """Authenticating a legacy key should transparently upgrade its stored hash."""
+
+    user = get_user_model().objects.create_user(username="legacy-hash-user")
+    key, plain_key = McpApiKey.objects.create_for_user(user=user, label="tests")
+
+    legacy_hash = McpApiKey.objects._build_legacy_hash(plain_key)
+    key.key_hash = legacy_hash
+    key.save(update_fields=["key_hash"])
+
+    authenticated = McpApiKey.objects.authenticate_key(plain_key)
+
+    assert authenticated is not None
+    key.refresh_from_db()
+    assert key.key_hash != legacy_hash
+    assert key.key_hash == McpApiKey.objects._build_key_hash(plain_key)
+
+
+@pytest.mark.django_db
 def test_security_group_check_rejects_user_without_membership() -> None:
     """Group-protected tools should reject users outside required groups."""
 
