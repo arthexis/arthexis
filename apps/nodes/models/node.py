@@ -39,8 +39,8 @@ from apps.sigils.fields import SigilShortAutoField
 from apps.users.models import Profile
 from utils import revision
 
-from ..features import NodeFeature, NodeFeatureMixin
-from ..networking import NodeNetworkingMixin
+from .features import NodeFeature, NodeFeatureMixin
+from .networking import NodeNetworkingMixin
 from .role import NodeRole
 from .utils import ROLE_RENAMES, _format_upgrade_body, _upgrade_in_progress
 
