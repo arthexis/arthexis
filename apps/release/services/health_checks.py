@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.core.management.base import CommandError
 
-from apps.release import release as release_utils
+import apps.release as release_utils
 from apps.release.models import PackageRelease
 
 

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from apps.release import release
+import apps.release as release
 from apps.release.services import builder
 from apps.release.domain import release_tasks
 
@@ -19,13 +19,13 @@ def _mock_git_status(monkeypatch: pytest.MonkeyPatch, output: str) -> None:
 def test_git_clean_ignores_branch_ahead(monkeypatch: pytest.MonkeyPatch):
     _mock_git_status(monkeypatch, "## main...origin/main [ahead 2]\n")
 
-    assert release._git_clean() is True  # noqa: SLF001
+    assert builder._git_clean() is True  # noqa: SLF001
     assert release_tasks._is_clean_repository() is True  # noqa: SLF001
 
 def test_git_clean_detects_working_tree_changes(monkeypatch: pytest.MonkeyPatch):
     _mock_git_status(monkeypatch, " M apps/release/services/__init__.py\n")
 
-    assert release._git_clean() is False  # noqa: SLF001
+    assert builder._git_clean() is False  # noqa: SLF001
     assert release_tasks._is_clean_repository() is False  # noqa: SLF001
 
 def test_promote_rejects_dirty_repo_without_stash(monkeypatch: pytest.MonkeyPatch):

@@ -32,7 +32,10 @@ from django.utils.translation import gettext as _
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.nodes.models import NetMessage, Node
-from apps.release import release as release_utils
+import apps.release as release_utils
+from apps.release import git_utils
+from apps.release.services import builder as release_builder
+from apps.release.services import uploader as release_uploader
 from apps.release.models import PackageRelease
 from apps.repos.models import GitHubToken
 from utils import revision
@@ -840,7 +843,7 @@ def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
     parsed = _parse_github_repository(repo_url)
     if parsed:
         return parsed
-    remote_url = release_utils._git_remote_url()
+    remote_url = git_utils.git_remote_url("origin", use_push_url=True) or git_utils.git_remote_url("origin")
     if remote_url:
         parsed = _parse_github_repository(remote_url)
         if parsed:
@@ -861,7 +864,7 @@ def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
         _append_log(log_path, f"Created git tag {tag_name}")
     else:
         _append_log(log_path, f"Git tag {tag_name} already exists")
-    release_utils._push_tag(tag_name, release.to_package())
+    release_uploader._push_tag(tag_name)
     _append_log(log_path, f"Pushed git tag {tag_name} to origin")
     return tag_name
 
@@ -1218,7 +1221,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     except Exception as exc:
         sync_error = exc
 
-    if not release_utils._git_clean():
+    if not release_builder._git_clean():
         dirty_entries = _collect_dirty_files()
         files = [entry["path"] for entry in dirty_entries]
         fixture_files = [
