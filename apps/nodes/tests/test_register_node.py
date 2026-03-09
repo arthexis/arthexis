@@ -244,7 +244,7 @@ def test_get_local_refreshes_self_node_mac_on_mismatch(monkeypatch, caplog):
     Node._local_cache.clear()
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
 
-    caplog.set_level(logging.WARNING, logger="apps.nodes.models.core.node")
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     local = Node.get_local()
 
     assert local is not None
@@ -320,7 +320,7 @@ def test_get_local_keeps_self_node_mac_when_runtime_mac_is_in_use(monkeypatch, c
     Node._local_cache.clear()
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
 
-    caplog.set_level(logging.WARNING, logger="apps.nodes.models.core.node")
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     local = Node.get_local()
 
     assert local is not None

@@ -17,7 +17,7 @@ from apps.base.models import Entity
 from apps.core.notifications import LcdChannel
 from apps.sigils.fields import SigilShortAutoField
 
-from ..features import NodeFeature
+from .features import NodeFeature
 from .node import Node
 from .role import NodeRole
 
