@@ -16,9 +16,9 @@ class NameRepresentationMixin:
 
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
 ROLE_ACRONYMS: dict[str, str] = {
-    "Terminal": "TERM",
+    "Terminal": "TRMN",
     "Control": "CTRL",
-    "Satellite": "SATL",
+    "Satellite": "STLT",
     "Watchtower": "WTTW",
     "Constellation": "CONS",
 }

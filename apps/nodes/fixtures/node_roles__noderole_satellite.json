@@ -5,7 +5,7 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "Satellite",
-      "acronym": "SATL",
+      "acronym": "STLT",
       "description": "Multi-Device Edge, Network & Data Acquisition",
       "default_upgrade_policy": [
         "Stable"
