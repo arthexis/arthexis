@@ -62,6 +62,10 @@ class ProjectAdminActionTests(TestCase):
         self.assertTrue(
             ProjectItem.objects.filter(
                 project=self.project,
+                content_type=ContentType.objects.get_for_model(
+                    self.favorite,
+                    for_concrete_model=False,
+                ),
                 object_id=str(self.favorite.pk),
             ).exists()
         )
@@ -108,6 +112,7 @@ class ProjectBundleTests(TestCase):
         imported_project = Project.objects.create(name="Bundle B")
         fileobj = io.BytesIO(export_response.content)
         with zipfile.ZipFile(fileobj, "r") as archive:
+            self.assertIn("project.json", archive.namelist())
             self.assertIn("objects.json", archive.namelist())
             self.assertIn("items.json", archive.namelist())
 
@@ -127,6 +132,53 @@ class ProjectBundleTests(TestCase):
         self.assertEqual(import_response.status_code, 200)
         self.assertEqual(imported_project.items.count(), 1)
 
+
+    def test_bundle_import_invalid_zip_shows_error(self):
+        """Regression: invalid archives should not raise 500 errors."""
+
+        response = self.client.post(
+            reverse("admin:projects_project_bundle_import", args=[self.project.pk]),
+            {
+                "bundle_file": SimpleUploadedFile(
+                    "bundle.zip",
+                    b"not-a-zip",
+                    content_type="application/zip",
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unable to import project bundle")
+
+    def test_bundle_view_requires_project_permissions(self):
+        """Regression: users without project perms must not access bundle routes."""
+
+        limited_user = get_user_model().objects.create_user(
+            username="limited",
+            email="limited@example.com",
+            password="password",
+            is_staff=True,
+            is_superuser=False,
+        )
+        self.client.force_login(limited_user)
+
+        bundle_response = self.client.get(
+            reverse("admin:projects_project_bundle", args=[self.project.pk])
+        )
+        import_response = self.client.post(
+            reverse("admin:projects_project_bundle_import", args=[self.project.pk]),
+            {
+                "bundle_file": SimpleUploadedFile(
+                    "bundle.zip",
+                    b"not-a-zip",
+                    content_type="application/zip",
+                )
+            },
+        )
+
+        self.assertEqual(bundle_response.status_code, 403)
+        self.assertEqual(import_response.status_code, 403)
 
     def test_bundle_view_shows_project_metadata_and_export_section(self):
         """Regression: bundle view should show project details and export controls."""

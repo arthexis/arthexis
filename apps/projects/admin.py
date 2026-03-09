@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import zipfile
+
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
@@ -13,6 +16,9 @@ from django.utils.translation import gettext_lazy as _
 from apps.locals.user_data import EntityModelAdmin
 from apps.projects.models import Project, ProjectItem
 from apps.projects.services import build_project_bundle_response, import_project_bundle
+
+
+BUNDLE_VIEW_NAME = "admin:projects_project_bundle"
 
 
 class ProjectItemInline(admin.TabularInline):
@@ -65,16 +71,26 @@ class ProjectAdmin(EntityModelAdmin):
         """Expose link to bundle view from project change form."""
 
         extra_context = extra_context or {}
-        extra_context["bundle_url"] = reverse("admin:projects_project_bundle", args=[object_id])
+        extra_context["bundle_url"] = reverse(BUNDLE_VIEW_NAME, args=[object_id])
         return super().change_view(
             request, object_id, form_url=form_url, extra_context=extra_context
         )
 
+    def _get_project_for_bundle(self, request: HttpRequest, object_id: str) -> Project:
+        """Load project and enforce object-level view/change permissions."""
+
+        project = get_object_or_404(Project, pk=object_id)
+        if not self.has_view_or_change_permission(request, obj=project):
+            raise PermissionDenied
+        return project
+
     def bundle_view(self, request: HttpRequest, object_id: str) -> HttpResponse:
         """Render and update bundle membership for linked instances."""
 
-        project = get_object_or_404(Project, pk=object_id)
+        project = self._get_project_for_bundle(request, object_id)
         if request.method == "POST" and request.POST.get("_bundle_selection") == "1":
+            if not self.has_change_permission(request, obj=project):
+                raise PermissionDenied
             selected_item_ids = set(request.POST.getlist("selected_items"))
             removable_items = project.items.exclude(pk__in=selected_item_ids)
             removed_count = removable_items.count()
@@ -91,7 +107,7 @@ class ProjectAdmin(EntityModelAdmin):
                     _("No bundle items were removed."),
                     level=messages.INFO,
                 )
-            return redirect("admin:projects_project_bundle", object_id)
+            return redirect(BUNDLE_VIEW_NAME, object_id)
 
         items = project.items.select_related("content_type")
         context = {
@@ -100,7 +116,7 @@ class ProjectAdmin(EntityModelAdmin):
             "project": project,
             "items": items,
             "title": _("Project bundle: %(name)s") % {"name": project.name},
-            "bundle_url": reverse("admin:projects_project_bundle", args=[project.pk]),
+            "bundle_url": reverse(BUNDLE_VIEW_NAME, args=[project.pk]),
             "change_url": reverse("admin:projects_project_change", args=[project.pk]),
             "export_url": reverse("admin:projects_project_bundle_export", args=[project.pk]),
             "import_url": reverse("admin:projects_project_bundle_import", args=[project.pk]),
@@ -110,35 +126,37 @@ class ProjectAdmin(EntityModelAdmin):
     def bundle_export_view(self, request: HttpRequest, object_id: str) -> HttpResponse:
         """Return a ZIP response for the selected project bundle."""
 
-        project = get_object_or_404(Project, pk=object_id)
+        project = self._get_project_for_bundle(request, object_id)
         return build_project_bundle_response(project)
 
     def bundle_import_view(self, request: HttpRequest, object_id: str) -> HttpResponse:
         """Import a ZIP bundle into the selected project and redirect."""
 
-        project = get_object_or_404(Project, pk=object_id)
+        project = self._get_project_for_bundle(request, object_id)
         if request.method != "POST":
-            return redirect("admin:projects_project_bundle", object_id)
+            return redirect(BUNDLE_VIEW_NAME, object_id)
+        if not self.has_change_permission(request, obj=project):
+            raise PermissionDenied
         bundle_file = request.FILES.get("bundle_file")
         if bundle_file is None:
             self.message_user(request, _("Select a ZIP file to import."), level=messages.ERROR)
-            return redirect("admin:projects_project_bundle", object_id)
+            return redirect(BUNDLE_VIEW_NAME, object_id)
         try:
             imported_objects, linked = import_project_bundle(project, bundle_file)
-        except (ValidationError, ValueError, KeyError):
+        except (ValidationError, ValueError, KeyError, zipfile.BadZipFile, json.JSONDecodeError):
             self.message_user(
                 request,
                 _("Unable to import project bundle. Verify the ZIP structure and data."),
                 level=messages.ERROR,
             )
-            return redirect("admin:projects_project_bundle", object_id)
+            return redirect(BUNDLE_VIEW_NAME, object_id)
         self.message_user(
             request,
             _("Imported %(objects)d objects and linked %(links)d items.")
             % {"objects": imported_objects, "links": linked},
             level=messages.SUCCESS,
         )
-        return redirect("admin:projects_project_bundle", object_id)
+        return redirect(BUNDLE_VIEW_NAME, object_id)
 
 
 @admin.register(ProjectItem)

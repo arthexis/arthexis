@@ -9,6 +9,7 @@ import zipfile
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.core.serializers import deserialize, serialize
 from django.db import transaction
 from django.http import HttpResponse
@@ -50,7 +51,8 @@ def build_project_bundle_response(project: Project) -> HttpResponse:
 
     serialized_objects = []
     for model_class, object_ids in grouped_ids.items():
-        objects = model_class._default_manager.filter(pk__in=object_ids)
+        manager = getattr(model_class, "all_objects", model_class._default_manager)
+        objects = manager.filter(pk__in=object_ids)
         serialized_objects.extend(json.loads(serialize("json", objects)))
 
     project_payload = {
@@ -78,9 +80,22 @@ def import_project_bundle(project: Project, bundle_file) -> tuple[int, int]:
         objects_payload = json.loads(bundle.read(ARCHIVE_OBJECTS_FILE).decode("utf-8"))
         items_payload = json.loads(bundle.read(ARCHIVE_ITEMS_FILE).decode("utf-8"))
 
+    allowed_models = {
+        item_data.get("model", "")
+        for item_data in items_payload
+        if isinstance(item_data, dict) and "." in item_data.get("model", "")
+    }
+
     imported_objects = 0
+    pk_remap: dict[tuple[str, str], str] = {}
     for deserialized in deserialize("json", json.dumps(objects_payload)):
+        instance = deserialized.object
+        if instance._meta.label_lower not in allowed_models:
+            raise ValidationError(f"Unsupported model in bundle: {instance._meta.label_lower}")
+        old_pk = str(instance.pk)
+        instance.pk = None
         deserialized.save()
+        pk_remap[(instance._meta.label_lower, old_pk)] = str(instance.pk)
         imported_objects += 1
 
     linked = 0
@@ -93,10 +108,15 @@ def import_project_bundle(project: Project, bundle_file) -> tuple[int, int]:
             content_type = ContentType.objects.get_by_natural_key(app_label, model_name)
         except ContentType.DoesNotExist:
             continue
+        model_class = content_type.model_class()
+        if model_class is None:
+            continue
+        object_id = str(item_data.get("object_id", ""))
+        remapped_object_id = pk_remap.get((model_class._meta.label_lower, object_id), object_id)
         _, created = ProjectItem.objects.get_or_create(
             project=project,
             content_type=content_type,
-            object_id=str(item_data.get("object_id", "")),
+            object_id=remapped_object_id,
             defaults={"note": item_data.get("note", "")},
         )
         if created:

@@ -512,6 +512,13 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
                 )
                 return None
             project = get_object_or_404(Project, pk=project_id)
+            if not request.user.has_perm("projects.change_project", project):
+                self.message_user(
+                    request,
+                    _("You do not have permission to modify this project."),
+                    level=messages.ERROR,
+                )
+                return None
             content_type = ContentType.objects.get_for_model(
                 queryset.model,
                 for_concrete_model=False,
