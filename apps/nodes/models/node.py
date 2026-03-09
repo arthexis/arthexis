@@ -56,6 +56,21 @@ logger = logging.getLogger(__name__)
 local_registration_logger = get_register_local_node_logger()
 
 
+def _redact_mac_for_log(mac: str | None) -> str:
+    """Return a deterministic, non-plaintext MAC token for logging."""
+
+    if not mac:
+        return ""
+
+    normalized = "".join(char.lower() for char in str(mac) if char.isalnum())
+    if not normalized:
+        return "***REDACTED***"
+
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(normalized.encode("utf-8"))
+    return f"***REDACTED***-{digest.finalize().hex()[:12]}"
+
+
 class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     """Information about a running node in the network."""
 
@@ -301,7 +316,11 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                     node.mac_address = stored_mac
                     logger.warning(
                         "nodes.Node.get_local detected MAC mismatch for self node and could not update due to MAC uniqueness conflict",
-                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                        extra={
+                            "runtime_mac_redacted": _redact_mac_for_log(mac),
+                            "stored_mac_redacted": _redact_mac_for_log(stored_mac),
+                            "node_id": node.pk,
+                        },
                         exc_info=True,
                     )
                     if transaction.get_connection().in_atomic_block:
@@ -316,13 +335,21 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                     should_cache = False
                     logger.warning(
                         "nodes.Node.get_local could not save MAC update for self node due to a database error",
-                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                        extra={
+                            "runtime_mac_redacted": _redact_mac_for_log(mac),
+                            "stored_mac_redacted": _redact_mac_for_log(stored_mac),
+                            "node_id": node.pk,
+                        },
                         exc_info=True,
                     )
                 else:
                     logger.warning(
                         "nodes.Node.get_local refreshed stale self-node MAC address",
-                        extra={"runtime_mac": mac, "stored_mac": stored_mac, "node_id": node.pk},
+                        extra={
+                            "runtime_mac_redacted": _redact_mac_for_log(mac),
+                            "stored_mac_redacted": _redact_mac_for_log(stored_mac),
+                            "node_id": node.pk,
+                        },
                     )
 
             if should_cache:

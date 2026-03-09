@@ -327,3 +327,50 @@ def test_get_local_keeps_self_node_mac_when_runtime_mac_is_in_use(monkeypatch, c
     assert local.hostname == "other-node"
     self_node.refresh_from_db()
     assert self_node.mac_address == "00:11:22:33:44:55"
+
+
+@pytest.mark.django_db
+def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
+    """MAC values in Node.get_local warnings must never be logged in clear text."""
+
+    self_node = Node.objects.create(
+        hostname="self-node",
+        mac_address="00:11:22:33:44:55",
+        current_relation=Node.Relation.SELF,
+    )
+    Node.objects.create(
+        hostname="other-node",
+        mac_address="aa:bb:cc:dd:ee:ff",
+        current_relation=Node.Relation.PEER,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
+    Node.get_local()
+
+    conflict_records = [
+        rec
+        for rec in caplog.records
+        if "could not update due to MAC uniqueness conflict" in rec.getMessage()
+    ]
+    assert conflict_records
+    record = conflict_records[-1]
+    assert getattr(record, "runtime_mac_redacted", "").startswith("***REDACTED***-")
+    assert getattr(record, "stored_mac_redacted", "").startswith("***REDACTED***-")
+    assert not hasattr(record, "runtime_mac")
+    assert not hasattr(record, "stored_mac")
+    assert "aa:bb:cc:dd:ee:ff" not in caplog.text
+    assert "00:11:22:33:44:55" not in caplog.text
+
+
+def test_redact_mac_for_log_masks_plaintext_value():
+    """Node MAC log redaction should be deterministic and avoid plain text output."""
+
+    from apps.nodes.models.node import _redact_mac_for_log
+
+    redacted = _redact_mac_for_log("AA-BB-CC-DD-EE-FF")
+
+    assert redacted.startswith("***REDACTED***-")
+    assert "aa" not in redacted.lower()
+    assert _redact_mac_for_log("aabbccddeeff") == redacted
