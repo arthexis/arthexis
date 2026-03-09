@@ -117,3 +117,42 @@ class AdminStaffTasksTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], f"{reverse('admin:system-startup-report')}?q=hello+world")
+
+    def test_reports_runner_hides_superuser_only_reports_from_staff_user(self):
+        """Reports runner should not expose superuser-only report routes to staff users."""
+
+        user_model = get_user_model()
+        staff_user = user_model.objects.create_user(
+            username="staffer",
+            email="staffer@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.get(reverse("admin:system-reports"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "System Upgrade Report")
+
+    def test_reports_runner_rejects_superuser_only_report_selection_for_staff_user(self):
+        """Reports runner should reject direct submission for superuser-only report routes."""
+
+        user_model = get_user_model()
+        staff_user = user_model.objects.create_user(
+            username="staffer2",
+            email="staffer2@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.post(
+            reverse("admin:system-reports"),
+            {"report": "system-upgrade-report", "params": ""},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        messages = list(response.context["messages"])
+        self.assertTrue(any("do not have access" in str(message) for message in messages))
