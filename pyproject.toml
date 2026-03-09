@@ -125,6 +125,7 @@ Homepage = "https://arthexis.com"
 [project.optional-dependencies]
 ci = [
   "black==26.1.0",
+  "import-linter==2.5",
   "playwright==1.58.0",
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",
