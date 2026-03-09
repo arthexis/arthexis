@@ -1,0 +1,16 @@
+{% load i18n %}
+<div class="module security-alerts-widget">
+  <h2>{% trans "Security Alerts" %}</h2>
+  {% if alerts %}
+    <ul>
+      {% for alert in alerts %}
+        <li class="security-alert security-alert--{{ alert.severity }}">
+          <strong>{{ alert.severity|title }}</strong>: {{ alert.message }}
+          <a href="{{ alert.remediation_url }}">{% trans "Fix" %}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="help">{% trans "No active security alerts." %}</p>
+  {% endif %}
+</div>
