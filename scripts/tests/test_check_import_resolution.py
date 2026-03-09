@@ -70,3 +70,31 @@ def test_relative_from_package_init_without_export_stays_unresolved(tmp_path: Pa
 
     assert len(collector.issues) == 1
     assert collector.issues[0].module == "get_revision"
+
+
+def test_relative_from_package_mixed_names_only_reports_unresolved(tmp_path: Path) -> None:
+    """Multi-name imports should still report names missing from __init__ and filesystem."""
+
+    package_dir = tmp_path / "apps" / "core" / "tasks" / "auto_upgrade"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text(
+        "__all__ = ['exported_name']\n",
+        encoding="utf-8",
+    )
+    (package_dir / "sibling_module.py").write_text("VALUE = 1\n", encoding="utf-8")
+    module_path = package_dir / "tasks.py"
+    module_path.write_text(
+        "from . import exported_name, sibling_module, missing_name\n",
+        encoding="utf-8",
+    )
+
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    collector = check_import_resolution.ImportCollector(
+        file_path=module_path,
+        package="apps.core.tasks.auto_upgrade",
+    )
+
+    collector.visit(tree)
+
+    assert len(collector.issues) == 1
+    assert collector.issues[0].module == "missing_name"
