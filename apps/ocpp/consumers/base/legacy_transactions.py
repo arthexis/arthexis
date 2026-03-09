@@ -9,10 +9,10 @@ from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
-from .... import store
-from ....models import Transaction
-from ....utils import _parse_ocpp_timestamp
-from ..identity import _extract_vehicle_identifier
+from ... import store
+from ...models import Transaction
+from ...utils import _parse_ocpp_timestamp
+from .identity import _extract_vehicle_identifier
 
 logger = logging.getLogger(__name__)
 

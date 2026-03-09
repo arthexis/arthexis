@@ -8,8 +8,8 @@ from django.utils import timezone
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.energy.models import CustomerAccount
 
-from .... import store
-from ....models import Transaction
+from ... import store
+from ...models import Transaction
 
 logger = logging.getLogger(__name__)
 

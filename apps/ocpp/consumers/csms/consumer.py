@@ -85,14 +85,14 @@ from apps.ocpp.consumers.base.identity import (
     _resolve_client_ip,
 )
 from apps.ocpp.utils import _parse_ocpp_timestamp
-from apps.ocpp.consumers.base.consumer.actions_metering import MeteringActionsMixin
-from apps.ocpp.consumers.base.consumer.actions_notifications import NotificationActionsMixin
-from apps.ocpp.consumers.base.consumer.actions_transactions import TransactionActionsMixin
-from apps.ocpp.consumers.base.consumer.connection_flow import ConnectionFlowMixin
-from apps.ocpp.consumers.base.consumer.legacy_transactions import LegacyTransactionHandlersMixin
-from apps.ocpp.consumers.base.consumer.rfid import RfidMixin
-from apps.ocpp.consumers.base.consumer.connection import ConnectionHandler
-from apps.ocpp.consumers.base.consumer.forwarding import ForwardingHandler
+from apps.ocpp.consumers.base.actions_metering import MeteringActionsMixin
+from apps.ocpp.consumers.base.actions_notifications import NotificationActionsMixin
+from apps.ocpp.consumers.base.actions_transactions import TransactionActionsMixin
+from apps.ocpp.consumers.base.connection_flow import ConnectionFlowMixin
+from apps.ocpp.consumers.base.legacy_transactions import LegacyTransactionHandlersMixin
+from apps.ocpp.consumers.base.rfid import RfidMixin
+from apps.ocpp.consumers.base.connection import ConnectionHandler
+from apps.ocpp.consumers.base.forwarding import ForwardingHandler
 from apps.ocpp.consumers.csms.handlers.metering import MeteringHandlersMixin
 from apps.ocpp.consumers.csms.handlers.notifications import (
     NotificationHandlersMixin as CsmsNotificationHandlersMixin,

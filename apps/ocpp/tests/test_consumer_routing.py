@@ -7,7 +7,7 @@ import pytest
 
 from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
-from apps.ocpp.consumers.base.consumer.routing import ActionRouter
+from apps.ocpp.consumers.base.routing import ActionRouter
 
 
 @pytest.fixture(autouse=True)
