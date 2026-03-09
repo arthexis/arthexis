@@ -63,13 +63,13 @@ def test_discover_subcommand_refreshes_suite_tests(monkeypatch) -> None:
         "apps.tests.management.commands.test.discover_suite_tests",
         lambda: [
             {
-                "node_id": "apps/tests/tests/test_test_management_command.py::test_discover_subcommand_refreshes_suite_tests",
+                "node_id": "apps/tests/test_test_management_command.py::test_discover_subcommand_refreshes_suite_tests",
                 "name": "test_discover_subcommand_refreshes_suite_tests",
-                "module_path": "apps.tests.tests.test_test_management_command",
+                "module_path": "apps.tests.test_test_management_command",
                 "app_label": "tests",
                 "class_name": "",
                 "marks": ["regression"],
-                "file_path": "apps/tests/tests/test_test_management_command.py",
+                "file_path": "apps/tests/test_test_management_command.py",
                 "is_parameterized": False,
             }
         ],
@@ -80,7 +80,7 @@ def test_discover_subcommand_refreshes_suite_tests(monkeypatch) -> None:
     created = captured["items"]
     assert len(created) == 1
     assert created[0].node_id == (
-        "apps/tests/tests/test_test_management_command.py::"
+        "apps/tests/test_test_management_command.py::"
         "test_discover_subcommand_refreshes_suite_tests"
     )
     assert created[0].app_label == "tests"
@@ -98,7 +98,7 @@ def test_normalize_marks_filters_builtin_keywords() -> None:
 def test_infer_app_label_from_apps_path() -> None:
     """Infer app labels from repository paths under ``apps/``."""
 
-    assert _infer_app_label("apps/tests/tests/test_test_management_command.py") == "tests"
+    assert _infer_app_label("apps/tests/test_test_management_command.py") == "tests"
     assert _infer_app_label("tests/test_misc.py") == ""
 
 
@@ -106,15 +106,15 @@ def test_infer_app_label_from_apps_path() -> None:
 def test_discover_suite_tests_truncates_long_node_ids(monkeypatch) -> None:
     """Regression: discovery should cap node ids to the SuiteTest field length."""
 
-    long_node_id = "apps/tests/tests/test_long.py::test_case[" + ("x" * 700) + "]"
+    long_node_id = "apps/tests/test_long.py::test_case[" + ("x" * 700) + "]"
     payload = {
         "returncode": 0,
         "items": [
             {
                 "node_id": long_node_id,
                 "name": "test_case",
-                "file_path": "apps/tests/tests/test_long.py",
-                "module_path": "apps.tests.tests.test_long",
+                "file_path": "apps/tests/test_long.py",
+                "module_path": "apps.tests.test_long",
                 "class_name": "",
                 "marks": ["regression"],
             }
@@ -138,7 +138,7 @@ def test_discover_subcommand_is_atomic_on_bulk_create_failure(monkeypatch) -> No
     """Regression: failed inserts should rollback deletions during refresh."""
 
     SuiteTest.objects.create(
-        node_id="apps/tests/tests/test_existing.py::test_existing",
+        node_id="apps/tests/test_existing.py::test_existing",
         name="test_existing",
     )
 
@@ -146,13 +146,13 @@ def test_discover_subcommand_is_atomic_on_bulk_create_failure(monkeypatch) -> No
         "apps.tests.management.commands.test.discover_suite_tests",
         lambda: [
             {
-                "node_id": "apps/tests/tests/test_new.py::test_new",
+                "node_id": "apps/tests/test_new.py::test_new",
                 "name": "test_new",
-                "module_path": "apps.tests.tests.test_new",
+                "module_path": "apps.tests.test_new",
                 "app_label": "tests",
                 "class_name": "",
                 "marks": [],
-                "file_path": "apps/tests/tests/test_new.py",
+                "file_path": "apps/tests/test_new.py",
                 "is_parameterized": False,
             }
         ],
@@ -171,5 +171,5 @@ def test_discover_subcommand_is_atomic_on_bulk_create_failure(monkeypatch) -> No
     monkeypatch.setattr(SuiteTest.objects, "bulk_create", original_bulk_create)
 
     assert SuiteTest.objects.filter(
-        node_id="apps/tests/tests/test_existing.py::test_existing"
+        node_id="apps/tests/test_existing.py::test_existing"
     ).exists()
