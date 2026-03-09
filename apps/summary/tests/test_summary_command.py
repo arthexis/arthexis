@@ -16,18 +16,18 @@ from apps.screens.startup_notifications import (
     LCD_LOW_LOCK_FILE,
     LCD_RUNTIME_LOCK_FILE,
 )
-from apps.summary.constants import LLM_SUMMARY_AUTOMATION_FEATURE_SLUG
+from apps.summary.constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from apps.summary.services import get_summary_config
 
 
 @pytest.fixture
-def llm_summary_automation_feature_enabled() -> Feature:
+def llm_summary_suite_feature_enabled() -> Feature:
     """Enable the suite gate used by summary automation tests."""
 
     feature, _ = Feature.objects.update_or_create(
-        slug=LLM_SUMMARY_AUTOMATION_FEATURE_SLUG,
+        slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
         defaults={
-            "display": "LLM Summary Automation",
+            "display": "LLM Summary Suite",
             "source": Feature.Source.CUSTOM,
             "is_enabled": True,
         },
@@ -92,7 +92,7 @@ def test_summary_command_enabled_turns_on_prereqs(tmp_path: Path) -> None:
 
 @pytest.mark.django_db
 def test_summary_command_run_now_executes_task_before_status(
-    tmp_path: Path, llm_summary_automation_feature_enabled: Feature
+    tmp_path: Path, llm_summary_suite_feature_enabled: Feature
 ) -> None:
     """The --run-now flag should execute the summary task before status output."""
 
@@ -116,7 +116,7 @@ def test_summary_command_run_now_executes_task_before_status(
 
 @pytest.mark.django_db
 def test_summary_command_run_now_refreshes_config_before_reporting(
-    tmp_path: Path, llm_summary_automation_feature_enabled: Feature
+    tmp_path: Path, llm_summary_suite_feature_enabled: Feature
 ) -> None:
     """The --run-now flag should print refreshed config fields updated by the task."""
 
@@ -154,6 +154,14 @@ def test_summary_command_run_now_skips_when_suite_feature_disabled(tmp_path: Pat
     """Regression: run-now should short-circuit when suite automation gate is disabled."""
 
     Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+    Feature.objects.update_or_create(
+        slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        defaults={
+            "display": "LLM Summary Suite",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": False,
+        },
+    )
 
     out = StringIO()
     with (
@@ -163,7 +171,7 @@ def test_summary_command_run_now_skips_when_suite_feature_disabled(tmp_path: Pat
         call_command("summary", "--run-now", stdout=out)
 
     output = out.getvalue()
-    assert f"Suite feature '{LLM_SUMMARY_AUTOMATION_FEATURE_SLUG}' is disabled" in output
+    assert f"Suite feature '{LLM_SUMMARY_SUITE_FEATURE_SLUG}' is disabled" in output
     assert "Run now: skipped:suite-feature-disabled" in output
     run_now.assert_not_called()
 
@@ -174,6 +182,15 @@ def test_summary_command_run_now_override_when_suite_feature_disabled(tmp_path: 
     """The --allow-disabled-feature flag should bypass the suite gate."""
 
     Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+
+    Feature.objects.update_or_create(
+        slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        defaults={
+            "display": "LLM Summary Suite",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": False,
+        },
+    )
 
     out = StringIO()
     with (
@@ -193,7 +210,7 @@ def test_summary_command_run_now_override_when_suite_feature_disabled(tmp_path: 
 
 @pytest.mark.django_db
 def test_summary_command_run_now_executes_when_suite_feature_enabled(
-    tmp_path: Path, llm_summary_automation_feature_enabled: Feature
+    tmp_path: Path, llm_summary_suite_feature_enabled: Feature
 ) -> None:
     """Regression: enabling suite automation gate should restore run-now execution."""
 

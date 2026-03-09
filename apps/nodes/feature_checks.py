@@ -230,6 +230,7 @@ def _check_user_desktop(feature: "NodeFeature", node: Optional["Node"]):
 @feature_checks.register("llm-summary")
 def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     from .models import Node
+    from apps.features.utils import is_suite_feature_enabled
     from apps.summary.node_features import get_llm_summary_prereq_state
     from apps.summary.services import get_summary_config, resolve_model_path
 
@@ -255,7 +256,10 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         or None
     )
 
+    suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
+
     details = [
+        f"Suite gate: {'ok' if suite_enabled else 'disabled'}",
         f"LCD lock: {'ok' if prereqs['lcd_enabled'] else 'missing'}",
         f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
         f"Config active: {'yes' if config.is_active else 'no'}",
@@ -265,7 +269,10 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     ]
 
     success = (
-        prereqs["lcd_enabled"] and prereqs["celery_enabled"] and config.is_active
+        suite_enabled
+        and prereqs["lcd_enabled"]
+        and prereqs["celery_enabled"]
+        and config.is_active
     )
     if success and model_path_exists:
         level = messages.SUCCESS

@@ -46,6 +46,27 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "llm-summary-suite": (
+        FeatureParameterDefinition(
+            key="model_path",
+            label=_("Model path"),
+            help_text=_("Directory that contains local LLM summary model files."),
+            default="",
+        ),
+        FeatureParameterDefinition(
+            key="model_command",
+            label=_("Model command"),
+            help_text=_("Optional command used to invoke the local summary model."),
+            default="",
+        ),
+        FeatureParameterDefinition(
+            key="timeout_seconds",
+            label=_("Model timeout (seconds)"),
+            help_text=_("Prompt timeout used when invoking the local summary model command."),
+            choices=tuple((str(value), str(value)) for value in (60, 120, 180, 240, 300, 600)),
+            default="240",
+        ),
+    ),
     "celery-workers": (
         FeatureParameterDefinition(
             key="worker_count",
