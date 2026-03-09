@@ -34,6 +34,8 @@ class AdminStaffTasksTests(TestCase):
         self.assertIn(">Rules<", content)
         self.assertIn(">System<", content)
         self.assertIn(">Reports<", content)
+        self.assertIn("admin-home-net-message__icon", content)
+        self.assertNotIn(">Net message<", content)
 
     def test_staff_member_can_toggle_dashboard_task_visibility(self):
         """Staff users can hide a dashboard task from their own top-button row."""
