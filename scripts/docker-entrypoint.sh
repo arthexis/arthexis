@@ -34,18 +34,14 @@ if ! preset_role="$(canonicalize_role "$ARTHEXIS_ROLE_PRESET")"; then
     exit 1
 fi
 
-node_role_was_explicit=false
-if [ -n "${NODE_ROLE:-}" ]; then
-    node_role_was_explicit=true
-fi
-
-if [ "$node_role_was_explicit" = false ]; then
-    export NODE_ROLE="$preset_role"
-fi
+export NODE_ROLE="${NODE_ROLE:-$preset_role}"
 
 effective_role="${NODE_ROLE:-$preset_role}"
 if canonical_effective_role="$(canonicalize_role "$effective_role" 2>/dev/null)"; then
     effective_role="$canonical_effective_role"
+else
+    echo "Invalid NODE_ROLE or ARTHEXIS_ROLE_PRESET. Effective role '$effective_role' is not a valid role." >&2
+    exit 1
 fi
 
 set_toggle_default() {
@@ -57,13 +53,7 @@ set_toggle_default() {
     fi
 }
 
-set_toggle_default ENABLE_CELERY false
-set_toggle_default ENABLE_LCD_SCREEN false
-set_toggle_default ENABLE_RFID_SERVICE false
-set_toggle_default ENABLE_CAMERA_SERVICE false
-set_toggle_default ENABLE_CONTROL false
-
-case "$preset_role" in
+case "$effective_role" in
     Terminal|Satellite|Watchtower)
         set_toggle_default ENABLE_CELERY true
         ;;
@@ -73,6 +63,12 @@ case "$preset_role" in
         set_toggle_default ENABLE_CONTROL true
         ;;
 esac
+
+set_toggle_default ENABLE_CELERY false
+set_toggle_default ENABLE_LCD_SCREEN false
+set_toggle_default ENABLE_RFID_SERVICE false
+set_toggle_default ENABLE_CAMERA_SERVICE false
+set_toggle_default ENABLE_CONTROL false
 
 mkdir -p "$BASE_DIR/.locks"
 printf '%s\n' "$effective_role" > "$BASE_DIR/.locks/role.lck"
