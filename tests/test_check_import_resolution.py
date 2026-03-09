@@ -70,3 +70,18 @@ except ImportError:
     )
 
     assert issues == []
+
+
+def test_legacy_importerror_guard_with_raise_remains_allowed() -> None:
+    """Legacy guards that re-raise a domain error stay optional during transition."""
+
+    issues = _collect_issues(
+        """
+try:
+    import definitely_missing_module_xyz
+except ImportError as exc:
+    raise RuntimeError("missing optional dependency") from exc
+"""
+    )
+
+    assert issues == []

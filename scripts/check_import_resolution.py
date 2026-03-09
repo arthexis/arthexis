@@ -86,7 +86,7 @@ class ImportCollector(ast.NodeVisitor):
         self.type_checking_stack.pop()
 
     def visit_Try(self, node: ast.Try) -> None:
-        optional = self._is_explicit_optional_try(node)
+        optional = self._is_explicit_optional_try(node) or self._is_legacy_guarded_optional_try(node)
         self.optional_import_stack.append(optional)
         self.generic_visit(node)
         self.optional_import_stack.pop()
@@ -169,6 +169,20 @@ class ImportCollector(ast.NodeVisitor):
         if not has_import_error_handler:
             return False
         return any(self._is_optional_marker_statement(statement) for statement in node.body)
+
+    def _is_legacy_guarded_optional_try(self, node: ast.Try) -> bool:
+        """Allow legacy ``ImportError`` guards that explicitly re-raise failures.
+
+        During transition to marker-based opt-ins, existing patterns that catch
+        ``ImportError`` and immediately raise a domain-specific error should
+        continue to be treated as optional import guards.
+        """
+
+        return any(
+            self._is_import_error_handler(handler)
+            and any(isinstance(statement, ast.Raise) for statement in handler.body)
+            for handler in node.handlers
+        )
 
     @staticmethod
     def _is_optional_marker_statement(statement: ast.stmt) -> bool:
