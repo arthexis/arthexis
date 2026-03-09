@@ -1,6 +1,8 @@
 from django.contrib import admin, messages
+from django.db.models import Count, Max, Q
 from django.shortcuts import redirect
 from django.urls import path, reverse
+from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
 from apps.emails.models import EmailOutbox
@@ -11,10 +13,12 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
     form = EmailOutboxAdminForm
     actions = ["test_outboxes"]
     list_display = (
+        "username",
         "owner_label",
+        "collector_count",
+        "last_used_at",
         "host",
         "port",
-        "username",
         "use_tls",
         "use_ssl",
         "is_enabled",
@@ -38,6 +42,31 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
             },
         ),
     )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                total_collectors=Count("bridge__inbox__collectors", distinct=True),
+                enabled_collectors=Count(
+                    "bridge__inbox__collectors",
+                    filter=Q(bridge__inbox__collectors__is_enabled=True),
+                    distinct=True,
+                ),
+                last_transaction_at=Max("transactions__processed_at"),
+            )
+        )
+
+    @admin.display(description=_("Collectors"), ordering="enabled_collectors")
+    def collector_count(self, obj):
+        enabled = getattr(obj, "enabled_collectors", 0)
+        total = getattr(obj, "total_collectors", 0)
+        return f"{enabled}/{total}"
+
+    @admin.display(description=_("Last used"), ordering="last_transaction_at")
+    def last_used_at(self, obj):
+        return obj.last_transaction_at or "-"
 
     @admin.action(description="Test selected Outbox")
     def test_outboxes(self, request, queryset):

@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
+from django.db.models import Count, Max, Q
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -18,12 +19,14 @@ class EmailCollectorAdmin(EntityModelAdmin):
     list_display = (
         "name",
         "inbox",
+        "is_enabled",
         "subject",
         "sender",
         "body",
         "fragment",
         "notification_mode",
     )
+    list_filter = ("is_enabled", "notification_mode")
     search_fields = (
         "name",
         "subject",
@@ -88,12 +91,45 @@ class EmailInboxAdmin(
     OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
     form = EmailInboxAdminForm
-    list_display = ("owner_label", "username", "host", "protocol", "is_enabled")
+    list_display = (
+        "username",
+        "owner_label",
+        "collector_count",
+        "last_used_at",
+        "host",
+        "protocol",
+        "is_enabled",
+    )
     actions = ["test_connection", "search_inbox", "test_collectors"]
     change_actions = ["test_collectors_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
     change_form_template = "admin/core/emailinbox/change_form.html"
     inlines = [EmailCollectorInline]
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                total_collectors=Count("collectors", distinct=True),
+                enabled_collectors=Count(
+                    "collectors",
+                    filter=Q(collectors__is_enabled=True),
+                    distinct=True,
+                ),
+                last_transaction_at=Max("transactions__processed_at"),
+            )
+        )
+
+    @admin.display(description=_("Collectors"), ordering="enabled_collectors")
+    def collector_count(self, obj):
+        enabled = getattr(obj, "enabled_collectors", 0)
+        total = getattr(obj, "total_collectors", 0)
+        return f"{enabled}/{total}"
+
+    @admin.display(description=_("Last used"), ordering="last_transaction_at")
+    def last_used_at(self, obj):
+        return obj.last_transaction_at or "-"
 
     def get_urls(self):
         urls = super().get_urls()
