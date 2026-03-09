@@ -369,3 +369,40 @@ def test_cp_simulator_serial_defaults_to_cp_path_when_not_provided(
     params = get_simulator_state(cp=1, refresh_file=True)["params"]
     assert params["cp_path"] == "CP-FALLBACK"
     assert params["serial_number"] == "CP-FALLBACK"
+
+
+def test_cp_simulator_rejects_disabled_backend_selection(logged_in_client, monkeypatch):
+    """Posted backend should be ignored when it is not in runtime-enabled choices."""
+
+    monkeypatch.setattr(
+        "apps.ocpp.views.simulator.get_simulator_backend_choices",
+        lambda: (("arthexis", "arthexis"),),
+    )
+
+    response = logged_in_client.post(
+        reverse("ocpp:cp-simulator"),
+        data={"action": "select-backend", "simulator_backend": "mobilityhouse"},
+    )
+
+    assert response.status_code == 200
+    assert response.context["selected_backend"] == "arthexis"
+    assert response.wsgi_request.session.get("cp_simulator_backend") != "mobilityhouse"
+
+
+def test_cp_simulator_shows_message_when_no_backends_available(logged_in_client, monkeypatch):
+    """Simulator controls should gracefully handle a fully disabled backend configuration."""
+
+    monkeypatch.setattr("apps.ocpp.views.simulator.get_simulator_backend_choices", lambda: ())
+
+    response = logged_in_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    assert response.context["backends_available"] is False
+
+    post_response = logged_in_client.post(
+        reverse("ocpp:cp-simulator"),
+        data={"action": "select-backend", "simulator_backend": "arthexis"},
+    )
+
+    assert post_response.status_code == 200
+    assert "No simulator backends are enabled" in post_response.context["message"]

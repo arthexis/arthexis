@@ -19,11 +19,12 @@
     <input type="hidden" name="action" value="select-backend">
     <input type="hidden" name="simulator_slot" value="{{ simulator_slot }}">
     <label for="simulator-backend-select">Simulator backend</label>
-    <select id="simulator-backend-select" name="simulator_backend" onchange="this.form.submit()">
+    <select id="simulator-backend-select" name="simulator_backend" onchange="this.form.submit()" {% if not backends_available %}disabled{% endif %}>
       {% for value, label in backend_choices %}
       <option value="{{ value }}" {% if value == selected_backend %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
+    {% if not backends_available %}<small class="text-warning ms-2">No simulator backends are enabled.</small>{% endif %}
   </form>
 </div>
 <div class="mt-3"
