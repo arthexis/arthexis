@@ -9,7 +9,6 @@ from utils.enabled_apps_lock import get_enabled_apps_lock_path
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_application_save_updates_enabled_apps_lock(settings):
     """Regression: saving application enablement rewrites the enabled-app lock file."""
 
@@ -27,7 +26,6 @@ def test_application_save_updates_enabled_apps_lock(settings):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_application_delete_updates_enabled_apps_lock(settings):
     """Regression: deleting an enabled app rewrites the lock file without that entry."""
 
@@ -45,7 +43,6 @@ def test_application_delete_updates_enabled_apps_lock(settings):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_refresh_enabled_apps_lock_keeps_manifest_apps_without_rows(monkeypatch, settings):
     """Regression: manifest apps without Application rows should stay in lock output."""
 
@@ -65,7 +62,6 @@ def test_refresh_enabled_apps_lock_keeps_manifest_apps_without_rows(monkeypatch,
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(monkeypatch, settings):
     """Regression: disabled labels should remove matching manifest app entries."""
 

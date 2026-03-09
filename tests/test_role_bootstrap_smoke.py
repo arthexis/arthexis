@@ -9,7 +9,7 @@ import sys
 import pytest
 
 
-pytestmark = [pytest.mark.critical, pytest.mark.regression]
+pytestmark = [pytest.mark.critical]
 
 
 _ROLE_TEST_CASES = [

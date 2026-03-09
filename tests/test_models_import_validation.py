@@ -10,7 +10,7 @@ from types import ModuleType
 import pytest
 from django.conf import settings
 
-pytestmark = [pytest.mark.critical, pytest.mark.regression]
+pytestmark = [pytest.mark.critical]
 
 
 def _import_models_module_if_present(app_label: str) -> ModuleType | None:

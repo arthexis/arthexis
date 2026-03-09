@@ -547,7 +547,6 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 @patch("apps.evergo.models.user.EvergoUser.fetch_order_detail")
 def test_reload_customer_from_remote_rebuilds_customer_and_order(
     mock_fetch_order_detail,
@@ -699,7 +698,6 @@ def test_reload_customer_from_remote_renames_stale_snapshot_before_name_fallback
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 @patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_customers):
     """Customer snapshot should remain if remote fallback reload fails."""

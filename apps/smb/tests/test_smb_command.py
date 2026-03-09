@@ -10,7 +10,7 @@ from apps.smb.models import SMBPartition, SMBServer
 
 
 @pytest.mark.django_db
-def test_smb_configure_and_create_and_list_regression() -> None:
+def test_smb_configure_and_create_and_list() -> None:
     """Regression: smb command should persist server and partition mappings."""
 
     call_command(
@@ -55,7 +55,7 @@ def test_smb_configure_and_create_and_list_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_smb_discover_outputs_detected_partitions_regression() -> None:
+def test_smb_discover_outputs_detected_partitions() -> None:
     """Regression: smb discover should print parsed lsblk partition rows."""
 
     fake_output = (
@@ -72,7 +72,7 @@ def test_smb_discover_outputs_detected_partitions_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_smb_create_does_not_set_last_discovered_at_regression() -> None:
+def test_smb_create_does_not_set_last_discovered_at() -> None:
     """Regression: manual partition creation should not stamp discovery time."""
 
     call_command(
@@ -101,7 +101,7 @@ def test_smb_create_does_not_set_last_discovered_at_regression() -> None:
     assert partition.last_discovered_at is None
 
 
-def test_smb_server_password_field_is_encrypted_regression() -> None:
+def test_smb_server_password_field_is_encrypted() -> None:
     """Regression: SMB server credentials should use encrypted model fields."""
 
     password_field = SMBServer._meta.get_field("password")

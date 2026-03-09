@@ -8,7 +8,7 @@ import pkgutil
 import apps
 import pytest
 
-pytestmark = [pytest.mark.critical, pytest.mark.regression]
+pytestmark = [pytest.mark.critical]
 
 # These modules are intentionally skipped because they depend on optional
 # platform/runtime services or have import-time side effects that are not

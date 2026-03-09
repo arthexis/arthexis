@@ -11,7 +11,6 @@ from django.apps import apps as django_apps
 from apps.features.models import Feature
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_enabled_suite_feature_cannot_be_deleted() -> None:
     """Regression: enabled suite features must be disabled before deletion."""
 

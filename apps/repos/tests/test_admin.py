@@ -7,7 +7,6 @@ from django.urls import reverse
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_github_token_admin_add_page_loads(client):
     """Regression: GitHub token add page renders successfully for admin users."""
 

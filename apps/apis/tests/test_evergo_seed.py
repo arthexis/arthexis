@@ -25,7 +25,7 @@ EXPECTED_METHOD_PATHS = {
 
 
 @pytest.mark.django_db
-def test_evergo_api_explorer_seeded_endpoints_regression() -> None:
+def test_evergo_api_explorer_seeded_endpoints() -> None:
     """Regression: migration should seed all Evergo integration endpoints."""
 
     api = APIExplorer.objects.get(name="Evergo API")
@@ -39,7 +39,7 @@ def test_evergo_api_explorer_seeded_endpoints_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_evergo_api_explorer_matches_model_endpoints_regression() -> None:
+def test_evergo_api_explorer_matches_model_endpoints() -> None:
     """Regression: seeded API explorer routes should include all endpoint constants used by the model."""
 
     api = APIExplorer.objects.get(name="Evergo API")
@@ -59,7 +59,7 @@ def test_evergo_api_explorer_matches_model_endpoints_regression() -> None:
 
 
 @pytest.mark.django_db
-def test_evergo_fixture_loaddata_is_idempotent_regression() -> None:
+def test_evergo_fixture_loaddata_is_idempotent() -> None:
     """Regression: loading Evergo endpoint fixture should update seeded rows without integrity errors."""
 
     api = APIExplorer.objects.get(name="Evergo API")
