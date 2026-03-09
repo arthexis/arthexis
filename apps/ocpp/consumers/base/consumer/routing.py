@@ -8,7 +8,7 @@ occur only inside delegated handlers on the consumer.
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from .csms.dispatch import build_action_registry
+from apps.ocpp.consumers.csms.dispatch import build_action_registry
 
 if TYPE_CHECKING:
     from . import CSMSConsumer

@@ -64,41 +64,41 @@ from apps.ocpp.evcs_discovery import (
     prioritise_ports,
     scan_open_ports,
 )
-from ....connection import (
+from apps.ocpp.consumers.connection import (
     RateLimitedConnectionMixin,
     SubprotocolConnectionMixin,
     WebsocketAuthMixin,
 )
-from ....constants import (
+from apps.ocpp.consumers.constants import (
     OCPP_CONNECT_RATE_LIMIT_FALLBACK,
     OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS,
     OCPP_VERSION_16,
     OCPP_VERSION_201,
     OCPP_VERSION_21,
 )
-from ...certificates import CertificatesMixin
-from ...dispatch import DispatchMixin
-from ...identity import (
+from apps.ocpp.consumers.base.certificates import CertificatesMixin
+from apps.ocpp.consumers.base.dispatch import DispatchMixin
+from apps.ocpp.consumers.base.identity import (
     IdentityMixin,
     _extract_vehicle_identifier,
     _register_log_names_for_identity,
     _resolve_client_ip,
 )
 from apps.ocpp.utils import _parse_ocpp_timestamp
-from ..actions_metering import MeteringActionsMixin
-from ..actions_notifications import NotificationActionsMixin
-from ..actions_transactions import TransactionActionsMixin
-from ..connection_flow import ConnectionFlowMixin
-from ..legacy_transactions import LegacyTransactionHandlersMixin
-from ..rfid import RfidMixin
-from ..connection import ConnectionHandler
-from ..forwarding import ForwardingHandler
-from .handlers.metering import MeteringHandlersMixin
-from .handlers.notifications import (
+from apps.ocpp.consumers.base.consumer.actions_metering import MeteringActionsMixin
+from apps.ocpp.consumers.base.consumer.actions_notifications import NotificationActionsMixin
+from apps.ocpp.consumers.base.consumer.actions_transactions import TransactionActionsMixin
+from apps.ocpp.consumers.base.consumer.connection_flow import ConnectionFlowMixin
+from apps.ocpp.consumers.base.consumer.legacy_transactions import LegacyTransactionHandlersMixin
+from apps.ocpp.consumers.base.consumer.rfid import RfidMixin
+from apps.ocpp.consumers.base.consumer.connection import ConnectionHandler
+from apps.ocpp.consumers.base.consumer.forwarding import ForwardingHandler
+from apps.ocpp.consumers.csms.handlers.metering import MeteringHandlersMixin
+from apps.ocpp.consumers.csms.handlers.notifications import (
     NotificationHandlersMixin as CsmsNotificationHandlersMixin,
 )
-from .handlers.status import StatusHandlersMixin
-from .transport import CSMSTransportMixin
+from apps.ocpp.consumers.csms.handlers.status import StatusHandlersMixin
+from apps.ocpp.consumers.csms.transport import CSMSTransportMixin
 
 logger = logging.getLogger(__name__)
 
