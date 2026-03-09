@@ -141,16 +141,26 @@ def operations_security_alerts() -> list[SecurityAlert]:
 def build_security_alerts() -> list[dict[str, str]]:
     """Aggregate security alerts from all supported data sources."""
 
-    alerts = [
-        *expiring_remote_action_token_alerts(),
-        *credential_readiness_dashboard_rule_alerts(),
-        *operations_security_alerts(),
-    ]
+    alerts: list[SecurityAlert] = []
+    for source_name, collector in (
+        ("remote_action_tokens", expiring_remote_action_token_alerts),
+        ("credential_readiness", credential_readiness_dashboard_rule_alerts),
+        ("required_operations", operations_security_alerts),
+    ):
+        try:
+            alerts.extend(collector())
+        except Exception:
+            logger.exception("Security alert source %s failed", source_name)
+
+    severity_order = {"error": 0, "warning": 1, "info": 2}
     return [
         {
             "severity": alert.severity,
             "message": alert.message,
             "remediation_url": alert.remediation_url,
         }
-        for alert in alerts
+        for alert in sorted(
+            alerts,
+            key=lambda alert: severity_order.get(alert.severity, 99),
+        )
     ]
