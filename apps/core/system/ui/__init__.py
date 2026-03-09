@@ -45,6 +45,7 @@ STARTUP_REPORT_DEFAULT_LIMIT = 50
 STARTUP_CLOCK_DRIFT_THRESHOLD = timedelta(minutes=5)
 
 
+
 @dataclass(frozen=True)
 class SystemField:
     """Metadata describing a single entry on the system admin page."""
@@ -391,3 +392,15 @@ def _read_startup_report(
         "limit": normalized_limit,
         "clock_warning": clock_warning,
     }
+
+# Deprecated compatibility re-exports.
+# Prefer importing these from ``apps.core.system_ui``.
+build_nginx_report = _build_nginx_report
+build_services_report = _build_services_report
+build_system_fields = _build_system_fields
+format_timestamp = _format_timestamp
+gather_info = _gather_info
+read_startup_report = _read_startup_report
+suite_uptime_details = _suite_uptime_details
+system_boot_time = _system_boot_time
+systemd_unit_status = _systemd_unit_status

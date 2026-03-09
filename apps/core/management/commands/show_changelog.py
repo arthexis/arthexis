@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core import changelog
-from apps.core.system.ui import _format_timestamp
+from apps.core.system_ui import format_timestamp
 
 
 class Command(BaseCommand):
@@ -53,7 +53,7 @@ class Command(BaseCommand):
             return
 
         for commit in commits:
-            timestamp = _format_timestamp(commit.authored_at)
+            timestamp = format_timestamp(commit.authored_at)
             description = f"[{commit.short_sha}] {commit.summary}"
             if commit.author:
                 description = f"{description} — {commit.author}"

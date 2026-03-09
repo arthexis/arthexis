@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from apps.cards.reader import validate_rfid_value
 from apps.core.notifications import NotificationManager, notify
-from apps.core.system.ui import _format_timestamp
+from apps.core.system_ui import format_timestamp
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
     _get_auto_upgrade_periodic_task,
@@ -247,10 +247,10 @@ def run_check_next_upgrade(*, stdout, **_kwargs) -> None:
         except Exception:
             pass
 
-    next_display = _format_timestamp(next_run_dt) if next_run_dt is not None else _auto_upgrade_next_check()
+    next_display = format_timestamp(next_run_dt) if next_run_dt is not None else _auto_upgrade_next_check()
     if not next_display:
         next_display = "Unavailable"
-    last_display = _format_timestamp(last_run_dt) if last_run_dt is not None else "Unavailable"
+    last_display = format_timestamp(last_run_dt) if last_run_dt is not None else "Unavailable"
 
     mode_info = _read_auto_upgrade_mode(base_dir)
     mode_value = str(mode_info.get("mode", "version"))
