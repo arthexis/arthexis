@@ -2,11 +2,13 @@ import json
 from pathlib import Path
 
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 from apps.core.analytics import build_usage_summary
 from apps.core.models import UsageEvent
 
 
+@absorbed_into_command("analytics")
 class Command(BaseCommand):
     help = "Export usage analytics summaries to JSON."
 

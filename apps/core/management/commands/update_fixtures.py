@@ -8,11 +8,13 @@ from django.apps import apps
 from django.conf import settings
 from django.core import serializers
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 from parler.models import TranslatableModel
 
 from apps.core.fixtures import ensure_seed_data_flags
 
 
+@absorbed_into_command("fixtures")
 class Command(BaseCommand):
     """Persist database changes back to fixture files."""
 

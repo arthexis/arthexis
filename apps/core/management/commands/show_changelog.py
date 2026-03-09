@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
+from apps.core.management.deprecation import absorbed_into_command
 
 from apps.core import changelog
 from apps.core.system_ui import format_timestamp
 
 
+@absorbed_into_command("changelog")
 class Command(BaseCommand):
     """Display recent changelog entries from the latest section."""
 

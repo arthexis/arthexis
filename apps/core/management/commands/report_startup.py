@@ -2,10 +2,12 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 
 from apps.core.system_ui import read_startup_report
 
 
+@absorbed_into_command("startup")
 class Command(BaseCommand):
     """Display startup activity captured by suite lifecycle scripts."""
 

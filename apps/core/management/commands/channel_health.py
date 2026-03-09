@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from apps.core.management.deprecation import absorbed_into_command
 from redis import Redis
 from redis.exceptions import RedisError
 
@@ -26,6 +27,7 @@ def _mask_url(url: str) -> str:
     return parsed._replace(netloc=f"{auth}@{host}{port}").geturl()
 
 
+@absorbed_into_command("channels")
 class Command(BaseCommand):
     """Display current channel-layer backend and runtime websocket counters."""
 
