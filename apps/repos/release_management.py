@@ -45,11 +45,11 @@ class ReleaseManagementClient:
         self._mode = self._normalize_mode(mode)
 
     @staticmethod
-    def _normalize_mode(mode: str | None) -> str:
+    def _normalize_mode(mode: str | None) -> str | None:
         value = (mode or "").strip().lower()
         if value in {EXECUTION_MODE_BINARY, EXECUTION_MODE_SUITE}:
             return value
-        return EXECUTION_MODE_SUITE
+        return None
 
     @staticmethod
     def _feature_enabled() -> bool:
@@ -230,6 +230,7 @@ class ReleaseManagementClient:
             [
                 "release",
                 "create",
+                "--",
                 tag,
                 "--repo",
                 repository.slug,

@@ -37,3 +37,11 @@ def test_repo_command_requires_owner_name_format_for_repo_option():
 
     with pytest.raises(CommandError, match="owner/name"):
         call_command("repo", "--repo", "bad-format", "issues", "list")
+
+
+@pytest.mark.django_db
+def test_repo_command_wraps_malformed_repo_url_as_command_error():
+    """URL parse errors should surface as command validation failures."""
+
+    with pytest.raises(CommandError):
+        call_command("repo", "--repo", "https://github.com/owner", "issues", "list")

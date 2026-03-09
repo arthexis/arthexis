@@ -33,11 +33,6 @@ class Command(BaseCommand):
             choices=(EXECUTION_MODE_SUITE, EXECUTION_MODE_BINARY),
             help="Execution mode: suite (token/API first) or binary (gh/git first).",
         )
-        parser.add_argument(
-            "--token",
-            default="",
-            help="Optional GitHub token override for suite API operations.",
-        )
 
         subparsers = parser.add_subparsers(dest="resource", required=True)
 
@@ -65,10 +60,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         repository = self._resolve_repository(str(options.get("repo") or ""))
-        client = ReleaseManagementClient(
-            token=str(options.get("token") or ""),
-            mode=options.get("mode"),
-        )
+        client = ReleaseManagementClient(mode=options.get("mode"))
 
         resource = options["resource"]
         action = options["action"]
@@ -130,7 +122,10 @@ class Command(BaseCommand):
         cleaned = raw_repo.strip()
         if cleaned:
             if "://" in cleaned or cleaned.startswith("git@"):
-                owner, name = parse_repository_url(cleaned)
+                try:
+                    owner, name = parse_repository_url(cleaned)
+                except ValueError as exc:
+                    raise CommandError(str(exc)) from exc
             else:
                 parts = cleaned.split("/", 1)
                 if len(parts) != 2 or not parts[0] or not parts[1]:

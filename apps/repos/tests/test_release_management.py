@@ -102,3 +102,57 @@ def test_release_management_binary_mode_prefers_gh(monkeypatch):
 
     assert rows[0]["number"] == 11
     assert called["args"][0:2] == ["pr", "list"]
+
+
+@pytest.mark.django_db
+def test_release_management_uses_feature_mode_when_mode_not_explicit(monkeypatch):
+    """Client should honor feature metadata mode when explicit mode is omitted."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_feature_mode",
+        staticmethod(lambda: EXECUTION_MODE_BINARY),
+    )
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-3",
+    )
+
+    called: dict[str, Any] = {}
+
+    def fake_gh(self, args: list[str]) -> list[dict[str, Any]]:
+        called["args"] = args
+        return [{"number": 5, "title": "Feature mode", "state": "open"}]
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh_json", fake_gh)
+
+    client = ReleaseManagementClient()
+    rows = client.list_issues(RepositoryRef(owner="octo", name="demo"))
+
+    assert rows[0]["number"] == 5
+    assert called["args"][0:2] == ["issue", "list"]
+
+
+@pytest.mark.django_db
+def test_release_create_uses_double_dash_before_tag(monkeypatch):
+    """Release creation should prevent option injection through tag values."""
+
+    captured: dict[str, Any] = {}
+
+    def fake_run(self, args: list[str]) -> str:
+        captured["args"] = args
+        return "ok"
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh", fake_run)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    result = client.create_release(
+        RepositoryRef(owner="octo", name="demo"),
+        tag="-nasty",
+        title="v1",
+        notes="notes",
+    )
+
+    assert result == "ok"
+    assert captured["args"][0:4] == ["release", "create", "--", "-nasty"]
