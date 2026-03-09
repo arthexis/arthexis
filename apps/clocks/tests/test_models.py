@@ -6,7 +6,14 @@ from django.urls import reverse
 
 
 @pytest.mark.django_db
-def test_refresh_from_system_creates_and_updates_devices():
+def test_refresh_from_system_creates_and_updates_devices(monkeypatch):
+    """Refresh should create once and remain stable across identical scans."""
+
+    monkeypatch.setattr(
+        "apps.clocks.models.is_feature_active_for_node",
+        lambda *, node, slug: True,
+    )
+
     node = Node.objects.create(hostname="local")
     sample = """
          0 1 2 3 4 5 6 7 8 9 a b c d e f
@@ -30,7 +37,14 @@ def test_refresh_from_system_creates_and_updates_devices():
 
 
 @pytest.mark.django_db
-def test_refresh_from_system_removes_stale_devices():
+def test_refresh_from_system_removes_stale_devices(monkeypatch):
+    """Refresh should remove persisted devices absent from the latest scan."""
+
+    monkeypatch.setattr(
+        "apps.clocks.models.is_feature_active_for_node",
+        lambda *, node, slug: True,
+    )
+
     node = Node.objects.create(hostname="local")
     ClockDevice.objects.create(node=node, bus=2, address="0x10", description="Old", raw_info="")
 
