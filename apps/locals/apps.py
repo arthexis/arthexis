@@ -7,7 +7,7 @@ class LocalsConfig(AppConfig):
 
     def ready(self):
         from .admin import patch_admin_favorites
-        from .user_data import (
+        from .api import (
             patch_admin_import_export,
             patch_admin_user_datum,
             patch_admin_user_data_views,

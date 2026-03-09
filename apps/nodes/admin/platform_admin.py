@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.admin_mixins import EntityModelAdmin
 
 from ..models import Platform
 

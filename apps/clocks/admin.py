@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.discovery.services import record_discovery_item, start_discovery
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.admin_mixins import EntityModelAdmin
 from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 

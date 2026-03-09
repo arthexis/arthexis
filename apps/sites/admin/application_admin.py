@@ -8,7 +8,7 @@ from apps.app.models import (
     refresh_application_models,
 )
 from apps.links.models.reference import Reference
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.admin_mixins import EntityModelAdmin
 from utils.enabled_apps_lock import get_enabled_apps_lock_path
 
 from .filters import ApplicationInstalledListFilter

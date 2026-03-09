@@ -5,7 +5,7 @@ from .mixins import (
     SaveBeforeChangeAction,
     _build_credentials_actions,
 )
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.admin_mixins import EntityModelAdmin
 
 from . import site as site  # noqa: F401
 from .admin_notice_admin import AdminNoticeAdmin

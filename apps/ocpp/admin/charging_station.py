@@ -5,7 +5,7 @@ from django.contrib import admin
 
 from apps.core.admin import OwnableAdminMixin
 from apps.locale.models import Language
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.admin_mixins import EntityModelAdmin
 
 from ..models import Charger, ChargingStation
 from .charge_point.actions.authorization import AuthorizationActionsMixin

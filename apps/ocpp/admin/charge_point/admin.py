@@ -13,7 +13,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.core.admin import OwnableAdminMixin
 from apps.energy.models import EnergyTariff
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.admin_mixins import EntityModelAdmin
 
 from ... import store
 from ...models import Charger

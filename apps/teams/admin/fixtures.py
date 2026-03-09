@@ -1,6 +1,5 @@
-from apps.locals.user_data import (
-    EntityModelAdmin,
-    UserDatumAdminMixin,
+from apps.locals.admin_mixins import EntityModelAdmin, UserDatumAdminMixin
+from apps.locals.user_fixtures import (
     delete_user_fixture,
     dump_user_fixture,
     fixture_path,
