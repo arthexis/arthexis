@@ -27,12 +27,12 @@ from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
 from .ui import (
     STARTUP_REPORT_DEFAULT_LIMIT,
-    _build_nginx_report,
-    _build_services_report,
+    build_nginx_report,
+    build_services_report,
     _build_system_fields,
     _build_uptime_report,
     _gather_info,
-    _read_startup_report,
+    read_startup_report,
 )
 from .upgrade import (
     UPGRADE_CHANNEL_CHOICES,
@@ -311,7 +311,7 @@ def _system_startup_report_view(request):
     context.update(
         {
             "title": _("Startup Report"),
-            "startup_report": _read_startup_report(limit=limit),
+            "startup_report": read_startup_report(limit=limit),
             "startup_report_limit": limit,
             "startup_report_options": (10, 25, 50, 100, 200),
         }
@@ -335,7 +335,7 @@ def _system_services_report_view(request):
     context.update(
         {
             "title": _("Suite Services Report"),
-            "services_report": _build_services_report(),
+            "services_report": build_services_report(),
         }
     )
     return TemplateResponse(request, "admin/system_services_report.html", context)
@@ -346,7 +346,7 @@ def _system_nginx_report_view(request):
     context.update(
         {
             "title": _("NGINX Report"),
-            "nginx_report": _build_nginx_report(),
+            "nginx_report": build_nginx_report(),
         }
     )
     return TemplateResponse(request, "admin/system_nginx_report.html", context)

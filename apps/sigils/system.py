@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Callable, Optional
 
-from apps.core.system.ui import SystemField, _build_system_fields, _gather_info
+from apps.core.system_ui import SystemField, build_system_fields, gather_info
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
     _resolve_auto_upgrade_namespace,
@@ -47,9 +47,9 @@ def _export_field_value(field: SystemField) -> str:
 def get_system_sigil_values() -> dict[str, str]:
     """Expose system information in a format suitable for sigil lookups."""
 
-    info = _gather_info()
+    info = gather_info(_auto_upgrade_next_check)
     values: dict[str, str] = {}
-    for field in _build_system_fields(info):
+    for field in build_system_fields(info):
         exported = _export_field_value(field)
         raw_key = (field.sigil_key or "").strip()
         if not raw_key:
