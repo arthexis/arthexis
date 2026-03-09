@@ -28,7 +28,7 @@ communications tied to this project.
 
 ## Enforcement
 If you experience or witness unacceptable behavior, please report it by emailing
-security@arthexis.com. Reports will be reviewed promptly and treated confidentially.
+arthexis@gmail.com. Reports will be reviewed promptly and treated confidentially.
 
 Project maintainers are responsible for clarifying standards of acceptable behavior
 and may take appropriate and fair corrective action in response to any behavior they
