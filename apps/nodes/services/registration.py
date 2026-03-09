@@ -29,17 +29,18 @@ def _resolve_local_role_name() -> str:
         configured_role = env_role.title()
         return ROLE_RENAMES.get(configured_role, configured_role)
 
+    configured_role = getattr(settings, "NODE_ROLE", "")
+    configured_role = "" if configured_role is None else str(configured_role).strip()
+    if configured_role:
+        normalized_setting_role = configured_role.title()
+        return ROLE_RENAMES.get(normalized_setting_role, normalized_setting_role)
+
     role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
     if role_lock.exists():
         locked_role = role_lock.read_text().strip()
         if locked_role:
             normalized_lock_role = locked_role.title()
             return ROLE_RENAMES.get(normalized_lock_role, normalized_lock_role)
-
-    configured_role = str(getattr(settings, "NODE_ROLE", "")).strip()
-    if configured_role:
-        normalized_setting_role = configured_role.title()
-        return ROLE_RENAMES.get(normalized_setting_role, normalized_setting_role)
 
     return "Terminal"
 

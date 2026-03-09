@@ -261,8 +261,8 @@ def test_register_current_uses_role_lock_when_node_role_is_missing(settings, mon
 
 
 @pytest.mark.django_db
-def test_register_current_prefers_lock_over_stale_settings_node_role(settings, monkeypatch, tmp_path):
-    """Registration should re-read lock role even when settings.NODE_ROLE is stale."""
+def test_register_current_prefers_settings_node_role_over_lock(settings, monkeypatch, tmp_path):
+    """Registration should use settings.NODE_ROLE before legacy lock role."""
     monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
@@ -274,11 +274,11 @@ def test_register_current_prefers_lock_over_stale_settings_node_role(settings, m
     control_role, _ = NodeRole.objects.get_or_create(name="Control")
 
     settings.BASE_DIR = tmp_path
-    settings.NODE_ROLE = "Terminal"
+    settings.NODE_ROLE = "Control"
     monkeypatch.delenv("NODE_ROLE", raising=False)
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
-    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+    (lock_dir / "role.lck").write_text("Terminal", encoding="utf-8")
 
     node, created = Node.register_current(notify_peers=False)
 
