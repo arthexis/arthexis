@@ -158,3 +158,25 @@ def test_setup_collector_view_reports_non_validation_test_errors(admin_client, a
     assert response.status_code == 200
     messages = [str(message) for message in response.context["messages"]]
     assert "Mailbox unavailable" in messages
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_email_inbox_change_form_includes_setup_collector_link(admin_client, admin_user):
+    """The inbox change form should expose a direct link to the collector builder."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="change-link@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+
+    response = admin_client.get(
+        reverse("admin:emails_emailinbox_change", args=[inbox.pk])
+    )
+
+    assert response.status_code == 200
+    setup_url = reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
+    assert setup_url in response.rendered_content
