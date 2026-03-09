@@ -1,4 +1,4 @@
-"""Capture deterministic Django admin previews and emit lightweight image diagnostics."""
+"""Capture deterministic previews and emit lightweight image diagnostics."""
 
 from __future__ import annotations
 
@@ -12,21 +12,31 @@ from apps.playwright.preview_tool import analyze_preview_image
 
 
 class Command(BaseCommand):
-    """Login to Django admin with deterministic credentials and capture a screenshot."""
+    """Login with deterministic credentials and capture one or more screenshots."""
 
-    help = "Capture an admin preview screenshot and print a simple image health summary."
+    help = "Capture preview screenshots and print a simple image health summary."
 
     def add_arguments(self, parser):
         """Register CLI arguments for the preview command."""
 
         parser.add_argument("--base-url", default="http://127.0.0.1:8000", help="Server base URL.")
-        parser.add_argument("--path", default="/admin/", help="Admin path to capture after login.")
+        parser.add_argument(
+            "--path",
+            action="append",
+            dest="paths",
+            help="Path to capture after login. Repeat to capture multiple paths.",
+        )
         parser.add_argument("--username", default="admin", help="Deterministic admin username.")
         parser.add_argument("--password", default="admin123", help="Deterministic admin password.")
         parser.add_argument(
             "--output",
             default="media/previews/admin-preview.png",
-            help="Relative or absolute PNG output path.",
+            help="PNG output path for single-path capture.",
+        )
+        parser.add_argument(
+            "--output-dir",
+            default="media/previews",
+            help="Directory for multi-path capture outputs.",
         )
         parser.add_argument(
             "--engine",
@@ -35,51 +45,100 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        """Capture an admin screenshot and print diagnostics."""
+        """Capture screenshot(s) and print diagnostics for each artifact."""
 
         self._ensure_admin_user(username=options["username"], password=options["password"])
 
-        output = Path(options["output"])
-        if not output.is_absolute():
-            output = settings.BASE_DIR / output
-        output.parent.mkdir(parents=True, exist_ok=True)
+        paths = options.get("paths") or ["/admin/"]
+        captures = self._build_capture_targets(paths=paths, output=options["output"], output_dir=options["output_dir"])
 
         engines = [item.strip() for item in options["engine"].split(",") if item.strip()]
         if not engines:
             raise CommandError("At least one engine must be provided via --engine.")
 
+        for path, output in captures:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            self._capture_with_fallback(
+                base_url=options["base_url"].rstrip("/"),
+                path=path,
+                username=options["username"],
+                password=options["password"],
+                output=output,
+                engines=engines,
+            )
+            report = analyze_preview_image(output)
+            self.stdout.write(self.style.SUCCESS(f"Saved preview for {path} to: {output}"))
+            self.stdout.write(
+                "Image report: "
+                f"size={report.width}x{report.height}, "
+                f"brightness={report.mean_brightness}, "
+                f"white_ratio={report.white_pixel_ratio}, "
+                f"mostly_white={report.mostly_white()}"
+            )
+
+    def _build_capture_targets(
+        self,
+        *,
+        paths: list[str],
+        output: str,
+        output_dir: str,
+    ) -> list[tuple[str, Path]]:
+        """Build target output files for either single- or multi-path capture mode."""
+
+        if len(paths) == 1:
+            target = Path(output)
+            if not target.is_absolute():
+                target = settings.BASE_DIR / target
+            return [(paths[0], target)]
+
+        base_output_dir = Path(output_dir)
+        if not base_output_dir.is_absolute():
+            base_output_dir = settings.BASE_DIR / base_output_dir
+
+        targets: list[tuple[str, Path]] = []
+        for raw_path in paths:
+            slug = raw_path.strip("/").replace("/", "-") or "root"
+            targets.append((raw_path, base_output_dir / f"{slug}.png"))
+        return targets
+
+    def _capture_with_fallback(
+        self,
+        *,
+        base_url: str,
+        path: str,
+        username: str,
+        password: str,
+        output: Path,
+        engines: list[str],
+    ) -> None:
+        """Capture a screenshot by trying each engine in configured order."""
+
         last_error: Exception | None = None
         for engine in engines:
             try:
                 self._capture(
-                    base_url=options["base_url"].rstrip("/"),
-                    path=options["path"],
-                    username=options["username"],
-                    password=options["password"],
+                    base_url=base_url,
+                    path=path,
+                    username=username,
+                    password=password,
                     output=output,
                     engine=engine,
-                )
-                report = analyze_preview_image(output)
-                self.stdout.write(self.style.SUCCESS(f"Saved preview to: {output}"))
-                self.stdout.write(
-                    "Image report: "
-                    f"size={report.width}x{report.height}, "
-                    f"brightness={report.mean_brightness}, "
-                    f"white_ratio={report.white_pixel_ratio}, "
-                    f"mostly_white={report.mostly_white()}"
                 )
                 return
             except Exception as exc:
                 last_error = exc
-                self.stderr.write(f"Engine '{engine}' failed: {exc}")
+                self.stderr.write(f"Engine '{engine}' failed for {path}: {exc}")
 
-        raise CommandError(f"All preview engines failed. Last error: {last_error}")
+        raise CommandError(f"All preview engines failed for {path}. Last error: {last_error}")
 
     def _ensure_admin_user(self, *, username: str, password: str) -> None:
         """Create or update deterministic superuser credentials for preview automation."""
 
         user_model = get_user_model()
-        user, created = user_model.objects.get_or_create(username=username, defaults={"is_staff": True, "is_superuser": True})
+        user, created = user_model.objects.get_or_create(
+            username=username,
+            defaults={"is_staff": True, "is_superuser": True},
+        )
         if created:
             user.set_password(password)
             user.save(update_fields=["password"])
@@ -99,7 +158,7 @@ class Command(BaseCommand):
             user.save()
 
     def _capture(self, *, base_url: str, path: str, username: str, password: str, output: Path, engine: str) -> None:
-        """Use Playwright to login and save a screenshot from the requested admin page."""
+        """Use Playwright to login and save a screenshot from the requested page."""
 
         try:
             from playwright.sync_api import Error as PlaywrightError
