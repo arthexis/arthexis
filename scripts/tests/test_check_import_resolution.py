@@ -49,3 +49,24 @@ def test_relative_from_package_missing_name_stays_unresolved(tmp_path: Path) -> 
 
     assert len(collector.issues) == 1
     assert collector.issues[0].module == "get_revision"
+
+
+def test_relative_from_package_init_without_export_stays_unresolved(tmp_path: Path) -> None:
+    """Names not defined/re-exported by package __init__ should still fail."""
+
+    package_dir = tmp_path / "apps" / "core" / "tasks" / "auto_upgrade"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("__all__ = ['different_name']\n", encoding="utf-8")
+    module_path = package_dir / "tasks.py"
+    module_path.write_text("from . import get_revision\n", encoding="utf-8")
+
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    collector = check_import_resolution.ImportCollector(
+        file_path=module_path,
+        package="apps.core.tasks.auto_upgrade",
+    )
+
+    collector.visit(tree)
+
+    assert len(collector.issues) == 1
+    assert collector.issues[0].module == "get_revision"
