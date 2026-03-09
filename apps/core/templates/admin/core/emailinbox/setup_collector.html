@@ -1,0 +1,81 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .collector-setup-form .form-row .flex-container {
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .collector-setup-form .form-row input[type="text"],
+    .collector-setup-form .form-row input[type="email"],
+    .collector-setup-form .form-row input[type="number"],
+    .collector-setup-form .form-row textarea,
+    .collector-setup-form .form-row select {
+      box-sizing: border-box;
+      max-width: min(100%, 56rem);
+      width: 100%;
+    }
+
+    .collector-setup-form .form-row textarea {
+      min-height: 6rem;
+      resize: vertical;
+    }
+
+    .collector-setup-form .form-row .help {
+      max-width: 56rem;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <form method="post" novalidate class="collector-setup-form">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <p class="errornote">{{ form.non_field_errors }}</p>
+      {% endif %}
+
+      <fieldset class="module aligned">
+        <h2>{% trans "Step 1: Configure Collector" %}</h2>
+        {% for field in form.visible_fields %}
+          <div class="form-row{% if field.errors %} errors{% endif %}">
+            <div>
+              {{ field.errors }}
+              <div class="flex-container">
+                {{ field.label_tag }}
+                {{ field }}
+              </div>
+              {% if field.help_text %}
+                <div class="help">{{ field.help_text|safe }}</div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </fieldset>
+
+      <div class="submit-row">
+        <input type="submit" class="default" value="{% trans 'Save and run test' %}">
+        <a href="{{ change_url }}" class="closelink">{% trans "Back to inbox" %}</a>
+      </div>
+    </form>
+
+    <fieldset class="module aligned">
+      <h2>{% trans "Step 2: Review Test Results" %}</h2>
+      {% if results %}
+        <ul class="messagelist">
+          {% for message in results %}
+            <li class="success">
+              <strong>{% firstof message.subject '(no subject)' %}</strong>
+              <div class="help">{% firstof message.from '' %}</div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>{% trans "Run the test to preview matching messages." %}</p>
+      {% endif %}
+    </fieldset>
+  </div>
+{% endblock %}
