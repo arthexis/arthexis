@@ -80,3 +80,50 @@ def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, adm
     assert collector.name == "Updated Collector"
     assert collector.additional_inboxes.filter(pk=additional.pk).exists()
     assert "Match" in response.rendered_content
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_tool_requires_single_selection(admin_client):
+    """The setup collector tool rejects empty or multi-inbox selections."""
+
+    response = admin_client.post(
+        reverse("admin:emails_emailinbox_actions", kwargs={"tool": "setup_collector"}),
+        {"_selected_action": []},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    messages = list(response.context["messages"])
+    assert any("Select exactly one inbox to start setup." in str(message) for message in messages)
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_tool_rejects_multiple_selected_inboxes(admin_client, admin_user):
+    """The setup collector tool does not pick an arbitrary inbox from multiple selections."""
+
+    first = EmailInbox.objects.create(
+        user=admin_user,
+        username="first@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    second = EmailInbox.objects.create(
+        user=admin_user,
+        username="second@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+
+    response = admin_client.post(
+        reverse("admin:emails_emailinbox_actions", kwargs={"tool": "setup_collector"}),
+        {"_selected_action": [str(first.pk), str(second.pk)]},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    messages = list(response.context["messages"])
+    assert any("Select exactly one inbox to start setup." in str(message) for message in messages)

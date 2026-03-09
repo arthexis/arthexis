@@ -151,10 +151,14 @@ class EmailInboxAdmin(
     def setup_collector(self, request, queryset=None):
         """Open the collector setup wizard for a selected inbox."""
 
-        inbox = queryset.first() if queryset is not None else None
-        if inbox is None:
-            self.message_user(request, _("Select one inbox to start setup."), messages.ERROR)
+        if queryset is None or queryset.count() != 1:
+            self.message_user(
+                request,
+                _("Select exactly one inbox to start setup."),
+                messages.ERROR,
+            )
             return redirect(reverse("admin:emails_emailinbox_changelist"))
+        inbox = queryset.first()
         return redirect(self._setup_collector_url(inbox))
 
     setup_collector.label = _("Setup Collector")
