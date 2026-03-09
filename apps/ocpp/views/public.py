@@ -521,10 +521,7 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
-    events_connector = charger
-    if charger.connector_id is None and connector_overview:
-        events_connector = connector_overview[0]["charger"]
-    non_transaction_events = _important_non_transaction_events(charger, events_connector)
+    non_transaction_events = _important_non_transaction_events(charger, charger)
     show_connector_tabs = False
     show_connector_overview_cards = (
         charger.connector_id is None and connector_count > 1
@@ -594,7 +591,9 @@ def charger_status(request, cid, connector=None):
             "search_url": search_url,
             "configuration_url": configuration_url,
             "transactions_admin_url": transactions_admin_url,
-            "can_view_transaction_links": request.user.is_staff,
+            "can_view_transaction_links": bool(
+                request.user.is_staff and transactions_admin_url
+            ),
             "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
             "is_connected": is_connected,
             "is_idle": is_connected and not has_active_session,

@@ -2,6 +2,7 @@
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.urls import NoReverseMatch
 from django.urls import reverse
 from django.utils import timezone
 
@@ -70,8 +71,7 @@ def test_status_view_includes_non_transaction_events(client):
     events = response.context["non_transaction_events"]
     assert any(item["event"] == "Connected websocket" for item in events)
     assert any(
-        item["event"] == "Status" and item["details"] == "Charging"
-        for item in events
+        item["event"] == "Status" and item["details"] == "Charging" for item in events
     )
     assert all(item["severity"] in {"info", "warning", "error"} for item in events)
     assert not any("TransactionEvent" in str(item["event"]) for item in events)
@@ -118,3 +118,76 @@ def test_status_view_limits_sessions_to_5_entries(client):
 
     assert response.status_code == 200
     assert len(response.context["transactions"]) == 5
+
+
+@pytest.mark.django_db
+def test_status_view_aggregate_includes_events_from_all_connectors(client):
+    """Aggregate status view should include notable events from all connectors."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-all-connectors", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-ALL-CONNECTORS")
+    connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
+    connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_a.connector_id),
+        "Connected connector-a",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_b.connector_id),
+        "Connected connector-b",
+    )
+
+    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    details = {item["details"] for item in events}
+    assert "connector-a" in details
+    assert "connector-b" in details
+
+
+@pytest.mark.django_db
+def test_status_view_disables_event_admin_links_when_admin_urls_missing(
+    client, monkeypatch
+):
+    """Event rows should render without admin links when admin URLs are unavailable."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-no-admin", password="pass", is_staff=True
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(
+        charger_id="STATUS-EVENTS-NO-ADMIN", connector_id=1
+    )
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(
+        identity,
+        'StatusNotification processed: {"connectorId": 1, "status": "Charging", "transactionId": 1234}',
+    )
+    from apps.ocpp.views import public
+
+    original_reverse = public.reverse
+
+    def _reverse_without_admin(viewname, *args, **kwargs):
+        if viewname.startswith("admin:"):
+            raise NoReverseMatch("admin disabled")
+        return original_reverse(viewname, *args, **kwargs)
+
+    monkeypatch.setattr(public, "reverse", _reverse_without_admin)
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.context["transactions_admin_url"] is None
+    assert response.context["can_view_transaction_links"] is False
+    html = response.content.decode()
+    assert "1234" in html
+    assert "admin/ocpp/transaction/1234/change/" not in html
