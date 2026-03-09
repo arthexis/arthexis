@@ -14,7 +14,7 @@ from apps.ocpp.models import Charger
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
-from .. import persistence
+from apps.ocpp.consumers.csms import persistence
 
 
 class StatusHandlersMixin:

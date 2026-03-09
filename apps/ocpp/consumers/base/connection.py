@@ -7,7 +7,7 @@ methods that create/update ``Charger`` records and session metadata.
 
 from typing import TYPE_CHECKING
 
-from ....models import Charger
+from ...models import Charger
 
 if TYPE_CHECKING:
     from . import CSMSConsumer
