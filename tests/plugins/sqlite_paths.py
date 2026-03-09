@@ -88,9 +88,12 @@ def _remove_sqlite_artifacts(db_path: Path) -> None:
     ]
 
     for artifact in artifacts:
-        if not artifact.exists():
+        try:
+            if not artifact.exists():
+                continue
+            if artifact.is_dir():
+                shutil.rmtree(artifact, ignore_errors=True)
+                continue
+            artifact.unlink(missing_ok=True)
+        except OSError:
             continue
-        if artifact.is_dir():
-            shutil.rmtree(artifact, ignore_errors=True)
-            continue
-        artifact.unlink(missing_ok=True)
