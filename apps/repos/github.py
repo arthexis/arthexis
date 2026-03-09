@@ -70,7 +70,7 @@ def resolve_active_repository(
     """Return the repository for the active package or default."""
 
     from apps.release.models import Package
-    from apps.release.release import DEFAULT_PACKAGE
+    from apps.release import DEFAULT_PACKAGE
     from apps.repos.models.repositories import GitHubRepository as RepositoryModel
 
     repository_cls = repository_cls or RepositoryModel

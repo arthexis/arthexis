@@ -20,7 +20,7 @@ from apps.release.domain import (
     run_transform,
 )
 from apps.release.models import PackageRelease
-from apps.release.release import DEFAULT_PACKAGE, ReleaseError, build
+from apps.release import DEFAULT_PACKAGE, ReleaseError, build
 from apps.release.models import Package as PackageModel
 
 REQUIRED_PACKAGE_FIELDS = (
