@@ -1,8 +1,8 @@
-from datetime import datetime, timezone as dt_timezone
 from django.contrib import admin
-from django.db.models import Count, Max, Q
+from django.db.models import Max
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total, normalize_timestamp
 from apps.locals.user_data import EntityModelAdmin
 from apps.meta.models import WhatsAppChatBridge
 from apps.odoo.models import OdooChatBridge
@@ -39,22 +39,20 @@ class OdooChatBridgeAdmin(EntityModelAdmin):
     )
 
     def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(
-                total_avatars=Count("avatars", distinct=True),
-                enabled_avatars=Count(
-                    "avatars", filter=Q(avatars__is_enabled=True), distinct=True
-                ),
-            )
+        return annotate_enabled_total(
+            super().get_queryset(request),
+            "avatars",
+            total_alias="total_avatars",
+            enabled_alias="enabled_avatars",
         )
 
     @admin.display(description=_("Avatars"), ordering="enabled_avatars")
     def avatar_count(self, obj):
-        enabled = getattr(obj, "enabled_avatars", 0)
-        total = getattr(obj, "total_avatars", 0)
-        return f"{enabled}/{total}"
+        return format_enabled_total(
+            obj,
+            enabled_attr="enabled_avatars",
+            total_attr="total_avatars",
+        )
 
     @admin.display(description=_("Last used"))
     def last_used_at(self, obj):
@@ -105,30 +103,26 @@ class WhatsAppChatBridgeAdmin(EntityModelAdmin):
     )
 
     def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(
-                total_avatars=Count("avatars", distinct=True),
-                enabled_avatars=Count(
-                    "avatars", filter=Q(avatars__is_enabled=True), distinct=True
-                ),
-                last_webhook_timestamp=Max("webhook__messages__timestamp"),
-            )
+        queryset = annotate_enabled_total(
+            super().get_queryset(request),
+            "avatars",
+            total_alias="total_avatars",
+            enabled_alias="enabled_avatars",
         )
+        return queryset.annotate(last_webhook_timestamp=Max("webhook__messages__timestamp"))
 
     @admin.display(description=_("Avatars"), ordering="enabled_avatars")
     def avatar_count(self, obj):
-        enabled = getattr(obj, "enabled_avatars", 0)
-        total = getattr(obj, "total_avatars", 0)
-        return f"{enabled}/{total}"
+        return format_enabled_total(
+            obj,
+            enabled_attr="enabled_avatars",
+            total_attr="total_avatars",
+        )
 
     @admin.display(description=_("Last used"), ordering="last_webhook_timestamp")
     def last_used_at(self, obj):
-        timestamp = getattr(obj, "last_webhook_timestamp", None)
-        if not timestamp:
-            return "-"
-        return datetime.fromtimestamp(timestamp, tz=dt_timezone.utc)
+        timestamp = normalize_timestamp(getattr(obj, "last_webhook_timestamp", None))
+        return timestamp or "-"
 
     @admin.display(description=_("Webhook"))
     def webhook_setup_help(self, obj):

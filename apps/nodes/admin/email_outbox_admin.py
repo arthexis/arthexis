@@ -1,10 +1,11 @@
 from django.contrib import admin, messages
-from django.db.models import Count, Max, Q
+from django.db.models import Max
 from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
+from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total
 from apps.emails.models import EmailOutbox
 from apps.locals.user_data import EntityModelAdmin
 
@@ -44,25 +45,21 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
     )
 
     def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(
-                total_collectors=Count("bridge__inbox__collectors", distinct=True),
-                enabled_collectors=Count(
-                    "bridge__inbox__collectors",
-                    filter=Q(bridge__inbox__collectors__is_enabled=True),
-                    distinct=True,
-                ),
-                last_transaction_at=Max("transactions__processed_at"),
-            )
+        queryset = annotate_enabled_total(
+            super().get_queryset(request),
+            "bridge__inbox__collectors",
+            total_alias="total_collectors",
+            enabled_alias="enabled_collectors",
         )
+        return queryset.annotate(last_transaction_at=Max("transactions__processed_at"))
 
     @admin.display(description=_("Collectors"), ordering="enabled_collectors")
     def collector_count(self, obj):
-        enabled = getattr(obj, "enabled_collectors", 0)
-        total = getattr(obj, "total_collectors", 0)
-        return f"{enabled}/{total}"
+        return format_enabled_total(
+            obj,
+            enabled_attr="enabled_collectors",
+            total_attr="total_collectors",
+        )
 
     @admin.display(description=_("Last used"), ordering="last_transaction_at")
     def last_used_at(self, obj):

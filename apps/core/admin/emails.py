@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Max, Q
+from django.db.models import Max
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -12,6 +12,7 @@ from apps.locals.user_data import EntityModelAdmin
 
 from .forms import EmailInboxAdminForm
 from .inlines import EmailCollectorInline
+from .metrics import annotate_enabled_total, format_enabled_total
 from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
@@ -107,25 +108,21 @@ class EmailInboxAdmin(
     inlines = [EmailCollectorInline]
 
     def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(
-                total_collectors=Count("collectors", distinct=True),
-                enabled_collectors=Count(
-                    "collectors",
-                    filter=Q(collectors__is_enabled=True),
-                    distinct=True,
-                ),
-                last_transaction_at=Max("transactions__processed_at"),
-            )
+        queryset = annotate_enabled_total(
+            super().get_queryset(request),
+            "collectors",
+            total_alias="total_collectors",
+            enabled_alias="enabled_collectors",
         )
+        return queryset.annotate(last_transaction_at=Max("transactions__processed_at"))
 
     @admin.display(description=_("Collectors"), ordering="enabled_collectors")
     def collector_count(self, obj):
-        enabled = getattr(obj, "enabled_collectors", 0)
-        total = getattr(obj, "total_collectors", 0)
-        return f"{enabled}/{total}"
+        return format_enabled_total(
+            obj,
+            enabled_attr="enabled_collectors",
+            total_attr="total_collectors",
+        )
 
     @admin.display(description=_("Last used"), ordering="last_transaction_at")
     def last_used_at(self, obj):
