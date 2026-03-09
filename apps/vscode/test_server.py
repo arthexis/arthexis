@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -45,6 +47,48 @@ def _build_subprocess_env() -> dict[str, str]:
     return env
 
 
+def _run_notification_command(command: list[str]) -> None:
+    """Execute a desktop notification command in a best-effort manner."""
+
+    try:
+        subprocess.run(command, check=False, capture_output=True, text=True)
+    except OSError:
+        # Notification support is optional in developer environments.
+        return
+
+
+def send_desktop_notification(return_code: int) -> None:
+    """Send a desktop notification when a test run completes, if supported."""
+
+    system = platform.system()
+    status = "passed" if return_code == 0 else "failed"
+    title = f"{PREFIX} Tests {status}"
+    message = "Pytest finished successfully." if return_code == 0 else f"Pytest exited with code {return_code}."
+
+    if system == "Linux":
+        if shutil.which("notify-send"):
+            _run_notification_command(["notify-send", title, message])
+        return
+
+    if system == "Darwin":
+        script = f'display notification "{message}" with title "{title}"'
+        _run_notification_command(["osascript", "-e", script])
+        return
+
+    if system == "Windows":
+        if shutil.which("powershell"):
+            command = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "$n = New-Object System.Windows.Forms.NotifyIcon; "
+                "$n.Icon = [System.Drawing.SystemIcons]::Information; "
+                "$n.Visible = $true; "
+                f'$n.BalloonTipTitle = "{title}"; '
+                f'$n.BalloonTipText = "{message}"; '
+                "$n.ShowBalloonTip(3000); Start-Sleep -Seconds 4; $n.Dispose();"
+            )
+            _run_notification_command(["powershell", "-NoProfile", "-Command", command])
+
+
 def run_tests(extra_args: list[str] | None = None) -> int:
     """Run pytest and return the subprocess exit code."""
 
@@ -75,6 +119,8 @@ def run_tests(extra_args: list[str] | None = None) -> int:
         print(f"{PREFIX} Tests passed.")
     else:
         print(f"{PREFIX} Tests failed with exit code {return_code}.")
+
+    send_desktop_notification(return_code)
     return return_code
 
 
