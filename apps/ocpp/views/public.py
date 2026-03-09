@@ -23,6 +23,7 @@ from .common import (
     _default_language_code,
     _ensure_charger_access,
     _get_charger,
+    _important_non_transaction_events,
     _landing_page_translations,
     _live_sessions,
     _charging_limit_details,
@@ -402,9 +403,7 @@ def charger_status(request, cid, connector=None):
         transactions_qs = Transaction.objects.filter(charger=charger).order_by(
             "-start_time"
         )
-    paginator = Paginator(transactions_qs, 10)
-    page_obj = paginator.get_page(request.GET.get("page"))
-    transactions = page_obj.object_list
+    transactions = list(transactions_qs[:5])
     date_view = request.GET.get("dates", "charger").lower()
     if date_view not in {"charger", "received"}:
         date_view = "charger"
@@ -522,6 +521,10 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
+    events_connector = charger
+    if charger.connector_id is None and connector_overview:
+        events_connector = connector_overview[0]["charger"]
+    non_transaction_events = _important_non_transaction_events(charger, events_connector)
     show_connector_tabs = False
     show_connector_overview_cards = (
         charger.connector_id is None and connector_count > 1
@@ -531,11 +534,16 @@ def charger_status(request, cid, connector=None):
     )
     search_url = _reverse_connector_url("charger-session-search", cid, connector_slug)
     configuration_url = None
+    transactions_admin_url = None
     if request.user.is_staff:
         try:
             configuration_url = reverse("admin:ocpp_charger_change", args=[charger.pk])
         except NoReverseMatch:  # pragma: no cover - admin may be disabled
             configuration_url = None
+        try:
+            transactions_admin_url = reverse("admin:ocpp_transaction_changelist")
+        except NoReverseMatch:  # pragma: no cover - admin may be disabled
+            transactions_admin_url = None
     is_connected = store.is_connected(cid, charger.connector_id)
     has_active_session = bool(
         live_tx if charger.connector_id is not None else sessions
@@ -576,7 +584,8 @@ def charger_status(request, cid, connector=None):
             "state": state,
             "color": color,
             "transactions": transactions,
-            "page_obj": page_obj,
+            "non_transaction_events": non_transaction_events,
+            "page_obj": None,
             "chart_data": chart_data,
             "past_session": past_session,
             "connector_slug": connector_slug,
@@ -584,6 +593,8 @@ def charger_status(request, cid, connector=None):
             "connector_overview": connector_overview,
             "search_url": search_url,
             "configuration_url": configuration_url,
+            "transactions_admin_url": transactions_admin_url,
+            "can_view_transaction_links": request.user.is_staff,
             "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
             "is_connected": is_connected,
             "is_idle": is_connected and not has_active_session,
