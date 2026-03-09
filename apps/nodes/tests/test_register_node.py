@@ -261,6 +261,55 @@ def test_register_current_uses_role_lock_when_node_role_is_missing(settings, mon
 
 
 @pytest.mark.django_db
+def test_register_current_prefers_lock_over_stale_settings_node_role(settings, monkeypatch, tmp_path):
+    """Registration should re-read lock role even when settings.NODE_ROLE is stale."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = "Terminal"
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_normalizes_env_role_name_case(settings, monkeypatch, tmp_path):
+    """Registration should normalize lowercase NODE_ROLE values."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.setenv("NODE_ROLE", "control")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
 def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_path):
     """Registration should default to Terminal when no role configuration exists."""
     monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
