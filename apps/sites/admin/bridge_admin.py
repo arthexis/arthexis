@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.db.models import Max
+from django.db.models import BigIntegerField, Case, F, Max, Value, When
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total, normalize_timestamp
@@ -15,7 +15,6 @@ class OdooChatBridgeAdmin(EntityModelAdmin):
         "bridge_label",
         "site",
         "avatar_count",
-        "last_used_at",
         "is_enabled",
         "is_default",
     )
@@ -53,10 +52,6 @@ class OdooChatBridgeAdmin(EntityModelAdmin):
             enabled_attr="enabled_avatars",
             total_attr="total_avatars",
         )
-
-    @admin.display(description=_("Last used"))
-    def last_used_at(self, obj):
-        return "-"
 
     @admin.display(description=_("Bridge"))
     def bridge_label(self, obj):
@@ -109,7 +104,17 @@ class WhatsAppChatBridgeAdmin(EntityModelAdmin):
             total_alias="total_avatars",
             enabled_alias="enabled_avatars",
         )
-        return queryset.annotate(last_webhook_timestamp=Max("webhook__messages__timestamp"))
+        queryset = queryset.annotate(
+            normalized_webhook_timestamp=Case(
+                When(
+                    webhook__messages__timestamp__gt=100_000_000_000,
+                    then=F("webhook__messages__timestamp") / Value(1000),
+                ),
+                default=F("webhook__messages__timestamp"),
+                output_field=BigIntegerField(),
+            )
+        )
+        return queryset.annotate(last_webhook_timestamp=Max("normalized_webhook_timestamp"))
 
     @admin.display(description=_("Avatars"), ordering="enabled_avatars")
     def avatar_count(self, obj):

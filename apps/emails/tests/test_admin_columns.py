@@ -96,6 +96,25 @@ def test_email_outbox_admin_columns_and_annotations(db):
     assert model_admin.last_used_at(row) != "-"
 
 
+
+def test_email_outbox_admin_last_used_includes_inbox_activity(db):
+    """Outbox last-used should include bridged inbox activity when outbox has none."""
+    owner = _create_owner("outbox-inbox-activity-owner")
+    inbox = _create_inbox(owner, "relay-inbox-activity@example.com")
+    outbox = _create_outbox(owner, "outbox-inbox-activity@example.com")
+    EmailBridge.objects.create(inbox=inbox, outbox=outbox)
+    EmailTransaction.objects.create(
+        direction=EmailTransaction.INBOUND,
+        inbox=inbox,
+        processed_at=timezone.now(),
+    )
+
+    model_admin = EmailOutboxAdmin(EmailOutbox, admin.site)
+    request = RequestFactory().get("/admin/emails/emailoutbox/")
+
+    row = model_admin.get_queryset(request).get(pk=outbox.pk)
+    assert model_admin.last_used_at(row) != "-"
+
 def test_email_collector_preview_template_renders(db):
     """Collector preview action should render without template lookup failures."""
     owner = _create_owner("collector-owner")

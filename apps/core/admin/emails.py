@@ -83,7 +83,10 @@ class EmailCollectorAdmin(EntityModelAdmin):
                 _("Preview template is not configured for Email Collectors."),
                 messages.ERROR,
             )
-            return redirect("..")
+            changelist_url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+            )
+            return redirect(changelist_url)
 
         return TemplateResponse(request, template_name, context)
 
@@ -196,7 +199,7 @@ class EmailInboxAdmin(
                 self.message_user(request, f"{inbox}: {exc}", level=messages.ERROR)
 
     def _test_collectors(self, request, inbox):
-        for collector in inbox.collectors.all():
+        for collector in inbox.collectors.filter(is_enabled=True):
             before = collector.artifacts.count()
             try:
                 collector.collect(limit=1)

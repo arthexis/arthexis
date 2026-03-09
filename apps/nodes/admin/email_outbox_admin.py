@@ -5,7 +5,7 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
-from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total
+from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total, max_attr
 from apps.emails.models import EmailOutbox
 from apps.locals.user_data import EntityModelAdmin
 
@@ -51,7 +51,10 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
             total_alias="total_collectors",
             enabled_alias="enabled_collectors",
         )
-        return queryset.annotate(last_transaction_at=Max("transactions__processed_at"))
+        return queryset.annotate(
+            last_outbox_transaction_at=Max("transactions__processed_at"),
+            last_inbox_transaction_at=Max("bridge__inbox__transactions__processed_at"),
+        )
 
     @admin.display(description=_("Collectors"), ordering="enabled_collectors")
     def collector_count(self, obj):
@@ -61,9 +64,9 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
             total_attr="total_collectors",
         )
 
-    @admin.display(description=_("Last used"), ordering="last_transaction_at")
+    @admin.display(description=_("Last used"))
     def last_used_at(self, obj):
-        return obj.last_transaction_at or "-"
+        return max_attr(obj, "last_outbox_transaction_at", "last_inbox_transaction_at") or "-"
 
     @admin.action(description="Test selected Outbox")
     def test_outboxes(self, request, queryset):
