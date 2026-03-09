@@ -327,7 +327,7 @@ def get_github_issue_token() -> str:
     """Return the configured GitHub token for issue reporting."""
 
     from apps.release.models import PackageRelease
-    from apps.release.release import DEFAULT_PACKAGE
+    from apps.release import DEFAULT_PACKAGE
 
     latest_release = PackageRelease.latest()
     if latest_release:
