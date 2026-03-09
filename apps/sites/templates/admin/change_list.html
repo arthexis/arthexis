@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n admin_urls static admin_list admin_extras favorites %}
+{% load i18n admin_urls static admin_list admin_extras favorites docs_model_docs %}
 
 {% block title %}{% if cl.formset and cl.formset.errors %}{% translate "Error:" %} {% endif %}{{ block.super }}{% endblock %}
 {% block extrastyle %}
@@ -116,5 +116,16 @@
     </div>
     {% related_admin_models cl.opts as related_models %}
     {% include "admin/includes/related_models_section.html" %}
+    {% model_documentation_links cl.opts as documentation_links %}
+    {% if documentation_links %}
+      <div class="module aligned mt-4">
+        <h2>{% trans "Linked documentation" %}</h2>
+        <ul>
+          {% for item in documentation_links %}
+            <li><a href="{{ item|document_url }}">{{ item.title }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
   </div>
 {% endblock %}
