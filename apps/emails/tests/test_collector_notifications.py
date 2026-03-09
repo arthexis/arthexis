@@ -54,9 +54,9 @@ def test_collect_popup_notification_renders_sigil_templates(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Incident",
                 "from": "alerts@example.com",
@@ -96,9 +96,9 @@ def test_collect_net_message_uses_broadcast(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Grid alarm",
                 "from": "grid@example.com",
@@ -137,9 +137,9 @@ def test_collect_email_mode_sends_using_recipients(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Tariff update",
                 "from": "market@example.com",
@@ -180,9 +180,9 @@ def test_collect_email_mode_sanitizes_subject_newlines(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Line1\nLine2\rLine3",
                 "from": "market@example.com",
@@ -221,9 +221,9 @@ def test_collect_continues_when_notification_fails(monkeypatch, caplog):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {"subject": "First", "from": "ops@example.com", "body": "One"},
             {"subject": "Second", "from": "ops@example.com", "body": "Two"},
         ],
@@ -262,9 +262,9 @@ def test_collect_recipe_mode_executes_configured_recipe(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Grid alarm",
                 "from": "grid@example.com",
@@ -318,9 +318,9 @@ def test_collect_email_mode_with_recipe_executes_both_routes(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Grid alarm",
                 "from": "grid@example.com",
@@ -389,9 +389,9 @@ def test_collect_email_mode_failure_still_executes_recipe(monkeypatch, caplog):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Grid alarm",
                 "from": "grid@example.com",
@@ -441,9 +441,9 @@ def test_collect_none_mode_skips_dispatch(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Maintenance",
                 "from": "ops@example.com",

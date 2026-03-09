@@ -5,8 +5,8 @@ from __future__ import annotations
 import importlib
 
 import pytest
-from django.core.exceptions import ValidationError
 from django.apps import apps as django_apps
+from django.core.exceptions import ValidationError
 
 from apps.features.models import Feature
 
@@ -60,11 +60,14 @@ def test_wikipedia_companion_seed_migration_does_not_overwrite_custom_feature() 
     migration = importlib.import_module(
         "apps.features.migrations.0037_seed_wikipedia_companion_suite_feature"
     )
-    custom_feature = Feature.objects.create(
+    custom_feature, _ = Feature.objects.update_or_create(
         slug="wikipedia-companion",
-        display="Custom Wikipedia Companion",
-        source=Feature.Source.CUSTOM,
-        is_enabled=True,
+        defaults={
+            "display": "Custom Wikipedia Companion",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": True,
+            "is_deleted": False,
+        },
     )
 
     migration.seed_wikipedia_companion_suite_feature(django_apps, None)
@@ -82,11 +85,14 @@ def test_wikipedia_companion_unseed_migration_only_removes_mainstream_row() -> N
     migration = importlib.import_module(
         "apps.features.migrations.0037_seed_wikipedia_companion_suite_feature"
     )
-    mainstream_feature = Feature.objects.create(
+    mainstream_feature, _ = Feature.objects.update_or_create(
         slug="wikipedia-companion",
-        display="Wikipedia Companion",
-        source=Feature.Source.MAINSTREAM,
-        is_enabled=True,
+        defaults={
+            "display": "Wikipedia Companion",
+            "source": Feature.Source.MAINSTREAM,
+            "is_enabled": True,
+            "is_deleted": False,
+        },
     )
 
     migration.unseed_wikipedia_companion_suite_feature(django_apps, None)

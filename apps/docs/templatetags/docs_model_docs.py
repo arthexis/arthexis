@@ -52,11 +52,23 @@ def document_url(record: ModelDocumentation) -> str:
 def _normalize_document_path(document_path: str | None) -> str | None:
     if not document_path:
         return None
-    normalized = document_path.strip().replace("\\", "/").lstrip("/")
-    if not normalized:
+    raw_path = document_path.strip().replace("\\", "/")
+    if not raw_path:
         return None
 
     base_dir = Path(settings.BASE_DIR).resolve()
+    absolute_candidate = Path(raw_path)
+    if absolute_candidate.is_absolute():
+        try:
+            relative = absolute_candidate.resolve(strict=False).relative_to(base_dir)
+        except ValueError:
+            return None
+        normalized = relative.as_posix()
+    else:
+        normalized = raw_path.lstrip("/")
+    if not normalized:
+        return None
+
     candidate = (base_dir / normalized).resolve(strict=False)
     for root_prefix in ("docs", "apps/docs"):
         root = (base_dir / root_prefix).resolve(strict=False)

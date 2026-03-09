@@ -157,17 +157,21 @@ def test_extension_catalog_and_download_archive(client) -> None:
 
 def test_seeded_slug_archive_includes_options_script(client) -> None:
     """Ensure seeded GitHub extension slug includes special options.js archive file."""
-    extension = JsExtension.objects.create(
+    extension, _ = JsExtension.objects.update_or_create(
         slug="github-resolve-open-comments",
-        name="GitHub Resolve Open Comments",
-        description="Resolve helper",
-        version="1.0.0",
-        manifest_version=3,
-        matches="https://github.com/*",
-        content_script="console.log('x');",
-        options_page="<html><body>Options</body></html>",
-        permissions="storage",
-        host_permissions="https://github.com/*",
+        defaults={
+            "name": "GitHub Resolve Open Comments",
+            "description": "Resolve helper",
+            "version": "1.0.0",
+            "manifest_version": 3,
+            "matches": "https://github.com/*",
+            "content_script": "console.log('x');",
+            "options_page": "<html><body>Options</body></html>",
+            "permissions": "storage",
+            "host_permissions": "https://github.com/*",
+            "is_enabled": True,
+            "is_deleted": False,
+        },
     )
 
     download_response = client.get(reverse("extensions:download", args=[extension.slug]))

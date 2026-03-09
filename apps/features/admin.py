@@ -16,6 +16,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
+from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.services.celery_workers import (
     CELERY_WORKERS_FEATURE_SLUG,
@@ -157,7 +158,7 @@ class FeatureAdminForm(forms.ModelForm):
 
 
 @admin.register(Feature)
-class FeatureAdmin(DjangoObjectActions, EntityModelAdmin):
+class FeatureAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
     form = FeatureAdminForm
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
