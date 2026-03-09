@@ -478,7 +478,7 @@ class Recipe(Ownable):
         RecipeProduct.objects.create(
             recipe=self,
             format_detected=self.detect_format(),
-            input_args=[self.PRODUCT_REDACTION_PLACEHOLDER] if args else [],
+            input_args=[self.PRODUCT_REDACTION_PLACEHOLDER for _ in args],
             input_kwargs={
                 key: self.PRODUCT_REDACTION_PLACEHOLDER for key in kwargs
             },
