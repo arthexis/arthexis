@@ -49,6 +49,16 @@ class CDNConfiguration(Entity):
         db_table = "cdn_configuration"
         constraints = [
             models.CheckConstraint(
+                name="cdn_base_url_https_only",
+                condition=models.Q(base_url__startswith="https://"),
+            ),
+            models.CheckConstraint(
+                name="cdn_distribution_id_trimmed",
+                condition=models.Q(
+                    aws_distribution_id=models.functions.Trim(models.F("aws_distribution_id"))
+                ),
+            ),
+            models.CheckConstraint(
                 name="cdn_distribution_id_matches_provider",
                 condition=(
                     (
@@ -70,19 +80,22 @@ class CDNConfiguration(Entity):
         """Validate provider-specific requirements for CDN configurations."""
 
         super().clean()
+        aws_distribution_id = (self.aws_distribution_id or "").strip()
 
         errors: dict[str, ValidationError] = {}
-        if self.provider == self.Provider.AWS_CLOUDFRONT and not self.aws_distribution_id:
+        if self.provider == self.Provider.AWS_CLOUDFRONT and not aws_distribution_id:
             errors["aws_distribution_id"] = ValidationError(
                 _("CloudFront distribution ID is required for AWS CloudFront."),
                 code="required",
             )
 
-        if self.provider != self.Provider.AWS_CLOUDFRONT and self.aws_distribution_id:
+        if self.provider != self.Provider.AWS_CLOUDFRONT and aws_distribution_id:
             errors["aws_distribution_id"] = ValidationError(
                 _("Distribution ID can only be set for AWS CloudFront."),
                 code="invalid",
             )
+
+        self.aws_distribution_id = aws_distribution_id
 
         if errors:
             raise ValidationError(errors)
