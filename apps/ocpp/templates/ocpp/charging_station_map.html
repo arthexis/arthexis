@@ -49,15 +49,13 @@
           {% endfor %}
         </ul>
       </nav>
-      <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
-        <div class="card-body flex-column">
-          <p class="small text-uppercase mb-3 text-muted">
-            {% trans "Directions to" %} <span id="charging-qr-location-name">
-              {% if initial_location %}{{ initial_location.name }}{% else %}{% trans "station" %}{% endif %}
-            </span>
-          </p>
-          <div class="reader-qr-image" id="charging-qr"></div>
-        </div>
+      <div class="reader-qr-card mt-4 d-flex flex-column align-items-center">
+        <p class="small text-uppercase mb-3 text-muted">
+          {% trans "Directions to" %} <span id="charging-qr-location-name">
+            {% if initial_location %}{{ initial_location.name }}{% else %}{% trans "station" %}{% endif %}
+          </span>
+        </p>
+        <div class="reader-qr-image" id="charging-qr"></div>
       </div>
     </div>
   </div>

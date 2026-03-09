@@ -147,21 +147,38 @@ nav.toc a:hover {
   }
 }
 
-.reader-qr-card .card-body {
+.reader-qr-card {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: 0.5rem;
 }
 
 .reader-qr-card .reader-qr-image {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 180px;
-  height: 180px;
+  width: 200px;
+  height: 200px;
   max-width: 100%;
   margin: 0 auto;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 55%),
+    rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+html[data-bs-theme='light'] .reader-qr-card .reader-qr-image {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72) 55%),
+    rgba(255, 255, 255, 0.88);
+  border-color: rgba(13, 110, 253, 0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 8px 24px rgba(13, 110, 253, 0.08);
 }
 
 .reader-qr-card .reader-qr-image canvas,
