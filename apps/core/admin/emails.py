@@ -83,7 +83,10 @@ class EmailCollectorAdmin(EntityModelAdmin):
                 _("Preview template is not configured for Email Collectors."),
                 messages.ERROR,
             )
-            return redirect("..")
+            changelist_url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+            )
+            return redirect(changelist_url)
 
         return TemplateResponse(request, template_name, context)
 
