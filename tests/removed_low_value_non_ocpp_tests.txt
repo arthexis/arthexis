@@ -238,6 +238,7 @@ tests/test_site_and_node_context_processor.py::test_site_and_node_disallowed_hos
 apps/content/tests/test_admin.py::test_take_snapshot_uses_resolved_feature_state
 
 Removed 30 additional low-value tests (2026-03-09):
+Note: the four test_upgrade_wsl_sudo_prompt.py tests listed below were restored on 2026-03-06 for CI triage, then re-removed after confirming they remained low-signal/non-core and continued to add maintenance churn.
 tests/test_upgrade_wsl_sudo_prompt.py::test_upgrade_script_skips_sudo_priming_for_check_mode
 tests/test_upgrade_wsl_sudo_prompt.py::test_upgrade_script_cleans_generated_merge_migrations
 tests/test_upgrade_wsl_sudo_prompt.py::test_upgrade_script_supports_short_flag_aliases
