@@ -1,4 +1,5 @@
 from django.db import migrations
+from django.db.migrations.exceptions import IrreversibleError
 
 
 ROLE_DEFAULTS = {
@@ -24,28 +25,13 @@ def set_role_default_upgrade_policies(apps, schema_editor):
 
 
 def unset_role_default_upgrade_policies(apps, schema_editor):
-    """Restore prior role-specific upgrade policy defaults."""
+    """Prevent unsafe rollback that would overwrite customized defaults."""
 
-    del schema_editor
-    NodeRole = apps.get_model("nodes", "NodeRole")
-    UpgradePolicy = apps.get_model("nodes", "UpgradePolicy")
-
-    control = NodeRole.objects.filter(name="Control").first()
-    fast_lane = UpgradePolicy.objects.filter(name="Fast Lane").first()
-    if control:
-        control.default_upgrade_policy = fast_lane
-        control.save(update_fields=["default_upgrade_policy"])
-
-    watchtower = NodeRole.objects.filter(name="Watchtower").first()
-    unstable = UpgradePolicy.objects.filter(name="Unstable").first()
-    if watchtower:
-        watchtower.default_upgrade_policy = unstable
-        watchtower.save(update_fields=["default_upgrade_policy"])
-
-    terminal = NodeRole.objects.filter(name="Terminal").first()
-    if terminal:
-        terminal.default_upgrade_policy = None
-        terminal.save(update_fields=["default_upgrade_policy"])
+    del apps, schema_editor
+    raise IrreversibleError(
+        "Migration 0041 cannot be reversed safely because prior "
+        "default_upgrade_policy values are not preserved."
+    )
 
 
 class Migration(migrations.Migration):
