@@ -1,9 +1,11 @@
+import hashlib
 import json
 import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.db import IntegrityError
 from django.test import RequestFactory
 
 import pytest
@@ -338,13 +340,13 @@ def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
         mac_address="00:11:22:33:44:55",
         current_relation=Node.Relation.SELF,
     )
-    Node.objects.create(
-        hostname="other-node",
-        mac_address="aa:bb:cc:dd:ee:ff",
-        current_relation=Node.Relation.PEER,
-    )
     Node._local_cache.clear()
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+
+    def raise_conflict(*args, **kwargs):
+        raise IntegrityError("simulated uniqueness conflict")
+
+    monkeypatch.setattr(Node, "save", raise_conflict)
 
     caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     Node.get_local()
@@ -370,7 +372,7 @@ def test_redact_mac_for_log_masks_plaintext_value():
     from apps.nodes.models.node import _redact_mac_for_log
 
     redacted = _redact_mac_for_log("AA-BB-CC-DD-EE-FF")
+    expected_hash = hashlib.sha256("aabbccddeeff".encode("utf-8")).hexdigest()[:12]
 
-    assert redacted.startswith("***REDACTED***-")
-    assert "aa" not in redacted.lower()
+    assert redacted == f"***REDACTED***-{expected_hash}"
     assert _redact_mac_for_log("aabbccddeeff") == redacted
