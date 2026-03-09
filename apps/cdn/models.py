@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -29,6 +30,7 @@ class CDNConfiguration(Entity):
         help_text=_("CDN provider backing this endpoint."),
     )
     base_url = models.URLField(
+        validators=[URLValidator(schemes=["https"])],
         help_text=_("Public base URL where static assets are served from."),
     )
     aws_distribution_id = models.CharField(
@@ -45,6 +47,21 @@ class CDNConfiguration(Entity):
         verbose_name = _("CDN configuration")
         verbose_name_plural = _("CDN configurations")
         db_table = "cdn_configuration"
+        constraints = [
+            models.CheckConstraint(
+                name="cdn_distribution_id_matches_provider",
+                condition=(
+                    (
+                        models.Q(provider="aws_cloudfront")
+                        & ~models.Q(aws_distribution_id="")
+                    )
+                    | (
+                        ~models.Q(provider="aws_cloudfront")
+                        & models.Q(aws_distribution_id="")
+                    )
+                ),
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - representation only
         return f"{self.name} ({self.get_provider_display()})"

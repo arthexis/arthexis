@@ -1,6 +1,8 @@
 """Tests for CDN provider configuration validation."""
 
+import pytest
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 
 from apps.cdn.models import CDNConfiguration
 
@@ -40,6 +42,23 @@ def test_non_aws_provider_rejects_distribution_id():
         raise AssertionError("Expected clean to raise ValidationError")
 
 
+def test_base_url_requires_https_scheme():
+    """CDN base URLs should only allow secure HTTPS URLs."""
+
+    config = CDNConfiguration(
+        name="Insecure CDN",
+        provider=CDNConfiguration.Provider.CLOUDFLARE,
+        base_url="http://cdn.example.com/static/",
+    )
+
+    try:
+        config.clean_fields()
+    except ValidationError as error:
+        assert "base_url" in error.message_dict
+    else:  # pragma: no cover - explicit guard
+        raise AssertionError("Expected full_clean to raise ValidationError")
+
+
 def test_jsdelivr_configuration_is_valid_without_distribution_id():
     """Free jsDelivr provider should validate without AWS-only fields."""
 
@@ -51,3 +70,16 @@ def test_jsdelivr_configuration_is_valid_without_distribution_id():
 
     config.clean()
     assert config.is_enabled is True
+
+
+@pytest.mark.django_db
+def test_database_constraint_enforces_provider_distribution_invariant():
+    """DB check constraint rejects provider/distribution mismatch writes."""
+
+    with pytest.raises(IntegrityError):
+        CDNConfiguration.objects.create(
+            name="Broken CDN",
+            provider=CDNConfiguration.Provider.CLOUDFLARE,
+            base_url="https://cdn.example.com/static/",
+            aws_distribution_id="E123ABC",
+        )
