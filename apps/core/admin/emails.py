@@ -150,22 +150,28 @@ class EmailInboxAdmin(
 
         return reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
 
-    @admin.action(description=SETUP_COLLECTOR_TEXT)
+    @admin.action(description=_("Setup Collector"))
     def setup_collector(self, request, queryset=None):
         """Open the collector setup wizard for a selected inbox."""
 
-        if queryset is None or queryset.count() != 1:
-            self.message_user(
-                request,
-                _("Select exactly one inbox to start setup."),
-                messages.ERROR,
-            )
+        selected_ids = request.POST.getlist("_selected_action")
+        if len(selected_ids) > 1:
+            self.message_user(request, _("Select exactly one inbox to start setup."), messages.ERROR)
             return redirect(reverse("admin:emails_emailinbox_changelist"))
-        inbox = queryset.first()
+
+        inbox = None
+        if len(selected_ids) == 1:
+            inbox = EmailInbox.objects.filter(pk=selected_ids[0]).first()
+        elif queryset is not None:
+            inbox = queryset.first()
+
+        if inbox is None:
+            self.message_user(request, _("Select one inbox to start setup."), messages.ERROR)
+            return redirect(reverse("admin:emails_emailinbox_changelist"))
         return redirect(self._setup_collector_url(inbox))
 
-    setup_collector.label = SETUP_COLLECTOR_TEXT
-    setup_collector.short_description = SETUP_COLLECTOR_TEXT
+    setup_collector.label = _("Setup Collector")
+    setup_collector.short_description = _("Setup Collector")
     setup_collector.requires_queryset = False
 
     def setup_collector_action(self, request, obj):
@@ -173,8 +179,8 @@ class EmailInboxAdmin(
 
         return redirect(self._setup_collector_url(obj))
 
-    setup_collector_action.label = SETUP_COLLECTOR_TEXT
-    setup_collector_action.short_description = SETUP_COLLECTOR_TEXT
+    setup_collector_action.label = _("Setup Collector")
+    setup_collector_action.short_description = _("Setup Collector")
 
     def setup_collector_view(self, request, object_id):
         """Render and process the interactive collector setup wizard."""
@@ -203,6 +209,8 @@ class EmailInboxAdmin(
                             self.message_user(request, _("Collector test found no matching emails."), messages.WARNING)
                     except ValidationError as exc:
                         self.message_user(request, str(exc), messages.ERROR)
+                    except Exception as exc:  # pragma: no cover - admin feedback
+                        self.message_user(request, str(exc), messages.ERROR)
                 collector = configured_collector
         else:
             form = EmailCollectorSetupForm(instance=collector)
@@ -212,7 +220,7 @@ class EmailInboxAdmin(
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
             "original": inbox,
-            "title": SETUP_COLLECTOR_TEXT,
+            "title": _("Setup Collector"),
             "form": form,
             "collector": collector,
             "results": results,

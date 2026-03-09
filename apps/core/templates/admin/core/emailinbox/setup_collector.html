@@ -4,27 +4,40 @@
 {% block extrastyle %}
   {{ block.super }}
   <style>
-    .collector-setup-form .form-row .flex-container {
-      align-items: flex-start;
-      gap: 1rem;
+    .collector-setup-form .form-table {
+      border-collapse: collapse;
+      table-layout: fixed;
+      width: 100%;
     }
 
-    .collector-setup-form .form-row input[type="text"],
-    .collector-setup-form .form-row input[type="email"],
-    .collector-setup-form .form-row input[type="number"],
-    .collector-setup-form .form-row textarea,
-    .collector-setup-form .form-row select {
+    .collector-setup-form .form-table th,
+    .collector-setup-form .form-table td {
+      padding: 0.5rem;
+      vertical-align: top;
+    }
+
+    .collector-setup-form .form-table th {
+      width: 16rem;
+      text-align: left;
+    }
+
+    .collector-setup-form .form-table td input[type="text"],
+    .collector-setup-form .form-table td input[type="email"],
+    .collector-setup-form .form-table td input[type="number"],
+    .collector-setup-form .form-table td textarea,
+    .collector-setup-form .form-table td select {
       box-sizing: border-box;
       max-width: min(100%, 56rem);
       width: 100%;
     }
 
-    .collector-setup-form .form-row textarea {
+    .collector-setup-form .form-table td textarea {
       min-height: 6rem;
       resize: vertical;
     }
 
-    .collector-setup-form .form-row .help {
+    .collector-setup-form .form-table td .help {
+      margin-top: 0.25rem;
       max-width: 56rem;
     }
   </style>
@@ -40,20 +53,22 @@
 
       <fieldset class="module aligned">
         <h2>{% trans "Step 1: Configure Collector" %}</h2>
-        {% for field in form.visible_fields %}
-          <div class="form-row{% if field.errors %} errors{% endif %}">
-            <div>
-              {{ field.errors }}
-              <div class="flex-container">
-                {{ field.label_tag }}
-                {{ field }}
-              </div>
-              {% if field.help_text %}
-                <div class="help">{{ field.help_text|safe }}</div>
-              {% endif %}
-            </div>
-          </div>
-        {% endfor %}
+        <table class="form-table">
+          <tbody>
+            {% for field in form.visible_fields %}
+              <tr class="form-row{% if field.errors %} errors{% endif %}">
+                <th>{{ field.label_tag }}</th>
+                <td>
+                  {{ field.errors }}
+                  {{ field }}
+                  {% if field.help_text %}
+                    <div class="help">{{ field.help_text|safe }}</div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </fieldset>
 
       <div class="submit-row">
