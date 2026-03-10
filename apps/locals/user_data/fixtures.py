@@ -357,7 +357,7 @@ def _load_fixture(
             verbosity_level = 0
 
         call_command(
-            "load_user_data",
+            "loaddata",
             str(temp_path or path),
             ignorenonexistent=True,
             verbosity=verbosity_level,
