@@ -84,6 +84,30 @@ def test_order_tracking_public_remote_image_lookup_uses_fallback_sources_after_i
     content = response.content.decode()
     assert 'src="https://cdn.evergo.example/fotos/tablero-fallback.jpg"' in content
 
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "javascript:alert(1)"})
+def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
+    """Security regression: preview images should only accept HTTP(S) URLs from Evergo."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-images-safe", email="owner-images-safe@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-images-safe@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30205, order_number="GM030205")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="preview-foto_tablero"' in content
+    assert 'src="javascript:alert(1)"' not in content
+
 @pytest.mark.django_db
 def test_order_tracking_public_requires_login(client):
     """Security: anonymous users should be redirected to login for tracking form access."""

@@ -9,7 +9,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.sites.models import Site
 from django.template.loader import render_to_string
 from django.test import RequestFactory
-from django.test.html import Element, parse_html
+from django.test.html import parse_html
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -41,46 +41,6 @@ def staff_user(db):
         password="secret",
         is_staff=True,
     )
-
-def _elements_with_class(element: Element, class_name: str) -> list[Element]:
-    """Return all elements that include the given CSS class."""
-
-    matches: list[Element] = []
-    classes = dict(element.attributes).get("class", "")
-    if class_name in classes.split():
-        matches.append(element)
-    for child in element.children:
-        if isinstance(child, Element):
-            matches.extend(_elements_with_class(child, class_name))
-    return matches
-
-def _find_all_elements(element: Element, tag_name: str, **attributes: str) -> list[Element]:
-    """Return all descendants whose tag and attributes match."""
-
-    matches: list[Element] = []
-    if element.name == tag_name and _has_attributes(element, attributes):
-        matches.append(element)
-    for child in element.children:
-        if isinstance(child, Element):
-            matches.extend(_find_all_elements(child, tag_name, **attributes))
-    return matches
-
-def _find_element(element: Element, tag_name: str, **attributes: str) -> Element | None:
-    """Return the first descendant whose tag and attributes match."""
-
-    matches = _find_all_elements(element, tag_name, **attributes)
-    return matches[0] if matches else None
-
-def _has_attributes(element: Element, attributes: dict[str, str]) -> bool:
-    """Check whether an element includes all expected attributes."""
-
-    element_attributes = dict(element.attributes)
-    return all(element_attributes.get(name) == value for name, value in attributes.items())
-
-def _normalized_row_text(element: Element) -> str:
-    """Flatten an element to normalized text for robust label assertions."""
-
-    return " ".join(str(element).split())
 
 def test_release_checklist_requires_staff(client, user, staff_user):
     """Release checklist access should be limited to staff users."""
@@ -166,6 +126,20 @@ def test_whatsapp_webhook_get_not_allowed(client, settings):
 
     response = client.get(url)
     assert response.status_code == 405
+
+
+def test_whatsapp_webhook_disabled_returns_503(client, settings):
+    """Webhook should reject traffic when WhatsApp integration is disabled."""
+
+    settings.PAGES_WHATSAPP_ENABLED = False
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15551234", "message": "Hello"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 503
 
 @pytest.mark.parametrize(
     "payload, expected_status",
@@ -266,4 +240,3 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     assert 'id="operator-interface-title"' in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
     assert DARK_THEME_BACKGROUND_STYLE in content
-

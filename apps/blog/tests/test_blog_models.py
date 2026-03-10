@@ -25,3 +25,17 @@ def test_scheduled_articles_publish_when_due(admin_user):
     assert article.published_at is not None
     assert article.reading_time_minutes >= 2
 
+@pytest.mark.django_db
+def test_resolve_blog_article_sigils_caps_growth(admin_user):
+    article = BlogArticle.objects.create(title="Recursive sigil", body="x", author=admin_user)
+    BlogSigilShortcut.objects.create(
+        article=article,
+        token="BLOG.LOOP",
+        expansion_template="[BLOG.LOOP] and more",
+    )
+
+    resolved = resolve_blog_article_sigils("Start [BLOG.LOOP]", article=article)
+
+    assert len(resolved) < 100_000
+    assert resolved.count("and more") == 10
+
