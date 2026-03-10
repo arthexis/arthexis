@@ -232,10 +232,16 @@ def cp_simulator(request):
     backend_choices = get_simulator_backend_choices()
     backend_values = {value for value, _label in backend_choices}
     preferred_default_backend = (
-        MOBILITY_HOUSE_BACKEND if MOBILITY_HOUSE_BACKEND in backend_values else ARTHEXIS_BACKEND
+        MOBILITY_HOUSE_BACKEND
+        if MOBILITY_HOUSE_BACKEND in backend_values
+        else (ARTHEXIS_BACKEND if ARTHEXIS_BACKEND in backend_values else None)
     )
     session_backend = str(request.session.get("cp_simulator_backend") or "").strip().lower()
-    selected_backend = session_backend if session_backend in backend_values else preferred_default_backend
+    selected_backend = (
+        session_backend
+        if session_backend in backend_values
+        else (preferred_default_backend if preferred_default_backend else "")
+    )
     backends_available = bool(backend_choices)
     if request.method == "POST":
         action = request.POST.get("action")

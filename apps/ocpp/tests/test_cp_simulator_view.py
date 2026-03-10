@@ -398,6 +398,7 @@ def test_cp_simulator_shows_message_when_no_backends_available(logged_in_client,
 
     assert response.status_code == 200
     assert response.context["backends_available"] is False
+    assert response.context["selected_backend"] == ""
 
     post_response = logged_in_client.post(
         reverse("ocpp:cp-simulator"),
