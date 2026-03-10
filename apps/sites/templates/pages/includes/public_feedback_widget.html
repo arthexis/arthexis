@@ -90,7 +90,7 @@
         <div class="mb-3">
           <div class="user-story-rating-row">
             <span class="form-label d-block mb-0" id="user-story-rating-group-label">
-              {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+              {% blocktrans trimmed with link_start='<button type="button" class="user-story-copy-link btn btn-link p-0 align-baseline" data-feedback-copy>'|safe link_end='</button>'|safe %}
                 Please rate {{ link_start }}this page{{ link_end }}
               {% endblocktrans %}
             </span>
@@ -146,10 +146,10 @@
         <button type="submit" class="btn btn-primary w-100 py-2">
           {% trans 'Submit feedback' %}
         </button>
-        <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" role="status">
+        <output id="user-story-success" class="alert alert-success user-story-alert mt-3" hidden>
           {% trans 'Thank you! Your feedback has been sent.' %}
-        </div>
-        <div id="user-story-error" class="alert alert-danger user-story-alert mt-3 d-none" role="alert"></div>
+        </output>
+        <div id="user-story-error" class="alert alert-danger user-story-alert mt-3" role="alert" hidden></div>
       </form>
     </div>
   </div>

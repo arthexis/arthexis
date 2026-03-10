@@ -43,15 +43,12 @@
   <div
     class="chat-overlay"
     data-chat-overlay
-    role="presentation"
     hidden
   >
-    <section
+    <dialog
       id="chat-drawer"
       class="chat-drawer"
       data-chat-drawer
-      role="dialog"
-      aria-modal="true"
       aria-labelledby="chat-title"
       aria-live="polite"
       aria-label="{% trans 'Support chat' %}"
@@ -89,7 +86,7 @@
           <button type="submit" class="btn btn-primary">{% trans "Send" %}</button>
         </div>
       </form>
-    </section>
+    </dialog>
   </div>
 </div>
 {% endif %}
