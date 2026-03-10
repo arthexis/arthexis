@@ -146,6 +146,7 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 
 ### 5. Development
 - Browse the [Developer Documentation Library](https://arthexis.com/docs/library/) for architecture references, protocol manuals, and contribution workflows.
+- Install local commit guards with `pre-commit install` and run `pre-commit run --all-files` before opening a PR so missing `pytest.mark.pr(...)` metadata is caught before CI.
 
 ## Support
 

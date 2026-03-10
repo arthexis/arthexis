@@ -127,6 +127,7 @@ ci = [
   "black==26.3.0",
   "import-linter==2.11",
   "playwright==1.58.0",
+  "pre-commit==4.3.0",
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",
   "pytest==9.0.2",
