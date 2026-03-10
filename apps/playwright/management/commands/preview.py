@@ -97,7 +97,7 @@ class Command(BaseCommand):
 
         targets: list[tuple[str, Path]] = []
         for raw_path in paths:
-            slug = raw_path.strip("/").replace("/", "-") or "root"
+            slug = raw_path.strip("/").replace("-", "--").replace("/", "-") or "root"
             targets.append((raw_path, base_output_dir / f"{slug}.png"))
         return targets
 

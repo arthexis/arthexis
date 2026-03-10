@@ -24,7 +24,7 @@ def test_preview_command_supports_multiple_paths(settings, monkeypatch):
     settings.BASE_DIR = Path("/tmp/arthexis-test")
     captured: list[tuple[str, Path]] = []
 
-    def fake_capture_with_fallback(**kwargs):
+    def fake_capture_with_fallback(*_, **kwargs):
         output_path = kwargs["output"]
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(
