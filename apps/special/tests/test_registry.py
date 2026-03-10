@@ -38,6 +38,7 @@ def test_special_command_model_enforces_one_word_restrictions() -> None:
     command = SpecialCommand(
         name="two words",
         plural_name="samples",
+        command_name="sample",
         command_path="tests.SampleCommand",
     )
 
@@ -53,7 +54,10 @@ def test_sync_special_command_persists_argument_schema() -> None:
 
     assert special.name == "sample"
     assert special.plural_name == "samples"
-    parameter_map = {parameter.name: parameter for parameter in special.parameters.all()}
+    assert special.command_name == "sample"
+    parameter_map = {
+        parameter.name: parameter for parameter in special.parameters.all()
+    }
 
     assert parameter_map["slug"].kind == "positional"
     assert parameter_map["count"].value_type == "integer"
@@ -66,7 +70,7 @@ def test_sync_special_command_persists_argument_schema() -> None:
 def test_call_special_command_validates_inputs_and_forwards(monkeypatch) -> None:
     """Validated special calls should forward normalized arguments to call_command."""
 
-    sync_special_command(command_name="sample", command_cls=SampleCommand)
+    sync_special_command(command_name="samples", command_cls=SampleCommand)
 
     captured: dict[str, object] = {}
 
@@ -87,7 +91,7 @@ def test_call_special_command_validates_inputs_and_forwards(monkeypatch) -> None
     )
 
     assert result == "ok"
-    assert captured["name"] == "sample"
+    assert captured["name"] == "samples"
     assert captured["args"] == ("alpha",)
     assert captured["kwargs"] == {"count": 2, "enabled": True, "kind": "suite"}
 
@@ -103,3 +107,24 @@ def test_call_special_command_rejects_unknown_or_invalid_inputs() -> None:
 
     with pytest.raises(SpecialCommandValidationError, match="Expected one of"):
         call_special_command("sample", slug="alpha", count=1, kind="bad")
+
+
+@pytest.mark.django_db
+def test_call_special_command_parses_string_booleans(monkeypatch) -> None:
+    """String boolean values should be parsed without Python truthiness pitfalls."""
+
+    sync_special_command(command_name="sample", command_cls=SampleCommand)
+
+    captured: dict[str, object] = {}
+
+    def fake_call_command(name: str, *args, **kwargs):
+        captured["kwargs"] = kwargs
+        return "ok"
+
+    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
+    call_special_command("sample", slug="alpha", count=1, enabled="false")
+
+    assert captured["kwargs"]["enabled"] is False
+
+    with pytest.raises(SpecialCommandValidationError, match="Invalid boolean value"):
+        call_special_command("sample", slug="alpha", count=1, enabled="not-bool")

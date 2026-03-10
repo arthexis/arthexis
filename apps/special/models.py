@@ -23,6 +23,10 @@ class SpecialCommand(models.Model):
         unique=True,
         help_text="Plural command alias (single lowercase word).",
     )
+    command_name = models.CharField(
+        max_length=64,
+        help_text="Actual Django management command name used for invocation.",
+    )
     command_path = models.CharField(
         max_length=255,
         help_text="Import path to the command class for introspection and traceability.",
@@ -52,7 +56,7 @@ class SpecialCommand(models.Model):
 
         super().clean()
 
-        for field in ("name", "plural_name"):
+        for field in ("name", "plural_name", "command_name"):
             value = (getattr(self, field) or "").strip()
             if not _SPECIAL_WORD_RE.fullmatch(value):
                 raise ValidationError(
@@ -128,7 +132,9 @@ class SpecialCommandParameter(models.Model):
 
         normalized_name = (self.name or "").strip()
         if not _SPECIAL_WORD_RE.fullmatch(normalized_name):
-            raise ValidationError({"name": "Parameter name must be one lowercase word."})
+            raise ValidationError(
+                {"name": "Parameter name must be one lowercase word."}
+            )
 
         if self.kind == self.ParameterKind.POSITIONAL:
             if not _SPECIAL_WORD_RE.fullmatch((self.cli_name or "").strip()):

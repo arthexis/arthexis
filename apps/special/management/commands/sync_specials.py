@@ -25,7 +25,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         """Sync one or more declared commands into the DB registry."""
 
-        selected = [name.strip() for name in options.get("commands", []) if name.strip()]
+        selected = [
+            name.strip() for name in options.get("commands", []) if name.strip()
+        ]
         command_map = get_commands()
 
         synced = 0
@@ -38,13 +40,21 @@ class Command(BaseCommand):
             if not hasattr(command_cls, "special_command"):
                 continue
 
-            special = sync_special_command(command_name=command_name, command_cls=command_cls)
+            special = sync_special_command(
+                command_name=command_name, command_cls=command_cls
+            )
             synced += 1
             self.stdout.write(
-                self.style.SUCCESS(f"Synced {command_name} -> {special.name}/{special.plural_name}")
+                self.style.SUCCESS(
+                    f"Synced {command_name} -> {special.name}/{special.plural_name}"
+                )
             )
 
         if selected and not synced:
-            raise CommandError("No selected commands were declared with @special_command.")
+            raise CommandError(
+                "No selected commands were declared with @special_command."
+            )
 
-        self.stdout.write(self.style.SUCCESS(f"Synced {synced} special command definition(s)."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Synced {synced} special command definition(s).")
+        )

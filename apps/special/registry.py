@@ -70,7 +70,9 @@ def _allows_multiple(action: Action) -> bool:
     return isinstance(action.nargs, int) and action.nargs > 1
 
 
-def sync_special_command(*, command_name: str, command_cls: type[BaseCommand]) -> SpecialCommand:
+def sync_special_command(
+    *, command_name: str, command_cls: type[BaseCommand]
+) -> SpecialCommand:
     """Introspect a command class and persist its safe DB definition."""
 
     declaration = getattr(command_cls, "special_command", None)
@@ -87,6 +89,7 @@ def sync_special_command(*, command_name: str, command_cls: type[BaseCommand]) -
             name=declaration.singular,
             defaults={
                 "plural_name": declaration.plural,
+                "command_name": command_name,
                 "keystone_model": declaration.keystone_model,
                 "command_path": f"{command_cls.__module__}.{command_cls.__name__}",
                 "is_active": True,
@@ -98,7 +101,9 @@ def sync_special_command(*, command_name: str, command_cls: type[BaseCommand]) -
             if action.dest in {"help"}:
                 continue
 
-            cli_name = action.option_strings[-1] if action.option_strings else action.dest
+            cli_name = (
+                action.option_strings[-1] if action.option_strings else action.dest
+            )
             choices = list(action.choices) if action.choices else []
             SpecialCommandParameter.objects.create(
                 command=special,
@@ -120,7 +125,20 @@ def _coerce_parameter_value(parameter: SpecialCommandParameter, value: Any) -> A
     """Coerce a raw value into the type declared by the DB parameter definition."""
 
     if parameter.value_type == SpecialCommandParameter.ValueType.BOOLEAN:
-        return bool(value)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            truthy = {"1", "true", "t", "yes", "y", "on"}
+            falsy = {"0", "false", "f", "no", "n", "off"}
+            if normalized in truthy:
+                return True
+            if normalized in falsy:
+                return False
+            raise ValueError(f"Invalid boolean value: {value!r}")
+        if isinstance(value, int) and value in (0, 1):
+            return bool(value)
+        raise ValueError(f"Invalid boolean value: {value!r}")
     if parameter.value_type == SpecialCommandParameter.ValueType.INTEGER:
         return int(value)
     if parameter.value_type == SpecialCommandParameter.ValueType.FLOAT:
@@ -135,7 +153,9 @@ def call_special_command(name: str, /, **inputs: Any) -> Any:
         name=name,
         is_active=True,
     )
-    parameter_map = {parameter.name: parameter for parameter in special.parameters.all()}
+    parameter_map = {
+        parameter.name: parameter for parameter in special.parameters.all()
+    }
 
     unknown_keys = sorted(set(inputs) - set(parameter_map))
     if unknown_keys:
@@ -154,7 +174,12 @@ def call_special_command(name: str, /, **inputs: Any) -> Any:
                 )
             continue
 
-        normalized = _coerce_parameter_value(parameter, inputs[parameter.name])
+        try:
+            normalized = _coerce_parameter_value(parameter, inputs[parameter.name])
+        except (TypeError, ValueError) as exc:
+            raise SpecialCommandValidationError(
+                f"Invalid value for '{parameter.name}': {exc}"
+            ) from exc
         if parameter.choices and normalized not in parameter.choices:
             raise SpecialCommandValidationError(
                 f"Invalid value for '{parameter.name}'. Expected one of: {parameter.choices}"
@@ -165,7 +190,7 @@ def call_special_command(name: str, /, **inputs: Any) -> Any:
         else:
             option_kwargs[parameter.name] = normalized
 
-    return call_command(name, *positional_args, **option_kwargs)
+    return call_command(special.command_name, *positional_args, **option_kwargs)
 
 
 def sync_special_command_by_name(command_name: str) -> SpecialCommand:
