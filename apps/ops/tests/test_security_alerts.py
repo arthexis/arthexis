@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 from django.utils import timezone
@@ -195,3 +196,53 @@ def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     assert len(alerts) == 1
     assert alerts[0].message == "Email worker failed."
     assert "Count: 2" in alerts[0].summary
+
+
+def test_record_occurrence_reactivates_soft_deleted_event() -> None:
+    """Re-recording a soft-deleted key should reactivate the same row."""
+
+    event = SecurityAlertEvent.record_occurrence(
+        key="event-reactivate",
+        message="Initial failure.",
+        detail="traceback",
+        remediation_url="/admin/system/dashboard-rules-report/",
+    )
+    SecurityAlertEvent.all_objects.filter(pk=event.pk).update(is_deleted=True, is_active=False)
+
+    reactivated = SecurityAlertEvent.record_occurrence(
+        key="event-reactivate",
+        message="Repeated failure.",
+        detail="traceback 2",
+        remediation_url="/admin/system/dashboard-rules-report/",
+    )
+
+    assert reactivated.pk == event.pk
+    assert reactivated.occurrence_count == 1
+    assert reactivated.is_active is True
+    assert reactivated.is_deleted is False
+
+
+def test_record_occurrence_rejects_unsafe_remediation_url() -> None:
+    """Unsafe remediation URL schemes should be rejected."""
+
+    with pytest.raises(ValidationError):
+        SecurityAlertEvent.record_occurrence(
+            key="event-unsafe-url",
+            message="Unsafe url",
+            remediation_url="javascript:alert(1)",
+        )
+
+
+def test_build_security_alerts_swallows_failure_recording_errors(monkeypatch) -> None:
+    """Collector failures should remain isolated even if persistence also fails."""
+
+    def _boom() -> list[security_alerts.SecurityAlert]:
+        raise RuntimeError("collector exploded")
+
+    def _record_boom(*, source_name: str, detail: str) -> None:
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr(security_alerts, "error_event_security_alerts", _boom)
+    monkeypatch.setattr(security_alerts, "_record_collector_failure_event", _record_boom)
+
+    assert security_alerts.build_security_alerts() == []
