@@ -129,6 +129,7 @@ def _extract_user_values(request, env_vars: list[tuple[str, str]]) -> dict[str, 
     return submitted
 
 
+
 def _write_user_env_values(user, values: dict[str, str]) -> None:
     """Persist user-specific environment values to the personal ``.env`` file."""
     env_dir = _user_env_dir()
@@ -137,7 +138,10 @@ def _write_user_env_values(user, values: dict[str, str]) -> None:
 
     with env_path.open("w", encoding="utf-8") as env_file:
         for key in sorted(values):
-            env_file.write(f"{key}={values[key]}\n")
+            # Remove newlines and carriage returns to prevent injection
+            safe_value = values[key].replace('\n', '').replace('\r', '')
+            env_file.write(f"{key}={safe_value}\n")
+
 
 def _config_view(request):
     django_settings = _get_django_settings()
