@@ -727,7 +727,7 @@ fi
 arthexis_timing_end "env_refresh"
 
 # Ensure auto-managed node features are refreshed via NodeFeatureAssignment lifecycle.
-python manage.py refresh_node_features
+python manage.py features --refresh-node
 
 deactivate
 
