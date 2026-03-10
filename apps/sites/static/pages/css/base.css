@@ -151,7 +151,8 @@ nav.toc a:hover {
   padding: 0.5rem;
 }
 
-.reader-qr-card .reader-qr-image {
+.reader-qr-card .reader-qr-image,
+.card.reader-qr-card > .card-body {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -168,7 +169,8 @@ nav.toc a:hover {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
-html[data-bs-theme='light'] .reader-qr-card .reader-qr-image {
+html[data-bs-theme='light'] .reader-qr-card .reader-qr-image,
+html[data-bs-theme='light'] .card.reader-qr-card > .card-body {
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72) 55%),
     rgba(255, 255, 255, 0.88);
@@ -179,7 +181,9 @@ html[data-bs-theme='light'] .reader-qr-card .reader-qr-image {
 }
 
 .reader-qr-card .reader-qr-image canvas,
-.reader-qr-card .reader-qr-image img {
+.reader-qr-card .reader-qr-image img,
+.card.reader-qr-card > .card-body img,
+.card.reader-qr-card > .card-body canvas {
   max-width: 100%;
   height: auto;
 }
