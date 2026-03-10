@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory
 
 from apps.core import environment
-from apps.core.environment import _config_view, _group_django_settings
+from apps.core.environment import _config_view, _environment_view, _group_django_settings
 
 
 def test_group_django_settings_uses_repeated_prefix_sections() -> None:
@@ -70,3 +71,56 @@ def test_config_view_renders_grouped_sections(db, monkeypatch) -> None:
     assert response.context_data["site_title"] == site.site_title
     assert 'href="#config-section-1">AWS<' in response.rendered_content
     assert 'href="#config-section-2">Other<' in response.rendered_content
+
+
+def test_environment_view_exposes_user_values(db, tmp_path, settings) -> None:
+    """The environment admin view should include persisted user-specific values."""
+    settings.BASE_DIR = tmp_path
+    user = get_user_model().objects.create_superuser(
+        username="admin2",
+        email="admin2@example.com",
+        password="admin123",
+    )
+    user_env_dir = tmp_path / "var" / "user_env"
+    user_env_dir.mkdir(parents=True)
+    (user_env_dir / f"{user.pk}.env").write_text("PATH=/custom/bin\n")
+
+    request = RequestFactory().get("/admin/environment/")
+    request.user = user
+
+    response = _environment_view(request)
+    response.render()
+
+    assert response.status_code == 200
+    path_row = next(
+        row
+        for row in response.context_data["env_rows"]
+        if row["key"] == "PATH"
+    )
+    assert path_row["user_value"] == "/custom/bin"
+
+
+def test_environment_view_post_persists_user_values(db, tmp_path, settings) -> None:
+    """Posting environment user values should persist to the personal ``.env`` file."""
+    settings.BASE_DIR = tmp_path
+    user = get_user_model().objects.create_superuser(
+        username="admin3",
+        email="admin3@example.com",
+        password="admin123",
+    )
+
+    request = RequestFactory().post(
+        "/admin/environment/",
+        data={"user_value_PATH": "/post/value"},
+    )
+    request.user = user
+    setattr(request, "session", {})
+    setattr(request, "_messages", FallbackStorage(request))
+
+    response = _environment_view(request)
+    response.render()
+
+    assert response.status_code == 200
+    env_file = tmp_path / "var" / "user_env" / f"{user.pk}.env"
+    assert env_file.exists()
+    assert "PATH=/post/value" in env_file.read_text()

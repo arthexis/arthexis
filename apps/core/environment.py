@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
 from django.conf import settings
 from django.contrib import admin
+from django.contrib import messages
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
@@ -55,15 +58,83 @@ def _group_django_settings(settings_items: list[tuple[str, object]]) -> list[dic
 
 def _environment_view(request):
     env_vars = sorted(os.environ.items())
+    user_env_values = _load_user_env_values(request.user)
+
+    if request.method == "POST":
+        user_env_values = _extract_user_values(request, env_vars)
+        _write_user_env_values(request.user, user_env_values)
+        messages.success(
+            request,
+            _(
+                "Personal environment values saved. They are applied after the next restart."
+            ),
+        )
+
+    env_rows = [
+        {
+            "key": key,
+            "value": value,
+            "user_value": user_env_values.get(key, ""),
+        }
+        for key, value in env_vars
+    ]
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("Environment"),
-            "env_vars": env_vars,
+            "env_rows": env_rows,
             "environment_tasks": [],
         }
     )
     return TemplateResponse(request, "admin/environment.html", context)
+
+
+def _user_env_dir() -> Path:
+    """Return the directory used to store user-specific environment files."""
+    return Path(settings.BASE_DIR) / "var" / "user_env"
+
+
+def _user_env_path(user) -> Path:
+    """Return the path to the current user's personal environment file."""
+    return _user_env_dir() / f"{user.pk}.env"
+
+
+def _load_user_env_values(user) -> dict[str, str]:
+    """Load key/value pairs from the user's personal ``.env`` file."""
+    env_path = _user_env_path(user)
+    if not env_path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    with env_path.open("r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key] = value
+    return values
+
+
+def _extract_user_values(request, env_vars: list[tuple[str, str]]) -> dict[str, str]:
+    """Extract submitted user values for known environment keys from ``request``."""
+    submitted: dict[str, str] = {}
+    for key, _ in env_vars:
+        value = request.POST.get(f"user_value_{key}", "").strip()
+        if value:
+            submitted[key] = value
+    return submitted
+
+
+def _write_user_env_values(user, values: dict[str, str]) -> None:
+    """Persist user-specific environment values to the personal ``.env`` file."""
+    env_dir = _user_env_dir()
+    env_dir.mkdir(parents=True, exist_ok=True)
+    env_path = _user_env_path(user)
+
+    with env_path.open("w", encoding="utf-8") as env_file:
+        for key in sorted(values):
+            env_file.write(f"{key}={values[key]}\n")
 
 def _config_view(request):
     django_settings = _get_django_settings()
