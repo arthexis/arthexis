@@ -9,12 +9,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.actions.models import StaffTask
+from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
 
 
 class AdminStaffTasksTests(TestCase):
     """Validate dashboard task buttons and user toggles."""
 
     def setUp(self):
+        ensure_default_staff_tasks_exist()
         user_model = get_user_model()
         self.user = user_model.objects.create_superuser(
             username="adminstaff",

@@ -155,8 +155,9 @@ def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]
 
 
 def _collect_admin_report_routes(user) -> list[dict[str, str]]:
-    """Return reverseable admin routes that appear to be report views."""
+    """Return reverseable admin report routes filtered by the current user permissions."""
 
+    ensure_default_staff_tasks_exist()
     routes: list[dict[str, str]] = []
     restricted_routes = set(
         StaffTask.objects.filter(superuser_only=True).values_list("admin_url_name", flat=True)
