@@ -54,6 +54,6 @@ USER appuser
 EXPOSE 8888
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.getenv(\"PORT\", \"8888\")}/admin/login/', timeout=3)"
+    CMD python -c "import os, urllib.request; admin_path=os.getenv('ADMIN_URL_PATH', 'admin/').strip('/'); health_path=f'/{admin_path}/login/' if admin_path else '/admin/login/'; urllib.request.urlopen(f'http://127.0.0.1:{os.getenv(\"PORT\", \"8888\")}{health_path}', timeout=3)"
 
 ENTRYPOINT ["scripts/docker-entrypoint.sh"]
