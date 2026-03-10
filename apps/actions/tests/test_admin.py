@@ -167,18 +167,24 @@ def test_model_admin_actions_includes_declarative_dashboard_action(admin_client)
 
     from django.contrib.contenttypes.models import ContentType
 
-    from apps.actions.models import DashboardAction
-    from apps.pyxel.models import PyxelViewport
+    from apps.recipes.models import Recipe
+
+    content_type = ContentType.objects.get_for_model(Recipe, for_concrete_model=False)
+    DashboardAction.objects.create(
+        content_type=content_type,
+        slug="recipe-bulk-import",
+        label="Bulk Import",
+        target_type=DashboardAction.TargetType.ABSOLUTE_URL,
+        absolute_url="/admin/recipes/recipe/bulk-import/",
+        http_method=DashboardAction.HttpMethod.GET,
+    )
 
     response = admin_client.get(reverse("admin:index"))
     assert response.status_code == 200
 
-    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
-    action = DashboardAction.objects.get(content_type=content_type, slug="open-viewport")
+    actions = model_admin_actions({"request": response.wsgi_request}, "recipes", "Recipe")
 
-    actions = model_admin_actions({"request": response.wsgi_request}, "pyxel", "PyxelViewport")
-
-    assert any(item["url"] == action.resolve_url() and item["method"] == "post" for item in actions)
+    assert any(item["url"].endswith("bulk-import/") and item["method"] == "get" for item in actions)
 
 
 def test_dashboard_action_rejects_recipe_with_get_method():
@@ -186,10 +192,9 @@ def test_dashboard_action_rejects_recipe_with_get_method():
 
     from django.contrib.contenttypes.models import ContentType
 
-    from apps.pyxel.models import PyxelViewport
     from apps.recipes.models import Recipe
 
-    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    content_type = ContentType.objects.get_for_model(Recipe, for_concrete_model=False)
     recipe = Recipe.objects.create(
         slug="validate-method",
         display="Validate Method",
@@ -215,9 +220,9 @@ def test_dashboard_action_rejects_unsafe_absolute_url():
 
     from django.contrib.contenttypes.models import ContentType
 
-    from apps.pyxel.models import PyxelViewport
+    from apps.recipes.models import Recipe
 
-    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    content_type = ContentType.objects.get_for_model(Recipe, for_concrete_model=False)
     action = DashboardAction(
         content_type=content_type,
         slug="unsafe-url",
@@ -237,7 +242,6 @@ def test_dashboard_action_execute_view_handles_recipe_failure(admin_user):
 
     from django.contrib.contenttypes.models import ContentType
 
-    from apps.pyxel.models import PyxelViewport
     from apps.recipes.models import Recipe
 
     request = RequestFactory().post("/admin/actions/dashboardaction/1/execute/")
@@ -245,7 +249,7 @@ def test_dashboard_action_execute_view_handles_recipe_failure(admin_user):
     request.session = {}
     setattr(request, "_messages", FallbackStorage(request))
 
-    content_type = ContentType.objects.get_for_model(PyxelViewport, for_concrete_model=False)
+    content_type = ContentType.objects.get_for_model(Recipe, for_concrete_model=False)
     recipe = Recipe.objects.create(
         slug="broken-recipe",
         display="Broken Recipe",
