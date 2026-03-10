@@ -292,10 +292,15 @@ class EmailInboxAdmin(
         return redirect("..")
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """Inject admin utility links into the inbox change form context."""
+
         extra_context = extra_context or {}
         if object_id:
             extra_context["test_url"] = reverse(
                 "admin:emails_emailinbox_test", args=[object_id]
+            )
+            extra_context["setup_collector_url"] = reverse(
+                "admin:emails_emailinbox_setup_collector", args=[object_id]
             )
         return super().changeform_view(request, object_id, form_url, extra_context)
 

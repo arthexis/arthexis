@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.selenium.models import InvalidCookiePayloadError, SessionCookie
+from apps.playwright.models import InvalidCookiePayloadError, SessionCookie
 
 
 @pytest.mark.django_db

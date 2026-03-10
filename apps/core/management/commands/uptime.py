@@ -14,7 +14,6 @@ from apps.core.system_ui import (
     system_boot_time,
 )
 from apps.nodes import tasks as node_tasks
-from apps.mcp.remote_commands import remote_command
 
 
 def _lcd_lines(
@@ -90,7 +89,6 @@ def _lock_issues(
     return issues
 
 
-@remote_command(description="Display suite uptime and lock status.")
 class Command(BaseCommand):
     help = "Display suite uptime and lockfile status"
 

@@ -2,6 +2,9 @@
 {% load i18n %}
 
 {% block object-tools-items %}
+    {% if setup_collector_url %}
+        <li><a href="{{ setup_collector_url }}">{% trans "Setup Collector" %}</a></li>
+    {% endif %}
     {% if test_url %}
         <li><a href="{{ test_url }}">{% trans "Test Inbox" %}</a></li>
     {% endif %}

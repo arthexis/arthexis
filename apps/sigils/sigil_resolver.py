@@ -15,6 +15,7 @@ from django.db.models import Count, Max, Min, Sum
 from .models import SigilRoot
 from .sigil_context import get_context, get_request
 from .system import get_system_sigil_values, resolve_system_namespace_value
+from .scanner import scan_sigil_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -498,27 +499,15 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
 
 def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
     parts: list[str] = []
-    i = 0
-    while i < len(text):
-        if text[i] == "[":
-            depth = 1
-            j = i + 1
-            while j < len(text) and depth:
-                if text[j] == "[":
-                    depth += 1
-                elif text[j] == "]":
-                    depth -= 1
-                j += 1
-            if depth:
-                parts.append(text[i])
-                i += 1
-                continue
-            token = text[i + 1 : j - 1]
-            parts.append(_resolve_token(token, current))
-            i = j
-        else:
-            parts.append(text[i])
-            i += 1
+    cursor = 0
+    for span in scan_sigil_tokens(text):
+        if span.start > cursor:
+            parts.append(text[cursor:span.start])
+        token = text[span.start + 1 : span.end - 1]
+        parts.append(_resolve_token(token, current))
+        cursor = span.end
+    if cursor < len(text):
+        parts.append(text[cursor:])
     return "".join(parts)
 
 

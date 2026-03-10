@@ -1,9 +1,12 @@
 """Application registry and site integration settings."""
 
+import importlib.util
+import os
 from pathlib import Path
 
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
+from django.core.exceptions import ImproperlyConfigured
 
 from .base import APPS_DIR, HAS_DEBUG_TOOLBAR
 
@@ -61,6 +64,10 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
+LEGACY_MIGRATION_APPS = ["apps.selenium"]
+EXCLUDED_AUTO_DISCOVERED_APPS = {"apps.selenium"}
+
+
 def _load_local_apps() -> list[str]:
     """Load local Django apps from ``apps/`` using package discovery."""
 
@@ -70,10 +77,29 @@ def _load_local_apps() -> list[str]:
         if _is_django_app_dir(candidate.parent)
     ]
 
-    return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
+    return sorted(
+        module_path
+        for app_dir in app_dirs
+        if (module_path := _to_module_path(app_dir)) not in EXCLUDED_AUTO_DISCOVERED_APPS
+    )
 
 
-LOCAL_APPS = _load_local_apps()
+def _load_active_prototype_app() -> list[str]:
+    """Return the explicitly activated hidden prototype app when configured."""
+
+    module_name = os.environ.get("ARTHEXIS_PROTOTYPE_APP", "").strip()
+    if not module_name:
+        return []
+
+    if importlib.util.find_spec(module_name) is None:
+        raise ImproperlyConfigured(
+            f"Configured ARTHEXIS_PROTOTYPE_APP could not be imported: {module_name}"
+        )
+
+    return [module_name]
+
+
+LOCAL_APPS = _load_local_apps() + _load_active_prototype_app()
 
 INSTALLED_APPS = [
     "apps.whitenoise",
@@ -93,7 +119,7 @@ INSTALLED_APPS = [
     "channels",
     "graphene_django",
     "apps.celery.beat_app.CeleryBeatConfig",
-] + LOCAL_APPS
+] + LOCAL_APPS + LEGACY_MIGRATION_APPS
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")

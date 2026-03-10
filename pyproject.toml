@@ -46,7 +46,7 @@ dependencies = [
   "django-otp==1.7.0",
   "django-parler==2.3",
   "django-timezone-field==7.2.1",
-  "Django==5.2.11",
+  "Django==5.2.12",
   "dnspython==2.7.0",
   "filelock==3.25.0",
   "graphene-django==3.2.3",
@@ -79,7 +79,7 @@ dependencies = [
   "python-dateutil==2.9.0.post0",
   "python-dotenv==1.2.2",
   "PyYAML==6.0.3",
-  "redis==7.2.1",
+  "redis==7.3.0",
   "reportlab==4.4.10",
   "requests==2.32.5",
   "s3transfer==0.11.1",
@@ -130,7 +130,7 @@ ci = [
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",
   "pytest==9.0.2",
-  "ruff==0.15.4",
+  "ruff==0.15.5",
   "twine==6.1.0",
 ]
 docs = [
@@ -209,7 +209,6 @@ config = [ "**/*",]
 "apps.sigils" = [ "**/*",]
 "apps.nodes" = [ "**/*",]
 "apps.nmcli" = [ "**/*",]
-"apps.pyxel" = [ "**/*",]
 "apps.reports" = [ "**/*",]
 "apps.widgets" = [ "**/*",]
 "apps.totp" = [ "**/*",]
@@ -362,9 +361,6 @@ config = [ "**/*",]
 "apps.nodes.migrations" = [ "**/*",]
 "apps.nodes.management.commands" = [ "**/*",]
 "apps.nmcli.migrations" = [ "**/*",]
-"apps.pyxel.management" = [ "**/*",]
-"apps.pyxel.migrations" = [ "**/*",]
-"apps.pyxel.management.commands" = [ "**/*",]
 "apps.reports.migrations" = [ "**/*",]
 "apps.widgets.management" = [ "**/*",]
 "apps.widgets.tests" = [ "**/*",]
@@ -422,3 +418,18 @@ config = [ "**/*",]
 
 [tool.setuptools.packages.find]
 where = [ ".",]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = [
+  "*/migrations/*.py",
+  "*/beat_migrations/*.py",
+]
+
+[tool.ruff.lint]
+select = ["E9", "F823"]
+extend-select = ["I", "UP", "B904"]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/*/tests/*.py" = ["B904"]

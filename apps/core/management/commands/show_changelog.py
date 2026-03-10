@@ -3,9 +3,11 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core import changelog
+from apps.core.management.deprecation import absorbed_into_command
 from apps.core.system_ui import format_timestamp
 
 
+@absorbed_into_command("changelog")
 class Command(BaseCommand):
     """Display recent changelog entries from the latest section."""
 
@@ -31,7 +33,9 @@ class Command(BaseCommand):
             raise CommandError(f"Unable to load changelog data: {exc}") from exc
 
         if not page.sections:
-            self.stdout.write(self.style.WARNING("No changelog information is available."))
+            self.stdout.write(
+                self.style.WARNING("No changelog information is available.")
+            )
             return
 
         latest_section = page.sections[0]
@@ -43,13 +47,17 @@ class Command(BaseCommand):
         elif latest_section.version:
             section_label = f"{section_label} [{latest_section.version}]"
 
-        self.stdout.write(self.style.MIGRATE_HEADING(f"Latest changelog section: {section_label}"))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(f"Latest changelog section: {section_label}")
+        )
         self.stdout.write(
             f"Showing {len(commits)} of {len(latest_section.commits)} entries from the most recent section."
         )
 
         if not commits:
-            self.stdout.write(self.style.WARNING("No commits found in the latest section."))
+            self.stdout.write(
+                self.style.WARNING("No commits found in the latest section.")
+            )
             return
 
         for commit in commits:

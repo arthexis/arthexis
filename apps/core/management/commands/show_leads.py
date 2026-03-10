@@ -1,10 +1,14 @@
-from django.core.management.base import BaseCommand
-from django.utils import timezone
-from apps.awg.models import PowerLead
-from apps.core.models import InviteLead
 import json
 
+from django.core.management.base import BaseCommand
+from django.utils import timezone
 
+from apps.awg.models import PowerLead
+from apps.core.management.deprecation import absorbed_into_command
+from apps.core.models import InviteLead
+
+
+@absorbed_into_command("leads")
 class Command(BaseCommand):
     """Display recent invite or power leads."""
 

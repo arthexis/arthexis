@@ -55,7 +55,6 @@ apps/ftp/tests/test_authorizers.py
 apps/core/tests/test_tasks.py
 apps/counters/tests/test_system_dashboard_rules_report.py
 apps/embeds/tests/test_views.py
-apps/mcp/tests/test_create_mcp_api_key_command.py
 apps/screens/tests/test_lcd_history.py
 apps/services/tests/test_lifecycle.py
 apps/counters/tests/test_user_story_dashboard_rules.py
@@ -212,16 +211,6 @@ apps/features/tests/test_admin.py::test_feature_admin_from_app_filter_shows_only
 apps/features/tests/test_admin.py::test_feature_admin_from_app_filter_limits_results
 apps/features/tests/test_admin.py::test_feature_admin_from_app_filter_uses_admin_queryset_scope
 apps/features/tests/test_admin.py::test_feature_admin_operator_site_language_parameter_is_editable
-apps/pyxel/tests/test_live_stats_admin.py::test_admin_index_omits_pyxel_button
-apps/pyxel/tests/test_live_stats_admin.py::test_open_live_stats_view_launches_subprocess_for_local_request
-apps/pyxel/tests/test_live_stats_admin.py::test_launch_live_stats_subprocess_raises_when_process_exits
-apps/pyxel/tests/test_live_stats_admin.py::test_launch_live_stats_subprocess_returns_running_process
-apps/pyxel/tests/test_live_stats_admin.py::test_pyxel_changelist_exposes_open_viewport_action
-apps/pyxel/tests/test_live_stats_admin.py::test_admin_dashboard_model_row_includes_open_viewport_link
-apps/pyxel/tests/test_live_stats_admin.py::test_open_viewport_view_uses_default_when_multiple
-apps/pyxel/tests/test_live_stats_admin.py::test_open_viewport_view_by_pk_launches_requested_viewport
-apps/pyxel/tests/test_live_stats_admin.py::test_soft_deleted_seed_default_does_not_block_new_default
-apps/pyxel/tests/test_live_stats_admin.py::test_soft_deleted_non_seed_default_does_not_block_new_default
 apps/aws/tests/test_admin.py::test_credentials_tool_action_load_instances_redirects
 apps/aws/tests/test_admin.py::test_credentials_selected_action_loads_instances_for_each_selection
 apps/aws/tests/test_admin.py::test_instance_tool_action_is_registered_and_redirects
@@ -263,9 +252,6 @@ apps/links/tests/test_footer_context.py::test_build_footer_context_uses_module_s
 apps/video/tests/test_utils.py::test_has_rpi_camera_stack_with_ffmpeg
 apps/video/tests/test_utils.py::test_capture_snapshot_uses_ffmpeg
 apps/video/tests/test_utils.py::test_capture_snapshot_falls_back_to_ffmpeg
-apps/pyxel/tests/test_live_stats_admin.py::test_is_local_request_matches_local_interface
-apps/pyxel/tests/test_live_stats_admin.py::test_is_local_request_rejects_non_local_ip
-apps/pyxel/tests/test_live_stats_admin.py::test_is_local_request_ignores_forwarded_for_header
 apps/links/tests/test_qr_utils.py::test_qr_utils_raise_clear_error_when_qrcode_missing
 apps/links/tests/test_qr_utils.py::test_qr_svg_and_png_generation_returns_data
 apps/alexa/tests/test_admin.py::test_alexa_admin_test_credentials_updates_last_check_fields
@@ -282,8 +268,6 @@ apps/bluetooth/tests/test_admin.py::test_discover_post_uses_60_seconds_when_time
 apps/repos/tests/test_admin.py::test_github_token_admin_add_page_loads
 apps/summary/tests/test_admin.py::test_wizard_uses_single_title_and_breadcrumbs
 apps/summary/tests/test_admin.py::test_wizard_initial_timeout_uses_saved_suite_parameter
-apps/pyxel/tests/test_admin_views_unit.py::test_has_graphical_display
-apps/pyxel/tests/test_admin_views_unit.py::test_viewport_opened_message
 apps/features/tests/test_admin.py::test_feature_admin_reload_base_requires_delete_permission
 apps/features/tests/test_admin.py::test_feature_admin_toggle_selected_feature_action_flips_enabled_state
 apps/nginx/tests/test_admin.py::test_preview_view_denies_user_without_permission

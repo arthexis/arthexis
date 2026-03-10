@@ -196,6 +196,78 @@ PY
   fi
 }
 
+playwright_requirement() {
+  local requirements_file="$SCRIPT_DIR/requirements-ci.txt"
+  if [ -f "$requirements_file" ]; then
+    local line
+    line=$(grep -E '^playwright([[:space:]]*[<=>!~].*)?$' "$requirements_file" | head -n 1 || true)
+    if [ -n "$line" ]; then
+      echo "$line"
+      return 0
+    fi
+  fi
+  echo "playwright"
+}
+
+playwright_version() {
+  "$PYTHON" - <<'PY'
+import importlib.metadata
+
+try:
+    print(importlib.metadata.version("playwright"))
+except importlib.metadata.PackageNotFoundError:
+    raise SystemExit(1)
+PY
+}
+
+ensure_playwright_installed() {
+  if playwright_version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local -a playwright_pip_args=(--cache-dir "$PIP_CACHE_DIR")
+  if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+    playwright_pip_args+=(--user)
+  fi
+
+  local playwright_req
+  playwright_req=$(playwright_requirement)
+  echo "Playwright not found; attempting to install ${playwright_req}." >&2
+  if ! pip_install_with_helper "${playwright_pip_args[@]}" "$playwright_req"; then
+    echo "Playwright installation failed. Ensure pip and Python venv support are installed." >&2
+    return 1
+  fi
+}
+
+ensure_playwright_browsers_installed() {
+  local browser_marker_file="$LOCK_DIR/playwright.version"
+  local current_version=""
+  local stored_version=""
+
+  if ! ensure_playwright_installed; then
+    return 1
+  fi
+
+  current_version="$(playwright_version)"
+
+  if [ -f "$browser_marker_file" ]; then
+    stored_version="$(cat "$browser_marker_file")"
+  fi
+
+  if [ "$FORCE_REFRESH" -eq 0 ] && [ "$current_version" = "$stored_version" ]; then
+    echo "playwright browsers already installed for version ${current_version}; skipping"
+    return 0
+  fi
+
+  echo "Installing Playwright browser runtimes (chromium, firefox) for version ${current_version}."
+  if ! "$PYTHON" -m playwright install chromium firefox; then
+    echo "Playwright browser runtime installation failed." >&2
+    return 1
+  fi
+
+  printf '%s\n' "$current_version" > "$browser_marker_file"
+}
+
 should_install_hardware_requirements() {
   local lock_dir="$SCRIPT_DIR/.locks"
   local role_file="$lock_dir/role.lck"
@@ -454,6 +526,7 @@ else
 fi
 
 ensure_celery_installed
+ensure_playwright_browsers_installed
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."

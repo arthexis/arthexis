@@ -1,14 +1,31 @@
+from pathlib import Path
+
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
+from apps.playwright.management.commands.preview import Command
+def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
+    """Engine failure aggregation should raise a clean CommandError message."""
 
-@pytest.mark.django_db
-def test_preview_command_help_lists_expected_options(capsys):
-    """The short preview command should expose the expected CLI contract."""
+    command = Command()
 
-    with pytest.raises(SystemExit):
-        call_command("preview", "--help")
+    monkeypatch.setattr(command, "_ensure_admin_user", lambda **kwargs: None)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
 
-    output = capsys.readouterr().out
-    assert "--base-url" in output
-    assert "--engine" in output
+    def _always_fail(**kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(command, "_capture_all", _always_fail)
+
+    with pytest.raises(CommandError, match=r"All preview engines failed\. Last error: boom"):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username="admin",
+            password="admin123",
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports="desktop",
+            engine="chromium,firefox",
+        )

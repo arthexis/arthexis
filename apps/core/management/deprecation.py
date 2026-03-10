@@ -35,7 +35,7 @@ def create_deprecated_command_shim(
     """Create a deprecated shim command class that delegates to ``canonical_command``."""
 
     class Command(canonical_command):
-        """Backwards-compatible command shim for canonical MCP commands."""
+        """Backwards-compatible command shim for canonical commands."""
 
         help = (
             f"{getattr(canonical_command, 'help', '')} "

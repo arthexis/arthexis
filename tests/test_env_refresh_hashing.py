@@ -18,11 +18,13 @@ def env_refresh_module():
     spec.loader.exec_module(module)
     return module
 
+
 def _write_fixture(base_dir: Path, relative: str, content: str) -> str:
     path = base_dir / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     return relative
+
 
 def test_migration_hash_reads_migration_files(tmp_path, monkeypatch, env_refresh_module):
     app_one = tmp_path / "apps" / "one"
@@ -54,6 +56,7 @@ def test_migration_hash_reads_migration_files(tmp_path, monkeypatch, env_refresh
 
     assert env_refresh_module._migration_hash(["app_one", "app_two"]) == expected
 
+
 def test_fixtures_hash_uses_relative_paths(tmp_path, monkeypatch, env_refresh_module):
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
     fixtures = [
@@ -72,6 +75,7 @@ def test_fixtures_hash_uses_relative_paths(tmp_path, monkeypatch, env_refresh_mo
             continue
 
     assert env_refresh_module._fixtures_hash(fixtures) == digest.hexdigest()
+
 
 def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
@@ -147,6 +151,47 @@ def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
 def test_upsert_site_configuration_returns_false_when_name_missing(env_refresh_module):
     result = env_refresh_module._upsert_site_configuration({"enabled": True})
     assert result is False
+
+
+def test_load_fixture_with_retry_retries_until_success(monkeypatch, env_refresh_module, capsys):
+    """Regression: fixture loading should retry transient sqlite lock failures."""
+
+    calls: list[str] = []
+
+    def _flaky_load(command: str, fixture: str, *, verbosity: int) -> None:
+        calls.append(fixture)
+        if len(calls) < 3:
+            raise env_refresh_module.OperationalError("database is locked")
+
+    monkeypatch.setattr(env_refresh_module, "call_command", _flaky_load)
+
+    env_refresh_module._load_fixture_with_retry(
+        "seed.json",
+        using_sqlite=True,
+        attempts=3,
+        base_delay=0,
+    )
+
+    output = capsys.readouterr().out
+    assert "Database locked while loading seed.json" in output
+    assert calls == ["seed.json", "seed.json", "seed.json"]
+
+
+def test_load_fixture_with_retry_raises_after_max_attempts(monkeypatch, env_refresh_module):
+    """Regression: repeated sqlite lock failures should still bubble up."""
+
+    def _always_locked(command: str, fixture: str, *, verbosity: int) -> None:
+        raise env_refresh_module.OperationalError("database is locked")
+
+    monkeypatch.setattr(env_refresh_module, "call_command", _always_locked)
+
+    with pytest.raises(env_refresh_module.OperationalError, match="database is locked"):
+        env_refresh_module._load_fixture_with_retry(
+            "seed.json",
+            using_sqlite=True,
+            attempts=2,
+            base_delay=0,
+        )
 
 
 def test_load_fixtures_with_deferred_retry_retries_once(monkeypatch, env_refresh_module, capsys):

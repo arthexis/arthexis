@@ -11,8 +11,10 @@ from django.core.management.base import BaseCommand
 from parler.models import TranslatableModel
 
 from apps.core.fixtures import ensure_seed_data_flags
+from apps.core.management.deprecation import absorbed_into_command
 
 
+@absorbed_into_command("fixtures")
 class Command(BaseCommand):
     """Persist database changes back to fixture files."""
 
@@ -65,7 +67,9 @@ class Command(BaseCommand):
 
             def _supports_natural_key(model):
                 natural_key = getattr(model, "natural_key", None)
-                get_natural = getattr(model._default_manager, "get_by_natural_key", None)
+                get_natural = getattr(
+                    model._default_manager, "get_by_natural_key", None
+                )
                 return callable(natural_key) and callable(get_natural)
 
             def _collect_translations(instance):

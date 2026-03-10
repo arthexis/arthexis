@@ -11,6 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.views import _compute_tracking_step_completion
 from apps.features.models import Feature
 
 
@@ -246,6 +247,64 @@ def test_order_tracking_public_loads_remote_image_previews(mock_fetch_order_deta
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
+def test_order_tracking_public_counts_remote_images_for_step_status(mock_fetch_order_detail, client):
+    """Regression: persisted remote images should count toward install/montage completion display."""
+    mock_fetch_order_detail.return_value = {
+        "reporte_visita": {
+            "metraje_visita_tecnica": "10",
+            "programacion_cargador": "32A",
+            "capacidad_itm_principal": "60",
+            "fecha_visita": "2026-02-26 13:00:00",
+            "voltaje_fase_fase": "220",
+            "voltaje_fase_tierra": "120",
+            "voltaje_fase_neutro": "120",
+            "voltaje_neutro_tierra": "1",
+            "prueba_carga": "Sin prueba",
+            "marca_cargador": "Marca",
+            "numero_serie": "SER-1",
+            "foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg",
+            "foto_medidor": "https://cdn.evergo.example/fotos/medidor.jpg",
+            "foto_tierra": "https://cdn.evergo.example/fotos/tierra.jpg",
+            "foto_ruta_cableado": "https://cdn.evergo.example/fotos/ruta.jpg",
+            "foto_ubicacion_cargador": "https://cdn.evergo.example/fotos/ubicacion.jpg",
+            "foto_general": "https://cdn.evergo.example/fotos/general.jpg",
+            "foto_hoja_visita": "https://cdn.evergo.example/fotos/hoja-visita.jpg",
+            "foto_interruptor_principal": "https://cdn.evergo.example/fotos/interruptor-principal.jpg",
+            "foto_panoramica_estacion": "https://cdn.evergo.example/fotos/panoramica.jpg",
+            "foto_numero_serie_cargador": "https://cdn.evergo.example/fotos/serie-cargador.jpg",
+            "foto_interruptor_instalado": "https://cdn.evergo.example/fotos/interruptor-instalado.jpg",
+            "foto_conexion_cargador": "https://cdn.evergo.example/fotos/conexion.jpg",
+            "foto_preparacion_cfe": "https://cdn.evergo.example/fotos/preparacion-cfe.jpg",
+            "foto_hoja_reporte_instalacion": "https://cdn.evergo.example/fotos/hoja-reporte.jpg",
+            "foto_voltaje_fase_fase": "https://cdn.evergo.example/fotos/vff.jpg",
+            "foto_voltaje_fase_tierra": "https://cdn.evergo.example/fotos/vft.jpg",
+            "foto_voltaje_fase_neutro": "https://cdn.evergo.example/fotos/vfn.jpg",
+            "foto_voltaje_neutro_tierra": "https://cdn.evergo.example/fotos/vnt.jpg",
+        }
+    }
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-images-steps", email="owner-images-steps@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-images-steps@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30206, order_number="GM030206")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "✅ 3. Reporte de instalación" in content
+    assert "✅ 4. Montaje-Conexión" in content
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "javascript:alert(1)"})
 def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
     """Security regression: preview images should only accept HTTP(S) URLs from Evergo."""
@@ -272,7 +331,7 @@ def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
 @pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
 def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, client, settings):
-    """Regression: tracking view should expose feedback/chat quick actions when enabled by permissions."""
+    """Regression: tracking view should expose shared feedback/chat widgets when enabled by permissions."""
     settings.PAGES_CHAT_ENABLED = True
     Feature.objects.update_or_create(
         slug="staff-chat-bridge",
@@ -299,7 +358,6 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'id="chat-launch"' in content
     assert 'id="user-story-toggle"' in content
     assert 'id="chat-widget"' in content
     assert 'id="user-story-overlay"' in content
@@ -332,7 +390,7 @@ def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, cl
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'id="chat-launch"' not in content
+    assert 'id="chat-widget"' not in content
     assert 'id="user-story-toggle"' not in content
 
 
@@ -545,6 +603,78 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
     assert mock_submit.called
     assert "4/4 pasos completados" in response.content.decode()
 
+
+
+
+def test_compute_tracking_step_completion_allows_assign_without_visita_completion():
+    """Regression: assign step can be complete independently while install still requires visita completion."""
+    completion = _compute_tracking_step_completion(
+        {
+            "fecha_visita": "2026-03-09T10:00",
+            "programacion_cargador": "32A",
+        }
+    )
+
+    assert completion["visita"] is False
+    assert completion["assign"] is True
+    assert completion["install"] is False
+    assert completion["montage"] is False
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 0})
+def test_order_tracking_public_allows_partial_submission_without_required_primary_fields(mock_submit, client):
+    """Regression: operators can submit partial progress and continue later without completing every field."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-partial", email="owner-partial@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-partial@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30314, order_number="GM030314")
+    client.force_login(owner)
+
+    response = client.post(
+        reverse("evergo:order-tracking-public", args=[order.remote_id]),
+        data={
+            "metraje_visita_tecnica": 10,
+            "confirm_missing_images": "1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert mock_submit.called
+    content = response.content.decode()
+    assert "Orden enviada correctamente. 0/4 pasos completados." in content
+    assert "Orden enviada correctamente. 4/4 pasos completados." not in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"metraje_visita_tecnica": "31"}})
+def test_order_tracking_public_shows_step_progress_with_incomplete_prefill(_, client):
+    """Regression: step summary should keep later steps pending when required fields remain missing."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-step-status", email="owner-step-status@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-step-status@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30315, order_number="GM030315")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Estado de pasos" in content
+    assert "🕓 1. Visita técnica" in content
 
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):

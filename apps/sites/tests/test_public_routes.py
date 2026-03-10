@@ -66,6 +66,19 @@ def test_public_pages_render_for_anonymous(client):
     )
 
 
+def test_share_modal_renders_page_thumbnail_instead_of_helper_copy(client):
+    """Share modal should show a page thumbnail preview instead of helper text."""
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="share-page-thumbnail"' in content
+    assert 'src="about:blank"' in content
+    assert 'sandbox="allow-same-origin"' in content
+    assert "Share this page using the short link below." not in content
+
+
 def test_public_feedback_renders_guest_contact_optin_beside_email(client):
     """Regression: guest feedback should render a single contact opt-in beside the email field."""
 
@@ -290,6 +303,27 @@ def test_feedback_copy_details_are_limited_to_staff(request, user_fixture, expec
     )
     assert f'data-copy-staff-details="{expected_flag}"' in public_html
 
+
+@pytest.mark.parametrize(
+    "template_name",
+    [
+        "admin/includes/user_story_feedback.html",
+        "pages/base.html",
+    ],
+)
+def test_feedback_rating_labels_match_updated_severity_scale(template_name):
+    """Regression: feedback star hints should expose the updated severity scale."""
+
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    rendered = render_to_string(template_name, {"request": request}, request=request)
+
+    assert "data-rating-message-1=\"Complete loss of function\"" in rendered
+    assert "data-rating-message-2=\"Partial loss of function\"" in rendered
+    assert "data-rating-message-3=\"Negative user experience\"" in rendered
+    assert "data-rating-message-4=\"Potential for improvement\"" in rendered
+    assert "data-rating-message-5=\"Meets all expectations\"" in rendered
 
 def test_release_checklist_requires_staff(client, user, staff_user):
     """Release checklist access should be limited to staff users."""

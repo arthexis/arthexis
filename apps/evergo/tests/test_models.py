@@ -728,3 +728,55 @@ def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_cust
 
     assert stale_pk is not None
     assert EvergoCustomer.objects.filter(pk=stale_pk).exists()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser._request_json", return_value={})
+@patch("apps.evergo.models.user.EvergoUser._login_session")
+@patch("apps.evergo.models.user.requests.Session")
+def test_submit_tracking_phase_one_skips_visita_request_when_incomplete(
+    mock_session_cls, _mock_login_session, _mock_request_json
+):
+    """Regression: visita endpoint must not be called when visita completion is False."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-phase-one", email="suite-phase-one@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-phase-one@example.com",
+        evergo_password="secret",
+        evergo_user_id=58642,
+    )
+
+    mock_session = mock_session_cls.return_value.__enter__.return_value
+
+    result = profile.submit_tracking_phase_one(
+        order_id=30316,
+        payload={"fecha_visita": "2026-03-10 10:00:00"},
+        files={},
+        step_completion={"visita": False, "assign": False, "install": False, "montage": False},
+    )
+
+    assert mock_session.post.call_count == 0
+    assert result["phase_1_status"] is None
+    assert result["phase_1_payload"] == {}
+    assert result["completed_steps"] == 0
+
+
+@pytest.mark.django_db
+def test_submit_tracking_phase_one_handles_non_json_payload_responses():
+    """Regression: non-JSON response bodies should not crash payload extraction."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-phase-json", email="suite-phase-json@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-phase-json@example.com",
+        evergo_password="secret",
+        evergo_user_id=58642,
+    )
+
+    broken_response = Mock()
+    broken_response.content = b"<html>error</html>"
+    broken_response.json.side_effect = ValueError("invalid json")
+
+    assert profile._safe_json_extract(broken_response) == {}
+

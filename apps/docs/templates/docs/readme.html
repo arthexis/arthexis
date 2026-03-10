@@ -11,16 +11,14 @@
         <h4>Contents</h4>
         {{ toc|safe }}
       </nav>
-      <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
-        <div class="card-body">
-          <div
-            id="reader-qr"
-            class="reader-qr-image"
-            data-url="{{ page_url }}"
-            role="img"
-            aria-label="{% trans 'QR code linking to this page' %}"
-          ></div>
-        </div>
+      <div class="reader-qr-card mt-4">
+        <div
+          id="reader-qr"
+          class="reader-qr-image"
+          data-url="{{ page_url }}"
+          role="img"
+          aria-label="{% trans 'QR code linking to this page' %}"
+        ></div>
       </div>
     </div>
   </div>
