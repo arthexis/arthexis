@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone as dt_timezone
 
 from channels.db import database_sync_to_async
@@ -15,6 +16,9 @@ from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from apps.ocpp.consumers.csms import persistence
+
+
+logger = logging.getLogger(__name__)
 
 
 class StatusHandlersMixin:
@@ -66,13 +70,21 @@ class StatusHandlersMixin:
             aggregate_charger=self.aggregate_charger,
             update_kwargs=update_kwargs,
         )
-        await database_sync_to_async(persistence.sync_charger_error_security_event)(
-            charger_id=self.charger_id,
-            connector_value=connector_value,
-            status=status,
-            error_code=error_code,
-            status_timestamp=status_timestamp,
-        )
+        try:
+            await database_sync_to_async(persistence.sync_charger_error_security_event)(
+                charger_id=self.charger_id,
+                connector_value=connector_value,
+                status=status,
+                error_code=error_code,
+                status_timestamp=status_timestamp,
+            )
+        except Exception:
+            active_logger = getattr(self, "logger", logger)
+            active_logger.exception(
+                "Failed to sync charger security alert event for charger_id=%s connector=%s",
+                self.charger_id,
+                connector_value,
+            )
         if connector_value is not None and status.lower() == "available":
             tx_obj = store.transactions.pop(self.store_key, None)
             if tx_obj:

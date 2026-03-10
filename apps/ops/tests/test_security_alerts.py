@@ -19,32 +19,31 @@ from apps.widgets.services import render_zone_widgets, sync_registered_widgets
 pytestmark = pytest.mark.django_db
 
 
-def test_build_security_alerts_includes_recent_error_events_only() -> None:
-    """Aggregator should include persisted recent error events only."""
+def test_build_security_alerts_includes_active_error_events_only() -> None:
+    """Aggregator should include active persisted error events only."""
 
-    stale = timezone.now() - timedelta(days=20)
     SecurityAlertEvent.record_occurrence(
-        key="event-recent",
-        message="Recent worker failure.",
+        key="event-active",
+        message="Active worker failure.",
         detail="traceback",
         remediation_url="/admin/system/dashboard-rules-report/",
     )
     SecurityAlertEvent.record_occurrence(
-        key="event-stale",
-        message="Stale worker failure.",
+        key="event-recovered",
+        message="Recovered worker failure.",
         detail="traceback",
         remediation_url="/admin/system/dashboard-rules-report/",
-        occurred_at=stale,
     )
+    SecurityAlertEvent.clear_occurrence(key="event-recovered")
 
     alerts = security_alerts.build_security_alerts()
 
-    assert [alert["message"] for alert in alerts] == ["Recent worker failure."]
+    assert [alert["message"] for alert in alerts] == ["Active worker failure."]
     assert alerts[0]["severity"] == "error"
 
 
 def test_build_security_alerts_returns_empty_list_when_no_error_events() -> None:
-    """Return an empty list when there are no active recent event alerts."""
+    """Return an empty list when there are no active event alerts."""
 
     assert security_alerts.build_security_alerts() == []
 
@@ -82,7 +81,7 @@ def test_security_alert_widget_template_uses_plain_link_for_remediation() -> Non
 def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
     """Collector failures should not crash rendering and should be recorded."""
 
-    def _boom() -> list[security_alerts.SecurityAlert]:
+    def _boom(now=None) -> list[security_alerts.SecurityAlert]:
         raise RuntimeError("collector exploded")
 
     monkeypatch.setattr(security_alerts, "error_event_security_alerts", _boom)
@@ -92,6 +91,49 @@ def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
     assert alerts == []
     persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
     assert persisted_event.occurrence_count == 1
+
+
+def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
+    """Older occurrences should not move last_occurred_at backwards."""
+
+    first_seen = timezone.now()
+    SecurityAlertEvent.record_occurrence(
+        key="event-monotonic",
+        message="Monotonic event.",
+        detail="first",
+        remediation_url="/admin/system/dashboard-rules-report/",
+        occurred_at=first_seen,
+    )
+    SecurityAlertEvent.record_occurrence(
+        key="event-monotonic",
+        message="Monotonic event.",
+        detail="older replay",
+        remediation_url="/admin/system/dashboard-rules-report/",
+        occurred_at=first_seen - timedelta(minutes=5),
+    )
+
+    event = SecurityAlertEvent.objects.get(key="event-monotonic")
+    assert event.occurrence_count == 2
+    assert event.last_occurred_at == first_seen
+
+
+def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) -> None:
+    """Collector failure events should be marked inactive after successful collection."""
+
+    SecurityAlertEvent.record_occurrence(
+        key="security-alert-source-error-events",
+        message="Security alert source failed.",
+        detail="error_events: boom",
+        remediation_url="/admin/system/dashboard-rules-report/",
+    )
+
+    monkeypatch.setattr(security_alerts, "error_event_security_alerts", lambda now=None: [])
+
+    alerts = security_alerts.build_security_alerts()
+
+    assert alerts == []
+    persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
+    assert persisted_event.is_active is False
 
 
 def test_security_alert_widget_template_renders_translated_severity_and_colored_badges() -> None:
@@ -187,6 +229,7 @@ def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
         detail="smtp timeout",
         remediation_url="/admin/system/dashboard-rules-report/",
     )
+    event.refresh_from_db()
 
     alerts = security_alerts.error_event_security_alerts(
         now=event.last_occurred_at + timedelta(minutes=1)

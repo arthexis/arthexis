@@ -10,7 +10,9 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, models, transaction
+from django.db import DatabaseError, IntegrityError, connection, models, transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest, Now
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -182,7 +184,7 @@ class OperationExecution(Entity):
 class SecurityAlertEvent(Entity):
     """Aggregated operational error event used by the security alerts widget."""
 
-    key = models.CharField(max_length=120, unique=True)
+    key = models.CharField(max_length=255, unique=True)
     severity = models.CharField(max_length=20, default="error")
     message = models.CharField(max_length=255)
     detail = models.TextField(blank=True)
@@ -216,41 +218,43 @@ class SecurityAlertEvent(Entity):
     ) -> "SecurityAlertEvent":
         """Create or update an event entry while incrementing occurrence metadata."""
 
-        event, created = cls.objects.get_or_create(
-            key=key,
-            defaults={
-                "severity": severity,
-                "message": message,
-                "detail": detail,
-                "occurrence_count": 1,
-                "last_occurred_at": occurred_at or timezone.now(),
-                "remediation_url": remediation_url,
-                "is_active": True,
-            },
-        )
-        if created:
-            return event
+        event_timestamp = occurred_at or timezone.now()
+        try:
+            with transaction.atomic():
+                return cls.objects.create(
+                    key=key,
+                    severity=severity,
+                    message=message,
+                    detail=detail,
+                    occurrence_count=1,
+                    last_occurred_at=event_timestamp,
+                    remediation_url=remediation_url,
+                    is_active=True,
+                )
+        except IntegrityError:
+            cls.objects.filter(key=key).update(
+                severity=severity,
+                message=message,
+                detail=detail,
+                remediation_url=remediation_url,
+                occurrence_count=F("occurrence_count") + 1,
+                last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
+                is_active=True,
+                updated_at=Now(),
+            )
+        return cls.objects.get(key=key)
 
-        event.severity = severity
-        event.message = message
-        event.detail = detail
-        event.remediation_url = remediation_url
-        event.occurrence_count += 1
-        event.last_occurred_at = occurred_at or timezone.now()
-        event.is_active = True
-        event.save(
-            update_fields=[
-                "severity",
-                "message",
-                "detail",
-                "remediation_url",
-                "occurrence_count",
-                "last_occurred_at",
-                "is_active",
-                "updated_at",
-            ]
-        )
-        return event
+    @classmethod
+    def clear_occurrence(cls, *, key: str, occurred_at=None) -> None:
+        """Mark an aggregated event inactive when the source recovers."""
+
+        update_kwargs = {"is_active": False, "updated_at": Now()}
+        if occurred_at is not None:
+            update_kwargs["last_occurred_at"] = Greatest(
+                F("last_occurred_at"),
+                Value(occurred_at),
+            )
+        cls.objects.filter(key=key, is_active=True).update(**update_kwargs)
 
 
 @dataclass(slots=True)

@@ -275,3 +275,55 @@ def test_sync_charger_error_security_event_deactivates_when_status_recovers(char
 
     event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-aggregate-error")
     assert event.is_active is False
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_ignores_stale_fault_after_recovery(charger_rows):
+    """Older fault replays should not reactivate an event after a newer recovery."""
+
+    faulted_at = timezone.now()
+    recovered_at = faulted_at + timedelta(minutes=2)
+
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Faulted",
+        error_code="ConnectorLockFailure",
+        status_timestamp=faulted_at,
+    )
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Available",
+        error_code="NoError",
+        status_timestamp=recovered_at,
+    )
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Faulted",
+        error_code="ConnectorLockFailure",
+        status_timestamp=faulted_at,
+    )
+
+    event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-1-error")
+    assert event.is_active is False
+    assert event.last_occurred_at == recovered_at
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_supports_long_charger_id_key(charger_rows):
+    """Long charger IDs should persist without exceeding key length limits."""
+
+    long_charger_id = "C" * 100
+
+    sync_charger_error_security_event(
+        charger_id=long_charger_id,
+        connector_value=None,
+        status="Faulted",
+        error_code="InternalError",
+        status_timestamp=timezone.now(),
+    )
+
+    event = SecurityAlertEvent.objects.get(key=f"ocpp-charger-{long_charger_id}-aggregate-error")
+    assert len(event.key) > 120

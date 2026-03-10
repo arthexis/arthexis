@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from apps.ocpp.models import Charger
+
+
+logger = logging.getLogger(__name__)
 
 
 def update_status_notification_records(
@@ -87,8 +92,7 @@ def sync_charger_error_security_event(
 
     if not is_error:
         if existing and existing.is_active:
-            existing.is_active = False
-            existing.save(update_fields=["is_active", "updated_at"])
+            SecurityAlertEvent.clear_occurrence(key=key, occurred_at=status_timestamp)
         return
 
     connector_label = "aggregate" if connector_value is None else str(connector_value)
@@ -114,6 +118,19 @@ def sync_charger_error_security_event(
         remediation_url = reverse("admin:ocpp_charger_changelist")
     except NoReverseMatch:
         remediation_url = "/admin/ocpp/charger/"
+
+    if existing and (
+        not existing.is_active
+        and existing.last_occurred_at is not None
+        and event_timestamp < existing.last_occurred_at
+    ):
+        logger.debug(
+            "Ignoring stale fault replay for key=%s at %s (last=%s)",
+            key,
+            event_timestamp,
+            existing.last_occurred_at,
+        )
+        return
 
     SecurityAlertEvent.record_occurrence(
         key=key,
