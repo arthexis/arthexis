@@ -7,6 +7,7 @@ outside the runtime test suite.
 """
 from __future__ import annotations
 
+import argparse
 import ast
 import importlib.util
 import os
@@ -15,7 +16,16 @@ from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-IGNORED_DIRS = {"media", "static", "venv", ".venv", "env", "node_modules", "__pycache__", ".git"}
+IGNORED_DIRS = {
+    "media",
+    "static",
+    "venv",
+    ".venv",
+    "env",
+    "node_modules",
+    "__pycache__",
+    ".git",
+}
 OPTIONAL_MODULES = {
     "plyer",
     "smbus",
@@ -87,7 +97,9 @@ class ImportCollector(ast.NodeVisitor):
         self.type_checking_stack.pop()
 
     def visit_Try(self, node: ast.Try) -> None:
-        optional = self._is_explicit_optional_try(node) or self._is_legacy_guarded_optional_try(node)
+        optional = self._is_explicit_optional_try(
+            node
+        ) or self._is_legacy_guarded_optional_try(node)
         self.optional_import_stack.append(optional)
         self.generic_visit(node)
         self.optional_import_stack.pop()
@@ -127,7 +139,9 @@ class ImportCollector(ast.NodeVisitor):
             spec = None
         if spec is None:
             self.issues.append(
-                ImportIssue(module, self.file_path, lineno, "import could not be resolved")
+                ImportIssue(
+                    module, self.file_path, lineno, "import could not be resolved"
+                )
             )
 
     def _check_relative_import(self, node: ast.ImportFrom) -> None:
@@ -138,10 +152,17 @@ class ImportCollector(ast.NodeVisitor):
         if node.module:
             module_path = target_dir / Path(node.module.replace(".", "/"))
             if not self._path_exists(module_path):
-                alt_module_path = target_dir.parent / Path(node.module.replace(".", "/"))
+                alt_module_path = target_dir.parent / Path(
+                    node.module.replace(".", "/")
+                )
                 if not self._path_exists(alt_module_path):
                     self.issues.append(
-                        ImportIssue(node.module, self.file_path, node.lineno, "unable to resolve relative import")
+                        ImportIssue(
+                            node.module,
+                            self.file_path,
+                            node.lineno,
+                            "unable to resolve relative import",
+                        )
                     )
             return
 
@@ -156,7 +177,12 @@ class ImportCollector(ast.NodeVisitor):
                 alt_module_path = target_dir.parent / Path(alias.name.replace(".", "/"))
                 if not self._path_exists(alt_module_path):
                     self.issues.append(
-                        ImportIssue(alias.name, self.file_path, node.lineno, "unable to resolve relative import")
+                        ImportIssue(
+                            alias.name,
+                            self.file_path,
+                            node.lineno,
+                            "unable to resolve relative import",
+                        )
                     )
 
     def _package_exports(self, package_dir: Path) -> set[str]:
@@ -184,7 +210,9 @@ class ImportCollector(ast.NodeVisitor):
                 continue
             if isinstance(node, ast.Import):
                 for import_alias in node.names:
-                    exported_names.add(import_alias.asname or import_alias.name.split(".")[-1])
+                    exported_names.add(
+                        import_alias.asname or import_alias.name.split(".")[-1]
+                    )
                 continue
             if isinstance(node, ast.ImportFrom):
                 for import_alias in node.names:
@@ -223,10 +251,14 @@ class ImportCollector(ast.NodeVisitor):
     def _is_explicit_optional_try(self, node: ast.Try) -> bool:
         """Return ``True`` when a ``try`` block explicitly marks optional imports."""
 
-        has_import_error_handler = any(self._is_import_error_handler(handler) for handler in node.handlers)
+        has_import_error_handler = any(
+            self._is_import_error_handler(handler) for handler in node.handlers
+        )
         if not has_import_error_handler:
             return False
-        return any(self._is_optional_marker_statement(statement) for statement in node.body)
+        return any(
+            self._is_optional_marker_statement(statement) for statement in node.body
+        )
 
     def _is_legacy_guarded_optional_try(self, node: ast.Try) -> bool:
         """Allow legacy ``ImportError`` guards that explicitly re-raise failures.
@@ -249,7 +281,9 @@ class ImportCollector(ast.NodeVisitor):
         if not isinstance(statement, ast.Expr):
             return False
 
-        if isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str):
+        if isinstance(statement.value, ast.Constant) and isinstance(
+            statement.value.value, str
+        ):
             return OPTIONAL_IMPORT_MARKER in statement.value.value
 
         if not isinstance(statement.value, ast.Call):
@@ -262,9 +296,7 @@ class ImportCollector(ast.NodeVisitor):
 
     @staticmethod
     def _is_type_checking(node: ast.expr) -> bool:
-        return (
-            isinstance(node, ast.Name) and node.id == "TYPE_CHECKING"
-        ) or (
+        return (isinstance(node, ast.Name) and node.id == "TYPE_CHECKING") or (
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and node.value.id == "typing"
@@ -273,10 +305,15 @@ class ImportCollector(ast.NodeVisitor):
 
     @staticmethod
     def _is_import_error_handler(handler: ast.excepthandler) -> bool:
+        if not isinstance(handler, ast.ExceptHandler):
+            return False
         if isinstance(handler.type, ast.Name):
             return handler.type.id == "ImportError"
         if isinstance(handler.type, ast.Tuple):
-            return any(isinstance(elt, ast.Name) and elt.id == "ImportError" for elt in handler.type.elts)
+            return any(
+                isinstance(elt, ast.Name) and elt.id == "ImportError"
+                for elt in handler.type.elts
+            )
         return False
 
 
@@ -285,16 +322,62 @@ def collect_missing_imports(files: Iterable[Path]) -> list[ImportIssue]:
     for file_path in files:
         module_path = module_path_from_file(file_path)
         tree = ast.parse(file_path.read_text(encoding="utf-8"))
-        collector = ImportCollector(file_path, module_path.rpartition(".")[0] or None if module_path else None)
+        collector = ImportCollector(
+            file_path, module_path.rpartition(".")[0] or None if module_path else None
+        )
         collector.visit(tree)
         issues.extend(collector.issues)
     return issues
 
 
-def main() -> int:
+def _collect_target_files(paths: list[str]) -> list[Path]:
+    """Resolve CLI-provided paths into Python files under project root."""
+
+    if not paths:
+        return list(iter_python_files(PROJECT_ROOT))
+
+    files: set[Path] = set()
+    for raw_path in paths:
+        candidate = Path(raw_path)
+        if not candidate.is_absolute():
+            candidate = (Path.cwd() / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+
+        if not candidate.exists():
+            continue
+
+        if candidate.is_file():
+            if candidate.suffix == ".py" and PROJECT_ROOT in candidate.parents:
+                files.add(candidate)
+            continue
+
+        for file_path in iter_python_files(candidate):
+            if PROJECT_ROOT in file_path.parents:
+                files.add(file_path)
+
+    return sorted(files)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for import resolution checks."""
+
+    parser = argparse.ArgumentParser(
+        description="Check Python imports resolve correctly."
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Optional files or directories to check. Defaults to the whole repository.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(PROJECT_ROOT))
     _prepare_django()
-    files = list(iter_python_files(PROJECT_ROOT))
+    args = parse_args(argv)
+    files = _collect_target_files(args.paths)
     issues = collect_missing_imports(files)
     if issues:
         formatted = "\n".join(
