@@ -194,8 +194,8 @@ class ManualTaskRequest(Entity):
     )
 
     class Meta:
-        verbose_name = _("Manual Task Request")
-        verbose_name_plural = _("Manual Task Requests")
+        verbose_name = _("Manual Request")
+        verbose_name_plural = _("Manual Requests")
         ordering = ("scheduled_start", "category__name")
         db_table = "core_manualtaskrequest"
         constraints = [

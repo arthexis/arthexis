@@ -29,6 +29,11 @@ _COLLECTOR_EVENT_KEYS: dict[str, str] = {
 }
 
 
+_COLLECTOR_EVENT_KEYS: dict[str, str] = {
+    "error_events": "security-alert-source-error-events",
+}
+
+
 def _reverse_or_fallback(url_name: str, fallback: str) -> str:
     """Resolve ``url_name`` or return ``fallback`` when unavailable."""
 
@@ -64,6 +69,37 @@ def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
 
     del now
     active_events = SecurityAlertEvent.objects.filter(is_active=True)
+
+    alerts: list[SecurityAlert] = []
+    for event in active_events.order_by("-last_occurred_at", "-updated_at")[:10]:
+        if event.last_occurred_at is None:
+            continue
+        summary = _(
+            "Last seen: %(timestamp)s · Count: %(count)s"
+        ) % {
+            "timestamp": timezone.localtime(event.last_occurred_at).strftime("%Y-%m-%d %H:%M:%S"),
+            "count": event.occurrence_count,
+        }
+        alerts.append(
+            SecurityAlert(
+                severity=event.severity,
+                message=event.message,
+                remediation_url=event.remediation_url,
+                summary=str(summary),
+            )
+        )
+
+    return alerts
+
+
+def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
+    """Return recent security error event summaries with recency and occurrence counts."""
+
+    current_time = now or timezone.now()
+    cutoff = current_time - timedelta(days=14)
+    active_events = SecurityAlertEvent.objects.filter(
+        is_active=True,
+    ).filter(last_occurred_at__gte=cutoff)
 
     alerts: list[SecurityAlert] = []
     for event in active_events.order_by("-last_occurred_at", "-updated_at")[:10]:

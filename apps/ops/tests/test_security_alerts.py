@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 from django.utils import timezone
