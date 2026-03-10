@@ -63,7 +63,11 @@ def register_extension_with_os(extension: RegisteredExtension) -> RegistrationRe
             ),
         )
 
-    import winreg  # type: ignore[import-not-found]
+    try:
+        "optional-import: winreg is only available on Windows."
+        import winreg  # type: ignore[import-not-found]
+    except ImportError as exc:  # pragma: no cover - defensive on non-standard Windows envs
+        return RegistrationResult(False, f"Windows registry module unavailable: {exc}")
 
     prog_id = f"Arthexis.Desktop{extension.extension.lstrip('.').upper()}"
     command_value = build_windows_registry_command(extension)
