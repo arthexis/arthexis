@@ -424,6 +424,7 @@ line-length = 88
 target-version = "py310"
 extend-exclude = [
   "*/migrations/*.py",
+  "*/beat_migrations/*.py",
 ]
 
 [tool.ruff.lint]
