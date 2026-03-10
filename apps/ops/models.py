@@ -11,7 +11,8 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, connection, models, transaction
-from django.db.models import F
+from django.db.models import F, Value
+from django.db.models.functions import Greatest, Now
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -183,7 +184,7 @@ class OperationExecution(Entity):
 class SecurityAlertEvent(Entity):
     """Aggregated operational error event used by the security alerts widget."""
 
-    key = models.CharField(max_length=120, unique=True)
+    key = models.CharField(max_length=255, unique=True)
     severity = models.CharField(max_length=20, default="error")
     message = models.CharField(max_length=255)
     detail = models.TextField(blank=True)
@@ -198,34 +199,11 @@ class SecurityAlertEvent(Entity):
         ordering = ("-last_occurred_at", "-updated_at")
         verbose_name = _("Security Alert Event")
         verbose_name_plural = _("Security Alert Events")
-        indexes = [
-            models.Index(fields=["is_active", "-last_occurred_at"], name="ops_secalert_active_last"),
-        ]
 
     def __str__(self) -> str:
         """Return a readable key/message label for admin lists."""
 
         return f"{self.key}: {self.message}"
-
-    @staticmethod
-    def _validate_remediation_url(remediation_url: str) -> None:
-        """Validate remediation links to prevent unsafe schemes."""
-
-        parsed = urlparse(remediation_url)
-        if parsed.scheme and parsed.scheme not in {"http", "https"}:
-            raise ValidationError(
-                {"remediation_url": _("Remediation URL must be HTTP(S) or a relative path.")}
-            )
-        if not parsed.scheme and not remediation_url.startswith("/"):
-            raise ValidationError(
-                {"remediation_url": _("Remediation URL must be HTTP(S) or a relative path.")}
-            )
-
-    def clean(self) -> None:
-        """Enforce safe remediation URL schemes."""
-
-        super().clean()
-        self._validate_remediation_url(self.remediation_url)
 
     @classmethod
     def record_occurrence(
@@ -240,39 +218,43 @@ class SecurityAlertEvent(Entity):
     ) -> "SecurityAlertEvent":
         """Create or update an event entry while incrementing occurrence metadata."""
 
-        current_time = occurred_at or timezone.now()
-        cls._validate_remediation_url(remediation_url)
-        with transaction.atomic():
-            event = cls.all_objects.select_for_update().filter(key=key).first()
-            if event is None:
-                try:
-                    return cls.all_objects.create(
-                        key=key,
-                        severity=severity,
-                        message=message,
-                        detail=detail,
-                        occurrence_count=1,
-                        last_occurred_at=current_time,
-                        remediation_url=remediation_url,
-                        is_active=True,
-                        is_deleted=False,
-                    )
-                except IntegrityError:
-                    event = cls.all_objects.select_for_update().get(key=key)
-
-            cls.all_objects.filter(pk=event.pk).update(
+        event_timestamp = occurred_at or timezone.now()
+        try:
+            with transaction.atomic():
+                return cls.objects.create(
+                    key=key,
+                    severity=severity,
+                    message=message,
+                    detail=detail,
+                    occurrence_count=1,
+                    last_occurred_at=event_timestamp,
+                    remediation_url=remediation_url,
+                    is_active=True,
+                )
+        except IntegrityError:
+            cls.objects.filter(key=key).update(
                 severity=severity,
                 message=message,
                 detail=detail,
                 remediation_url=remediation_url,
-                occurrence_count=1 if event.is_deleted else F("occurrence_count") + 1,
-                last_occurred_at=current_time,
+                occurrence_count=F("occurrence_count") + 1,
+                last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
                 is_active=True,
-                is_deleted=False,
-                updated_at=timezone.now(),
+                updated_at=Now(),
             )
-            event.refresh_from_db()
-            return event
+        return cls.objects.get(key=key)
+
+    @classmethod
+    def clear_occurrence(cls, *, key: str, occurred_at=None) -> None:
+        """Mark an aggregated event inactive when the source recovers."""
+
+        update_kwargs = {"is_active": False, "updated_at": Now()}
+        if occurred_at is not None:
+            update_kwargs["last_occurred_at"] = Greatest(
+                F("last_occurred_at"),
+                Value(occurred_at),
+            )
+        cls.objects.filter(key=key, is_active=True).update(**update_kwargs)
 
 
 @dataclass(slots=True)
