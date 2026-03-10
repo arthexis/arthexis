@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import secrets
+import sys
 from pathlib import Path
 
 from django.conf import settings
@@ -56,11 +58,20 @@ class Command(BaseCommand):
             default="chromium,firefox",
             help="Comma-separated engine fallback order (chromium,firefox,webkit).",
         )
+        parser.add_argument(
+            "--no-login",
+            action="store_true",
+            help="Capture pages without authenticating first.",
+        )
 
     def handle(self, *args, **options):
         """Capture screenshots for all requested paths and viewport profiles."""
 
-        self._ensure_admin_user(username=options["username"], password=options["password"])
+        preview_username = ""
+        preview_password = ""
+        preview_user_id: int | None = None
+        if not options["no_login"]:
+            preview_username, preview_password, preview_user_id = self._create_throwaway_admin_user()
 
         output = Path(options["output"])
         if not output.is_absolute():
@@ -91,23 +102,27 @@ class Command(BaseCommand):
 
         captures = self._build_capture_plan(paths=paths, viewport_names=viewport_names, output=output, output_dir=output_dir)
 
-        last_error: Exception | None = None
-        for engine in engines:
-            try:
-                self._capture_all(
-                    base_url=options["base_url"].rstrip("/"),
-                    username=options["username"],
-                    password=options["password"],
-                    captures=captures,
-                    engine=engine,
-                )
-                self._print_reports(captures)
-                return
-            except Exception as exc:
-                last_error = exc
-                self.stderr.write(f"Engine '{engine}' failed: {exc}")
+        try:
+            last_error: Exception | None = None
+            for engine in engines:
+                try:
+                    self._capture_all(
+                        base_url=options["base_url"].rstrip("/"),
+                        username=preview_username,
+                        password=preview_password,
+                        captures=captures,
+                        engine=engine,
+                        login_required=not options["no_login"],
+                    )
+                    self._print_reports(captures)
+                    return
+                except Exception as exc:
+                    last_error = exc
+                    self.stderr.write(f"Engine '{engine}' failed: {exc}")
 
-        raise CommandError(f"All preview engines failed. Last error: {last_error}")
+            raise CommandError(f"All preview engines failed. Last error: {last_error}")
+        finally:
+            self._delete_throwaway_admin_user(preview_user_id)
 
     def _build_capture_plan(
         self,
@@ -158,31 +173,31 @@ class Command(BaseCommand):
                 f"mostly_white={report.mostly_white()}"
             )
 
-    def _ensure_admin_user(self, *, username: str, password: str) -> None:
-        """Create or update deterministic superuser credentials for preview automation."""
+    def _create_throwaway_admin_user(self) -> tuple[str, str, int]:
+        """Create a temporary superuser for preview login and return credentials plus user id."""
 
         user_model = get_user_model()
-        user, created = user_model.objects.get_or_create(
-            username=username,
-            defaults={"is_staff": True, "is_superuser": True},
-        )
-        if created:
-            user.set_password(password)
-            user.save(update_fields=["password"])
+        username = f"preview-{secrets.token_hex(6)}"
+        password = secrets.token_urlsafe(18)
+        user = user_model.objects.create_user(username=username, password=password)
+        user.is_active = True
+        user.is_staff = True
+        user.is_superuser = True
+        user.save(update_fields=["is_active", "is_staff", "is_superuser"])
+        return username, password, user.pk
+
+    def _delete_throwaway_admin_user(self, user_id: int | None) -> None:
+        """Best-effort cleanup for temporary preview users."""
+
+        if user_id is None:
             return
 
-        changed = False
-        if not user.is_staff:
-            user.is_staff = True
-            changed = True
-        if not user.is_superuser:
-            user.is_superuser = True
-            changed = True
-        if not user.check_password(password):
-            user.set_password(password)
-            changed = True
-        if changed:
-            user.save()
+        user_model = get_user_model()
+        try:
+            user = user_model.objects.get(pk=user_id)
+        except user_model.DoesNotExist:
+            return
+        user.delete()
 
     def _capture_all(
         self,
@@ -192,6 +207,7 @@ class Command(BaseCommand):
         password: str,
         captures: list[dict[str, object]],
         engine: str,
+        login_required: bool,
     ) -> None:
         """Use Playwright to login once and capture all requested screenshots."""
         try:
@@ -199,7 +215,9 @@ class Command(BaseCommand):
             from playwright.sync_api import sync_playwright
         except ModuleNotFoundError as exc:
             raise CommandError(
-                "Playwright is required for preview. Install it and run `python -m playwright install chromium firefox`."
+                "Playwright is required for preview. "
+                f"Install it for this interpreter ({sys.executable}) and run "
+                "`python -m playwright install chromium firefox` (or `./env-refresh.sh --deps-only`)."
             ) from exc
 
         login_url = f"{base_url}/admin/login/"
@@ -210,10 +228,13 @@ class Command(BaseCommand):
                 browser = launcher.launch(headless=True)
                 context = browser.new_context()
                 page = context.new_page()
-                page.goto(login_url, wait_until="networkidle")
-                page.fill("#id_username", username)
-                page.fill("#id_password", password)
-                page.click("input[type='submit']")
+                if login_required:
+                    page.goto(login_url, wait_until="networkidle")
+                    page.fill("#id_username", username)
+                    page.fill("#id_password", password)
+                    page.click("input[type='submit']")
+                    page.wait_for_load_state("networkidle")
+                    self._validate_login_success(page.url)
 
                 for capture in captures:
                     width, height = capture["viewport_size"]
@@ -228,4 +249,37 @@ class Command(BaseCommand):
         except AttributeError as exc:
             raise CommandError(f"Unsupported Playwright engine '{engine}'.") from exc
         except PlaywrightError as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(self._playwright_runtime_help(exc)) from exc
+
+    def _validate_login_success(self, current_url: str) -> None:
+        """Raise a command error when preview login does not leave the admin login page."""
+
+        if "/admin/login" in current_url:
+            raise CommandError(
+                "Preview login did not complete successfully. "
+                "If you intended to capture anonymous pages, pass --no-login."
+            )
+
+    def _playwright_runtime_help(self, exc: Exception) -> str:
+        """Return a practical troubleshooting message for recurring runtime failures."""
+
+        base_message = str(exc)
+        lower_message = base_message.lower()
+
+        if "host system is missing dependencies" in lower_message:
+            return (
+                f"{base_message}\n"
+                "Playwright browser binaries were found, but OS libraries are missing. "
+                "Run `python -m playwright install-deps` (or install the listed apt packages) "
+                "for this machine."
+            )
+
+        if "executable doesn't exist" in lower_message or "browser has been closed" in lower_message:
+            return (
+                f"{base_message}\n"
+                "The Playwright runtime for this interpreter appears incomplete. "
+                f"Use `{sys.executable} -m playwright install chromium firefox` "
+                "or `./env-refresh.sh --deps-only` to re-install runtimes for the active environment."
+            )
+
+        return base_message
