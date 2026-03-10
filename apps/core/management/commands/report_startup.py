@@ -2,8 +2,8 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from apps.core.management.deprecation import absorbed_into_command
 
+from apps.core.management.deprecation import absorbed_into_command
 from apps.core.system_ui import read_startup_report
 
 
@@ -11,9 +11,7 @@ from apps.core.system_ui import read_startup_report
 class Command(BaseCommand):
     """Display startup activity captured by suite lifecycle scripts."""
 
-    help = (
-        "Show recent start.sh and upgrade.sh lifecycle entries from the startup report log."
-    )
+    help = "Show recent start.sh and upgrade.sh lifecycle entries from the startup report log."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -36,9 +34,7 @@ class Command(BaseCommand):
         if limit < 1:
             limit = 10
 
-        report = read_startup_report(
-            limit=limit, base_dir=Path(settings.BASE_DIR)
-        )
+        report = read_startup_report(limit=limit, base_dir=Path(settings.BASE_DIR))
         log_path = report.get("log_path")
         if log_path:
             self.stdout.write(f"Startup report log: {log_path}")

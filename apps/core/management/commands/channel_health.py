@@ -7,11 +7,11 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from apps.core.management.deprecation import absorbed_into_command
 from redis import Redis
 from redis.exceptions import RedisError
 
 from apps.core.channel_metrics import metrics_snapshot
+from apps.core.management.deprecation import absorbed_into_command
 
 
 def _mask_url(url: str) -> str:

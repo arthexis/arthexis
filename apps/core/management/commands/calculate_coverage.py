@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
-from apps.core.management.deprecation import absorbed_into_command
 
+from apps.core.management.deprecation import absorbed_into_command
 from utils.coverage import coverage_color, load_summary, render_badge
 
 

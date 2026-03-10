@@ -1,16 +1,16 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from apps.emails import mailer
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
-from django.utils import timezone
-from apps.core.management.deprecation import absorbed_into_command
 
-from apps.nodes.models import Node
+from apps.core.management.deprecation import absorbed_into_command
 from apps.core.models import InviteLead
+from apps.emails import mailer
+from apps.nodes.models import Node
 
 
 @absorbed_into_command("invite")
