@@ -19,6 +19,8 @@ DEFAULT_VIEWPORTS: dict[str, tuple[int, int]] = {
     "tablet": (1024, 1366),
     "mobile": (390, 844),
 }
+DEFAULT_PREVIEW_USERNAME = "admin"
+DEFAULT_PREVIEW_PASSWORD = "admin123"
 
 
 class Command(BaseCommand):
@@ -37,8 +39,8 @@ class Command(BaseCommand):
             default=[],
             help="Path to capture after login. Repeat for multiple pages.",
         )
-        parser.add_argument("--username", default="admin", help="Deterministic admin username.")
-        parser.add_argument("--password", default="admin123", help="Deterministic admin password.")
+        parser.add_argument("--username", default=DEFAULT_PREVIEW_USERNAME, help="Deterministic admin username.")
+        parser.add_argument("--password", default=DEFAULT_PREVIEW_PASSWORD, help="Deterministic admin password.")
         parser.add_argument(
             "--output",
             default="media/previews/admin-preview.png",
@@ -73,6 +75,17 @@ class Command(BaseCommand):
         preview_user_id: int | None = None
 
         try:
+            if (
+                options["username"] != DEFAULT_PREVIEW_USERNAME
+                or options["password"] != DEFAULT_PREVIEW_PASSWORD
+            ):
+                self.stderr.write(
+                    self.style.WARNING(
+                        "--username and --password are deprecated and ignored. "
+                        "Preview now uses a temporary admin account."
+                    )
+                )
+
             if not options["no_login"]:
                 preview_username, preview_password, preview_user_id = self._create_throwaway_admin_user()
 

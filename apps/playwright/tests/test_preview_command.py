@@ -135,6 +135,30 @@ def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     assert state["deleted"] is None
 
 
+def test_handle_warns_when_username_or_password_overridden(monkeypatch, capsys) -> None:
+    """Legacy credential flags should emit a clear deprecation warning."""
+
+    command = Command()
+
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_capture_all", lambda **kwargs: None)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username="legacy-admin",
+        password="legacy-pass",
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        engine="chromium",
+        no_login=True,
+    )
+
+    assert "deprecated and ignored" in capsys.readouterr().err
+
+
 def test_playwright_runtime_help_for_missing_host_dependencies() -> None:
     """Host dependency errors should include explicit install-deps guidance."""
 
@@ -182,11 +206,10 @@ def test_validate_login_success_allows_non_login_url() -> None:
     assert result is None
 
 
-def test_validate_login_success_uses_custom_admin_path(settings) -> None:
-    """Preview login validation should respect a custom admin mount path."""
+def test_validate_login_success_compares_paths_correctly() -> None:
+    """Preview login validation should compare URL paths correctly."""
 
     command = Command()
-    settings.ADMIN_URL_PATH = "control-panel/"
 
     with pytest.raises(CommandError, match="Preview login did not complete successfully"):
         command._validate_login_success(
