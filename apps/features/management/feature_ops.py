@@ -6,7 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management import call_command
-from django.core.management.base import CommandError
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.app.models import Application
@@ -134,6 +134,21 @@ def refresh_local_node_features() -> Node | None:
     if node is None:
         return None
     node.refresh_features()
+    return node
+
+
+def refresh_and_report_local_node_features(command: BaseCommand) -> Node | None:
+    """Refresh local-node features and write consistent CLI output."""
+
+    node = refresh_local_node_features()
+    if node is None:
+        command.stdout.write(
+            command.style.WARNING("Local node not found, skipping feature refresh.")
+        )
+        return None
+
+    command.stdout.write(f"Refreshing features for local node {node}...")
+    command.stdout.write(command.style.SUCCESS("Successfully refreshed features."))
     return node
 
 

@@ -7,7 +7,7 @@ from apps.features.management.feature_ops import (
     get_feature_state,
     list_node_features,
     list_suite_features,
-    refresh_local_node_features,
+    refresh_and_report_local_node_features,
     reset_all_suite_features,
     set_feature_enabled,
 )
@@ -82,18 +82,7 @@ class Command(BaseCommand):
 
 
         if refresh_node:
-            node = refresh_local_node_features()
-            if node is None:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "Local node not found, skipping feature refresh."
-                    )
-                )
-            else:
-                self.stdout.write(f"Refreshing features for local node {node}...")
-                self.stdout.write(
-                    self.style.SUCCESS("Successfully refreshed features.")
-                )
+            refresh_and_report_local_node_features(self)
 
         if slug:
             if include_enabled and include_disabled:

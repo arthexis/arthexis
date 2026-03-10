@@ -96,6 +96,7 @@ def test_node_screenshot_rejects_invalid_argument_combo():
         ("message", "message", ["Subject", "Body"], {"reach": "ops"}),
         ("purge_nodes", "purge_nodes", [], {"remove_anonymous": True}),
         ("purge_net_messages", "purge_net_messages", [], {}),
+        ("refresh_node_features", "refresh_features", [], {}),
         ("screenshot", "screenshot", ["https://example.com"], {"freq": 5, "local": False}),
     ],
 )
@@ -114,6 +115,10 @@ def test_legacy_command_wrappers_delegate(monkeypatch, legacy, action, args, kwa
         "apps.nodes.management.commands.purge_net_messages.call_command", fake_call_command
     )
     monkeypatch.setattr("apps.nodes.management.commands.screenshot.call_command", fake_call_command)
+    monkeypatch.setattr(
+        "apps.nodes.management.commands.refresh_node_features.call_command",
+        fake_call_command,
+    )
 
     call_command(legacy, *args, stdout=stdout, **kwargs)
 
@@ -140,29 +145,21 @@ def test_node_screenshot_returns_path(monkeypatch):
     assert "shots/example.png" in command.stdout.getvalue()
 
 
-@pytest.mark.django_db
 def test_node_refresh_features_action_refreshes_local_node(monkeypatch):
-    """The node refresh_features action should refresh local auto-managed features."""
+    """The node refresh_features action should delegate to shared refresh/report helper."""
 
-    node = Node.objects.create(
-        hostname="local",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-    )
-    calls: list[int] = []
+    calls: list[object] = []
 
-    def fake_refresh_local_node_features():
-        calls.append(node.pk)
-        return node
+    def fake_refresh_and_report(command):
+        calls.append(command)
 
     command = _load_node_command()
     command.stdout = io.StringIO()
     monkeypatch.setattr(
-        "apps.nodes.management.commands.node.refresh_local_node_features",
-        fake_refresh_local_node_features,
+        "apps.nodes.management.commands.node.refresh_and_report_local_node_features",
+        fake_refresh_and_report,
     )
 
     command.handle(action="refresh_features")
 
-    assert calls == [node.pk]
-    assert "Successfully refreshed features." in command.stdout.getvalue()
+    assert calls == [command]

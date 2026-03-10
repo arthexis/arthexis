@@ -6,7 +6,7 @@ from apps.features.management.feature_ops import (
     FeatureKind,
     get_feature_state,
     infer_kind_for_slug,
-    refresh_local_node_features,
+    refresh_and_report_local_node_features,
     set_feature_enabled,
 )
 
@@ -62,18 +62,7 @@ class Command(BaseCommand):
             raise CommandError("Choose only one of --enabled or --disabled.")
 
         if refresh_node:
-            node = refresh_local_node_features()
-            if node is None:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "Local node not found, skipping feature refresh."
-                    )
-                )
-            else:
-                self.stdout.write(f"Refreshing features for local node {node}...")
-                self.stdout.write(
-                    self.style.SUCCESS("Successfully refreshed features.")
-                )
+            refresh_and_report_local_node_features(self)
 
         if slug:
             resolved_kind = infer_kind_for_slug(slug=slug, kind=kind)

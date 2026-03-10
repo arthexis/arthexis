@@ -28,7 +28,7 @@ from django.urls import reverse
 from requests import RequestException
 
 from apps.content.utils import capture_and_save_screenshot
-from apps.features.management.feature_ops import refresh_local_node_features
+from apps.features.management.feature_ops import refresh_and_report_local_node_features
 from apps.nodes.models import NetMessage, Node, PendingNetMessage
 from apps.nodes.tasks import poll_peers
 from apps.nodes.views import node_info, register_node
@@ -460,15 +460,7 @@ class Command(BaseCommand):
     def _handle_refresh_features(self, **options):
         """Refresh auto-managed features for the local node."""
 
-        node = refresh_local_node_features()
-        if node is None:
-            self.stdout.write(
-                self.style.WARNING("Local node not found, skipping feature refresh.")
-            )
-            return
-
-        self.stdout.write(f"Refreshing features for local node {node}...")
-        self.stdout.write(self.style.SUCCESS("Successfully refreshed features."))
+        refresh_and_report_local_node_features(self)
 
     def _handle_message(self, **options):
         """Broadcast a net message across nodes."""
