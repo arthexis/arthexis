@@ -649,7 +649,7 @@ fi
 # Load personal user data fixtures if present
 if ls data/*.json >/dev/null 2>&1; then
     arthexis_timing_start "load_user_data"
-    python manage.py load_user_data data/*.json
+    python manage.py loaddata data/*.json
     arthexis_timing_end "load_user_data"
 else
     arthexis_timing_record "load_user_data" 0 "skipped"

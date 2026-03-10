@@ -273,7 +273,7 @@ class FeatureAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
             with transaction.atomic():
                 feature_manager.update(is_seed_data=False, is_enabled=False)
                 feature_manager.all().delete()
-                call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
+                call_command("loaddata", *(str(path) for path in fixture_paths), verbosity=0)
         except CommandError as exc:
             self.message_user(
                 request,
