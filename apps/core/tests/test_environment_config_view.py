@@ -124,3 +124,29 @@ def test_environment_view_post_persists_user_values(db, tmp_path, settings) -> N
     env_file = tmp_path / "var" / "user_env" / f"{user.pk}.env"
     assert env_file.exists()
     assert "PATH=/post/value" in env_file.read_text()
+
+
+def test_environment_view_trims_user_env_keys(db, tmp_path, settings) -> None:
+    """User env keys with spaces around '=' should still match known variables."""
+    settings.BASE_DIR = tmp_path
+    user = get_user_model().objects.create_superuser(
+        username="admin4",
+        email="admin4@example.com",
+        password="admin123",
+    )
+    user_env_dir = tmp_path / "var" / "user_env"
+    user_env_dir.mkdir(parents=True)
+    (user_env_dir / f"{user.pk}.env").write_text("PATH = /spaced/value\n")
+
+    request = RequestFactory().get("/admin/environment/")
+    request.user = user
+
+    response = _environment_view(request)
+    response.render()
+
+    path_row = next(
+        row
+        for row in response.context_data["env_rows"]
+        if row["key"] == "PATH"
+    )
+    assert path_row["user_value"] == " /spaced/value"

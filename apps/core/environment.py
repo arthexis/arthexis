@@ -112,6 +112,7 @@ def _load_user_env_values(user) -> dict[str, str]:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
+            key = key.strip()
             values[key] = value
     return values
 
