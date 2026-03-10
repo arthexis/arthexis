@@ -42,6 +42,7 @@ jobs:
           --health-retries 5
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
+      CURRENT_PR: ${{ github.event_name == 'pull_request' && format('PR-{0}', github.event.pull_request.number) || '' }}
     steps:
       # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
       - uses: actions/checkout@v6
@@ -170,12 +171,42 @@ jobs:
           else
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
+      - name: Validate PR marker metadata on changed tests
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+            echo "Unable to determine changed files for PR marker validation."
+            exit 1
+          fi
+
+          changed_tests=()
+          while IFS= read -r changed_file; do
+            [ -n "${changed_file}" ] || continue
+            file_name="$(basename "${changed_file}")"
+            if [[ "${changed_file}" == *.py ]] && [[ "${file_name}" == test_* || "${file_name}" == *_test.py || "${file_name}" == *_tests.py ]]; then
+              changed_tests+=("${changed_file}")
+            fi
+          done <<< "${CHANGED_FILES}"
+
+          if [ "${#changed_tests[@]}" -eq 0 ]; then
+            echo "No changed test files require PR marker validation."
+            exit 0
+          fi
+
+          python scripts/check_test_pr_markers.py --current-pr "${CURRENT_PR}" "${changed_tests[@]}"
       - name: Run tests
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+          current_pr_args=()
+          if [ -n "${CURRENT_PR}" ]; then
+            current_pr_args=(--current-pr "${CURRENT_PR}")
+          fi
+          pytest "${xdist_args[@]}" "${current_pr_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
@@ -198,6 +229,7 @@ jobs:
           --health-retries 5
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
+      CURRENT_PR: ${{ github.event_name == 'pull_request' && format('PR-{0}', github.event.pull_request.number) || '' }}
     steps:
       # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
       - name: Checkout main
@@ -243,7 +275,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest tests/test_role_bootstrap_smoke.py -q
+          current_pr_args=()
+          if [ -n "${CURRENT_PR}" ]; then
+            current_pr_args=(--current-pr "${CURRENT_PR}")
+          fi
+          pytest "${current_pr_args[@]}" tests/test_role_bootstrap_smoke.py -q
       - name: Apply upgrade
         run: |
           set -Eeuo pipefail
@@ -258,7 +294,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest tests/test_installed_apps_manifests.py -q
+          current_pr_args=()
+          if [ -n "${CURRENT_PR}" ]; then
+            current_pr_args=(--current-pr "${CURRENT_PR}")
+          fi
+          pytest "${current_pr_args[@]}" tests/test_installed_apps_manifests.py -q
 
       - name: Validate upgraded migrations
         run: |
@@ -410,16 +450,46 @@ jobs:
           else
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
+      - name: Validate PR marker metadata on changed tests
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+            echo "Unable to determine changed files for PR marker validation."
+            exit 1
+          fi
+
+          changed_tests=()
+          while IFS= read -r changed_file; do
+            [ -n "${changed_file}" ] || continue
+            file_name="$(basename "${changed_file}")"
+            if [[ "${changed_file}" == *.py ]] && [[ "${file_name}" == test_* || "${file_name}" == *_test.py || "${file_name}" == *_tests.py ]]; then
+              changed_tests+=("${changed_file}")
+            fi
+          done <<< "${CHANGED_FILES}"
+
+          if [ "${#changed_tests[@]}" -eq 0 ]; then
+            echo "No changed test files require PR marker validation."
+            exit 0
+          fi
+
+          python scripts/check_test_pr_markers.py --current-pr "${CURRENT_PR}" "${changed_tests[@]}"
       - name: Run tests on upgraded install
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           : > pytest.log
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          current_pr_args=()
+          if [ -n "${CURRENT_PR}" ]; then
+            current_pr_args=(--current-pr "${CURRENT_PR}")
+          fi
 
           if [ "${{ github.event_name }}" = "schedule" ]; then
             echo "=== Full test suite (scheduled daily run) ===" | tee -a pytest.log
-            pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee -a pytest.log
+            pytest "${xdist_args[@]}" "${current_pr_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee -a pytest.log
             exit 0
           fi
 
@@ -434,7 +504,7 @@ jobs:
             echo "=== Integration tests ===" | tee -a pytest.log
           fi
 
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "${marker_expr}" | tee -a pytest.log
+          pytest "${xdist_args[@]}" "${current_pr_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "${marker_expr}" | tee -a pytest.log
       - name: Report integration test skip
         if: ${{ github.event_name != 'schedule' && steps.integration_gate.outputs.run_integration != 'true' }}
         run: |
