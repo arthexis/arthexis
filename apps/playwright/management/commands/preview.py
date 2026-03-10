@@ -7,6 +7,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.utils.http import urlencode
 
 from apps.playwright.preview_tool import analyze_preview_image
 
@@ -99,18 +100,22 @@ class Command(BaseCommand):
             user.save()
 
     def _capture(self, *, base_url: str, path: str, username: str, password: str, output: Path, engine: str) -> None:
-        """Use Playwright to login and save a screenshot from the requested admin page."""
+        """Use Playwright to authenticate and save a screenshot from the requested page."""
 
         try:
             from playwright.sync_api import Error as PlaywrightError
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
             from playwright.sync_api import sync_playwright
         except ModuleNotFoundError as exc:
             raise CommandError(
                 "Playwright is required for preview. Install it and run `python -m playwright install chromium firefox`."
             ) from exc
 
-        login_url = f"{base_url}/admin/login/"
-        capture_url = f"{base_url}{path}"
+        normalized_path = path if path.startswith("/") else f"/{path}"
+        login_path = "/admin/login/"
+        login_query = urlencode({"next": normalized_path})
+        login_url = f"{base_url}{login_path}?{login_query}"
+        capture_url = f"{base_url}{normalized_path}"
 
         try:
             with sync_playwright() as playwright:
@@ -118,10 +123,17 @@ class Command(BaseCommand):
                 browser = launcher.launch(headless=True)
                 context = browser.new_context()
                 page = context.new_page()
-                page.goto(login_url, wait_until="networkidle")
+                page.goto(login_url, wait_until="domcontentloaded")
                 page.fill("#id_username", username)
                 page.fill("#id_password", password)
                 page.click("input[type='submit']")
+                self._complete_login_if_needed(
+                    page=page,
+                    username=username,
+                    password=password,
+                    capture_url=capture_url,
+                    timeout_error=PlaywrightTimeoutError,
+                )
                 page.goto(capture_url, wait_until="networkidle")
                 page.screenshot(path=str(output), full_page=True)
                 context.close()
@@ -130,3 +142,28 @@ class Command(BaseCommand):
             raise CommandError(f"Unsupported Playwright engine '{engine}'.") from exc
         except PlaywrightError as exc:
             raise CommandError(str(exc)) from exc
+
+    def _complete_login_if_needed(
+        self,
+        *,
+        page,
+        username: str,
+        password: str,
+        capture_url: str,
+        timeout_error,
+    ) -> None:
+        """Complete site-login fallback when a capture path redirects away from admin session flow."""
+
+        try:
+            page.wait_for_selector("#id_username", timeout=1500)
+        except timeout_error:
+            return
+
+        current_url = page.url or ""
+        if "/admin/login/" in current_url:
+            return
+
+        page.fill("#id_username", username)
+        page.fill("#id_password", password)
+        page.click("button[type='submit'], input[type='submit']")
+        page.goto(capture_url, wait_until="domcontentloaded")
