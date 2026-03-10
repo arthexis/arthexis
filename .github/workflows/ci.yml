@@ -183,8 +183,11 @@ jobs:
           source .venv/bin/activate
 
           if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
-            echo "Unable to determine changed files for PR marker validation."
-            exit 1
+            echo "Unable to compute merge-base diff for PR marker validation; retrying with direct base..head diff."
+            if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}")"; then
+              echo "Unable to determine changed files for PR marker validation."
+              exit 1
+            fi
           fi
 
           changed_tests=()
@@ -459,8 +462,11 @@ jobs:
           source .venv/bin/activate
 
           if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
-            echo "Unable to determine changed files for PR marker validation."
-            exit 1
+            echo "Unable to compute merge-base diff for PR marker validation; retrying with direct base..head diff."
+            if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}")"; then
+              echo "Unable to determine changed files for PR marker validation."
+              exit 1
+            fi
           fi
 
           changed_tests=()
