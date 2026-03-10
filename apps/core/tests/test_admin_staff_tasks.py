@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from apps.actions.models import StaffTask
 from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
+from apps.core.system.admin_views import TASK_PANEL_ROUTES
 
 
 class AdminStaffTasksTests(TestCase):
@@ -24,6 +25,7 @@ class AdminStaffTasksTests(TestCase):
             password="admin123",
         )
         self.client.force_login(self.user)
+
     @patch("apps.core.system.admin_views._systemctl_command", return_value=["systemctl"])
     @patch("apps.core.system.admin_views.subprocess.run")
     def test_system_restart_endpoint_restarts_service_for_active_superuser(
@@ -62,3 +64,20 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         messages = list(response.context["messages"])
         self.assertTrue(any("do not have access" in str(message) for message in messages))
+
+
+    def test_task_panel_registry_contains_system_route(self):
+        """System view should be registered in task-panel route metadata."""
+
+        route_names = {route.name for route in TASK_PANEL_ROUTES}
+        self.assertIn("system", route_names)
+        self.assertIn("system-reports", route_names)
+
+    def test_system_page_uses_task_panel_rebrand(self):
+        """System settings page should render task panel terminology."""
+
+        response = self.client.get(reverse("admin:system"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Task Panels")
+        self.assertContains(response, "Save task panel preferences")

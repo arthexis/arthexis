@@ -4,8 +4,8 @@
 {% block content %}
 <div id="content-main">
   <div class="module system-reports">
-    <h2>{% trans "Suite Tasks" %}</h2>
-    <p class="help">{% trans "Choose which tasks appear as top dashboard buttons for your account." %}</p>
+    <h2>{% trans "Task Panels" %}</h2>
+    <p class="help">{% trans "Choose which task panels appear as top dashboard buttons for your account." %}</p>
     <form method="post">
       {% csrf_token %}
       <table class="table table-striped">
@@ -30,12 +30,12 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="3"><p class="help">{% trans "No tasks are configured." %}</p></td>
+              <td colspan="3"><p class="help">{% trans "No task panels are configured." %}</p></td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
-      <button type="submit" class="button">{% trans "Save suite task preferences" %}</button>
+      <button type="submit" class="button">{% trans "Save task panel preferences" %}</button>
     </form>
   </div>
 </div>
