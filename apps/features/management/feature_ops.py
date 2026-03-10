@@ -123,6 +123,20 @@ def list_node_features(*, enabled: bool | None = True) -> list[tuple[str, bool]]
     return [(feature.slug, feature.slug in assigned) for feature in queryset]
 
 
+def refresh_local_node_features() -> Node | None:
+    """Refresh auto-managed feature assignments for the local node.
+
+    Returns:
+        Node | None: The local node when present, otherwise ``None``.
+    """
+
+    node = Node.get_local()
+    if node is None:
+        return None
+    node.refresh_features()
+    return node
+
+
 def _ensure_fixture_applications_exist(*, fixture_paths: list[Path]) -> None:
     """Ensure fixture-referenced ``Application`` rows exist before fixture loading."""
 

@@ -138,3 +138,31 @@ def test_node_screenshot_returns_path(monkeypatch):
 
     assert result == "shots/example.png"
     assert "shots/example.png" in command.stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_node_refresh_features_action_refreshes_local_node(monkeypatch):
+    """The node refresh_features action should refresh local auto-managed features."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    calls: list[int] = []
+
+    def fake_refresh_local_node_features():
+        calls.append(node.pk)
+        return node
+
+    command = _load_node_command()
+    command.stdout = io.StringIO()
+    monkeypatch.setattr(
+        "apps.nodes.management.commands.node.refresh_local_node_features",
+        fake_refresh_local_node_features,
+    )
+
+    command.handle(action="refresh_features")
+
+    assert calls == [node.pk]
+    assert "Successfully refreshed features." in command.stdout.getvalue()
