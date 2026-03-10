@@ -331,7 +331,7 @@ def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
 @pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
 def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, client, settings):
-    """Regression: tracking view should expose feedback/chat quick actions when enabled by permissions."""
+    """Regression: tracking view should expose shared feedback/chat widgets when enabled by permissions."""
     settings.PAGES_CHAT_ENABLED = True
     Feature.objects.update_or_create(
         slug="staff-chat-bridge",
@@ -358,7 +358,6 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'id="chat-launch"' in content
     assert 'id="user-story-toggle"' in content
     assert 'id="chat-widget"' in content
     assert 'id="user-story-overlay"' in content
@@ -391,7 +390,7 @@ def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, cl
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'id="chat-launch"' not in content
+    assert 'id="chat-widget"' not in content
     assert 'id="user-story-toggle"' not in content
 
 

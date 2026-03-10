@@ -1,0 +1,95 @@
+{% load i18n %}
+{% if chat_enabled %}
+<div
+  id="chat-widget"
+  class="chat-widget"
+  data-has-feedback="{% if feedback_ingestion_enabled %}true{% else %}false{% endif %}"
+  data-path="{{ chat_socket_path }}"
+  data-session-storage-key="pages.chat.session"
+  data-connected-text="{% trans 'Connected' %}"
+  data-connecting-text="{% trans 'Connecting…' %}"
+  data-disconnected-text="{% trans 'Disconnected' %}"
+  data-unread-text="{% trans 'New' %}"
+  data-open-text="{% trans 'Need help?' %}"
+  data-close-text="{% trans 'Close chat' %}"
+  data-session-label="{% trans 'Session' %}"
+  data-empty-text="{% trans 'Say hello to start the conversation.' %}"
+  data-error-text="{% trans 'We could not send your message. Please retry.' %}"
+  data-staff-join-text="{% trans 'A staff member joined the chat.' %}"
+  data-staff-leave-text="{% trans 'A staff member left the chat.' %}"
+  data-visitor-join-text="{% trans 'You joined the chat.' %}"
+  data-visitor-leave-text="{% trans 'You left the chat.' %}"
+  data-staff="{% if request.user.is_authenticated and request.user.is_staff %}true{% else %}false{% endif %}"
+>
+  <button
+    type="button"
+    class="chat-toggle"
+    data-chat-toggle
+    aria-expanded="false"
+    aria-controls="chat-drawer"
+    aria-label="{% trans 'Need help?' %}"
+  >
+    <span class="chat-toggle-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M12 3c-4.97 0-9 3.582-9 8 0 1.93.78 3.69 2.08 5.08-.097.86-.43 2.348-1.4 3.734a.75.75 0 00.902 1.133c2.115-.633 3.422-1.522 4.09-2.073A10.63 10.63 0 0012 19c4.97 0 9-3.582 9-8s-4.03-8-9-8z"
+        ></path>
+      </svg>
+    </span>
+    <span class="chat-toggle-label">{% trans "Need help?" %}</span>
+    <span class="chat-unread" data-chat-unread hidden>{% trans "New" %}</span>
+  </button>
+  <div
+    class="chat-overlay"
+    data-chat-overlay
+    role="presentation"
+    hidden
+  >
+    <section
+      id="chat-drawer"
+      class="chat-drawer"
+      data-chat-drawer
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chat-title"
+      aria-live="polite"
+      aria-label="{% trans 'Support chat' %}"
+      tabindex="-1"
+    >
+      <header class="chat-header">
+        <div>
+          <h2 class="mb-0" id="chat-title">{% trans "Support" %}</h2>
+          <small data-chat-status>{% trans "Connecting…" %}</small>
+        </div>
+        <button type="button" class="btn-close" data-chat-close>
+          <span class="visually-hidden">{% trans "Close chat" %}</span>
+        </button>
+      </header>
+      <div
+        class="chat-messages"
+        data-chat-messages
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      ></div>
+      <form class="chat-form" data-chat-form>
+        <label class="visually-hidden" for="chat-message-input">{% trans "Message" %}</label>
+        <textarea
+          id="chat-message-input"
+          class="form-control"
+          data-chat-input
+          rows="2"
+          maxlength="2000"
+          placeholder="{% trans 'Type your message…' %}"
+          required
+        ></textarea>
+        <div class="chat-actions">
+          <span class="chat-session-hint text-muted" data-chat-session-hint></span>
+          <button type="submit" class="btn btn-primary">{% trans "Send" %}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+{% endif %}
