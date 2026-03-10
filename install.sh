@@ -618,6 +618,7 @@ case "${ARTHEXIS_MIGRATION_POLICY,,}" in
         ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY,,}"
         ;;
     *)
+        echo "Warning: Invalid ARTHEXIS_MIGRATION_POLICY value '${ARTHEXIS_MIGRATION_POLICY}', using role default." >&2
         case "${NODE_ROLE,,}" in
             satellite|watchtower)
                 ARTHEXIS_MIGRATION_POLICY="check"
