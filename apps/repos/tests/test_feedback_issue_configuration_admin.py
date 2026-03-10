@@ -50,10 +50,12 @@ def test_repository_issue_configure_view_updates_feature_and_repository(client, 
     """Configure view should persist editable fields and re-run validation."""
 
     admin_client = _create_admin_client(client)
-    feature = Feature.objects.create(
+    feature, _ = Feature.objects.update_or_create(
         slug="feedback-ingestion",
-        display="Feedback Ingestion",
-        is_enabled=False,
+        defaults={
+            "display": "Feedback Ingestion",
+            "is_enabled": False,
+        },
     )
     package = Package.objects.create(
         name="suite",

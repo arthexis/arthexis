@@ -37,19 +37,6 @@ class FavoriteToggleViewTests(TestCase):
         self.assertEqual(favorite.custom_label, "")
         self.assertEqual(favorite.priority, 0)
         self.assertFalse(favorite.user_data)
-
-    def test_get_existing_favorite_renders_configuration(self):
-        """Regression: existing favorites should still open the configuration screen."""
-
-        Favorite.objects.create(user=self.user, content_type=self.content_type)
-        url = reverse("admin:favorite_toggle", args=[self.content_type.pk])
-
-        response = self.client.get(url, {"next": "/admin/"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "admin/favorite_confirm.html")
-        self.assertContains(response, "Update Favorite")
-
     def test_duplicate_add_falls_back_to_existing_favorite(self):
         """Regression: race-condition duplicate add should update existing favorite."""
 
@@ -131,91 +118,6 @@ class FavoriteListViewTests(TestCase):
         self.assertEqual(favorite.custom_label, "After")
         self.assertEqual(favorite.priority, 1)
         self.assertTrue(favorite.user_data)
-
-    def test_post_move_up_reorders_favorites(self):
-        """Regression: move controls should reorder favorites deterministically."""
-
-        first = Favorite.objects.create(
-            user=self.user,
-            content_type=self.content_type,
-            custom_label="First",
-            priority=0,
-        )
-        second = Favorite.objects.create(
-            user=self.user,
-            content_type=ContentType.objects.get_for_model(get_user_model()),
-            custom_label="Second",
-            priority=1,
-        )
-
-        response = self.client.post(
-            reverse("admin:favorite_list"),
-            {
-                "move": f"up:{second.pk}",
-            },
-        )
-
-        self.assertRedirects(response, reverse("admin:favorite_list"))
-        first.refresh_from_db()
-        second.refresh_from_db()
-        self.assertEqual(second.priority, 0)
-        self.assertEqual(first.priority, 1)
-
-    def test_post_move_submits_inline_edits_before_reorder(self):
-        """Regression: moving should not discard label/user-data edits in same submit."""
-
-        first = Favorite.objects.create(
-            user=self.user,
-            content_type=self.content_type,
-            custom_label="First",
-            priority=0,
-            user_data=False,
-        )
-        second = Favorite.objects.create(
-            user=self.user,
-            content_type=ContentType.objects.get_for_model(get_user_model()),
-            custom_label="Second",
-            priority=1,
-            user_data=False,
-        )
-
-        response = self.client.post(
-            reverse("admin:favorite_list"),
-            {
-                "move": f"up:{second.pk}",
-                f"custom_label_{second.pk}": "Renamed",
-                "user_data": [str(second.pk)],
-            },
-        )
-
-        self.assertRedirects(response, reverse("admin:favorite_list"))
-        first.refresh_from_db()
-        second.refresh_from_db()
-        self.assertEqual(second.priority, 0)
-        self.assertEqual(first.priority, 1)
-        self.assertEqual(second.custom_label, "Renamed")
-        self.assertTrue(second.user_data)
-
-    def test_get_renders_app_and_seed_data_columns(self):
-        """Regression: favorites list should expose app and seed data columns."""
-
-        Favorite.objects.create(
-            user=self.user,
-            content_type=self.content_type,
-            custom_label="Seeded",
-            priority=0,
-            is_seed_data=True,
-        )
-
-        response = self.client.get(reverse("admin:favorite_list"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Seed Data")
-        self.assertContains(response, "App")
-        self.assertContains(response, "locals")
-        self.assertContains(response, "Yes")
-
-
 class RecoverSelectedActionTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()

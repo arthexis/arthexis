@@ -9,6 +9,42 @@ fi
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
 
+default_migration_policy() {
+  local role="${NODE_ROLE:-}"
+
+  if [ -z "$role" ] && [ -n "${LOCK_DIR:-}" ] && [ -f "${LOCK_DIR}/role.lck" ]; then
+    role="$(cat "${LOCK_DIR}/role.lck")"
+  fi
+
+  case "${role,,}" in
+    satellite|watchtower)
+      echo "check"
+      ;;
+    *)
+      echo "apply"
+      ;;
+  esac
+}
+
+resolve_migration_policy() {
+  local configured_policy="${ARTHEXIS_MIGRATION_POLICY:-}"
+
+  if [ -z "$configured_policy" ]; then
+    default_migration_policy
+    return 0
+  fi
+
+  case "${configured_policy,,}" in
+    apply|check|skip)
+      echo "${configured_policy,,}"
+      ;;
+    *)
+      echo "Unsupported ARTHEXIS_MIGRATION_POLICY value '${configured_policy}'. Expected one of: apply, check, skip." >&2
+      return 1
+      ;;
+  esac
+}
+
 compute_migration_fingerprint() {
   local base_dir
   local python_bin
@@ -88,6 +124,17 @@ run_runserver_preflight() {
     return 1
   fi
 
+  local migration_policy
+  if ! migration_policy="$(resolve_migration_policy)"; then
+    return 1
+  fi
+
+  if [ "$migration_policy" = "skip" ]; then
+    echo "Skipping runserver migration preflight (ARTHEXIS_MIGRATION_POLICY=skip)."
+    RUNSERVER_PREFLIGHT_DONE=true
+    return 0
+  fi
+
   local fingerprint
   if ! fingerprint=$(compute_migration_fingerprint); then
     echo "Failed to compute migration fingerprint" >&2
@@ -155,6 +202,12 @@ run_runserver_preflight() {
   else
     migrate_check_status=$?
     if [ "$migrate_check_status" -ne 10 ]; then
+      return 1
+    fi
+
+    if [ "$migration_policy" = "check" ]; then
+      echo "Migration preflight failed: pending migrations detected and policy is check-only." >&2
+      printf '%s\n' "$migrate_check_output" >&2
       return 1
     fi
 

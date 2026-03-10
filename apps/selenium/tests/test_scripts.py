@@ -1,6 +1,6 @@
 import pytest
 
-from apps.selenium.models import SeleniumBrowser, SeleniumScript
+from apps.playwright.models import PlaywrightBrowser, PlaywrightScript
 
 
 class DummyDriver:
@@ -21,8 +21,8 @@ def example_callable(browser, script=None):  # pragma: no cover - used via impor
 
 @pytest.mark.django_db
 def test_inline_script_executes_after_start_url(monkeypatch):
-    browser = SeleniumBrowser.objects.create(name="Default", is_default=True)
-    script = SeleniumScript.objects.create(
+    browser = PlaywrightBrowser.objects.create(name="Default", is_default=True)
+    script = PlaywrightScript.objects.create(
         name="Inline",
         script="""
         https://example.com
@@ -31,7 +31,7 @@ def test_inline_script_executes_after_start_url(monkeypatch):
     )
 
     driver = DummyDriver()
-    monkeypatch.setattr(SeleniumBrowser, "create_driver", lambda self: driver)
+    monkeypatch.setattr(PlaywrightBrowser, "create_driver", lambda self: driver)
 
     script.execute()
 
@@ -41,15 +41,15 @@ def test_inline_script_executes_after_start_url(monkeypatch):
 
 @pytest.mark.django_db
 def test_callable_path_runs_after_start_url(monkeypatch):
-    browser = SeleniumBrowser.objects.create(name="Default", is_default=True)
-    script = SeleniumScript.objects.create(
+    browser = PlaywrightBrowser.objects.create(name="Default", is_default=True)
+    script = PlaywrightScript.objects.create(
         name="Callable",
         start_url="https://start.test",
         python_path="apps.selenium.tests.test_scripts.example_callable",
     )
 
     driver = DummyDriver()
-    monkeypatch.setattr(SeleniumBrowser, "create_driver", lambda self: driver)
+    monkeypatch.setattr(PlaywrightBrowser, "create_driver", lambda self: driver)
 
     script.execute()
 
@@ -61,6 +61,6 @@ def test_browser_forces_headless_without_display(monkeypatch):
     """Headed mode should downgrade to headless when DISPLAY is unavailable."""
 
     monkeypatch.delenv("DISPLAY", raising=False)
-    browser = SeleniumBrowser(name="Example", mode=SeleniumBrowser.Mode.HEADED)
+    browser = PlaywrightBrowser(name="Example", mode=PlaywrightBrowser.Mode.HEADED)
 
     assert browser._headless_mode() is True

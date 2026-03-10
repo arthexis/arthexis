@@ -62,6 +62,14 @@ python manage.py runserver 0.0.0.0:8888
   ```bash
   python -m black .
   ```
+- Check import resolution with the canonical standalone checker:
+  ```bash
+  make check-imports
+  ```
+- Run **Pyright** for editor-friendly import diagnostics:
+  ```bash
+  pyright
+  ```
 - Prefer clear, well-documented functions over clever shortcuts.
 
 ### Documentation changes

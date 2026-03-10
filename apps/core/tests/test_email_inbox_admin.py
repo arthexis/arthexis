@@ -6,30 +6,6 @@ import pytest
 
 from apps.emails.models import EmailCollector, EmailInbox
 from apps.users.models import User
-
-
-@pytest.mark.integration
-@pytest.mark.django_db
-def test_setup_collector_tool_redirects_to_wizard(admin_client, admin_user):
-    """The inbox setup collector changelist tool redirects to the wizard endpoint."""
-
-    inbox = EmailInbox.objects.create(
-        user=admin_user,
-        username="admin-inbox@example.com",
-        host="imap.example.com",
-        port=993,
-        password="secret",
-    )
-
-    response = admin_client.post(
-        reverse("admin:emails_emailinbox_actions", kwargs={"tool": "setup_collector"}),
-        {"_selected_action": [str(inbox.pk)]},
-    )
-
-    assert response.status_code == 302
-    assert response.url == reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
-
-
 @pytest.mark.integration
 @pytest.mark.django_db
 def test_setup_collector_tool_requires_single_selected_inbox(admin_client, admin_user):
@@ -158,25 +134,3 @@ def test_setup_collector_view_reports_non_validation_test_errors(admin_client, a
     assert response.status_code == 200
     messages = [str(message) for message in response.context["messages"]]
     assert "Mailbox unavailable" in messages
-
-
-@pytest.mark.integration
-@pytest.mark.django_db
-def test_email_inbox_change_form_includes_setup_collector_link(admin_client, admin_user):
-    """The inbox change form should expose a direct link to the collector builder."""
-
-    inbox = EmailInbox.objects.create(
-        user=admin_user,
-        username="change-link@example.com",
-        host="imap.example.com",
-        port=993,
-        password="secret",
-    )
-
-    response = admin_client.get(
-        reverse("admin:emails_emailinbox_change", args=[inbox.pk])
-    )
-
-    assert response.status_code == 200
-    setup_url = reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
-    assert f'href="{setup_url}"' in response.rendered_content

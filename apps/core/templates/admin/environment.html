@@ -1,8 +1,51 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block extrahead %}
+  {{ block.super }}
+  <style>
+    .environment-variables .environment-filter {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-bottom: 0.75rem;
+    }
+
+    .environment-variables .environment-table-wrap {
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .environment-variables #env-vars-table {
+      min-width: 680px;
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    .environment-variables #env-vars-table td,
+    .environment-variables #env-vars-table th {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .environment-variables #env-vars-table input[type="text"] {
+      box-sizing: border-box;
+      max-width: 100%;
+      width: 100%;
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
 <div id="content-main">
+  {% if messages %}
+    <ul class="messagelist">
+      {% for message in messages %}
+        <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
   {% if environment_tasks %}
     <div class="module environment-tasks">
       <h2>{% trans "Environment Tasks" %}</h2>
@@ -30,31 +73,59 @@
   {% endif %}
   <div class="module environment-variables">
     <h2>{% trans "Environment Variables" %}</h2>
-    <div class="environment-filter">
-      <label>
-        <span class="sr-only">{% trans "Filter names" %}</span>
-        <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter names' %}" />
-      </label>
-      <label>
-        <span class="sr-only">{% trans "Filter values" %}</span>
-        <input type="text" id="env-vars-value-filter" placeholder="{% trans 'Filter values' %}" />
-      </label>
-    </div>
-    <table id="env-vars-table" class="table table-striped">
-      <thead>
-        <tr>
-          <th scope="col">{% trans "Name" %}</th>
-          <th scope="col">{% trans "Value" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for key, value in env_vars %}
-        <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
-      {% empty %}
-        <tr><td colspan="2">{% trans "No environment variables." %}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <p class="help">{% trans "User values are stored in your personal .env file and apply after the next restart." %}</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="submit-row" style="margin-bottom: 1rem;">
+        <input type="submit" value="{% trans 'Save user values' %}" class="default" />
+      </div>
+      <div class="environment-filter">
+        <label>
+          <span class="sr-only">{% trans "Filter names" %}</span>
+          <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter names' %}" />
+        </label>
+        <label>
+          <span class="sr-only">{% trans "Filter values" %}</span>
+          <input type="text" id="env-vars-value-filter" placeholder="{% trans 'Filter values' %}" />
+        </label>
+        <label>
+          <span class="sr-only">{% trans "Filter user values" %}</span>
+          <input type="text" id="env-vars-user-value-filter" placeholder="{% trans 'Filter user values' %}" />
+        </label>
+      </div>
+      <div class="environment-table-wrap">
+        <table id="env-vars-table" class="table table-striped">
+          <thead>
+            <tr>
+              <th scope="col">{% trans "Name" %}</th>
+              <th scope="col">{% trans "Value" %}</th>
+              <th scope="col">{% trans "User Value" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for row in env_rows %}
+            <tr>
+              <td>{{ row.key }}</td>
+              <td>{{ row.value }}</td>
+              <td>
+                <input
+                  type="text"
+                  name="user_value_{{ row.key }}"
+                  value="{{ row.user_value }}"
+                  aria-label="{% blocktrans with name=row.key %}User value for {{ name }}{% endblocktrans %}"
+                />
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">{% trans "No environment variables." %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Save user values' %}" class="default" />
+      </div>
+    </form>
   </div>
 </div>
 <script>
@@ -89,6 +160,7 @@
     const filters = [];
     setupFilter('env-vars-filter', 'env-vars-table', 0, filters);
     setupFilter('env-vars-value-filter', 'env-vars-table', 1, filters);
+    setupFilter('env-vars-user-value-filter', 'env-vars-table', 2, filters);
     const table = document.getElementById('env-vars-table');
     applyFilters(table, filters);
   });

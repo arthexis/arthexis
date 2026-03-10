@@ -25,6 +25,11 @@ repos:
         entry: ruff check --select E9,F823
         language: system
         types: [python]
+      - id: check-import-resolution
+        name: check-import-resolution
+        entry: python scripts/check_import_resolution.py
+        language: system
+        types: [python]
       - id: black
         name: black
         entry: black

@@ -1,8 +1,11 @@
 from django.contrib import admin, messages
+from django.db.models import Max
 from django.shortcuts import redirect
 from django.urls import path, reverse
+from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
+from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total, max_attr
 from apps.emails.models import EmailOutbox
 from apps.locals.entity import EntityModelAdmin
 
@@ -11,10 +14,12 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
     form = EmailOutboxAdminForm
     actions = ["test_outboxes"]
     list_display = (
+        "username",
         "owner_label",
+        "collector_count",
+        "last_used_at",
         "host",
         "port",
-        "username",
         "use_tls",
         "use_ssl",
         "is_enabled",
@@ -38,6 +43,30 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
             },
         ),
     )
+
+    def get_queryset(self, request):
+        queryset = annotate_enabled_total(
+            super().get_queryset(request),
+            "bridge__inbox__collectors",
+            total_alias="total_collectors",
+            enabled_alias="enabled_collectors",
+        )
+        return queryset.annotate(
+            last_outbox_transaction_at=Max("transactions__processed_at"),
+            last_inbox_transaction_at=Max("bridge__inbox__transactions__processed_at"),
+        )
+
+    @admin.display(description=_("Collectors"), ordering="enabled_collectors")
+    def collector_count(self, obj):
+        return format_enabled_total(
+            obj,
+            enabled_attr="enabled_collectors",
+            total_attr="total_collectors",
+        )
+
+    @admin.display(description=_("Last used"))
+    def last_used_at(self, obj):
+        return max_attr(obj, "last_outbox_transaction_at", "last_inbox_transaction_at") or "-"
 
     @admin.action(description="Test selected Outbox")
     def test_outboxes(self, request, queryset):

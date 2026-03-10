@@ -5,24 +5,93 @@ env:
 
 on:
   schedule:
-    - cron: '0 0 * * 1'
+    - cron: '0 0 * * *'
 
 jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v10
+      - uses: actions/github-script@v7
         with:
-          days-before-stale: 7
-          days-before-close: 7
-          close-branch: true
-          stale-pr-label: stale
-          exempt-pr-labels: in-progress,needs-review,blocked,security
-          stale-pr-message: >
-            This PR has had no activity for 7 days and has been marked stale. To keep it open,
-            leave a comment, push new commits, or apply one of the exempt labels
-            (`in-progress`, `needs-review`, `blocked`, or `security`) within 7 days.
-          close-pr-message: >
-            Closing this stale PR after 7 additional days of inactivity. To reopen and continue,
-            comment, push new commits, or apply one of the exempt labels
-            (`in-progress`, `needs-review`, `blocked`, or `security`).
+          script: |
+            const DAY_MS = 24 * 60 * 60 * 1000;
+            const HEALTHY_CLOSE_DAYS = 7;
+            const CONFLICT_CLOSE_DAYS = 3;
+            const MERGEABILITY_MAX_ATTEMPTS = 3;
+            const MERGEABILITY_RETRY_DELAY_MS = 1500;
+            const exemptLabels = new Set(['in-progress', 'needs-review', 'blocked', 'security']);
+
+            const now = Date.now();
+            const staleCandidates = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            for (const pr of staleCandidates) {
+              const prLabels = new Set(pr.labels.map((label) => label.name));
+              const hasExemptLabel = [...exemptLabels].some((label) => prLabels.has(label));
+              if (hasExemptLabel) {
+                core.info(`#${pr.number}: skipped (exempt label)`);
+                continue;
+              }
+
+              const inactivityDays = (now - Date.parse(pr.updated_at)) / DAY_MS;
+              if (Number.isNaN(inactivityDays)) {
+                core.warning(`#${pr.number}: skipped (invalid updated_at timestamp)`);
+                continue;
+              }
+
+              let detailedPr;
+              for (let attempt = 1; attempt <= MERGEABILITY_MAX_ATTEMPTS; attempt += 1) {
+                detailedPr = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                });
+
+                const isMergeabilityResolved = detailedPr.data.mergeable !== null
+                  && detailedPr.data.mergeable_state !== 'unknown';
+
+                if (isMergeabilityResolved || attempt === MERGEABILITY_MAX_ATTEMPTS) {
+                  break;
+                }
+
+                core.info(`#${pr.number}: mergeability unresolved, retrying (${attempt}/${MERGEABILITY_MAX_ATTEMPTS})`);
+                await new Promise((resolve) => setTimeout(resolve, MERGEABILITY_RETRY_DELAY_MS));
+              }
+
+              if (detailedPr.data.mergeable === null || detailedPr.data.mergeable_state === 'unknown') {
+                core.warning(`#${pr.number}: mergeability unresolved after retries; defaulting to healthy threshold`);
+              }
+
+              const hasMergeConflict = detailedPr.data.mergeable === false
+                || detailedPr.data.mergeable_state === 'dirty';
+              const closeAfterDays = hasMergeConflict ? CONFLICT_CLOSE_DAYS : HEALTHY_CLOSE_DAYS;
+
+              if (inactivityDays < closeAfterDays) {
+                core.info(`#${pr.number}: skipped (${inactivityDays.toFixed(1)} days inactive, threshold ${closeAfterDays})`);
+                continue;
+              }
+
+              const reason = hasMergeConflict
+                ? `a merge conflict and ${CONFLICT_CLOSE_DAYS}+ days of inactivity`
+                : `${HEALTHY_CLOSE_DAYS}+ days of inactivity`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: `Closing this PR due to ${reason}. Comment or push new commits to continue work.`,
+              });
+
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: 'closed',
+              });
+
+              core.info(`#${pr.number}: closed (${reason})`);
+            }
