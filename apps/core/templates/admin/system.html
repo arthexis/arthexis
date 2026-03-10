@@ -4,7 +4,7 @@
 {% block content %}
 <div id="content-main">
   <div class="module system-reports">
-    <h2>{% trans "Staff Tasks" %}</h2>
+    <h2>{% trans "Suite Tasks" %}</h2>
     <p class="help">{% trans "Choose which tasks appear as top dashboard buttons for your account." %}</p>
     <form method="post">
       {% csrf_token %}
@@ -35,7 +35,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <button type="submit" class="button">{% trans "Save task preferences" %}</button>
+      <button type="submit" class="button">{% trans "Save suite task preferences" %}</button>
     </form>
   </div>
 </div>

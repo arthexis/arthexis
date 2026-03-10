@@ -236,8 +236,8 @@ class StaffTask(models.Model):
 
     class Meta:
         ordering = ("order", "label")
-        verbose_name = _("Staff Task")
-        verbose_name_plural = _("Staff Tasks")
+        verbose_name = _("Suite Task")
+        verbose_name_plural = _("Suite Tasks")
 
     def __str__(self) -> str:
         """Return the display label used in admin controls."""
@@ -269,8 +269,8 @@ class StaffTaskPreference(models.Model):
                 name="actions_stafftaskpreference_unique_user_task",
             )
         ]
-        verbose_name = _("Staff Task Preference")
-        verbose_name_plural = _("Staff Task Preferences")
+        verbose_name = _("Suite Task Preference")
+        verbose_name_plural = _("Suite Task Preferences")
 
     def __str__(self) -> str:
         """Return a readable preference description."""

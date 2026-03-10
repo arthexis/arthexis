@@ -16,7 +16,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.actions.models import DashboardAction, RemoteAction, RemoteActionToken
+from apps.actions.models import DashboardAction, RemoteAction, RemoteActionToken, StaffTask, StaffTaskPreference
 from apps.sites.templatetags.admin_extras import model_admin_actions
 
 
@@ -39,6 +39,15 @@ class _LinkParser(HTMLParser):
         if tag != "a":
             return
         self.links.append(dict(attrs))
+
+
+def test_staff_task_models_use_suite_task_verbose_names():
+    """Staff task admin labels should use suite task wording."""
+
+    assert StaffTask._meta.verbose_name == "Suite Task"
+    assert StaffTask._meta.verbose_name_plural == "Suite Tasks"
+    assert StaffTaskPreference._meta.verbose_name == "Suite Task Preference"
+    assert StaffTaskPreference._meta.verbose_name_plural == "Suite Task Preferences"
 
 
 @pytest.mark.integration
