@@ -11,6 +11,7 @@ from redis import Redis
 from redis.exceptions import RedisError
 
 from apps.core.channel_metrics import metrics_snapshot
+from apps.core.management.deprecation import absorbed_into_command
 
 
 def _mask_url(url: str) -> str:
@@ -26,6 +27,7 @@ def _mask_url(url: str) -> str:
     return parsed._replace(netloc=f"{auth}@{host}{port}").geturl()
 
 
+@absorbed_into_command("channels")
 class Command(BaseCommand):
     """Display current channel-layer backend and runtime websocket counters."""
 

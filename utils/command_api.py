@@ -29,7 +29,7 @@ for command_name, app_name in sorted(get_commands().items()):
         cls = module.Command
     except Exception:
         continue
-    if getattr(cls, "arthexis_absorbed_command", False):
+    if cls.__dict__.get("arthexis_absorbed_command", False):
         print(command_name)
 """.strip()
 
@@ -51,11 +51,16 @@ class CommandOptions:
         return "--celery" if self.celery else "--no-celery"
 
 
-
-
 def _fast_run_enabled() -> bool:
     """Return whether run-mode should skip command discovery for faster execution."""
-    return os.getenv("ARTHEXIS_COMMAND_FAST_RUN", "") in {"1", "true", "TRUE", "yes", "YES"}
+    return os.getenv("ARTHEXIS_COMMAND_FAST_RUN", "") in {
+        "1",
+        "true",
+        "TRUE",
+        "yes",
+        "YES",
+    }
+
 
 def _cache_ttl_seconds() -> int:
     """Read and sanitize cache TTL from environment."""

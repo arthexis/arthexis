@@ -9,6 +9,8 @@ from django.core.management.base import BaseCommand, CommandError
 from dotenv import dotenv_values
 from filelock import FileLock, Timeout
 
+from apps.core.management.deprecation import absorbed_into_command
+
 
 _VALID_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -62,6 +64,7 @@ def write_env(path: Path, values: OrderedDict[str, str]) -> None:
             path.unlink()
 
 
+@absorbed_into_command("env")
 class Command(BaseCommand):
     help = (
         "Manage key/value pairs in arthexis.env so they are loaded by startup scripts. "

@@ -6,6 +6,7 @@ from typing import Any
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.timesince import timesince
+from apps.core.management.deprecation import absorbed_into_command
 
 from apps.core.system_ui import (
     build_uptime_segments,
@@ -18,6 +19,7 @@ from apps.core.system_ui import (
 WINDOW_HOURS = 72
 
 
+@absorbed_into_command("availability")
 class Command(BaseCommand):
     help = "Summarize suite offline/online periods for the last 72 hours"
 
