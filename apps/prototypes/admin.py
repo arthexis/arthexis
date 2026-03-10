@@ -48,8 +48,16 @@ class PrototypeAdmin(EntityModelAdmin):
             level=messages.SUCCESS,
         )
 
-    @admin.action(description=_("Deactivate selected prototype"))
+    @admin.action(description=_("Deactivate active prototype"))
     def deactivate_selected(self, request, queryset):
+        if not Prototype.objects.filter(is_active=True).exists():
+            self.message_user(
+                request,
+                _("No prototype is currently active."),
+                level=messages.WARNING,
+            )
+            return
+
         prototype_ops.deactivate_prototype()
         self.message_user(
             request,

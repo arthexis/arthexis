@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -181,6 +182,12 @@ def _camelize(value: str) -> str:
     return "".join(part.capitalize() for part in value.split("_"))
 
 
+def _python_string_literal(value: str) -> str:
+    """Render *value* as a safe Python string literal."""
+
+    return repr(value)
+
+
 def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None) -> Path:
     """Create a hidden local Django app scaffold for *prototype* if missing."""
 
@@ -203,7 +210,7 @@ def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None
 
     model_name = f"{_camelize(prototype.slug)}Experiment"
     config_class = f"{_camelize(prototype.slug)}PrototypeConfig"
-    verbose_name = prototype.name.replace('"', '\\"')
+    verbose_name = f"{prototype.name}"
 
     files_to_write: dict[Path, str] = {
         app_dir / "__init__.py": '"""Scaffolded prototype app."""\n',
@@ -212,9 +219,9 @@ def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None
             f"class {config_class}(AppConfig):\n"
             '    """App config for a scaffolded hidden prototype app."""\n\n'
             '    default_auto_field = "django.db.models.BigAutoField"\n'
-            f'    name = "{prototype.scaffold_module}"\n'
-            f'    label = "{prototype.scaffold_label}"\n'
-            f'    verbose_name = "{verbose_name}"\n'
+            f"    name = {_python_string_literal(prototype.scaffold_module)}\n"
+            f"    label = {_python_string_literal(prototype.scaffold_label)}\n"
+            f"    verbose_name = {_python_string_literal(verbose_name)}\n"
         ),
         app_dir / "models.py": (
             "from django.db import models\n\n\n"
@@ -223,8 +230,8 @@ def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None
             "    name = models.CharField(max_length=120, unique=True)\n"
             "    created_at = models.DateTimeField(auto_now_add=True)\n\n"
             "    class Meta:\n"
-            f'        verbose_name = "{prototype.name} record"\n'
-            f'        verbose_name_plural = "{prototype.name} records"\n\n'
+            f"        verbose_name = {_python_string_literal(f'{prototype.name} record')}\n"
+            f"        verbose_name_plural = {_python_string_literal(f'{prototype.name} records')}\n\n"
             "    def __str__(self) -> str:\n"
             "        return self.name\n"
         ),
@@ -241,7 +248,7 @@ def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None
             "from django.http import HttpRequest, HttpResponse\n\n\n"
             "def index(request: HttpRequest) -> HttpResponse:\n"
             '    """Return a minimal response so scaffolded prototype routes are immediately usable."""\n\n'
-            f'    return HttpResponse("Prototype scaffold active: {prototype.slug}")\n'
+            f"    return HttpResponse({_python_string_literal(f'Prototype scaffold active: {prototype.slug}')})\n"
         ),
         app_dir / "urls.py": (
             "from django.urls import path\n\nfrom . import views\n\n\n"
@@ -252,7 +259,8 @@ def scaffold_prototype_app(prototype: Prototype, *, base_dir: Path | None = None
         app_dir / "routes.py": (
             "from django.urls import include, path\n\n\n"
             "ROOT_URLPATTERNS = [\n"
-            f'    path("prototype/{prototype.slug}/", include("{prototype.scaffold_module}.urls")),\n'
+            f"    path({_python_string_literal(f'prototype/{prototype.slug}/')}, "
+            f"include({_python_string_literal(f'{prototype.scaffold_module}.urls')})),\n"
             "]\n"
         ),
         app_dir / "migrations" / "__init__.py": "",
@@ -275,8 +283,13 @@ def restart_suite(*, base_dir: Path | None = None, force_stop: bool = False) -> 
     """Restart the suite via the existing lifecycle scripts."""
 
     resolved_base_dir = _base_dir(base_dir)
+    restart_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in Prototype.RESERVED_ENV_KEYS
+    }
     stop_command = ["./stop.sh"]
     if force_stop:
         stop_command.append("--force")
-    subprocess.run(stop_command, cwd=resolved_base_dir, check=True)
-    subprocess.run(["./start.sh", "--await"], cwd=resolved_base_dir, check=True)
+    subprocess.run(stop_command, cwd=resolved_base_dir, check=True, env=restart_env)
+    subprocess.run(["./start.sh", "--await"], cwd=resolved_base_dir, check=True, env=restart_env)

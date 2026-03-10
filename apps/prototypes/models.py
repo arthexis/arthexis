@@ -141,9 +141,6 @@ class Prototype(Entity):
         """Normalize derived fields and validate custom env overrides."""
 
         super().clean()
-        if self.slug and not _SLUG_RE.match(self.slug):
-            raise ValidationError({"slug": "Use lowercase snake_case starting with a letter."})
-
         if not self.app_module:
             self.app_module = f"{self.PROTOTYPE_PACKAGE_ROOT}.{self.slug}"
         if not self.app_label:
