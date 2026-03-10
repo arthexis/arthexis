@@ -1,0 +1,127 @@
+name: Release Readiness
+
+permissions:
+  contents: read
+
+env:
+  OCPP_STATE_REDIS_URL: redis://localhost:6379
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  release-readiness-test:
+    name: Release readiness (test)
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install suite from repository
+        run: ./install.sh --no-start
+      - name: Validate migrations
+        run: |
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --database default
+      - name: Run release test suite
+        run: |
+          set -o pipefail
+          source .venv/bin/activate
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-readiness-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
+
+  release-readiness-build:
+    name: Release readiness (build)
+    needs: release-readiness-test
+    if: always()
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install build backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-readiness-dists
+          path: dist/
+
+  release-readiness-publish:
+    name: Release readiness (publish dry run)
+    needs: release-readiness-build
+    if: always()
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-readiness-dists
+          path: dist/
+      - name: Verify publish artifacts
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install twine
+          twine check dist/*
+      - name: Release readiness note
+        run: |
+          echo "Release Readiness is informational and currently non-blocking for pull requests."
