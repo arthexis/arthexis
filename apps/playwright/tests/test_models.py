@@ -3,8 +3,15 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from apps.groups.models import SecurityGroup
 from apps.playwright import models as playwright_models
-from apps.playwright.models import PlaywrightBrowser, PlaywrightScript, SessionCookie, WebsiteScreenshotSchedule, schedule_pending_website_screenshots
+from apps.playwright.models import (
+    PlaywrightBrowser,
+    PlaywrightScript,
+    SessionCookie,
+    WebsiteScreenshotSchedule,
+    schedule_pending_website_screenshots,
+)
 
 
 @pytest.mark.django_db
@@ -69,7 +76,8 @@ def test_playwright_script_supports_legacy_url_preamble():
 
 
 @pytest.mark.django_db
-def test_sessioncookie_set_cookies_saves_unsaved_instance(group):
+def test_sessioncookie_set_cookies_saves_unsaved_instance():
+    group = SecurityGroup.objects.create(name="Playwright Operators")
     cookie = SessionCookie(name="new-cookie", group=group)
 
     cookie.set_cookies([{"name": "session", "value": "abc"}])

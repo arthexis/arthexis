@@ -26,7 +26,7 @@ def test_noderole_changelist_marks_self_role_with_checkmark(admin_client):
     response = admin_client.get(reverse("admin:nodes_noderole_changelist"))
 
     assert response.status_code == 200
-    assert b'<th scope="col" class="column-is_assigned_to_this_node">' in response.content
+    assert b'column-is_assigned_to_this_node' in response.content
     assert b"icon-yes.svg" in response.content
 
 

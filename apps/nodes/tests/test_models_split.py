@@ -1,7 +1,7 @@
 import pytest
-
 from django.contrib.sites.models import Site
 
+from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.models import utils as node_utils
 
@@ -310,7 +310,9 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
 
 @pytest.mark.django_db
 def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
-    """Auto-detection should defer to app-provided node feature hook modules."""
+    """Regression: auto-detection should defer to app-provided hook modules."""
+
+    node_feature_detection_registry.reset()
 
     node = Node(
         hostname="hook-node",
@@ -341,6 +343,8 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
         is True
     )
     assert setup_calls == ["rfid-scanner"]
+
+    node_feature_detection_registry.reset()
 
 
 @pytest.mark.django_db
