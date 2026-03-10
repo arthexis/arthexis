@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.db import models
 
 from apps.core.admin import OwnableAdminMixin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 from apps.recipes.models import Recipe, RecipeProduct
 
 

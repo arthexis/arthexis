@@ -10,7 +10,7 @@ from django.urls import reverse
 from unittest import mock
 
 from apps.locals.models import Favorite
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 
 
 class FavoriteToggleViewTests(TestCase):

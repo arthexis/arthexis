@@ -9,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm, CardSetUploadForm
 from apps.cards.models import CardDesign, CardFace, CardSet, RFID, RFIDAttempt
 from apps.core.admin import RFIDAdmin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 
 
 @admin.register(CardFace)

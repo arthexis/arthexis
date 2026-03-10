@@ -5,7 +5,7 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
 
 from ..models import UserStory, UserStoryAttachment

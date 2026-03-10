@@ -24,7 +24,7 @@ from apps.actions.models import (
 )
 from apps.actions.openapi import build_openapi_spec
 from apps.core.admin import OwnableAdminMixin
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ from django.urls import reverse
 
 from apps.features.models import Feature, FeatureTest
 from apps.locals.models import Favorite
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 from apps.projects.models import Project, ProjectItem
 
 

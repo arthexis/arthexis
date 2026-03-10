@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.systemctl import _systemctl_command
 from apps.services.lifecycle import SERVICE_NAME_LOCK, lock_dir, read_service_name
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 
 from ..models import NodeRole, Node
 from .forms import NodeRoleAdminForm

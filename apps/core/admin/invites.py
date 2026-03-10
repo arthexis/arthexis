@@ -1,5 +1,5 @@
 from apps.core.models import InviteLead
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 
 
 class InviteLeadAdmin(EntityModelAdmin):

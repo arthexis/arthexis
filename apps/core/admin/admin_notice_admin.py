@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 
 from apps.core.models.admin_notice import AdminNotice
 

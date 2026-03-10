@@ -14,7 +14,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import EntityModelAdmin
+from apps.locals.entity import EntityModelAdmin
 from apps.projects.models import Project, ProjectItem
 from apps.projects.services import build_project_bundle_response, import_project_bundle
 

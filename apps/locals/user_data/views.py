@@ -19,8 +19,8 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _, ngettext
 
-from .admin import _iter_entity_admin_models, _supports_seed_datum, _supports_user_datum
-from .fixtures import (
+from apps.locals.entity import _iter_entity_admin_models, _supports_seed_datum, _supports_user_datum
+from apps.locals.fixtures import (
     _data_dir,
     _load_fixture,
     _user_fixture_status,
@@ -30,7 +30,7 @@ from .fixtures import (
     resolve_fixture_user,
     user_allows_user_data,
 )
-from .seeds import (
+from apps.locals.seeds import (
     _seed_datum_is_default,
     _seed_fixture_entries_from_text,
     _seed_fixture_index,
