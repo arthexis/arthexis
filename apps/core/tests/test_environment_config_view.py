@@ -149,4 +149,29 @@ def test_environment_view_trims_user_env_keys(db, tmp_path, settings) -> None:
         for row in response.context_data["env_rows"]
         if row["key"] == "PATH"
     )
-    assert path_row["user_value"] == " /spaced/value"
+    assert path_row["user_value"] == "/spaced/value"
+
+
+def test_environment_view_post_strips_newline_characters(db, tmp_path, settings) -> None:
+    """Persisted values should not allow newline-delimited env injection."""
+    settings.BASE_DIR = tmp_path
+    user = get_user_model().objects.create_superuser(
+        username="admin5",
+        email="admin5@example.com",
+        password="admin123",
+    )
+
+    request = RequestFactory().post(
+        "/admin/environment/",
+        data={"user_value_PATH": "safe\nMALICIOUS=1\r"},
+    )
+    request.user = user
+    setattr(request, "session", {})
+    setattr(request, "_messages", FallbackStorage(request))
+
+    response = _environment_view(request)
+    response.render()
+
+    assert response.status_code == 200
+    env_file = tmp_path / "var" / "user_env" / f"{user.pk}.env"
+    assert env_file.read_text() == "PATH=safeMALICIOUS=1\n"

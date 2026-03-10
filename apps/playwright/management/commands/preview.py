@@ -105,9 +105,9 @@ class Command(BaseCommand):
                 return
             except Exception as exc:
                 last_error = exc
-                self.stderr.write(f"Engine '{engine}' failed for {path}: {exc}")
+                self.stderr.write(f"Engine '{engine}' failed: {exc}")
 
-        raise CommandError(f"All preview engines failed for {path}. Last error: {last_error}")
+        raise CommandError(f"All preview engines failed. Last error: {last_error}")
 
     def _build_capture_plan(
         self,
@@ -120,15 +120,24 @@ class Command(BaseCommand):
         """Build a deterministic list of captures for path and viewport combinations."""
         captures: list[dict[str, object]] = []
         use_legacy_output = len(paths) == 1
-        for path in paths:
-            normalized_path = path if path.startswith("/") else f"/{path}"
-            slug = self._path_slug(normalized_path)
+        normalized_paths = [path if path.startswith("/") else f"/{path}" for path in paths]
+        slugs = [self._path_slug(path) for path in normalized_paths]
+        slug_counts: dict[str, int] = {}
+        unique_slugs: list[str] = []
+        for slug in slugs:
+            slug_counts[slug] = slug_counts.get(slug, 0) + 1
+            if slug_counts[slug] == 1:
+                unique_slugs.append(slug)
+            else:
+                unique_slugs.append(f"{slug}-{slug_counts[slug]}")
+
+        for normalized_path, unique_slug in zip(normalized_paths, unique_slugs):
             for viewport_name in viewport_names:
                 viewport_size = DEFAULT_VIEWPORTS[viewport_name]
                 if use_legacy_output and viewport_name == "desktop":
                     target = output
                 else:
-                    target = output_dir / f"{slug}-{viewport_name}.png"
+                    target = output_dir / f"{unique_slug}-{viewport_name}.png"
                 captures.append(
                     {
                         "path": normalized_path,

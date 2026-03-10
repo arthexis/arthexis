@@ -113,7 +113,7 @@ def _load_user_env_values(user) -> dict[str, str]:
                 continue
             key, value = line.split("=", 1)
             key = key.strip()
-            values[key] = value
+            values[key] = value.strip()
     return values
 
 
@@ -135,7 +135,8 @@ def _write_user_env_values(user, values: dict[str, str]) -> None:
 
     with env_path.open("w", encoding="utf-8") as env_file:
         for key in sorted(values):
-            env_file.write(f"{key}={values[key]}\n")
+            safe_value = values[key].replace("\n", "").replace("\r", "")
+            env_file.write(f"{key}={safe_value}\n")
 
 def _config_view(request):
     django_settings = _get_django_settings()

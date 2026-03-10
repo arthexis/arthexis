@@ -62,3 +62,18 @@ def test_build_capture_plan_multiple_paths_includes_all_viewports() -> None:
     assert "root-desktop.png" in outputs
     assert "root-tablet.png" in outputs
     assert "root-mobile.png" in outputs
+
+
+def test_build_capture_plan_disambiguates_duplicate_path_slugs() -> None:
+    """Distinct paths producing same slug should still get unique output names."""
+
+    command = Command()
+    captures = command._build_capture_plan(
+        paths=["/foo/bar/", "/foo-bar/"],
+        viewport_names=["desktop"],
+        output=Path("/tmp/preview/admin-preview.png"),
+        output_dir=Path("/tmp/preview"),
+    )
+
+    outputs = [capture["output"].name for capture in captures]
+    assert outputs == ["foo-bar-desktop.png", "foo-bar-2-desktop.png"]
