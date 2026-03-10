@@ -41,6 +41,7 @@ class FeedbackIssueConfigurationForm(forms.Form):
     )
     active_repository_url = forms.URLField(
         required=False,
+        assume_scheme="https",
         label=_("Active package repository URL"),
         help_text=_("Repository used for creating feedback GitHub issues."),
     )
