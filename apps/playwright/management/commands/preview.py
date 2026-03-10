@@ -6,6 +6,7 @@ import re
 import secrets
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -70,39 +71,45 @@ class Command(BaseCommand):
         preview_username = ""
         preview_password = ""
         preview_user_id: int | None = None
-        if not options["no_login"]:
-            preview_username, preview_password, preview_user_id = self._create_throwaway_admin_user()
-
-        output = Path(options["output"])
-        if not output.is_absolute():
-            output = settings.BASE_DIR / output
-
-        output_dir = Path(options["output_dir"]) if options["output_dir"] else output.parent
-        if not output_dir.is_absolute():
-            output_dir = settings.BASE_DIR / output_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        paths = options["paths"] or ["/admin/"]
-        viewport_names = [item.strip() for item in options["viewports"].split(",") if item.strip()]
-        if not viewport_names:
-            raise CommandError("At least one viewport profile must be provided via --viewports.")
-
-        invalid_viewports = sorted(set(viewport_names) - set(DEFAULT_VIEWPORTS))
-        if invalid_viewports:
-            raise CommandError(
-                "Unsupported viewport profile(s): "
-                + ", ".join(invalid_viewports)
-                + ". Supported values are: "
-                + ", ".join(DEFAULT_VIEWPORTS)
-            )
-
-        engines = [item.strip() for item in options["engine"].split(",") if item.strip()]
-        if not engines:
-            raise CommandError("At least one engine must be provided via --engine.")
-
-        captures = self._build_capture_plan(paths=paths, viewport_names=viewport_names, output=output, output_dir=output_dir)
 
         try:
+            if not options["no_login"]:
+                preview_username, preview_password, preview_user_id = self._create_throwaway_admin_user()
+
+            output = Path(options["output"])
+            if not output.is_absolute():
+                output = settings.BASE_DIR / output
+
+            output_dir = Path(options["output_dir"]) if options["output_dir"] else output.parent
+            if not output_dir.is_absolute():
+                output_dir = settings.BASE_DIR / output_dir
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            paths = options["paths"] or ["/admin/"]
+            viewport_names = [item.strip() for item in options["viewports"].split(",") if item.strip()]
+            if not viewport_names:
+                raise CommandError("At least one viewport profile must be provided via --viewports.")
+
+            invalid_viewports = sorted(set(viewport_names) - set(DEFAULT_VIEWPORTS))
+            if invalid_viewports:
+                raise CommandError(
+                    "Unsupported viewport profile(s): "
+                    + ", ".join(invalid_viewports)
+                    + ". Supported values are: "
+                    + ", ".join(DEFAULT_VIEWPORTS)
+                )
+
+            engines = [item.strip() for item in options["engine"].split(",") if item.strip()]
+            if not engines:
+                raise CommandError("At least one engine must be provided via --engine.")
+
+            captures = self._build_capture_plan(
+                paths=paths,
+                viewport_names=viewport_names,
+                output=output,
+                output_dir=output_dir,
+            )
+
             last_error: Exception | None = None
             for engine in engines:
                 try:
@@ -179,11 +186,7 @@ class Command(BaseCommand):
         user_model = get_user_model()
         username = f"preview-{secrets.token_hex(6)}"
         password = secrets.token_urlsafe(18)
-        user = user_model.objects.create_user(username=username, password=password)
-        user.is_active = True
-        user.is_staff = True
-        user.is_superuser = True
-        user.save(update_fields=["is_active", "is_staff", "is_superuser"])
+        user = user_model.objects.create_superuser(username=username, password=password)
         return username, password, user.pk
 
     def _delete_throwaway_admin_user(self, user_id: int | None) -> None:
@@ -220,7 +223,8 @@ class Command(BaseCommand):
                 "`python -m playwright install chromium firefox` (or `./env-refresh.sh --deps-only`)."
             ) from exc
 
-        login_url = f"{base_url}/admin/login/"
+        admin_path = getattr(settings, "ADMIN_URL_PATH", "admin/").strip("/")
+        login_url = f"{base_url}/{admin_path}/login/"
 
         try:
             with sync_playwright() as playwright:
@@ -234,7 +238,7 @@ class Command(BaseCommand):
                     page.fill("#id_password", password)
                     page.click("input[type='submit']")
                     page.wait_for_load_state("networkidle")
-                    self._validate_login_success(page.url)
+                    self._validate_login_success(page.url, login_url)
 
                 for capture in captures:
                     width, height = capture["viewport_size"]
@@ -251,10 +255,10 @@ class Command(BaseCommand):
         except PlaywrightError as exc:
             raise CommandError(self._playwright_runtime_help(exc)) from exc
 
-    def _validate_login_success(self, current_url: str) -> None:
+    def _validate_login_success(self, current_url: str, login_url: str) -> None:
         """Raise a command error when preview login does not leave the admin login page."""
 
-        if "/admin/login" in current_url:
+        if urlparse(current_url).path.rstrip("/") == urlparse(login_url).path.rstrip("/"):
             raise CommandError(
                 "Preview login did not complete successfully. "
                 "If you intended to capture anonymous pages, pass --no-login."

@@ -71,6 +71,31 @@ def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     assert state["deleted"] == 99
 
 
+def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> None:
+    """Throwaway preview user should be deleted when argument validation fails."""
+
+    command = Command()
+    state: dict[str, object] = {"deleted": None}
+
+    monkeypatch.setattr(command, "_create_throwaway_admin_user", lambda: ("preview-user", "preview-pass", 99))
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda user_id: state.__setitem__("deleted", user_id))
+
+    with pytest.raises(CommandError, match="At least one viewport profile"):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username="admin",
+            password="admin123",
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports=",",
+            engine="chromium",
+            no_login=False,
+        )
+
+    assert state["deleted"] == 99
+
+
 def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     """No-login captures should not create or authenticate any temporary user."""
 
@@ -138,7 +163,10 @@ def test_validate_login_success_rejects_login_page_url() -> None:
     command = Command()
 
     with pytest.raises(CommandError, match="Preview login did not complete successfully"):
-        command._validate_login_success("http://127.0.0.1:8011/admin/login/?next=/admin/")
+        command._validate_login_success(
+            "http://127.0.0.1:8011/admin/login/?next=/admin/",
+            "http://127.0.0.1:8011/admin/login/",
+        )
 
 
 def test_validate_login_success_allows_non_login_url() -> None:
@@ -146,4 +174,22 @@ def test_validate_login_success_allows_non_login_url() -> None:
 
     command = Command()
 
-    command._validate_login_success("http://127.0.0.1:8011/admin/")
+    result = command._validate_login_success(
+        "http://127.0.0.1:8011/admin/",
+        "http://127.0.0.1:8011/admin/login/",
+    )
+
+    assert result is None
+
+
+def test_validate_login_success_uses_custom_admin_path(settings) -> None:
+    """Preview login validation should respect a custom admin mount path."""
+
+    command = Command()
+    settings.ADMIN_URL_PATH = "control-panel/"
+
+    with pytest.raises(CommandError, match="Preview login did not complete successfully"):
+        command._validate_login_success(
+            "http://127.0.0.1:8011/control-panel/login/?next=/control-panel/",
+            "http://127.0.0.1:8011/control-panel/login/",
+        )
