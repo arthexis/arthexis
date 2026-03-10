@@ -114,14 +114,33 @@ class _LlvmScanner:
             )
         )
         tokens: list[TokenSpan] = []
+        byte_to_char = self._build_utf8_byte_to_char_index(text)
         for idx in range(pair_count):
             start = int(pair_buffer[idx * 2])
             end = int(pair_buffer[idx * 2 + 1])
-            if end > len(text) or start >= end:
+            if end > len(encoded) or start >= end:
                 logger.warning("Ignoring invalid LLVM token span (%s, %s)", start, end)
                 continue
-            tokens.append(TokenSpan(start=start, end=end))
+            start_char = byte_to_char[start]
+            end_char = byte_to_char[end]
+            if start_char < 0 or end_char < 0:
+                logger.warning(
+                    "Ignoring non-boundary LLVM token span (%s, %s)", start, end
+                )
+                continue
+            tokens.append(TokenSpan(start=start_char, end=end_char))
         return tokens
+
+    @staticmethod
+    def _build_utf8_byte_to_char_index(text: str) -> list[int]:
+        encoded_length = len(text.encode("utf-8"))
+        byte_to_char = [-1] * (encoded_length + 1)
+        byte_index = 0
+        byte_to_char[0] = 0
+        for char_index, char in enumerate(text, start=1):
+            byte_index += len(char.encode("utf-8"))
+            byte_to_char[byte_index] = char_index
+        return byte_to_char
 
 
 @lru_cache(maxsize=1)
