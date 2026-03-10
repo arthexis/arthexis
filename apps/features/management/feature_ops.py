@@ -186,7 +186,7 @@ def reset_all_suite_features() -> tuple[int, int]:
         feature_manager.all().delete()
         _ensure_fixture_applications_exist(fixture_paths=fixture_paths)
         call_command(
-            "load_user_data", *(str(path) for path in fixture_paths), verbosity=0
+            "loaddata", *(str(path) for path in fixture_paths), verbosity=0
         )
         _ensure_reset_baseline_features()
     return deleted_count, len(fixture_paths)
