@@ -3,6 +3,65 @@
 from django.db import migrations
 
 
+def _rename_permission_labels(apps, schema_editor, *, source_label, target_label):
+    Permission = apps.get_model("auth", "Permission")
+    ContentType = apps.get_model("contenttypes", "ContentType")
+
+    model_updates = {
+        "stafftask": (f"{source_label} Task", f"{target_label} Task"),
+        "stafftaskpreference": (
+            f"{source_label} Task Preference",
+            f"{target_label} Task Preference",
+        ),
+    }
+
+    action_verbs = {
+        "add",
+        "change",
+        "delete",
+        "view",
+    }
+
+    for model_name, (old_model_label, new_model_label) in model_updates.items():
+        content_type = ContentType.objects.filter(
+            app_label="actions",
+            model=model_name,
+        ).first()
+        if content_type is None:
+            continue
+
+        for codename, permission_id, name in Permission.objects.filter(
+            content_type=content_type
+        ).values_list("codename", "id", "name"):
+            prefix, _, _ = codename.partition("_")
+            if prefix not in action_verbs:
+                continue
+            if old_model_label not in name:
+                continue
+
+            Permission.objects.filter(id=permission_id).update(
+                name=name.replace(old_model_label, new_model_label)
+            )
+
+
+def rename_permissions_to_suite_task_labels(apps, schema_editor):
+    _rename_permission_labels(
+        apps,
+        schema_editor,
+        source_label="Staff",
+        target_label="Suite",
+    )
+
+
+def rename_permissions_to_staff_task_labels(apps, schema_editor):
+    _rename_permission_labels(
+        apps,
+        schema_editor,
+        source_label="Suite",
+        target_label="Staff",
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -25,5 +84,9 @@ class Migration(migrations.Migration):
                 "verbose_name": "Suite Task Preference",
                 "verbose_name_plural": "Suite Task Preferences",
             },
+        ),
+        migrations.RunPython(
+            rename_permissions_to_suite_task_labels,
+            rename_permissions_to_staff_task_labels,
         ),
     ]

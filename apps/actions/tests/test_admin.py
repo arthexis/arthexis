@@ -50,6 +50,59 @@ def test_staff_task_models_use_suite_task_verbose_names():
     assert StaffTaskPreference._meta.verbose_name_plural == "Suite Task Preferences"
 
 
+def test_suite_task_permission_names_are_upgraded_by_migration_function():
+    """Migration helper should rename existing auth permission labels to suite wording."""
+
+    from django.apps import apps as global_apps
+    from django.contrib.contenttypes.models import ContentType
+
+    import importlib
+
+    migration_module = importlib.import_module(
+        "apps.actions.migrations.0006_alter_stafftask_options_and_more"
+    )
+
+    staff_task_content_type, _ = ContentType.objects.get_or_create(
+        app_label="actions",
+        model="stafftask",
+    )
+    staff_task_preference_content_type, _ = ContentType.objects.get_or_create(
+        app_label="actions",
+        model="stafftaskpreference",
+    )
+
+    add_task_permission = Permission.objects.get(
+        content_type=staff_task_content_type,
+        codename="add_stafftask",
+    )
+    add_task_permission.name = "Can add Staff Task"
+    add_task_permission.save(update_fields=["name"])
+
+    view_preference_permission = Permission.objects.get(
+        content_type=staff_task_preference_content_type,
+        codename="view_stafftaskpreference",
+    )
+    view_preference_permission.name = "Can view Staff Task Preference"
+    view_preference_permission.save(update_fields=["name"])
+
+    custom_permission, _ = Permission.objects.get_or_create(
+        content_type=staff_task_content_type,
+        codename="approve_stafftask",
+        defaults={"name": "Can approve Staff Task"},
+    )
+
+    migration_module.rename_permissions_to_suite_task_labels(global_apps, schema_editor=None)
+
+    add_task_permission.refresh_from_db()
+    view_preference_permission.refresh_from_db()
+    custom_permission.refresh_from_db()
+
+    assert add_task_permission.name == "Can add Suite Task"
+    assert view_preference_permission.name == "Can view Suite Task Preference"
+    assert custom_permission.name == "Can approve Staff Task"
+
+
+
 @pytest.mark.integration
 def test_remote_action_token_admin_add_defaults_to_request_user(admin_client, admin_user):
     """Regression: add form defaults the owner to the logged-in admin user."""
