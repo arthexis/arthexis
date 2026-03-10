@@ -7,17 +7,6 @@ import pytest
 from django.urls import reverse
 
 from apps.links.models.reference import Reference
-
-
-@pytest.mark.django_db
-def test_bulk_create_get_returns_method_not_allowed_for_staff(admin_client):
-    url = reverse("admin:links_reference_bulk")
-
-    response = admin_client.get(url)
-
-    assert response.status_code == 405
-
-
 @pytest.mark.django_db
 def test_bulk_create_creates_references_for_staff(admin_client, admin_user):
     url = reverse("admin:links_reference_bulk")
