@@ -10,7 +10,8 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, models, transaction
+from django.db import DatabaseError, IntegrityError, connection, models, transaction
+from django.db.models import F
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -177,6 +178,101 @@ class OperationExecution(Entity):
         """Return execution string summary."""
 
         return f"{self.operation} @ {self.performed_at:%Y-%m-%d %H:%M}"
+
+
+class SecurityAlertEvent(Entity):
+    """Aggregated operational error event used by the security alerts widget."""
+
+    key = models.CharField(max_length=120, unique=True)
+    severity = models.CharField(max_length=20, default="error")
+    message = models.CharField(max_length=255)
+    detail = models.TextField(blank=True)
+    occurrence_count = models.PositiveIntegerField(default=1)
+    last_occurred_at = models.DateTimeField(default=timezone.now)
+    remediation_url = models.CharField(max_length=500, default="/admin/")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-last_occurred_at", "-updated_at")
+        verbose_name = _("Security Alert Event")
+        verbose_name_plural = _("Security Alert Events")
+        indexes = [
+            models.Index(fields=["is_active", "-last_occurred_at"], name="ops_secalert_active_last"),
+        ]
+
+    def __str__(self) -> str:
+        """Return a readable key/message label for admin lists."""
+
+        return f"{self.key}: {self.message}"
+
+    @staticmethod
+    def _validate_remediation_url(remediation_url: str) -> None:
+        """Validate remediation links to prevent unsafe schemes."""
+
+        parsed = urlparse(remediation_url)
+        if parsed.scheme and parsed.scheme not in {"http", "https"}:
+            raise ValidationError(
+                {"remediation_url": _("Remediation URL must be HTTP(S) or a relative path.")}
+            )
+        if not parsed.scheme and not remediation_url.startswith("/"):
+            raise ValidationError(
+                {"remediation_url": _("Remediation URL must be HTTP(S) or a relative path.")}
+            )
+
+    def clean(self) -> None:
+        """Enforce safe remediation URL schemes."""
+
+        super().clean()
+        self._validate_remediation_url(self.remediation_url)
+
+    @classmethod
+    def record_occurrence(
+        cls,
+        *,
+        key: str,
+        message: str,
+        detail: str = "",
+        severity: str = "error",
+        remediation_url: str = "/admin/",
+        occurred_at=None,
+    ) -> "SecurityAlertEvent":
+        """Create or update an event entry while incrementing occurrence metadata."""
+
+        current_time = occurred_at or timezone.now()
+        cls._validate_remediation_url(remediation_url)
+        with transaction.atomic():
+            event = cls.all_objects.select_for_update().filter(key=key).first()
+            if event is None:
+                try:
+                    return cls.all_objects.create(
+                        key=key,
+                        severity=severity,
+                        message=message,
+                        detail=detail,
+                        occurrence_count=1,
+                        last_occurred_at=current_time,
+                        remediation_url=remediation_url,
+                        is_active=True,
+                        is_deleted=False,
+                    )
+                except IntegrityError:
+                    event = cls.all_objects.select_for_update().get(key=key)
+
+            cls.all_objects.filter(pk=event.pk).update(
+                severity=severity,
+                message=message,
+                detail=detail,
+                remediation_url=remediation_url,
+                occurrence_count=1 if event.is_deleted else F("occurrence_count") + 1,
+                last_occurred_at=current_time,
+                is_active=True,
+                is_deleted=False,
+                updated_at=timezone.now(),
+            )
+            event.refresh_from_db()
+            return event
 
 
 @dataclass(slots=True)
