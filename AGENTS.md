@@ -109,6 +109,14 @@ Agents must run relevant tests after code changes.
 * Do **not create tests solely to validate styling**.
 * Apply required marks to tag the PR of origin.
 
+Example:
+
+```python
+@pytest.mark.pr_origin(6172)
+def test_my_feature():
+    ...
+```
+
 Styling will be validated through previews.
 
 ---
@@ -124,7 +132,7 @@ If a test fails **multiple times across runs**, it must be:
 
 ### Fixture Changes
 
-Any modification to fixtures must include:
+Any modification to database models must include:
 
 * **reversible migrations**
 
@@ -173,8 +181,15 @@ A **preview is mandatory** whenever changes affect:
 
 Primary method:
 
+```bash
+python manage.py runserver 127.0.0.1:8000
 ```
+
+In another shell:
+
+```bash
 python manage.py preview \
+  --base-url http://127.0.0.1:8000 \
   --path / \
   --path /admin/ \
   --output-dir preview_output
@@ -241,7 +256,7 @@ Agents must **not modify primary README files** unless:
 
 ## Cleave
 
-Remove **all words contained in brackets**.
+Remove **all words contained in parentheses**.
 
 Example:
 
