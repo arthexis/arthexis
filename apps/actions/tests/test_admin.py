@@ -165,6 +165,20 @@ def test_remote_action_dashboard_button_opens_preview_page(admin_user):
 def test_model_admin_actions_includes_declarative_dashboard_action(admin_client):
     """Dashboard rows should include declarative actions from DashboardAction records."""
 
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.recipes.models import Recipe
+
+    content_type = ContentType.objects.get_for_model(Recipe, for_concrete_model=False)
+    DashboardAction.objects.create(
+        content_type=content_type,
+        slug="recipe-bulk-import",
+        label="Bulk Import",
+        target_type=DashboardAction.TargetType.ABSOLUTE_URL,
+        absolute_url="/admin/recipes/recipe/bulk-import/",
+        http_method=DashboardAction.HttpMethod.GET,
+    )
+
     response = admin_client.get(reverse("admin:index"))
     assert response.status_code == 200
 
