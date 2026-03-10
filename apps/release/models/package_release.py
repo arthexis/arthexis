@@ -10,7 +10,7 @@ from urllib.parse import quote_plus, urlparse
 
 from django.core import serializers
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, models
+from django.db import DatabaseError, models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -159,8 +159,14 @@ class PackageRelease(Entity):
                 old_path.unlink()
 
     def delete(self, using=None, keep_parents=False):
-        delete_user_fixture(self)
-        super().delete(using=using, keep_parents=keep_parents)
+        db_alias = using or self._state.db or "default"
+        fixture_pk = self.pk
+        with transaction.atomic(using=db_alias):
+            super().delete(using=db_alias, keep_parents=keep_parents)
+            transaction.on_commit(
+                lambda: delete_user_fixture(self.__class__(pk=fixture_pk)),
+                using=db_alias,
+            )
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.package.name} {self.version}"

@@ -1171,7 +1171,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if not node:
             self.message_user(request, "Unknown node", messages.ERROR)
             return redirect("..")
-        security_dir = local_node.get_base_path() / "security"
+        security_dir = node.get_base_path() / "security"
         pub_path = security_dir / f"{node.public_endpoint}.pub"
         if pub_path.exists():
             response = HttpResponse(pub_path.read_bytes(), content_type="text/plain")

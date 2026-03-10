@@ -32,7 +32,7 @@ from .user_fixtures import (
     user_allows_user_data,
 )
 from .seeds import _seed_datum_is_default, _seed_fixture_index
-from .user_data.utils import _safe_next_url
+from .utils import _safe_next_url
 
 
 class UserDatumAdminMixin(admin.ModelAdmin):
