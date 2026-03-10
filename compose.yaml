@@ -21,10 +21,9 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       OCPP_STATE_REDIS_URL: ${OCPP_STATE_REDIS_URL:-redis://redis:6379/1}
       CHANNEL_REDIS_URL: ${CHANNEL_REDIS_URL:-redis://redis:6379/2}
-      BROKER_URL: ${BROKER_URL:-redis://redis:6379/0}
-      PAGES_CHAT_SOCKET_PATH: ${PAGES_CHAT_SOCKET_PATH:-/ws/chat/}
+      PAGES_CHAT_SOCKET_PATH: ${PAGES_CHAT_SOCKET_PATH:-/ws/pages/chat/}
     ports:
-      - "${PORT:-8888}:8888"
+      - "${PORT:-8888}:${PORT:-8888}"
     volumes:
       - arthexis_db:/app/data
       - arthexis_media:/app/media
@@ -35,7 +34,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8888/', timeout=5)"
+        - python -c "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT', '8888')}/\", timeout=5)"
       interval: 30s
       timeout: 10s
       retries: 5
