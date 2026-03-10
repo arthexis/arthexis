@@ -2,6 +2,8 @@
 
 [![Release CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/release-readiness.yml?branch=main&label=Release%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/release-readiness.yml)
 
+> **Note**: The badge above reflects the status of the `main` branch.
+
 The **Release Readiness** workflow runs on pull requests as a non-blocking preflight for the release pipeline.
 It mirrors release-critical stages (tests, package build, and publish artifact verification) so issues are surfaced before handoff to the tag-driven release workflow.
 

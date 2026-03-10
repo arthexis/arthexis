@@ -1,8 +1,5 @@
 name: Release Readiness
 
-permissions:
-  contents: read
-
 env:
   OCPP_STATE_REDIS_URL: redis://localhost:6379
 
@@ -22,6 +19,8 @@ on:
 jobs:
   release-readiness-test:
     name: Release readiness (test)
+    permissions:
+      contents: read
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     continue-on-error: true
     runs-on: ubuntu-latest
@@ -68,6 +67,7 @@ jobs:
         run: |
           set -o pipefail
           source .venv/bin/activate
+          pip install -r requirements-ci.txt
           pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
@@ -79,8 +79,10 @@ jobs:
 
   release-readiness-build:
     name: Release readiness (build)
+    permissions:
+      contents: read
     needs: release-readiness-test
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
@@ -105,7 +107,7 @@ jobs:
   release-readiness-publish:
     name: Release readiness (publish dry run)
     needs: release-readiness-build
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
