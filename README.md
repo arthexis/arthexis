@@ -123,13 +123,15 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
    - To run as a background service, install [NSSM](https://nssm.cc/) and use [`service.bat install --name arthexis`](https://github.com/arthexis/arthexis/blob/main/service.bat) (add `--port` if needed).
    - Installation is not required to start in Terminal mode (the default).
 
-Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgrade.sh`):
+Upgrade channels (selected during install/upgrade and used by `scripts/delegated-upgrade.sh` when auto-upgrade is enabled):
 
-| Channel | Check cadence | Purpose | Opt-in flag |
+| Channel | Check cadence | Purpose | Channel flags |
 | --- | --- | --- | --- |
-| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` (default) |
-| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` / `-l` or `--unstable` |
-| Manual | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | _Run upgrades on demand without specifying a channel flag._ |
+| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` / `--regular` / `--normal` (default) |
+| Latest (unstable) | Daily (same hour) | Follows the newest `origin/main` revisions with daily checks. | `--latest` / `-l` / `--unstable` |
+| Manual-only | None (manual upgrades only) | Disables unattended checks for full operator control. | Use `--fixed` on install, then run `./upgrade.sh` manually when needed. |
+
+Use `--auto-upgrade` during install when you want unattended checks; without it, upgrades stay operator-driven by default.
 
 ### 4. Administration
 - Access the Django admin at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
