@@ -1,6 +1,9 @@
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.pr("PR-6152", "2026-03-10T14:30:24Z")
+
 from django.core.management import call_command
 from django.core.management.base import CommandError
 

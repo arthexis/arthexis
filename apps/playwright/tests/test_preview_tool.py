@@ -1,6 +1,9 @@
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.pr("PR-6152", "2026-03-10T14:30:24Z")
+
 from PIL import Image
 
 from apps.playwright.preview_tool import PreviewImageAnalysisError, analyze_preview_image

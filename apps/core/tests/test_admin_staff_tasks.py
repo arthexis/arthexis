@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -10,6 +11,9 @@ from django.urls import reverse
 
 from apps.actions.models import StaffTask
 from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
+
+
+pytestmark = pytest.mark.pr("PR-6152", "2026-03-10T14:30:24Z")
 
 
 class AdminStaffTasksTests(TestCase):

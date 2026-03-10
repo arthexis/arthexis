@@ -4,6 +4,9 @@ import json
 import uuid
 
 import pytest
+
+pytestmark = pytest.mark.pr("PR-6152", "2026-03-10T14:30:24Z")
+
 from django.urls import reverse
 
 from apps.links.models.reference import Reference

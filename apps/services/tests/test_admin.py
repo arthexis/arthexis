@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import pytest
+
+pytestmark = pytest.mark.pr("PR-6152", "2026-03-10T14:30:24Z")
+
 from django.test import override_settings
 from django.urls import reverse
 

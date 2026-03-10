@@ -1,3 +1,4 @@
+import pytest
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -12,6 +13,9 @@ from unittest import mock
 from apps.locals.models import Favorite
 from apps.locals.user_data import EntityModelAdmin
 
+
+
+pytestmark = pytest.mark.pr("PR-6152", "2026-03-10T14:30:24Z")
 
 class FavoriteToggleViewTests(TestCase):
     def setUp(self):
