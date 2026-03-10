@@ -327,3 +327,23 @@ def test_sync_charger_error_security_event_supports_long_charger_id_key(charger_
 
     event = SecurityAlertEvent.objects.get(key=f"ocpp-charger-{long_charger_id}-aggregate-error")
     assert len(event.key) > 120
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_hashes_very_long_key(charger_rows):
+    """Very long charger IDs should be reduced to a safe deterministic key."""
+
+    long_charger_id = "CHARGER-" + ("X" * 300)
+
+    sync_charger_error_security_event(
+        charger_id=long_charger_id,
+        connector_value="connector-with-very-long-label-" + ("Y" * 120),
+        status="Faulted",
+        error_code="InternalError",
+        status_timestamp=timezone.now(),
+    )
+
+    event = SecurityAlertEvent.objects.get()
+    assert len(event.key) <= 255
+    assert event.key.startswith("ocpp-charger-")
+    assert event.key.endswith("-error")

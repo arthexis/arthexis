@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 
 from django.urls import NoReverseMatch, reverse
@@ -58,7 +59,13 @@ def _ocpp_security_event_key(*, charger_id: str, connector_value: int | str | No
     """Return a deterministic security event key for a charger status stream."""
 
     connector_label = "aggregate" if connector_value is None else str(connector_value)
-    return f"ocpp-charger-{charger_id}-{connector_label}-error"
+    key = f"ocpp-charger-{charger_id}-{connector_label}-error"
+    if len(key) <= 255:
+        return key
+
+    charger_hash = hashlib.sha256(charger_id.encode("utf-8")).hexdigest()[:40]
+    connector_hash = hashlib.sha256(connector_label.encode("utf-8")).hexdigest()[:16]
+    return f"ocpp-charger-{charger_hash}-{connector_hash}-error"
 
 
 def sync_charger_error_security_event(
