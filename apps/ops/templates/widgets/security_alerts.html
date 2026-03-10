@@ -11,6 +11,9 @@
             {% elif alert.severity == "info" %}{% trans "Info" %}
             {% else %}{{ alert.severity|title }}{% endif %}
           </strong>: {{ alert.message }}
+          {% if alert.summary %}
+            <div class="security-alert__summary">{{ alert.summary }}</div>
+          {% endif %}
           <a href="{{ alert.remediation_url }}">{% trans "View" %}</a>
         </li>
       {% endfor %}
@@ -20,6 +23,12 @@
   {% endif %}
 </div>
 <style>
+  .security-alerts-widget ul {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+  }
+
   .security-alert__severity {
     border-radius: 999px;
     color: #fff;
@@ -41,5 +50,11 @@
 
   .security-alert__severity--info {
     background-color: #1d4ed8;
+  }
+
+  .security-alert__summary {
+    font-size: 0.85rem;
+    margin: 0.2rem 0;
+    opacity: 0.9;
   }
 </style>

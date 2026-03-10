@@ -66,6 +66,13 @@ class StatusHandlersMixin:
             aggregate_charger=self.aggregate_charger,
             update_kwargs=update_kwargs,
         )
+        await database_sync_to_async(persistence.sync_charger_error_security_event)(
+            charger_id=self.charger_id,
+            connector_value=connector_value,
+            status=status,
+            error_code=error_code,
+            status_timestamp=status_timestamp,
+        )
         if connector_value is not None and status.lower() == "available":
             tx_obj = store.transactions.pop(self.store_key, None)
             if tx_obj:
