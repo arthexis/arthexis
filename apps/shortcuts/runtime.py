@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -45,11 +46,23 @@ def _select_pattern(shortcut: Shortcut, clipboard: str) -> ClipboardPattern | No
         return None
 
     for pattern in shortcut.clipboard_patterns.filter(is_active=True).order_by("priority", "pk"):
-        import re
-
         if re.search(pattern.pattern, clipboard or ""):
             return pattern
     return None
+
+
+def _sanitize_recipe_argument(value: str) -> str:
+    """Escape user-provided text to reduce Python argument-substitution risks."""
+
+    return (
+        str(value or "")
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace('"', '\\"')
+        .replace("'", "\\'")
+    )
 
 
 def execute_client_shortcut(*, shortcut: Shortcut, clipboard: str, keyboard: str = "") -> ShortcutExecution:
@@ -64,7 +77,13 @@ def execute_client_shortcut(*, shortcut: Shortcut, clipboard: str, keyboard: str
     if recipe is None:
         raise ValidationError("No recipe configured for this shortcut execution.")
 
-    execution = recipe.execute(clipboard=clipboard, keyboard=keyboard, shortcut_key=shortcut.key_combo)
+    sanitized_clipboard = _sanitize_recipe_argument(clipboard)
+    sanitized_keyboard = _sanitize_recipe_argument(keyboard)
+    execution = recipe.execute(
+        clipboard=sanitized_clipboard,
+        keyboard=sanitized_keyboard,
+        shortcut_key=shortcut.key_combo,
+    )
     context = {
         "clipboard": clipboard,
         "keyboard": keyboard,

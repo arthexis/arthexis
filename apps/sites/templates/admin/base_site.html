@@ -440,15 +440,7 @@ document.addEventListener('DOMContentLoaded', function () {
   {% endif %}
   {% include "admin/ops/active_operation_banner.html" %}
 
-  <script>
-    window.arthexisShortcuts = {
-      configUrl: '{% url "shortcuts:client-config" %}',
-      executeBase: '{% url "shortcuts:client-execute" 0 %}'.replace(/0\/$/, ''),
-    };
-    document.body.dataset.shortcutConfigUrl = window.arthexisShortcuts.configUrl;
-    document.body.dataset.shortcutExecuteBase = window.arthexisShortcuts.executeBase;
-  </script>
-  <script src="{% static 'shortcuts/client_shortcuts.js' %}" defer></script>
+  {% include "shortcuts/includes/client_shortcuts_setup.html" %}
 
   {% if feedback_ingestion_enabled %}
     {% if not request.resolver_match or request.resolver_match.url_name != "login" %}

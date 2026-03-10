@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.features.utils import is_suite_feature_enabled
+
+from apps.recipes.models import RecipeExecutionError
 
 from .constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from .models import Shortcut
@@ -66,7 +69,14 @@ def execute_client_shortcut_view(request: HttpRequest, shortcut_id: int) -> Json
 
     clipboard = str(payload.get("clipboard") or "")
     keyboard = str(payload.get("keyboard") or "")
-    execution = execute_client_shortcut(shortcut=shortcut, clipboard=clipboard, keyboard=keyboard)
+    try:
+        execution = execute_client_shortcut(shortcut=shortcut, clipboard=clipboard, keyboard=keyboard)
+    except ValidationError as exc:
+        message = exc.message if hasattr(exc, "message") else "; ".join(exc.messages) or "Invalid shortcut configuration."
+        return JsonResponse({"detail": message}, status=400)
+    except RecipeExecutionError as exc:
+        return JsonResponse({"detail": str(exc)}, status=422)
+
     return JsonResponse(
         {
             "shortcut": shortcut.key_combo,

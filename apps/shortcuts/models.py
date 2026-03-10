@@ -61,11 +61,15 @@ class Shortcut(Entity):
 
     @staticmethod
     def normalize_key_combo(value: str) -> str:
-        """Normalize a key combo to uppercase tokens separated by ``+``."""
+        """Normalize key combos and canonicalize modifier ordering."""
 
         tokens = [token.strip().upper() for token in str(value or "").split("+")]
         cleaned = [token for token in tokens if token]
-        return "+".join(cleaned)
+        modifier_order = ("CTRL", "ALT", "SHIFT", "META")
+        modifiers = {token for token in cleaned if token in modifier_order}
+        non_modifiers = [token for token in cleaned if token not in modifier_order]
+        ordered_modifiers = [token for token in modifier_order if token in modifiers]
+        return "+".join([*ordered_modifiers, *non_modifiers])
 
     def clean(self) -> None:
         """Validate shortcut consistency and key format."""
@@ -83,8 +87,8 @@ class Shortcut(Entity):
         if self.use_clipboard_patterns and self.kind != self.Kind.CLIENT:
             raise ValidationError({"use_clipboard_patterns": _("Clipboard patterns are supported only for client shortcuts.")})
 
-        if not self.recipe_id and not self.use_clipboard_patterns:
-            raise ValidationError({"recipe": _("Select a fallback recipe or enable clipboard patterns.")})
+        if not self.recipe_id:
+            raise ValidationError({"recipe": _("A fallback recipe is required.")})
 
 
 class ClipboardPattern(Entity):

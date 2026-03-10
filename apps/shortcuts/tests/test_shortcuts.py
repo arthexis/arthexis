@@ -119,3 +119,26 @@ def test_server_shortcut_auto_enables_listener_assignment(monkeypatch) -> None:
 
     assert enabled is True
     assert NodeFeatureAssignment.objects.filter(node=node, feature=node_feature).exists()
+
+
+@pytest.mark.django_db
+def test_normalize_key_combo_canonicalizes_modifier_order() -> None:
+    """Equivalent modifier combos should normalize to one canonical value."""
+
+    assert Shortcut.normalize_key_combo("shift+ctrl+k") == "CTRL+SHIFT+K"
+
+
+@pytest.mark.django_db
+def test_client_shortcut_requires_fallback_recipe_even_with_patterns() -> None:
+    """Clipboard pattern mode should still require a fallback recipe."""
+
+    shortcut = Shortcut(
+        display="Clipboard shortcut",
+        key_combo="CTRL+SHIFT+V",
+        kind=Shortcut.Kind.CLIENT,
+        use_clipboard_patterns=True,
+        is_active=True,
+    )
+
+    with pytest.raises(ValidationError):
+        shortcut.full_clean()

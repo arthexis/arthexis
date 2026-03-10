@@ -99,7 +99,7 @@
       const shortcut = map.get(combo);
       if (!shortcut) return;
       event.preventDefault();
-      runShortcut(shortcut).catch(() => {});
+      runShortcut(shortcut).catch(console.error);
     });
-  }).catch(() => {});
+  }).catch(console.error);
 })();
