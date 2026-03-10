@@ -1,15 +1,15 @@
 from django.db import migrations
 
 
-def _rename_permission_labels(apps, schema_editor, *, source_label, target_label):
+def _rename_permission_labels(apps, schema_editor, *, source_model_label, target_model_label):
     Permission = apps.get_model("auth", "Permission")
     ContentType = apps.get_model("contenttypes", "ContentType")
 
     model_updates = {
-        "stafftask": (f"{source_label} Task", f"{target_label} Panel"),
+        "stafftask": (source_model_label, target_model_label),
         "stafftaskpreference": (
-            f"{source_label} Task Preference",
-            f"{target_label} Panel Preference",
+            f"{source_model_label} Preference",
+            f"{target_model_label} Preference",
         ),
     }
 
@@ -38,8 +38,8 @@ def rename_permissions_to_task_panel_labels(apps, schema_editor):
     _rename_permission_labels(
         apps,
         schema_editor,
-        source_label="Suite",
-        target_label="Task",
+        source_model_label="Suite Task",
+        target_model_label="Task Panel",
     )
 
 
@@ -47,8 +47,8 @@ def rename_permissions_to_suite_task_labels(apps, schema_editor):
     _rename_permission_labels(
         apps,
         schema_editor,
-        source_label="Task",
-        target_label="Suite",
+        source_model_label="Task Panel",
+        target_model_label="Suite Task",
     )
 
 
