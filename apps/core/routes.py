@@ -1,6 +1,6 @@
 """Root route provider for core-owned framework extensions."""
 
-from django.urls import path
+from django.urls import include, path
 from django.views.generic import RedirectView
 
 from config.admin_urls import admin_route
@@ -14,6 +14,7 @@ from apps.core.admindocs import (
 )
 
 ROOT_URLPATTERNS = [
+    path("core/", include("apps.core.urls")),
     path(
         admin_route("doc/commands/"),
         RedirectView.as_view(pattern_name="django-admindocs-commands"),

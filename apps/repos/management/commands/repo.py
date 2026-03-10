@@ -121,6 +121,10 @@ class Command(BaseCommand):
 
         cleaned = raw_repo.strip()
         if cleaned:
+            if "://" not in cleaned:
+                path_segments = [segment for segment in cleaned.split("/") if segment]
+                if len(path_segments) != 2:
+                    raise CommandError("Repository must be in owner/name format")
             if "/" not in cleaned:
                 raise CommandError("Repository must be in owner/name format")
             try:
