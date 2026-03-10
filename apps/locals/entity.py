@@ -32,7 +32,7 @@ from apps.locals.fixtures import (
     user_allows_user_data,
 )
 from apps.locals.seeds import _seed_datum_is_default, _seed_fixture_index
-from apps.locals.user_data.utils import _safe_next_url
+from apps.locals.utils import safe_next_url
 
 
 class UserDatumAdminMixin(admin.ModelAdmin):
@@ -365,7 +365,7 @@ class ImportExportAdminMixin:
                     _("Error processing import: %(error)s") % {"error": exc},
                     level=messages.ERROR,
                 )
-                return HttpResponseRedirect(_safe_next_url(request) or changelist_url)
+                return HttpResponseRedirect(safe_next_url(request) or changelist_url)
             name = (
                 opts.verbose_name
                 if imported == 1
@@ -381,7 +381,7 @@ class ImportExportAdminMixin:
                 % {"count": imported, "name": name},
                 level=messages.SUCCESS,
             )
-            return HttpResponseRedirect(_safe_next_url(request) or changelist_url)
+            return HttpResponseRedirect(safe_next_url(request) or changelist_url)
         context = admin.site.each_context(request)
         context.update(
             {
