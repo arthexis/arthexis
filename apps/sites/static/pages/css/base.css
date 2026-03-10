@@ -693,6 +693,9 @@ body.user-story-open {
 }
 
 .chat-drawer {
+  position: relative;
+  margin: 0;
+  inset: auto;
   width: min(28rem, 100%);
   max-height: calc(100dvh - 3rem);
   border-radius: 1rem;

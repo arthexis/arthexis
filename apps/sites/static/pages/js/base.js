@@ -128,6 +128,13 @@ const setupDropdowns = () => {
     return;
   }
 
+  const setExpandedState = (item, expanded) => {
+    const trigger = item.querySelector('.nav-link');
+    if (trigger) {
+      trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+  };
+
   const hideItem = item => {
     const menu = item.querySelector('.dropdown-menu');
     item.classList.remove('show');
@@ -135,6 +142,7 @@ const setupDropdowns = () => {
       menu.classList.remove('show');
     }
     item.dataset.clickOpen = 'false';
+    setExpandedState(item, false);
   };
 
   const showItem = item => {
@@ -143,6 +151,7 @@ const setupDropdowns = () => {
     if (menu) {
       menu.classList.add('show');
     }
+    setExpandedState(item, true);
   };
 
   const closeOthers = current => {
@@ -161,6 +170,7 @@ const setupDropdowns = () => {
     }
 
     item.dataset.clickOpen = 'false';
+    link.setAttribute('aria-expanded', 'false');
 
     link.addEventListener('click', event => {
       event.preventDefault();
@@ -175,6 +185,15 @@ const setupDropdowns = () => {
         showItem(item);
         item.dataset.clickOpen = 'true';
       }
+    });
+
+
+    link.addEventListener('keydown', event => {
+      if (event.key !== ' ' && event.key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      link.click();
     });
 
     if (window.matchMedia('(hover: hover)').matches) {

@@ -100,7 +100,7 @@
           <p class="lead text-muted">{% trans "Track unreleased changes and published versions as commits land in git." %}</p>
         </header>
         {% if error_message %}
-          <div class="alert alert-warning">{{ error_message }}</div>
+          <div class="alert alert-warning" role="status">{{ error_message }}</div>
         {% endif %}
         {% if not initial_sections %}
           <p class="text-muted fst-italic">{% trans "No changelog information is available yet." %}</p>

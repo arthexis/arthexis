@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -222,7 +223,7 @@
           </dialog>
         </div>
       </div>
-      <script src="/static/pages/js/chat.js" defer></script>
+      <script src="{% static 'pages/js/chat.js' %}" defer></script>
     {% endif %}
 
     {% if feedback_ingestion_enabled %}
@@ -258,7 +259,7 @@
           </div>
         </div>
       </dialog>
-      <script src="/static/pages/js/user_story_feedback.js" defer></script>
+      <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>
     {% endif %}
 
     <script>

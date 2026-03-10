@@ -43,7 +43,7 @@
                     {% if landings|length == 1 %}
                       {% if module.enabled_landings_all_invalid %}
                         <li class="nav-item dropdown">
-                          <a class="nav-link" href="#">
+                          <a class="nav-link" href="#" role="button" aria-expanded="false">
                             <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
                             {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                           </a>
@@ -88,7 +88,7 @@
                       {% endif %}
                     {% else %}
                       <li class="nav-item dropdown">
-                        <a class="nav-link" href="#">
+                        <a class="nav-link" href="#" role="button" aria-expanded="false">
                           <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
                           {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                         </a>
@@ -128,7 +128,7 @@
               {% endif %}
               {% if header_references %}
                 <li class="nav-item dropdown">
-                  <a class="nav-link" href="#">
+                  <a class="nav-link" href="#" role="button" aria-expanded="false">
                     <span class="badge rounded-pill text-bg-secondary">CONSOLES</span>
                   </a>
                   <ul class="dropdown-menu">

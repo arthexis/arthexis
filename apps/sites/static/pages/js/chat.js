@@ -225,6 +225,17 @@
       }
     };
 
+    const setDialogOpenState = (element, isOpen) => {
+      if (!element || element.tagName !== 'DIALOG') {
+        return;
+      }
+      if (isOpen) {
+        element.setAttribute('open', '');
+      } else {
+        element.removeAttribute('open');
+      }
+    };
+
     const openDrawer = () => {
       if (drawerOpen) {
         return;
@@ -239,6 +250,7 @@
       }
       resetUnread();
       overlay.removeAttribute('hidden');
+      overlay.removeAttribute('aria-hidden');
       setDialogOpenState(drawer, true);
       window.requestAnimationFrame(() => {
         overlay.classList.add('show');
@@ -274,6 +286,7 @@
       previousFocus = null;
       window.setTimeout(() => {
         overlay.setAttribute('hidden', '');
+        overlay.setAttribute('aria-hidden', 'true');
         setDialogOpenState(drawer, false);
         if (focusTarget) {
           try {
@@ -283,18 +296,6 @@
           }
         }
       }, 200);
-    };
-
-
-    const setDialogOpenState = (element, isOpen) => {
-      if (!element || element.tagName !== 'DIALOG') {
-        return;
-      }
-      if (isOpen) {
-        element.setAttribute('open', '');
-      } else {
-        element.removeAttribute('open');
-      }
     };
 
     const clearStoredSession = () => {
