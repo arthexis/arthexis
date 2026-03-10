@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlsplit
 import uuid
 
 import requests
+from requests import Response
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -620,15 +621,25 @@ class EvergoUser(Profile):
             return {
                 "order_payload": order_payload,
                 "phase_1_status": visita_response.status_code if visita_response is not None else None,
-                "phase_1_payload": visita_response.json() if visita_response is not None and visita_response.content else {},
+                "phase_1_payload": self._safe_json_extract(visita_response),
                 "assign_status": assign_response.status_code if assign_response is not None else None,
-                "assign_payload": assign_response.json() if assign_response is not None and assign_response.content else {},
+                "assign_payload": self._safe_json_extract(assign_response),
                 "install_status": install_response.status_code if install_response is not None else None,
-                "install_payload": install_response.json() if install_response is not None and install_response.content else {},
+                "install_payload": self._safe_json_extract(install_response),
                 "montage_status": montage_response.status_code if montage_response is not None else None,
-                "montage_payload": montage_response.json() if montage_response is not None and montage_response.content else {},
+                "montage_payload": self._safe_json_extract(montage_response),
                 "completed_steps": completed_steps,
             }
+
+    def _safe_json_extract(self, response: Response | None) -> dict[str, Any]:
+        """Safely parse response JSON payload, returning an empty mapping when invalid."""
+        if response is None or not response.content:
+            return {}
+        try:
+            payload = response.json()
+        except ValueError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
 
     def _build_montaje_submission(
         self,

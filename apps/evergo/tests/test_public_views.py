@@ -649,7 +649,9 @@ def test_order_tracking_public_allows_partial_submission_without_required_primar
 
     assert response.status_code == 200
     assert mock_submit.called
-    assert "0/4 pasos completados" in response.content.decode()
+    content = response.content.decode()
+    assert "Orden enviada correctamente. 0/4 pasos completados." in content
+    assert "Orden enviada correctamente. 4/4 pasos completados." not in content
 
 
 @pytest.mark.django_db

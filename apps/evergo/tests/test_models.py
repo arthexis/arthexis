@@ -760,3 +760,23 @@ def test_submit_tracking_phase_one_skips_visita_request_when_incomplete(
     assert result["phase_1_status"] is None
     assert result["phase_1_payload"] == {}
     assert result["completed_steps"] == 0
+
+
+@pytest.mark.django_db
+def test_submit_tracking_phase_one_handles_non_json_payload_responses():
+    """Regression: non-JSON response bodies should not crash payload extraction."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-phase-json", email="suite-phase-json@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-phase-json@example.com",
+        evergo_password="secret",
+        evergo_user_id=58642,
+    )
+
+    broken_response = Mock()
+    broken_response.content = b"<html>error</html>"
+    broken_response.json.side_effect = ValueError("invalid json")
+
+    assert profile._safe_json_extract(broken_response) == {}
+

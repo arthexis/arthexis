@@ -247,14 +247,26 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
 
     if request.method == "POST":
         form = EvergoOrderTrackingForm(request.POST, request.FILES, charger_brands=brands)
-        missing_images = [name for name in IMAGE_FIELD_NAMES if not form.files.get(name)]
+        remote_initial_data, _, remote_image_urls = _load_remote_phase_one_initial_data(
+            profile=profile,
+            order_id=order_id,
+        )
+        missing_images = [
+            name
+            for name in IMAGE_FIELD_NAMES
+            if not form.files.get(name) and not remote_image_urls.get(name)
+        ]
         if form.is_valid():
             if missing_images and request.POST.get("confirm_missing_images") != "1":
                 form.add_error(None, "Confirma que deseas continuar con imágenes faltantes.")
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
                 files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
-                step_completion = _compute_tracking_step_completion(form.cleaned_data)
+                merged_step_values = dict(remote_initial_data)
+                merged_step_values.update(form.cleaned_data)
+                step_completion = _compute_tracking_step_completion(
+                    _build_tracking_step_values(values=merged_step_values, remote_image_urls=remote_image_urls)
+                )
                 messages.info(request, "Inicio de envío: 0/4 pasos completados.")
                 try:
                     result = profile.submit_tracking_phase_one(
@@ -272,17 +284,13 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 except EvergoAPIError as exc:
                     form.add_error(None, str(exc))
                 else:
-                    completed_steps = int(result.get("completed_steps") or 4)
+                    completed_steps_raw = result.get("completed_steps")
+                    completed_steps = 4 if completed_steps_raw is None else int(completed_steps_raw)
                     messages.success(
                         request,
                         f"Orden enviada correctamente. {completed_steps}/4 pasos completados.",
                     )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
-        if form.errors:
-            _, _, remote_image_urls = _load_remote_phase_one_initial_data(
-                profile=profile,
-                order_id=order_id,
-            )
     else:
         remote_initial_data, remote_prefill_errors, remote_image_urls = _load_remote_phase_one_initial_data(
             profile=profile,
