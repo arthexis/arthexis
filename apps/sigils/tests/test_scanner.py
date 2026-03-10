@@ -61,11 +61,19 @@ def test_resolve_sigils_consumes_scanner_spans(monkeypatch):
 def test_default_backend_prefers_llvm(monkeypatch):
     scanner.get_scanner.cache_clear()
     monkeypatch.delenv("SIGIL_SCANNER_BACKEND", raising=False)
+    attempted: list[str] = []
+
+    class StubLlvmScanner:
+        def __init__(self, library_path):
+            attempted.append(library_path)
+
     monkeypatch.setenv("SIGIL_LLVM_LIBRARY", "/tmp/not-a-real-library.so")
+    monkeypatch.setattr(scanner, "_LlvmScanner", StubLlvmScanner)
 
     selected = scanner.get_scanner()
 
-    assert isinstance(selected, scanner._PythonScanner)
+    assert attempted == ["/tmp/not-a-real-library.so"]
+    assert isinstance(selected, StubLlvmScanner)
 
 
 def test_llvm_scanner_maps_utf8_byte_offsets_to_character_spans(monkeypatch):
