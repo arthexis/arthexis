@@ -1,3 +1,5 @@
-"""Manifest metadata for the game app."""
+"""Manifest entries for Django app loading."""
 
-__all__ = []
+DJANGO_APPS = [
+    "apps.game",
+]
