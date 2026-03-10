@@ -179,6 +179,80 @@ class OperationExecution(Entity):
         return f"{self.operation} @ {self.performed_at:%Y-%m-%d %H:%M}"
 
 
+class SecurityAlertEvent(Entity):
+    """Aggregated operational error event used by the security alerts widget."""
+
+    key = models.CharField(max_length=120, unique=True)
+    severity = models.CharField(max_length=20, default="error")
+    message = models.CharField(max_length=255)
+    detail = models.TextField(blank=True)
+    occurrence_count = models.PositiveIntegerField(default=1)
+    last_occurred_at = models.DateTimeField(default=timezone.now)
+    remediation_url = models.CharField(max_length=500, default="/admin/")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-last_occurred_at", "-updated_at")
+        verbose_name = _("Security Alert Event")
+        verbose_name_plural = _("Security Alert Events")
+
+    def __str__(self) -> str:
+        """Return a readable key/message label for admin lists."""
+
+        return f"{self.key}: {self.message}"
+
+    @classmethod
+    def record_occurrence(
+        cls,
+        *,
+        key: str,
+        message: str,
+        detail: str = "",
+        severity: str = "error",
+        remediation_url: str = "/admin/",
+        occurred_at=None,
+    ) -> "SecurityAlertEvent":
+        """Create or update an event entry while incrementing occurrence metadata."""
+
+        event, created = cls.objects.get_or_create(
+            key=key,
+            defaults={
+                "severity": severity,
+                "message": message,
+                "detail": detail,
+                "occurrence_count": 1,
+                "last_occurred_at": occurred_at or timezone.now(),
+                "remediation_url": remediation_url,
+                "is_active": True,
+            },
+        )
+        if created:
+            return event
+
+        event.severity = severity
+        event.message = message
+        event.detail = detail
+        event.remediation_url = remediation_url
+        event.occurrence_count += 1
+        event.last_occurred_at = occurred_at or timezone.now()
+        event.is_active = True
+        event.save(
+            update_fields=[
+                "severity",
+                "message",
+                "detail",
+                "remediation_url",
+                "occurrence_count",
+                "last_occurred_at",
+                "is_active",
+                "updated_at",
+            ]
+        )
+        return event
+
+
 @dataclass(slots=True)
 class PendingOperation:
     """Computed pending operation context for UI display."""
