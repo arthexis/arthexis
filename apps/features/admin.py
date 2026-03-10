@@ -144,7 +144,27 @@ class FeatureAdminForm(forms.ModelForm):
             except ValueError as exc:
                 self.add_error(field_name, str(exc))
 
+        self._validate_ocpp_simulator_backend_availability(cleaned_data)
+
         return cleaned_data
+
+    def _validate_ocpp_simulator_backend_availability(self, cleaned_data: dict[str, object]) -> None:
+        """Require at least one OCPP simulator backend to remain enabled."""
+
+        slug = (cleaned_data.get("slug") or self.instance.slug or "").strip()
+        if slug != "ocpp-simulator":
+            return
+
+        arthexis_backend_field = f"{self.PARAM_FIELD_PREFIX}arthexis_backend"
+        mobilityhouse_backend_field = f"{self.PARAM_FIELD_PREFIX}mobilityhouse_backend"
+        arthexis_backend = cleaned_data.get(arthexis_backend_field)
+        mobilityhouse_backend = cleaned_data.get(mobilityhouse_backend_field)
+        if arthexis_backend == "disabled" and mobilityhouse_backend == "disabled":
+            error_message = _(
+                "At least one simulator backend must stay enabled so backend dropdowns remain available."
+            )
+            self.add_error(arthexis_backend_field, error_message)
+            self.add_error(mobilityhouse_backend_field, error_message)
 
     def cleaned_parameter_values(self) -> dict[str, str]:
         """Return normalized dynamic parameter values ready for persistence."""
