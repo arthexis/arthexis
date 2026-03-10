@@ -41,6 +41,7 @@ def test_restart_reports_failure(temp_base_dir: Path):
                 call_command("lcd", "write", restart=True, service_name="demo")
 
 
+@pytest.mark.django_db
 def test_restart_handles_missing_systemctl(temp_base_dir: Path):
     """Raise a clear error when systemctl is unavailable on the host."""
 
