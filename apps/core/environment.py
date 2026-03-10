@@ -61,8 +61,10 @@ def _environment_view(request):
     user_env_values = _load_user_env_values(request.user)
 
     if request.method == "POST":
-        user_env_values = _extract_user_values(request, env_vars)
-        _write_user_env_values(request.user, user_env_values)
+        loaded_values = _load_user_env_values(request.user)
+        submitted_values = _extract_user_values(request, env_vars)
+        loaded_values.update(submitted_values)
+        _write_user_env_values(request.user, loaded_values)
         messages.success(
             request,
             _(
