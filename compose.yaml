@@ -1,0 +1,79 @@
+name: arthexis
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: arthexis-web:local
+    profiles:
+      - terminal
+      - control
+      - satellite
+      - watchtower
+    environment:
+      ARTHEXIS_ROLE_PRESET: ${ARTHEXIS_ROLE_PRESET:-terminal}
+      PORT: ${PORT:-8888}
+      DEBUG: ${DEBUG:-false}
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings}
+      ARTHEXIS_SQLITE_PATH: ${ARTHEXIS_SQLITE_PATH:-/app/data/db.sqlite3}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      OCPP_STATE_REDIS_URL: ${OCPP_STATE_REDIS_URL:-redis://redis:6379/1}
+      CHANNEL_REDIS_URL: ${CHANNEL_REDIS_URL:-redis://redis:6379/2}
+      BROKER_URL: ${BROKER_URL:-redis://redis:6379/0}
+      PAGES_CHAT_SOCKET_PATH: ${PAGES_CHAT_SOCKET_PATH:-/ws/chat/}
+    ports:
+      - "${PORT:-8888}:8888"
+    volumes:
+      - arthexis_db:/app/data
+      - arthexis_media:/app/media
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8888/', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  redis:
+    image: redis:7-alpine
+    profiles:
+      - control
+      - satellite
+      - watchtower
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:1.27-alpine
+    profiles:
+      - control
+      - satellite
+      - watchtower
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - arthexis_media:/app/media:ro
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  arthexis_db:
+  arthexis_media:
+  redis_data:
