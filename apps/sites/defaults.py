@@ -54,7 +54,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "recipes": "Scriptable recipes for reusable actions and validations.",
     "repos": "Repository management and release helpers.",
     "screens": "UI screen definitions and templates.",
-    "selenium": "Browser automation and Selenium helpers.",
     "sensors": "Sensor data ingestion and monitoring utilities.",
     "sigils": "Sigil handling and certificate helpers.",
     "sites": "Site management, domains, and tenancy helpers.",

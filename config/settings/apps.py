@@ -64,6 +64,10 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
+LEGACY_MIGRATION_APPS = ["apps.selenium"]
+EXCLUDED_AUTO_DISCOVERED_APPS = {"apps.selenium"}
+
+
 def _load_local_apps() -> list[str]:
     """Load local Django apps from ``apps/`` using package discovery."""
 
@@ -73,7 +77,11 @@ def _load_local_apps() -> list[str]:
         if _is_django_app_dir(candidate.parent)
     ]
 
-    return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
+    return sorted(
+        module_path
+        for app_dir in app_dirs
+        if (module_path := _to_module_path(app_dir)) not in EXCLUDED_AUTO_DISCOVERED_APPS
+    )
 
 
 def _load_active_prototype_app() -> list[str]:
@@ -111,7 +119,7 @@ INSTALLED_APPS = [
     "channels",
     "graphene_django",
     "apps.celery.beat_app.CeleryBeatConfig",
-] + LOCAL_APPS
+] + LOCAL_APPS + LEGACY_MIGRATION_APPS
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")

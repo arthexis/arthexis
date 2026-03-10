@@ -1,21 +1,21 @@
 from django.contrib import admin
 
-from apps.selenium.admin import SeleniumBrowserAdmin
-from apps.selenium.models import SeleniumBrowser
+from apps.playwright.admin import PlaywrightBrowserAdmin
+from apps.playwright.models import PlaywrightBrowser
 
 
-def make_admin(browser_cls=SeleniumBrowser):
-    return SeleniumBrowserAdmin(browser_cls, admin.site)
+def make_admin(browser_cls=PlaywrightBrowser):
+    return PlaywrightBrowserAdmin(browser_cls, admin.site)
 
 
 def make_browser(**kwargs):
     defaults = {
         "name": "Test Browser",
-        "mode": SeleniumBrowser.Mode.HEADED,
-        "engine": SeleniumBrowser.Engine.CHROMIUM,
+        "mode": PlaywrightBrowser.Mode.HEADED,
+        "engine": PlaywrightBrowser.Engine.CHROMIUM,
     }
     defaults.update(kwargs)
-    return SeleniumBrowser(**defaults)
+    return PlaywrightBrowser(**defaults)
 
 
 class DummyDriver:
@@ -34,7 +34,7 @@ def test_test_browsers_success_with_advice(monkeypatch):
     )
 
     dummy_driver = DummyDriver()
-    monkeypatch.setattr(SeleniumBrowser, "create_driver", lambda self: dummy_driver)
+    monkeypatch.setattr(PlaywrightBrowser, "create_driver", lambda self: dummy_driver)
     monkeypatch.delenv("DISPLAY", raising=False)
 
     browser = make_browser()
@@ -56,7 +56,7 @@ def test_test_browsers_reports_errors(monkeypatch):
     def failing_driver(_self):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(SeleniumBrowser, "create_driver", failing_driver)
+    monkeypatch.setattr(PlaywrightBrowser, "create_driver", failing_driver)
     monkeypatch.delenv("DISPLAY", raising=False)
 
     browser = make_browser(binary_path="/missing/browser")
