@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+import json
+import re
 from pathlib import Path
 
 from django.conf import settings
@@ -56,7 +58,7 @@ class Command(BaseCommand):
             return
 
         if target == "rebuild":
-            branch_id = options["branch_id"] or f"rebuild-{datetime.utcnow():%Y%m%d%H%M%S}"
+            branch_id = options["branch_id"] or f"rebuild-{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
             self._rebuild_migrations(apps_dir, branch_id)
             return
 
@@ -97,7 +99,7 @@ class Command(BaseCommand):
 
         project_apps = self._collect_project_apps(apps_dir)
 
-        call_command("migrations", "clear", apps_dir=str(apps_dir))
+        self._clear_migrations(apps_dir)
         call_command("makemigrations")
 
         tagged = self._tag_initial_migrations(apps_dir, branch_id, project_apps)
@@ -148,15 +150,17 @@ class Command(BaseCommand):
                 content = f"{guard_import}\n{content}"
 
         migration_label = f"{migration_path.parent.parent.name}.{migration_path.stem}"
-        guard_line = (
-            "    operations = [\n"
-            f"        BranchTagOperation(\"{branch_id}\", "
-            f"migration_label=\"{migration_label}\", "
-            f"project_apps={tuple(project_apps)}),\n"
-        )
-        marker = "    operations = [\n"
-        if marker not in content:
+        marker_match = re.search(r"^(?P<indent>\s*)operations\s*=\s*\[\s*$", content, re.MULTILINE)
+        if not marker_match:
             raise ValueError(f"Could not find operations block in migration {migration_path}")
+        marker = marker_match.group(0)
+        indent = marker_match.group("indent")
 
+        guard_line = (
+            f"{indent}operations = [\n"
+            f"{indent}    BranchTagOperation({json.dumps(branch_id)}, "
+            f"migration_label={json.dumps(migration_label)}, "
+            f"project_apps={tuple(project_apps)!r}),\n"
+        )
         migration_path.write_text(content.replace(marker, guard_line, 1), encoding="utf-8")
         return True

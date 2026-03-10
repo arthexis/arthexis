@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from django.conf import settings
 from django.core.management import call_command
 
 
@@ -12,8 +11,6 @@ def _seed_apps_root(base_dir: Path) -> Path:
     apps_dir = base_dir / "apps"
     apps_dir.mkdir(parents=True, exist_ok=True)
     (apps_dir / "__init__.py").write_text('"""Project application packages."""\n', encoding="utf-8")
-    settings.BASE_DIR = base_dir
-    settings.APPS_DIR = apps_dir
     return apps_dir
 
 
@@ -32,10 +29,12 @@ def _seed_app_migrations(apps_dir: Path, app_label: str) -> Path:
     return migration_path
 
 
-def test_migrations_clear_removes_non_init_files(tmp_path):
+def test_migrations_clear_removes_non_init_files(settings, tmp_path):
     """migrations clear should remove migration modules but keep __init__.py files."""
 
     apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
     migration_path = _seed_app_migrations(apps_dir, "catalog")
 
     call_command("migrations", "clear")
@@ -44,17 +43,15 @@ def test_migrations_clear_removes_non_init_files(tmp_path):
     assert (apps_dir / "catalog" / "migrations" / "__init__.py").exists()
 
 
-def test_migrations_rebuild_tags_initial_migration(monkeypatch, tmp_path):
+def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_path):
     """migrations rebuild should clear, regenerate, and tag initial migrations."""
 
     apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
     _seed_app_migrations(apps_dir, "catalog")
 
     def _fake_call_command(name, *args, **kwargs):
-        if name == "migrations" and args and args[0] == "clear":
-            call_command(name, *args, **kwargs)
-            return
-
         if name == "makemigrations":
             _seed_app_migrations(apps_dir, "catalog")
             return
@@ -68,6 +65,31 @@ def test_migrations_rebuild_tags_initial_migration(monkeypatch, tmp_path):
     content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(encoding="utf-8")
     assert "BranchTagOperation" in content
     assert '"branch-123"' in content
+
+
+def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
+    """migrations rebuild should safely encode branch IDs in generated code."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    _seed_app_migrations(apps_dir, "catalog")
+
+    def _fake_call_command(name, *args, **kwargs):
+        if name == "makemigrations":
+            _seed_app_migrations(apps_dir, "catalog")
+            return
+
+        raise AssertionError(f"Unexpected command: {name} {args}")
+
+    monkeypatch.setattr("apps.core.management.commands.migrations.call_command", _fake_call_command)
+
+    malicious_branch = '"); import os; os.system("echo pwned"); #'
+    call_command("migrations", "rebuild", branch_id=malicious_branch)
+
+    content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(encoding="utf-8")
+    assert '\\"' in content
+    assert 'import os; os.system' in content
 
 
 def test_rebuild_apps_migrations_delegates_to_root_command(monkeypatch):
