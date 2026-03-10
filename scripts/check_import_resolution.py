@@ -330,6 +330,12 @@ def collect_missing_imports(files: Iterable[Path]) -> list[ImportIssue]:
     return issues
 
 
+def _is_in_ignored_dir(path: Path) -> bool:
+    """Return True when a project-relative path lives in an ignored directory."""
+
+    return any(part in IGNORED_DIRS for part in path.parts)
+
+
 def _collect_target_files(paths: list[str]) -> list[Path]:
     """Resolve CLI-provided paths into Python files under project root."""
 
@@ -349,7 +355,9 @@ def _collect_target_files(paths: list[str]) -> list[Path]:
 
         if candidate.is_file():
             if candidate.suffix == ".py" and PROJECT_ROOT in candidate.parents:
-                files.add(candidate)
+                relative_candidate = candidate.relative_to(PROJECT_ROOT)
+                if not _is_in_ignored_dir(relative_candidate):
+                    files.add(candidate)
             continue
 
         for file_path in iter_python_files(candidate):

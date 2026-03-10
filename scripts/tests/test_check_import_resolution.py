@@ -145,3 +145,22 @@ def test_collect_target_files_filters_to_python_files_under_project_root(
     files = check_import_resolution._collect_target_files([str(in_repo), str(outside)])
 
     assert files == [in_repo]
+
+
+def test_collect_target_files_ignores_explicit_files_in_ignored_dirs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Explicit files inside ignored directories should be excluded."""
+
+    project_root = tmp_path / "repo"
+    project_root.mkdir()
+    migration = project_root / "apps" / "sample" / "__pycache__" / "cached.py"
+    migration.parent.mkdir(parents=True)
+    migration.write_text("VALUE = 1\n", encoding="utf-8")
+
+    monkeypatch.setattr(check_import_resolution, "PROJECT_ROOT", project_root)
+
+    files = check_import_resolution._collect_target_files([str(migration)])
+
+    assert files == []
