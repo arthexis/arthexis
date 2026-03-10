@@ -48,6 +48,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           clean: false
+      - name: Fetch PR base commit for diff checks
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -261,6 +266,11 @@ jobs:
         uses: actions/checkout@v6
         with:
           clean: false
+      - name: Fetch PR base commit for diff checks
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
       - name: Validate pyproject dependency ordering (PR)
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
@@ -275,11 +285,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          current_pr_args=()
-          if [ -n "${CURRENT_PR}" ]; then
-            current_pr_args=(--current-pr "${CURRENT_PR}")
-          fi
-          pytest "${current_pr_args[@]}" tests/test_role_bootstrap_smoke.py -q
+          pytest tests/test_role_bootstrap_smoke.py -q
       - name: Apply upgrade
         run: |
           set -Eeuo pipefail
@@ -294,11 +300,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          current_pr_args=()
-          if [ -n "${CURRENT_PR}" ]; then
-            current_pr_args=(--current-pr "${CURRENT_PR}")
-          fi
-          pytest "${current_pr_args[@]}" tests/test_installed_apps_manifests.py -q
+          pytest tests/test_installed_apps_manifests.py -q
 
       - name: Validate upgraded migrations
         run: |
