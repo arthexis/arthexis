@@ -90,22 +90,24 @@ class EvergoLoadCustomersForm(forms.Form):
 class EvergoOrderTrackingForm(forms.Form):
     """Collect phase-one data for the public Evergo order tracking flow."""
 
-    metraje_visita_tecnica = forms.IntegerField(min_value=0, label="Metraje visita técnica")
-    programacion_cargador = forms.ChoiceField(choices=(("16A", "16A"), ("32A", "32A")))
-    capacidad_itm_principal = forms.IntegerField(min_value=1, initial=60)
+    metraje_visita_tecnica = forms.IntegerField(min_value=0, label="Metraje visita técnica", required=False)
+    programacion_cargador = forms.ChoiceField(choices=(("16A", "16A"), ("32A", "32A")), required=False)
+    capacidad_itm_principal = forms.IntegerField(min_value=1, initial=60, required=False)
     fecha_visita = forms.DateTimeField(
         input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"],
         widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
+        required=False,
     )
-    voltaje_fase_fase = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Fase")
-    voltaje_fase_tierra = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Tierra")
-    voltaje_fase_neutro = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Neutro")
+    voltaje_fase_fase = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Fase", required=False)
+    voltaje_fase_tierra = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Tierra", required=False)
+    voltaje_fase_neutro = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Neutro", required=False)
     voltaje_neutro_tierra = forms.DecimalField(
         min_value=0,
         max_digits=8,
         decimal_places=2,
         initial=0,
         label="Neutro-Tierra",
+        required=False,
     )
     prueba_carga = forms.ChoiceField(
         choices=(
@@ -115,9 +117,10 @@ class EvergoOrderTrackingForm(forms.Form):
         ),
         initial="Sin prueba",
         label="Prueba de carga",
+        required=False,
     )
     marca_cargador = forms.ChoiceField(choices=(), required=False)
-    numero_serie = forms.CharField(max_length=128, label="Número de Serie")
+    numero_serie = forms.CharField(max_length=128, label="Número de Serie", required=False)
 
 
     foto_tablero = forms.ImageField(required=False)

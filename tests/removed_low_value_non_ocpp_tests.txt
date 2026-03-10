@@ -55,7 +55,6 @@ apps/ftp/tests/test_authorizers.py
 apps/core/tests/test_tasks.py
 apps/counters/tests/test_system_dashboard_rules_report.py
 apps/embeds/tests/test_views.py
-apps/mcp/tests/test_create_mcp_api_key_command.py
 apps/screens/tests/test_lcd_history.py
 apps/services/tests/test_lifecycle.py
 apps/counters/tests/test_user_story_dashboard_rules.py

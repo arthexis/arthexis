@@ -106,7 +106,7 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             label=_("Mobility House backend"),
             help_text=_("Enable or disable the Mobility House simulator backend."),
             choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
-            default="disabled",
+            default="enabled",
         ),
     ),
     "odoo-crm-sync": (

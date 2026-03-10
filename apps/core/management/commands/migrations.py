@@ -1,0 +1,166 @@
+"""Unified migration maintenance command for local apps."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import json
+import re
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management import call_command
+from django.core.management.base import BaseCommand, CommandError
+
+
+class Command(BaseCommand):
+    """Run migration maintenance workflows for project-local apps."""
+
+    help = "Run migration maintenance workflows (clear, rebuild) for apps.* packages."
+
+    def add_arguments(self, parser):
+        """Register subcommands for migration maintenance tasks."""
+
+        subparsers = parser.add_subparsers(dest="target")
+        subparsers.required = True
+
+        clear_parser = subparsers.add_parser(
+            "clear", help="Remove all app migration files except __init__.py."
+        )
+        clear_parser.add_argument(
+            "--apps-dir",
+            dest="apps_dir",
+            help="Override the apps directory (defaults to settings.APPS_DIR)",
+        )
+
+        rebuild_parser = subparsers.add_parser(
+            "rebuild",
+            help="Clear and regenerate app migrations, then tag initial migrations.",
+        )
+        rebuild_parser.add_argument(
+            "--apps-dir",
+            dest="apps_dir",
+            help="Override the apps directory (defaults to settings.APPS_DIR)",
+        )
+        rebuild_parser.add_argument(
+            "--branch-id",
+            dest="branch_id",
+            help="Stable identifier recorded by the branch tag operation.",
+        )
+
+    def handle(self, *args, **options):
+        """Dispatch migration operations."""
+
+        target = options["target"]
+        apps_dir = self._resolve_apps_dir(options.get("apps_dir"))
+
+        if target == "clear":
+            self._clear_migrations(apps_dir)
+            return
+
+        if target == "rebuild":
+            branch_id = options["branch_id"] or f"rebuild-{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
+            self._rebuild_migrations(apps_dir, branch_id)
+            return
+
+        raise CommandError(f"Unsupported migrations target: {target}")
+
+    def _resolve_apps_dir(self, apps_dir_option: str | None) -> Path:
+        return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
+
+    def _clear_migrations(self, apps_dir: Path) -> None:
+        if not apps_dir.exists():
+            self.stderr.write(f"Apps directory not found: {apps_dir}")
+            return
+
+        removed_files: list[Path] = []
+
+        for migrations_dir in apps_dir.glob("*/migrations"):
+            if not migrations_dir.is_dir():
+                continue
+
+            for migration_file in migrations_dir.rglob("*.py"):
+                if migration_file.name == "__init__.py":
+                    continue
+
+                migration_file.unlink(missing_ok=True)
+                removed_files.append(migration_file)
+
+        if removed_files:
+            self.stdout.write("Removed migrations:")
+            for path in sorted(removed_files):
+                self.stdout.write(f" - {path.relative_to(apps_dir)}")
+        else:
+            self.stdout.write("No migration files found to remove.")
+
+    def _rebuild_migrations(self, apps_dir: Path, branch_id: str) -> None:
+        if not apps_dir.exists():
+            self.stderr.write(f"Apps directory not found: {apps_dir}")
+            return
+
+        project_apps = self._collect_project_apps(apps_dir)
+
+        self._clear_migrations(apps_dir)
+        call_command("makemigrations")
+
+        tagged = self._tag_initial_migrations(apps_dir, branch_id, project_apps)
+        if tagged:
+            self.stdout.write("Tagged migrations with rebuild branch guards:")
+            for path in tagged:
+                self.stdout.write(f" - {path.relative_to(apps_dir)}")
+        else:
+            self.stdout.write(
+                "No initial migrations were tagged; ensure makemigrations created them."
+            )
+
+    def _collect_project_apps(self, apps_dir: Path) -> list[str]:
+        return sorted(path.name for path in apps_dir.iterdir() if (path / "migrations").is_dir())
+
+    def _tag_initial_migrations(self, apps_dir: Path, branch_id: str, project_apps: list[str]) -> list[Path]:
+        tagged: list[Path] = []
+        for app_label in project_apps:
+            migrations_dir = apps_dir / app_label / "migrations"
+            if not migrations_dir.exists():
+                continue
+
+            initial_candidates = sorted(migrations_dir.glob("0001_*.py"))
+            if not initial_candidates:
+                continue
+
+            target = initial_candidates[0]
+            if self._inject_guard(target, branch_id, project_apps):
+                tagged.append(target)
+        return tagged
+
+    def _inject_guard(self, migration_path: Path, branch_id: str, project_apps: list[str]) -> bool:
+        content = migration_path.read_text(encoding="utf-8")
+        if "BranchTagOperation" in content:
+            return False
+
+        import_hooks = (
+            "from django.db import migrations, models",
+            "from django.db import migrations",
+        )
+        guard_import = "from utils.migration_branches import BranchTagOperation"
+        if guard_import not in content:
+            for import_hook in import_hooks:
+                if import_hook in content:
+                    content = content.replace(import_hook, f"{import_hook}\n{guard_import}", 1)
+                    break
+            else:
+                content = f"{guard_import}\n{content}"
+
+        migration_label = f"{migration_path.parent.parent.name}.{migration_path.stem}"
+        marker_match = re.search(r"^(?P<indent>\s*)operations\s*=\s*\[\s*$", content, re.MULTILINE)
+        if not marker_match:
+            raise ValueError(f"Could not find operations block in migration {migration_path}")
+        marker = marker_match.group(0)
+        indent = marker_match.group("indent")
+
+        guard_line = (
+            f"{indent}operations = [\n"
+            f"{indent}    BranchTagOperation({json.dumps(branch_id)}, "
+            f"migration_label={json.dumps(migration_label)}, "
+            f"project_apps={tuple(project_apps)!r}),\n"
+        )
+        migration_path.write_text(content.replace(marker, guard_line, 1), encoding="utf-8")
+        return True

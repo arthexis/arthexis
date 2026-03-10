@@ -73,6 +73,8 @@
         .messages .warning { color: var(--warning-foreground); }
         .errorlist { color: var(--error-foreground); margin: .3rem 0 0; padding-left: 1rem; }
         .prefill-error { color: var(--warning-foreground); font-size: .86rem; margin-top: .2rem; }
+        .step-status-list { list-style:none; margin:.5rem 0 0; padding:0; display:grid; gap:.35rem; }
+        .step-status-item { font-size:.92rem; }
         @media (max-width: 860px) {
             .grid { gap: 1rem; }
             .grid > .field { padding-inline: .3rem; }
@@ -99,6 +101,15 @@
         {% for message in messages %}<p>{{ message }}</p>{% endfor %}
       </div>
     {% endif %}
+
+    <div class="card">
+      <h2>Estado de pasos</h2>
+      <ul class="step-status-list">
+        {% for step in step_statuses %}
+          <li class="step-status-item">{% if step.complete %}✅{% else %}🕓{% endif %} {{ step.label }}</li>
+        {% endfor %}
+      </ul>
+    </div>
 
     <form method="post" enctype="multipart/form-data" id="tracking-form">
         {% csrf_token %}

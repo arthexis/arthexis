@@ -105,9 +105,9 @@ class Command(BaseCommand):
                 return
             except Exception as exc:
                 last_error = exc
-                self.stderr.write(f"Engine '{engine}' failed: {exc}")
+                self.stderr.write(f"Engine '{engine}' failed for {path}: {exc}")
 
-        raise CommandError(f"All preview engines failed. Last error: {last_error}")
+        raise CommandError(f"All preview engines failed for {path}. Last error: {last_error}")
 
     def _build_capture_plan(
         self,
