@@ -14,6 +14,15 @@ from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
 
+@pytest.fixture(autouse=True)
+def _stub_certbot_availability(monkeypatch):
+    """Keep command tests independent from host-level certbot installation."""
+
+    from apps.nginx.management.commands.https_parts import certificate_flow
+
+    monkeypatch.setattr(certificate_flow, "ensure_certbot_available", lambda *, sudo="sudo": None)
+
+
 @pytest.mark.django_db
 def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
     """`https --enable --godaddy` should configure a certbot DNS challenge certificate."""
