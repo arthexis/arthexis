@@ -157,8 +157,8 @@ class FeatureAdminForm(forms.ModelForm):
 
         arthexis_backend_field = f"{self.PARAM_FIELD_PREFIX}arthexis_backend"
         mobilityhouse_backend_field = f"{self.PARAM_FIELD_PREFIX}mobilityhouse_backend"
-        arthexis_backend = str(cleaned_data.get(arthexis_backend_field) or "").strip()
-        mobilityhouse_backend = str(cleaned_data.get(mobilityhouse_backend_field) or "").strip()
+        arthexis_backend = cleaned_data.get(arthexis_backend_field)
+        mobilityhouse_backend = cleaned_data.get(mobilityhouse_backend_field)
         if arthexis_backend == "disabled" and mobilityhouse_backend == "disabled":
             error_message = _(
                 "At least one simulator backend must stay enabled so backend dropdowns remain available."
