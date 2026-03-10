@@ -103,6 +103,30 @@ class SimulatorCommandTests(SimpleTestCase):
         self.assertEqual(params["ws_scheme"], "wss")
         self.assertTrue(params["use_tls"])
 
+    @patch("apps.ocpp.management.commands.simulator._start_simulator")
+    @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
+    def test_start_defaults_allow_private_network(self, choices_mock, start_mock) -> None:
+        """Start action should permit localhost defaults without extra flags."""
+
+        choices_mock.return_value = (("arthexis", "arthexis"),)
+        start_mock.return_value = (True, "Connection accepted", "sim.log")
+
+        call_command("simulator", "start")
+
+        params = start_mock.call_args.args[0]
+        self.assertTrue(params["allow_private_network"])
+
+    @patch("apps.ocpp.management.commands.simulator._start_simulator")
+    @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
+    def test_start_raises_error_when_runtime_rejects_request(self, choices_mock, start_mock) -> None:
+        """Start action should return non-zero via CommandError when not started."""
+
+        choices_mock.return_value = (("arthexis", "arthexis"),)
+        start_mock.return_value = (False, "Already running", "sim.log")
+
+        with self.assertRaisesMessage(CommandError, "Already running"):
+            call_command("simulator", "start")
+
     @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
     def test_start_rejects_backend_when_not_enabled(self, choices_mock) -> None:
         """Backend validation should fail with a clear error when disabled."""

@@ -92,7 +92,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--allow-private-network",
             action=BooleanOptionalAction,
-            default=False,
+            default=True,
             help="Allow simulator to target private network hosts.",
         )
         parser.add_argument(
@@ -156,7 +156,7 @@ class Command(BaseCommand):
         if started:
             self.stdout.write(self.style.SUCCESS(status))
         else:
-            self.stdout.write(self.style.WARNING(status))
+            raise CommandError(status)
         self.stdout.write(f"log_file={log_file}")
 
     def _resolve_backend(self, requested: str | None) -> str:
