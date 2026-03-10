@@ -391,14 +391,14 @@ document.addEventListener('DOMContentLoaded', function () {
       <div
         class="chat-overlay"
         data-chat-overlay
-        role="presentation"
+        aria-hidden="true"
         hidden
       >
-        <aside
+        <dialog
           id="chat-drawer"
           class="chat-drawer"
           data-chat-drawer
-          role="dialog"
+
           aria-modal="true"
           aria-labelledby="chat-title"
           aria-label="{% trans 'Support chat' %}"
@@ -433,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function () {
               <button type="submit" class="button button-primary">{% trans "Send" %}</button>
             </div>
           </form>
-        </aside>
+        </dialog>
       </div>
     </div>
     <script src="{% static 'pages/js/chat.js' %}" defer></script>

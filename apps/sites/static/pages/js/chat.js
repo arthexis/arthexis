@@ -239,6 +239,7 @@
       }
       resetUnread();
       overlay.removeAttribute('hidden');
+      setDialogOpenState(drawer, true);
       window.requestAnimationFrame(() => {
         overlay.classList.add('show');
         drawer.classList.add('open');
@@ -273,6 +274,7 @@
       previousFocus = null;
       window.setTimeout(() => {
         overlay.setAttribute('hidden', '');
+        setDialogOpenState(drawer, false);
         if (focusTarget) {
           try {
             focusTarget.focus({ preventScroll: true });
@@ -281,6 +283,18 @@
           }
         }
       }, 200);
+    };
+
+
+    const setDialogOpenState = (element, isOpen) => {
+      if (!element || element.tagName !== 'DIALOG') {
+        return;
+      }
+      if (isOpen) {
+        element.setAttribute('open', '');
+      } else {
+        element.removeAttribute('open');
+      }
     };
 
     const clearStoredSession = () => {

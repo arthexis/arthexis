@@ -202,8 +202,8 @@
         data-staff="{% if request.user.is_authenticated and request.user.is_staff %}true{% else %}false{% endif %}"
       >
         <button type="button" data-chat-toggle hidden aria-expanded="false" aria-controls="chat-drawer">Chat</button>
-        <div class="chat-overlay" data-chat-overlay role="presentation" hidden>
-          <section id="chat-drawer" class="chat-drawer" data-chat-drawer role="dialog" aria-modal="true" aria-label="Support chat" tabindex="-1">
+        <div class="chat-overlay" data-chat-overlay aria-hidden="true" hidden>
+          <dialog id="chat-drawer" class="chat-drawer" data-chat-drawer aria-modal="true" aria-label="Support chat" tabindex="-1">
             <header class="chat-header">
               <div>
                 <h2 class="mb-0">Support</h2>
@@ -219,14 +219,14 @@
                 <button type="submit" class="btn btn-primary">Send</button>
               </div>
             </form>
-          </section>
+          </dialog>
         </div>
       </div>
       <script src="/static/pages/js/chat.js" defer></script>
     {% endif %}
 
     {% if feedback_ingestion_enabled %}
-      <div id="user-story-overlay" class="user-story-overlay" role="dialog" aria-modal="true" aria-labelledby="user-story-title" hidden>
+      <dialog id="user-story-overlay" class="user-story-overlay" aria-modal="true" aria-labelledby="user-story-title" hidden>
         <div class="user-story-card" tabindex="-1">
           <div class="user-story-header">
             <h5 id="user-story-title">Please provide feedback!</h5>
@@ -252,12 +252,12 @@
                 <textarea id="user-story-comments" name="comments" rows="4" required></textarea>
               </div>
               <button type="submit" class="user-story-submit">Submit feedback</button>
-              <div id="user-story-success" class="user-story-alert user-story-alert-success is-hidden" role="status" hidden>Thank you! Your feedback has been sent.</div>
+              <div id="user-story-success" class="user-story-alert user-story-alert-success is-hidden" aria-live="polite" hidden>Thank you! Your feedback has been sent.</div>
               <div id="user-story-error" class="user-story-alert user-story-alert-error is-hidden" role="alert" hidden></div>
             </form>
           </div>
         </div>
-      </div>
+      </dialog>
       <script src="/static/pages/js/user_story_feedback.js" defer></script>
     {% endif %}
 

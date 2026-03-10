@@ -15,7 +15,7 @@
 {% last_net_message as admin_last_net_message %}
 <div id="admin-home-header">
   <h1>Home</h1>
-  <div class="admin-home-net-message" role="status" aria-live="polite">
+  <div class="admin-home-net-message" aria-live="polite">
     <a
       class="admin-home-net-message__icon admin-home-net-message__link"
       href="{% url 'admin:nodes_netmessage_changelist' %}"

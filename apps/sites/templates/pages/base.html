@@ -43,7 +43,7 @@
                     {% if landings|length == 1 %}
                       {% if module.enabled_landings_all_invalid %}
                         <li class="nav-item dropdown">
-                          <a class="nav-link" href="#" role="button">
+                          <a class="nav-link" href="#">
                             <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
                             {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                           </a>
@@ -88,7 +88,7 @@
                       {% endif %}
                     {% else %}
                       <li class="nav-item dropdown">
-                        <a class="nav-link" href="#" role="button">
+                        <a class="nav-link" href="#">
                           <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
                           {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                         </a>
@@ -128,7 +128,7 @@
               {% endif %}
               {% if header_references %}
                 <li class="nav-item dropdown">
-                  <a class="nav-link" href="#" role="button">
+                  <a class="nav-link" href="#">
                     <span class="badge rounded-pill text-bg-secondary">CONSOLES</span>
                   </a>
                   <ul class="dropdown-menu">
@@ -252,14 +252,13 @@
       <div
         class="chat-overlay"
         data-chat-overlay
-        role="presentation"
+        aria-hidden="true"
         hidden
       >
-        <section
+        <dialog
           id="chat-drawer"
           class="chat-drawer"
           data-chat-drawer
-          role="dialog"
           aria-modal="true"
           aria-labelledby="chat-title"
           aria-live="polite"
@@ -298,7 +297,7 @@
               <button type="submit" class="btn btn-primary">{% trans "Send" %}</button>
             </div>
           </form>
-        </section>
+        </dialog>
       </div>
     </div>
     {% endif %}
@@ -321,10 +320,9 @@
       </svg>
       <span class="visually-hidden">{% trans 'Share your feedback' %}</span>
     </button>
-    <div
+    <dialog
       id="user-story-overlay"
       class="user-story-overlay"
-      role="dialog"
       aria-modal="true"
       aria-labelledby="user-story-title"
       hidden
@@ -393,7 +391,7 @@
             <div class="mb-3">
               <div class="user-story-rating-row">
                 <span class="form-label d-block mb-0" id="user-story-rating-group-label">
-                  {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+                  {% blocktrans trimmed with link_start='<button type="button" class="user-story-copy-link" data-feedback-copy>'|safe link_end='</button>'|safe %}
                     Please rate {{ link_start }}this page{{ link_end }}
                   {% endblocktrans %}
                 </span>
@@ -449,14 +447,14 @@
             <button type="submit" class="btn btn-primary w-100 py-2">
               {% trans 'Submit feedback' %}
             </button>
-            <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" role="status">
+            <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" aria-live="polite">
               {% trans 'Thank you! Your feedback has been sent.' %}
             </div>
             <div id="user-story-error" class="alert alert-danger user-story-alert mt-3 d-none" role="alert"></div>
           </form>
         </div>
       </div>
-    </div>
+    </dialog>
     <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -510,7 +508,6 @@
         <div class="text-center text-muted py-4">
           <div
             class="spinner-border spinner-border-sm"
-            role="status"
             aria-label="{% trans 'Loading footer' %}"
           ></div>
           <span class="ms-2">{% trans "Loading footer..." %}</span>

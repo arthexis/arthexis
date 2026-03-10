@@ -18,10 +18,10 @@
   </svg>
   <span class="visually-hidden">{% trans 'Share your feedback' %}</span>
 </button>
-<div
+<dialog
   id="user-story-overlay"
   class="user-story-overlay"
-  role="dialog"
+
   aria-modal="true"
   aria-labelledby="user-story-title"
   hidden
@@ -89,7 +89,7 @@
         <div class="user-story-field">
           <div class="user-story-rating-row">
             <span class="user-story-label" id="user-story-rating-group-label">
-              {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+              {% blocktrans trimmed with link_start='<button type="button" class="user-story-copy-link" data-feedback-copy>'|safe link_end='</button>'|safe %}
                 Please rate {{ link_start }}this page{{ link_end }}
               {% endblocktrans %}
             </span>
@@ -144,12 +144,12 @@
         <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
         </button>
-        <div id="user-story-success" class="user-story-alert user-story-alert-success is-hidden" role="status" hidden>
+        <div id="user-story-success" class="user-story-alert user-story-alert-success is-hidden" aria-live="polite" hidden>
           {% trans 'Thank you! Your feedback has been sent.' %}
         </div>
         <div id="user-story-error" class="user-story-alert user-story-alert-error is-hidden" role="alert" hidden></div>
       </form>
     </div>
   </div>
-</div>
+</dialog>
 <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>

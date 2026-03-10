@@ -114,6 +114,18 @@
     }
   };
 
+
+  const setDialogOpenState = (isOpen) => {
+    if (overlay.tagName !== 'DIALOG') {
+      return;
+    }
+    if (isOpen) {
+      overlay.setAttribute('open', '');
+    } else {
+      overlay.removeAttribute('open');
+    }
+  };
+
   const openOverlay = () => {
     if (!overlay.hasAttribute('hidden')) {
       return;
@@ -121,6 +133,7 @@
     document.dispatchEvent(new CustomEvent(DIALOG_OPENED_EVENT, { detail: { source: 'feedback' } }));
     previousFocus = document.activeElement;
     overlay.removeAttribute('hidden');
+    setDialogOpenState(true);
     requestAnimationFrame(() => {
       overlay.classList.add('show');
       document.body.classList.add('user-story-open');
@@ -141,6 +154,7 @@
     toggle.setAttribute('aria-expanded', 'false');
     setTimeout(() => {
       overlay.setAttribute('hidden', '');
+      setDialogOpenState(false);
       resetAlerts();
       if (restoreFocus && previousFocus) {
         previousFocus.focus();
