@@ -24,5 +24,5 @@ lint-strict:
 
 
 lint-fix:
-	ruff check --select E9,F823,I . --fix
+	ruff check . --fix
 	black .
