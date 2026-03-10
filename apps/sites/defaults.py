@@ -46,7 +46,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "payments": "Payment gateways and billing helpers.",
     "playwright": "Playwright browser automation and scheduled screenshot capture.",
     "pages": "User QA, Continuity Design and Chaos Testing.",
-    "pyxel": "Pyxel game tooling and pixel-art helpers.",
     "protocols": "Protocol helpers and shared interfaces.",
     "rates": "Rates, pricing and tariff helpers.",
     "release": "Release management and deployment helpers.",
