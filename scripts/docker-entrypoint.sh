@@ -88,4 +88,15 @@ if [ "$#" -gt 0 ]; then
     exec "$@"
 fi
 
-exec python manage.py runserver "0.0.0.0:${PORT:-8888}" --noreload
+case "${ARTHEXIS_SERVER_MODE:-production}" in
+    development|dev|runserver)
+        exec python manage.py runserver "0.0.0.0:${PORT:-8888}" --noreload
+        ;;
+    production|prod|daphne)
+        exec daphne -b 0.0.0.0 -p "${PORT:-8888}" config.asgi:application
+        ;;
+    *)
+        echo "Invalid ARTHEXIS_SERVER_MODE '${ARTHEXIS_SERVER_MODE:-production}'. Use development or production." >&2
+        exit 1
+        ;;
+esac
