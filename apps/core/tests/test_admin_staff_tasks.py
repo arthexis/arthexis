@@ -81,3 +81,12 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Task Panels")
         self.assertContains(response, "Save task panel preferences")
+
+    def test_sigil_builder_breadcrumb_links_back_to_task_panels(self):
+        """Sigil Builder breadcrumb trail should include Task Panels as previous view."""
+
+        response = self.client.get(reverse("admin:sigil_builder"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Task Panels")
+        self.assertContains(response, reverse("admin:system"))
