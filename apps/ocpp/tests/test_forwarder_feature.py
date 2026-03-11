@@ -13,24 +13,30 @@ from apps.ocpp.tasks.forwarding import setup_forwarders
 pytestmark = pytest.mark.django_db
 
 
-def test_ocpp_forwarder_enabled_reads_suite_feature_flag() -> None:
-    """Regression: helper should mirror the OCPP Forwarder suite feature state."""
+@pytest.fixture
+def disabled_ocpp_forwarder_feature() -> Feature:
+    """Ensure the OCPP Forwarder suite feature exists and is disabled."""
 
-    Feature.objects.update_or_create(
+    feature, _ = Feature.objects.update_or_create(
         slug=OCPP_FORWARDER_FEATURE_SLUG,
         defaults={"display": "OCPP Forwarder", "is_enabled": False},
     )
+    return feature
+
+
+def test_ocpp_forwarder_enabled_reads_suite_feature_flag(disabled_ocpp_forwarder_feature: Feature) -> None:
+    """Regression: helper should mirror the OCPP Forwarder suite feature state."""
+    assert disabled_ocpp_forwarder_feature.is_enabled is False
 
     assert ocpp_forwarder_enabled(default=True) is False
 
 
-def test_setup_forwarders_skips_sync_when_suite_feature_disabled(monkeypatch) -> None:
+def test_setup_forwarders_skips_sync_when_suite_feature_disabled(
+    disabled_ocpp_forwarder_feature: Feature,
+    monkeypatch,
+) -> None:
     """Regression: disabled suite feature must short-circuit forwarding sync tasks."""
-
-    Feature.objects.update_or_create(
-        slug=OCPP_FORWARDER_FEATURE_SLUG,
-        defaults={"display": "OCPP Forwarder", "is_enabled": False},
-    )
+    assert disabled_ocpp_forwarder_feature.is_enabled is False
     clear_calls: list[str] = []
     update_calls: list[set[int]] = []
 
@@ -56,13 +62,12 @@ def test_setup_forwarders_skips_sync_when_suite_feature_disabled(monkeypatch) ->
     assert update_calls == [set()]
 
 
-def test_sync_forwarded_charge_points_clears_sessions_when_feature_disabled(monkeypatch) -> None:
+def test_sync_forwarded_charge_points_clears_sessions_when_feature_disabled(
+    disabled_ocpp_forwarder_feature: Feature,
+    monkeypatch,
+) -> None:
     """Forwarder service should clear active sessions and skip sync when feature is off."""
-
-    Feature.objects.update_or_create(
-        slug=OCPP_FORWARDER_FEATURE_SLUG,
-        defaults={"display": "OCPP Forwarder", "is_enabled": False},
-    )
+    assert disabled_ocpp_forwarder_feature.is_enabled is False
     forwarder = Forwarder()
     fake_session = SimpleNamespace(connection=SimpleNamespace(close=lambda: None))
     forwarder._sessions[99] = fake_session
