@@ -1,6 +1,14 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'Task Panels' %}</a>
+  &rsaquo; {% trans 'Sigil Builder' %}
+</div>
+{% endblock %}
+
 {% block content %}
 <div id="content-main">
   <form method="post" enctype="multipart/form-data" style="margin-bottom:1em;">
