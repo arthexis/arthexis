@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.db import DatabaseError, IntegrityError
 
 from apps.playwright.preview_tool import analyze_preview_image
 
@@ -136,7 +137,21 @@ class Command(BaseCommand):
 
             raise CommandError(f"All preview engines failed. Last error: {last_error}")
         finally:
-            self._delete_throwaway_admin_user(preview_user_id)
+            try:
+                self._delete_throwaway_admin_user(preview_user_id)
+            except DatabaseError as exc:
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"Failed to delete temporary preview user {preview_user_id}: {exc}"
+                    )
+                )
+            except Exception as exc:
+                self.stderr.write(
+                    self.style.WARNING(
+                        "Unexpected error while deleting temporary preview user "
+                        f"{preview_user_id}: {exc}"
+                    )
+                )
 
     def _build_capture_plan(
         self,
@@ -197,7 +212,8 @@ class Command(BaseCommand):
             tuple[str, str, int]: Generated username, generated password, and user primary key.
 
         Raises:
-            Exception: Propagates user-model creation/database exceptions.
+            DatabaseError: If the database operation fails while creating the user.
+            IntegrityError: If user creation violates a database constraint.
 
         Side Effects:
             Inserts a temporary superuser record that should be cleaned up with

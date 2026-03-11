@@ -9,8 +9,10 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
 
     command = Command()
 
+    deleted_ids: list[int | None] = []
+
     monkeypatch.setattr(command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42))
-    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda user_id: None)
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", deleted_ids.append)
     monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
 
     def _always_fail(**kwargs):
@@ -30,6 +32,8 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
             engine="chromium,firefox",
             no_login=False,
         )
+
+    assert deleted_ids == [42]
 
 
 def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
