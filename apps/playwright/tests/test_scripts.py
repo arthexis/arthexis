@@ -21,7 +21,7 @@ def example_callable(browser, script=None):  # pragma: no cover - used via impor
 
 @pytest.mark.django_db
 def test_inline_script_executes_after_start_url(monkeypatch):
-    browser = PlaywrightBrowser.objects.create(name="Default", is_default=True)
+    PlaywrightBrowser.objects.create(name="Default", is_default=True)
     script = PlaywrightScript.objects.create(
         name="Inline",
         script="""
@@ -41,11 +41,11 @@ def test_inline_script_executes_after_start_url(monkeypatch):
 
 @pytest.mark.django_db
 def test_callable_path_runs_after_start_url(monkeypatch):
-    browser = PlaywrightBrowser.objects.create(name="Default", is_default=True)
+    PlaywrightBrowser.objects.create(name="Default", is_default=True)
     script = PlaywrightScript.objects.create(
         name="Callable",
         start_url="https://start.test",
-        python_path="apps.selenium.tests.test_scripts.example_callable",
+        python_path="apps.playwright.tests.test_scripts.example_callable",
     )
 
     driver = DummyDriver()
