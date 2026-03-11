@@ -123,6 +123,46 @@ def test_collect_net_message_uses_broadcast(monkeypatch):
     }
 
 
+def test_collect_net_message_escapes_untrusted_sigil_like_content(monkeypatch):
+    """Collector net messages should neutralize square brackets from message data."""
+
+    owner = _create_owner("collector-net-escaped-owner")
+    inbox = _create_inbox(owner, "collector-net-escaped@example.com")
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        notification_mode=EmailCollector.NOTIFY_NET_MESSAGE,
+        notification_subject="[subject]",
+        notification_message="[body] from [sender]",
+    )
+
+    monkeypatch.setattr(
+        inbox,
+        "search_messages",
+        lambda **kwargs: [
+            {
+                "subject": "Alarm [ENV.SECRET_KEY]",
+                "from": "grid[CONF.DATABASES]@example.com",
+                "body": "Body [ENV.SECRET_KEY]",
+            }
+        ],
+    )
+    captured: dict[str, str] = {}
+
+    def _fake_broadcast(subject: str, body: str, **_kwargs):
+        captured["subject"] = subject
+        captured["body"] = body
+        return object()
+
+    monkeypatch.setattr("apps.nodes.models.NetMessage.broadcast", _fake_broadcast)
+
+    collector.collect(limit=1)
+
+    assert captured == {
+        "subject": "Alarm (ENV.SECRET_KEY)",
+        "body": "Body (ENV.SECRET_KEY) from grid(CONF.DATABASES)@example.com",
+    }
+
+
 def test_collect_email_mode_sends_using_recipients(monkeypatch):
     """Collector email mode should send rendered content to configured recipients."""
 

@@ -232,6 +232,11 @@ def _safe_close_old_connections() -> None:
     try:
         close_old_connections()
     except RuntimeError:
+        message = (
+            "Ignoring RuntimeError from close_old_connections(), "
+            "likely due to blocked DB access in tests."
+        )
+        print(message, flush=True)
         return
 
 

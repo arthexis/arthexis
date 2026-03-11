@@ -158,6 +158,11 @@ class EmailCollector(Entity):
             return []
         return [item.strip() for item in raw.split(",") if item.strip()]
 
+    @staticmethod
+    def _escape_sigil_brackets(value: str) -> str:
+        """Return ``value`` with square brackets neutralized to block sigil resolution."""
+        return value.replace("[", "(").replace("]", ")")
+
     def _notify_for_message(self, msg: dict[str, str], sigils: dict[str, str]) -> None:
         """Dispatch collector notification according to ``notification_mode``."""
         mode = (self.notification_mode or self.NOTIFY_NONE).strip().lower()
@@ -169,12 +174,18 @@ class EmailCollector(Entity):
             "date": msg.get("date", ""),
         }
         context.update({str(key).lower(): str(value) for key, value in sigils.items()})
+        render_context = context
+        if mode == self.NOTIFY_NET_MESSAGE:
+            render_context = {
+                key: self._escape_sigil_brackets(str(value))
+                for key, value in context.items()
+            }
 
         subject_template = self.notification_subject or "[subject]"
         message_template = self.notification_message or "[body]"
-        rendered_subject = self._render_notification_template(subject_template, context)
+        rendered_subject = self._render_notification_template(subject_template, render_context)
         rendered_subject = rendered_subject.replace("\n", " ").replace("\r", " ")
-        rendered_message = self._render_notification_template(message_template, context)
+        rendered_message = self._render_notification_template(message_template, render_context)
 
         if mode == self.NOTIFY_POPUP:
             try:
