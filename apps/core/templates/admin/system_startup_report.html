@@ -2,11 +2,7 @@
 {% load i18n %}
 
 {% block breadcrumbs %}
-<div class="breadcrumbs">
-  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
-  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'Task Panels' %}</a>
-  &rsaquo; {% trans "Startup Report" %}
-</div>
+{% include "admin/includes/task_panel_breadcrumb.html" with page_title="Startup Report" %}
 {% endblock %}
 
 {% block extrastyle %}
