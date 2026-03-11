@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timezone as dt_timezone
+from collections.abc import Iterable
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from pathlib import Path
-from typing import Iterable
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
@@ -17,8 +18,10 @@ from django.utils.dateparse import parse_datetime
 from apps.ocpp import store
 from apps.ocpp.models import Charger, MeterValue, Transaction
 from apps.ocpp.views import _aggregate_dashboard_state
+from apps.special.registry import special_command
 
 
+@special_command(singular="charger", plural="chargers", keystone_model="ocpp.Charger")
 class Command(BaseCommand):
     help = "Inspect configured OCPP chargers and update their RFID settings."
 
