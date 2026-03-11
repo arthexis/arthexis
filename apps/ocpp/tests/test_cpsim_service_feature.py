@@ -15,16 +15,20 @@ pytestmark = pytest.mark.django_db
 def test_cpsim_service_enabled_reads_suite_feature_flag():
     """Regression: service enabled state should come from suite feature flag."""
 
-    Feature.objects.filter(slug="ocpp-simulator").update(is_enabled=True)
+    Feature.objects.update_or_create(
+        slug="ocpp-simulator",
+        defaults={"display": "OCPP Simulator", "is_enabled": True},
+    )
     assert cpsim_service_enabled() is True
 
 
 def test_simulator_admin_toggle_updates_suite_feature(admin_client, monkeypatch):
     """Regression: admin toggle should update suite feature instead of node feature assignment."""
 
-    feature = Feature.objects.get(slug="ocpp-simulator")
-    feature.is_enabled = False
-    feature.save(update_fields=["is_enabled", "updated_at"])
+    feature, _ = Feature.objects.update_or_create(
+        slug="ocpp-simulator",
+        defaults={"display": "OCPP Simulator", "is_enabled": False},
+    )
     node = Node.objects.create(hostname="sim-node", public_endpoint="sim-node")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
@@ -38,7 +42,10 @@ def test_simulator_admin_toggle_updates_suite_feature(admin_client, monkeypatch)
 def test_simulator_admin_toggle_requires_local_node(admin_client, monkeypatch):
     """Regression: admin toggle should fail gracefully when no local node is registered."""
 
-    Feature.objects.filter(slug="ocpp-simulator").update(is_enabled=False)
+    Feature.objects.update_or_create(
+        slug="ocpp-simulator",
+        defaults={"display": "OCPP Simulator", "is_enabled": False},
+    )
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: None))
 
     response = admin_client.post(reverse("admin:ocpp_simulator_cpsim_toggle"), follow=True)

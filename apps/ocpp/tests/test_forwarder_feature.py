@@ -16,7 +16,10 @@ pytestmark = pytest.mark.django_db
 def test_ocpp_forwarder_enabled_reads_suite_feature_flag() -> None:
     """Regression: helper should mirror the OCPP Forwarder suite feature state."""
 
-    Feature.objects.filter(slug=OCPP_FORWARDER_FEATURE_SLUG).update(is_enabled=False)
+    Feature.objects.update_or_create(
+        slug=OCPP_FORWARDER_FEATURE_SLUG,
+        defaults={"display": "OCPP Forwarder", "is_enabled": False},
+    )
 
     assert ocpp_forwarder_enabled(default=True) is False
 
@@ -24,7 +27,10 @@ def test_ocpp_forwarder_enabled_reads_suite_feature_flag() -> None:
 def test_setup_forwarders_skips_sync_when_suite_feature_disabled(monkeypatch) -> None:
     """Regression: disabled suite feature must short-circuit forwarding sync tasks."""
 
-    Feature.objects.filter(slug=OCPP_FORWARDER_FEATURE_SLUG).update(is_enabled=False)
+    Feature.objects.update_or_create(
+        slug=OCPP_FORWARDER_FEATURE_SLUG,
+        defaults={"display": "OCPP Forwarder", "is_enabled": False},
+    )
     clear_calls: list[str] = []
     update_calls: list[set[int]] = []
 
@@ -53,7 +59,10 @@ def test_setup_forwarders_skips_sync_when_suite_feature_disabled(monkeypatch) ->
 def test_sync_forwarded_charge_points_clears_sessions_when_feature_disabled(monkeypatch) -> None:
     """Forwarder service should clear active sessions and skip sync when feature is off."""
 
-    Feature.objects.filter(slug=OCPP_FORWARDER_FEATURE_SLUG).update(is_enabled=False)
+    Feature.objects.update_or_create(
+        slug=OCPP_FORWARDER_FEATURE_SLUG,
+        defaults={"display": "OCPP Forwarder", "is_enabled": False},
+    )
     forwarder = Forwarder()
     fake_session = SimpleNamespace(connection=SimpleNamespace(close=lambda: None))
     forwarder._sessions[99] = fake_session
