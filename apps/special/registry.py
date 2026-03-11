@@ -71,6 +71,15 @@ def _allows_multiple(action: Action) -> bool:
     return isinstance(action.nargs, int) and action.nargs > 1
 
 
+def _validate_action_shape(action: Action) -> None:
+    """Reject parser shapes that cannot be reconstructed safely at runtime."""
+
+    if not action.option_strings and not getattr(action, "required", True):
+        raise SpecialCommandValidationError(
+            f"Optional positional argument '{action.dest}' is not supported."
+        )
+
+
 def sync_special_command(
     *, command_name: str, command_cls: type[BaseCommand]
 ) -> SpecialCommand:
@@ -113,6 +122,8 @@ def sync_special_command(
             if action.dest in {"help"}:
                 continue
 
+            _validate_action_shape(action)
+
             cli_name = (
                 action.option_strings[-1] if action.option_strings else action.dest
             )
@@ -126,6 +137,8 @@ def sync_special_command(
                 is_required=bool(getattr(action, "required", False)),
                 allows_multiple=_allows_multiple(action),
                 choices=choices,
+                nargs=getattr(action, "nargs", None),
+                const=getattr(action, "const", None),
                 help_text=(action.help or "").strip(),
                 sort_order=index,
             )
@@ -167,10 +180,13 @@ def _coerce_boolean_value(value: Any) -> bool:
 def call_special_command(name: str, /, **inputs: Any) -> Any:
     """Validate input kwargs against DB metadata and execute matching command."""
 
-    special = SpecialCommand.objects.prefetch_related("parameters").get(
-        name=name,
-        is_active=True,
-    )
+    try:
+        special = SpecialCommand.objects.prefetch_related("parameters").get(
+            Q(name=name) | Q(plural_name=name),
+            is_active=True,
+        )
+    except SpecialCommand.DoesNotExist as exc:
+        raise SpecialCommandValidationError(f"Unknown special command: {name}") from exc
     parameter_map = {
         parameter.name: parameter for parameter in special.parameters.all()
     }

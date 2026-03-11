@@ -9,6 +9,7 @@ from django.db import models
 from django.db.models import Q
 
 _SPECIAL_WORD_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_SPECIAL_OPTION_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 class SpecialCommand(models.Model):
@@ -136,6 +137,8 @@ class SpecialCommandParameter(models.Model):
     is_required = models.BooleanField(default=False)
     allows_multiple = models.BooleanField(default=False)
     choices = models.JSONField(default=list, blank=True)
+    nargs = models.JSONField(null=True, blank=True, default=None)
+    const = models.JSONField(null=True, blank=True, default=None)
     help_text = models.TextField(blank=True, default="")
     sort_order = models.PositiveIntegerField(default=0)
 
@@ -178,6 +181,6 @@ class SpecialCommandParameter(models.Model):
         if (
             not normalized_cli_name.startswith("--")
             or len(normalized_cli_name) <= 2
-            or not _SPECIAL_WORD_RE.fullmatch(normalized_cli_name[2:])
+            or not _SPECIAL_OPTION_RE.fullmatch(normalized_cli_name[2:])
         ):
             raise ValidationError({"cli_name": "Option/flag names must start with --."})
