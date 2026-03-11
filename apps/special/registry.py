@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from argparse import Action, _StoreTrueAction
+from argparse import Action
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +13,7 @@ from django.core.management import (
     load_command_class,
 )
 from django.db import transaction
+from django.db.models import Q
 
 from apps.special.models import SpecialCommand, SpecialCommandParameter
 
@@ -45,7 +46,7 @@ def special_command(*, singular: str, plural: str, keystone_model: str = ""):
 
 
 def _value_type_from_action(action: Action) -> str:
-    if isinstance(action, _StoreTrueAction):
+    if action.nargs == 0 and action.const is True:
         return SpecialCommandParameter.ValueType.BOOLEAN
 
     action_type = getattr(action, "type", None)
@@ -59,7 +60,7 @@ def _value_type_from_action(action: Action) -> str:
 def _kind_from_action(action: Action) -> str:
     if not action.option_strings:
         return SpecialCommandParameter.ParameterKind.POSITIONAL
-    if isinstance(action, _StoreTrueAction):
+    if action.nargs == 0 and action.const is True:
         return SpecialCommandParameter.ParameterKind.FLAG
     return SpecialCommandParameter.ParameterKind.OPTION
 
@@ -85,6 +86,14 @@ def sync_special_command(
     parser = instance.create_parser("manage.py", command_name)
 
     with transaction.atomic():
+        has_collision = SpecialCommand.objects.filter(
+            Q(name__iexact=declaration.plural) | Q(plural_name__iexact=declaration.singular)
+        ).exclude(name=declaration.singular).exists()
+        if has_collision:
+            raise SpecialCommandValidationError(
+                "Special command names and plural aliases must be globally unique."
+            )
+
         special, _created = SpecialCommand.objects.update_or_create(
             name=declaration.singular,
             defaults={
@@ -97,6 +106,9 @@ def sync_special_command(
         )
 
         special.parameters.all().delete()
+        # NOTE: argparse does not expose a public, equivalent action-iteration API,
+        # so we intentionally introspect parser._actions. If argparse changes this
+        # private structure, this loop should move behind a compatibility wrapper.
         for index, action in enumerate(parser._actions):
             if action.dest in {"help"}:
                 continue
@@ -125,25 +137,31 @@ def _coerce_parameter_value(parameter: SpecialCommandParameter, value: Any) -> A
     """Coerce a raw value into the type declared by the DB parameter definition."""
 
     if parameter.value_type == SpecialCommandParameter.ValueType.BOOLEAN:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            truthy = {"1", "true", "t", "yes", "y", "on"}
-            falsy = {"0", "false", "f", "no", "n", "off"}
-            if normalized in truthy:
-                return True
-            if normalized in falsy:
-                return False
-            raise ValueError(f"Invalid boolean value: {value!r}")
-        if isinstance(value, int) and value in (0, 1):
-            return bool(value)
-        raise ValueError(f"Invalid boolean value: {value!r}")
+        return _coerce_boolean_value(value)
     if parameter.value_type == SpecialCommandParameter.ValueType.INTEGER:
         return int(value)
     if parameter.value_type == SpecialCommandParameter.ValueType.FLOAT:
         return float(value)
     return str(value)
+
+
+def _coerce_boolean_value(value: Any) -> bool:
+    """Coerce a value to boolean, supporting common serialized representations."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        truthy = {"1", "true", "t", "yes", "y", "on"}
+        falsy = {"0", "false", "f", "no", "n", "off"}
+        if normalized in truthy:
+            return True
+        if normalized in falsy:
+            return False
+        raise ValueError(f"Invalid boolean value: {value!r}")
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    raise ValueError(f"Invalid boolean value: {value!r}")
 
 
 def call_special_command(name: str, /, **inputs: Any) -> Any:
@@ -180,10 +198,19 @@ def call_special_command(name: str, /, **inputs: Any) -> Any:
             raise SpecialCommandValidationError(
                 f"Invalid value for '{parameter.name}': {exc}"
             ) from exc
-        if parameter.choices and normalized not in parameter.choices:
-            raise SpecialCommandValidationError(
-                f"Invalid value for '{parameter.name}'. Expected one of: {parameter.choices}"
-            )
+        if parameter.choices:
+            try:
+                coerced_choices = [
+                    _coerce_parameter_value(parameter, choice)
+                    for choice in parameter.choices
+                ]
+            except (TypeError, ValueError):
+                coerced_choices = []
+
+            if normalized not in coerced_choices:
+                raise SpecialCommandValidationError(
+                    f"Invalid value for '{parameter.name}'. Expected one of: {parameter.choices}"
+                )
 
         if parameter.kind == SpecialCommandParameter.ParameterKind.POSITIONAL:
             positional_args.append(normalized)

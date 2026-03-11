@@ -6,6 +6,7 @@ import re
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 _SPECIAL_WORD_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -56,8 +57,12 @@ class SpecialCommand(models.Model):
 
         super().clean()
 
+        self.name = (self.name or "").strip()
+        self.plural_name = (self.plural_name or "").strip()
+        self.command_name = (self.command_name or "").strip()
+
         for field in ("name", "plural_name", "command_name"):
-            value = (getattr(self, field) or "").strip()
+            value = getattr(self, field)
             if not _SPECIAL_WORD_RE.fullmatch(value):
                 raise ValidationError(
                     {field: "Special command names must be one lowercase word."}
@@ -68,7 +73,9 @@ class SpecialCommand(models.Model):
                 {"plural_name": "Plural form must differ from singular command name."}
             )
 
-        if self.keystone_model and "." not in self.keystone_model:
+        self.keystone_model = (self.keystone_model or "").strip()
+        parts = self.keystone_model.split(".") if self.keystone_model else []
+        if self.keystone_model and (len(parts) != 2 or not all(parts)):
             raise ValidationError(
                 {
                     "keystone_model": (
@@ -76,6 +83,24 @@ class SpecialCommand(models.Model):
                     )
                 }
             )
+
+        collisions = SpecialCommand.objects.filter(
+            Q(name__iexact=self.plural_name) | Q(plural_name__iexact=self.name)
+        )
+        if self.pk:
+            collisions = collisions.exclude(pk=self.pk)
+        if collisions.exists():
+            raise ValidationError(
+                {
+                    "name": "Special command names and plural aliases must be globally unique."
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        """Validate the model before persisting it."""
+
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class SpecialCommandParameter(models.Model):
@@ -131,17 +156,28 @@ class SpecialCommandParameter(models.Model):
         super().clean()
 
         normalized_name = (self.name or "").strip()
+        self.name = normalized_name
         if not _SPECIAL_WORD_RE.fullmatch(normalized_name):
             raise ValidationError(
                 {"name": "Parameter name must be one lowercase word."}
             )
 
         if self.kind == self.ParameterKind.POSITIONAL:
-            if not _SPECIAL_WORD_RE.fullmatch((self.cli_name or "").strip()):
+            normalized_cli_name = (self.cli_name or "").strip()
+            self.cli_name = normalized_cli_name
+            if not _SPECIAL_WORD_RE.fullmatch(normalized_cli_name):
                 raise ValidationError(
                     {
                         "cli_name": "Positional argument names must be one lowercase word."
                     }
                 )
-        elif not (self.cli_name or "").startswith("--"):
+            return
+
+        normalized_cli_name = (self.cli_name or "").strip()
+        self.cli_name = normalized_cli_name
+        if (
+            not normalized_cli_name.startswith("--")
+            or len(normalized_cli_name) <= 2
+            or not _SPECIAL_WORD_RE.fullmatch(normalized_cli_name[2:])
+        ):
             raise ValidationError({"cli_name": "Option/flag names must start with --."})

@@ -3,9 +3,10 @@ from django.db import migrations, models
 
 def copy_plural_to_command_name(apps, schema_editor):
     SpecialCommand = apps.get_model("special", "SpecialCommand")
-    for command in SpecialCommand.objects.all():
+    db_alias = schema_editor.connection.alias
+    for command in SpecialCommand.objects.using(db_alias).all():
         command.command_name = command.plural_name
-        command.save(update_fields=["command_name"])
+        command.save(using=db_alias, update_fields=["command_name"])
 
 
 class Migration(migrations.Migration):
