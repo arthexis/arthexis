@@ -7,7 +7,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.entity import Entity
 from apps.core.models import EmailArtifact
 from apps.emails.models.inbox import EmailInbox
-from apps.recipes.models import RecipeExecutionError, RecipeFormatDetectionError
 
 
 logger = logging.getLogger(__name__)
@@ -230,17 +229,29 @@ class EmailCollector(Entity):
         if recipe is None:
             return
 
-        recipe.execute(
-            subject=self._sanitize_recipe_argument(rendered_subject),
-            message=self._sanitize_recipe_argument(rendered_message),
-            sender=self._sanitize_recipe_argument(context.get("sender", "")),
-            body=self._sanitize_recipe_argument(context.get("body", "")),
-            date=self._sanitize_recipe_argument(context.get("date", "")),
-            sigils={
-                str(key): self._sanitize_recipe_argument(str(value))
-                for key, value in sigils.items()
-            },
-        )
+        recipe_kwargs = {
+            "subject": rendered_subject,
+            "message": rendered_message,
+            "sender": context.get("sender", ""),
+            "body": context.get("body", ""),
+            "date": context.get("date", ""),
+            "sigils": {str(key): str(value) for key, value in sigils.items()},
+        }
+
+        if recipe.detect_format() != recipe.RecipeFormat.BASH:
+            recipe_kwargs = {
+                "subject": self._sanitize_recipe_argument(recipe_kwargs["subject"]),
+                "message": self._sanitize_recipe_argument(recipe_kwargs["message"]),
+                "sender": self._sanitize_recipe_argument(recipe_kwargs["sender"]),
+                "body": self._sanitize_recipe_argument(recipe_kwargs["body"]),
+                "date": self._sanitize_recipe_argument(recipe_kwargs["date"]),
+                "sigils": {
+                    str(key): self._sanitize_recipe_argument(str(value))
+                    for key, value in sigils.items()
+                },
+            }
+
+        recipe.execute(**recipe_kwargs)
 
     def collect(self, limit: int = 10) -> None:
         """Poll inboxes and store artifacts not already recorded.
@@ -251,15 +262,9 @@ class EmailCollector(Entity):
         Returns:
             None.
 
-        Raises:
-            RecipeExecutionError: Propagated when recipe execution fails while
-                dispatching notifications.
-            RecipeFormatDetectionError: Propagated when recipe format detection
-                fails while dispatching notifications.
-
         Note:
             Notification dispatch failures are logged and suppressed for popup,
-            net-message, and email channels.
+            net-message, email, and recipe channels.
         """
         if not self.is_enabled:
             return
@@ -286,5 +291,5 @@ class EmailCollector(Entity):
 
             try:
                 self._notify_for_message(msg, sigils)
-            except (RecipeExecutionError, RecipeFormatDetectionError):
+            except Exception:
                 logger.exception("Failed to send notification for collector %s", self.pk)
