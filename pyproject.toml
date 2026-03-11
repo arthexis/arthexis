@@ -412,7 +412,6 @@ config = [ "**/*",]
 "apps.modules.migrations" = [ "**/*",]
 "apps.groups.migrations" = [ "**/*",]
 "apps.selenium.utils" = [ "**/*",]
-"apps.selenium.tests" = [ "**/*",]
 "apps.selenium.migrations" = [ "**/*",]
 "apps.features.migrations" = [ "**/*",]
 
