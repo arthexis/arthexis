@@ -298,6 +298,12 @@ class SessionCookie(Ownable):
                 raise InvalidCookiePayloadError("Each cookie entry must be a mapping with cookie attributes.")
             if "name" not in cookie or "value" not in cookie:
                 raise InvalidCookiePayloadError("Each cookie must include both 'name' and 'value' keys.")
+            name = cookie.get("name")
+            value = cookie.get("value")
+            if not isinstance(name, str) or not name.strip():
+                raise InvalidCookiePayloadError("Each cookie must include a non-empty string 'name'.")
+            if not isinstance(value, str):
+                raise InvalidCookiePayloadError("Each cookie must include a string 'value'.")
         return payload
 
     def _save_fields(self, fields: list[str]) -> None:

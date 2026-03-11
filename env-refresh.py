@@ -217,13 +217,22 @@ def _load_fixture_with_retry(
                 raise
             if attempt == attempts:
                 raise
-            close_old_connections()
+            _safe_close_old_connections()
             delay = base_delay * attempt
             print(
                 f"Database locked while loading {fixture}; retrying in {delay:.1f}s",
                 flush=True,
             )
             time.sleep(delay)
+
+
+def _safe_close_old_connections() -> None:
+    """Close old Django DB connections while tolerating blocked DB access in tests."""
+
+    try:
+        close_old_connections()
+    except RuntimeError:
+        return
 
 
 def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) -> None:
@@ -256,7 +265,7 @@ def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) 
         _unlink_sqlite_db(Path(default_db["NAME"]))
         db_path.parent.mkdir(parents=True, exist_ok=True)
         db_path.touch()
-        close_old_connections()
+        _safe_close_old_connections()
         _attempt()
 
 
@@ -279,7 +288,7 @@ def _call_command_with_sqlite_lock_retry(
                 raise
             if attempt == attempts:
                 raise
-            close_old_connections()
+            _safe_close_old_connections()
             delay = base_delay * attempt
             print(
                 f"Database locked while running {command}; retrying in {delay:.1f}s",
