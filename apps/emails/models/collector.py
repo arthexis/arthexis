@@ -1,12 +1,13 @@
 import logging
 import re
 
-from django.db import IntegrityError, models
+from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.core.models import EmailArtifact
 from apps.emails.models.inbox import EmailInbox
+from apps.recipes.models import RecipeExecutionError, RecipeFormatDetectionError
 
 
 logger = logging.getLogger(__name__)
@@ -158,6 +159,19 @@ class EmailCollector(Entity):
             return []
         return [item.strip() for item in raw.split(",") if item.strip()]
 
+    @staticmethod
+    def _sanitize_recipe_argument(value: str) -> str:
+        """Escape text used in recipe argument substitution to reduce injection risks."""
+        return (
+            str(value or "")
+            .replace("\\", "\\\\")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+            .replace('"', '\\"')
+            .replace("'", "\\'")
+        )
+
     def _notify_for_message(self, msg: dict[str, str], sigils: dict[str, str]) -> None:
         """Dispatch collector notification according to ``notification_mode``."""
         mode = (self.notification_mode or self.NOTIFY_NONE).strip().lower()
@@ -217,16 +231,36 @@ class EmailCollector(Entity):
             return
 
         recipe.execute(
-            subject=rendered_subject,
-            message=rendered_message,
-            sender=context.get("sender", ""),
-            body=context.get("body", ""),
-            date=context.get("date", ""),
-            sigils=sigils,
+            subject=self._sanitize_recipe_argument(rendered_subject),
+            message=self._sanitize_recipe_argument(rendered_message),
+            sender=self._sanitize_recipe_argument(context.get("sender", "")),
+            body=self._sanitize_recipe_argument(context.get("body", "")),
+            date=self._sanitize_recipe_argument(context.get("date", "")),
+            sigils={
+                str(key): self._sanitize_recipe_argument(str(value))
+                for key, value in sigils.items()
+            },
         )
 
     def collect(self, limit: int = 10) -> None:
-        """Poll inboxes and store artifacts for messages not already recorded."""
+        """Poll inboxes and store artifacts not already recorded.
+
+        Args:
+            limit: Maximum number of matching messages to fetch across inboxes.
+
+        Returns:
+            None.
+
+        Raises:
+            RecipeExecutionError: Propagated when recipe execution fails while
+                dispatching notifications.
+            RecipeFormatDetectionError: Propagated when recipe format detection
+                fails while dispatching notifications.
+
+        Note:
+            Notification dispatch failures are logged and suppressed for popup,
+            net-message, and email channels.
+        """
         if not self.is_enabled:
             return
 
@@ -237,23 +271,20 @@ class EmailCollector(Entity):
             )
             sigils = self._parse_sigils(msg.get("body", ""))
 
-            try:
-                _, created = EmailArtifact.objects.get_or_create(
-                    collector=self,
-                    fingerprint=fp,
-                    defaults={
-                        "subject": msg.get("subject", ""),
-                        "sender": msg.get("from", ""),
-                        "body": msg.get("body", ""),
-                        "sigils": sigils,
-                    },
-                )
-            except IntegrityError:
-                continue
+            _, created = EmailArtifact.objects.get_or_create(
+                collector=self,
+                fingerprint=fp,
+                defaults={
+                    "subject": msg.get("subject", ""),
+                    "sender": msg.get("from", ""),
+                    "body": msg.get("body", ""),
+                    "sigils": sigils,
+                },
+            )
             if not created:
                 continue
 
             try:
                 self._notify_for_message(msg, sigils)
-            except Exception:
+            except (RecipeExecutionError, RecipeFormatDetectionError):
                 logger.exception("Failed to send notification for collector %s", self.pk)
