@@ -6,6 +6,13 @@ from apps.nodes.models import Node, NodeFeature
 from apps.nodes.models import utils as node_utils
 
 
+@pytest.fixture
+def isolated_feature_registry():
+    node_feature_detection_registry.reset()
+    yield
+    node_feature_detection_registry.reset()
+
+
 def test_select_preferred_ip_prefers_global_address():
     addresses = ["192.168.1.10", "8.8.8.8", "10.0.0.5"]
 
@@ -309,10 +316,10 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
+def test_detect_auto_feature_uses_app_node_feature_hooks(
+    monkeypatch, tmp_path, isolated_feature_registry
+):
     """Regression: auto-detection should defer to app-provided hook modules."""
-
-    node_feature_detection_registry.reset()
 
     node = Node(
         hostname="hook-node",
@@ -343,8 +350,6 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
         is True
     )
     assert setup_calls == ["rfid-scanner"]
-
-    node_feature_detection_registry.reset()
 
 
 @pytest.mark.django_db
