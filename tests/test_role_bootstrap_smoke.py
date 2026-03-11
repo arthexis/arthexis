@@ -9,7 +9,7 @@ import sys
 import pytest
 
 
-pytestmark = [pytest.mark.critical]
+pytestmark = [pytest.mark.critical, pytest.mark.pr_origin(6177)]
 
 
 _ROLE_TEST_CASES = [
@@ -23,7 +23,18 @@ _ROLE_SPECIFIC_SETTINGS = tuple(sorted({key for _, extra_env in _ROLE_TEST_CASES
 
 
 def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """Run a clean subprocess that imports settings and Celery for a specific node role."""
+    """Run a clean subprocess that imports settings and Celery for a specific node role.
+
+    Parameters:
+        node_role: NODE_ROLE value to test.
+        extra_env: Extra environment variables required by the role.
+
+    Returns:
+        CompletedProcess output from the subprocess run.
+
+    Raises:
+        pytest.fail: If the subprocess times out.
+    """
 
     env = {
         key: value
@@ -65,14 +76,22 @@ def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = No
         )
 
 
-@pytest.mark.parametrize(
-    ("node_role", "extra_env"),
-    _ROLE_TEST_CASES,
-)
+@pytest.mark.parametrize(("node_role", "extra_env"), _ROLE_TEST_CASES)
 def test_role_bootstrap_imports_succeed_with_minimum_required_environment(
     node_role: str, extra_env: dict[str, str]
 ) -> None:
-    """Each supported role can import settings and Celery with minimal valid environment values."""
+    """Each supported role can import settings and Celery with minimal environment values.
+
+    Parameters:
+        node_role: NODE_ROLE value under test.
+        extra_env: Minimal role-specific environment overrides.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: If process import/bootstrap fails for the role.
+    """
 
     result = _run_role_bootstrap(node_role=node_role, extra_env=extra_env)
 

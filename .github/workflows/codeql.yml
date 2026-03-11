@@ -19,6 +19,15 @@ jobs:
         with:
           clean: false
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Upgrade pip tooling for dependency detection
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:

@@ -87,21 +87,16 @@ class ProjectBundleTests(TestCase):
         self.client.force_login(self.user)
         self.project = Project.objects.create(name="Bundle A")
         self.feature = Feature.objects.create(slug="bundle-export", display="Export")
-        self.feature_test = FeatureTest.objects.create(
-            feature=self.feature,
-            node_id="tests::export",
-            name="Export Test",
-        )
 
     def test_export_and_import_bundle_zip(self):
         """Regression: project bundles should export and import as a ZIP archive."""
 
         self.project.items.create(
             content_type=ContentType.objects.get_for_model(
-                FeatureTest,
+                Feature,
                 for_concrete_model=False,
             ),
-            object_id=str(self.feature_test.pk),
+            object_id=str(self.feature.pk),
         )
 
         export_response = self.client.get(
@@ -284,10 +279,10 @@ class ProjectBundleTests(TestCase):
         )
         first_item = self.project.items.create(
             content_type=ContentType.objects.get_for_model(
-                FeatureTest,
+                Feature,
                 for_concrete_model=False,
             ),
-            object_id=str(self.feature_test.pk),
+            object_id=str(self.feature.pk),
         )
         second_item = self.project.items.create(
             content_type=ContentType.objects.get_for_model(
