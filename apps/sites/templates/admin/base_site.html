@@ -439,6 +439,9 @@ document.addEventListener('DOMContentLoaded', function () {
     <script src="{% static 'pages/js/chat.js' %}" defer></script>
   {% endif %}
   {% include "admin/ops/active_operation_banner.html" %}
+
+  {% include "shortcuts/includes/client_shortcuts_setup.html" %}
+
   {% if feedback_ingestion_enabled %}
     {% if not request.resolver_match or request.resolver_match.url_name != "login" %}
       {% include "admin/includes/user_story_feedback.html" %}
