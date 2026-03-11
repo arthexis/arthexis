@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -22,11 +23,6 @@ class SecurityAlert:
     message: str
     remediation_url: str
     summary: str = ""
-
-
-_COLLECTOR_EVENT_KEYS: dict[str, str] = {
-    "error_events": "security-alert-source-error-events",
-}
 
 
 _COLLECTOR_EVENT_KEYS: dict[str, str] = {
@@ -65,41 +61,14 @@ def _record_collector_failure_event(*, source_name: str, detail: str) -> None:
 
 
 def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
-    """Return active security error event summaries with occurrence counts."""
-
-    del now
-    active_events = SecurityAlertEvent.objects.filter(is_active=True)
-
-    alerts: list[SecurityAlert] = []
-    for event in active_events.order_by("-last_occurred_at", "-updated_at")[:10]:
-        if event.last_occurred_at is None:
-            continue
-        summary = _(
-            "Last seen: %(timestamp)s · Count: %(count)s"
-        ) % {
-            "timestamp": timezone.localtime(event.last_occurred_at).strftime("%Y-%m-%d %H:%M:%S"),
-            "count": event.occurrence_count,
-        }
-        alerts.append(
-            SecurityAlert(
-                severity=event.severity,
-                message=event.message,
-                remediation_url=event.remediation_url,
-                summary=str(summary),
-            )
-        )
-
-    return alerts
-
-
-def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
     """Return recent security error event summaries with recency and occurrence counts."""
 
     current_time = now or timezone.now()
     cutoff = current_time - timedelta(days=14)
     active_events = SecurityAlertEvent.objects.filter(
         is_active=True,
-    ).filter(last_occurred_at__gte=cutoff)
+        last_occurred_at__gte=cutoff,
+    )
 
     alerts: list[SecurityAlert] = []
     for event in active_events.order_by("-last_occurred_at", "-updated_at")[:10]:
