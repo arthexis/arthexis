@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 import secrets
 import sys
-from pathlib import Path
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -19,10 +19,6 @@ DEFAULT_VIEWPORTS: dict[str, tuple[int, int]] = {
     "tablet": (1024, 1366),
     "mobile": (390, 844),
 }
-DEFAULT_PREVIEW_USERNAME = "admin"
-DEFAULT_PREVIEW_PASSWORD = "admin123"
-
-
 class Command(BaseCommand):
     """Login to Django admin and capture deterministic screenshots."""
 
@@ -39,8 +35,8 @@ class Command(BaseCommand):
             default=[],
             help="Path to capture after login. Repeat for multiple pages.",
         )
-        parser.add_argument("--username", default=DEFAULT_PREVIEW_USERNAME, help="Deterministic admin username.")
-        parser.add_argument("--password", default=DEFAULT_PREVIEW_PASSWORD, help="Deterministic admin password.")
+        parser.add_argument("--username", default=None, help="Deprecated; ignored.")
+        parser.add_argument("--password", default=None, help="Deprecated; ignored.")
         parser.add_argument(
             "--output",
             default="media/previews/admin-preview.png",
@@ -75,10 +71,7 @@ class Command(BaseCommand):
         preview_user_id: int | None = None
 
         try:
-            if (
-                options["username"] != DEFAULT_PREVIEW_USERNAME
-                or options["password"] != DEFAULT_PREVIEW_PASSWORD
-            ):
+            if options["username"] is not None or options["password"] is not None:
                 self.stderr.write(
                     self.style.WARNING(
                         "--username and --password are deprecated and ignored. "
@@ -98,7 +91,8 @@ class Command(BaseCommand):
                 output_dir = settings.BASE_DIR / output_dir
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            paths = options["paths"] or ["/admin/"]
+            default_admin_path = f"/{getattr(settings, 'ADMIN_URL_PATH', 'admin/').strip('/')}/"
+            paths = options["paths"] or [default_admin_path]
             viewport_names = [item.strip() for item in options["viewports"].split(",") if item.strip()]
             if not viewport_names:
                 raise CommandError("At least one viewport profile must be provided via --viewports.")
@@ -123,7 +117,7 @@ class Command(BaseCommand):
                 output_dir=output_dir,
             )
 
-            last_error: Exception | None = None
+            last_error: CommandError | None = None
             for engine in engines:
                 try:
                     self._capture_all(
@@ -136,7 +130,7 @@ class Command(BaseCommand):
                     )
                     self._print_reports(captures)
                     return
-                except Exception as exc:
+                except CommandError as exc:
                     last_error = exc
                     self.stderr.write(f"Engine '{engine}' failed: {exc}")
 
@@ -194,7 +188,21 @@ class Command(BaseCommand):
             )
 
     def _create_throwaway_admin_user(self) -> tuple[str, str, int]:
-        """Create a temporary superuser for preview login and return credentials plus user id."""
+        """Create temporary admin credentials for preview login.
+
+        Args:
+            None.
+
+        Returns:
+            tuple[str, str, int]: Generated username, generated password, and user primary key.
+
+        Raises:
+            Exception: Propagates user-model creation/database exceptions.
+
+        Side Effects:
+            Inserts a temporary superuser record that should be cleaned up with
+            ``_delete_throwaway_admin_user`` after capture completes.
+        """
 
         user_model = get_user_model()
         username = f"preview-{secrets.token_hex(6)}"
@@ -203,7 +211,15 @@ class Command(BaseCommand):
         return username, password, user.pk
 
     def _delete_throwaway_admin_user(self, user_id: int | None) -> None:
-        """Best-effort cleanup for temporary preview users."""
+        """Delete a temporary preview superuser when one was created.
+
+        Args:
+            user_id (int | None): Primary key of the temporary user, or ``None`` when
+                no temporary account was created.
+
+        Returns:
+            None: Performs best-effort cleanup and silently ignores missing users.
+        """
 
         if user_id is None:
             return
@@ -269,7 +285,18 @@ class Command(BaseCommand):
             raise CommandError(self._playwright_runtime_help(exc)) from exc
 
     def _validate_login_success(self, current_url: str, login_url: str) -> None:
-        """Raise a command error when preview login does not leave the admin login page."""
+        """Validate that authentication left the login endpoint.
+
+        Args:
+            current_url (str): Browser URL after submitting the login form.
+            login_url (str): Expected login URL used for authentication.
+
+        Returns:
+            None: Returns when login redirected away from the login page.
+
+        Raises:
+            CommandError: If current URL path still matches the login URL path.
+        """
 
         if urlparse(current_url).path.rstrip("/") == urlparse(login_url).path.rstrip("/"):
             raise CommandError(
@@ -278,7 +305,14 @@ class Command(BaseCommand):
             )
 
     def _playwright_runtime_help(self, exc: Exception) -> str:
-        """Return a practical troubleshooting message for recurring runtime failures."""
+        """Build user-facing guidance for common Playwright runtime failures.
+
+        Args:
+            exc (Exception): Original runtime exception from Playwright.
+
+        Returns:
+            str: Error text augmented with actionable troubleshooting guidance.
+        """
 
         base_message = str(exc)
         lower_message = base_message.lower()

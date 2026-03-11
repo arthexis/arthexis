@@ -14,7 +14,7 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
     monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
 
     def _always_fail(**kwargs):
-        raise RuntimeError("boom")
+        raise CommandError("boom")
 
     monkeypatch.setattr(command, "_capture_all", _always_fail)
 
@@ -22,8 +22,8 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
         command.handle(
             base_url="http://127.0.0.1:8000",
             paths=["/admin/"],
-            username="admin",
-            password="admin123",
+            username=None,
+            password=None,
             output="media/previews/admin-preview.png",
             output_dir="",
             viewports="desktop",
@@ -57,8 +57,8 @@ def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     command.handle(
         base_url="http://127.0.0.1:8000",
         paths=["/admin/"],
-        username="admin",
-        password="admin123",
+        username=None,
+        password=None,
         output="media/previews/admin-preview.png",
         output_dir="",
         viewports="desktop",
@@ -84,8 +84,8 @@ def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> N
         command.handle(
             base_url="http://127.0.0.1:8000",
             paths=["/admin/"],
-            username="admin",
-            password="admin123",
+            username=None,
+            password=None,
             output="media/previews/admin-preview.png",
             output_dir="",
             viewports=",",
@@ -121,8 +121,8 @@ def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     command.handle(
         base_url="http://127.0.0.1:8000",
         paths=["/admin/"],
-        username="admin",
-        password="admin123",
+        username=None,
+        password=None,
         output="media/previews/admin-preview.png",
         output_dir="",
         viewports="desktop",
