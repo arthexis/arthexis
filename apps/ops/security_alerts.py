@@ -5,15 +5,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Callable
 
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
 
-from apps.actions.models import RemoteActionToken
-from apps.counters import dashboard_rules
-from apps.ops.dashboard_rules import evaluate_required_operations_rule
+from apps.ops.models import SecurityAlertEvent
 
 logger = logging.getLogger(__name__)
 
@@ -25,28 +22,12 @@ class SecurityAlert:
     severity: str
     message: str
     remediation_url: str
+    summary: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class DashboardRuleAlertSource:
-    """Mapping of a dashboard-rule evaluator to its remediation destination."""
-
-    evaluator: Callable[[], dict[str, object] | None]
-    remediation_url_name: str
-
-
-_TOKEN_EXPIRY_LOOKAHEAD = timedelta(hours=6)
-
-_CREDENTIAL_RULE_SOURCES: tuple[DashboardRuleAlertSource, ...] = (
-    DashboardRuleAlertSource(
-        evaluator=dashboard_rules.evaluate_aws_credentials_rules,
-        remediation_url_name="admin:system-dashboard-rules-report",
-    ),
-    DashboardRuleAlertSource(
-        evaluator=dashboard_rules.evaluate_email_profile_rules,
-        remediation_url_name="admin:system-dashboard-rules-report",
-    ),
-)
+_COLLECTOR_EVENT_KEYS: dict[str, str] = {
+    "error_events": "security-alert-source-error-events",
+}
 
 
 def _reverse_or_fallback(url_name: str, fallback: str) -> str:
@@ -58,99 +39,75 @@ def _reverse_or_fallback(url_name: str, fallback: str) -> str:
         return fallback
 
 
-def expiring_remote_action_token_alerts(*, now=None) -> list[SecurityAlert]:
-    """Return alerts for active remote action tokens nearing expiry."""
+def _record_collector_failure_event(*, source_name: str, detail: str) -> None:
+    """Persist collector failures so repeated runtime errors appear in the widget."""
+
+    event_key = _COLLECTOR_EVENT_KEYS.get(source_name)
+    if not event_key:
+        return
+
+    try:
+        SecurityAlertEvent.record_occurrence(
+            key=event_key,
+            message=_("Security alert source failed."),
+            detail=f"{source_name}: {detail}",
+            remediation_url=_reverse_or_fallback(
+                "admin:system-dashboard-rules-report",
+                "/admin/system/dashboard-rules-report/",
+            ),
+        )
+    except Exception:
+        logger.debug("Unable to record collector failure for %s", source_name, exc_info=True)
+
+
+def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
+    """Return recent security error event summaries with recency and occurrence counts."""
 
     current_time = now or timezone.now()
-    threshold = current_time + _TOKEN_EXPIRY_LOOKAHEAD
-    expiring_count = RemoteActionToken.objects.filter(
+    cutoff = current_time - timedelta(days=14)
+    active_events = SecurityAlertEvent.objects.filter(
         is_active=True,
-        expires_at__gt=current_time,
-        expires_at__lte=threshold,
-    ).count()
-    if not expiring_count:
-        return []
-
-    message = ngettext(
-        "%(count)s remote action token expires soon.",
-        "%(count)s remote action tokens expire soon.",
-        expiring_count,
-    ) % {"count": expiring_count}
-    return [
-        SecurityAlert(
-            severity="warning",
-            message=str(message),
-            remediation_url=_reverse_or_fallback(
-                "admin:actions_remoteactiontoken_changelist",
-                "/admin/actions/remoteactiontoken/",
-            ),
-        )
-    ]
-
-
-def credential_readiness_dashboard_rule_alerts() -> list[SecurityAlert]:
-    """Return alerts from known credential-readiness dashboard evaluators."""
+        last_occurred_at__gte=cutoff,
+    )
 
     alerts: list[SecurityAlert] = []
-    for source in _CREDENTIAL_RULE_SOURCES:
-        try:
-            result = source.evaluator()
-        except (AttributeError, TypeError, ValueError) as exc:
-            logger.warning("Security alert evaluator failed: %s", exc)
+    for event in active_events.order_by("-last_occurred_at", "-updated_at")[:10]:
+        if event.last_occurred_at is None:
             continue
-        if not result or result.get("success", True):
-            continue
+        summary = _(
+            "Last seen: %(timestamp)s · Count: %(count)s"
+        ) % {
+            "timestamp": timezone.localtime(event.last_occurred_at).strftime("%Y-%m-%d %H:%M:%S"),
+            "count": event.occurrence_count,
+        }
         alerts.append(
             SecurityAlert(
-                severity="error",
-                message=str(
-                    result.get("message")
-                    or _("Credential readiness check failed.")
-                ),
-                remediation_url=_reverse_or_fallback(
-                    source.remediation_url_name,
-                    "/admin/system/dashboard-rules-report/",
-                ),
+                severity=event.severity,
+                message=event.message,
+                remediation_url=event.remediation_url,
+                summary=str(summary),
             )
         )
+
     return alerts
-
-
-def operations_security_alerts() -> list[SecurityAlert]:
-    """Return alerts based on operations compliance checks."""
-
-    result = evaluate_required_operations_rule()
-    if result.get("success", True):
-        return []
-
-    return [
-        SecurityAlert(
-            severity="warning",
-            message=str(
-                result.get("message")
-                or _("Required operations check failed.")
-            ),
-            remediation_url=_reverse_or_fallback(
-                "admin:ops_operationscreen_changelist",
-                "/admin/ops/operationscreen/",
-            ),
-        )
-    ]
 
 
 def build_security_alerts() -> list[dict[str, str]]:
     """Aggregate security alerts from all supported data sources."""
 
     alerts: list[SecurityAlert] = []
-    for source_name, collector in (
-        ("remote_action_tokens", expiring_remote_action_token_alerts),
-        ("credential_readiness", credential_readiness_dashboard_rule_alerts),
-        ("required_operations", operations_security_alerts),
-    ):
+    for source_name, collector in (("error_events", error_event_security_alerts),):
+        event_key = _COLLECTOR_EVENT_KEYS.get(source_name)
         try:
             alerts.extend(collector())
-        except Exception:
+            if event_key:
+                SecurityAlertEvent.clear_occurrence(key=event_key)
+        except Exception as exc:
             logger.exception("Security alert source %s failed", source_name)
+            try:
+                _record_collector_failure_event(source_name=source_name, detail=str(exc))
+            except Exception:
+                logger.debug("Secondary collector failure recording failed", exc_info=True)
 
     severity_order = {"error": 0, "warning": 1, "info": 2}
     return [
@@ -158,6 +115,7 @@ def build_security_alerts() -> list[dict[str, str]]:
             "severity": alert.severity,
             "message": alert.message,
             "remediation_url": alert.remediation_url,
+            "summary": alert.summary,
         }
         for alert in sorted(
             alerts,

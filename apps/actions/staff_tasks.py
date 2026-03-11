@@ -81,7 +81,7 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
     {
         "slug": "tasks",
         "label": "Tasks",
-        "description": "Open the staff tasks overview and toggles.",
+        "description": "Open the task panels overview and toggles.",
         "admin_url_name": "admin:system",
         "order": 100,
     },

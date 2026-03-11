@@ -1,6 +1,10 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+{% include "admin/includes/task_panel_breadcrumb.html" with page_title="Sigil Builder" %}
+{% endblock %}
+
 {% block content %}
 <div id="content-main">
   <form method="post" enctype="multipart/form-data" style="margin-bottom:1em;">
