@@ -91,9 +91,9 @@ class NodeRoleAdmin(EntityModelAdmin):
             return
         role = roles[0]
 
-        local_node = Node.objects.filter(
+        local_node = Node.get_local() or Node.objects.filter(
             current_relation=Node.Relation.SELF
-        ).first() or Node.get_local()
+        ).first()
         if local_node is None:
             self.message_user(
                 request,

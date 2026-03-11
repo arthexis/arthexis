@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,7 @@ apply_bootstrap(ROOT_DIR)
 
 
 @pytest.fixture(autouse=True)
-def restore_mutable_path_settings() -> None:
+def restore_mutable_path_settings() -> Iterator[None]:
     """Reset mutable path settings after each test to avoid cross-test leakage."""
 
     original_base_dir = settings.BASE_DIR

@@ -15,6 +15,10 @@ def test_related_admin_models_exposes_target_filter_lookups():
 
     assert isinstance(related, list)
     assert related
+    assert any(
+        item.get("filter_lookups") and "selected-id" in item["filter_lookups"]
+        for item in related
+    )
 
 
 def test_related_selection_prefilter_limits_target_admin_results(client):
@@ -66,4 +70,4 @@ def test_related_selection_prefilter_limits_target_admin_results(client):
     changelist = response.context["cl"]
     result_pks = {item.pk for item in changelist.result_list}
     assert selected_inbox.pk in result_pks
-    assert other_inbox.pk in result_pks
+    assert other_inbox.pk not in result_pks

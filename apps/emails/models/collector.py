@@ -1,7 +1,7 @@
 import logging
 import re
 
-from django.db import models
+from django.db import IntegrityError, models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
@@ -235,18 +235,24 @@ class EmailCollector(Entity):
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
-            if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
+            sigils = self._parse_sigils(msg.get("body", ""))
+
+            try:
+                _, created = EmailArtifact.objects.get_or_create(
+                    collector=self,
+                    fingerprint=fp,
+                    defaults={
+                        "subject": msg.get("subject", ""),
+                        "sender": msg.get("from", ""),
+                        "body": msg.get("body", ""),
+                        "sigils": sigils,
+                    },
+                )
+            except IntegrityError:
+                continue
+            if not created:
                 continue
 
-            sigils = self._parse_sigils(msg.get("body", ""))
-            EmailArtifact.objects.create(
-                collector=self,
-                subject=msg.get("subject", ""),
-                sender=msg.get("from", ""),
-                body=msg.get("body", ""),
-                sigils=sigils,
-                fingerprint=fp,
-            )
             try:
                 self._notify_for_message(msg, sigils)
             except Exception:
