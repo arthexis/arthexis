@@ -43,6 +43,10 @@ class EmailCollector(Entity):
         default=False,
         help_text="Treat subject, sender and body filters as regular expressions (case-insensitive).",
     )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to exclude this collector from automatic runs and admin totals.",
+    )
     NOTIFY_EMAIL = "email"
     NOTIFY_NET_MESSAGE = "net_message"
     NOTIFY_NONE = "none"
@@ -223,14 +227,12 @@ class EmailCollector(Entity):
 
     def collect(self, limit: int = 10) -> None:
         """Poll the inbox and store new artifacts until an existing one is found."""
-        inboxes = [self.inbox, *self.additional_inboxes.all()]
-        for inbox in inboxes:
-            messages = inbox.search_messages(
-                subject=self.subject,
-                from_address=self.sender,
-                body=self.body,
-                limit=limit,
-                use_regular_expressions=self.use_regular_expressions,
+        if not self.is_enabled:
+            return
+        messages = self.search_messages(limit=limit)
+        for msg in messages:
+            fp = EmailArtifact.fingerprint_for(
+                msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
             for msg in messages:
                 fp = EmailArtifact.fingerprint_for(

@@ -293,6 +293,9 @@
     {% if request.user.is_authenticated and request.user.is_staff %}
     {% include "core/version_check.html" %}
     {% endif %}
+
+    {% include "shortcuts/includes/client_shortcuts_setup.html" %}
+
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>

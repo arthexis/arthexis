@@ -1,9 +1,16 @@
 import pytest
-
 from django.contrib.sites.models import Site
 
+from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.models import utils as node_utils
+
+
+@pytest.fixture
+def isolated_feature_registry():
+    node_feature_detection_registry.reset()
+    yield
+    node_feature_detection_registry.reset()
 
 
 def test_select_preferred_ip_prefers_global_address():
@@ -309,8 +316,10 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
-    """Auto-detection should defer to app-provided node feature hook modules."""
+def test_detect_auto_feature_uses_app_node_feature_hooks(
+    monkeypatch, tmp_path, isolated_feature_registry
+):
+    """Regression: auto-detection should defer to app-provided hook modules."""
 
     node = Node(
         hostname="hook-node",
