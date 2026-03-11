@@ -226,30 +226,28 @@ class EmailCollector(Entity):
         )
 
     def collect(self, limit: int = 10) -> None:
-        """Poll the inbox and store new artifacts until an existing one is found."""
+        """Poll inboxes and store artifacts for messages not already recorded."""
         if not self.is_enabled:
             return
+
         messages = self.search_messages(limit=limit)
         for msg in messages:
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
-            for msg in messages:
-                fp = EmailArtifact.fingerprint_for(
-                    msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
-                )
-                if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
-                    break
-                sigils = self._parse_sigils(msg.get("body", ""))
-                EmailArtifact.objects.create(
-                    collector=self,
-                    subject=msg.get("subject", ""),
-                    sender=msg.get("from", ""),
-                    body=msg.get("body", ""),
-                    sigils=sigils,
-                    fingerprint=fp,
-                )
-                try:
-                    self._notify_for_message(msg, sigils)
-                except Exception:
-                    logger.exception("Failed to send notification for collector %s", self.pk)
+            if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
+                continue
+
+            sigils = self._parse_sigils(msg.get("body", ""))
+            EmailArtifact.objects.create(
+                collector=self,
+                subject=msg.get("subject", ""),
+                sender=msg.get("from", ""),
+                body=msg.get("body", ""),
+                sigils=sigils,
+                fingerprint=fp,
+            )
+            try:
+                self._notify_for_message(msg, sigils)
+            except Exception:
+                logger.exception("Failed to send notification for collector %s", self.pk)
