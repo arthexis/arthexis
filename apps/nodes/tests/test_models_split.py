@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from django.contrib.sites.models import Site
 
@@ -239,8 +241,9 @@ def test_ensure_keys_generates_keypair(monkeypatch, tmp_path):
 
 @pytest.mark.django_db
 def test_iter_remote_urls_prefers_https_port_443_when_required():
+    domain = f"arthexis-{uuid4().hex}.example"
     site = Site.objects.create(
-        domain="arthexis.example",
+        domain=domain,
         name="Arthexis",
         require_https=True,
     )
@@ -252,8 +255,8 @@ def test_iter_remote_urls_prefers_https_port_443_when_required():
 
     urls = list(node.iter_remote_urls("/nodes/info/"))
 
-    assert "https://arthexis.example/nodes/info/" in urls
-    assert "https://arthexis.example:8888/nodes/info/" in urls
+    assert f"https://{domain}/nodes/info/" in urls
+    assert f"https://{domain}:8888/nodes/info/" in urls
 
 
 @pytest.mark.django_db
