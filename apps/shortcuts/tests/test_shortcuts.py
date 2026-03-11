@@ -110,6 +110,11 @@ def test_server_shortcut_auto_enables_listener_assignment(monkeypatch) -> None:
         slug=SHORTCUT_LISTENER_NODE_FEATURE_SLUG,
         defaults={"display": "Shortcut Listener"},
     )
+    Node.objects.create(
+        hostname="shortcut-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
     node = Node.get_local()
     assert node is not None
 
