@@ -11,10 +11,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
 
-
+from apps.features.models import Feature
 from apps.sites.forms import UserStoryForm
 from apps.sites.models import UserStory, UserStoryAttachment
-from apps.features.models import Feature
 
 pytestmark = [pytest.mark.django_db]
 
@@ -26,7 +25,6 @@ def make_png_bytes() -> bytes:
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
-
 
 
 def test_anonymous_user_cannot_upload_feedback_files(client, settings):
@@ -194,3 +192,68 @@ def test_form_save_attachments_after_manual_instance_save(settings):
     form.save_attachments()
 
     assert UserStoryAttachment.objects.filter(user_story=story).count() == 2
+
+
+@pytest.mark.pr_origin(6177)
+def test_form_rejects_invalid_screenshot_content_type():
+    """Screenshot uploads should reject mismatched content types.
+
+    Returns:
+        None
+    """
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile("screenshot.png", b"fake", content_type="text/plain"),
+                ]
+            }
+        ),
+    )
+
+    assert not form.is_valid()
+    assert "screenshot" in form.errors
+    assert "Unsupported screenshot content type" in form.errors["screenshot"][0]
+
+
+@pytest.mark.pr_origin(6177)
+def test_form_rejects_oversized_screenshot(settings):
+    """Screenshot uploads should reject files larger than configured maximum.
+
+    Parameters:
+        settings: Django settings fixture.
+
+    Returns:
+        None
+    """
+
+    settings.USER_STORY_SCREENSHOT_MAX_BYTES = 1024
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile("screenshot.png", make_png_bytes() * 2048, content_type="image/png"),
+                ]
+            }
+        ),
+    )
+
+    assert not form.is_valid()
+    assert "screenshot" in form.errors
+    assert "Screenshot must be" in form.errors["screenshot"][0]
