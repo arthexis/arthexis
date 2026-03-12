@@ -269,6 +269,35 @@ def test_load_fixtures_with_deferred_retry_handles_chained_dependencies(
     assert capsys.readouterr().out == "..."
 
 
+
+
+@pytest.mark.pr_origin(6190)
+def test_close_old_connections_safely_ignores_pytest_db_guard(monkeypatch, env_refresh_module):
+    """Regression: pytest-django DB guard RuntimeError should be swallowed."""
+
+    def _guarded_close() -> None:
+        raise RuntimeError(
+            'Database access not allowed, use the "django_db" mark, or the "db" or "transactional_db" fixtures to enable it.'
+        )
+
+    monkeypatch.setattr(env_refresh_module, "close_old_connections", _guarded_close)
+
+    env_refresh_module._close_old_connections_safely()
+
+
+@pytest.mark.pr_origin(6190)
+def test_close_old_connections_safely_reraises_unexpected_runtime_error(monkeypatch, env_refresh_module):
+    """Regression: unexpected RuntimeError values should still be surfaced."""
+
+    def _broken_close() -> None:
+        raise RuntimeError("unexpected close failure")
+
+    monkeypatch.setattr(env_refresh_module, "close_old_connections", _broken_close)
+
+    with pytest.raises(RuntimeError, match="unexpected close failure"):
+        env_refresh_module._close_old_connections_safely()
+
+
 def test_call_command_with_sqlite_lock_retry_retries_and_succeeds(
     monkeypatch, env_refresh_module, capsys
 ):

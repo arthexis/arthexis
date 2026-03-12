@@ -15,12 +15,55 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
+      - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
+      - 'upgrade.sh'
   pull_request:
+    branches:
+      - main
+      - 'release/**'
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
+      - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
+      - 'upgrade.sh'
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
@@ -99,6 +142,8 @@ jobs:
           python scripts/check_import_resolution.py
       - name: Detect changed fixture files
         id: seed-fixtures
+        env:
+          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
           set -Eeuo pipefail
           if [ "${{ github.event_name }}" != "pull_request" ]; then
@@ -106,7 +151,7 @@ jobs:
             exit 0
           fi
 
-          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${PR_BASE_SHA}...${{ github.sha }}")"; then
             echo "Fixture path detection failed; falling back to full scan."
             echo "mode=full" >> "${GITHUB_OUTPUT}"
             exit 0
@@ -183,7 +228,7 @@ jobs:
           path: pytest.log
           if-no-files-found: warn
   upgrade:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -199,10 +244,16 @@ jobs:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
       # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
-      - name: Checkout main
+      - name: Checkout baseline branch for PR upgrades
         uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           ref: ${{ github.event.repository.default_branch }}
+          clean: false
+      - name: Checkout current ref for non-PR upgrades
+        uses: actions/checkout@v6
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
           clean: false
       - uses: actions/setup-python@v6
         with:
@@ -225,6 +276,7 @@ jobs:
         run: |
           ./install.sh --no-start
       - name: Checkout PR changes
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@v6
         with:
           clean: false

@@ -232,6 +232,7 @@ class NodeFeatureMixin:
         "ap-router",
         "gpio-rtc",
         "lcd-screen",
+        "llvm-sigils",
         "gui-toast",
         "video-cam",
         "llm-summary",
