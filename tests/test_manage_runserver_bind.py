@@ -50,3 +50,12 @@ def test_ensure_runserver_default_bind_preserves_port_only() -> None:
     args = ["runserver", "8000"]
     manage._ensure_runserver_default_bind(args)
     assert args == ["runserver", "8000"]
+
+
+@pytest.mark.pr(6201)
+def test_ensure_runserver_default_bind_preserves_addrport_flag() -> None:
+    """Explicit --addrport should prevent appending an additional default bind."""
+
+    args = ["runserver", "--addrport", "9000"]
+    manage._ensure_runserver_default_bind(args)
+    assert args == ["runserver", "--addrport", "9000"]

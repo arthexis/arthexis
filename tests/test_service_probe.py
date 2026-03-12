@@ -24,6 +24,14 @@ def test_parse_runserver_port_supports_standalone_numeric_port() -> None:
 
 
 @pytest.mark.pr(6201)
+def test_parse_runserver_port_supports_addrport_option_with_value() -> None:
+    """Port parsing should support ``--addrport`` when passed as a separate token."""
+
+    command = "4321 python manage.py runserver --addrport 9100 --noreload"
+    assert service_probe.parse_runserver_port(command) == 9100
+
+
+@pytest.mark.pr(6201)
 def test_probe_admin_login_requires_http_response(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reachability should depend on an HTTP response rather than only opening a TCP socket."""
 

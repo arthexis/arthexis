@@ -282,13 +282,16 @@ def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888)
     if not args or args[0] != "runserver":
         return
 
-    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath", "--addrport"}
+    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath"}
     skip_next = False
     has_addrport = False
     for argument in args[1:]:
         if skip_next:
             skip_next = False
             continue
+        if argument == "--addrport" or argument.startswith("--addrport="):
+            has_addrport = True
+            break
         if argument in options_with_values:
             skip_next = True
             continue
