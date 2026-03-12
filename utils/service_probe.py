@@ -11,6 +11,7 @@ import subprocess
 
 RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
+RUNSERVER_OPTIONS_WITH_VALUES = {"--verbosity", "-v", "--settings", "--pythonpath"}
 
 
 @dataclass(frozen=True)
@@ -42,15 +43,9 @@ def parse_runserver_port(command_line: str) -> int | None:
         None.
     """
 
-    for pattern in (RUNSERVER_PORT_FLAG_PATTERN, RUNSERVER_PORT_PATTERN):
-        match = pattern.search(command_line)
-        if match:
-            try:
-                port = int(match.group(1))
-            except ValueError:
-                continue
-            if 1 <= port <= 65535:
-                return port
+    port = _extract_port_from_patterns(command_line)
+    if port is not None:
+        return port
 
     try:
         tokens = shlex.split(command_line)
@@ -62,46 +57,92 @@ def parse_runserver_port(command_line: str) -> int | None:
     except ValueError:
         return None
 
-    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath"}
+    return _scan_runserver_tail(tokens[runserver_index + 1 :])
+
+
+def _extract_port_from_patterns(command_line: str) -> int | None:
+    """Parse the first valid port discovered via regex scans.
+
+    Args:
+        command_line: Raw command-line string to inspect.
+
+    Returns:
+        A validated port in range ``1..65535`` when any known pattern matches,
+        otherwise ``None``.
+
+    Raises:
+        None.
+    """
+
+    for pattern in (RUNSERVER_PORT_FLAG_PATTERN, RUNSERVER_PORT_PATTERN):
+        match = pattern.search(command_line)
+        if match:
+            parsed = _parse_port_candidate(match.group(1))
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def _parse_port_candidate(candidate: str) -> int | None:
+    """Validate and parse a port candidate.
+
+    Args:
+        candidate: Candidate value that may represent a runserver port.
+
+    Returns:
+        Parsed integer port in range ``1..65535`` when valid; otherwise ``None``.
+
+    Raises:
+        None.
+    """
+
+    if candidate.isdigit():
+        parsed = int(candidate)
+        return parsed if 1 <= parsed <= 65535 else None
+
+    match = RUNSERVER_PORT_PATTERN.search(candidate)
+    if not match:
+        return None
+
+    parsed = int(match.group(1))
+    return parsed if 1 <= parsed <= 65535 else None
+
+
+def _scan_runserver_tail(tail_tokens: list[str]) -> int | None:
+    """Scan arguments following ``runserver`` and return an addrport, if any.
+
+    Args:
+        tail_tokens: Tokens appearing after the ``runserver`` command.
+
+    Returns:
+        Parsed runserver port when found, otherwise ``None``.
+
+    Raises:
+        None.
+    """
+
     skip_next = False
-    tail = tokens[runserver_index + 1 :]
-    for index, token in enumerate(tail):
+    for index, token in enumerate(tail_tokens):
         if skip_next:
             skip_next = False
             continue
-        if token == "--addrport" and index + 1 < len(tail):
-            candidate = tail[index + 1]
-            if candidate.isdigit():
-                port = int(candidate)
-                return port if 1 <= port <= 65535 else None
-            match = RUNSERVER_PORT_PATTERN.search(candidate)
-            if match:
-                port = int(match.group(1))
-                return port if 1 <= port <= 65535 else None
-            return None
+
+        if token == "--addrport":
+            if index + 1 >= len(tail_tokens):
+                return None
+            return _parse_port_candidate(tail_tokens[index + 1])
+
         if token.startswith("--addrport="):
-            candidate = token.split("=", 1)[1]
-            if candidate.isdigit():
-                port = int(candidate)
-                return port if 1 <= port <= 65535 else None
-            match = RUNSERVER_PORT_PATTERN.search(candidate)
-            if match:
-                port = int(match.group(1))
-                return port if 1 <= port <= 65535 else None
-            return None
-        if token in options_with_values:
+            return _parse_port_candidate(token.split("=", 1)[1])
+
+        if token in RUNSERVER_OPTIONS_WITH_VALUES:
             skip_next = True
             continue
+
         if token.startswith("-"):
             continue
-        if token.isdigit():
-            port = int(token)
-            return port if 1 <= port <= 65535 else None
-        match = RUNSERVER_PORT_PATTERN.search(token)
-        if match:
-            port = int(match.group(1))
-            return port if 1 <= port <= 65535 else None
-        break
+
+        return _parse_port_candidate(token)
 
     return None
 
@@ -156,15 +197,18 @@ def probe_admin_login(port: int, *, timeout: float = 1.0) -> ServiceProbeResult:
     if not (1 <= int(port) <= 65535):
         return ServiceProbeResult(reachable=False, status_code=None)
 
+    connection: http.client.HTTPConnection | None = None
     try:
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
         connection.request("GET", "/admin/login/")
         response = connection.getresponse()
         status_code = int(response.status)
         response.read()
-        connection.close()
     except (OSError, http.client.HTTPException):
         return ServiceProbeResult(reachable=False, status_code=None)
+    finally:
+        if connection is not None:
+            connection.close()
 
     reachable = 200 <= status_code < 500
     return ServiceProbeResult(reachable=reachable, status_code=status_code)
