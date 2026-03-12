@@ -1,4 +1,4 @@
-"""Backward compatibility shims for the legacy camera module."""
+"""Backward compatibility shims for the legacy camera module (non-Django app)."""
 
 from apps.video import (
     CAMERA_DIR,

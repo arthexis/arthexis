@@ -46,6 +46,10 @@ def _is_django_app_dir(path: Path) -> bool:
     if not (path / "__init__.py").exists():
         return False
 
+    module_path = _to_module_path(path)
+    if module_path in EXCLUDED_AUTO_DISCOVERED_APPS:
+        return False
+
     if (path / "apps.py").exists():
         return True
 
@@ -65,7 +69,12 @@ def _to_module_path(path: Path) -> str:
 
 
 LEGACY_MIGRATION_APPS = ["apps.selenium"]
-EXCLUDED_AUTO_DISCOVERED_APPS = {"apps.selenium"}
+EXCLUDED_AUTO_DISCOVERED_APPS = {
+    "apps.camera",
+    "apps.loggers",
+    "apps.selenium",
+    "apps.vscode",
+}
 
 
 def _load_local_apps() -> list[str]:
