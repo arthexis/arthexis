@@ -10,6 +10,8 @@ from apps.playwright import models as playwright_models
 from apps.playwright.models import (
     InvalidCookiePayloadError,
     PlaywrightBrowser,
+    PlaywrightEngineFeatureDisabledError,
+    PlaywrightRuntimeDisabledError,
     PlaywrightScript,
     SessionCookie,
     WebsiteScreenshotSchedule,
@@ -58,11 +60,47 @@ def test_create_driver_passes_binary_path(monkeypatch):
             return DummyPlaywright()
 
     monkeypatch.setattr(playwright_models, "_load_sync_playwright", lambda: (lambda: DummyFactory()))
+    monkeypatch.setattr(playwright_models, "is_feature_active_for_node", lambda *, node, slug: True)
+    monkeypatch.setattr(playwright_models, "is_suite_feature_enabled", lambda slug, default=True: True)
+    monkeypatch.setattr("apps.nodes.models.Node.get_local", lambda: object())
 
     driver = browser.create_driver()
     assert launch_kwargs["headless"] is True
     assert launch_kwargs["executable_path"] == "/opt/custom/chromium"
     driver.quit()
+
+
+@pytest.mark.django_db
+def test_create_driver_requires_suite_feature(monkeypatch):
+    browser = PlaywrightBrowser.objects.create(
+        name="disabled-runtime",
+        engine=PlaywrightBrowser.Engine.CHROMIUM,
+        mode=PlaywrightBrowser.Mode.HEADLESS,
+    )
+
+    monkeypatch.setattr(playwright_models, "is_suite_feature_enabled", lambda slug, default=True: False)
+
+    with pytest.raises(PlaywrightRuntimeDisabledError):
+        browser.create_driver()
+
+
+@pytest.mark.django_db
+def test_create_driver_requires_engine_node_feature(monkeypatch):
+    browser = PlaywrightBrowser.objects.create(
+        name="engine-check",
+        engine=PlaywrightBrowser.Engine.FIREFOX,
+        mode=PlaywrightBrowser.Mode.HEADLESS,
+    )
+
+    class DummyNode:
+        pass
+
+    monkeypatch.setattr(playwright_models, "is_suite_feature_enabled", lambda slug, default=True: True)
+    monkeypatch.setattr("apps.nodes.models.Node.get_local", lambda: DummyNode())
+    monkeypatch.setattr(playwright_models, "is_feature_active_for_node", lambda *, node, slug: False)
+
+    with pytest.raises(PlaywrightEngineFeatureDisabledError):
+        browser.create_driver()
 
 
 def test_playwright_script_supports_legacy_url_preamble():
@@ -286,3 +324,19 @@ def test_session_cookie_mark_rejected_atomic_increment():
     assert cookie.rejection_count == 3
     assert cookie.state == SessionCookie.State.REJECTED
     assert cookie.last_rejection_reason == "expired"
+
+
+@pytest.mark.django_db
+def test_schedule_pending_website_screenshots_short_circuits_when_suite_disabled(monkeypatch):
+    WebsiteScreenshotSchedule.objects.create(
+        slug="disabled",
+        label="Disabled",
+        url="https://example.com/disabled",
+        sampling_period_minutes=5,
+    )
+
+    monkeypatch.setattr(playwright_models, "is_suite_feature_enabled", lambda slug, default=True: False)
+
+    ran = schedule_pending_website_screenshots()
+
+    assert ran == []
