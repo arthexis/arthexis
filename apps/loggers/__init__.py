@@ -1,4 +1,4 @@
-"""Centralized logging utilities for Arthexis."""
+"""Centralized logging utilities for Arthexis (non-Django app package)."""
 
 from .config import build_logging_settings, configure_library_loggers
 from .handlers import ActiveAppFileHandler, ErrorFileHandler, PageMissesFileHandler
