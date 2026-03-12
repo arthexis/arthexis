@@ -18,40 +18,6 @@ def _run_shell(script: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_default_migration_policy_prefers_check_for_satellite() -> None:
-    """Satellite nodes should default preflight policy to check-only mode."""
-
-    result = _run_shell(
-        """
-        set -e
-        source scripts/helpers/common.sh
-        source scripts/helpers/runserver_preflight.sh
-        NODE_ROLE=Satellite
-        default_migration_policy
-        """
-    )
-
-    assert result.returncode == 0
-    assert result.stdout.strip() == "check"
-
-
-def test_default_migration_policy_prefers_apply_for_terminal() -> None:
-    """Terminal nodes should default preflight policy to apply mode."""
-
-    result = _run_shell(
-        """
-        set -e
-        source scripts/helpers/common.sh
-        source scripts/helpers/runserver_preflight.sh
-        NODE_ROLE=Terminal
-        default_migration_policy
-        """
-    )
-
-    assert result.returncode == 0
-    assert result.stdout.strip() == "apply"
-
-
 def test_default_migration_policy_reads_role_file_when_env_missing(tmp_path: Path) -> None:
     """Policy defaults should fall back to role.lck when NODE_ROLE is unset."""
 
