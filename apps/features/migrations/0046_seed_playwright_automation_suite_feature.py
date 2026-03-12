@@ -38,12 +38,11 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
                 "apps.playwright.models.PlaywrightBrowser.create_driver",
                 "apps.playwright.models.PlaywrightScript.execute",
                 "apps.playwright.models.execute_website_screenshot_schedule",
-                "apps.playwright.tasks.run_scheduled_website_screenshots",
+                "apps.tasks.tasks.run_scheduled_website_screenshots",
             ],
             "code_locations": [
                 "apps/playwright/admin.py",
                 "apps/playwright/models.py",
-                "apps/playwright/tasks.py",
                 "apps/tasks/tasks.py",
             ],
             "metadata": {

@@ -491,6 +491,7 @@ def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, 
     errors: dict[str, str] = {}
     for engine in schedule.browser_engine_candidates():
         try:
+            _ensure_engine_feature_enabled(engine)
             with sync_playwright() as playwright:
                 launcher = getattr(playwright, engine)
                 browser = launcher.launch(headless=True)

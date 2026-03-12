@@ -26,7 +26,6 @@
       "code_locations": [
         "apps/playwright/admin.py",
         "apps/playwright/models.py",
-        "apps/playwright/tasks.py",
         "apps/tasks/tasks.py"
       ],
       "protocol_coverage": {},
