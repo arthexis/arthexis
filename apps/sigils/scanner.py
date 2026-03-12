@@ -143,19 +143,65 @@ class _LlvmScanner:
         return byte_to_char
 
 
+def get_llvm_library_path() -> str:
+    """Return the configured LLVM sigil scanner library path."""
+
+    return os.environ.get("SIGIL_LLVM_LIBRARY", "").strip()
+
+
+def is_llvm_scanner_runtime_available() -> bool:
+    """Return whether the LLVM scanner can be initialized with current settings."""
+
+    library_path = get_llvm_library_path()
+    if not library_path:
+        return False
+    try:
+        _LlvmScanner(library_path=library_path)
+    except SigilScannerError:
+        return False
+    return True
+
+
+def _is_llvm_node_feature_enabled() -> bool:
+    """Return whether the local node reports the llvm-sigils feature as active."""
+
+    try:
+        from apps.nodes.feature_detection import is_local_node_feature_active
+    except Exception:
+        return False
+    return is_local_node_feature_active("llvm-sigils")
+
+
+def _build_llvm_scanner(*, log_failures: bool) -> _LlvmScanner | None:
+    """Build the LLVM scanner when available and optionally log failures."""
+
+    library_path = get_llvm_library_path()
+    try:
+        scanner = _LlvmScanner(library_path=library_path)
+    except SigilScannerError:
+        if log_failures:
+            logger.exception("Falling back to Python sigil scanner backend")
+        return None
+    logger.info("Using LLVM sigil scanner backend from %s", library_path)
+    return scanner
+
+
 @lru_cache(maxsize=1)
 def get_scanner():
     """Return the active scanner backend according to environment configuration."""
 
-    backend = os.environ.get("SIGIL_SCANNER_BACKEND", "llvm").strip().lower()
+    backend = os.environ.get("SIGIL_SCANNER_BACKEND", "auto").strip().lower()
     if backend == "llvm":
-        library_path = os.environ.get("SIGIL_LLVM_LIBRARY", "").strip()
-        try:
-            scanner = _LlvmScanner(library_path=library_path)
-            logger.info("Using LLVM sigil scanner backend from %s", library_path)
-            return scanner
-        except SigilScannerError:
-            logger.exception("Falling back to Python sigil scanner backend")
+        llvm_scanner = _build_llvm_scanner(log_failures=True)
+        if llvm_scanner is not None:
+            return llvm_scanner
+    elif backend == "auto":
+        if _is_llvm_node_feature_enabled():
+            llvm_scanner = _build_llvm_scanner(log_failures=False)
+            if llvm_scanner is not None:
+                return llvm_scanner
+    elif backend != "python":
+        logger.warning("Unknown SIGIL_SCANNER_BACKEND value %r; using python", backend)
     return _PythonScanner()
 
 
