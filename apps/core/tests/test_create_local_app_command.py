@@ -47,6 +47,8 @@ def test_create_local_app_generates_expected_scaffold(tmp_path):
         apps_dir / "billing" / "apps.py",
         apps_dir / "billing" / "models.py",
         apps_dir / "billing" / "admin.py",
+        apps_dir / "billing" / "views.py",
+        apps_dir / "billing" / "urls.py",
         apps_dir / "billing" / "manifest.py",
         apps_dir / "billing" / "routes.py",
         apps_dir / "billing" / "migrations" / "__init__.py",
@@ -66,6 +68,26 @@ def test_create_local_app_generates_expected_scaffold(tmp_path):
     assert "python manage.py migrate" in output
     assert "apps/billing/routes.py" in output
 
+
+
+
+def test_create_local_app_backend_only_omits_web_modules(tmp_path):
+    """Backend-only alias mode should skip views/url/routes scaffolding."""
+
+    apps_dir = tmp_path / "apps"
+    _create_apps_package(apps_dir)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+
+    call_command("create_local_app", "ledger", "--backend-only")
+
+    assert (apps_dir / "ledger" / "apps.py").exists()
+    assert not (apps_dir / "ledger" / "views.py").exists()
+    assert not (apps_dir / "ledger" / "urls.py").exists()
+    assert not (apps_dir / "ledger" / "routes.py").exists()
+
+    manifest_text = (apps_dir / "ledger" / "manifest.py").read_text(encoding="utf-8")
+    assert "APP_STRUCTURE: backend-only" in manifest_text
 
 def test_create_local_app_generated_modules_are_importable(tmp_path):
     """Generated Python modules should be importable from the temporary apps package."""

@@ -15,12 +15,19 @@ class Command(BaseCommand):
         """Reuse arguments accepted by ``create app``."""
 
         parser.add_argument("name", help="App package name (lowercase snake_case).")
+        parser.add_argument(
+            "--backend-only",
+            action="store_true",
+            help="Create an app scaffold without views.py, urls.py, and routes.py.",
+        )
         parser.add_argument("--apps-dir", dest="apps_dir", help="Override apps directory path.")
 
     def handle(self, *args, **options):
         """Delegate to the new one-word create command."""
 
         command_args = ["app", options["name"]]
+        if options.get("backend_only"):
+            command_args.append("--backend-only")
         if options.get("apps_dir"):
             command_args.extend(["--apps-dir", options["apps_dir"]])
         call_command("create", *command_args, stdout=self.stdout)
