@@ -115,9 +115,12 @@ def _parse_prefilter_lookups(raw_value):
 
 def _get_related_selection_prefilter_query(request):
     """Build a queryset filter for related-model prefilter query parameters."""
-    selected_ids = _parse_prefilter_id_values(request.GET.get("__selected_ids"))
+    prefilter_params = getattr(request, "_related_prefilter_params", None) or {}
+    selected_ids = _parse_prefilter_id_values(
+        prefilter_params.get("__selected_ids", request.GET.get("__selected_ids"))
+    )
     relation_lookups = _parse_prefilter_lookups(
-        request.GET.get("__relation_lookups")
+        prefilter_params.get("__relation_lookups", request.GET.get("__relation_lookups"))
     )
     if not selected_ids or not relation_lookups:
         return None
@@ -137,6 +140,10 @@ def changelist_view_with_object_links(self, request, extra_context=None):
         key in request.GET
         for key in ("__selected_ids", "__relation_lookups", "__source_model")
     ):
+        request._related_prefilter_params = {
+            "__selected_ids": request.GET.get("__selected_ids", ""),
+            "__relation_lookups": request.GET.get("__relation_lookups", ""),
+        }
         cleaned_query = request.GET.copy()
         cleaned_query.pop("__selected_ids", None)
         cleaned_query.pop("__relation_lookups", None)
@@ -256,4 +263,3 @@ def get_queryset_with_related_selection_prefilter(self, request):
 
 
 admin.ModelAdmin.get_queryset = get_queryset_with_related_selection_prefilter
-

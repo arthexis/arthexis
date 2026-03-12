@@ -107,6 +107,7 @@ class UserStoryForm(forms.ModelForm):
     """Feedback form used on public and admin pages."""
 
     attachments = MultipleFileField(required=False)
+    screenshot = forms.FileField(required=False)
     contact_via_chat = forms.BooleanField(
         required=False,
         label=_("You may contact me"),

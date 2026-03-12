@@ -60,7 +60,7 @@ def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | 
     """Create a GitHub issue for a manual task when ``trigger`` is eligible."""
 
     from apps.repos.services.github import GitHubRepositoryError
-    from apps.tasks.models import ManualTaskRequest
+    from apps.tasks.models import GitHubIssueTrigger, ManualTaskRequest
 
     task = ManualTaskRequest.objects.filter(pk=manual_task_id).first()
     if task is None:
@@ -68,7 +68,13 @@ def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | 
             "Manual task GitHub issue skipped; task %s not found", manual_task_id
         )
         return None
-    if not task.can_open_github_issue_for_trigger(trigger):
+    is_scheduled_start_fallback = (
+        trigger == GitHubIssueTrigger.SCHEDULED_START
+        and task.github_issue_template_id
+        and not task.github_issue_opened_at
+        and task.github_issue_trigger == trigger
+    )
+    if not task.can_open_github_issue_for_trigger(trigger) and not is_scheduled_start_fallback:
         logger.debug(
             "Manual task GitHub issue skipped; trigger %s is not eligible for %s",
             trigger,

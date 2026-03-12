@@ -589,6 +589,7 @@ class ManualTaskRequest(Entity):
             eta=eta,
             require_enabled=True,
         )
+        self._last_scheduled_github_issue = (trigger, eta)
 
     def schedule_github_issue(self) -> None:
         """Schedule GitHub issue creation according to request configuration."""
@@ -605,6 +606,11 @@ class ManualTaskRequest(Entity):
         now = timezone.now()
         if self.github_issue_trigger == GitHubIssueTrigger.SCHEDULED_START:
             eta = start if start > now else None
+            if getattr(self, "_last_scheduled_github_issue", None) == (
+                GitHubIssueTrigger.SCHEDULED_START,
+                eta,
+            ):
+                return
             self._schedule_github_issue_task(
                 GitHubIssueTrigger.SCHEDULED_START, eta=eta
             )
@@ -614,6 +620,11 @@ class ManualTaskRequest(Entity):
             if not self.github_issue_overdue_after:
                 return
             eta = start + self.github_issue_overdue_after
+            if getattr(self, "_last_scheduled_github_issue", None) == (
+                GitHubIssueTrigger.OVERDUE,
+                eta if eta > now else None,
+            ):
+                return
             if eta <= now:
                 self._schedule_github_issue_task(GitHubIssueTrigger.OVERDUE)
             else:
