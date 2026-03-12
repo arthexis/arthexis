@@ -217,13 +217,32 @@ def _load_fixture_with_retry(
                 raise
             if attempt == attempts:
                 raise
-            close_old_connections()
+            _close_old_connections_safely()
             delay = base_delay * attempt
             print(
                 f"Database locked while loading {fixture}; retrying in {delay:.1f}s",
                 flush=True,
             )
             time.sleep(delay)
+
+
+def _close_old_connections_safely() -> None:
+    """Close stale Django DB connections without requiring active DB fixtures.
+
+    ``close_old_connections`` can raise ``RuntimeError`` in test contexts where
+    database access is intentionally blocked. Refresh retries should tolerate
+    that scenario because they only need best-effort connection cleanup.
+    """
+
+    try:
+        close_old_connections()
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if "database access not allowed" in message:
+            return
+        if "database access is not allowed" in message:
+            return
+        raise
 
 
 def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) -> None:
@@ -256,7 +275,7 @@ def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) 
         _unlink_sqlite_db(Path(default_db["NAME"]))
         db_path.parent.mkdir(parents=True, exist_ok=True)
         db_path.touch()
-        close_old_connections()
+        _close_old_connections_safely()
         _attempt()
 
 
@@ -279,7 +298,7 @@ def _call_command_with_sqlite_lock_retry(
                 raise
             if attempt == attempts:
                 raise
-            close_old_connections()
+            _close_old_connections_safely()
             delay = base_delay * attempt
             print(
                 f"Database locked while running {command}; retrying in {delay:.1f}s",
