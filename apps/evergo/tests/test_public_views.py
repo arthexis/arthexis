@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -55,16 +53,19 @@ def test_evergo_artifact_validation_blocks_unsupported_file_extensions(filename)
         )
 
 @pytest.mark.django_db
-@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
 def test_order_tracking_public_remote_image_lookup_uses_fallback_sources_after_invalid_candidate(
-    mock_fetch_order_detail,
+    monkeypatch,
     client,
 ):
     """Regression: invalid values in earlier sources should not block valid fallback image URLs."""
-    mock_fetch_order_detail.return_value = {
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, **_: {
         "reporte_visita": {"foto_tablero": {"placeholder": "not-a-url"}},
         "foto_tablero": "https://cdn.evergo.example/fotos/tablero-fallback.jpg",
-    }
+        },
+    )
 
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-image-fallback", email="owner-image-fallback@example.com")
@@ -86,9 +87,14 @@ def test_order_tracking_public_remote_image_lookup_uses_fallback_sources_after_i
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "javascript:alert(1)"})
-def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
+def test_order_tracking_public_ignores_non_http_remote_image_urls(monkeypatch, client):
     """Security regression: preview images should only accept HTTP(S) URLs from Evergo."""
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, **_: {"foto_tablero": "javascript:alert(1)"},
+    )
+
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-images-safe", email="owner-images-safe@example.com")
     profile = EvergoUser.objects.create(
@@ -140,9 +146,16 @@ def test_order_tracking_public_rejects_non_owner_access(client):
     assert response.status_code == 404
 
 @pytest.mark.django_db
-@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 4})
-def test_order_tracking_public_submits_with_missing_images_after_confirmation(mock_submit, client):
+def test_order_tracking_public_submits_with_missing_images_after_confirmation(monkeypatch, client):
     """Regression: tracking view should allow missing images after operator confirmation."""
+    called = {"value": False}
+
+    def _fake_submit(self, **kwargs):
+        called["value"] = True
+        return {"completed_steps": 4}
+
+    monkeypatch.setattr(EvergoUser, "submit_tracking_phase_one", _fake_submit)
+
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-5", email="owner5@example.com")
     profile = EvergoUser.objects.create(user=owner, evergo_email="owner5@example.com", evergo_password="secret")
@@ -172,7 +185,7 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
     )
 
     assert response.status_code == 200
-    assert mock_submit.called
+    assert called["value"] is True
     assert "4/4 pasos completados" in response.content.decode()
 
 def test_compute_tracking_step_completion_allows_assign_without_visita_completion():
@@ -190,9 +203,16 @@ def test_compute_tracking_step_completion_allows_assign_without_visita_completio
     assert completion["montage"] is False
 
 @pytest.mark.django_db
-@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 0})
-def test_order_tracking_public_allows_partial_submission_without_required_primary_fields(mock_submit, client):
+def test_order_tracking_public_allows_partial_submission_without_required_primary_fields(monkeypatch, client):
     """Regression: operators can submit partial progress and continue later without completing every field."""
+    called = {"value": False}
+
+    def _fake_submit(self, **kwargs):
+        called["value"] = True
+        return {"completed_steps": 0}
+
+    monkeypatch.setattr(EvergoUser, "submit_tracking_phase_one", _fake_submit)
+
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-partial", email="owner-partial@example.com")
     profile = EvergoUser.objects.create(
@@ -215,15 +235,20 @@ def test_order_tracking_public_allows_partial_submission_without_required_primar
     )
 
     assert response.status_code == 200
-    assert mock_submit.called
+    assert called["value"] is True
     content = response.content.decode()
     assert "Orden enviada correctamente. 0/4 pasos completados." in content
     assert "Orden enviada correctamente. 4/4 pasos completados." not in content
 
 @pytest.mark.django_db
-@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"metraje_visita_tecnica": "31"}})
-def test_order_tracking_public_shows_step_progress_with_incomplete_prefill(_, client):
+def test_order_tracking_public_shows_step_progress_with_incomplete_prefill(monkeypatch, client):
     """Regression: step summary should keep later steps pending when required fields remain missing."""
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, **_: {"reporte_visita": {"metraje_visita_tecnica": "31"}},
+    )
+
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-step-status", email="owner-step-status@example.com")
     profile = EvergoUser.objects.create(
@@ -295,14 +320,37 @@ def test_my_evergo_dashboard_fetches_missing_rows_when_partial_cache_exists(clie
         client_name="Jane Doe",
     )
 
-    with patch("apps.evergo.views.EvergoUser.load_customers_from_queries") as mock_load:
-        response = client.post(
-            reverse("evergo:my-dashboard", kwargs={"token": profile.dashboard_token}),
-            data={"raw_queries": "GM09999 GM08888"},
+    loaded = {"value": False}
+
+    def _fake_load(self, *, raw_queries, timeout=20):
+        loaded["value"] = True
+        EvergoOrder.objects.create(
+            user=self,
+            remote_id=28696,
+            order_number="GM08888",
+            client_name="Loaded From Sync",
         )
+        return {
+            "sales_orders": ["GM09999", "GM08888"],
+            "customer_names": [],
+            "customers_loaded": 1,
+            "orders_created": 1,
+            "orders_updated": 0,
+            "placeholders_created": 0,
+            "unresolved": [],
+            "loaded_customer_ids": [],
+            "loaded_order_ids": [],
+        }
+
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", _fake_load)
+    response = client.post(
+        reverse("evergo:my-dashboard", kwargs={"token": profile.dashboard_token}),
+        data={"raw_queries": "GM09999 GM08888"},
+    )
 
     assert response.status_code == 200
-    assert mock_load.called
+    assert loaded["value"] is True
+    assert "GM08888" in response.content.decode()
 
 @pytest.mark.django_db
 def test_my_evergo_dashboard_handles_orders_without_remote_id(client):
@@ -364,3 +412,27 @@ def test_my_evergo_dashboard_404_for_invalid_token(client):
     response = client.get(reverse("evergo:my-dashboard", kwargs={"token": "00000000-0000-0000-0000-000000000000"}))
 
     assert response.status_code == 404
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, **_: {"foto_tablero": "javascript:alert(1)"},
+    )
+    called = {"value": False}
+
+    def _fake_submit(self, **kwargs):
+        called["value"] = True
+        return {"completed_steps": 4}
+
+    monkeypatch.setattr(EvergoUser, "submit_tracking_phase_one", _fake_submit)
+    called = {"value": False}
+
+    def _fake_submit(self, **kwargs):
+        called["value"] = True
+        return {"completed_steps": 0}
+
+    monkeypatch.setattr(EvergoUser, "submit_tracking_phase_one", _fake_submit)
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, **_: {"reporte_visita": {"metraje_visita_tecnica": "31"}},
+    )
