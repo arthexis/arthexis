@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -37,19 +35,23 @@ def evergo_customer_export_record(db):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
+def test_evergo_admin_load_customers_wizard_submits(monkeypatch, admin_client):
     """Wizard submit should invoke sync for selected profile and redirect."""
 
-    mock_load_customers.return_value = {
-        "customers_loaded": 1,
-        "orders_created": 1,
-        "orders_updated": 0,
-        "placeholders_created": 0,
-        "unresolved": [],
-        "loaded_customer_ids": [101],
-        "loaded_order_ids": [202],
-    }
+    def _fake_loader(self, *, raw_queries, timeout=20):
+        assert raw_queries == "J00830, Customer Name"
+        EvergoOrder.objects.create(user=self, remote_id=202, order_number="J00830")
+        return {
+            "customers_loaded": 1,
+            "orders_created": 1,
+            "orders_updated": 0,
+            "placeholders_created": 0,
+            "unresolved": [],
+            "loaded_customer_ids": [101],
+            "loaded_order_ids": [202],
+        }
+
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", _fake_loader)
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     profile = EvergoUser.objects.create(
         user=admin_user,
@@ -67,24 +69,31 @@ def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_c
     )
     assert post_response.status_code == 302
     assert post_response["Location"].endswith("/admin/evergo/evergoorder/?id__in=202")
-    mock_load_customers.assert_called_once_with(raw_queries="J00830, Customer Name")
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_evergo_admin_load_customers_wizard_can_redirect_to_customers_with_selected_ids(
-    mock_load_customers, admin_client
+    monkeypatch, admin_client
 ):
     """Regression: wizard next-view selector should support customer destination with scoped IDs."""
-    mock_load_customers.return_value = {
-        "customers_loaded": 2,
-        "orders_created": 2,
-        "orders_updated": 0,
-        "placeholders_created": 0,
-        "unresolved": [],
-        "loaded_customer_ids": [12, 18],
-        "loaded_order_ids": [99],
-    }
+    loaded_customer_ids: list[int] = []
+
+    def _fake_loader(self, *, raw_queries, timeout=20):
+        first = EvergoCustomer.objects.create(user=self, remote_id=12, name="Customer A")
+        second = EvergoCustomer.objects.create(user=self, remote_id=18, name="Customer B")
+        EvergoOrder.objects.create(user=self, remote_id=99, order_number="J00830")
+        loaded_customer_ids.extend([first.pk, second.pk])
+        return {
+            "customers_loaded": 2,
+            "orders_created": 2,
+            "orders_updated": 0,
+            "placeholders_created": 0,
+            "unresolved": [],
+            "loaded_customer_ids": [first.pk, second.pk],
+            "loaded_order_ids": [99],
+        }
+
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", _fake_loader)
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     profile = EvergoUser.objects.create(
         user=admin_user,
@@ -103,7 +112,9 @@ def test_evergo_admin_load_customers_wizard_can_redirect_to_customers_with_selec
     )
 
     assert response.status_code == 302
-    assert response["Location"].endswith("/admin/evergo/evergocustomer/?id__in=12,18")
+    assert response["Location"].endswith(
+        f"/admin/evergo/evergocustomer/?id__in={loaded_customer_ids[0]},{loaded_customer_ids[1]}"
+    )
 
 
 @pytest.mark.django_db
@@ -129,8 +140,7 @@ def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_cre
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_customers, admin_client):
+def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(monkeypatch, admin_client):
     """Wizard should not allow selecting a profile owned by another user."""
 
     user_model = get_user_model()
@@ -144,6 +154,14 @@ def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_cu
         evergo_password="secret",  # noqa: S106
     )
 
+    called = {"value": False}
+
+    def _fake_loader(self, *, raw_queries, timeout=20):
+        called["value"] = True
+        return {}
+
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", _fake_loader)
+
     wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
     response = admin_client.post(
         wizard_url,
@@ -152,24 +170,32 @@ def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_cu
 
     assert response.status_code == 200
     assert b"Select a valid choice" in response.content
-    mock_load_customers.assert_not_called()
+    assert called["value"] is False
 
 
 @pytest.mark.django_db
 @pytest.mark.integration
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_evergo_admin_load_customers_wizard_load_all_submits_without_queries(
-    mock_load_customers, admin_client
+    monkeypatch, admin_client
 ):
     """Load-all mode should allow an empty query payload."""
 
-    mock_load_customers.return_value = {
-        "customers_loaded": 2,
-        "orders_created": 2,
-        "orders_updated": 0,
-        "placeholders_created": 0,
-        "unresolved": [],
-    }
+    called = {"value": False}
+
+    def _fake_loader(self, *, raw_queries, timeout=20):
+        called["value"] = True
+        assert raw_queries == ""
+        return {
+            "customers_loaded": 2,
+            "orders_created": 2,
+            "orders_updated": 0,
+            "placeholders_created": 0,
+            "unresolved": [],
+            "loaded_customer_ids": [],
+            "loaded_order_ids": [],
+        }
+
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", _fake_loader)
     admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
     profile = EvergoUser.objects.create(
         user=admin_user,
@@ -184,7 +210,7 @@ def test_evergo_admin_load_customers_wizard_load_all_submits_without_queries(
     )
 
     assert response.status_code == 302
-    mock_load_customers.assert_called_once_with(raw_queries="")
+    assert called["value"] is True
 
 
 @pytest.mark.django_db
@@ -210,8 +236,7 @@ def test_evergo_admin_load_customers_wizard_requires_queries_for_filtered_mode(a
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.test_login")
-def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
+def test_evergo_admin_change_action_runs_test_login_sync(monkeypatch, admin_client):
     """Change-form action should run login sync for a selected Evergo user."""
 
     user_model = get_user_model()
@@ -225,6 +250,14 @@ def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_
         evergo_password="secret",  # noqa: S106
     )
 
+    called = {"value": False}
+
+    def _fake_test_login(self, *, timeout=15):
+        called["value"] = True
+        return None
+
+    monkeypatch.setattr(EvergoUser, "test_login", _fake_test_login)
+
     action_url = reverse(
         "admin:evergo_evergouser_actions",
         args=[profile.pk, "test_login_and_sync_action"],
@@ -232,7 +265,7 @@ def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_
     response = admin_client.post(action_url, follow=True)
 
     assert response.status_code == 200
-    mock_test_login.assert_called_once_with()
+    assert called["value"] is True
 
 
 @pytest.mark.django_db
