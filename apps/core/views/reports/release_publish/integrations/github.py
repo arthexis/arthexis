@@ -1,6 +1,6 @@
 """Compatibility re-exports for GitHub release publishing helpers.
 
-Deprecated import path: ``release_publish.integrations.github``.
+Legacy import path: ``release_publish.integrations.github``.
 """
 
 from ..github_ops import (  # noqa: F401

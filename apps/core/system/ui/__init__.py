@@ -393,7 +393,7 @@ def _read_startup_report(
         "clock_warning": clock_warning,
     }
 
-# Deprecated compatibility re-exports.
+# Legacy compatibility re-exports.
 # Prefer importing these from ``apps.core.system_ui``.
 build_nginx_report = _build_nginx_report
 build_services_report = _build_services_report

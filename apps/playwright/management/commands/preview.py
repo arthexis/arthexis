@@ -36,8 +36,8 @@ class Command(BaseCommand):
             default=[],
             help="Path to capture after login. Repeat for multiple pages.",
         )
-        parser.add_argument("--username", default=None, help="Deprecated; ignored.")
-        parser.add_argument("--password", default=None, help="Deprecated; ignored.")
+        parser.add_argument("--username", default=None, help="Legacy option; ignored.")
+        parser.add_argument("--password", default=None, help="Legacy option; ignored.")
         parser.add_argument(
             "--output",
             default="media/previews/admin-preview.png",
@@ -75,7 +75,7 @@ class Command(BaseCommand):
             if options["username"] is not None or options["password"] is not None:
                 self.stderr.write(
                     self.style.WARNING(
-                        "--username and --password are deprecated and ignored. "
+                        "--username and --password are legacy options and ignored. "
                         "Preview now uses a temporary admin account."
                     )
                 )

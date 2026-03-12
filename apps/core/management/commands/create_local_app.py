@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     """Delegate to the unified ``create app`` command."""
 
-    help = "Deprecated alias for `create app`; kept for compatibility."
+    help = "Legacy alias for `create app`; kept for compatibility."
 
     def add_arguments(self, parser):
         """Reuse arguments accepted by ``create app``."""
