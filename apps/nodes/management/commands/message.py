@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the deprecated ``message`` command."""
+"""Compatibility wrapper for the legacy ``message`` command."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     """Bridge legacy ``message`` calls to ``node message``."""
 
-    help = "Deprecated; use `python manage.py node message ...` instead."
+    help = "Legacy alias; use `python manage.py node message ...` instead."
 
     def add_arguments(self, parser) -> None:
         """Mirror legacy args and forward to the unified node command."""
@@ -22,11 +22,11 @@ class Command(BaseCommand):
         parser.add_argument("--lcd-channel-num", dest="lcd_channel_num", type=int)
 
     def handle(self, *args, **options):
-        """Print deprecation notice and execute ``node message``."""
+        """Print legacy-alias notice and execute ``node message``."""
 
         self.stdout.write(
             self.style.WARNING(
-                "DEPRECATED: `manage.py message` is deprecated; use `manage.py node message` instead."
+                "LEGACY: `manage.py message` is a legacy alias; use `manage.py node message` instead."
             )
         )
         call_command(

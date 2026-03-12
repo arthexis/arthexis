@@ -101,7 +101,7 @@ def test_node_screenshot_rejects_invalid_argument_combo():
     ],
 )
 def test_legacy_command_wrappers_delegate(monkeypatch, legacy, action, args, kwargs):
-    """Legacy commands should print deprecation warnings and call node subcommands."""
+    """Legacy commands should print legacy-alias notices and call node subcommands."""
 
     stdout = io.StringIO()
     calls: list[tuple[tuple, dict]] = []
@@ -122,7 +122,7 @@ def test_legacy_command_wrappers_delegate(monkeypatch, legacy, action, args, kwa
 
     call_command(legacy, *args, stdout=stdout, **kwargs)
 
-    assert "DEPRECATED:" in stdout.getvalue()
+    assert "LEGACY:" in stdout.getvalue()
     assert calls, "Wrapper did not delegate to node command"
     forwarded_args, forwarded_kwargs = calls[-1]
     assert forwarded_args[0] == "node"

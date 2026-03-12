@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     """Delegate to the unified ``migrations clear`` command."""
 
-    help = "Deprecated alias for `migrations clear`; kept for compatibility."
+    help = "Legacy alias for `migrations clear`; kept for compatibility."
 
     def add_arguments(self, parser):
         """Mirror compatible arguments for ``migrations clear``."""

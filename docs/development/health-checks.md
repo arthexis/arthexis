@@ -36,7 +36,7 @@ python manage.py health --list-targets
 - Group names use app labels (for example `core`, `ocpp`, `release`).
 - Reusable implementations live in service modules:
   - `apps/<app_label>/services/health_checks.py`
-- Deprecated `check_*` compatibility wrappers were removed; invoke `manage.py health` targets directly.
+- Legacy `check_*` compatibility wrappers were removed; invoke `manage.py health` targets directly.
 
 ## Current inventory
 
