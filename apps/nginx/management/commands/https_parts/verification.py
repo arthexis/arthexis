@@ -11,19 +11,38 @@ from apps.certs.models import CertbotCertificate
 from apps.certs.services import CertificateVerificationResult
 
 
-def _verify_certificate(cert, *, sudo: str) -> str:
-    """Verify a certificate and return formatted status output."""
+def _verify_certificate(cert, *, sudo: str) -> list[str]:
+    """Verify a certificate and return detailed formatted status output lines."""
 
     result = cert.verify(sudo=sudo)
-    return _format_verification_result(result)
+    expiration = getattr(cert, "expiration_date", None)
+    lines = _format_verification_result(result)
+
+    if expiration is None:
+        lines.append("Expiration: unknown (certificate metadata unavailable).")
+    else:
+        now = timezone.now()
+        remaining = expiration - now
+        days_remaining = remaining.days
+        state = "expired" if remaining.total_seconds() <= 0 else "active"
+        day_label = "day" if days_remaining == 1 else "days"
+        lines.append(
+            f"Expiration: {expiration.isoformat()} ({days_remaining} {day_label} remaining; {state})."
+        )
+
+    cert_path = getattr(cert, "certificate_path", "") or "unknown"
+    key_path = getattr(cert, "certificate_key_path", "") or "unknown"
+    lines.append(f"Paths: cert={cert_path}; key={key_path}.")
+    return lines
 
 
-def _format_verification_result(result: CertificateVerificationResult) -> str:
+def _format_verification_result(result: CertificateVerificationResult) -> list[str]:
     """Render verification result with stable command output wording."""
 
     status = "valid" if result.ok else "invalid"
-    summary = result.summary
-    return f"Certificate status: {status}. {summary}"
+    if not result.messages:
+        return [f"Certificate status: {status}. Certificate verified."]
+    return [f"Certificate status: {status}.", *result.messages]
 
 
 def _warn_if_certificate_expiring_soon(service, certificate, *, warn_days: int) -> None:
@@ -41,7 +60,9 @@ def _warn_if_certificate_expiring_soon(service, certificate, *, warn_days: int) 
 
         if expiration <= now:
             status = "has expired"
-            remediation = "Run './command.sh https --renew' to reissue due certificates."
+            remediation = (
+                "Run './command.sh https --renew' to reissue due certificates."
+            )
 
             if is_certbot:
                 remediation += (
@@ -57,7 +78,9 @@ def _warn_if_certificate_expiring_soon(service, certificate, *, warn_days: int) 
                     f"--certbot {quoted_domain}' (or '--godaddy {quoted_domain}') to reissue immediately."
                 )
             else:
-                remediation = "Run './command.sh https --enable --local' to reissue immediately."
+                remediation = (
+                    "Run './command.sh https --enable --local' to reissue immediately."
+                )
 
         service.stdout.write(
             service.style.WARNING(

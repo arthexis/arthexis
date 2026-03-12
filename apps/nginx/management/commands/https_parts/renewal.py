@@ -35,6 +35,29 @@ def _certificate_source_label(certificate: CertificateBase) -> str:
     return "certificate"
 
 
+def _certificate_status_line(certificate: CertificateBase, *, now: datetime) -> str:
+    """Return a concise status line for operator visibility in no-op renewal runs."""
+
+    expiration = certificate.expiration_date
+    if expiration is None:
+        status = "unknown expiration"
+    elif expiration <= now:
+        status = "expired"
+    else:
+        remaining_days = (expiration - now).days
+        day_label = "day" if remaining_days == 1 else "days"
+        status = f"valid ({remaining_days} {day_label} remaining)"
+
+    return (
+        f"domain={certificate.domain}; "
+        f"source={_certificate_source_label(certificate)}; "
+        f"expiration={_format_expiration(expiration)}; "
+        f"status={status}; "
+        f"cert={certificate.certificate_path}; "
+        f"key={certificate.certificate_key_path}"
+    )
+
+
 def _renew_due_certificates(
     service,
     *,
@@ -59,7 +82,9 @@ def _renew_due_certificates(
             certbotcertificate__challenge_type=CertbotCertificate.ChallengeType.GODADDY
         )
     elif require_local:
-        candidate_certificates = candidate_certificates.filter(selfsignedcertificate__isnull=False)
+        candidate_certificates = candidate_certificates.filter(
+            selfsignedcertificate__isnull=False
+        )
 
     candidate_list = list(candidate_certificates)
 
@@ -81,9 +106,10 @@ def _renew_due_certificates(
             due_certificates.append(certificate)
             continue
 
-        certificate_file_missing = bool(certificate.certificate_path) and not Path(
-            certificate.certificate_path
-        ).exists()
+        certificate_file_missing = (
+            bool(certificate.certificate_path)
+            and not Path(certificate.certificate_path).exists()
+        )
         if refreshed_expiration is None and (
             certificate_file_missing
             or (stored_expiration is not None and stored_expiration <= now)
@@ -93,7 +119,9 @@ def _renew_due_certificates(
     if not due_certificates:
         if candidate_list:
             if domain_filter:
-                service.stdout.write(f"No certificates were due for renewal for {domain_filter}.")
+                service.stdout.write(
+                    f"No certificates were due for renewal for {domain_filter}."
+                )
                 quoted_domain = shlex.quote(domain_filter)
                 service.stdout.write(
                     "To force immediate certbot reissuance, run: "
@@ -102,6 +130,12 @@ def _renew_due_certificates(
                 )
             else:
                 service.stdout.write("No certificates were due for renewal.")
+
+            service.stdout.write("Tracked certificate status:")
+            for certificate in candidate_list:
+                service.stdout.write(
+                    f"- {_certificate_status_line(certificate, now=now)}"
+                )
         else:
             service.stdout.write("No certificates are tracked for renewal.")
         return
@@ -136,7 +170,9 @@ def _renew_due_certificates(
     if renewed:
         https_configs = list(
             SiteConfiguration.objects.filter(
-                certificate_id__in=[certificate.pk for certificate in renewed_certificates],
+                certificate_id__in=[
+                    certificate.pk for certificate in renewed_certificates
+                ],
                 enabled=True,
                 protocol="https",
             ).order_by("name")
@@ -153,7 +189,9 @@ def _renew_due_certificates(
             service.stdout.write(
                 f"{action_label} HTTPS site configuration(s): {config_names}."
             )
-        service.stdout.write(service.style.SUCCESS(f"Renewed {renewed} certificate(s)."))
+        service.stdout.write(
+            service.style.SUCCESS(f"Renewed {renewed} certificate(s).")
+        )
 
     if errors:
         raise CommandError("Certificate renewal failed:\n" + "\n".join(errors))
