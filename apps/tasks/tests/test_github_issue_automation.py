@@ -230,6 +230,7 @@ def test_schedule_github_issue_uses_cross_process_cache_dedupe(
     )
 
     eta = task.scheduled_start
+    calls.clear()
     cache.delete(task._github_issue_schedule_cache_key("scheduled_start", eta))
 
     task.schedule_github_issue()

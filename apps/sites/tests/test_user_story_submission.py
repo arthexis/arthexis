@@ -263,6 +263,12 @@ def test_form_rejects_oversized_screenshot(settings):
 def test_form_rejects_non_image_screenshot_payload():
     """Screenshot field should reject payloads that are not valid images."""
 
+    user = get_user_model().objects.create_user(
+        username="screenshot-user",
+        email="screenshot-user@example.com",
+        password="secret",
+    )
+
     form = UserStoryForm(
         data={
             "name": "anon@example.com",
@@ -278,6 +284,7 @@ def test_form_rejects_non_image_screenshot_payload():
                 ]
             }
         ),
+        user=user,
     )
 
     assert not form.is_valid()
@@ -287,6 +294,12 @@ def test_form_rejects_non_image_screenshot_payload():
 @pytest.mark.pr_origin(6182)
 def test_form_accepts_valid_image_screenshot():
     """Screenshot field should accept valid image payloads."""
+
+    user = get_user_model().objects.create_user(
+        username="valid-screenshot-user",
+        email="valid-screenshot-user@example.com",
+        password="secret",
+    )
 
     image_file = io.BytesIO()
     Image.new("RGB", (2, 2), color="red").save(image_file, format="PNG")
@@ -307,6 +320,7 @@ def test_form_accepts_valid_image_screenshot():
                 ]
             }
         ),
+        user=user,
     )
 
     assert form.is_valid(), form.errors

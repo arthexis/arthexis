@@ -593,15 +593,24 @@ class ManualTaskRequest(Entity):
         from apps.tasks.tasks import create_manual_task_github_issue
 
         cache_key = self._github_issue_schedule_cache_key(trigger, eta)
-        if not cache.add(cache_key, timezone.now().isoformat(), timeout=24 * 60 * 60):
+        now = timezone.now()
+        if not cache.add(cache_key, now.isoformat(), timeout=60):
             return False
 
-        schedule_task(
+        was_enqueued = schedule_task(
             create_manual_task_github_issue,
             kwargs={"manual_task_id": self.pk, "trigger": trigger},
             eta=eta,
             require_enabled=True,
         )
+        if not was_enqueued:
+            cache.delete(cache_key)
+            return False
+
+        timeout_seconds = 24 * 60 * 60
+        if eta is not None:
+            timeout_seconds = max(int((eta - now).total_seconds()), 1)
+        cache.set(cache_key, now.isoformat(), timeout=timeout_seconds)
         return True
 
     def schedule_github_issue(self) -> None:
