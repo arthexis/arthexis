@@ -58,7 +58,7 @@ jobs:
 
       - name: Run passive ZAP baseline scan
         id: zap_scan
-        uses: zaproxy/action-baseline@v0.15.0
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: ${{ vars.PR_SECURITY_SCAN_TARGET }}
           cmd_options: >-
@@ -93,7 +93,7 @@ jobs:
 
       - name: Run ZAP baseline scan
         id: zap_scan
-        uses: zaproxy/action-baseline@v0.15.0
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: https://arthexis.com
           cmd_options: >-
