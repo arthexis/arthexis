@@ -81,12 +81,16 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(monkeypatch
     assert "enabled-core" in lock_entries
 
 
+@pytest.mark.pr("6193", "2026-03-12T00:00:00Z")
 def test_load_manifest_app_entries_includes_classification_projects_special_shortcuts():
     """Manifest discovery should include app entries for recently-manifested apps."""
 
     manifest_app_entries = _load_manifest_app_entries()
+    expected_apps = {
+        "apps.classification",
+        "apps.projects",
+        "apps.special",
+        "apps.shortcuts",
+    }
 
-    assert "apps.classification" in manifest_app_entries
-    assert "apps.projects" in manifest_app_entries
-    assert "apps.special" in manifest_app_entries
-    assert "apps.shortcuts" in manifest_app_entries
+    assert expected_apps.issubset(manifest_app_entries)
