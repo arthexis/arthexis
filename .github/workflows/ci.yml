@@ -31,7 +31,11 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
       - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
       - 'upgrade.sh'
   pull_request:
     branches:
@@ -54,7 +58,11 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
       - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
       - 'upgrade.sh'
   schedule:
     - cron: '0 2 * * *'
@@ -237,10 +245,16 @@ jobs:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
       # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
-      - name: Checkout main
+      - name: Checkout baseline branch for PR upgrades
         uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           ref: ${{ github.event.repository.default_branch }}
+          clean: false
+      - name: Checkout current ref for non-PR upgrades
+        uses: actions/checkout@v6
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
           clean: false
       - uses: actions/setup-python@v6
         with:
@@ -263,6 +277,7 @@ jobs:
         run: |
           ./install.sh --no-start
       - name: Checkout PR changes
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@v6
         with:
           clean: false
