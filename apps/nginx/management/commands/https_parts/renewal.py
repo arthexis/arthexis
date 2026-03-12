@@ -39,6 +39,7 @@ def _renew_due_certificates(
     service,
     *,
     sudo: str,
+    reload: bool,
     domain_filter: str | None = None,
     require_godaddy: bool = False,
     require_local: bool = False,
@@ -141,10 +142,16 @@ def _renew_due_certificates(
             ).order_by("name")
         )
         for index, config in enumerate(https_configs):
-            _apply_config(service, config, reload=index == len(https_configs) - 1)
+            _apply_config(
+                service,
+                config,
+                reload=reload and index == len(https_configs) - 1,
+            )
         if https_configs:
+            config_names = ", ".join(config.name for config in https_configs)
+            action_label = "Reloaded" if reload else "Applied without reload"
             service.stdout.write(
-                f"Reloaded HTTPS site configuration(s): {', '.join(config.name for config in https_configs)}."
+                f"{action_label} HTTPS site configuration(s): {config_names}."
             )
         service.stdout.write(service.style.SUCCESS(f"Renewed {renewed} certificate(s)."))
 

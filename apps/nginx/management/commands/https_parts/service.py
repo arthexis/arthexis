@@ -89,6 +89,7 @@ class HttpsProvisioningService:
             _renew_due_certificates(
                 self,
                 sudo=sudo,
+                reload=reload,
                 domain_filter=godaddy_domain or certbot_domain,
                 require_godaddy=bool(godaddy_domain),
                 require_local=bool(options["local"]),

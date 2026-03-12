@@ -958,18 +958,18 @@ def test_https_renew_reapplies_https_configuration_for_renewed_certificate(monke
         "update_expiration_date",
         lambda self, *, sudo="sudo": self.expiration_date,
     )
-    monkeypatch.setattr(
-        CertificateBase,
-        "renew",
-        lambda self, *, sudo="sudo": "renewed",
-    )
+    def fake_renew(self, *, sudo="sudo"):
+        self.expiration_date = timezone.now() + timedelta(days=90)
+        self.save(update_fields=["expiration_date", "updated_at"])
+
+    monkeypatch.setattr(CertificateBase, "renew", fake_renew)
 
     applied_calls: list[tuple[str, bool]] = []
 
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
         applied_calls.append((self.name, reload))
         return services.ApplyResult(
-            changed=True, validated=True, reloaded=True, message=f"applied:{self.name}"
+            changed=True, validated=True, reloaded=reload, message=f"applied:{self.name}"
         )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
@@ -988,3 +988,63 @@ def test_https_renew_reapplies_https_configuration_for_renewed_certificate(monke
     rendered = out.getvalue()
     assert "Renewed certificate: domain=reapply.example.com;" in rendered
     assert "Reloaded HTTPS site configuration(s): reapply.example.com." in rendered
+
+
+@pytest.mark.django_db
+def test_https_renew_reapplies_https_configuration_without_reload_when_requested(monkeypatch):
+    """`--renew --no-reload` should reapply HTTPS sites without triggering reload."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="reapply-no-reload-example-com-certbot",
+        domain="reapply-no-reload.example.com",
+        certificate_path="/etc/letsencrypt/live/reapply-no-reload.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/reapply-no-reload.example.com/privkey.pem",
+        expiration_date=timezone.now() - timedelta(hours=2),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+    SiteConfiguration.objects.create(
+        name="reapply-no-reload.example.com",
+        enabled=True,
+        protocol="https",
+        certificate=cert,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+
+    def fake_renew(self, *, sudo="sudo"):
+        self.expiration_date = timezone.now() + timedelta(days=90)
+        self.save(update_fields=["expiration_date", "updated_at"])
+
+    monkeypatch.setattr(CertificateBase, "renew", fake_renew)
+
+    applied_calls: list[tuple[str, bool]] = []
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        applied_calls.append((self.name, reload))
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=reload, message=f"applied:{self.name}"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command(
+        "https",
+        "--renew",
+        "--godaddy",
+        "reapply-no-reload.example.com",
+        "--no-sudo",
+        "--no-reload",
+        stdout=out,
+    )
+
+    assert applied_calls == [("reapply-no-reload.example.com", False)]
+    rendered = out.getvalue()
+    assert "Applied without reload HTTPS site configuration(s): reapply-no-reload.example.com." in rendered
