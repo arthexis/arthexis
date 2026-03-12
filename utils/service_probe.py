@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import argparse
+from dataclasses import dataclass
 import http.client
 import re
+import shlex
 import subprocess
 
 RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
@@ -23,7 +24,7 @@ class ServiceProbeResult:
 def parse_runserver_port(command_line: str) -> int | None:
     """Extract a valid runserver port from *command_line* if one is present."""
 
-    for pattern in (RUNSERVER_PORT_PATTERN, RUNSERVER_PORT_FLAG_PATTERN):
+    for pattern in (RUNSERVER_PORT_FLAG_PATTERN, RUNSERVER_PORT_PATTERN):
         match = pattern.search(command_line)
         if match:
             try:
@@ -32,6 +33,37 @@ def parse_runserver_port(command_line: str) -> int | None:
                 continue
             if 1 <= port <= 65535:
                 return port
+
+    try:
+        tokens = shlex.split(command_line)
+    except ValueError:
+        tokens = command_line.split()
+
+    try:
+        runserver_index = tokens.index("runserver")
+    except ValueError:
+        return None
+
+    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath", "--addrport"}
+    skip_next = False
+    for token in tokens[runserver_index + 1 :]:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in options_with_values:
+            skip_next = True
+            continue
+        if token.startswith("-"):
+            continue
+        if token.isdigit():
+            port = int(token)
+            return port if 1 <= port <= 65535 else None
+        match = RUNSERVER_PORT_PATTERN.search(token)
+        if match:
+            port = int(match.group(1))
+            return port if 1 <= port <= 65535 else None
+        break
+
     return None
 
 
@@ -46,9 +78,7 @@ def detect_runserver_port() -> int | None:
             check=False,
             timeout=1.0,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    except Exception:
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return None
 
     if result.returncode != 0:
@@ -74,7 +104,7 @@ def probe_admin_login(port: int, *, timeout: float = 1.0) -> ServiceProbeResult:
         status_code = int(response.status)
         response.read()
         connection.close()
-    except Exception:
+    except (OSError, http.client.HTTPException):
         return ServiceProbeResult(reachable=False, status_code=None)
 
     reachable = 200 <= status_code < 500
@@ -82,6 +112,18 @@ def probe_admin_login(port: int, *, timeout: float = 1.0) -> ServiceProbeResult:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser used for service probing commands.
+
+    Returns:
+        argparse.ArgumentParser: A parser configured with
+            ``detect-runserver-port`` and ``probe-admin-login`` subcommands.
+            The latter requires a ``--port`` argument.
+
+    Raises:
+        argparse.ArgumentError: If argparse encounters parser configuration
+            conflicts while creating subcommands.
+    """
+
     parser = argparse.ArgumentParser(description="Arthexis runtime service probing helpers.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

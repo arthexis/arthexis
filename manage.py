@@ -266,13 +266,42 @@ class RunserverSession:
 
 
 def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888) -> None:
-    """Ensure runserver defaults to ``0.0.0.0`` when no explicit bind is provided."""
+    """Ensure runserver defaults to an explicit bind when no addrport is provided.
+
+    Args:
+        args: Command-line arguments where ``args[0]`` is expected to be ``runserver``.
+        default_port: Port used for default bindings.
+
+    Returns:
+        None. The ``args`` list is mutated in place.
+
+    Raises:
+        None.
+    """
 
     if not args or args[0] != "runserver":
         return
 
-    has_addrport = any(not argument.startswith("-") for argument in args[1:])
+    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath", "--addrport"}
+    skip_next = False
+    has_addrport = False
+    for argument in args[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if argument in options_with_values:
+            skip_next = True
+            continue
+        if argument.startswith("-"):
+            continue
+        has_addrport = True
+        break
+
     if has_addrport:
+        return
+
+    if "--ipv6" in args or "-6" in args:
+        args.append(f"[::]:{default_port}")
         return
 
     args.append(f"0.0.0.0:{default_port}")

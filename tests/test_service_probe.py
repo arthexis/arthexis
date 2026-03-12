@@ -16,6 +16,14 @@ def test_parse_runserver_port_prefers_valid_addrport() -> None:
 
 
 @pytest.mark.pr(6201)
+def test_parse_runserver_port_supports_standalone_numeric_port() -> None:
+    """Port parsing should accept valid standalone numeric runserver addrport values."""
+
+    command = "4321 python manage.py runserver 9000 --noreload"
+    assert service_probe.parse_runserver_port(command) == 9000
+
+
+@pytest.mark.pr(6201)
 def test_probe_admin_login_requires_http_response(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reachability should depend on an HTTP response rather than only opening a TCP socket."""
 
