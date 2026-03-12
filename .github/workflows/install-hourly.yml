@@ -93,7 +93,7 @@ jobs:
       - name: Run Ruff
         run: |
           source .venv/bin/activate
-          ruff check --select E9,F823 .
+          ruff check .
       - name: Run import contracts
         run: |
           source .venv/bin/activate
