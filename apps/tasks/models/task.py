@@ -4,6 +4,7 @@ from datetime import timedelta
 from math import ceil
 from typing import Iterator, Sequence
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
@@ -575,20 +576,42 @@ class ManualTaskRequest(Entity):
         )
         return issue_url or None
 
+    def _github_issue_schedule_cache_key(
+        self, trigger: str, eta: timezone.datetime | None = None
+    ) -> str:
+        """Return cache key used to deduplicate GitHub issue scheduling across workers."""
+
+        normalized_eta = "immediate" if eta is None else eta.isoformat()
+        return f"manual-task-github-issue:{self.pk}:{trigger}:{normalized_eta}"
+
     def _schedule_github_issue_task(
         self, trigger: str, eta: timezone.datetime | None = None
-    ) -> None:
+    ) -> bool:
         """Enqueue asynchronous GitHub issue creation for this request."""
 
         from apps.celery.utils import schedule_task
         from apps.tasks.tasks import create_manual_task_github_issue
 
-        schedule_task(
+        cache_key = self._github_issue_schedule_cache_key(trigger, eta)
+        now = timezone.now()
+        if not cache.add(cache_key, now.isoformat(), timeout=60):
+            return False
+
+        was_enqueued = schedule_task(
             create_manual_task_github_issue,
             kwargs={"manual_task_id": self.pk, "trigger": trigger},
             eta=eta,
             require_enabled=True,
         )
+        if not was_enqueued:
+            cache.delete(cache_key)
+            return False
+
+        timeout_seconds = 24 * 60 * 60
+        if eta is not None:
+            timeout_seconds = max(int((eta - now).total_seconds()), 1)
+        cache.set(cache_key, now.isoformat(), timeout=timeout_seconds)
+        return True
 
     def schedule_github_issue(self) -> None:
         """Schedule GitHub issue creation according to request configuration."""
@@ -605,9 +628,7 @@ class ManualTaskRequest(Entity):
         now = timezone.now()
         if self.github_issue_trigger == GitHubIssueTrigger.SCHEDULED_START:
             eta = start if start > now else None
-            self._schedule_github_issue_task(
-                GitHubIssueTrigger.SCHEDULED_START, eta=eta
-            )
+            self._schedule_github_issue_task(GitHubIssueTrigger.SCHEDULED_START, eta=eta)
             return
 
         if self.github_issue_trigger == GitHubIssueTrigger.OVERDUE:
