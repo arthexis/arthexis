@@ -236,8 +236,13 @@ def _close_old_connections_safely() -> None:
 
     try:
         close_old_connections()
-    except RuntimeError:
-        return
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if "database access not allowed" in message:
+            return
+        if "database access is not allowed" in message:
+            return
+        raise
 
 
 def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) -> None:
