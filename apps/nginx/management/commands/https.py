@@ -69,6 +69,14 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--migrate-from",
+            metavar="HOST_OR_URL",
+            help=(
+                "Optional existing host or URL to migrate to the target --site/--certbot/--godaddy domain. "
+                "This updates local Site/Node links and reuses the prior nginx site configuration when possible."
+            ),
+        )
+        parser.add_argument(
             "--no-reload",
             action="store_true",
             help="Skip nginx reload/restart after applying changes.",
