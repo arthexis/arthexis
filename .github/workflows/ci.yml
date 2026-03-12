@@ -27,8 +27,7 @@ on:
 
 jobs:
   install:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
-    needs: upgrade
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -469,11 +468,27 @@ jobs:
           name: upgrade-pytest-log
           path: pytest.log
           if-no-files-found: warn
+  upgrade-failure-triage:
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft && needs.upgrade.result == 'failure' }}
+    needs:
+      - install
+      - upgrade
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize install and upgrade outcomes for triage
+        run: |
+          {
+            echo "## Upgrade failure triage";
+            echo "- upgrade result: ${{ needs.upgrade.result }}";
+            echo "- install result: ${{ needs.install.result }}";
+            echo "- note: install now runs independently from upgrade on normal CI events.";
+          } >> "$GITHUB_STEP_SUMMARY"
   notify-failure:
     if: ${{ failure() && github.event_name == 'pull_request' && !github.event.pull_request.draft }}
     needs:
       - install
       - upgrade
+      - upgrade-failure-triage
     permissions:
       actions: read
       contents: read
@@ -515,12 +530,16 @@ jobs:
               upgrade: process.env.UPGRADE_RESULT
             };
 
+            const statusSummary = Object.entries(results)
+              .map(([name, result]) => `- ${name}: ${result || 'unknown'}`)
+              .join('\n');
+
             const failedJobs = Object.entries(results)
               .filter(([, result]) => result === 'failure')
               .map(([name]) => `- ${name}`)
               .join('\n');
 
-            const summaryLines = failedJobs || '- One or more jobs failed. Review the workflow run for details.';
+            const failureSummary = failedJobs || '- No direct install/upgrade failure was recorded; another dependency may have failed.';
 
             const logFiles = {
               install: 'artifacts/install-pytest-log/pytest.log',
@@ -551,8 +570,11 @@ jobs:
             const body = [
               'CI failed for this PR.',
               '',
+              '### Job status summary',
+              statusSummary,
+              '',
               '### Failed job summary',
-              summaryLines,
+              failureSummary,
               logBlocks ? `\n${logBlocks}` : '',
               '',
               `View the workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
