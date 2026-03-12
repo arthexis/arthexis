@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.celery.utils import is_celery_enabled
@@ -52,27 +52,47 @@ class FeedbackIssueConfigurationAdminMixin:
 
     change_actions = ("configure_action",)
 
+    def _configure_route_names(self) -> list[str]:
+        """Return route names for the configure screen, including legacy aliases."""
+
+        opts = self.model._meta
+        names = [f"{opts.app_label}_{opts.model_name}_configure"]
+
+        model_module = getattr(self.model, "__module__", "")
+        if ".sites." in model_module and opts.app_label != "sites":
+            names.append(f"sites_{opts.model_name}_configure")
+        return names
+
     def get_urls(self):
         """Register a per-object configure route for this admin."""
 
         urls = super().get_urls()
-        opts = self.model._meta
-        custom_urls = [
-            path(
-                "<path:object_id>/configure/",
-                self.admin_site.admin_view(self.configure_view),
-                name=f"{opts.app_label}_{opts.model_name}_configure",
+        custom_urls = []
+        for route_name in self._configure_route_names():
+            custom_urls.append(
+                path(
+                    "<path:object_id>/configure/",
+                    self.admin_site.admin_view(self.configure_view),
+                    name=route_name,
+                )
             )
-        ]
         return custom_urls + urls
 
     def _configure_url(self, obj) -> str:
         """Return the admin URL for the configure screen."""
 
+        for route_name in self._configure_route_names():
+            try:
+                return reverse(
+                    f"admin:{route_name}",
+                    kwargs={"object_id": obj.pk},
+                )
+            except NoReverseMatch:
+                continue
         opts = self.model._meta
         return reverse(
-            f"admin:{opts.app_label}_{opts.model_name}_configure",
-            kwargs={"object_id": obj.pk},
+            f"admin:{opts.app_label}_{opts.model_name}_change",
+            args=[obj.pk],
         )
 
     def configure_action(self, request, obj):

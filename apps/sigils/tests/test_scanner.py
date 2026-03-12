@@ -68,12 +68,23 @@ def test_default_backend_prefers_llvm(monkeypatch):
             attempted.append(library_path)
 
     monkeypatch.setenv("SIGIL_LLVM_LIBRARY", "/tmp/not-a-real-library.so")
+    monkeypatch.setattr(scanner, "_is_llvm_node_feature_enabled", lambda: True)
     monkeypatch.setattr(scanner, "_LlvmScanner", StubLlvmScanner)
 
     selected = scanner.get_scanner()
 
     assert attempted == ["/tmp/not-a-real-library.so"]
     assert isinstance(selected, StubLlvmScanner)
+
+
+def test_auto_backend_uses_python_when_llvm_node_feature_disabled(monkeypatch):
+    scanner.get_scanner.cache_clear()
+    monkeypatch.delenv("SIGIL_SCANNER_BACKEND", raising=False)
+    monkeypatch.setattr(scanner, "_is_llvm_node_feature_enabled", lambda: False)
+
+    selected = scanner.get_scanner()
+
+    assert isinstance(selected, scanner._PythonScanner)
 
 
 def test_llvm_scanner_maps_utf8_byte_offsets_to_character_spans(monkeypatch):

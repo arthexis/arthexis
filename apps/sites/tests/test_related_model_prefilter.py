@@ -16,7 +16,7 @@ def test_related_admin_models_exposes_target_filter_lookups():
     assert isinstance(related, list)
     assert related
     assert any(
-        item.get("filter_lookups") and "selected-id" in item["filter_lookups"]
+        item.get("filter_lookups") and "selected-id__id__in" in item["filter_lookups"]
         for item in related
     )
 
