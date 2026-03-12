@@ -61,7 +61,7 @@ def test_order_tracking_public_remote_image_lookup_uses_fallback_sources_after_i
     monkeypatch.setattr(
         EvergoUser,
         "fetch_order_detail",
-        lambda self, **_: {
+        lambda self, *, order_id, timeout=20: {
         "reporte_visita": {"foto_tablero": {"placeholder": "not-a-url"}},
         "foto_tablero": "https://cdn.evergo.example/fotos/tablero-fallback.jpg",
         },
@@ -306,7 +306,7 @@ def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(clien
     assert "Copy / Paste table" in content
 
 @pytest.mark.django_db
-def test_my_evergo_dashboard_fetches_missing_rows_when_partial_cache_exists(client):
+def test_my_evergo_dashboard_fetches_missing_rows_when_partial_cache_exists(monkeypatch, client):
     """Regression: mixed cached + uncached lookups should still trigger API sync."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-dashboard-owner-2", email="dash2@example.com")
@@ -412,27 +412,3 @@ def test_my_evergo_dashboard_404_for_invalid_token(client):
     response = client.get(reverse("evergo:my-dashboard", kwargs={"token": "00000000-0000-0000-0000-000000000000"}))
 
     assert response.status_code == 404
-    monkeypatch.setattr(
-        EvergoUser,
-        "fetch_order_detail",
-        lambda self, **_: {"foto_tablero": "javascript:alert(1)"},
-    )
-    called = {"value": False}
-
-    def _fake_submit(self, **kwargs):
-        called["value"] = True
-        return {"completed_steps": 4}
-
-    monkeypatch.setattr(EvergoUser, "submit_tracking_phase_one", _fake_submit)
-    called = {"value": False}
-
-    def _fake_submit(self, **kwargs):
-        called["value"] = True
-        return {"completed_steps": 0}
-
-    monkeypatch.setattr(EvergoUser, "submit_tracking_phase_one", _fake_submit)
-    monkeypatch.setattr(
-        EvergoUser,
-        "fetch_order_detail",
-        lambda self, **_: {"reporte_visita": {"metraje_visita_tecnica": "31"}},
-    )
