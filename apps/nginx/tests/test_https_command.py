@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.certs.models import CertificateBase, CertbotCertificate
-from apps.certs.services import CertbotChallengeError
+from apps.certs.services import CertificateVerificationResult, CertbotChallengeError
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
@@ -20,7 +20,9 @@ def _stub_certbot_availability(monkeypatch):
 
     from apps.nginx.management.commands.https_parts import certificate_flow
 
-    monkeypatch.setattr(certificate_flow, "ensure_certbot_available", lambda *, sudo="sudo": None)
+    monkeypatch.setattr(
+        certificate_flow, "ensure_certbot_available", lambda *, sudo="sudo": None
+    )
 
 
 @pytest.mark.django_db
@@ -958,6 +960,7 @@ def test_https_renew_reapplies_https_configuration_for_renewed_certificate(monke
         "update_expiration_date",
         lambda self, *, sudo="sudo": self.expiration_date,
     )
+
     def fake_renew(self, *, sudo="sudo"):
         self.expiration_date = timezone.now() + timedelta(days=90)
         self.save(update_fields=["expiration_date", "updated_at"])
@@ -969,7 +972,10 @@ def test_https_renew_reapplies_https_configuration_for_renewed_certificate(monke
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
         applied_calls.append((self.name, reload))
         return services.ApplyResult(
-            changed=True, validated=True, reloaded=reload, message=f"applied:{self.name}"
+            changed=True,
+            validated=True,
+            reloaded=reload,
+            message=f"applied:{self.name}",
         )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
@@ -991,7 +997,9 @@ def test_https_renew_reapplies_https_configuration_for_renewed_certificate(monke
 
 
 @pytest.mark.django_db
-def test_https_renew_reapplies_https_configuration_without_reload_when_requested(monkeypatch):
+def test_https_renew_reapplies_https_configuration_without_reload_when_requested(
+    monkeypatch,
+):
     """`--renew --no-reload` should reapply HTTPS sites without triggering reload."""
 
     from datetime import timedelta
@@ -1029,7 +1037,10 @@ def test_https_renew_reapplies_https_configuration_without_reload_when_requested
     def fake_apply(self, *, reload: bool = True, remove: bool = False):
         applied_calls.append((self.name, reload))
         return services.ApplyResult(
-            changed=True, validated=True, reloaded=reload, message=f"applied:{self.name}"
+            changed=True,
+            validated=True,
+            reloaded=reload,
+            message=f"applied:{self.name}",
         )
 
     monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
@@ -1047,4 +1058,102 @@ def test_https_renew_reapplies_https_configuration_without_reload_when_requested
 
     assert applied_calls == [("reapply-no-reload.example.com", False)]
     rendered = out.getvalue()
-    assert "Applied without reload HTTPS site configuration(s): reapply-no-reload.example.com." in rendered
+    assert (
+        "Applied without reload HTTPS site configuration(s): reapply-no-reload.example.com."
+        in rendered
+    )
+
+
+@pytest.mark.django_db
+def test_https_validate_reports_detailed_certificate_status(monkeypatch):
+    """`--validate` should report certificate verification, expiration, and filesystem paths."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="validate-example-com-certbot",
+        domain="validate.example.com",
+        certificate_path="/etc/letsencrypt/live/validate.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/validate.example.com/privkey.pem",
+        expiration_date=timezone.now() + timedelta(days=20),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+    SiteConfiguration.objects.create(
+        name="validate.example.com",
+        enabled=True,
+        protocol="https",
+        certificate=cert,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "verify",
+        lambda self, *, sudo="sudo": CertificateVerificationResult(
+            ok=True,
+            messages=["Certificate chain verified."],
+        ),
+    )
+
+    out = StringIO()
+    call_command(
+        "https",
+        "--validate",
+        "--godaddy",
+        "validate.example.com",
+        "--no-sudo",
+        stdout=out,
+    )
+
+    rendered = out.getvalue()
+    assert "HTTPS status report:" in rendered
+    assert "validate.example.com: protocol=https, enabled=True" in rendered
+    assert "Certificate status: valid." in rendered
+    assert "Certificate chain verified." in rendered
+    assert "Expiration:" in rendered
+    assert (
+        "Paths: cert=/etc/letsencrypt/live/validate.example.com/fullchain.pem; key=/etc/letsencrypt/live/validate.example.com/privkey.pem."
+        in rendered
+    )
+
+
+@pytest.mark.django_db
+def test_https_renew_domain_filter_reports_existing_certificate_details_when_not_due(
+    monkeypatch,
+):
+    """`--renew` no-op output should include existing certificate details for operator visibility."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    CertbotCertificate.objects.create(
+        name="existing-example-com-certbot",
+        domain="existing.example.com",
+        certificate_path="/etc/letsencrypt/live/existing.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/existing.example.com/privkey.pem",
+        expiration_date=timezone.now() + timedelta(days=30),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+
+    out = StringIO()
+    call_command(
+        "https",
+        "--renew",
+        "--godaddy",
+        "existing.example.com",
+        "--no-sudo",
+        stdout=out,
+    )
+
+    rendered = out.getvalue()
+    assert "No certificates were due for renewal for existing.example.com." in rendered
+    assert "Tracked certificate status:" in rendered
+    assert "domain=existing.example.com;" in rendered
+    assert "source=certbot (godaddy dns-01);" in rendered
+    assert "status=valid" in rendered

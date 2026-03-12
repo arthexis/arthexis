@@ -6,24 +6,48 @@ from apps.nginx.management.commands.https_parts.verification import _verify_cert
 from apps.nginx.models import SiteConfiguration
 
 
-def _render_report(service, *, sudo: str) -> None:
-    """Render HTTPS status report with optional certificate verification details."""
+def _render_report(
+    service,
+    *,
+    sudo: str,
+    domain_filter: str | None = None,
+    require_godaddy: bool = False,
+    require_local: bool = False,
+) -> None:
+    """Render HTTPS status report with detailed certificate verification output."""
 
-    configs = list(SiteConfiguration.objects.order_by("pk"))
-    if not configs:
-        service.stdout.write("No site configurations found.")
+    configs = SiteConfiguration.objects.select_related(
+        "certificate",
+        "certificate__certbotcertificate",
+        "certificate__selfsignedcertificate",
+    ).order_by("pk")
+
+    if domain_filter:
+        configs = configs.filter(name=domain_filter)
+    if require_godaddy:
+        configs = configs.filter(
+            certificate__certbotcertificate__challenge_type="godaddy"
+        )
+    elif require_local:
+        configs = configs.filter(certificate__selfsignedcertificate__isnull=False)
+
+    config_list = list(configs)
+    if not config_list:
+        if domain_filter:
+            service.stdout.write(f"No site configurations found for {domain_filter}.")
+        else:
+            service.stdout.write("No site configurations found.")
         return
 
     service.stdout.write("HTTPS status report:")
-    for config in configs:
+    for config in config_list:
         cert = config.certificate
         cert_label = "none"
-        cert_summary = ""
         if cert:
             cert_label = f"{cert.name} ({cert.__class__.__name__})"
-            cert_summary = _verify_certificate(cert, sudo=sudo)
         service.stdout.write(
             f"- {config.name}: protocol={config.protocol}, enabled={config.enabled}, certificate={cert_label}"
         )
-        if cert_summary:
-            service.stdout.write(f"  - {cert_summary}")
+        if cert:
+            for line in _verify_certificate(cert, sudo=sudo):
+                service.stdout.write(f"  - {line}")

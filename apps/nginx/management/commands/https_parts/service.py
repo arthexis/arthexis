@@ -43,15 +43,20 @@ class HttpsProvisioningService:
         enable = options["enable"]
         disable = options["disable"]
         renew = options["renew"]
+        validate = options["validate"]
         certbot_domain = options["certbot"]
         godaddy_domain = options["godaddy"]
         explicit_site = options["site"]
         parsed_site = _parse_site_domain(explicit_site) if explicit_site else None
 
         if parsed_site and options["local"]:
-            raise CommandError("--local cannot be combined with --site. Use --certbot/--godaddy or omit --local.")
+            raise CommandError(
+                "--local cannot be combined with --site. Use --certbot/--godaddy or omit --local."
+            )
 
-        certbot_domain = certbot_domain or (parsed_site if parsed_site and not godaddy_domain else None)
+        certbot_domain = certbot_domain or (
+            parsed_site if parsed_site and not godaddy_domain else None
+        )
         certbot_domain = _parse_site_domain(certbot_domain) if certbot_domain else None
         godaddy_domain = _parse_site_domain(godaddy_domain) if godaddy_domain else None
         use_local = options["local"] or not (certbot_domain or godaddy_domain)
@@ -66,20 +71,42 @@ class HttpsProvisioningService:
             raise CommandError("--warn-days must be zero or a positive integer.")
 
         if use_local and force_renewal:
-            raise CommandError("--force-renewal is only supported for certbot/godaddy certificates.")
+            raise CommandError(
+                "--force-renewal is only supported for certbot/godaddy certificates."
+            )
 
-        if not enable and not disable and not renew and (certbot_domain or godaddy_domain or parsed_site):
+        if (
+            not enable
+            and not disable
+            and not renew
+            and not validate
+            and (certbot_domain or godaddy_domain or parsed_site)
+        ):
             enable = True
+
+        if validate:
+            _render_report(
+                self,
+                sudo=sudo,
+                domain_filter=godaddy_domain or certbot_domain or parsed_site,
+                require_godaddy=bool(godaddy_domain),
+                require_local=bool(options["local"]),
+            )
+            return
 
         if not enable and not disable and not renew:
             if options["local"]:
-                raise CommandError("Use --enable or --disable with certificate options.")
+                raise CommandError(
+                    "Use --enable, --disable, or --validate with certificate options."
+                )
             _render_report(self, sudo=sudo)
             return
 
         domain = "localhost" if use_local else (godaddy_domain or certbot_domain)
         if not domain:
-            raise CommandError("No target domain was provided. Use --site, --certbot, --godaddy, or --local.")
+            raise CommandError(
+                "No target domain was provided. Use --site, --certbot, --godaddy, or --local."
+            )
 
         if disable:
             self._disable_https(domain, reload=reload)
@@ -152,7 +179,9 @@ class HttpsProvisioningService:
         )
 
         _warn_if_certificate_expiring_soon(self, certificate, warn_days=warn_days)
-        SiteConfiguration.objects.filter(pk=config.pk).update(protocol="https", enabled=True)
+        SiteConfiguration.objects.filter(pk=config.pk).update(
+            protocol="https", enabled=True
+        )
         config.refresh_from_db(fields=["protocol", "enabled"])
         self._ensure_managed_site(domain, require_https=True)
         _apply_config(self, config, reload=reload)
@@ -177,13 +206,18 @@ class HttpsProvisioningService:
 
         if domain == "localhost":
             return
-        site, created = Site.objects.get_or_create(domain=domain, defaults={"name": domain})
+        site, created = Site.objects.get_or_create(
+            domain=domain, defaults={"name": domain}
+        )
         updated_fields: list[str] = []
 
         if hasattr(site, "managed") and not getattr(site, "managed"):
             setattr(site, "managed", True)
             updated_fields.append("managed")
-        if hasattr(site, "require_https") and getattr(site, "require_https") != require_https:
+        if (
+            hasattr(site, "require_https")
+            and getattr(site, "require_https") != require_https
+        ):
             setattr(site, "require_https", require_https)
             updated_fields.append("require_https")
         if created:

@@ -25,6 +25,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Renew all due HTTPS certificates.",
         )
+        action_group.add_argument(
+            "--validate",
+            action="store_true",
+            help="Validate tracked certificates and show detailed status output.",
+        )
 
         cert_group = parser.add_mutually_exclusive_group()
         cert_group.add_argument(
