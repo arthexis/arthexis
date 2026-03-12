@@ -265,6 +265,19 @@ class RunserverSession:
             time.sleep(self.poll_interval)
 
 
+def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888) -> None:
+    """Ensure runserver defaults to ``0.0.0.0`` when no explicit bind is provided."""
+
+    if not args or args[0] != "runserver":
+        return
+
+    has_addrport = any(not argument.startswith("-") for argument in args[1:])
+    if has_addrport:
+        return
+
+    args.append(f"0.0.0.0:{default_port}")
+
+
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:
     global _RUNSERVER_STARTED_AT
     _RUNSERVER_STARTED_AT = time.monotonic()
@@ -314,6 +327,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     is_runserver = bool(args) and args[0] == "runserver"
     is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
+        _ensure_runserver_default_bind(args)
         if is_debug_session:
             os.environ["DEBUG"] = "1"
         else:
