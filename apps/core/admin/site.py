@@ -134,6 +134,25 @@ original_changelist_view = admin.ModelAdmin.changelist_view
 
 
 def changelist_view_with_object_links(self, request, extra_context=None):
+    """Render changelist while preserving related-prefilter params and small-dataset links.
+
+    Parameters:
+        self: Active ModelAdmin instance with an associated ``self.model``.
+        request: Incoming HttpRequest that may carry related-selection prefilter params.
+        extra_context: Optional template context dictionary passed to changelist rendering.
+
+    Returns:
+        HttpResponse returned by ``original_changelist_view`` with updated context.
+
+    Side Effects:
+        Stores related prefilter params on ``request._related_prefilter_params`` and
+        removes helper params from ``request.GET``/``request.META['QUERY_STRING']``
+        so generated UI links stay clean. Populates ``global_object_links`` using
+        ``self.model._default_manager`` for models with very small datasets.
+
+    Raises:
+        NoReverseMatch: When Django cannot reverse the admin change URL for a row.
+    """
     extra_context = extra_context or {}
 
     if any(

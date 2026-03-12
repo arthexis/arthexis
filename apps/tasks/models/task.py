@@ -4,6 +4,7 @@ from datetime import timedelta
 from math import ceil
 from typing import Iterator, Sequence
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
@@ -575,13 +576,25 @@ class ManualTaskRequest(Entity):
         )
         return issue_url or None
 
+    def _github_issue_schedule_cache_key(
+        self, trigger: str, eta: timezone.datetime | None = None
+    ) -> str:
+        """Return cache key used to deduplicate GitHub issue scheduling across workers."""
+
+        normalized_eta = "immediate" if eta is None else eta.isoformat()
+        return f"manual-task-github-issue:{self.pk}:{trigger}:{normalized_eta}"
+
     def _schedule_github_issue_task(
         self, trigger: str, eta: timezone.datetime | None = None
-    ) -> None:
+    ) -> bool:
         """Enqueue asynchronous GitHub issue creation for this request."""
 
         from apps.celery.utils import schedule_task
         from apps.tasks.tasks import create_manual_task_github_issue
+
+        cache_key = self._github_issue_schedule_cache_key(trigger, eta)
+        if not cache.add(cache_key, timezone.now().isoformat(), timeout=24 * 60 * 60):
+            return False
 
         schedule_task(
             create_manual_task_github_issue,
@@ -589,7 +602,7 @@ class ManualTaskRequest(Entity):
             eta=eta,
             require_enabled=True,
         )
-        self._last_scheduled_github_issue = (trigger, eta)
+        return True
 
     def schedule_github_issue(self) -> None:
         """Schedule GitHub issue creation according to request configuration."""
@@ -606,25 +619,13 @@ class ManualTaskRequest(Entity):
         now = timezone.now()
         if self.github_issue_trigger == GitHubIssueTrigger.SCHEDULED_START:
             eta = start if start > now else None
-            if getattr(self, "_last_scheduled_github_issue", None) == (
-                GitHubIssueTrigger.SCHEDULED_START,
-                eta,
-            ):
-                return
-            self._schedule_github_issue_task(
-                GitHubIssueTrigger.SCHEDULED_START, eta=eta
-            )
+            self._schedule_github_issue_task(GitHubIssueTrigger.SCHEDULED_START, eta=eta)
             return
 
         if self.github_issue_trigger == GitHubIssueTrigger.OVERDUE:
             if not self.github_issue_overdue_after:
                 return
             eta = start + self.github_issue_overdue_after
-            if getattr(self, "_last_scheduled_github_issue", None) == (
-                GitHubIssueTrigger.OVERDUE,
-                eta if eta > now else None,
-            ):
-                return
             if eta <= now:
                 self._schedule_github_issue_task(GitHubIssueTrigger.OVERDUE)
             else:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import pytest
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
@@ -196,3 +197,63 @@ def test_overdue_trigger_rejects_stale_early_job() -> None:
     )
 
     assert not task.can_open_github_issue_for_trigger("overdue")
+
+
+@pytest.mark.pr_origin(6182)
+def test_schedule_github_issue_uses_cross_process_cache_dedupe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scheduling should dedupe duplicate trigger/ETA combinations via shared cache."""
+
+    calls: list[dict] = []
+
+    def fake_schedule(task, *, args=None, kwargs=None, require_enabled=True, **options):
+        calls.append({
+            "task": task,
+            "args": args,
+            "kwargs": kwargs,
+            "require_enabled": require_enabled,
+            "options": options,
+        })
+        return True
+
+    monkeypatch.setattr("apps.celery.utils.schedule_task", fake_schedule)
+
+    template = GitHubIssueTemplate.objects.create(
+        name="Start task",
+        title_template="Task starts",
+        body_template="Start now.",
+    )
+    task = build_manual_task_request(
+        github_issue_template=template,
+        github_issue_trigger="scheduled_start",
+    )
+
+    eta = task.scheduled_start
+    cache.delete(task._github_issue_schedule_cache_key("scheduled_start", eta))
+
+    task.schedule_github_issue()
+    task.schedule_github_issue()
+
+    assert len(calls) == 1
+
+
+@pytest.mark.pr_origin(6182)
+def test_create_manual_task_github_issue_skips_early_scheduled_start() -> None:
+    """Task should not create issue before scheduled start time."""
+
+    template = GitHubIssueTemplate.objects.create(
+        name="Task starts",
+        title_template="Start maintenance",
+        body_template="Handle this now.",
+    )
+    task = build_manual_task_request(
+        github_issue_template=template,
+        github_issue_trigger="scheduled_start",
+        scheduled_start=timezone.now() + timedelta(hours=2),
+        scheduled_end=timezone.now() + timedelta(hours=3),
+    )
+
+    issue_url = create_manual_task_github_issue(task.pk, "scheduled_start")
+
+    assert issue_url is None
