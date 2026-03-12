@@ -20,15 +20,10 @@ def test_collect_missing_scaffold_paths_reports_empty_when_complete(tmp_path: Pa
     monkeypatch.setattr(check_django_app_scaffold, "APPS_DIR", apps_dir)
     monkeypatch.setattr(
         check_django_app_scaffold,
-        "_is_django_app_dir",
-        lambda path: path.name == "sample",
-    )
-    monkeypatch.setattr(
-        check_django_app_scaffold,
         "_to_module_path",
         lambda path: f"apps.{path.name}",
     )
-    monkeypatch.setattr(check_django_app_scaffold, "EXCLUDED_AUTO_DISCOVERED_APPS", set())
+    monkeypatch.setattr(check_django_app_scaffold, "NON_DJANGO_UTILITY_PACKAGES", set())
 
     assert check_django_app_scaffold.collect_missing_scaffold_paths() == {}
 
@@ -48,15 +43,10 @@ def test_collect_missing_scaffold_paths_reports_missing_migration_init(
     monkeypatch.setattr(check_django_app_scaffold, "APPS_DIR", apps_dir)
     monkeypatch.setattr(
         check_django_app_scaffold,
-        "_is_django_app_dir",
-        lambda path: path.name == "sample",
-    )
-    monkeypatch.setattr(
-        check_django_app_scaffold,
         "_to_module_path",
         lambda path: f"apps.{path.name}",
     )
-    monkeypatch.setattr(check_django_app_scaffold, "EXCLUDED_AUTO_DISCOVERED_APPS", set())
+    monkeypatch.setattr(check_django_app_scaffold, "NON_DJANGO_UTILITY_PACKAGES", set())
 
     assert check_django_app_scaffold.collect_missing_scaffold_paths() == {
         "apps.sample": ["migrations/__init__.py"]
@@ -77,17 +67,12 @@ def test_collect_missing_scaffold_paths_ignores_explicitly_excluded_packages(
     monkeypatch.setattr(check_django_app_scaffold, "APPS_DIR", apps_dir)
     monkeypatch.setattr(
         check_django_app_scaffold,
-        "_is_django_app_dir",
-        lambda path: path.name == "camera",
-    )
-    monkeypatch.setattr(
-        check_django_app_scaffold,
         "_to_module_path",
         lambda path: f"apps.{path.name}",
     )
     monkeypatch.setattr(
         check_django_app_scaffold,
-        "EXCLUDED_AUTO_DISCOVERED_APPS",
+        "NON_DJANGO_UTILITY_PACKAGES",
         {"apps.camera"},
     )
 

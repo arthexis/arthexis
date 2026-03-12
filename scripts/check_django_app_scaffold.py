@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.append(str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT))
 
 from config.settings.base import APPS_DIR
-from config.settings.apps import EXCLUDED_AUTO_DISCOVERED_APPS, _is_django_app_dir, _to_module_path
+from config.settings.apps import NON_DJANGO_UTILITY_PACKAGES, _to_module_path
 
 REQUIRED_TOP_LEVEL_APP_FILES = ("__init__.py", "apps.py")
 REQUIRED_TOP_LEVEL_APP_DIRS = ("migrations/__init__.py",)
@@ -18,11 +18,18 @@ REQUIRED_TOP_LEVEL_APP_DIRS = ("migrations/__init__.py",)
 def _is_top_level_app(path: Path) -> bool:
     """Return whether ``path`` points to a direct child package under ``apps/``."""
 
-    return len(path.relative_to(APPS_DIR).parts) == 1
+    relative = path.relative_to(APPS_DIR)
+    return len(relative.parts) == 1 and not _is_private_package_path(relative)
 
 
-def _iter_top_level_django_app_dirs() -> list[Path]:
-    """Return sorted top-level Django app directories discovered under ``apps/``."""
+def _is_private_package_path(path: Path) -> bool:
+    """Return whether any path segment is private or hidden."""
+
+    return any(part.startswith((".", "_")) for part in path.parts)
+
+
+def _iter_top_level_app_dirs() -> list[Path]:
+    """Return sorted top-level app directories under ``apps/`` excluding utility packages."""
 
     app_dirs: list[Path] = []
     for candidate in sorted(APPS_DIR.iterdir()):
@@ -30,11 +37,9 @@ def _iter_top_level_django_app_dirs() -> list[Path]:
             continue
         if not _is_top_level_app(candidate):
             continue
-        if not _is_django_app_dir(candidate):
-            continue
 
         module_path = _to_module_path(candidate)
-        if module_path in EXCLUDED_AUTO_DISCOVERED_APPS:
+        if module_path in NON_DJANGO_UTILITY_PACKAGES:
             continue
 
         app_dirs.append(candidate)
@@ -46,7 +51,7 @@ def collect_missing_scaffold_paths() -> dict[str, list[str]]:
     """Collect missing scaffold paths for intended top-level Django apps."""
 
     missing: dict[str, list[str]] = {}
-    for app_dir in _iter_top_level_django_app_dirs():
+    for app_dir in _iter_top_level_app_dirs():
         module_path = _to_module_path(app_dir)
         missing_items: list[str] = []
 

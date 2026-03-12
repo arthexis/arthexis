@@ -20,6 +20,7 @@ def test_local_apps_use_standard_package_discovery() -> None:
     assert "apps.camera" not in discovered
     assert "apps.loggers" not in discovered
     assert "apps.vscode" not in discovered
+    assert "apps.selenium" in discovered
 
 
 def test_local_apps_are_importable_through_appconfig() -> None:

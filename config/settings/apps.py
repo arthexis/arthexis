@@ -47,7 +47,7 @@ def _is_django_app_dir(path: Path) -> bool:
         return False
 
     module_path = _to_module_path(path)
-    if module_path in EXCLUDED_AUTO_DISCOVERED_APPS:
+    if module_path in NON_DJANGO_UTILITY_PACKAGES:
         return False
 
     if (path / "apps.py").exists():
@@ -69,10 +69,9 @@ def _to_module_path(path: Path) -> str:
 
 
 LEGACY_MIGRATION_APPS = ["apps.selenium"]
-EXCLUDED_AUTO_DISCOVERED_APPS = {
+NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
     "apps.loggers",
-    "apps.selenium",
     "apps.vscode",
 }
 
@@ -89,7 +88,7 @@ def _load_local_apps() -> list[str]:
     return sorted(
         module_path
         for app_dir in app_dirs
-        if (module_path := _to_module_path(app_dir)) not in EXCLUDED_AUTO_DISCOVERED_APPS
+        if (module_path := _to_module_path(app_dir)) not in NON_DJANGO_UTILITY_PACKAGES
     )
 
 
