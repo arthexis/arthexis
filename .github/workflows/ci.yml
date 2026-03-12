@@ -15,19 +15,54 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'install.sh'
+      - 'upgrade.sh'
   pull_request:
+    branches:
+      - main
+      - 'release/**'
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'install.sh'
+      - 'upgrade.sh'
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
   install:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
+    if: ${{ (github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && needs.upgrade.result == 'failure' }}
     needs: upgrade
     runs-on: ubuntu-latest
     services:
@@ -100,6 +135,8 @@ jobs:
           python scripts/check_import_resolution.py
       - name: Detect changed fixture files
         id: seed-fixtures
+        env:
+          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
           set -Eeuo pipefail
           if [ "${{ github.event_name }}" != "pull_request" ]; then
@@ -107,7 +144,7 @@ jobs:
             exit 0
           fi
 
-          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${PR_BASE_SHA}...${{ github.sha }}")"; then
             echo "Fixture path detection failed; falling back to full scan."
             echo "mode=full" >> "${GITHUB_OUTPUT}"
             exit 0
@@ -184,7 +221,7 @@ jobs:
           path: pytest.log
           if-no-files-found: warn
   upgrade:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     services:
       redis:
