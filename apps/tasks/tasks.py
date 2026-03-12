@@ -118,7 +118,14 @@ def run_scheduled_web_samplers() -> list[int]:
 def run_scheduled_website_screenshots() -> list[int]:
     """Execute due Playwright website screenshot schedules."""
 
+    from apps.features.utils import is_suite_feature_enabled
     from apps.playwright.models import schedule_pending_website_screenshots
+
+    if not is_suite_feature_enabled("playwright-automation", default=True):
+        logger.info(
+            "Skipping Playwright website screenshots because suite feature playwright-automation is disabled."
+        )
+        return []
 
     executed = schedule_pending_website_screenshots()
     if executed:

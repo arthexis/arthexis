@@ -59,6 +59,24 @@ Select one or more features on the changelist and choose **Check features for el
 
 Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_data` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
 
+## Playwright global vs engine-level controls
+
+Playwright execution now uses **two gates**:
+
+1. **Suite feature gate**: `playwright-automation` (global toggle in Suite Features).
+2. **Node feature gate**: engine-specific node feature (`playwright-browser-chromium`, `playwright-browser-firefox`, `playwright-browser-webkit`).
+
+An engine can run only when both gates are open. Practical effects:
+
+- If `playwright-automation` is disabled, admin actions, script execution, and scheduled screenshot celery tasks short-circuit globally.
+- If `playwright-automation` is enabled but a specific `playwright-browser-*` node feature is disabled, that engine is rejected on the local node.
+- Website screenshot schedules still evaluate engine fallbacks, but only among engines currently active for the local node.
+
+Use this pattern to separate policy from capability:
+
+- **Policy** (all Playwright runtime execution): Suite Feature.
+- **Capability** (which browser engine can run on a node): Node Features.
+
 ## Declaring feature setup hooks
 
 Auto-managed features discover their enablement and lifecycle through app-level hooks:

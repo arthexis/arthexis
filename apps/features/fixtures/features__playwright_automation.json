@@ -1,0 +1,58 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "playwright-automation",
+      "display": "Playwright Automation",
+      "summary": "Enable Playwright runtime automation entry points across admin and celery workers.",
+      "is_enabled": true,
+      "main_app": ["playwright"],
+      "node_feature": null,
+      "admin_requirements": "Allow admins to test browsers, execute scripts, and run screenshot schedules.",
+      "public_requirements": "",
+      "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before runtime execution.",
+      "admin_views": [
+        "admin:playwright_playwrightbrowser_changelist",
+        "admin:playwright_playwrightscript_changelist",
+        "admin:playwright_websitescreenshotschedule_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "apps.playwright.models.PlaywrightBrowser.create_driver",
+        "apps.playwright.models.PlaywrightScript.execute",
+        "apps.playwright.models.execute_website_screenshot_schedule",
+        "apps.tasks.tasks.run_scheduled_website_screenshots"
+      ],
+      "code_locations": [
+        "apps/playwright/admin.py",
+        "apps/playwright/models.py",
+        "apps/playwright/tasks.py",
+        "apps/tasks/tasks.py"
+      ],
+      "protocol_coverage": {},
+      "metadata": {
+        "runtime_paths": [
+          "apps.playwright.models.PlaywrightBrowser.create_driver",
+          "apps.playwright.models.PlaywrightScript.execute",
+          "apps.playwright.models.schedule_pending_website_screenshots",
+          "apps.tasks.tasks.run_scheduled_website_screenshots"
+        ],
+        "admin_paths": [
+          "admin:playwright_playwrightbrowser_changelist",
+          "admin:playwright_playwrightscript_changelist",
+          "admin:playwright_websitescreenshotschedule_changelist"
+        ],
+        "node_feature_requirements": [
+          "playwright-browser-chromium",
+          "playwright-browser-firefox",
+          "playwright-browser-webkit"
+        ]
+      },
+      "created_at": "2024-03-10T00:00:00Z",
+      "updated_at": "2024-03-10T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]
