@@ -25,8 +25,9 @@ def _verify_certificate(cert, *, sudo: str) -> list[str]:
         remaining = expiration - now
         days_remaining = remaining.days
         state = "expired" if remaining.total_seconds() <= 0 else "active"
+        day_label = "day" if days_remaining == 1 else "days"
         lines.append(
-            f"Expiration: {expiration.isoformat()} ({days_remaining} day(s) remaining; {state})."
+            f"Expiration: {expiration.isoformat()} ({days_remaining} {day_label} remaining; {state})."
         )
 
     cert_path = getattr(cert, "certificate_path", "") or "unknown"

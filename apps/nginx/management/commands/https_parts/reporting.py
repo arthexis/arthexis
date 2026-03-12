@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apps.certs.models import CertbotCertificate
 from apps.nginx.management.commands.https_parts.verification import _verify_certificate
 from apps.nginx.models import SiteConfiguration
 
@@ -26,7 +27,7 @@ def _render_report(
         configs = configs.filter(name=domain_filter)
     if require_godaddy:
         configs = configs.filter(
-            certificate__certbotcertificate__challenge_type="godaddy"
+            certificate__certbotcertificate__challenge_type=CertbotCertificate.ChallengeType.GODADDY
         )
     elif require_local:
         configs = configs.filter(certificate__selfsignedcertificate__isnull=False)

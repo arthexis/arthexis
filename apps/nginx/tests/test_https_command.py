@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.certs.models import CertificateBase, CertbotCertificate
-from apps.certs.services import CertificateVerificationResult, CertbotChallengeError
+from apps.certs.services import CertbotChallengeError, CertificateVerificationResult
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 

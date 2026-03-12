@@ -45,7 +45,8 @@ def _certificate_status_line(certificate: CertificateBase, *, now: datetime) -> 
         status = "expired"
     else:
         remaining_days = (expiration - now).days
-        status = f"valid ({remaining_days} day(s) remaining)"
+        day_label = "day" if remaining_days == 1 else "days"
+        status = f"valid ({remaining_days} {day_label} remaining)"
 
     return (
         f"domain={certificate.domain}; "
