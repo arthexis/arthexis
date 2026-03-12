@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 import shlex
 
@@ -9,6 +10,29 @@ from django.core.management.base import CommandError
 from django.utils import timezone
 
 from apps.certs.models import CertificateBase, CertbotCertificate
+from apps.nginx.management.commands.https_parts.config_apply import _apply_config
+from apps.nginx.models import SiteConfiguration
+
+
+def _format_expiration(value: datetime | None) -> str:
+    """Format certificate expiration timestamps for operator-facing output."""
+
+    if value is None:
+        return "unknown"
+    return value.isoformat(timespec="seconds")
+
+
+def _certificate_source_label(certificate: CertificateBase) -> str:
+    """Return a concise source label for a certificate record."""
+
+    certbot_record = getattr(certificate, "certbotcertificate", None)
+    if certbot_record is not None:
+        if certbot_record.challenge_type == CertbotCertificate.ChallengeType.GODADDY:
+            return "certbot (godaddy dns-01)"
+        return "certbot (http-01)"
+    if getattr(certificate, "selfsignedcertificate", None) is not None:
+        return "self-signed"
+    return "certificate"
 
 
 def _renew_due_certificates(
@@ -81,17 +105,47 @@ def _renew_due_certificates(
             service.stdout.write("No certificates are tracked for renewal.")
         return
 
-    renewed = 0
+    renewed_certificates: list[CertificateBase] = []
     errors: list[str] = []
+
     for certificate in due_certificates:
+        previous_expiration = certificate.expiration_date
         try:
             certificate.renew(sudo=sudo)
         except RuntimeError as exc:
             errors.append(f"{certificate}: {exc}")
             continue
-        renewed += 1
 
+        certificate.refresh_from_db(fields=["expiration_date", "updated_at"])
+        renewed_certificates.append(certificate)
+
+        service.stdout.write(
+            service.style.SUCCESS(
+                "Renewed certificate: "
+                f"domain={certificate.domain}; "
+                f"source={_certificate_source_label(certificate)}; "
+                f"expiration={_format_expiration(previous_expiration)}"
+                f" -> {_format_expiration(certificate.expiration_date)}; "
+                f"cert={certificate.certificate_path}; "
+                f"key={certificate.certificate_key_path}"
+            )
+        )
+
+    renewed = len(renewed_certificates)
     if renewed:
+        https_configs = list(
+            SiteConfiguration.objects.filter(
+                certificate_id__in=[certificate.pk for certificate in renewed_certificates],
+                enabled=True,
+                protocol="https",
+            ).order_by("name")
+        )
+        for index, config in enumerate(https_configs):
+            _apply_config(service, config, reload=index == len(https_configs) - 1)
+        if https_configs:
+            service.stdout.write(
+                f"Reloaded HTTPS site configuration(s): {', '.join(config.name for config in https_configs)}."
+            )
         service.stdout.write(service.style.SUCCESS(f"Renewed {renewed} certificate(s)."))
 
     if errors:

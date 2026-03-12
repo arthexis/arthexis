@@ -929,3 +929,62 @@ def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
     rendered = out.getvalue()
     assert "No certificates were due for renewal for example.com." in rendered
     assert "--force-renewal --certbot example.com" in rendered
+
+
+@pytest.mark.django_db
+def test_https_renew_reapplies_https_configuration_for_renewed_certificate(monkeypatch):
+    """`--renew` should reapply nginx for HTTPS sites using renewed certificates."""
+
+    from datetime import timedelta
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="reapply-example-com-certbot",
+        domain="reapply.example.com",
+        certificate_path="/etc/letsencrypt/live/reapply.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/reapply.example.com/privkey.pem",
+        expiration_date=timezone.now() - timedelta(hours=2),
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+    )
+    SiteConfiguration.objects.create(
+        name="reapply.example.com",
+        enabled=True,
+        protocol="https",
+        certificate=cert,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+    monkeypatch.setattr(
+        CertificateBase,
+        "renew",
+        lambda self, *, sudo="sudo": "renewed",
+    )
+
+    applied_calls: list[tuple[str, bool]] = []
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        applied_calls.append((self.name, reload))
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message=f"applied:{self.name}"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    out = StringIO()
+    call_command(
+        "https",
+        "--renew",
+        "--godaddy",
+        "reapply.example.com",
+        "--no-sudo",
+        stdout=out,
+    )
+
+    assert applied_calls == [("reapply.example.com", True)]
+    rendered = out.getvalue()
+    assert "Renewed certificate: domain=reapply.example.com;" in rendered
+    assert "Reloaded HTTPS site configuration(s): reapply.example.com." in rendered
