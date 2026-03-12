@@ -4,6 +4,17 @@ env:
   NODE_OPTIONS: '--no-deprecation'
 
 on:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.html'
+      - '**/*.css'
+      - '**/*.scss'
+      - '.github/workflows/security-scan.yml'
+      - '.github/workflows/codeql.yml'
   schedule:
     - cron: '0 2 1 * *'
   workflow_dispatch:
@@ -13,8 +24,66 @@ permissions:
   issues: write
 
 jobs:
+  zap-baseline-pr:
+    name: OWASP ZAP Baseline Scan
+    if: github.event_name == 'pull_request' && vars.PR_SECURITY_SCAN_TARGET != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - name: Validate PR scan target
+        env:
+          TARGET_URL: ${{ vars.PR_SECURITY_SCAN_TARGET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TARGET_URL}" ]; then
+            echo "PR_SECURITY_SCAN_TARGET is not configured." >&2
+            exit 1
+          fi
+
+          case "${TARGET_URL}" in
+            https://arthexis.com*|http://arthexis.com*|https://www.arthexis.com*|http://www.arthexis.com*)
+              echo "Refusing to scan production target from pull_request context." >&2
+              exit 1
+              ;;
+          esac
+
+          echo "Using PR-safe scan target: ${TARGET_URL}"
+
+      - name: Run passive ZAP baseline scan
+        id: zap_scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: ${{ vars.PR_SECURITY_SCAN_TARGET }}
+          cmd_options: >-
+            -m 5
+            -J zap-pr-report.json
+            -w zap-pr-report.md
+            -r zap-pr-report.html
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-baseline-pr-report
+
+      - name: Upload PR ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-baseline-pr-report
+          path: |
+            zap-pr-report.html
+            zap-pr-report.md
+            zap-pr-report.json
+          if-no-files-found: warn
+
   zap-baseline:
     name: OWASP ZAP Baseline Scan
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

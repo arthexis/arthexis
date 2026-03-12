@@ -1,6 +1,16 @@
 name: CodeQL
 
 on:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/security-scan.yml'
+      - '.github/codeql/**'
   schedule:
     - cron: "15 3 1 * *"
   workflow_dispatch:
