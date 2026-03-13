@@ -195,12 +195,17 @@ def test_form_save_attachments_after_manual_instance_save(settings):
 
 
 @pytest.mark.pr_origin(6177)
-def test_form_rejects_invalid_screenshot_content_type():
-    """Screenshot uploads should reject mismatched content types.
+def test_form_rejects_invalid_screenshot_content_type(settings):
+    """Screenshot uploads should reject valid images with disallowed MIME types.
+
+    Parameters:
+        settings: Django settings fixture.
 
     Returns:
         None
     """
+
+    settings.USER_STORY_SCREENSHOT_ALLOWED_CONTENT_TYPES = ["image/png"]
 
     form = UserStoryForm(
         data={
@@ -213,7 +218,11 @@ def test_form_rejects_invalid_screenshot_content_type():
         files=MultiValueDict(
             {
                 "screenshot": [
-                    SimpleUploadedFile("screenshot.png", b"fake", content_type="text/plain"),
+                    SimpleUploadedFile(
+                        "screenshot.png",
+                        make_png_bytes(),
+                        content_type="text/plain",
+                    ),
                 ]
             }
         ),
@@ -221,7 +230,7 @@ def test_form_rejects_invalid_screenshot_content_type():
 
     assert not form.is_valid()
     assert "screenshot" in form.errors
-    assert form.errors["screenshot"]
+    assert any(error.code == "invalid_screenshot_content_type" for error in form.errors.as_data()["screenshot"])
 
 
 @pytest.mark.pr_origin(6177)
