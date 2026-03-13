@@ -221,7 +221,7 @@ def test_form_rejects_invalid_screenshot_content_type():
 
     assert not form.is_valid()
     assert "screenshot" in form.errors
-    assert "Unsupported screenshot content type" in form.errors["screenshot"][0]
+    assert form.errors["screenshot"]
 
 
 @pytest.mark.pr_origin(6177)

@@ -45,6 +45,10 @@ def test_calibrate_saves_lock_file(temp_base_dir: Path):
             return_value=FakeLCD(),
         ),
         mock.patch.object(subprocess, "run") as mock_run,
+        mock.patch(
+            "apps.screens.management.commands.lcd_actions.calibrate.is_local_node_feature_active",
+            return_value=True,
+        ),
     ):
         mock_run.return_value = subprocess.CompletedProcess(
             ["systemctl", "stop", "lcd-demo"], returncode=0, stdout="", stderr=""
@@ -66,6 +70,10 @@ def test_calibrate_can_skip_save(temp_base_dir: Path):
             "apps.screens.management.commands.lcd_actions.calibrate.prepare_lcd_controller",
             return_value=FakeLCD(),
         ),
+        mock.patch(
+            "apps.screens.management.commands.lcd_actions.calibrate.is_local_node_feature_active",
+            return_value=True,
+        ),
     ):
         call_command("lcd", "calibrate")
 
@@ -81,6 +89,10 @@ def test_restart_requires_service_name(temp_base_dir: Path):
         mock.patch(
             "apps.screens.management.commands.lcd_actions.calibrate.prepare_lcd_controller",
             return_value=FakeLCD(),
+        ),
+        mock.patch(
+            "apps.screens.management.commands.lcd_actions.calibrate.is_local_node_feature_active",
+            return_value=True,
         ),
         pytest.raises(CommandError, match="Service name is required"),
     ):

@@ -70,7 +70,13 @@ def test_delete_lock_file(temp_base_dir: Path):
 def test_restart_reports_failure(temp_base_dir: Path):
     """Surface systemctl stderr when restart exits with a non-zero status."""
 
-    with override_settings(BASE_DIR=temp_base_dir):
+    with (
+        override_settings(BASE_DIR=temp_base_dir),
+        mock.patch(
+            "apps.screens.management.commands.lcd_actions.write.is_local_node_feature_active",
+            return_value=True,
+        ),
+    ):
         with mock.patch.object(subprocess, "run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
                 ["systemctl", "restart", "lcd-demo"],
@@ -86,7 +92,13 @@ def test_restart_reports_failure(temp_base_dir: Path):
 def test_restart_handles_missing_systemctl(temp_base_dir: Path):
     """Raise a clear error when systemctl is unavailable on the host."""
 
-    with override_settings(BASE_DIR=temp_base_dir):
+    with (
+        override_settings(BASE_DIR=temp_base_dir),
+        mock.patch(
+            "apps.screens.management.commands.lcd_actions.write.is_local_node_feature_active",
+            return_value=True,
+        ),
+    ):
         with mock.patch.object(
             subprocess, "run", side_effect=FileNotFoundError
         ) as mock_run:
