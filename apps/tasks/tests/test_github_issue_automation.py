@@ -103,6 +103,8 @@ def test_create_manual_task_github_issue_creates_issue(
     task = build_manual_task_request(
         github_issue_template=template,
         github_issue_trigger="scheduled_start",
+        scheduled_start=timezone.now() - timedelta(minutes=5),
+        scheduled_end=timezone.now() + timedelta(minutes=55),
     )
 
     class FakeResponse:
