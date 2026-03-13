@@ -156,28 +156,26 @@ class HttpsProvisioningService:
             )
             return
 
-        with transaction.atomic():
-            migration_source_config = None
-            if migrate_from:
+        migration_source_config = None
+        if migrate_from:
+            with transaction.atomic():
                 migration_source_config = self._migrate_domain_records(
                     source_domain=migrate_from,
                     target_domain=domain,
                 )
-
-            certificate = self._enable_https(
-                domain,
-                use_local=use_local,
-                use_godaddy=use_godaddy,
-                sandbox_override=sandbox_override,
-                sudo=sudo,
-                reload=reload,
-                force_renewal=force_renewal,
-                warn_days=warn_days,
-                migrate_from_config=migration_source_config,
-            )
-
-            if migrate_from:
                 transaction.on_commit(update_local_nginx_scripts)
+
+        certificate = self._enable_https(
+            domain,
+            use_local=use_local,
+            use_godaddy=use_godaddy,
+            sandbox_override=sandbox_override,
+            sudo=sudo,
+            reload=reload,
+            force_renewal=force_renewal,
+            warn_days=warn_days,
+            migrate_from_config=migration_source_config,
+        )
         self.stdout.write(
             self.style.SUCCESS(
                 f"HTTPS enabled for {domain} using {certificate.__class__.__name__}."
