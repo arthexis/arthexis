@@ -115,6 +115,40 @@ def test_execute_escapes_bash_arg_sigils(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_execute_windows_bash_launcher_falls_back_to_sh(monkeypatch):
+    """Windows bash launcher failures should fall back to the next shell candidate."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-win-fallback-{uuid.uuid4()}",
+        display="Windows Fallback",
+        body_type=Recipe.BodyType.BASH,
+        script="echo ok",
+    )
+
+    monkeypatch.setattr("apps.recipes.models.os.name", "nt")
+    monkeypatch.setattr(
+        Recipe, "_bash_shell_candidates", staticmethod(lambda: ("bash", "sh"))
+    )
+
+    def _fake_run(command, **_kwargs):
+        shell = command[0]
+        if shell == "bash":
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=command,
+                output="",
+                stderr="WSL\x00service\x00createinstance\x00RPC\x00call\x00failed",
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", _fake_run)
+
+    execution = recipe.execute()
+
+    assert execution.result == "ok"
+
 def test_execute_markdown_bash_blocks_quote_arg_sigils(monkeypatch):
     """Markdown bash fences shell-escape arg sigils before execution."""
 

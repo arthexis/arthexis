@@ -724,10 +724,8 @@ def test_https_validate_reports_detailed_certificate_status(monkeypatch):
         CertbotCertificate,
         "verify_paths",
         lambda self, *, sudo="sudo": CertificateVerificationResult(
-            valid=True,
-            certificate_exists=True,
-            key_exists=True,
-            details="all good",
+            ok=True,
+            messages=["all good"],
         ),
     )
 

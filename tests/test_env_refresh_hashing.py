@@ -220,7 +220,9 @@ def test_load_fixtures_with_deferred_retry_retries_once(
     )
 
     assert calls == ["a.json", "b.json", "b.json"]
-    assert capsys.readouterr().out == ".."
+    # _load_fixtures_with_deferred_retry prints one dot per successful fixture load.
+    expected_progress = ".."
+    assert capsys.readouterr().out == expected_progress
 
 
 @pytest.mark.pr_origin(6190)
