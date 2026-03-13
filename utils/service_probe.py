@@ -43,10 +43,6 @@ def parse_runserver_port(command_line: str) -> int | None:
         None.
     """
 
-    port = _extract_port_from_patterns(command_line)
-    if port is not None:
-        return port
-
     try:
         tokens = shlex.split(command_line)
     except ValueError:
@@ -57,7 +53,12 @@ def parse_runserver_port(command_line: str) -> int | None:
     except ValueError:
         return None
 
-    return _scan_runserver_tail(tokens[runserver_index + 1 :])
+    tail_tokens = tokens[runserver_index + 1 :]
+    port = _extract_port_from_patterns(" ".join(tail_tokens))
+    if port is not None:
+        return port
+
+    return _scan_runserver_tail(tail_tokens)
 
 
 def _extract_port_from_patterns(command_line: str) -> int | None:
