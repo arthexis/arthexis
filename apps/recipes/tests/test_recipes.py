@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import uuid
 
 import pytest
@@ -84,3 +85,56 @@ def test_execute_creates_recipe_product():
     assert product.result == '{"ok": true}'
     assert product.format_detected == Recipe.RecipeFormat.PYTHON
     assert product.resolved_script == Recipe.PRODUCT_REDACTION_PLACEHOLDER
+
+
+@pytest.mark.django_db
+def test_execute_escapes_bash_arg_sigils(monkeypatch):
+    """Bash arg sigils are shell-escaped to avoid command injection."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"bash-arg-escape-{uuid.uuid4()}",
+        display="Bash Arg Escape",
+        body_type=Recipe.BodyType.BASH,
+        script="echo [ARG.0]",
+    )
+
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.append(command[2])
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello; cat /etc/passwd")
+
+    assert execution.result == "ok"
+    assert captured[0] == "echo 'hello; cat /etc/passwd'"
+
+
+@pytest.mark.django_db
+def test_execute_markdown_bash_blocks_quote_arg_sigils(monkeypatch):
+    """Markdown bash fences shell-escape arg sigils before execution."""
+
+    user = get_user_model().objects.create(username=f"chef-{uuid.uuid4()}")
+    recipe = Recipe.objects.create(
+        user=user,
+        slug=f"guide-bash-{uuid.uuid4()}.md",
+        display="Guide Bash",
+        script="""```bash\necho [ARG.0]\n```""",
+    )
+
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.append(command[2])
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("apps.recipes.models.subprocess.run", fake_run)
+
+    execution = recipe.execute("hello; cat /etc/passwd")
+
+    assert execution.result == "ok"
+    assert captured[0] == "echo 'hello; cat /etc/passwd'"

@@ -144,3 +144,96 @@ def test_upsert_site_configuration_updates_existing_row(env_refresh_module):
     assert config.last_applied_at == applied_at
     assert config.last_validated_at == validated_at
     assert config.last_message == "runtime state"
+
+
+def test_load_fixture_with_retry_retries_until_success(
+    monkeypatch, env_refresh_module, capsys
+):
+    """Regression: fixture loading should retry transient sqlite lock failures."""
+
+    calls: list[str] = []
+
+    def _flaky_load(command: str, fixture: str, *, verbosity: int) -> None:
+        calls.append(fixture)
+        if len(calls) < 3:
+            raise env_refresh_module.OperationalError("database is locked")
+
+    monkeypatch.setattr(env_refresh_module, "call_command", _flaky_load)
+
+    env_refresh_module._load_fixture_with_retry(
+        "seed.json",
+        using_sqlite=True,
+        attempts=3,
+        base_delay=0,
+    )
+
+    output = capsys.readouterr().out
+    assert "Database locked while loading seed.json" in output
+    assert calls == ["seed.json", "seed.json", "seed.json"]
+
+
+def test_call_command_with_sqlite_lock_retry_retries_and_succeeds(
+    monkeypatch, env_refresh_module, capsys
+):
+    """Regression: SQLite lock conflicts during command calls should be retried."""
+
+    calls: list[str] = []
+
+    def _flaky_call(command: str, *args, **kwargs) -> None:
+        calls.append(command)
+        if len(calls) == 1:
+            raise env_refresh_module.OperationalError("database is locked")
+
+    monkeypatch.setattr(env_refresh_module, "call_command", _flaky_call)
+
+    env_refresh_module._call_command_with_sqlite_lock_retry(
+        "register_site_apps",
+        using_sqlite=True,
+        attempts=3,
+        base_delay=0,
+    )
+
+    output = capsys.readouterr().out
+    assert "Database locked while running register_site_apps" in output
+    assert calls == ["register_site_apps", "register_site_apps"]
+
+
+def test_load_fixtures_with_deferred_retry_retries_once(
+    monkeypatch, env_refresh_module, capsys
+):
+    """Regression: deferred fixtures should be retried after initial dependency loads."""
+
+    calls: list[str] = []
+
+    real_error = env_refresh_module.DeserializationError
+
+    def _fake_loader(fixture: str, *, using_sqlite: bool) -> None:
+        calls.append(fixture)
+        if fixture == "b.json" and calls.count("b.json") == 1:
+            raise real_error("dependency missing")
+
+    monkeypatch.setattr(env_refresh_module, "_load_fixture_with_retry", _fake_loader)
+
+    env_refresh_module._load_fixtures_with_deferred_retry(
+        {1: ["a.json"], 2: ["b.json"]},
+        using_sqlite=True,
+    )
+
+    assert calls == ["a.json", "b.json", "b.json"]
+    assert capsys.readouterr().out == ".."
+
+
+@pytest.mark.pr_origin(6190)
+def test_close_old_connections_safely_ignores_pytest_db_guard(
+    monkeypatch, env_refresh_module
+):
+    """Regression: pytest-django DB guard RuntimeError should be swallowed."""
+
+    def _guarded_close() -> None:
+        raise RuntimeError(
+            'Database access not allowed, use the "django_db" mark, or the "db" or "transactional_db" fixtures to enable it.'
+        )
+
+    monkeypatch.setattr(env_refresh_module, "close_old_connections", _guarded_close)
+
+    env_refresh_module._close_old_connections_safely()

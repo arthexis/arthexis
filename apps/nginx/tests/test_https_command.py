@@ -659,3 +659,118 @@ def test_https_migrate_from_disables_source_https_config(monkeypatch):
 
     source.refresh_from_db()
     assert source.enabled is False
+
+
+@pytest.mark.django_db
+def test_https_enable_passes_force_renewal_to_certbot(monkeypatch):
+    """`https --force-renewal` should forward the flag to certbot provisioning."""
+
+    from apps.dns.models import DNSProviderCredential
+
+    DNSProviderCredential.objects.create(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        api_key="api-key",
+        api_secret="api-secret",
+        is_enabled=True,
+    )
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["force_renewal"] = force_renewal
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--godaddy", "example.dev", "--force-renewal")
+
+    assert provision_calls["force_renewal"] is True
+
+
+@pytest.mark.django_db
+def test_https_validate_reports_detailed_certificate_status(monkeypatch):
+    """`https --validate` should print success details for verified certbot certificates."""
+
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="validate-example-com-certbot",
+        domain="validate.example.com",
+        certificate_path="/etc/letsencrypt/live/validate.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/validate.example.com/privkey.pem",
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+        expiration_date=timezone.now() + timedelta(days=10),
+    )
+
+    SiteConfiguration.objects.create(
+        name="validate.example.com",
+        enabled=True,
+        protocol="https",
+        certificate=cert,
+    )
+
+    monkeypatch.setattr(
+        CertbotCertificate,
+        "verify_paths",
+        lambda self, *, sudo="sudo": CertificateVerificationResult(
+            valid=True,
+            certificate_exists=True,
+            key_exists=True,
+            details="all good",
+        ),
+    )
+
+    out = StringIO()
+    call_command("https", "--validate", stdout=out)
+
+    rendered = out.getvalue()
+    assert "validate.example.com" in rendered
+    assert "all good" in rendered
+
+
+@pytest.mark.django_db
+def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
+    """`https --renew <domain>` should report when the target cert is not due yet."""
+
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="filter-example-com-certbot",
+        domain="filter.example.com",
+        certificate_path="/etc/letsencrypt/live/filter.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/filter.example.com/privkey.pem",
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+        expiration_date=timezone.now() + timedelta(days=45),
+    )
+    SiteConfiguration.objects.create(
+        name="filter.example.com",
+        enabled=True,
+        protocol="https",
+        certificate=cert,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+
+    out = StringIO()
+    call_command("https", "--renew", "filter.example.com", stdout=out)
+
+    rendered = out.getvalue()
+    assert "not due for renewal" in rendered
+    assert "filter.example.com" in rendered
