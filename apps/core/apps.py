@@ -460,13 +460,8 @@ def _connect_sqlite_wal():
         if raw_value is None:
             return None
 
-        candidate = raw_value.strip()
-        if not candidate:
-            logger.warning("Invalid %s value %r; ignoring %s.", env_name, raw_value, pragma_name)
-            return None
-
         try:
-            parsed_value = int(candidate)
+            parsed_value = int(raw_value.strip())
         except ValueError:
             logger.warning("Invalid %s value %r; ignoring %s.", env_name, raw_value, pragma_name)
             return None
