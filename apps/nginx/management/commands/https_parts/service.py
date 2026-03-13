@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
+from django.db import transaction
+
+from apps.nodes.models import Node
 
 from apps.nginx.management.commands.https_parts.certificate_flow import (
     _get_or_create_certificate,
@@ -30,6 +33,19 @@ from apps.sites.site_config import update_local_nginx_scripts
 class HttpsProvisioningService:
     """Encapsulate HTTPS command state and operational workflows."""
 
+    _MIGRATABLE_SITE_CONFIG_FIELDS = (
+        "enabled",
+        "mode",
+        "role",
+        "port",
+        "external_websockets",
+        "managed_subdomains",
+        "include_ipv6",
+        "expected_path",
+        "site_entries_path",
+        "site_destination",
+    )
+
     def __init__(self, command):
         """Initialize service from management command IO/style handles."""
 
@@ -47,7 +63,21 @@ class HttpsProvisioningService:
         certbot_domain = options["certbot"]
         godaddy_domain = options["godaddy"]
         explicit_site = options["site"]
+        explicit_migrate_from = options.get("migrate_from")
         parsed_site = _parse_site_domain(explicit_site) if explicit_site else None
+        migrate_from = (
+            _parse_site_domain(explicit_migrate_from)
+            if explicit_migrate_from
+            else None
+        )
+
+        if migrate_from and not parsed_site and not certbot_domain and not godaddy_domain:
+            raise CommandError(
+                "--migrate-from requires a target domain via --site, --certbot, or --godaddy."
+            )
+
+        if migrate_from and (disable or renew or validate):
+            raise CommandError("--migrate-from is only supported when enabling HTTPS.")
 
         if parsed_site and options["local"]:
             raise CommandError(
@@ -108,6 +138,9 @@ class HttpsProvisioningService:
                 "No target domain was provided. Use --site, --certbot, --godaddy, or --local."
             )
 
+        if migrate_from and domain == "localhost":
+            raise CommandError("--migrate-from requires a public target domain.")
+
         if disable:
             self._disable_https(domain, reload=reload)
             return
@@ -123,16 +156,28 @@ class HttpsProvisioningService:
             )
             return
 
-        certificate = self._enable_https(
-            domain,
-            use_local=use_local,
-            use_godaddy=use_godaddy,
-            sandbox_override=sandbox_override,
-            sudo=sudo,
-            reload=reload,
-            force_renewal=force_renewal,
-            warn_days=warn_days,
-        )
+        with transaction.atomic():
+            migration_source_config = None
+            if migrate_from:
+                migration_source_config = self._migrate_domain_records(
+                    source_domain=migrate_from,
+                    target_domain=domain,
+                )
+
+            certificate = self._enable_https(
+                domain,
+                use_local=use_local,
+                use_godaddy=use_godaddy,
+                sandbox_override=sandbox_override,
+                sudo=sudo,
+                reload=reload,
+                force_renewal=force_renewal,
+                warn_days=warn_days,
+                migrate_from_config=migration_source_config,
+            )
+
+            if migrate_from:
+                transaction.on_commit(update_local_nginx_scripts)
         self.stdout.write(
             self.style.SUCCESS(
                 f"HTTPS enabled for {domain} using {certificate.__class__.__name__}."
@@ -150,10 +195,31 @@ class HttpsProvisioningService:
         reload: bool,
         force_renewal: bool,
         warn_days: int,
+        migrate_from_config: SiteConfiguration | None = None,
     ):
-        """Enable HTTPS for a site, provision certs, and apply nginx configuration."""
+        """Enable HTTPS for a target domain and apply the resulting nginx state.
+
+        Parameters:
+            domain: Destination hostname being enabled for HTTPS.
+            use_local: Whether to issue a local/self-signed certificate flow.
+            use_godaddy: Whether the certbot flow should use GoDaddy DNS challenge.
+            sandbox_override: Optional explicit override for DNS sandbox behavior.
+            sudo: Prefix used for shell commands requiring privileged access.
+            reload: Whether nginx should be reloaded after config changes.
+            force_renewal: Whether certificate issuance should force renewal.
+            warn_days: Threshold in days to warn if certificate expiry is near.
+            migrate_from_config: Optional source configuration to copy during migration.
+
+        Returns:
+            The created or reused certificate instance bound to the HTTPS config.
+
+        Raises:
+            CommandError: Propagated when certificate provisioning or config apply fails.
+        """
 
         config = _get_or_create_config(domain, protocol="https")
+        if migrate_from_config is not None:
+            self._copy_site_configuration(source=migrate_from_config, target=config)
         certificate = _get_or_create_certificate(
             domain,
             config,
@@ -226,3 +292,88 @@ class HttpsProvisioningService:
             site.save(update_fields=updated_fields)
 
         update_local_nginx_scripts()
+
+
+    def _migrate_domain_records(
+        self,
+        *,
+        source_domain: str,
+        target_domain: str,
+    ) -> SiteConfiguration | None:
+        """Migrate persisted Site/Node references from one domain to another.
+
+        Parameters:
+            source_domain: Existing domain whose records should be migrated.
+            target_domain: Destination domain receiving migrated references.
+
+        Returns:
+            The source SiteConfiguration when it exists, otherwise ``None``.
+
+        Raises:
+            CommandError: If source and target are identical, or if target conflicts.
+        """
+
+        if source_domain == target_domain:
+            raise CommandError("--migrate-from source must differ from the target domain.")
+
+        target_site = Site.objects.filter(domain__iexact=target_domain).first()
+        source_site = Site.objects.filter(domain__iexact=source_domain).first()
+        if source_site and target_site and source_site.pk != target_site.pk:
+            raise CommandError(
+                f"Cannot migrate from {source_domain}: target domain {target_domain} already exists as a different Site."
+            )
+
+        if source_site and not target_site:
+            target_site = source_site
+            target_site.domain = target_domain
+            target_site.name = target_domain
+            target_site.save(update_fields=["domain", "name"])
+        elif not target_site:
+            target_site = Site.objects.create(domain=target_domain, name=target_domain)
+
+        if source_site and source_site.pk != target_site.pk:
+            Node.objects.filter(base_site=source_site).update(base_site=target_site)
+
+        migrated_nodes = Node.objects.filter(hostname__iexact=source_domain).update(
+            hostname=target_domain
+        )
+
+        source_config = SiteConfiguration.objects.filter(name=source_domain).first()
+        if source_config and source_config.enabled and source_config.protocol == "https":
+            source_config.enabled = False
+            source_config.save(update_fields=["enabled"])
+
+        if source_config or source_site:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Migrating domain records from {source_domain} to {target_domain}; {migrated_nodes} node hostname(s) updated."
+                )
+            )
+        return source_config
+
+    @staticmethod
+    def _copy_site_configuration(
+        *, source: SiteConfiguration, target: SiteConfiguration
+    ) -> None:
+        """Copy migratable runtime fields from a source config to a target config.
+
+        Parameters:
+            source: Existing site configuration used as migration source.
+            target: Destination configuration to mutate with migrated values.
+
+        Returns:
+            ``None``. The target instance is updated in place and saved when changed.
+
+        Raises:
+            CommandError: Not raised directly by this helper.
+        """
+
+        updated_fields: list[str] = []
+        for field_name in HttpsProvisioningService._MIGRATABLE_SITE_CONFIG_FIELDS:
+            source_value = getattr(source, field_name)
+            if getattr(target, field_name) != source_value:
+                setattr(target, field_name, source_value)
+                updated_fields.append(field_name)
+
+        if updated_fields:
+            target.save(update_fields=updated_fields)

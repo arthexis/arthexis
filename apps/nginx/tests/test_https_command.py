@@ -1157,3 +1157,162 @@ def test_https_renew_domain_filter_reports_existing_certificate_details_when_not
     assert "domain=existing.example.com;" in rendered
     assert "source=certbot (godaddy dns-01);" in rendered
     assert "status=valid" in rendered
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_updates_site_and_node_records(monkeypatch):
+    """`--migrate-from` should move existing node/site references to the new domain."""
+
+    from django.contrib.sites.models import Site
+    from apps.nodes.models import Node
+
+    previous_site = Site.objects.create(domain="arthexis.com", name="arthexis.com")
+    Node.objects.create(
+        hostname="arthexis.com",
+        mac_address="00:11:22:33:44:55",
+        base_site=previous_site,
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command(
+        "https",
+        "--site",
+        "arthexis.gelectriic.com",
+        "--migrate-from",
+        "arthexis.com",
+        "--no-sudo",
+    )
+
+    migrated_site = Site.objects.get(domain="arthexis.gelectriic.com")
+    node = Node.objects.get(mac_address="00:11:22:33:44:55")
+    assert node.base_site_id == migrated_site.pk
+    assert node.hostname == "arthexis.gelectriic.com"
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_requires_public_target_domain():
+    """`--migrate-from` should reject local-only migrations without public target hosts."""
+
+    with pytest.raises(CommandError, match="requires a target domain"):
+        call_command("https", "--enable", "--local", "--migrate-from", "arthexis.com")
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_copies_site_configuration(monkeypatch):
+    """Migrated domains should inherit existing site configuration defaults when possible."""
+
+    from django.utils import timezone
+
+    source = SiteConfiguration.objects.create(
+        name="arthexis.com",
+        enabled=True,
+        mode="public",
+        role="default",
+        protocol="http",
+        port=9443,
+        managed_subdomains="admin,api,status",
+        include_ipv6=True,
+        last_applied_at=timezone.now(),
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command(
+        "https",
+        "--site",
+        "arthexis.gelectriic.com",
+        "--migrate-from",
+        source.name,
+        "--no-sudo",
+    )
+
+    target = SiteConfiguration.objects.get(name="arthexis.gelectriic.com")
+    assert target.mode == "public"
+    assert target.role == "default"
+    assert target.port == 9443
+    assert target.managed_subdomains == "admin,api,status"
+    assert target.include_ipv6 is True
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_rejects_non_enable_actions():
+    """`--migrate-from` should fail fast when combined with non-enable actions."""
+
+    with pytest.raises(CommandError, match="only supported when enabling HTTPS"):
+        call_command(
+            "https",
+            "--disable",
+            "--site",
+            "example.com",
+            "--migrate-from",
+            "old.example.com",
+        )
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_disables_source_https_config(monkeypatch):
+    """Source HTTPS configuration should be deactivated after migration."""
+
+    from django.utils import timezone
+
+    source = SiteConfiguration.objects.create(
+        name="arthexis.com",
+        enabled=True,
+        mode="public",
+        protocol="https",
+        port=443,
+        managed_subdomains="admin,api,status",
+        include_ipv6=True,
+        last_applied_at=timezone.now(),
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command(
+        "https",
+        "--site",
+        "arthexis.gelectriic.com",
+        "--migrate-from",
+        source.name,
+        "--no-sudo",
+    )
+
+    source.refresh_from_db()
+    assert source.enabled is False
