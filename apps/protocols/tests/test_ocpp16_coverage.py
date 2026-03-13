@@ -1,5 +1,5 @@
-import json
 from importlib import import_module, reload
+import json
 from pathlib import Path
 
 from django.test import TestCase
@@ -14,8 +14,20 @@ from apps.protocols.services import load_protocol_spec_from_file, spec_path
 
 
 class Ocpp16SpecTests(TestCase):
+    """Validate OCPP 1.6 spec call lists against the checked-in registry fixture."""
+
     def test_spec_matches_call_registry_fixture(self):
-        """OCPP 1.6 spec call lists should stay aligned with registry fixture entries."""
+        """Assert OCPP 1.6 spec calls match registry fixture entries.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If spec calls diverge from registry fixture entries.
+        """
 
         project_root = Path(__file__).resolve().parents[3]
         registry_path = project_root / "apps/ocpp/spec/ocpp16_calls.json"
@@ -26,15 +38,10 @@ class Ocpp16SpecTests(TestCase):
 
         for direction in ("cp_to_csms", "csms_to_cp"):
             with self.subTest(direction=direction):
-                self.assertEqual(
-                    set(spec_calls[direction]),
-                    set(registry_calls[direction]),
+                self.assertCountEqual(
+                    spec_calls[direction],
+                    registry_calls[direction],
                     msg=f"Spec mismatch for {direction}",
-                )
-                self.assertEqual(
-                    len(spec_calls[direction]),
-                    len(registry_calls[direction]),
-                    msg=f"Spec count mismatch for {direction}",
                 )
 
 
