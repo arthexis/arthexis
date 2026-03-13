@@ -19,7 +19,7 @@ default_migration_policy() {
     role="$(cat "${LOCK_DIR}/role.lck")"
   fi
 
-  role="$(printf '%s' "$role" | tr -d '[:space:]')"
+  role="${role//[[:space:]]/}"
 
   case "${role,,}" in
     satellite|watchtower)
@@ -134,6 +134,17 @@ run_runserver_preflight() {
     return 1
   fi
 
+  write_migration_fingerprint() {
+    local value="$1"
+
+    if ! printf '%s\n' "$value" > "$MIGRATIONS_SHA_FILE"; then
+      echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
   if [ "$migration_policy" = "skip" ]; then
     echo "Skipping runserver migration preflight (ARTHEXIS_MIGRATION_POLICY=skip)."
     RUNSERVER_PREFLIGHT_DONE=true
@@ -164,8 +175,7 @@ run_runserver_preflight() {
       echo "Found successful pre-deploy migration marker; verifying migration state..."
       if "$python_bin" manage.py migrate --check; then
         echo "Pre-deploy migration marker verified; skipping migration apply fallback."
-        if ! printf '%s\n' "$fingerprint" > "$MIGRATIONS_SHA_FILE"; then
-          echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+        if ! write_migration_fingerprint "$fingerprint"; then
           return 1
         fi
         RUNSERVER_PREFLIGHT_DONE=true
@@ -182,8 +192,7 @@ run_runserver_preflight() {
     echo "Migrations unchanged since last successful preflight; verifying database state..."
     if "$python_bin" manage.py migrate --check; then
       echo "Database matches cached migrations fingerprint; skipping migration checks."
-      if ! printf '%s\n' "$fingerprint" > "$MIGRATIONS_SHA_FILE"; then
-        echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+      if ! write_migration_fingerprint "$fingerprint"; then
         return 1
       fi
       RUNSERVER_PREFLIGHT_DONE=true
@@ -240,8 +249,7 @@ run_runserver_preflight() {
     fi
   fi
 
-  if ! printf '%s\n' "$fingerprint" > "$MIGRATIONS_SHA_FILE"; then
-    echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+  if ! write_migration_fingerprint "$fingerprint"; then
     return 1
   fi
   RUNSERVER_PREFLIGHT_DONE=true
