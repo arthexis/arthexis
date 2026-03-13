@@ -1,4 +1,4 @@
-Removed 100 low-value non-OCPP test modules:
+Removed 99 low-value non-OCPP test modules:
 apps/smb/tests/test_wikipedia_links.py
 tests/test_settings_import_smoke.py
 scripts/tests/test_deploy_orchestration_scripts.py

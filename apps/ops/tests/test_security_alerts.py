@@ -42,6 +42,21 @@ def test_build_security_alerts_includes_active_error_events_only() -> None:
     assert [alert["message"] for alert in alerts] == ["Active worker failure."]
     assert alerts[0]["severity"] == "error"
 
+
+def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
+    """Collector exceptions should be isolated and recorded as active events."""
+
+    def _boom(now=None) -> list[security_alerts.SecurityAlert]:
+        raise RuntimeError("collector exploded")
+
+    monkeypatch.setattr(security_alerts, "error_event_security_alerts", _boom)
+
+    alerts = security_alerts.build_security_alerts()
+
+    assert alerts == []
+    persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
+    assert persisted_event.occurrence_count == 1
+
 def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
     """Older occurrences should not move last_occurred_at backwards."""
 
@@ -64,6 +79,25 @@ def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
     event = SecurityAlertEvent.objects.get(key="event-monotonic")
     assert event.occurrence_count == 2
     assert event.last_occurred_at == first_seen
+
+
+def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) -> None:
+    """Collector failure events should be deactivated after successful collection."""
+
+    SecurityAlertEvent.record_occurrence(
+        key="security-alert-source-error-events",
+        message="Security alert source failed.",
+        detail="error_events: boom",
+        remediation_url="/admin/system/dashboard-rules-report/",
+    )
+
+    monkeypatch.setattr(security_alerts, "error_event_security_alerts", lambda now=None: [])
+
+    alerts = security_alerts.build_security_alerts()
+
+    assert alerts == []
+    persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
+    assert persisted_event.is_active is False
 
 def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     """Recorded event alerts should expose summary with timestamp and occurrence count."""
