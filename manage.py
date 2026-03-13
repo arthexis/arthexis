@@ -265,6 +265,51 @@ class RunserverSession:
             time.sleep(self.poll_interval)
 
 
+def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888) -> None:
+    """Ensure runserver defaults to an explicit bind when no addrport is provided.
+
+    Args:
+        args: Command-line arguments where ``args[0]`` is expected to be ``runserver``.
+        default_port: Port used for default bindings.
+
+    Returns:
+        None. The ``args`` list is mutated in place.
+
+    Raises:
+        None.
+    """
+
+    if not args or args[0] != "runserver":
+        return
+
+    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath"}
+    skip_next = False
+    has_addrport = False
+    for argument in args[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if argument == "--addrport" or argument.startswith("--addrport="):
+            has_addrport = True
+            break
+        if argument in options_with_values:
+            skip_next = True
+            continue
+        if argument.startswith("-"):
+            continue
+        has_addrport = True
+        break
+
+    if has_addrport:
+        return
+
+    if "--ipv6" in args or "-6" in args:
+        args.append(f"[::]:{default_port}")
+        return
+
+    args.append(f"0.0.0.0:{default_port}")
+
+
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:
     global _RUNSERVER_STARTED_AT
     _RUNSERVER_STARTED_AT = time.monotonic()
@@ -314,6 +359,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     is_runserver = bool(args) and args[0] == "runserver"
     is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
+        _ensure_runserver_default_bind(args)
         if is_debug_session:
             os.environ["DEBUG"] = "1"
         else:
