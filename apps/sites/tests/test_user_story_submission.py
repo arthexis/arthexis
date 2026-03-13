@@ -234,6 +234,45 @@ def test_form_rejects_invalid_screenshot_content_type(settings):
 
 
 @pytest.mark.pr_origin(6177)
+def test_form_rejects_screenshot_without_content_type(settings):
+    """Screenshot uploads should fail when the original MIME type is missing.
+
+    Parameters:
+        settings: Django settings fixture.
+
+    Returns:
+        None
+    """
+
+    settings.USER_STORY_SCREENSHOT_ALLOWED_CONTENT_TYPES = ["image/png"]
+
+    form = UserStoryForm(
+        data={
+            "name": "anon@example.com",
+            "rating": 4,
+            "comments": "Screenshot upload",
+            "path": "/",
+            "messages": "",
+        },
+        files=MultiValueDict(
+            {
+                "screenshot": [
+                    SimpleUploadedFile(
+                        "screenshot.png",
+                        make_png_bytes(),
+                        content_type="",
+                    ),
+                ]
+            }
+        ),
+    )
+
+    assert not form.is_valid()
+    assert "screenshot" in form.errors
+    assert any(error.code == "missing_screenshot_content_type" for error in form.errors.as_data()["screenshot"])
+
+
+@pytest.mark.pr_origin(6177)
 def test_form_rejects_oversized_screenshot(settings):
     """Screenshot uploads should reject files larger than configured maximum.
 

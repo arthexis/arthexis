@@ -124,8 +124,29 @@ class UserStoryForm(forms.ModelForm):
         }
 
     def __init__(self, *args, user=None, files=None, **kwargs):
+        """Initialize feedback form state and cache uploaded file metadata.
+
+        Parameters:
+            *args: Positional form arguments passed to ``ModelForm``.
+            user: Authenticated user associated with the submission, if any.
+            files: MultiValueDict-like upload container used for attachments and screenshot metadata.
+            **kwargs: Additional keyword arguments forwarded to ``ModelForm``.
+
+        Returns:
+            None: Initializes instance attributes in place.
+
+        Raises:
+            AttributeError: If ``files`` does not provide ``get`` and ``getlist`` methods.
+        """
+
         self.user = user
         self.upload_files = files.getlist("attachments") if files is not None else []
+        self.screenshot_upload_content_type = ""
+        if files is not None:
+            screenshot_upload = files.get("screenshot")
+            self.screenshot_upload_content_type = (
+                getattr(screenshot_upload, "content_type", "") or ""
+            ).strip().lower()
         super().__init__(*args, files=files, **kwargs)
 
         if user is not None and user.is_authenticated:
@@ -301,12 +322,18 @@ class UserStoryForm(forms.ModelForm):
                 code="invalid_screenshot_type",
             )
 
-        content_type = (getattr(screenshot, "content_type", "") or "").lower()
+        content_type = (self.screenshot_upload_content_type or "").strip().lower()
+        if not content_type:
+            raise forms.ValidationError(
+                _("Screenshot content type is required."),
+                code="missing_screenshot_content_type",
+            )
+
         allowed_content_types = self.get_allowed_screenshot_content_types()
         if allowed_content_types and content_type not in allowed_content_types:
             raise forms.ValidationError(
                 _("Unsupported screenshot content type: %(content_type)s.")
-                % {"content_type": content_type or _("unknown")},
+                % {"content_type": content_type},
                 code="invalid_screenshot_content_type",
             )
 
