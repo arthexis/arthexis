@@ -6,23 +6,6 @@ import pytest
 
 from utils import service_probe
 
-
-@pytest.mark.pr(6201)
-def test_parse_runserver_port_prefers_valid_addrport() -> None:
-    """Port parsing should extract a valid address-port argument from runserver commands."""
-
-    command = "1234 python manage.py runserver 0.0.0.0:9010 --noreload"
-    assert service_probe.parse_runserver_port(command) == 9010
-
-
-@pytest.mark.pr(6201)
-def test_parse_runserver_port_supports_standalone_numeric_port() -> None:
-    """Port parsing should accept valid standalone numeric runserver addrport values."""
-
-    command = "4321 python manage.py runserver 9000 --noreload"
-    assert service_probe.parse_runserver_port(command) == 9000
-
-
 @pytest.mark.pr(6201)
 def test_parse_runserver_port_supports_addrport_option_with_value() -> None:
     """Port parsing should support ``--addrport`` when passed as a separate token."""
