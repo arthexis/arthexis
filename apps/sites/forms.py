@@ -126,6 +126,12 @@ class UserStoryForm(forms.ModelForm):
     def __init__(self, *args, user=None, files=None, **kwargs):
         self.user = user
         self.upload_files = files.getlist("attachments") if files is not None else []
+        self.screenshot_upload_content_type = ""
+        if files is not None:
+            screenshot_upload = files.get("screenshot")
+            self.screenshot_upload_content_type = (
+                getattr(screenshot_upload, "content_type", "") or ""
+            ).lower()
         super().__init__(*args, files=files, **kwargs)
 
         if user is not None and user.is_authenticated:
@@ -301,7 +307,11 @@ class UserStoryForm(forms.ModelForm):
                 code="invalid_screenshot_type",
             )
 
-        content_type = (getattr(screenshot, "content_type", "") or "").lower()
+        content_type = (
+            self.screenshot_upload_content_type
+            or getattr(screenshot, "content_type", "")
+            or ""
+        ).lower()
         allowed_content_types = self.get_allowed_screenshot_content_types()
         if allowed_content_types and content_type not in allowed_content_types:
             raise forms.ValidationError(

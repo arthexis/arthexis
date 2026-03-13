@@ -1,5 +1,10 @@
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied
+from django.shortcuts import resolve_url
+
+
+ADMIN_LOGIN_URL_NAME = "admin:login"
 
 
 def staff_required(view_func):
@@ -7,9 +12,24 @@ def staff_required(view_func):
 
     The wrapped view is marked so navigation helpers can hide links from
     non-staff users.
+
+    Parameters:
+        view_func: The view function that requires staff access.
+
+    Returns:
+        Callable: Wrapped view enforcing authentication and staff status.
+
+    Raises:
+        PermissionDenied: Raised for authenticated non-staff users.
     """
 
-    decorated = staff_member_required(view_func)
+    def decorated(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path(), resolve_url(ADMIN_LOGIN_URL_NAME))
+        if not request.user.is_staff:
+            raise PermissionDenied
+        return view_func(request, *args, **kwargs)
+
     decorated.login_required = True
     decorated.staff_required = True
     return decorated
