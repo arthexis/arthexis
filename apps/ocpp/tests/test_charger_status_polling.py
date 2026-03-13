@@ -200,6 +200,45 @@ def test_status_view_aggregate_deduplicates_events_from_multiple_identities(clie
 
 
 @pytest.mark.django_db
+def test_status_view_aggregate_keeps_distinct_connector_status_rows(client):
+    """Aggregate status view should preserve connector-specific status rows."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-by-connector", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-EVENTS-BY-CONNECTOR")
+    connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
+    connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
+
+    connector_a_message = (
+        "2024-01-01 12:00:00.000 StatusNotification processed: {\"connectorId\": 1, \"status\": \"Available\"}"
+    )
+    connector_b_message = (
+        "2024-01-01 12:00:00.000 StatusNotification processed: {\"connectorId\": 2, \"status\": \"Available\"}"
+    )
+    store.logs_module._append_memory_log(
+        store.identity_key(charger.charger_id, connector_a.connector_id),
+        connector_a_message,
+        log_type="charger",
+    )
+    store.logs_module._append_memory_log(
+        store.identity_key(charger.charger_id, connector_b.connector_id),
+        connector_b_message,
+        log_type="charger",
+    )
+
+    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    connector_status_rows = [
+        row for row in events if row["event"] == "Status" and row["details"] == "Available"
+    ]
+    assert len(connector_status_rows) == 2
+
+
+@pytest.mark.django_db
 def test_status_view_aggregate_includes_pending_events(client):
     """Regression: aggregate status view includes notable pending-key events."""
 
