@@ -2,9 +2,12 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-if [ -n "${LOCK_DIR:-}" ]; then
-  LOCK_DIR="$(normalize_path "$LOCK_DIR")"
+if [ -z "${BASE_DIR:-}" ]; then
+  BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
+
+LOCK_DIR="${LOCK_DIR:-${BASE_DIR}/.locks}"
+LOCK_DIR="$(normalize_path "$LOCK_DIR")"
 
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
@@ -15,6 +18,8 @@ default_migration_policy() {
   if [ -z "$role" ] && [ -n "${LOCK_DIR:-}" ] && [ -f "${LOCK_DIR}/role.lck" ]; then
     role="$(cat "${LOCK_DIR}/role.lck")"
   fi
+
+  role="$(printf '%s' "$role" | tr -d '[:space:]')"
 
   case "${role,,}" in
     satellite|watchtower)
@@ -141,6 +146,11 @@ run_runserver_preflight() {
     return 1
   fi
 
+  if ! mkdir -p "$LOCK_DIR"; then
+    echo "Failed to create lock directory '$LOCK_DIR'." >&2
+    return 1
+  fi
+
   local stored_fingerprint=""
   if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" = true ]; then
     echo "Forcing migration preflight refresh..."
@@ -154,7 +164,10 @@ run_runserver_preflight() {
       echo "Found successful pre-deploy migration marker; verifying migration state..."
       if "$python_bin" manage.py migrate --check; then
         echo "Pre-deploy migration marker verified; skipping migration apply fallback."
-        echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+        if ! printf '%s\n' "$fingerprint" > "$MIGRATIONS_SHA_FILE"; then
+          echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+          return 1
+        fi
         RUNSERVER_PREFLIGHT_DONE=true
         export DJANGO_SUPPRESS_MIGRATION_CHECK=1
         RUNSERVER_EXTRA_ARGS+=("--skip-checks")
@@ -169,7 +182,10 @@ run_runserver_preflight() {
     echo "Migrations unchanged since last successful preflight; verifying database state..."
     if "$python_bin" manage.py migrate --check; then
       echo "Database matches cached migrations fingerprint; skipping migration checks."
-      echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+      if ! printf '%s\n' "$fingerprint" > "$MIGRATIONS_SHA_FILE"; then
+        echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+        return 1
+      fi
       RUNSERVER_PREFLIGHT_DONE=true
       export DJANGO_SUPPRESS_MIGRATION_CHECK=1
       RUNSERVER_EXTRA_ARGS+=("--skip-checks")
@@ -224,7 +240,10 @@ run_runserver_preflight() {
     fi
   fi
 
-  echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+  if ! printf '%s\n' "$fingerprint" > "$MIGRATIONS_SHA_FILE"; then
+    echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+    return 1
+  fi
   RUNSERVER_PREFLIGHT_DONE=true
   export DJANGO_SUPPRESS_MIGRATION_CHECK=1
   RUNSERVER_EXTRA_ARGS+=("--skip-checks")
