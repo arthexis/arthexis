@@ -560,6 +560,27 @@ def _important_non_transaction_events(
         return None
 
     events: list[dict[str, str | int | datetime | None]] = []
+    dedupe_keys: set[tuple[datetime, str, str, int | None]] = set()
+
+    def _event_dedupe_key(
+        row: dict[str, str | int | datetime | None],
+    ) -> tuple[datetime, str, str, int | None] | None:
+        """Return a stable dedupe key for non-transaction event rows."""
+
+        timestamp = row.get("timestamp")
+        event_name = row.get("event")
+        details = row.get("details")
+        if not isinstance(timestamp, datetime):
+            return None
+        if not isinstance(event_name, str):
+            return None
+        if not isinstance(details, str):
+            return None
+        event_id = row.get("event_id")
+        if not isinstance(event_id, int):
+            event_id = None
+        return timestamp, event_name, details, event_id
+
     for entry in store.iter_log_entries(keys, log_type="charger"):
         if len(entry.text) < 24:
             continue
@@ -583,34 +604,42 @@ def _important_non_transaction_events(
             if not status_value:
                 continue
             severity, severity_color, severity_label = _event_meta("Status", status_value)
-            events.append(
-                {
-                    "timestamp": entry.timestamp,
-                    "event": "Status",
-                    "details": status_value,
-                    "severity": severity,
-                    "severity_color": severity_color,
-                    "severity_label": severity_label,
-                    "event_id": _transaction_id_from_payload(payload),
-                }
-            )
+            row = {
+                "timestamp": entry.timestamp,
+                "event": "Status",
+                "details": status_value,
+                "severity": severity,
+                "severity_color": severity_color,
+                "severity_label": severity_label,
+                "event_id": _transaction_id_from_payload(payload),
+            }
+            dedupe_key = _event_dedupe_key(row)
+            if dedupe_key is not None:
+                if dedupe_key in dedupe_keys:
+                    continue
+                dedupe_keys.add(dedupe_key)
+            events.append(row)
             continue
         if not message.startswith(important_prefixes):
             continue
         event_name, _, detail_text = message.partition(":")
         details = detail_text.strip() or "-"
         severity, severity_color, severity_label = _event_meta(event_name, details)
-        events.append(
-            {
-                "timestamp": entry.timestamp,
-                "event": event_name.strip(),
-                "details": details,
-                "severity": severity,
-                "severity_color": severity_color,
-                "severity_label": severity_label,
-                "event_id": None,
-            }
-        )
+        row = {
+            "timestamp": entry.timestamp,
+            "event": event_name.strip(),
+            "details": details,
+            "severity": severity,
+            "severity_color": severity_color,
+            "severity_label": severity_label,
+            "event_id": None,
+        }
+        dedupe_key = _event_dedupe_key(row)
+        if dedupe_key is not None:
+            if dedupe_key in dedupe_keys:
+                continue
+            dedupe_keys.add(dedupe_key)
+        events.append(row)
 
     return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
