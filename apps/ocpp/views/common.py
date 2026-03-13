@@ -560,31 +560,80 @@ def _important_non_transaction_events(
         return None
 
     events: list[dict[str, str | int | datetime | None]] = []
-    for entry in store.iter_log_entries(keys, log_type="charger"):
-        if len(entry.text) < 24:
-            continue
-        message = entry.text[24:].strip()
-        if message.startswith(excluded_prefixes):
-            continue
-        if message.startswith(status_prefix):
-            payload_text = message.split(":", 1)[1].strip()
+    dedupe_keys: set[tuple[datetime, str, str, int | None, str | int | None]] = set()
+
+    def _row_identity_for_dedupe(
+        source_key: str,
+        payload: dict[str, object] | None = None,
+    ) -> str | int | None:
+        """Return the connector identity component used for event deduplication."""
+
+        if payload is not None:
+            connector_value = payload.get("connectorId")
             try:
-                payload = json.loads(payload_text)
-            except json.JSONDecodeError:
+                return int(connector_value)
+            except (TypeError, ValueError):
+                pass
+        if store.IDENTITY_SEPARATOR in source_key:
+            _, slug = source_key.split(store.IDENTITY_SEPARATOR, 1)
+            if slug in {store.AGGREGATE_SLUG, store.PENDING_SLUG}:
+                return None
+            try:
+                return int(slug)
+            except (TypeError, ValueError):
+                return slug
+        return None
+
+    def _event_dedupe_key(
+        row: dict[str, str | int | datetime | None],
+        identity: str | int | None,
+    ) -> tuple[datetime, str, str, int | None, str | int | None] | None:
+        """Return a stable dedupe key for non-transaction event rows."""
+
+        timestamp = row.get("timestamp")
+        event_name = row.get("event")
+        details = row.get("details")
+        if not isinstance(timestamp, datetime):
+            return None
+        if not isinstance(event_name, str):
+            return None
+        if not isinstance(details, str):
+            return None
+        event_id = row.get("event_id")
+        if not isinstance(event_id, int):
+            event_id = None
+        return timestamp, event_name, details, event_id, identity
+
+    for source_key in keys:
+        for entry in store.iter_log_entries(source_key, log_type="charger"):
+            if len(entry.text) < 24:
                 continue
-            if connector_id is not None:
+            message = entry.text[24:].strip()
+            if message.startswith(excluded_prefixes):
+                continue
+
+            row: dict[str, str | int | datetime | None] | None = None
+            dedupe_identity = _row_identity_for_dedupe(source_key)
+
+            if message.startswith(status_prefix):
+                payload_text = message.split(":", 1)[1].strip()
                 try:
-                    payload_connector_id = int(payload.get("connectorId"))
-                except (TypeError, ValueError):
-                    payload_connector_id = None
-                if payload_connector_id not in {None, connector_id}:
+                    payload = json.loads(payload_text)
+                except json.JSONDecodeError:
                     continue
-            status_value = str(payload.get("status") or "").strip()
-            if not status_value:
-                continue
-            severity, severity_color, severity_label = _event_meta("Status", status_value)
-            events.append(
-                {
+                if connector_id is not None:
+                    try:
+                        payload_connector_id = int(payload.get("connectorId"))
+                    except (TypeError, ValueError):
+                        payload_connector_id = None
+                    if payload_connector_id not in {None, connector_id}:
+                        continue
+                status_value = str(payload.get("status") or "").strip()
+                if not status_value:
+                    continue
+                dedupe_identity = _row_identity_for_dedupe(source_key, payload)
+                severity, severity_color, severity_label = _event_meta("Status", status_value)
+                row = {
                     "timestamp": entry.timestamp,
                     "event": "Status",
                     "details": status_value,
@@ -593,24 +642,28 @@ def _important_non_transaction_events(
                     "severity_label": severity_label,
                     "event_id": _transaction_id_from_payload(payload),
                 }
-            )
-            continue
-        if not message.startswith(important_prefixes):
-            continue
-        event_name, _, detail_text = message.partition(":")
-        details = detail_text.strip() or "-"
-        severity, severity_color, severity_label = _event_meta(event_name, details)
-        events.append(
-            {
-                "timestamp": entry.timestamp,
-                "event": event_name.strip(),
-                "details": details,
-                "severity": severity,
-                "severity_color": severity_color,
-                "severity_label": severity_label,
-                "event_id": None,
-            }
-        )
+            elif message.startswith(important_prefixes):
+                event_name, _, detail_text = message.partition(":")
+                details = detail_text.strip() or "-"
+                severity, severity_color, severity_label = _event_meta(event_name, details)
+                row = {
+                    "timestamp": entry.timestamp,
+                    "event": event_name.strip(),
+                    "details": details,
+                    "severity": severity,
+                    "severity_color": severity_color,
+                    "severity_label": severity_label,
+                    "event_id": None,
+                }
+
+            if row is None:
+                continue
+            dedupe_key = _event_dedupe_key(row, dedupe_identity)
+            if dedupe_key is not None:
+                if dedupe_key in dedupe_keys:
+                    continue
+                dedupe_keys.add(dedupe_key)
+            events.append(row)
 
     return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
