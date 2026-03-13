@@ -76,6 +76,7 @@ pycparser==3.0
 pyftpdlib==2.2.0
 pyOpenSSL==25.3.0
 PySocks==1.7.1
+pysqlite3-binary==0.5.4; sys_platform == "linux"
 pytest-django==4.12.0
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
