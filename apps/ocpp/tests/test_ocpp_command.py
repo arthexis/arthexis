@@ -42,3 +42,49 @@ def test_ocpp_coverage_16_routes_through_unified_command(tmp_path):
 
     assert output_path.exists()
     assert badge_path.exists()
+
+
+def test_ocpp_coverage_16_matches_fixture(tmp_path):
+    """Regression: OCPP 1.6 coverage output stays aligned with checked-in fixture."""
+
+    output_path = tmp_path / "ocpp16_coverage.json"
+    badge_path = tmp_path / "ocpp16_coverage.svg"
+
+    call_command(
+        "ocpp",
+        "coverage",
+        "--version",
+        "1.6J",
+        json_path=output_path,
+        badge_path=badge_path,
+    )
+
+    generated = json.loads(output_path.read_text())
+    fixture_path = Path(__file__).resolve().parents[1] / "coverage.json"
+    expected = json.loads(fixture_path.read_text())
+    assert generated["coverage"] == expected["coverage"]
+    assert generated["implemented"] == expected["implemented"]
+    assert generated["spec"] == expected["spec"]
+
+
+def test_ocpp_coverage_21_matches_fixture(tmp_path):
+    """Regression: OCPP 2.1 coverage output stays aligned with checked-in fixture."""
+
+    output_path = tmp_path / "ocpp21_coverage.json"
+    badge_path = tmp_path / "ocpp21_coverage.svg"
+
+    call_command(
+        "ocpp",
+        "coverage",
+        "--version",
+        "2.1",
+        json_path=output_path,
+        badge_path=badge_path,
+    )
+
+    generated = json.loads(output_path.read_text())
+    fixture_path = Path(__file__).resolve().parents[1] / "coverage21.json"
+    expected = json.loads(fixture_path.read_text())
+    assert generated["coverage"] == expected["coverage"]
+    assert generated["implemented"] == expected["implemented"]
+    assert generated["spec"] == expected["spec"]
