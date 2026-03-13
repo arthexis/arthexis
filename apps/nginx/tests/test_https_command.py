@@ -1220,6 +1220,7 @@ def test_https_migrate_from_copies_site_configuration(monkeypatch):
         name="arthexis.com",
         enabled=True,
         mode="public",
+        role="default",
         protocol="http",
         port=9443,
         managed_subdomains="admin,api,status",
@@ -1252,6 +1253,66 @@ def test_https_migrate_from_copies_site_configuration(monkeypatch):
 
     target = SiteConfiguration.objects.get(name="arthexis.gelectriic.com")
     assert target.mode == "public"
+    assert target.role == "default"
     assert target.port == 9443
     assert target.managed_subdomains == "admin,api,status"
     assert target.include_ipv6 is True
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_rejects_non_enable_actions():
+    """`--migrate-from` should fail fast when combined with non-enable actions."""
+
+    with pytest.raises(CommandError, match="only supported when enabling HTTPS"):
+        call_command(
+            "https",
+            "--disable",
+            "--site",
+            "example.com",
+            "--migrate-from",
+            "old.example.com",
+        )
+
+
+@pytest.mark.django_db
+def test_https_migrate_from_disables_source_https_config(monkeypatch):
+    """Source HTTPS configuration should be deactivated after migration."""
+
+    from django.utils import timezone
+
+    source = SiteConfiguration.objects.create(
+        name="arthexis.com",
+        enabled=True,
+        mode="public",
+        protocol="https",
+        port=443,
+        managed_subdomains="admin,api,status",
+        include_ipv6=True,
+        last_applied_at=timezone.now(),
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command(
+        "https",
+        "--site",
+        "arthexis.gelectriic.com",
+        "--migrate-from",
+        source.name,
+        "--no-sudo",
+    )
+
+    source.refresh_from_db()
+    assert source.enabled is False
