@@ -269,7 +269,8 @@ def test_release_checklist_requires_staff(client, staff_user, user):
     url = reverse("pages:release-checklist")
 
     anon_response = client.get(url)
-    assert anon_response.status_code in (302, 403)
+    assert anon_response.status_code == 302
+    assert reverse("admin:login") in anon_response["Location"]
 
     client.force_login(user)
     non_staff_response = client.get(url)
@@ -278,3 +279,30 @@ def test_release_checklist_requires_staff(client, staff_user, user):
     client.force_login(staff_user)
     staff_response = client.get(url)
     assert staff_response.status_code in (200, 404)
+
+
+def test_release_checklist_denies_inactive_staff(client):
+    """Ensure inactive staff sessions cannot access staff-only checklist views.
+
+    Parameters:
+        client: Django test client for authenticated route requests.
+
+    Returns:
+        None: Assertion verifies inactive staff receive HTTP 403.
+
+    Raises:
+        AssertionError: If inactive staff accounts are incorrectly authorized.
+    """
+
+    user = get_user_model().objects.create_user(
+        username="inactive-staff",
+        email="inactive-staff@example.com",
+        password="secret",
+        is_staff=True,
+        is_active=False,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("pages:release-checklist"))
+
+    assert response.status_code == 403
