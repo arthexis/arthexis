@@ -72,6 +72,7 @@ def test_delete_lock_file(temp_base_dir: Path):
     assert not lock_file.exists()
 
 
+@pytest.mark.django_db
 def test_restart_reports_failure(temp_base_dir: Path):
     """Surface systemctl stderr when restart exits with a non-zero status."""
 
@@ -91,6 +92,7 @@ def test_restart_reports_failure(temp_base_dir: Path):
                 call_command("lcd", "write", restart=True, service_name="demo", resolve_sigils=False)
 
 
+@pytest.mark.django_db
 def test_restart_handles_missing_systemctl(temp_base_dir: Path):
     """Raise a clear error when systemctl is unavailable on the host."""
 
@@ -144,6 +146,7 @@ def test_lcd_write_sigil_resolution_modes(
     assert lock_payload.body == "Body"
 
 
+@pytest.mark.django_db
 def test_restart_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
     """Restart should be gated by lcd-screen feature availability."""
 

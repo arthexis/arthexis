@@ -37,6 +37,7 @@ def temp_base_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.mark.django_db
 def test_calibrate_saves_lock_file(temp_base_dir: Path):
     (temp_base_dir / ".locks" / "service.lck").write_text("demo", encoding="utf-8")
 
@@ -62,6 +63,7 @@ def test_calibrate_saves_lock_file(temp_base_dir: Path):
     assert "pulse_enable_delay=" in content
 
 
+@pytest.mark.django_db
 def test_calibrate_can_skip_save(temp_base_dir: Path):
     inputs = ["", "", "", "", "", "n"]
     with (
@@ -82,6 +84,7 @@ def test_calibrate_can_skip_save(temp_base_dir: Path):
     assert not lock_file.exists()
 
 
+@pytest.mark.django_db
 def test_restart_requires_service_name(temp_base_dir: Path):
     inputs = ["", "", "", "", "", "n"]
     with (
@@ -100,6 +103,7 @@ def test_restart_requires_service_name(temp_base_dir: Path):
         call_command("lcd", "calibrate", restart=True)
 
 
+@pytest.mark.django_db
 def test_calibrate_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
     """Calibration should fail fast when lcd-screen is inactive."""
 
