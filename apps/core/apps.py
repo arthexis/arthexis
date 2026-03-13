@@ -499,8 +499,6 @@ def _connect_sqlite_wal():
                     try:
                         cursor.execute("PRAGMA journal_mode=WAL;")
                         cursor.execute("PRAGMA busy_timeout=60000;")
-                        for pragma_statement in _sqlite_runtime_pragmas():
-                            cursor.execute(pragma_statement)
                     except DatabaseError as exc:
                         logger.warning(
                             "SQLite WAL setup failed; falling back to DELETE journal mode: %s",
@@ -514,6 +512,16 @@ def _connect_sqlite_wal():
                                 "SQLite DELETE journal mode fallback failed: %s",
                                 fallback_exc,
                             )
+                    else:
+                        for pragma_statement in _sqlite_runtime_pragmas():
+                            try:
+                                cursor.execute(pragma_statement)
+                            except DatabaseError as exc:
+                                logger.warning(
+                                    "Failed to apply runtime PRAGMA %r: %s",
+                                    pragma_statement,
+                                    exc,
+                                )
             except DatabaseError as exc:
                 logger.warning(
                     "Skipping SQLite WAL setup; unable to open cursor: %s",
