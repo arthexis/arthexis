@@ -46,3 +46,19 @@ Compose uses named volumes so container restarts do not lose state:
 
 For local development, remove data with `docker compose down -v` only when you
 explicitly want a fresh database/media/redis state.
+
+## SQLite driver selection
+
+For SQLite-backed environments, you can select the Python SQLite driver with:
+
+- `ARTHEXIS_SQLITE_DRIVER=stdlib` (default)
+- `ARTHEXIS_SQLITE_DRIVER=pysqlite3` (requires `pysqlite3-binary` on Linux)
+
+Example:
+
+```bash
+ARTHEXIS_SQLITE_DRIVER=pysqlite3 python manage.py shell -c "import sqlite3; print(sqlite3.sqlite_version)"
+```
+
+If `ARTHEXIS_SQLITE_DRIVER=pysqlite3` is set but the package is unavailable,
+Arthexis falls back to the standard-library `sqlite3` module and emits a warning.
