@@ -21,7 +21,17 @@ DARK_THEME_BACKGROUND_STYLE = "background: #111827;"
 
 @pytest.fixture
 def user(db):
-    """Create a regular user for authenticated route checks."""
+    """Create a regular user for authenticated route checks.
+
+    Parameters:
+        db: Enables database access for fixture setup.
+
+    Returns:
+        User: A persisted non-staff user instance.
+
+    Raises:
+        None.
+    """
 
     return get_user_model().objects.create_user(
         username="route-user", email="route-user@example.com", password="secret"
@@ -30,7 +40,17 @@ def user(db):
 
 @pytest.fixture
 def staff_user(db):
-    """Create a staff user for staff-only route checks."""
+    """Create a staff user for staff-only route checks.
+
+    Parameters:
+        db: Enables database access for fixture setup.
+
+    Returns:
+        User: A persisted staff user instance.
+
+    Raises:
+        None.
+    """
 
     return get_user_model().objects.create_user(
         username="route-staff",
@@ -43,7 +63,21 @@ def staff_user(db):
 def test_client_report_download_enforces_login_and_ownership(
     client, user, staff_user, monkeypatch, tmp_path
 ):
-    """Client report download should require login and owner/staff permissions."""
+    """Require login and owner or staff access for report downloads.
+
+    Parameters:
+        client: Django test client for route requests.
+        user: Baseline authenticated user fixture.
+        staff_user: Staff user fixture used for elevated access assertions.
+        monkeypatch: Fixture used to stub report PDF generation.
+        tmp_path: Temporary filesystem path for a fake PDF.
+
+    Returns:
+        None: Assertions validate response codes and content types.
+
+    Raises:
+        AssertionError: If route authorization or response payloads regress.
+    """
 
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -83,7 +117,17 @@ def test_client_report_download_enforces_login_and_ownership(
 
 
 def test_invitation_login_invalid_tokens_are_handled_safely(client):
-    """Invitation login should reject malformed and invalid token payloads."""
+    """Reject malformed invitation UID and token payloads.
+
+    Parameters:
+        client: Django test client for unauthenticated invitation requests.
+
+    Returns:
+        None: Assertions validate HTTP 400 responses for invalid inputs.
+
+    Raises:
+        AssertionError: If invalid links stop returning safe client errors.
+    """
 
     user_model = get_user_model()
     user = user_model.objects.create_user(
@@ -104,7 +148,18 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
 
 
 def test_whatsapp_webhook_post_payload_validation(client, settings):
-    """Webhook should validate JSON payload content and reject malformed input."""
+    """Validate webhook JSON payload content and malformed request handling.
+
+    Parameters:
+        client: Django test client for webhook requests.
+        settings: Django settings fixture for feature flag toggles.
+
+    Returns:
+        None: Assertions validate accepted and rejected webhook payloads.
+
+    Raises:
+        AssertionError: If webhook validation behavior regresses.
+    """
 
     settings.PAGES_WHATSAPP_ENABLED = True
     url = reverse("pages:whatsapp-webhook")
@@ -128,8 +183,46 @@ def test_whatsapp_webhook_post_payload_validation(client, settings):
     assert empty_fields.status_code == 400
 
 
+def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
+    """Enforce webhook method guardrails and feature-flag availability checks.
+
+    Parameters:
+        client: Django test client for webhook requests.
+        settings: Django settings fixture for feature flag toggles.
+
+    Returns:
+        None: Assertions validate method and feature-flag guard branches.
+
+    Raises:
+        AssertionError: If method restriction or disabled-mode behavior regresses.
+    """
+
+    url = reverse("pages:whatsapp-webhook")
+
+    method_not_allowed = client.get(url)
+    assert method_not_allowed.status_code == 405
+
+    settings.PAGES_WHATSAPP_ENABLED = False
+    disabled = client.post(
+        url,
+        data=json.dumps({"from": "+15551234", "message": "Hello"}),
+        content_type="application/json",
+    )
+    assert disabled.status_code == 503
+
+
 def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
-    """Unsafe absolute and scheme-relative interface targets should not redirect."""
+    """Ensure unsafe interface redirect targets are not followed.
+
+    Parameters:
+        client: Django test client for homepage rendering.
+
+    Returns:
+        None: Assertions validate rendered fallback content for unsafe paths.
+
+    Raises:
+        AssertionError: If unsafe interface targets start redirecting users.
+    """
 
     Feature.objects.update_or_create(
         slug="operator-site-interface",
@@ -156,3 +249,32 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     assert 'id="operator-interface-title"' in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
     assert DARK_THEME_BACKGROUND_STYLE in content
+
+
+def test_release_checklist_requires_staff(client, staff_user, user):
+    """Verify release checklist access is restricted to staff users.
+
+    Parameters:
+        client: Django test client for authenticated and anonymous requests.
+        staff_user: Staff user fixture expected to access the view.
+        user: Non-staff user fixture expected to be denied.
+
+    Returns:
+        None: Assertions validate status codes for each permission level.
+
+    Raises:
+        AssertionError: If staff-only access control regresses.
+    """
+
+    url = reverse("pages:release-checklist")
+
+    anon_response = client.get(url)
+    assert anon_response.status_code in (302, 403)
+
+    client.force_login(user)
+    non_staff_response = client.get(url)
+    assert non_staff_response.status_code == 403
+
+    client.force_login(staff_user)
+    staff_response = client.get(url)
+    assert staff_response.status_code in (200, 404)
