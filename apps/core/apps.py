@@ -408,6 +408,81 @@ def _connect_sqlite_wal():
             or "PYTEST_CURRENT_TEST" in os.environ
         )
 
+    def _sqlite_runtime_pragmas() -> list[str]:
+        """Build validated SQLite runtime PRAGMAs from environment settings."""
+
+        pragma_statements = [
+            f"PRAGMA synchronous={_sqlite_synchronous_level()};",
+        ]
+
+        cache_size = _sqlite_integer_pragma(
+            env_name="ARTHEXIS_SQLITE_CACHE_SIZE",
+            pragma_name="cache_size",
+        )
+        if cache_size is not None:
+            pragma_statements.append(f"PRAGMA cache_size={cache_size};")
+
+        mmap_size = _sqlite_integer_pragma(
+            env_name="ARTHEXIS_SQLITE_MMAP_SIZE",
+            pragma_name="mmap_size",
+            minimum=0,
+        )
+        if mmap_size is not None:
+            pragma_statements.append(f"PRAGMA mmap_size={mmap_size};")
+
+        return pragma_statements
+
+    def _sqlite_synchronous_level() -> str:
+        """Return a safe SQLite synchronous level from environment configuration."""
+
+        env_name = "ARTHEXIS_SQLITE_SYNCHRONOUS"
+        configured_level = os.environ.get(env_name, "FULL")
+        normalized_level = configured_level.strip().upper()
+        if normalized_level in {"FULL", "NORMAL"}:
+            return normalized_level
+
+        logger.warning(
+            "Invalid %s value %r; using FULL.",
+            env_name,
+            configured_level,
+        )
+        return "FULL"
+
+    def _sqlite_integer_pragma(
+        *,
+        env_name: str,
+        pragma_name: str,
+        minimum: int | None = None,
+    ) -> int | None:
+        """Parse and validate integer-backed SQLite PRAGMA environment values."""
+
+        raw_value = os.environ.get(env_name)
+        if raw_value is None:
+            return None
+
+        candidate = raw_value.strip()
+        if not candidate:
+            logger.warning("Invalid %s value %r; ignoring %s.", env_name, raw_value, pragma_name)
+            return None
+
+        try:
+            parsed_value = int(candidate)
+        except ValueError:
+            logger.warning("Invalid %s value %r; ignoring %s.", env_name, raw_value, pragma_name)
+            return None
+
+        if minimum is not None and parsed_value < minimum:
+            logger.warning(
+                "Invalid %s value %r; %s must be >= %s.",
+                env_name,
+                raw_value,
+                pragma_name,
+                minimum,
+            )
+            return None
+
+        return parsed_value
+
     def enable_sqlite_wal(**kwargs):
         if not apps.ready:
             return
@@ -429,6 +504,8 @@ def _connect_sqlite_wal():
                     try:
                         cursor.execute("PRAGMA journal_mode=WAL;")
                         cursor.execute("PRAGMA busy_timeout=60000;")
+                        for pragma_statement in _sqlite_runtime_pragmas():
+                            cursor.execute(pragma_statement)
                     except DatabaseError as exc:
                         logger.warning(
                             "SQLite WAL setup failed; falling back to DELETE journal mode: %s",
