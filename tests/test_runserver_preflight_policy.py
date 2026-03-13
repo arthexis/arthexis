@@ -5,6 +5,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.pr_origin(6213)
+
 
 def _run_shell(script: str) -> subprocess.CompletedProcess[str]:
     """Run a bash snippet from the repository root and return the completed process."""
