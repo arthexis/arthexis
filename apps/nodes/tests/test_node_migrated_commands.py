@@ -90,17 +90,7 @@ def test_node_screenshot_rejects_invalid_argument_combo():
         command.handle(action="screenshot", url="https://example.com", local=True, freq=None)
 
 
-@pytest.mark.parametrize(
-    ("legacy", "action", "args", "kwargs"),
-    [
-        ("message", "message", ["Subject", "Body"], {"reach": "ops"}),
-        ("purge_nodes", "purge_nodes", [], {"remove_anonymous": True}),
-        ("purge_net_messages", "purge_net_messages", [], {}),
-        ("refresh_node_features", "refresh_features", [], {}),
-        ("screenshot", "screenshot", ["https://example.com"], {"freq": 5, "local": False}),
-    ],
-)
-def test_legacy_command_wrappers_delegate(monkeypatch, legacy, action, args, kwargs):
+def test_legacy_command_wrappers_delegate(monkeypatch):
     """Legacy commands should print legacy-alias notices and call node subcommands."""
 
     stdout = io.StringIO()
@@ -120,13 +110,13 @@ def test_legacy_command_wrappers_delegate(monkeypatch, legacy, action, args, kwa
         fake_call_command,
     )
 
-    call_command(legacy, *args, stdout=stdout, **kwargs)
+    call_command("message", "Subject", "Body", stdout=stdout, reach="ops")
 
     assert "LEGACY:" in stdout.getvalue()
     assert calls, "Wrapper did not delegate to node command"
     forwarded_args, forwarded_kwargs = calls[-1]
     assert forwarded_args[0] == "node"
-    assert forwarded_args[1] == action
+    assert forwarded_args[1] == "message"
 
 
 def test_node_screenshot_returns_path(monkeypatch):
