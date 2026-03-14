@@ -86,7 +86,7 @@ All functions and classes should include **docstrings** describing:
 * return values
 * raised exceptions (when relevant)
 
-Test modules are exempt from this requirement unless a docstring is needed to clarify non-obvious behavior.
+Code within test modules (e.g., test functions and classes) is exempt from this requirement unless a docstring is needed to clarify non-obvious behavior.
 
 ---
 
