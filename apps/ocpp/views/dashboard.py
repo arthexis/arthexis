@@ -25,11 +25,11 @@ from .common import (_charger_last_seen, _charger_state,
                      _landing_visibility_params, _reverse_connector_url)
 
 
-@landing("CPMS Online Dashboard")
 @module_pill_link_validation(
     _landing_requires_chargers,
     parameter_getter=_landing_visibility_params,
 )
+@landing("CPMS Online Dashboard")
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
     is_htmx = request.headers.get("HX-Request") == "true"
