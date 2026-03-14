@@ -4,8 +4,9 @@ from django.core.management.base import CommandError
 from apps.playwright.management.commands.preview import Command
 
 
-def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
-    """Engine failure aggregation should raise a clean CommandError message."""
+@pytest.mark.pr_origin(6223)
+def test_handle_reports_backend_failures_without_name_error(monkeypatch) -> None:
+    """Backend failure aggregation should raise a clean CommandError message."""
 
     command = Command()
 
@@ -18,9 +19,9 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
     def _always_fail(**kwargs):
         raise CommandError("boom")
 
-    monkeypatch.setattr(command, "_capture_all", _always_fail)
+    monkeypatch.setattr(command, "_capture_with_backend", _always_fail)
 
-    with pytest.raises(CommandError, match=r"All preview engines failed\. Last error: boom"):
+    with pytest.raises(CommandError, match=r"All preview backends failed\. Last error: boom"):
         command.handle(
             base_url="http://127.0.0.1:8000",
             paths=["/admin/"],
@@ -29,6 +30,7 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
             output="media/previews/admin-preview.png",
             output_dir="",
             viewports="desktop",
+            backend="playwright,selenium",
             engine="chromium,firefox",
             no_login=False,
         )
@@ -36,6 +38,7 @@ def test_handle_reports_engine_failures_without_name_error(monkeypatch) -> None:
     assert deleted_ids == [42]
 
 
+@pytest.mark.pr_origin(6223)
 def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     """Preview captures should use a temporary login user and remove it afterwards."""
 
@@ -49,13 +52,13 @@ def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     def _delete_user(user_id: int | None) -> None:
         state["deleted"] = user_id
 
-    def _capture_all(**kwargs):
+    def _capture_with_backend(**kwargs):
         state["login_required"] = kwargs["login_required"]
 
     monkeypatch.setattr(command, "_create_throwaway_admin_user", _create_user)
     monkeypatch.setattr(command, "_delete_throwaway_admin_user", _delete_user)
     monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
-    monkeypatch.setattr(command, "_capture_all", _capture_all)
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
     monkeypatch.setattr(command, "_print_reports", lambda captures: None)
 
     command.handle(
@@ -66,6 +69,7 @@ def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
         output="media/previews/admin-preview.png",
         output_dir="",
         viewports="desktop",
+        backend="playwright",
         engine="chromium",
         no_login=False,
     )
@@ -75,6 +79,7 @@ def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     assert state["deleted"] == 99
 
 
+@pytest.mark.pr_origin(6223)
 def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> None:
     """Throwaway preview user should be deleted when argument validation fails."""
 
@@ -93,6 +98,7 @@ def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> N
             output="media/previews/admin-preview.png",
             output_dir="",
             viewports=",",
+            backend="playwright",
             engine="chromium",
             no_login=False,
         )
@@ -100,6 +106,7 @@ def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> N
     assert state["deleted"] == 99
 
 
+@pytest.mark.pr_origin(6223)
 def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     """No-login captures should not create or authenticate any temporary user."""
 
@@ -113,13 +120,13 @@ def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     def _delete_user(user_id: int | None) -> None:
         state["deleted"] = user_id
 
-    def _capture_all(**kwargs):
+    def _capture_with_backend(**kwargs):
         state["login_required"] = kwargs["login_required"]
 
     monkeypatch.setattr(command, "_create_throwaway_admin_user", _create_user)
     monkeypatch.setattr(command, "_delete_throwaway_admin_user", _delete_user)
     monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
-    monkeypatch.setattr(command, "_capture_all", _capture_all)
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
     monkeypatch.setattr(command, "_print_reports", lambda captures: None)
 
     command.handle(
@@ -130,6 +137,7 @@ def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
         output="media/previews/admin-preview.png",
         output_dir="",
         viewports="desktop",
+        backend="playwright",
         engine="chromium",
         no_login=True,
     )
@@ -138,3 +146,83 @@ def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     assert state["login_required"] is False
     assert state["deleted"] is None
 
+
+@pytest.mark.pr_origin(6223)
+def test_handle_falls_back_to_selenium_backend(monkeypatch) -> None:
+    """Preview should try Selenium automatically when Playwright backend fails."""
+
+    command = Command()
+    attempted_backends: list[str] = []
+
+    monkeypatch.setattr(command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42))
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _capture_with_backend(**kwargs):
+        attempted_backends.append(kwargs["backend"])
+        if kwargs["backend"] == "playwright":
+            raise CommandError("playwright unavailable")
+
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright,selenium",
+        engine="chromium",
+        no_login=False,
+    )
+
+    assert attempted_backends == ["playwright", "selenium"]
+
+
+@pytest.mark.pr_origin(6223)
+def test_handle_waits_for_suite_when_requested(monkeypatch) -> None:
+    """Preview should probe suite readiness before capturing when requested."""
+
+    command = Command()
+    state: dict[str, object] = {"wait_called": False}
+
+    monkeypatch.setattr(command, "_create_throwaway_admin_user", lambda: ("preview-user", "preview-pass", 99))
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_capture_with_backend", lambda **kwargs: None)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _wait_for_suite_ready(**kwargs):
+        state["wait_called"] = kwargs == {"base_url": "http://127.0.0.1:8000", "timeout_seconds": 10}
+
+    monkeypatch.setattr(command, "_wait_for_suite_ready", _wait_for_suite_ready)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright",
+        engine="chromium",
+        no_login=False,
+        wait_for_suite=True,
+        suite_timeout=10,
+    )
+
+    assert state["wait_called"] is True
+
+
+@pytest.mark.pr_origin(6223)
+def test_wait_for_suite_ready_rejects_non_positive_timeout() -> None:
+    """Suite wait should fail fast when timeout is non-positive."""
+
+    command = Command()
+
+    with pytest.raises(CommandError, match="--suite-timeout must be greater than zero"):
+        command._wait_for_suite_ready(base_url="http://127.0.0.1:8000", timeout_seconds=0)
