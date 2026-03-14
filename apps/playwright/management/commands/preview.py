@@ -20,6 +20,13 @@ DEFAULT_VIEWPORTS: dict[str, tuple[int, int]] = {
     "tablet": (1024, 1366),
     "mobile": (390, 844),
 }
+ENGINE_TO_SELENIUM_BROWSER = {
+    "chromium": "chrome",
+    "firefox": "firefox",
+}
+SUPPORTED_BACKENDS = ("playwright", "selenium")
+
+
 class Command(BaseCommand):
     """Login to Django admin and capture deterministic screenshots."""
 
@@ -54,9 +61,14 @@ class Command(BaseCommand):
             help="Comma-separated viewport profiles to capture (desktop,tablet,mobile).",
         )
         parser.add_argument(
+            "--backend",
+            default=",".join(SUPPORTED_BACKENDS),
+            help="Comma-separated capture backends in fallback order (playwright,selenium).",
+        )
+        parser.add_argument(
             "--engine",
             default="chromium,firefox",
-            help="Comma-separated engine fallback order (chromium,firefox,webkit).",
+            help="Comma-separated browser engine fallback order (chromium,firefox,webkit).",
         )
         parser.add_argument(
             "--no-login",
@@ -107,7 +119,20 @@ class Command(BaseCommand):
                     + ", ".join(DEFAULT_VIEWPORTS)
                 )
 
-            engines = [item.strip() for item in options["engine"].split(",") if item.strip()]
+            backends = [item.strip().lower() for item in options["backend"].split(",") if item.strip()]
+            if not backends:
+                raise CommandError("At least one backend must be provided via --backend.")
+
+            invalid_backends = sorted(set(backends) - set(SUPPORTED_BACKENDS))
+            if invalid_backends:
+                raise CommandError(
+                    "Unsupported backend(s): "
+                    + ", ".join(invalid_backends)
+                    + ". Supported values are: "
+                    + ", ".join(SUPPORTED_BACKENDS)
+                )
+
+            engines = [item.strip().lower() for item in options["engine"].split(",") if item.strip()]
             if not engines:
                 raise CommandError("At least one engine must be provided via --engine.")
 
@@ -119,23 +144,24 @@ class Command(BaseCommand):
             )
 
             last_error: CommandError | None = None
-            for engine in engines:
+            for backend in backends:
                 try:
-                    self._capture_all(
+                    self._capture_with_backend(
+                        backend=backend,
                         base_url=options["base_url"].rstrip("/"),
                         username=preview_username,
                         password=preview_password,
                         captures=captures,
-                        engine=engine,
+                        engines=engines,
                         login_required=not options["no_login"],
                     )
                     self._print_reports(captures)
                     return
                 except CommandError as exc:
                     last_error = exc
-                    self.stderr.write(f"Engine '{engine}' failed: {exc}")
+                    self.stderr.write(f"Backend '{backend}' failed: {exc}")
 
-            raise CommandError(f"All preview engines failed. Last error: {last_error}")
+            raise CommandError(f"All preview backends failed. Last error: {last_error}")
         finally:
             try:
                 self._delete_throwaway_admin_user(preview_user_id)
@@ -162,6 +188,7 @@ class Command(BaseCommand):
         output_dir: Path,
     ) -> list[dict[str, object]]:
         """Build a deterministic list of captures for path and viewport combinations."""
+
         captures: list[dict[str, object]] = []
         use_legacy_output = len(paths) == 1
         for path in paths:
@@ -185,11 +212,13 @@ class Command(BaseCommand):
 
     def _path_slug(self, path: str) -> str:
         """Return a filesystem-safe slug for a capture path."""
+
         cleaned = path.strip("/") or "root"
         return re.sub(r"[^a-zA-Z0-9]+", "-", cleaned).strip("-") or "root"
 
     def _print_reports(self, captures: list[dict[str, object]]) -> None:
         """Analyze generated images and print a short diagnostic summary."""
+
         for capture in captures:
             output = capture["output"]
             report = analyze_preview_image(output)
@@ -247,7 +276,74 @@ class Command(BaseCommand):
             return
         user.delete()
 
-    def _capture_all(
+    def _capture_with_backend(
+        self,
+        *,
+        backend: str,
+        base_url: str,
+        username: str,
+        password: str,
+        captures: list[dict[str, object]],
+        engines: list[str],
+        login_required: bool,
+    ) -> None:
+        """Capture screenshots using the selected backend and engine fallback order."""
+
+        if backend == "playwright":
+            self._capture_with_playwright(
+                base_url=base_url,
+                username=username,
+                password=password,
+                captures=captures,
+                engines=engines,
+                login_required=login_required,
+            )
+            return
+
+        if backend == "selenium":
+            self._capture_with_selenium(
+                base_url=base_url,
+                username=username,
+                password=password,
+                captures=captures,
+                engines=engines,
+                login_required=login_required,
+            )
+            return
+
+        raise CommandError(f"Unsupported backend '{backend}'.")
+
+    def _capture_with_playwright(
+        self,
+        *,
+        base_url: str,
+        username: str,
+        password: str,
+        captures: list[dict[str, object]],
+        engines: list[str],
+        login_required: bool,
+    ) -> None:
+        """Capture screenshots using Playwright engines in fallback order."""
+
+        last_error: CommandError | None = None
+        for engine in engines:
+            try:
+                self._capture_all_playwright(
+                    base_url=base_url,
+                    username=username,
+                    password=password,
+                    captures=captures,
+                    engine=engine,
+                    login_required=login_required,
+                )
+                return
+            except CommandError as exc:
+                last_error = exc
+                self.stderr.write(f"Playwright engine '{engine}' failed: {exc}")
+
+        raise CommandError(f"All Playwright engines failed. Last error: {last_error}")
+
+    def _capture_all_playwright(
         self,
         *,
         base_url: str,
@@ -258,12 +354,13 @@ class Command(BaseCommand):
         login_required: bool,
     ) -> None:
         """Use Playwright to login once and capture all requested screenshots."""
+
         try:
             from playwright.sync_api import Error as PlaywrightError
             from playwright.sync_api import sync_playwright
         except ModuleNotFoundError as exc:
             raise CommandError(
-                "Playwright is required for preview. "
+                "Playwright is required for this backend. "
                 f"Install it for this interpreter ({sys.executable}) and run "
                 "`python -m playwright install chromium firefox` (or `./env-refresh.sh --deps-only`)."
             ) from exc
@@ -299,6 +396,118 @@ class Command(BaseCommand):
             raise CommandError(f"Unsupported Playwright engine '{engine}'.") from exc
         except PlaywrightError as exc:
             raise CommandError(self._playwright_runtime_help(exc)) from exc
+
+    def _capture_with_selenium(
+        self,
+        *,
+        base_url: str,
+        username: str,
+        password: str,
+        captures: list[dict[str, object]],
+        engines: list[str],
+        login_required: bool,
+    ) -> None:
+        """Capture screenshots using Selenium browser fallback derived from engine order."""
+
+        browsers = [ENGINE_TO_SELENIUM_BROWSER[engine] for engine in engines if engine in ENGINE_TO_SELENIUM_BROWSER]
+        if not browsers:
+            raise CommandError(
+                "No Selenium-compatible engines were provided. "
+                "Use --engine with chromium and/or firefox when backend includes selenium."
+            )
+
+        last_error: CommandError | None = None
+        for browser_name in browsers:
+            try:
+                self._capture_all_selenium(
+                    base_url=base_url,
+                    username=username,
+                    password=password,
+                    captures=captures,
+                    browser_name=browser_name,
+                    login_required=login_required,
+                )
+                return
+            except CommandError as exc:
+                last_error = exc
+                self.stderr.write(f"Selenium browser '{browser_name}' failed: {exc}")
+
+        raise CommandError(f"All Selenium browsers failed. Last error: {last_error}")
+
+    def _capture_all_selenium(
+        self,
+        *,
+        base_url: str,
+        username: str,
+        password: str,
+        captures: list[dict[str, object]],
+        browser_name: str,
+        login_required: bool,
+    ) -> None:
+        """Use Selenium WebDriver to login once and capture requested screenshots."""
+
+        try:
+            from selenium import webdriver
+            from selenium.common.exceptions import TimeoutException, WebDriverException
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+        except ModuleNotFoundError as exc:
+            raise CommandError(
+                "Selenium is required for this backend. Install it with "
+                f"`{sys.executable} -m pip install selenium`."
+            ) from exc
+
+        admin_path = getattr(settings, "ADMIN_URL_PATH", "admin/").strip("/")
+        login_url = f"{base_url}/{admin_path}/login/"
+
+        driver = None
+        try:
+            if browser_name == "chrome":
+                from selenium.webdriver.chrome.options import Options as ChromeOptions
+
+                options = ChromeOptions()
+                options.add_argument("--headless=new")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--no-sandbox")
+                driver = webdriver.Chrome(options=options)
+            elif browser_name == "firefox":
+                from selenium.webdriver.firefox.options import Options as FirefoxOptions
+
+                options = FirefoxOptions()
+                options.add_argument("--headless")
+                driver = webdriver.Firefox(options=options)
+            else:
+                raise CommandError(f"Unsupported Selenium browser '{browser_name}'.")
+
+            if login_required:
+                driver.get(login_url)
+                driver.find_element(By.ID, "id_username").send_keys(username)
+                driver.find_element(By.ID, "id_password").send_keys(password)
+                driver.find_element(By.CSS_SELECTOR, "input[type='submit']").click()
+                try:
+                    WebDriverWait(driver, 20).until(
+                        lambda current_driver: urlparse(current_driver.current_url).path.rstrip("/")
+                        != urlparse(login_url).path.rstrip("/")
+                    )
+                except TimeoutException:
+                    pass
+                self._validate_login_success(driver.current_url, login_url)
+
+            for capture in captures:
+                width, height = capture["viewport_size"]
+                output = capture["output"]
+                output.parent.mkdir(parents=True, exist_ok=True)
+                driver.set_window_size(width, height)
+                driver.get(f"{base_url}{capture['path']}")
+                WebDriverWait(driver, 20).until(
+                    lambda current_driver: current_driver.execute_script("return document.readyState") == "complete"
+                )
+                driver.save_screenshot(str(output))
+        except (TimeoutException, WebDriverException) as exc:
+            raise CommandError(self._selenium_runtime_help(exc)) from exc
+        finally:
+            if driver is not None:
+                driver.quit()
 
     def _validate_login_success(self, current_url: str, login_url: str) -> None:
         """Validate that authentication left the login endpoint.
@@ -350,3 +559,19 @@ class Command(BaseCommand):
             )
 
         return base_message
+
+    def _selenium_runtime_help(self, exc: Exception) -> str:
+        """Build user-facing guidance for common Selenium runtime failures.
+
+        Args:
+            exc (Exception): Original runtime exception from Selenium.
+
+        Returns:
+            str: Error text augmented with troubleshooting guidance.
+        """
+
+        return (
+            f"{exc}\n"
+            "Selenium could not start a browser in this environment. "
+            "Install browser binaries and WebDriver dependencies, or prioritize the playwright backend."
+        )
