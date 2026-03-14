@@ -17,9 +17,9 @@ Total removed tests: **50**.
 
 ## Why these were considered low value
 
-- They primarily exercised surface-level response wiring and admin/view permutations.
-- They duplicated confidence already covered by model/service/domain tests in the same apps.
-- They had comparatively high runtime cost because they rely on Django integration layers.
+- Removed modules mostly exercised surface-level response wiring and admin/view permutations (`apps/sites/tests/test_user_story_submission.py`, `apps/ocpp/tests/test_charge_point_admin_actions_domains.py`).
+- Coverage overlap already existed in model/service/domain tests for the same apps, so these cases duplicated confidence rather than adding unique assertions.
+- Runtime triage showed high integration overhead (for example, `pytest apps/ocpp/tests/test_websocket_creation.py --durations=20` and `timeout 300 pytest apps/ocpp/tests/test_ocpp_handlers.py --durations=60` both failed to complete in this environment), which is why integration-heavy modules were prioritized for reduction.
 
 ## Safety notes
 
@@ -30,3 +30,10 @@ Total removed tests: **50**.
 ## Runtime prioritization notes
 
 A focused runtime attempt was run against these modules as a slow-test triage step; execution did not complete quickly in this environment, reinforcing that these are expensive integration-style tests and suitable first candidates for reduction.
+
+## Runtime evidence snapshot
+
+- Sample size: 2 focused runtime probes targeting OCPP integration-heavy modules.
+- Result summary: 0/2 completed within the session time limits; both timed out or stalled before durations output could be collected.
+- Preserved commands: `pytest apps/ocpp/tests/test_websocket_creation.py --durations=20` and `timeout 300 pytest apps/ocpp/tests/test_ocpp_handlers.py --durations=60`.
+- Interpretation: these module-level integration paths remain among the slowest candidates and motivated the low-value triage pass.
