@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.pr_origin(6213)
+pytestmark = [
+    pytest.mark.pr_origin(6213),
+    pytest.mark.skipif(sys.platform == "win32", reason="bash helper scripts are not supported on Windows"),
+]
 
 
 def _run_shell(script: str) -> subprocess.CompletedProcess[str]:

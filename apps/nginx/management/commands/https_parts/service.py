@@ -6,8 +6,6 @@ from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
 from django.db import transaction
 
-from apps.nodes.models import Node
-
 from apps.nginx.management.commands.https_parts.certificate_flow import (
     _get_or_create_certificate,
     _provision_certificate,
@@ -21,12 +19,13 @@ from apps.nginx.management.commands.https_parts.parsing import (
     _parse_sandbox_override,
     _parse_site_domain,
 )
-from apps.nginx.management.commands.https_parts.reporting import _render_report
 from apps.nginx.management.commands.https_parts.renewal import _renew_due_certificates
+from apps.nginx.management.commands.https_parts.reporting import _render_report
 from apps.nginx.management.commands.https_parts.verification import (
     _warn_if_certificate_expiring_soon,
 )
 from apps.nginx.models import SiteConfiguration
+from apps.nodes.models import Node
 from apps.sites.site_config import update_local_nginx_scripts
 
 
@@ -63,7 +62,12 @@ class HttpsProvisioningService:
         certbot_domain = options["certbot"]
         godaddy_domain = options["godaddy"]
         explicit_site = options["site"]
+        positional_domain = options.get("domain")
         explicit_migrate_from = options.get("migrate_from")
+
+        if positional_domain and not (certbot_domain or godaddy_domain or explicit_site):
+            certbot_domain = positional_domain
+
         parsed_site = _parse_site_domain(explicit_site) if explicit_site else None
         migrate_from = (
             _parse_site_domain(explicit_migrate_from)
@@ -81,7 +85,12 @@ class HttpsProvisioningService:
 
         if parsed_site and options["local"]:
             raise CommandError(
-                "--local cannot be combined with --site. Use --certbot/--godaddy or omit --local."
+                "--local cannot be combined with --site. Use a public-domain flag or omit --local."
+            )
+
+        if positional_domain and options["local"]:
+            raise CommandError(
+                "Positional domain cannot be combined with --local. Use --certbot/--godaddy/--site or omit domain."
             )
 
         certbot_domain = certbot_domain or (
