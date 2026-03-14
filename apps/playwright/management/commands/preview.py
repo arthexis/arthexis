@@ -6,6 +6,9 @@ from pathlib import Path
 import re
 import secrets
 import sys
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -75,6 +78,17 @@ class Command(BaseCommand):
             action="store_true",
             help="Capture pages without authenticating first.",
         )
+        parser.add_argument(
+            "--wait-for-suite",
+            action="store_true",
+            help="Wait for the suite base URL to become reachable before capture starts.",
+        )
+        parser.add_argument(
+            "--suite-timeout",
+            default=60,
+            type=int,
+            help="Maximum seconds to wait when --wait-for-suite is enabled.",
+        )
 
     def handle(self, *args, **options):
         """Capture screenshots for all requested paths and viewport profiles."""
@@ -90,6 +104,13 @@ class Command(BaseCommand):
                         "--username and --password are legacy options and ignored. "
                         "Preview now uses a temporary admin account."
                     )
+                )
+
+            base_url = options["base_url"].rstrip("/")
+            if options.get("wait_for_suite", False):
+                self._wait_for_suite_ready(
+                    base_url=base_url,
+                    timeout_seconds=options.get("suite_timeout", 60),
                 )
 
             if not options["no_login"]:
@@ -148,7 +169,7 @@ class Command(BaseCommand):
                 try:
                     self._capture_with_backend(
                         backend=backend,
-                        base_url=options["base_url"].rstrip("/"),
+                        base_url=base_url,
                         username=preview_username,
                         password=preview_password,
                         captures=captures,
@@ -312,6 +333,45 @@ class Command(BaseCommand):
             return
 
         raise CommandError(f"Unsupported backend '{backend}'.")
+
+    def _wait_for_suite_ready(self, *, base_url: str, timeout_seconds: int) -> None:
+        """Wait until the preview suite base URL responds before capturing.
+
+        Args:
+            base_url (str): Absolute base URL used by the preview command.
+            timeout_seconds (int): Maximum time to wait for an HTTP response.
+
+        Returns:
+            None: Returns once the suite responds to an HTTP request.
+
+        Raises:
+            CommandError: If timeout is not positive or the suite is not reachable
+                before the timeout expires.
+        """
+
+        if timeout_seconds <= 0:
+            raise CommandError("--suite-timeout must be greater than zero.")
+
+        deadline = time.monotonic() + timeout_seconds
+        last_error: URLError | None = None
+
+        while time.monotonic() < deadline:
+            try:
+                with urlopen(base_url, timeout=5):
+                    self.stdout.write(self.style.SUCCESS(f"Suite is reachable at {base_url}."))
+                    return
+            except HTTPError:
+                # HTTP errors still indicate that the web server is running.
+                self.stdout.write(self.style.SUCCESS(f"Suite is reachable at {base_url}."))
+                return
+            except URLError as exc:
+                last_error = exc
+                time.sleep(1)
+
+        raise CommandError(
+            "Timed out waiting for suite to become reachable at "
+            f"{base_url} after {timeout_seconds}s. Last error: {last_error}"
+        )
 
     def _capture_with_playwright(
         self,
