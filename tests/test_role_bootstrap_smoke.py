@@ -7,12 +7,13 @@ import subprocess
 import sys
 
 import pytest
+from config.roles import SUPPORTED_ROLES
 
 
 pytestmark = [pytest.mark.critical, pytest.mark.pr_origin(6177)]
 
 
-_ROLE_TEST_CASES = ("Terminal", "Control", "Satellite", "Watchtower")
+_ROLE_TEST_CASES = SUPPORTED_ROLES
 _ROLE_SPECIFIC_SETTINGS = ("BROKER_URL", "CELERY_BROKER_URL", "CHANNEL_REDIS_URL", "OCPP_STATE_REDIS_URL")
 
 
