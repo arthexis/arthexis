@@ -63,8 +63,14 @@ class HttpsProvisioningService:
         certbot_domain = options["certbot"]
         godaddy_domain = options["godaddy"]
         explicit_site = options["site"]
+        positional_domain = options.get("domain")
         explicit_migrate_from = options.get("migrate_from")
-        parsed_site = _parse_site_domain(explicit_site) if explicit_site else None
+
+        if explicit_site and positional_domain:
+            raise CommandError("Provide a domain using either positional domain or --site, not both.")
+
+        domain_input = explicit_site or positional_domain
+        parsed_site = _parse_site_domain(domain_input) if domain_input else None
         migrate_from = (
             _parse_site_domain(explicit_migrate_from)
             if explicit_migrate_from
@@ -85,7 +91,7 @@ class HttpsProvisioningService:
             )
 
         certbot_domain = certbot_domain or (
-            parsed_site if parsed_site and not godaddy_domain else None
+            parsed_site if explicit_site and parsed_site and not godaddy_domain else None
         )
         certbot_domain = _parse_site_domain(certbot_domain) if certbot_domain else None
         godaddy_domain = _parse_site_domain(godaddy_domain) if godaddy_domain else None
@@ -150,7 +156,7 @@ class HttpsProvisioningService:
                 self,
                 sudo=sudo,
                 reload=reload,
-                domain_filter=godaddy_domain or certbot_domain,
+                domain_filter=godaddy_domain or certbot_domain or parsed_site,
                 require_godaddy=bool(godaddy_domain),
                 require_local=bool(options["local"]),
             )

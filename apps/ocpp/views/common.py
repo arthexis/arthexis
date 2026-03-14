@@ -604,68 +604,83 @@ def _important_non_transaction_events(
             event_id = None
         return timestamp, event_name, details, event_id, identity
 
-    for source_key in keys:
-        for entry in store.iter_log_entries(source_key, log_type="charger"):
-            if len(entry.text) < 24:
-                continue
-            message = entry.text[24:].strip()
-            if message.startswith(excluded_prefixes):
-                continue
+    for entry in store.iter_log_entries(keys, log_type="charger"):
+        if len(entry.text) < 24:
+            continue
+        message = entry.text[24:].strip()
+        if message.startswith(excluded_prefixes):
+            continue
 
-            row: dict[str, str | int | datetime | None] | None = None
-            dedupe_identity = _row_identity_for_dedupe(source_key)
+        row: dict[str, str | int | datetime | None] | None = None
+        dedupe_identity = None
 
-            if message.startswith(status_prefix):
-                payload_text = message.split(":", 1)[1].strip()
+        if message.startswith(status_prefix):
+            payload_text = message.split(":", 1)[1].strip()
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                continue
+            if connector_id is not None:
                 try:
-                    payload = json.loads(payload_text)
-                except json.JSONDecodeError:
+                    payload_connector_id = int(payload.get("connectorId"))
+                except (TypeError, ValueError):
+                    payload_connector_id = None
+                if payload_connector_id not in {None, connector_id}:
                     continue
-                if connector_id is not None:
-                    try:
-                        payload_connector_id = int(payload.get("connectorId"))
-                    except (TypeError, ValueError):
-                        payload_connector_id = None
-                    if payload_connector_id not in {None, connector_id}:
-                        continue
-                status_value = str(payload.get("status") or "").strip()
-                if not status_value:
-                    continue
-                dedupe_identity = _row_identity_for_dedupe(source_key, payload)
-                severity, severity_color, severity_label = _event_meta("Status", status_value)
-                row = {
-                    "timestamp": entry.timestamp,
-                    "event": "Status",
-                    "details": status_value,
-                    "severity": severity,
-                    "severity_color": severity_color,
-                    "severity_label": severity_label,
-                    "event_id": _transaction_id_from_payload(payload),
-                }
-            elif message.startswith(important_prefixes):
-                event_name, _, detail_text = message.partition(":")
-                details = detail_text.strip() or "-"
-                severity, severity_color, severity_label = _event_meta(event_name, details)
-                row = {
-                    "timestamp": entry.timestamp,
-                    "event": event_name.strip(),
-                    "details": details,
-                    "severity": severity,
-                    "severity_color": severity_color,
-                    "severity_label": severity_label,
-                    "event_id": None,
-                }
-
-            if row is None:
+            status_value = str(payload.get("status") or "").strip()
+            if not status_value:
                 continue
-            dedupe_key = _event_dedupe_key(row, dedupe_identity)
-            if dedupe_key is not None:
-                if dedupe_key in dedupe_keys:
-                    continue
-                dedupe_keys.add(dedupe_key)
-            events.append(row)
+            dedupe_identity = _row_identity_for_dedupe("", payload)
+            severity, severity_color, severity_label = _event_meta(
+                "Status", status_value
+            )
+            row = {
+                "timestamp": entry.timestamp,
+                "event": "Status",
+                "details": status_value,
+                "severity": severity,
+                "severity_color": severity_color,
+                "severity_label": severity_label,
+                "event_id": _transaction_id_from_payload(payload),
+            }
+        elif message.startswith(important_prefixes):
+            event_name, _, detail_text = message.partition(":")
+            details = detail_text.strip() or "-"
+            severity, severity_color, severity_label = _event_meta(event_name, details)
+            row = {
+                "timestamp": entry.timestamp,
+                "event": event_name.strip(),
+                "details": details,
+                "severity": severity,
+                "severity_color": severity_color,
+                "severity_label": severity_label,
+                "event_id": None,
+            }
 
-    return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
+        if row is None:
+            continue
+        dedupe_key = _event_dedupe_key(row, dedupe_identity)
+        if dedupe_key is not None:
+            if dedupe_key in dedupe_keys:
+                continue
+            dedupe_keys.add(dedupe_key)
+        events.append(row)
+
+    ranked_events = sorted(events, key=lambda item: item["timestamp"], reverse=True)
+    limited_events = ranked_events[:limit]
+
+    has_status_row = any(item.get("event") == "Status" for item in limited_events)
+    if not has_status_row:
+        status_candidate = next(
+            (item for item in ranked_events if item.get("event") == "Status"),
+            None,
+        )
+        if status_candidate is not None:
+            if len(limited_events) < limit:
+                limited_events.append(status_candidate)
+            elif limited_events:
+                limited_events[-1] = status_candidate
+    return limited_events
 
 
 def _usage_timeline(

@@ -120,7 +120,7 @@ def _renew_due_certificates(
         if candidate_list:
             if domain_filter:
                 service.stdout.write(
-                    f"No certificates were due for renewal for {domain_filter}."
+                    f"Certificates for {domain_filter} are not due for renewal."
                 )
                 quoted_domain = shlex.quote(domain_filter)
                 service.stdout.write(

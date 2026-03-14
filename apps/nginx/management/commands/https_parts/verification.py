@@ -14,7 +14,12 @@ from apps.certs.services import CertificateVerificationResult
 def _verify_certificate(cert, *, sudo: str) -> list[str]:
     """Verify a certificate and return detailed formatted status output lines."""
 
-    result = cert.verify(sudo=sudo)
+    specific_certificate = getattr(cert, "_specific_certificate", cert)
+    verifier = getattr(specific_certificate, "verify_paths", None)
+    if callable(verifier):
+        result = verifier(sudo=sudo)
+    else:
+        result = specific_certificate.verify(sudo=sudo)
     expiration = getattr(cert, "expiration_date", None)
     lines = _format_verification_result(result)
 

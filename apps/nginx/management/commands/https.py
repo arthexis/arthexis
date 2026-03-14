@@ -61,6 +61,11 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "domain",
+            nargs="?",
+            help="Optional target domain for --renew/--validate shorthand operations.",
+        )
+        parser.add_argument(
             "--site",
             metavar="HOST_OR_URL",
             help=(

@@ -135,6 +135,20 @@ class CertificateBase(Certificate):
             sudo=sudo,
         )
 
+    def verify_paths(
+        self, *, sudo: str = "sudo"
+    ) -> services.CertificateVerificationResult:
+        """Backward-compatible alias for filesystem verification checks.
+
+        Args:
+            sudo: Privilege escalation prefix used for filesystem checks.
+
+        Returns:
+            CertificateVerificationResult produced by :meth:`verify`.
+        """
+
+        return self.verify(sudo=sudo)
+
     @property
     def _specific_certificate(self) -> "CertificateBase":
         if isinstance(self, (CertbotCertificate, SelfSignedCertificate)):
