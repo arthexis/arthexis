@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from apps.playwright.models import PlaywrightBrowser, PlaywrightScript
@@ -58,6 +60,10 @@ def test_callable_path_runs_after_start_url(monkeypatch):
 
 
 @pytest.mark.pr_origin(6217)
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="Display-environment detection is Linux-specific in this suite.",
+)
 def test_browser_forces_headless_without_display(monkeypatch):
     """Headed mode should downgrade to headless when DISPLAY is unavailable."""
 
