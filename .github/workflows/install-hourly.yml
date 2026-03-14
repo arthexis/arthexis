@@ -129,6 +129,7 @@ jobs:
       - install
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: write
     steps:
@@ -140,27 +141,37 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const runApiUrl = `${context.apiUrl}/repos/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const marker = '<!-- install-health-check-failure -->';
-            const { data: runData } = await github.rest.actions.getWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId
-            });
-            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-              per_page: 100
-            });
-            const failedJobs = jobsData.jobs.filter((job) => job.conclusion === 'failure');
-            const failedSteps = failedJobs
-              .map((job) => {
-                const failedStep = (job.steps || []).find((step) => step.conclusion === 'failure');
-                if (!failedStep) {
-                  return `- ${job.name}`;
-                }
-                return `- ${job.name}: ${failedStep.name}`;
-              })
-              .join('\n');
+            let runData = null;
+            let failedSteps = '';
+
+            try {
+              const { data: fetchedRunData } = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId
+              });
+              runData = fetchedRunData;
+
+              const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100
+              });
+
+              const failedJobs = jobsData.jobs.filter((job) => job.conclusion === 'failure');
+              failedSteps = failedJobs
+                .map((job) => {
+                  const failedStep = (job.steps || []).find((step) => step.conclusion === 'failure');
+                  if (!failedStep) {
+                    return `- ${job.name}`;
+                  }
+                  return `- ${job.name}: ${failedStep.name}`;
+                })
+                .join('\n');
+            } catch (error) {
+              core.warning(`Failed to fetch install health metadata: ${error.message}`);
+            }
 
             const body = [
               marker,
@@ -171,7 +182,7 @@ jobs:
               `- Workflow run API: ${runApiUrl}`,
               `- Branch/ref: ${context.ref}`,
               `- Commit: ${context.sha}`,
-              `- Triggered by: ${runData.event}`,
+              `- Triggered by: ${runData?.event ?? context.eventName}`,
               '',
               '## Failure details',
               '',
@@ -215,7 +226,7 @@ jobs:
             core.info(`Created issue #${created.data.number}.`);
 
   notify_recovery:
-    if: ${{ always() && needs.install.result == 'success' }}
+    if: ${{ always() && needs.install.result == 'success' && github.event_name == 'schedule' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     needs:
       - install
     runs-on: ubuntu-latest
