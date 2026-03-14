@@ -67,6 +67,10 @@ Pytest honours the following environment variables for local filtering:
 - `NODE_FEATURES` – comma-separated list of feature slugs to enable. Tests
   marked with `@pytest.mark.feature` are skipped if their features are not
   listed. Leaving this unset (the default in CI) runs all feature tests.
+- `PYTEST_DISABLE_MIGRATIONS` – controls whether pytest skips Django
+  migrations during early bootstrap. The default is `1` (migrations disabled
+  for faster and more reliable setup). Set `PYTEST_DISABLE_MIGRATIONS=0` to
+  opt back into running migrations.
 
 Example invocations:
 

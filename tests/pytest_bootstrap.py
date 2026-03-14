@@ -10,6 +10,8 @@ from django.conf import settings
 
 from tests.plugins.sqlite_paths import configure_ephemeral_sqlite_paths, ensure_clean_test_databases
 
+PYTEST_DISABLE_MIGRATIONS_ENV_VAR = "PYTEST_DISABLE_MIGRATIONS"
+
 
 class DisableMigrations(dict):
     """Short-circuit Django migrations for faster test database setup."""
@@ -25,7 +27,7 @@ def apply_bootstrap(base_dir: Path) -> None:
     """Apply environment and Django bootstrap required before pytest plugin loading."""
 
     os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
-    os.environ.setdefault("PYTEST_DISABLE_MIGRATIONS", "1")
+    os.environ.setdefault(PYTEST_DISABLE_MIGRATIONS_ENV_VAR, "1")
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     configure_ephemeral_sqlite_paths()
     ensure_clean_test_databases(base_dir)
@@ -36,5 +38,5 @@ def apply_bootstrap(base_dir: Path) -> None:
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
 
-    if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "0") == "1":
+    if os.environ.get(PYTEST_DISABLE_MIGRATIONS_ENV_VAR, "0") == "1":
         settings.MIGRATION_MODULES = DisableMigrations()
