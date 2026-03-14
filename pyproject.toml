@@ -95,7 +95,7 @@ dependencies = [
   "toml==0.10.2",
   "Twisted==25.5.0",
   "txaio==25.9.2",
-  "typing_extensions==4.14.1",
+  "typing_extensions==4.15.0",
   "tzdata==2025.3",
   "urllib3~=2.6.3",
   "vine==5.1.0",
@@ -153,7 +153,7 @@ video = [
   "aiortc==1.14.0",
   "opencv-python==4.13.0.92",
   "trio-websocket==0.12.2",
-  "trio==0.30.0",
+  "trio==0.31.0",
 ]
 
 [tool.setuptools]
