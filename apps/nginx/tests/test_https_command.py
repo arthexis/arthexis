@@ -62,12 +62,84 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_enable_with_godaddy_requires_dns_credential(monkeypatch):
+    """GoDaddy mode should stop with guidance if no credential is configured."""
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    with pytest.raises(CommandError, match="requires credentials"):
+        call_command("https", "--enable", "--godaddy", "example.com")
 
 
 @pytest.mark.django_db
+def test_https_godaddy_implies_enable(monkeypatch):
+    """`https --godaddy` should implicitly behave like `https --enable --godaddy`."""
+
+    provision_calls: dict[str, str] = {}
+
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    from apps.nginx.management.commands.https_parts import certificate_flow
+
+    monkeypatch.setattr(
+        certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None
+    )
+
+    call_command("https", "--godaddy", "example.net", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="example.net")
+    cert = config.certificate._specific_certificate
+    assert isinstance(cert, CertbotCertificate)
+    assert cert.challenge_type == CertbotCertificate.ChallengeType.GODADDY
+    assert provision_calls["sudo"] == ""
 
 
 @pytest.mark.django_db
+def test_https_certbot_implies_enable(monkeypatch):
+    """`https --certbot` should implicitly behave like `https --enable --certbot`."""
+
+    provision_calls: dict[str, str] = {}
+
+    def fake_provision(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_provision)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--certbot", "example.net", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="example.net")
+    cert = config.certificate._specific_certificate
+    assert isinstance(cert, CertbotCertificate)
+    assert cert.challenge_type == CertbotCertificate.ChallengeType.NGINX
+    assert provision_calls["sudo"] == ""
 
 
 @pytest.mark.django_db
@@ -114,6 +186,39 @@ def test_https_site_uses_latest_enabled_config_port(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_site_url_implies_enable_and_creates_managed_site(monkeypatch):
+    """`https --site wss://...` should normalize host and stage managed site metadata."""
+
+    provision_calls: dict[str, str] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--site", "wss://porsche-abb-1.gelectriic.com/", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="porsche-abb-1.gelectriic.com")
+    cert = config.certificate._specific_certificate
+    assert isinstance(cert, CertbotCertificate)
+    assert cert.challenge_type == CertbotCertificate.ChallengeType.NGINX
+    assert provision_calls["sudo"] == ""
+
+    from django.contrib.sites.models import Site
+
+    site = Site.objects.get(domain="porsche-abb-1.gelectriic.com")
+    assert getattr(site, "managed", False) is True
+    assert getattr(site, "require_https", False) is True
 
 
 @pytest.mark.django_db
@@ -148,15 +253,77 @@ def test_https_disable_clears_managed_site_require_https(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_site_rejects_invalid_hostname_characters():
+    """`--site` should reject invalid hostnames that could break nginx config rendering."""
+
+    with pytest.raises(CommandError, match="valid hostname or URL"):
+        call_command("https", "--site", "[example.com; return 301 http://evil.com;]")
 
 
 @pytest.mark.django_db
+def test_https_site_rejects_loopback_host():
+    """`--site` should reject localhost/loopback targets and direct users to --local."""
+
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "localhost")
+
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "127.0.0.1")
+
+    with pytest.raises(CommandError, match="public host"):
+        call_command("https", "--site", "http://[::1]")
 
 
 @pytest.mark.django_db
+def test_https_site_rejects_local_combination():
+    """`--site` and `--local` should fail to avoid contradictory certificate intent."""
+
+    with pytest.raises(CommandError, match="cannot be combined"):
+        call_command("https", "--enable", "--local", "--site", "example.com")
 
 
 @pytest.mark.django_db
+def test_prompt_for_godaddy_credential_allows_redirected_stdout(monkeypatch):
+    """Credential prompts should still run when stdout is redirected but stdin is interactive."""
+
+    import sys
+
+    from apps.dns.models import DNSProviderCredential
+    from apps.nginx.management.commands.https import Command
+    from apps.nginx.management.commands.https_parts.certificate_flow import (
+        _prompt_for_godaddy_credential,
+    )
+    from apps.nginx.management.commands.https_parts.service import (
+        HttpsProvisioningService,
+    )
+
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+
+    prompt_map = {
+        "Enter credentials now and save to DNS Credentials? [y/N]: ": "y",
+        "GoDaddy customer ID (optional): ": "customer-42",
+        "Use GoDaddy OTE sandbox environment? [y/N]: ": "n",
+    }
+    monkeypatch.setattr("builtins.input", lambda prompt="": prompt_map[prompt])
+    getpass_values = iter(["key-123", "secret-456"])
+    monkeypatch.setattr(
+        "apps.nginx.management.commands.https_parts.certificate_flow.getpass",
+        lambda _prompt="": next(getpass_values),
+    )
+
+    command = Command()
+    service = HttpsProvisioningService(command)
+    credential = _prompt_for_godaddy_credential(service, "example.edu")
+
+    assert credential is not None
+    assert credential.provider == DNSProviderCredential.Provider.GODADDY
+    assert credential.api_key == "key-123"
+    assert credential.api_secret == "secret-456"
+    assert credential.customer_id == "customer-42"
+    assert credential.default_domain == "example.edu"
+    assert credential.is_enabled is True
+    assert credential.use_sandbox is False
 
 
 @pytest.mark.django_db
@@ -394,6 +561,11 @@ def test_https_migrate_from_updates_site_and_node_records(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_migrate_from_requires_public_target_domain():
+    """`--migrate-from` should reject local-only migrations without public target hosts."""
+
+    with pytest.raises(CommandError, match="requires a target domain"):
+        call_command("https", "--enable", "--local", "--migrate-from", "arthexis.com")
 
 
 @pytest.mark.django_db
@@ -565,3 +737,38 @@ def test_https_validate_reports_detailed_certificate_status(monkeypatch):
     assert "all good" in rendered
 
 
+@pytest.mark.django_db
+def test_https_renew_domain_filter_reports_targeted_noop_message(monkeypatch):
+    """`https --renew <domain>` should report when the target cert is not due yet."""
+
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    cert = CertbotCertificate.objects.create(
+        name="filter-example-com-certbot",
+        domain="filter.example.com",
+        certificate_path="/etc/letsencrypt/live/filter.example.com/fullchain.pem",
+        certificate_key_path="/etc/letsencrypt/live/filter.example.com/privkey.pem",
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+        expiration_date=timezone.now() + timedelta(days=45),
+    )
+    SiteConfiguration.objects.create(
+        name="filter.example.com",
+        enabled=True,
+        protocol="https",
+        certificate=cert,
+    )
+
+    monkeypatch.setattr(
+        CertificateBase,
+        "update_expiration_date",
+        lambda self, *, sudo="sudo": self.expiration_date,
+    )
+
+    out = StringIO()
+    call_command("https", "--renew", "filter.example.com", stdout=out)
+
+    rendered = out.getvalue()
+    assert "not due for renewal" in rendered
+    assert "filter.example.com" in rendered

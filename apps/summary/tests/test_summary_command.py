@@ -35,6 +35,37 @@ def llm_summary_suite_feature_enabled() -> Feature:
     return feature
 
 
+@pytest.mark.django_db
+def test_summary_command_prints_status_and_plan(tmp_path: Path) -> None:
+    """The summary command should report status and parsed screen plan."""
+
+    node = Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+    config = get_summary_config()
+    config.last_output = """SCREEN 1:
+ALARM
+CHECK PUMP
+---
+SCREEN 2:
+TEMP OK
+HOLD
+"""
+    config.save(update_fields=["last_output", "updated_at"])
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / LCD_LOW_LOCK_FILE).write_text("TEMP OK\nHOLD\n", encoding="utf-8")
+    (lock_dir / LCD_CHANNELS_LOCK_FILE).write_text("high, low, stats\n", encoding="utf-8")
+
+    out = StringIO()
+    with override_settings(BASE_DIR=tmp_path):
+        call_command("summary", stdout=out)
+
+    output = out.getvalue()
+    assert f"Node: {node.hostname}" in output
+    assert "Summary Plan" in output
+    assert "  01. ALARM            | CHECK PUMP" in output
+    assert "* 02. TEMP OK          | HOLD" in output
+    assert "Channel order: high, low, stats" in output
 
 
 @pytest.mark.django_db
@@ -59,13 +90,122 @@ def test_summary_command_enabled_turns_on_prereqs(tmp_path: Path) -> None:
     assert node.features.filter(slug="lcd-screen").exists()
 
 
+@pytest.mark.django_db
+def test_summary_command_run_now_executes_task_before_status(
+    tmp_path: Path, llm_summary_suite_feature_enabled: Feature
+) -> None:
+    """The --run-now flag should execute the summary task before status output."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            return_value="wrote:2",
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert "Run now: wrote:2" in output
+    assert "LCD Summary Status" in output
+    run_now.assert_called_once_with()
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_refreshes_config_before_reporting(
+    tmp_path: Path, llm_summary_suite_feature_enabled: Feature
+) -> None:
+    """The --run-now flag should print refreshed config fields updated by the task."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+    config = get_summary_config()
+    config.last_run_at = None
+    config.save(update_fields=["last_run_at", "updated_at"])
+
+    refreshed_run_at = timezone.now().replace(microsecond=0)
+
+    def _run_now_side_effect() -> str:
+        run_config = get_summary_config()
+        run_config.last_run_at = refreshed_run_at
+        run_config.save(update_fields=["last_run_at", "updated_at"])
+        return "wrote:1"
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            side_effect=_run_now_side_effect,
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert "Run now: wrote:1" in output
+    assert f"Last run: {refreshed_run_at.isoformat()}" in output
+    run_now.assert_called_once_with()
+
+
+@pytest.mark.django_db
+def test_summary_command_run_now_skips_when_suite_feature_disabled(tmp_path: Path) -> None:
+    """Regression: run-now should short-circuit when suite automation gate is disabled."""
+
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
+    Feature.objects.update_or_create(
+        slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        defaults={
+            "display": "LLM Summary Suite",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": False,
+        },
+    )
+
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch("apps.summary.management.commands.summary.Command._run_summary_task_now") as run_now,
+    ):
+        call_command("summary", "--run-now", stdout=out)
+
+    output = out.getvalue()
+    assert f"Suite feature '{LLM_SUMMARY_SUITE_FEATURE_SLUG}' is disabled" in output
+    assert "Run now: skipped:suite-feature-disabled" in output
+    run_now.assert_not_called()
 
 
 
+@pytest.mark.django_db
+def test_summary_command_run_now_override_when_suite_feature_disabled(tmp_path: Path) -> None:
+    """The --allow-disabled-feature flag should bypass the suite gate."""
 
+    Node.objects.create(hostname="local", current_relation=Node.Relation.SELF)
 
+    Feature.objects.update_or_create(
+        slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        defaults={
+            "display": "LLM Summary Suite",
+            "source": Feature.Source.CUSTOM,
+            "is_enabled": False,
+        },
+    )
 
+    out = StringIO()
+    with (
+        override_settings(BASE_DIR=tmp_path),
+        patch(
+            "apps.summary.management.commands.summary.Command._run_summary_task_now",
+            return_value="wrote:1",
+        ) as run_now,
+    ):
+        call_command("summary", "--run-now", "--allow-disabled-feature", stdout=out)
 
+    output = out.getvalue()
+    assert "running manual override via --allow-disabled-feature" in output
+    assert "Run now: wrote:1" in output
+    run_now.assert_called_once_with(ignore_suite_feature_gate=True)
 
 
 @pytest.mark.django_db

@@ -41,8 +41,25 @@ def test_feature_command_toggles_single_node_feature_with_positional_slug() -> N
     assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
 
 
+@pytest.mark.django_db
+def test_feature_command_requires_single_status_flag() -> None:
+    """Singular command should reject mutually exclusive status flags."""
+
+    feature = Feature.objects.create(slug="public-api", display="Public API", is_enabled=False)
+
+    with pytest.raises(CommandError, match="Choose only one of --enabled or --disabled"):
+        call_command("feature", feature.slug, "--enabled", "--disabled")
 
 
+@pytest.mark.django_db
+def test_feature_command_requires_kind_for_ambiguous_slugs() -> None:
+    """Ambiguous slugs should require explicit --kind when using singular command."""
+
+    Feature.objects.create(slug="ambiguous-toggle", display="Ambiguous Suite", is_enabled=False)
+    NodeFeature.objects.create(slug="ambiguous-toggle", display="Ambiguous Node")
+
+    with pytest.raises(CommandError, match="exists in both suite and node kinds"):
+        call_command("feature", "ambiguous-toggle", "--enabled")
 
 
 @pytest.mark.django_db
@@ -89,8 +106,31 @@ def test_features_command_filters_disabled_rows() -> None:
     assert "suite-enabled" not in output
 
 
+@pytest.mark.django_db
+def test_features_command_with_feature_flag_behaves_like_singular_toggle() -> None:
+    """Using ``--feature`` plus status filter should toggle one selected feature."""
+
+    feature = Feature.objects.create(slug="single-filtered", display="Single Filtered", is_enabled=False)
+
+    out = StringIO()
+    call_command("features", "--feature", feature.slug, "--enabled", stdout=out)
+    feature.refresh_from_db()
+
+    assert feature.is_enabled is True
+    assert f"- {feature.slug} [enabled]" in out.getvalue()
 
 
+@pytest.mark.django_db
+def test_features_command_with_feature_rejects_mutually_exclusive_status_flags() -> None:
+    """Plural command should reject conflicting status flags for ``--feature`` mode."""
+
+    feature = Feature.objects.create(slug="conflict-slug", display="Conflict", is_enabled=False)
+
+    with pytest.raises(CommandError, match="Choose only one of --enabled or --disabled"):
+        call_command("features", "--feature", feature.slug, "--enabled", "--disabled")
+
+    feature.refresh_from_db()
+    assert feature.is_enabled is False
 
 
 @pytest.mark.django_db
@@ -132,3 +172,24 @@ def test_features_command_refresh_node_triggers_local_refresh(monkeypatch) -> No
     assert "Successfully refreshed features." in out.getvalue()
 
 
+@pytest.mark.django_db
+def test_feature_command_refresh_node_runs_without_slug(monkeypatch) -> None:
+    """Singular command should support refresh-only mode without a slug."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    calls: list[int] = []
+
+    def fake_refresh(self) -> None:
+        calls.append(self.pk)
+
+    monkeypatch.setattr(Node, "refresh_features", fake_refresh)
+
+    out = StringIO()
+    call_command("feature", "--refresh-node", stdout=out)
+
+    assert calls == [node.pk]
+    assert "Successfully refreshed features." in out.getvalue()
