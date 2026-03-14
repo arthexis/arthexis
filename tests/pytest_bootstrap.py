@@ -25,6 +25,7 @@ def apply_bootstrap(base_dir: Path) -> None:
     """Apply environment and Django bootstrap required before pytest plugin loading."""
 
     os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
+    os.environ.setdefault("PYTEST_DISABLE_MIGRATIONS", "1")
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     configure_ephemeral_sqlite_paths()
     ensure_clean_test_databases(base_dir)
