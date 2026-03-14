@@ -374,3 +374,11 @@ tests/test_manage_runserver_bind.py::test_ensure_runserver_default_bind_preserve
 tests/test_manage_runserver_bind.py::test_ensure_runserver_default_bind_preserves_addrport_flag
 tests/test_service_probe.py::test_parse_runserver_port_prefers_valid_addrport
 tests/test_service_probe.py::test_parse_runserver_port_supports_standalone_numeric_port
+
+Removed 50 additional low-value tests (2026-03-13) - module-level summary:
+This module list is a roll-up summary of the same 50 test-level removals documented in the previous 2026-03-13 block; it is not a separate removal batch.
+apps/evergo/tests/test_public_views.py
+apps/sites/tests/test_user_story_submission.py
+apps/ocpp/tests/test_charge_point_admin_actions_domains.py
+apps/actions/tests/test_admin.py
+apps/projects/tests/test_admin.py
