@@ -151,6 +151,7 @@ def test_execute_windows_bash_launcher_falls_back_to_sh(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.pr_origin(6217)
 def test_execute_markdown_bash_blocks_quote_arg_sigils(monkeypatch):
     """Markdown bash fences shell-escape arg sigils before execution."""
 

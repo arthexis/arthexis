@@ -4,12 +4,13 @@ import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.urls import NoReverseMatch
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Transaction
+
+pytestmark = pytest.mark.pr_origin(6217)
 
 
 @pytest.mark.django_db

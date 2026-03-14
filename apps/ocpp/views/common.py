@@ -2,32 +2,24 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone as dt_timezone
+from datetime import datetime, time, timedelta
+from datetime import timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from types import SimpleNamespace
+from urllib.parse import urljoin
 
+from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.contrib import messages
-from django.http import (Http404, HttpResponse, JsonResponse)
-from django.http.request import split_domain_port
-from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404, redirect, render, resolve_url
-from django.template.loader import render_to_string
-from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
-from django.utils.translation import gettext_lazy as _, gettext, ngettext
-from django.utils.encoding import force_str
-from django.utils.text import slugify
-from django.urls import NoReverseMatch, reverse
-from django.conf import settings
-from django.utils import translation, timezone, formats
-from django.db.utils import OperationalError, ProgrammingError
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.db.models import (
     ExpressionWrapper,
-    FloatField,
     F,
+    FloatField,
     OuterRef,
     Q,
     Subquery,
@@ -35,42 +27,48 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
-from urllib.parse import urljoin
+from django.db.utils import OperationalError, ProgrammingError
+from django.http import Http404, HttpResponse, JsonResponse
+from django.http.request import split_domain_port
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.template.loader import render_to_string
+from django.urls import NoReverseMatch, reverse
+from django.utils import formats, timezone, translation
+from django.utils.dateparse import parse_datetime
+from django.utils.encoding import force_str
+from django.utils.text import slugify
+from django.utils.translation import gettext, ngettext
+from django.utils.translation import gettext_lazy as _
+from django.views.decorators.csrf import csrf_exempt
 
-from asgiref.sync import async_to_sync
-
-from utils.api import api_login_required
-
-from apps.nodes.models import NetMessage, Node
+from apps.cards.models import RFID as CoreRFID
 from apps.locale.models import Language
+from apps.nodes.models import NetMessage, Node
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-
-from apps.sites.utils import landing
-from apps.cards.models import RFID as CoreRFID
-
-from django.utils.dateparse import parse_datetime
-
-from .. import store
-from ..status_resets import clear_stale_cached_statuses
-from ..models import (
-    Transaction,
-    Charger,
-    ChargerLogRequest,
-    DataTransferMessage,
-    ChargingProfile,
-    CPReservation,
-    CPFirmware,
-    CPFirmwareDeployment,
-    Simulator,
-    annotate_transaction_energy_bounds,
-)
 from apps.simulators.evcs import (
     _start_simulator,
     _stop_simulator,
     get_simulator_state,
 )
-from ..status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
+from apps.sites.utils import landing
+from utils.api import api_login_required
+
+from .. import store
+from ..models import (
+    Charger,
+    ChargerLogRequest,
+    ChargingProfile,
+    CPFirmware,
+    CPFirmwareDeployment,
+    CPReservation,
+    DataTransferMessage,
+    Simulator,
+    Transaction,
+    annotate_transaction_energy_bounds,
+)
+from ..status_display import ERROR_OK_VALUES, STATUS_BADGE_MAP
+from ..status_resets import clear_stale_cached_statuses
 from .actions.common import (
     CALL_ACTION_LABELS,
     CALL_EXPECTED_STATUSES,
@@ -82,6 +80,10 @@ from .actions.common import (
     _get_or_create_charger,
     _normalize_connector_slug,
     _parse_request_body,
+)
+
+_PREFIXED_STATUS_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
 )
 
 
@@ -561,7 +563,10 @@ def _important_non_transaction_events(
         return None
 
     events: list[dict[str, str | int | datetime | None]] = []
-    dedupe_keys: set[tuple[str, str, int | None, str | int | None, datetime | None]] = set()
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        dict[str, str | int | datetime | None],
+    ] = {}
 
     def _row_identity_for_dedupe(
         source_key: str,
@@ -607,16 +612,12 @@ def _important_non_transaction_events(
             return event_name, details, event_id, identity, None
         return event_name, details, event_id, identity, timestamp
 
-    prefixed_status_pattern = re.compile(
-        r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
-    )
-
     for source_key in keys:
         for entry in store.iter_log_entries(source_key, log_type="charger"):
             if len(entry.text) < 24:
                 continue
             message = entry.text[24:].strip()
-            prefixed_match = prefixed_status_pattern.match(message)
+            prefixed_match = _PREFIXED_STATUS_PATTERN.match(message)
             if prefixed_match is not None:
                 message = message[prefixed_match.start(1) :]
             if message.startswith(excluded_prefixes):
@@ -670,10 +671,26 @@ def _important_non_transaction_events(
                 continue
             dedupe_key = _event_dedupe_key(row, dedupe_identity)
             if dedupe_key is not None:
-                if dedupe_key in dedupe_keys:
+                existing = deduped_rows.get(dedupe_key)
+                if existing is None:
+                    deduped_rows[dedupe_key] = row
                     continue
-                dedupe_keys.add(dedupe_key)
+
+                existing_timestamp = existing.get("timestamp")
+                row_timestamp = row.get("timestamp")
+
+                if existing_timestamp is None and row_timestamp is not None:
+                    deduped_rows[dedupe_key] = row
+                elif (
+                    isinstance(existing_timestamp, datetime)
+                    and isinstance(row_timestamp, datetime)
+                    and row_timestamp > existing_timestamp
+                ):
+                    deduped_rows[dedupe_key] = row
+                continue
             events.append(row)
+
+    events.extend(deduped_rows.values())
 
     return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
 

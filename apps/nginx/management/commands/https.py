@@ -9,6 +9,33 @@ class Command(BaseCommand):
     help = "Manage HTTPS certificates and nginx configuration."
 
     def add_arguments(self, parser):
+        """Register HTTPS command flags and positional-domain compatibility behavior.
+
+        Parameters:
+            parser: Django command parser receiving action, certificate source,
+                migration, execution, and compatibility arguments.
+
+        Return:
+            None. Arguments are registered directly on ``parser``.
+
+        Raises:
+            CommandError: Downstream validation in the service raises command
+                errors for incompatible combinations such as conflicting domain
+                selectors or ``--local`` with a public-domain selector.
+
+        Notes:
+            ``action_group`` ensures only one of ``--enable``, ``--disable``,
+            ``--renew``, or ``--validate`` is explicit per invocation.
+            ``cert_group`` enforces one certificate-source selector among
+            ``--local``, ``--certbot``, and ``--godaddy``.
+            ``sandbox_group`` controls GoDaddy DNS API environment overrides.
+            The positional ``domain`` argument is a backward-compatible shortcut
+            treated like a public-domain selector when explicit selectors are
+            omitted; explicit ``--certbot``, ``--godaddy``, and ``--site`` take
+            precedence. Without selectors, command behavior defaults to local
+            certificate flows unless an explicit public-domain selector is set.
+        """
+
         action_group = parser.add_mutually_exclusive_group()
         action_group.add_argument(
             "--enable",

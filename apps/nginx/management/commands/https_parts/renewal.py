@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import shlex
 from datetime import datetime
 from pathlib import Path
-import shlex
 
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from apps.certs.models import CertificateBase, CertbotCertificate
+from apps.certs.models import CertbotCertificate, CertificateBase
 from apps.nginx.management.commands.https_parts.config_apply import _apply_config
 from apps.nginx.models import SiteConfiguration
 
@@ -119,8 +119,12 @@ def _renew_due_certificates(
     if not due_certificates:
         if candidate_list:
             if domain_filter:
+                certificate_label = (
+                    "Certificate" if len(candidate_list) == 1 else "Certificates"
+                )
+                verb_label = "is" if len(candidate_list) == 1 else "are"
                 service.stdout.write(
-                    f"Certificate for {domain_filter} is not due for renewal."
+                    f"{certificate_label} for {domain_filter} {verb_label} not due for renewal."
                 )
                 quoted_domain = shlex.quote(domain_filter)
                 service.stdout.write(

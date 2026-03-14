@@ -57,6 +57,7 @@ def test_callable_path_runs_after_start_url(monkeypatch):
     assert driver.quit_called is True
 
 
+@pytest.mark.pr_origin(6217)
 def test_browser_forces_headless_without_display(monkeypatch):
     """Headed mode should downgrade to headless when DISPLAY is unavailable."""
 
