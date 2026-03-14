@@ -47,15 +47,22 @@ _ROLE_FAVICONS = {
 }
 
 
-def _resolve_landing_visibility(landing, request, *, role_id: object, site_id: object) -> bool:
+def _resolve_landing_visibility(
+    landing,
+    view_func,
+    request,
+    *,
+    role_id: object,
+    site_id: object,
+) -> bool:
     """Return whether a landing should be visible in module navigation."""
 
-    validator = getattr(landing, "module_pill_link_validator", None)
+    validator = getattr(view_func, "module_pill_link_validator", None)
     if validator is None:
         return True
 
     parameter_getter = getattr(
-        landing,
+        view_func,
         "module_pill_link_validator_parameter_getter",
         None,
     )
@@ -65,7 +72,8 @@ def _resolve_landing_visibility(landing, request, *, role_id: object, site_id: o
         if values:
             parameters = dict(values)
 
-    cache_ttl = int(getattr(landing, "module_pill_link_validator_cache_ttl", 60) or 60)
+    ttl_from_attr = getattr(view_func, "module_pill_link_validator_cache_ttl", 60)
+    cache_ttl = int(ttl_from_attr if ttl_from_attr is not None else 60)
     params_fingerprint = "|".join(
         f"{key}={force_str(parameters[key])}" for key in sorted(parameters)
     )
@@ -228,6 +236,7 @@ def nav_links(request):
                     continue
             if not _resolve_landing_visibility(
                 landing,
+                view_func,
                 request,
                 role_id=role_id,
                 site_id=site_id,

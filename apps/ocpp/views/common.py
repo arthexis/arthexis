@@ -160,6 +160,19 @@ def _visible_chargers(user):
     return Charger.visible_for_user(user).prefetch_related("owner_users", "owner_groups")
 
 
+def _landing_requires_chargers(*, request, landing, **kwargs) -> bool:
+    """Return ``True`` when at least one charger exists for this user."""
+
+    return _visible_chargers(request.user).exists()
+
+
+def _landing_visibility_params(*, request, landing) -> dict[str, object]:
+    """Return cache parameters used for landing visibility checks."""
+
+    user = getattr(request, "user", None)
+    return {"user_id": getattr(user, "pk", "anon") or "anon"}
+
+
 def _charger_last_seen(charger: Charger | object):
     """Return the last activity timestamp for ``charger`` safely.
 

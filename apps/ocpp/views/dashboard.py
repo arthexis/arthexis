@@ -19,23 +19,10 @@ from .. import store
 from ..models import Charger, Transaction, annotate_transaction_energy_bounds
 from ..status_display import STATUS_BADGE_MAP
 from . import common as view_common
-
-
-def _landing_requires_chargers(*, request, landing, **kwargs) -> bool:
-    """Return ``True`` when at least one charger exists for this user."""
-
-    return view_common._visible_chargers(request.user).exists()
-
-
-def _landing_visibility_params(*, request, landing) -> dict[str, object]:
-    """Return cache parameters used for landing visibility checks."""
-
-    user = getattr(request, "user", None)
-    return {"user_id": getattr(user, "pk", "anon") or "anon"}
-
 from .common import (_charger_last_seen, _charger_state,
                      _charging_limit_details, _clear_stale_statuses_for_view,
-                     _has_active_session, _reverse_connector_url)
+                     _has_active_session, _landing_requires_chargers,
+                     _landing_visibility_params, _reverse_connector_url)
 
 
 @landing("CPMS Online Dashboard")
