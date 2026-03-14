@@ -12,22 +12,15 @@ import pytest
 pytestmark = [pytest.mark.critical, pytest.mark.pr_origin(6177)]
 
 
-_ROLE_TEST_CASES = [
-    ("Terminal", {}),
-    ("Control", {"CELERY_BROKER_URL": "redis://localhost:6379/0"}),
-    ("Satellite", {"OCPP_STATE_REDIS_URL": "redis://localhost:6379/1"}),
-    ("Watchtower", {"CHANNEL_REDIS_URL": "redis://localhost:6379/2"}),
-]
-
-_ROLE_SPECIFIC_SETTINGS = tuple(sorted({key for _, extra_env in _ROLE_TEST_CASES for key in extra_env}))
+_ROLE_TEST_CASES = ("Terminal", "Control", "Satellite", "Watchtower")
+_ROLE_SPECIFIC_SETTINGS = ("BROKER_URL", "CELERY_BROKER_URL", "CHANNEL_REDIS_URL", "OCPP_STATE_REDIS_URL")
 
 
-def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run_role_bootstrap(*, node_role: str) -> subprocess.CompletedProcess[str]:
     """Run a clean subprocess that imports settings and Celery for a specific node role.
 
     Parameters:
         node_role: NODE_ROLE value to test.
-        extra_env: Extra environment variables required by the role.
 
     Returns:
         CompletedProcess output from the subprocess run.
@@ -52,9 +45,6 @@ def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = No
     for setting_name in _ROLE_SPECIFIC_SETTINGS:
         env.pop(setting_name, None)
 
-    if extra_env:
-        env.update(extra_env)
-
     try:
         return subprocess.run(
             [
@@ -76,15 +66,12 @@ def _run_role_bootstrap(*, node_role: str, extra_env: dict[str, str] | None = No
         )
 
 
-@pytest.mark.parametrize(("node_role", "extra_env"), _ROLE_TEST_CASES)
-def test_role_bootstrap_imports_succeed_with_minimum_required_environment(
-    node_role: str, extra_env: dict[str, str]
-) -> None:
-    """Each supported role can import settings and Celery with minimal environment values.
+@pytest.mark.parametrize("node_role", _ROLE_TEST_CASES)
+def test_role_bootstrap_imports_succeed_without_role_specific_environment(node_role: str) -> None:
+    """Supported roles should bootstrap without requiring role-specific runtime settings.
 
     Parameters:
         node_role: NODE_ROLE value under test.
-        extra_env: Minimal role-specific environment overrides.
 
     Returns:
         None
@@ -93,7 +80,7 @@ def test_role_bootstrap_imports_succeed_with_minimum_required_environment(
         AssertionError: If process import/bootstrap fails for the role.
     """
 
-    result = _run_role_bootstrap(node_role=node_role, extra_env=extra_env)
+    result = _run_role_bootstrap(node_role=node_role)
 
     assert result.returncode == 0, (
         f"{node_role} bootstrap failed with rc={result.returncode}\n"
