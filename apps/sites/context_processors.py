@@ -1,20 +1,24 @@
-from utils.sites import get_site
-from django.urls import Resolver404, resolve
+from pathlib import Path
+
 from django.apps import apps
-from django.shortcuts import resolve_url
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import OperationalError, ProgrammingError
-from pathlib import Path
-from apps.nodes.models import Node
-from apps.nodes.utils import FeatureChecker
+from django.shortcuts import resolve_url
+from django.urls import Resolver404, resolve
+from django.utils.encoding import force_str
+
+from apps.features.utils import is_suite_feature_enabled
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from apps.modules.models import Module
+from apps.nodes.models import Node
+from apps.nodes.utils import FeatureChecker
 from apps.sites.utils import user_in_site_operator_group
-from apps.features.utils import is_suite_feature_enabled
+from utils.sites import get_site
+
 from .models import SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
@@ -41,6 +45,44 @@ _ROLE_FAVICONS = {
     for role, filename in _FAVICON_FILENAMES.items()
     if role != "default"
 }
+
+
+def _resolve_landing_visibility(landing, request, *, role_id: object, site_id: object) -> bool:
+    """Return whether a landing should be visible in module navigation."""
+
+    validator = getattr(landing, "module_pill_link_validator", None)
+    if validator is None:
+        return True
+
+    parameter_getter = getattr(
+        landing,
+        "module_pill_link_validator_parameter_getter",
+        None,
+    )
+    parameters: dict[str, object] = {}
+    if callable(parameter_getter):
+        values = parameter_getter(request=request, landing=landing)
+        if values:
+            parameters = dict(values)
+
+    cache_ttl = int(getattr(landing, "module_pill_link_validator_cache_ttl", 60) or 60)
+    params_fingerprint = "|".join(
+        f"{key}={force_str(parameters[key])}" for key in sorted(parameters)
+    )
+    cache_key = (
+        "nav_links:landing_visibility:"
+        f"{landing.path}:"
+        f"role:{role_id}:"
+        f"site:{site_id}:"
+        f"params:{params_fingerprint}"
+    )
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return bool(cached)
+
+    is_visible = bool(validator(request=request, landing=landing, **parameters))
+    cache.set(cache_key, is_visible, timeout=cache_ttl)
+    return is_visible
 
 
 def nav_links(request):
@@ -184,6 +226,13 @@ def nav_links(request):
                     feature_checker.is_enabled(slug) for slug in required_features_any
                 ):
                     continue
+            if not _resolve_landing_visibility(
+                landing,
+                request,
+                role_id=role_id,
+                site_id=site_id,
+            ):
+                continue
             seen_paths.add(normalized_path)
             requires_login = bool(getattr(view_func, "login_required", False))
             if not requires_login and hasattr(view_func, "login_url"):
