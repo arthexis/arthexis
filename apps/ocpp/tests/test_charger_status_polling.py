@@ -1,5 +1,7 @@
 """Tests for charger status polling behavior in the status page context."""
 
+import uuid
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import NoReverseMatch
@@ -157,24 +159,13 @@ def test_status_view_aggregate_deduplicates_events_from_multiple_identities(clie
         username="status-events-deduplicated", password="pass"
     )
     client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-EVENTS-DEDUPE")
+    charger = Charger.objects.create(charger_id=f"STATUS-EVENTS-DEDUPE-{uuid.uuid4().hex[:8]}")
     connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
     connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
 
     duplicate_message = (
-        "2024-01-01 12:00:00.000 StatusNotification processed: {\"connectorId\": 1, \"status\": \"Preparing\"}"
+        'StatusNotification processed: {"connectorId": 1, "status": "Preparing"}'
     )
-    store.logs_module._append_memory_log(
-        store.identity_key(charger.charger_id, None),
-        duplicate_message,
-        log_type="charger",
-    )
-    store.logs_module._append_memory_log(
-        store.identity_key(charger.charger_id, connector_a.connector_id),
-        duplicate_message,
-        log_type="charger",
-    )
-
     store.add_log(
         store.identity_key(charger.charger_id, connector_a.connector_id),
         "Connected connector-a-unique",
@@ -182,6 +173,16 @@ def test_status_view_aggregate_deduplicates_events_from_multiple_identities(clie
     store.add_log(
         store.identity_key(charger.charger_id, connector_b.connector_id),
         "Connected connector-b-unique",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, None),
+        duplicate_message,
+        log_type="charger",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_a.connector_id),
+        duplicate_message,
+        log_type="charger",
     )
 
     response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
@@ -207,22 +208,24 @@ def test_status_view_aggregate_keeps_distinct_connector_status_rows(client):
         username="status-events-by-connector", password="pass"
     )
     client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-EVENTS-BY-CONNECTOR")
+    charger = Charger.objects.create(
+        charger_id=f"STATUS-EVENTS-BY-CONNECTOR-{uuid.uuid4().hex[:8]}"
+    )
     connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
     connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
 
     connector_a_message = (
-        "2024-01-01 12:00:00.000 StatusNotification processed: {\"connectorId\": 1, \"status\": \"Available\"}"
+        'StatusNotification processed: {"connectorId": 1, "status": "Available"}'
     )
     connector_b_message = (
-        "2024-01-01 12:00:00.000 StatusNotification processed: {\"connectorId\": 2, \"status\": \"Available\"}"
+        'StatusNotification processed: {"connectorId": 2, "status": "Available"}'
     )
-    store.logs_module._append_memory_log(
+    store.add_log(
         store.identity_key(charger.charger_id, connector_a.connector_id),
         connector_a_message,
         log_type="charger",
     )
-    store.logs_module._append_memory_log(
+    store.add_log(
         store.identity_key(charger.charger_id, connector_b.connector_id),
         connector_b_message,
         log_type="charger",

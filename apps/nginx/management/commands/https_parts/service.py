@@ -63,6 +63,7 @@ class HttpsProvisioningService:
         certbot_domain = options["certbot"]
         godaddy_domain = options["godaddy"]
         explicit_site = options["site"]
+        positional_domain = options.get("domain")
         explicit_migrate_from = options.get("migrate_from")
         parsed_site = _parse_site_domain(explicit_site) if explicit_site else None
         migrate_from = (
@@ -83,6 +84,9 @@ class HttpsProvisioningService:
             raise CommandError(
                 "--local cannot be combined with --site. Use --certbot/--godaddy or omit --local."
             )
+
+        if positional_domain and not (certbot_domain or godaddy_domain or explicit_site):
+            certbot_domain = positional_domain
 
         certbot_domain = certbot_domain or (
             parsed_site if parsed_site and not godaddy_domain else None

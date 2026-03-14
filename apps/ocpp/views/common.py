@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone as dt_timezone
@@ -560,7 +561,7 @@ def _important_non_transaction_events(
         return None
 
     events: list[dict[str, str | int | datetime | None]] = []
-    dedupe_keys: set[tuple[datetime, str, str, int | None, str | int | None]] = set()
+    dedupe_keys: set[tuple[str, str, int | None, str | int | None, datetime | None]] = set()
 
     def _row_identity_for_dedupe(
         source_key: str,
@@ -587,28 +588,37 @@ def _important_non_transaction_events(
     def _event_dedupe_key(
         row: dict[str, str | int | datetime | None],
         identity: str | int | None,
-    ) -> tuple[datetime, str, str, int | None, str | int | None] | None:
+    ) -> tuple[str, str, int | None, str | int | None, datetime | None] | None:
         """Return a stable dedupe key for non-transaction event rows."""
 
         timestamp = row.get("timestamp")
         event_name = row.get("event")
         details = row.get("details")
-        if not isinstance(timestamp, datetime):
-            return None
         if not isinstance(event_name, str):
             return None
         if not isinstance(details, str):
             return None
+        if timestamp is not None and not isinstance(timestamp, datetime):
+            return None
         event_id = row.get("event_id")
         if not isinstance(event_id, int):
             event_id = None
-        return timestamp, event_name, details, event_id, identity
+        if event_name == "Status":
+            return event_name, details, event_id, identity, None
+        return event_name, details, event_id, identity, timestamp
+
+    prefixed_status_pattern = re.compile(
+        r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
+    )
 
     for source_key in keys:
         for entry in store.iter_log_entries(source_key, log_type="charger"):
             if len(entry.text) < 24:
                 continue
             message = entry.text[24:].strip()
+            prefixed_match = prefixed_status_pattern.match(message)
+            if prefixed_match is not None:
+                message = message[prefixed_match.start(1) :]
             if message.startswith(excluded_prefixes):
                 continue
 

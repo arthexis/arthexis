@@ -97,6 +97,14 @@ class Command(BaseCommand):
             default=14,
             help="Warn when certificate expiration is within this many days (default: 14).",
         )
+        parser.add_argument(
+            "domain",
+            nargs="?",
+            help=(
+                "Optional target domain filter for --renew/--validate compatibility "
+                "(same as passing --certbot/--godaddy domain)."
+            ),
+        )
 
     def handle(self, *args, **options):
         """Dispatch HTTPS actions through a dedicated provisioning service."""

@@ -61,6 +61,7 @@ def test_browser_forces_headless_without_display(monkeypatch):
     """Headed mode should downgrade to headless when DISPLAY is unavailable."""
 
     monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     browser = PlaywrightBrowser(name="Example", mode=PlaywrightBrowser.Mode.HEADED)
 
     assert browser._headless_mode() is True
