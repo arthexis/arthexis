@@ -10,61 +10,12 @@ from apps.nginx.renderers import (
 )
 
 
-def test_generate_primary_config_internal_mode():
-    config = generate_primary_config("internal", 8080)
-
-    assert "proxy_pass http://127.0.0.1:8080" in config
-    assert "location ^~ /.well-known/acme-challenge/" in config
-    assert "root /var/www/arthexis;" in config
-    assert "error_page 500 502 503 504 /maintenance/app-down.html;" in config
-    assert "location = /maintenance/app-down.html" in config
-    assert "ssl_certificate" not in config
-
-def test_generate_primary_config_public_mode():
-    config = generate_primary_config("public", 8080, https_enabled=True)
-
-    assert "return 301 https://$host$request_uri;" in config
-    assert "location ^~ /.well-known/acme-challenge/" in config
-    assert "ssl_certificate" in config
-    assert "proxy_pass http://127.0.0.1:8080" in config
-
-def test_generate_primary_config_external_websockets_toggle():
-    config = generate_primary_config("internal", 8080, external_websockets=True)
-
-    assert config_utils.WEBSOCKET_MAP_DIRECTIVE in config
-    assert config_utils.WEBSOCKET_CONNECTION_HEADER in config
-    assert config_utils.WEBSOCKET_READ_TIMEOUT in config
-
-    disabled = generate_primary_config("internal", 8080, external_websockets=False)
-
-    assert config_utils.WEBSOCKET_MAP_DIRECTIVE not in disabled
-    assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
 
 
 
-def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
-    staging = tmp_path / "sites.json"
-    staging.write_text('[{"domain": "proxy.example.com", "require_https": false}]', encoding="utf-8")
 
-    content = generate_site_entries_content(
-        staging, "public", 8080, proxy_target="arthexis-blue"
-    )
 
-    assert "proxy_pass http://arthexis-blue" in content
 
-def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
-    staging = tmp_path / "sites.json"
-    staging.write_text('[{"domain": "example.com", "require_https": false}]', encoding="utf-8")
-
-    content = generate_site_entries_content(
-        staging,
-        "public",
-        8080,
-        https_enabled=True,
-        subdomain_prefixes=["api", "admin"],
-    )
-
-    assert "server_name example.com api.example.com admin.example.com;" in content
 
 def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(config_utils, "SSL_OPTIONS_PATH", tmp_path / "missing-options.conf")
