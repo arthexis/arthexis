@@ -138,19 +138,6 @@ def nav_links(request):
     )
     pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
 
-    if not user_is_authenticated and not explicit_badge_role:
-        template_id = getattr(getattr(site, "template", None), "id", "none")
-        cache_key = (
-            f"nav_links:anon:{role_id}:{site_id}:{template_id}:"
-            f"interface:{int(operator_interface_mode)}:"
-            f"feedback:{int(feedback_ingestion_enabled)}:"
-            f"public_chat:{int(bool(getattr(site, 'enable_public_chat', False)))}:"
-            f"staff_chat_bridge:{int(staff_chat_bridge_enabled)}:"
-            f"pages_chat:{int(pages_chat_enabled)}"
-        )
-        cached = cache.get(cache_key)
-        if cached:
-            return cached
 
     try:
         modules = (
@@ -177,19 +164,7 @@ def nav_links(request):
         user_group_ids = set()
     feature_checker = FeatureChecker()
 
-    def _is_charge_points_module(candidate: Module) -> bool:
-        module_path = (candidate.path or "").rstrip("/").lower()
-        if module_path == "/ocpp":
-            return True
-        app_name = getattr(getattr(candidate, "application", None), "name", "")
-        return app_name.lower() == "ocpp"
-
     for module in modules:
-        if _is_charge_points_module(module):
-            if not user_is_authenticated:
-                continue
-            if not (user_is_staff or user_is_superuser or is_site_operator):
-                continue
         if not module.meets_feature_requirements(feature_checker.is_enabled):
             continue
         module_roles = getattr(module, "roles")
@@ -398,6 +373,4 @@ def nav_links(request):
             getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
         ),
     }
-    if not user_is_authenticated and not explicit_badge_role:
-        cache.set(cache_key, context, timeout=300)
     return context
