@@ -7,7 +7,7 @@ from django.test import RequestFactory
 
 from apps.links.context_processors import share_short_url
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(9999)]
+pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6230)]
 
 
 def test_share_short_url_returns_qr_data_uri(monkeypatch):
@@ -44,3 +44,23 @@ def test_share_short_url_falls_back_to_page_url_when_short_url_unavailable(monke
 
     assert context["share_short_url"] == "http://example.com/docs/"
     assert context["share_short_url_qr"].startswith("data:image/png;base64,")
+
+
+def test_share_short_url_returns_empty_qr_when_encoding_fails(monkeypatch):
+    """Share context should gracefully handle QR encoder errors."""
+
+    monkeypatch.setattr(
+        "apps.links.context_processors.get_or_create_short_url",
+        lambda _target: None,
+    )
+    monkeypatch.setattr(
+        "apps.links.context_processors._encode_share_qr_data_uri",
+        lambda _target: (_ for _ in ()).throw(ValueError("bad qr")),
+    )
+
+    request = RequestFactory().get("/docs/", HTTP_HOST="example.com")
+
+    context = share_short_url(request)
+
+    assert context["share_short_url"] == "http://example.com/docs/"
+    assert context["share_short_url_qr"] == ""

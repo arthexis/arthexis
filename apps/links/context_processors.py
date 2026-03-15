@@ -7,7 +7,27 @@ from .qr_utils import build_qr_png_bytes
 
 
 def _encode_share_qr_data_uri(url: str) -> str:
-    """Return a base64 QR image for the given share URL."""
+    """Encode a share URL as a QR image data URI.
+
+    Parameters
+    ----------
+    url : str
+        Absolute URL to encode as a QR code.
+
+    Returns
+    -------
+    str
+        PNG QR image encoded as a ``data:image/png;base64,...`` URI.
+
+    Raises
+    ------
+    RuntimeError
+        If QR code dependencies are unavailable.
+    ValueError
+        If QR color inputs are invalid.
+    OSError
+        If the image cannot be written to memory.
+    """
     if not url:
         return ""
     png_bytes = build_qr_png_bytes(
@@ -22,13 +42,28 @@ def _encode_share_qr_data_uri(url: str) -> str:
 
 
 def share_short_url(request):
-    """Return short URL and QR metadata used by the public share modal."""
+    """Build public share-link context for the site share modal.
+
+    Parameters
+    ----------
+    request : django.http.HttpRequest | None
+        Current request used to build absolute share links.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping containing ``share_short_url`` and ``share_short_url_qr``.
+
+    Raises
+    ------
+    None
+        Exceptions from QR generation are handled and converted to an empty QR value.
+    """
     if request is None:
         return {"share_short_url": "", "share_short_url_qr": ""}
-    target_url = request.build_absolute_uri(request.path)
-    share_url = target_url
+    share_url = request.build_absolute_uri(request.path)
     try:
-        short_url = get_or_create_short_url(target_url)
+        short_url = get_or_create_short_url(share_url)
     except DatabaseError:
         short_url = None
     if short_url:
@@ -36,7 +71,7 @@ def share_short_url(request):
 
     try:
         qr_data_uri = _encode_share_qr_data_uri(share_url)
-    except RuntimeError:
+    except Exception:
         qr_data_uri = ""
 
     return {"share_short_url": share_url, "share_short_url_qr": qr_data_uri}

@@ -239,9 +239,11 @@
                 alt="{% trans 'QR code for shared page link' %}"
               />
               {% endif %}
+              {% if share_short_url %}
               <a href="{{ share_short_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm">
                 {% trans 'Open shared link' %}
               </a>
+              {% endif %}
             </div>
             <div class="mb-3">
               <label class="form-label" for="share-short-url">{% trans 'Short URL' %}</label>
