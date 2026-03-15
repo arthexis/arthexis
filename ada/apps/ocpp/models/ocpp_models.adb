@@ -25,6 +25,11 @@ package body Apps.OCPP.Models.OCPP_Models is
          & "ended_at_utc TEXT, "
          & "FOREIGN KEY (charge_point_id) REFERENCES ocpp_charge_point(id)"
          & ");");
+
+      Arthexis.ORM.Execute
+        (Conn,
+         "CREATE INDEX IF NOT EXISTS idx_ocpp_transaction_active_started_at "
+         & "ON ocpp_transaction (ended_at_utc, started_at_utc DESC);");
    end Install;
 
 end Apps.OCPP.Models.OCPP_Models;
