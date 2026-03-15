@@ -1,9 +1,135 @@
+with "gnatcoll_sql";
+with "gnatcoll_sqlite";
+
 project Arthexis_Ada is
    for Source_Dirs use ("src", "apps", "apps/**");
    for Object_Dir use "obj";
    for Main use ();
 
    package Naming is
+
+      for Spec ("Apps.App.Functions.App_Functions") use
+        "apps/app/functions/app_functions.ads";
+      for Body ("Apps.App.Functions.App_Functions") use
+        "apps/app/functions/app_functions.adb";
+
+      for Spec ("Apps.App.Models.App_Models") use
+        "apps/app/models/app_models.ads";
+      for Body ("Apps.App.Models.App_Models") use
+        "apps/app/models/app_models.adb";
+
+      for Spec ("Apps.Functions.Functions.Functions_Functions") use
+        "apps/functions/functions/functions_functions.ads";
+      for Body ("Apps.Functions.Functions.Functions_Functions") use
+        "apps/functions/functions/functions_functions.adb";
+
+      for Spec ("Apps.Functions.Models.Functions_Models") use
+        "apps/functions/models/functions_models.ads";
+      for Body ("Apps.Functions.Models.Functions_Models") use
+        "apps/functions/models/functions_models.adb";
+
+
+      for Spec ("Apps.Fixtures.Functions.Fixtures_Functions") use
+        "apps/fixtures/functions/fixtures_functions.ads";
+      for Body ("Apps.Fixtures.Functions.Fixtures_Functions") use
+        "apps/fixtures/functions/fixtures_functions.adb";
+
+      for Spec ("Apps.Fixtures.Models.Fixtures_Models") use
+        "apps/fixtures/models/fixtures_models.ads";
+      for Body ("Apps.Fixtures.Models.Fixtures_Models") use
+        "apps/fixtures/models/fixtures_models.adb";
+
+      for Spec ("Apps.Migrations.Functions.Migrations_Functions") use
+        "apps/migrations/functions/migrations_functions.ads";
+      for Body ("Apps.Migrations.Functions.Migrations_Functions") use
+        "apps/migrations/functions/migrations_functions.adb";
+
+      for Spec ("Apps.Migrations.Models.Migrations_Models") use
+        "apps/migrations/models/migrations_models.ads";
+      for Body ("Apps.Migrations.Models.Migrations_Models") use
+        "apps/migrations/models/migrations_models.adb";
+
+      for Spec ("Apps.Model.Functions.Model_Functions") use
+        "apps/model/functions/model_functions.ads";
+      for Body ("Apps.Model.Functions.Model_Functions") use
+        "apps/model/functions/model_functions.adb";
+
+      for Spec ("Apps.Model.Models.Model_Models") use
+        "apps/model/models/model_models.ads";
+      for Body ("Apps.Model.Models.Model_Models") use
+        "apps/model/models/model_models.adb";
+
+      for Spec ("Apps.Models.Functions.Models_Functions") use
+        "apps/models/functions/models_functions.ads";
+      for Body ("Apps.Models.Functions.Models_Functions") use
+        "apps/models/functions/models_functions.adb";
+
+      for Spec ("Apps.Models.Models.Models_Models") use
+        "apps/models/models/models_models.ads";
+      for Body ("Apps.Models.Models.Models_Models") use
+        "apps/models/models/models_models.adb";
+
+
+      for Spec ("Apps.Preview.Functions.Preview_Functions") use
+        "apps/preview/functions/preview_functions.ads";
+      for Body ("Apps.Preview.Functions.Preview_Functions") use
+        "apps/preview/functions/preview_functions.adb";
+
+      for Spec ("Apps.Preview.Models.Preview_Models") use
+        "apps/preview/models/preview_models.ads";
+      for Body ("Apps.Preview.Models.Preview_Models") use
+        "apps/preview/models/preview_models.adb";
+
+      for Spec ("Apps.Product.Functions.Product_Functions") use
+        "apps/product/functions/product_functions.ads";
+      for Body ("Apps.Product.Functions.Product_Functions") use
+        "apps/product/functions/product_functions.adb";
+
+      for Spec ("Apps.Product.Models.Product_Models") use
+        "apps/product/models/product_models.ads";
+      for Body ("Apps.Product.Models.Product_Models") use
+        "apps/product/models/product_models.adb";
+
+      for Spec ("Apps.Templates.Functions.Templates_Functions") use
+        "apps/templates/functions/templates_functions.ads";
+      for Body ("Apps.Templates.Functions.Templates_Functions") use
+        "apps/templates/functions/templates_functions.adb";
+
+      for Spec ("Apps.Templates.Models.Templates_Models") use
+        "apps/templates/models/templates_models.ads";
+      for Body ("Apps.Templates.Models.Templates_Models") use
+        "apps/templates/models/templates_models.adb";
+
+      for Spec ("Apps.Test.Functions.Test_Functions") use
+        "apps/test/functions/test_functions.ads";
+      for Body ("Apps.Test.Functions.Test_Functions") use
+        "apps/test/functions/test_functions.adb";
+
+      for Spec ("Apps.Test.Models.Test_Models") use
+        "apps/test/models/test_models.ads";
+      for Body ("Apps.Test.Models.Test_Models") use
+        "apps/test/models/test_models.adb";
+
+      for Spec ("Apps.Views.Functions.Views_Functions") use
+        "apps/views/functions/views_functions.ads";
+      for Body ("Apps.Views.Functions.Views_Functions") use
+        "apps/views/functions/views_functions.adb";
+
+      for Spec ("Apps.Views.Models.Views_Models") use
+        "apps/views/models/views_models.ads";
+      for Body ("Apps.Views.Models.Views_Models") use
+        "apps/views/models/views_models.adb";
+
+      for Spec ("Apps.Command.Functions.Command_Functions") use
+        "apps/command/functions/command_functions.ads";
+      for Body ("Apps.Command.Functions.Command_Functions") use
+        "apps/command/functions/command_functions.adb";
+
+      for Spec ("Apps.Command.Models.Command_Models") use
+        "apps/command/models/command_models.ads";
+      for Body ("Apps.Command.Models.Command_Models") use
+        "apps/command/models/command_models.adb";
+
       for Spec ("Apps.Core.Functions.Core_Functions") use
         "apps/core/functions/core_functions.ads";
       for Body ("Apps.Core.Functions.Core_Functions") use

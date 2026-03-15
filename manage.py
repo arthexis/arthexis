@@ -117,6 +117,59 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
     execute_from_command_line(list(argv))
 
 
+
+def _should_auto_migrate(args: Sequence[str]) -> bool:
+    """Return whether the active command should auto-apply migrations.
+
+    Args:
+        args: Command-line arguments excluding the program name.
+
+    Returns:
+        ``True`` when startup should ensure database schema readiness.
+
+    Raises:
+        None.
+    """
+
+    if not args:
+        return False
+
+    command = args[0]
+    if command in {"makemigrations", "migrate", "showmigrations", "sqlmigrate"}:
+        return False
+
+    return command in {"preview", "simulator"}
+
+
+def _ensure_database_ready(base_dir: Path, args: Sequence[str]) -> None:
+    """Run Django migrations before startup commands that need schema readiness.
+
+    Args:
+        base_dir: Repository base directory containing ``manage.py``.
+        args: Command-line arguments excluding the program name.
+
+    Returns:
+        None.
+
+    Raises:
+        subprocess.CalledProcessError: If migration application fails.
+    """
+
+    if os.environ.get("ARTHEXIS_AUTO_MIGRATE_RUNNING"):
+        return
+
+    if not _should_auto_migrate(args):
+        return
+
+    env = os.environ.copy()
+    env["ARTHEXIS_AUTO_MIGRATE_RUNNING"] = "1"
+    subprocess.run(
+        [sys.executable, str(base_dir / "manage.py"), "migrate", "--noinput"],
+        cwd=base_dir,
+        check=True,
+        env=env,
+    )
+
 def _run_env_refresh(base_dir: Path) -> None:
     """Execute ``env-refresh`` in *base_dir* using the local interpreter."""
 
@@ -342,6 +395,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
     args = list(argv or sys.argv[1:])
+    _ensure_database_ready(base_dir, args)
     celery_enabled = (base_dir / ".locks/celery.lck").exists()
     if "--celery" in args:
         celery_enabled = True
