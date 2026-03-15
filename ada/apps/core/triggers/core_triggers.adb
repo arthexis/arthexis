@@ -14,6 +14,17 @@ package body Apps.Core.Triggers.Core_Triggers is
            & "BEGIN "
            & "SELECT RAISE(FAIL, 'app_name cannot be blank'); "
            & "END;");
+
+      Arthexis.ORM.Register_Trigger
+        (Conn,
+         Name => "core_app_registry_name_guard_update",
+         SQL_Body =>
+           "CREATE TRIGGER IF NOT EXISTS core_app_registry_name_guard_update "
+           & "BEFORE UPDATE ON core_app_registry "
+           & "WHEN trim(NEW.app_name) = '' "
+           & "BEGIN "
+           & "SELECT RAISE(FAIL, 'app_name cannot be blank'); "
+           & "END;");
    end Install;
 
 end Apps.Core.Triggers.Core_Triggers;

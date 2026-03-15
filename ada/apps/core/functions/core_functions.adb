@@ -4,13 +4,10 @@ package body Apps.Core.Functions.Core_Functions is
 
    procedure Install (Conn : in out Arthexis.ORM.Database_Connection) is
    begin
-      Arthexis.ORM.Register_SQL_Function
+      Arthexis.ORM.Execute
         (Conn,
-         Name => "core_is_app_enabled",
-         Arity => 1,
-         SQL_Body =>
-           "CREATE VIEW IF NOT EXISTS core_enabled_apps AS "
-           & "SELECT app_name FROM core_app_registry WHERE enabled = 1;");
+         "CREATE VIEW IF NOT EXISTS core_enabled_apps AS "
+         & "SELECT app_name FROM core_app_registry WHERE enabled = 1;");
    end Install;
 
 end Apps.Core.Functions.Core_Functions;
