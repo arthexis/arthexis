@@ -210,11 +210,12 @@ playwright_requirement() {
 }
 
 selenium_requirement() {
+  # Resolve the selenium requirement from requirements-ci.txt when present.
   local requirements_file="$SCRIPT_DIR/requirements-ci.txt"
-  if [ -f "$requirements_file" ]; then
+  if [[ -f "$requirements_file" ]]; then
     local line
-    line=$(grep -E '^selenium([[:space:]]*[<=>!~].*)?$' "$requirements_file" | head -n 1 || true)
-    if [ -n "$line" ]; then
+    line=$(grep -E '^[[:space:]]*selenium(\[[^]]*\])?([[:space:]]*[<=>!~][^;]*)?([[:space:]]*;.*)?[[:space:]]*$' "$requirements_file" | head -n 1 || true)
+    if [[ -n "$line" ]]; then
       echo "$line"
       return 0
     fi
@@ -223,12 +224,13 @@ selenium_requirement() {
 }
 
 ensure_selenium_installed() {
-  if "$PYTHON" -c 'import selenium' >/dev/null 2>&1; then
+  # Ensure selenium is importable, installing it from the pinned requirement when needed.
+  if "$PYTHON" -c 'import importlib.metadata; importlib.metadata.version("selenium")' >/dev/null 2>&1; then
     return 0
   fi
 
   local -a selenium_pip_args=(--cache-dir "$PIP_CACHE_DIR")
-  if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+  if [[ "$USE_SYSTEM_PYTHON" -eq 1 ]]; then
     selenium_pip_args+=(--user)
   fi
 
