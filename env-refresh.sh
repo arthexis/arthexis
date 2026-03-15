@@ -225,7 +225,7 @@ selenium_requirement() {
 
 ensure_selenium_installed() {
   # Ensure selenium is importable, installing it from the pinned requirement when needed.
-  if "$PYTHON" -c 'import importlib.metadata; importlib.metadata.version("selenium")' >/dev/null 2>&1; then
+  if "$PYTHON" -c 'import importlib; importlib.import_module("selenium")' >/dev/null 2>&1; then
     return 0
   fi
 
