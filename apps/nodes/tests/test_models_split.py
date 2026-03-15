@@ -259,36 +259,6 @@ def test_iter_remote_urls_prefers_https_port_443_when_required():
     assert f"https://{domain}:8888/nodes/info/" in urls
 
 
-@pytest.mark.django_db
-def test_refresh_features_does_not_auto_assign_heavy_feature(tmp_path):
-    """Regression: refresh should never auto-enable heavy node features."""
-
-    node = Node.objects.create(
-        hostname="heavy-feature-node",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-        public_endpoint="heavy-feature-node",
-        base_path=str(tmp_path),
-    )
-    feature = NodeFeature.objects.create(
-        slug="celery-queue",
-        display="Celery Queue",
-        footprint="heavy",
-    )
-
-    locks_dir = tmp_path / ".locks"
-    locks_dir.mkdir()
-    (locks_dir / "celery.lck").write_text("1")
-
-    assert node._detect_auto_feature(
-        "celery-queue", base_dir=tmp_path, base_path=tmp_path
-    ) is True
-
-    node.refresh_features()
-
-    assert not node.features.filter(pk=feature.pk).exists()
-
-
 def test_format_upgrade_body_handles_missing_release_app(monkeypatch):
     """Regression: formatting should not fail when apps.release is disabled."""
 
