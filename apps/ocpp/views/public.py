@@ -9,32 +9,25 @@ from django.shortcuts import redirect
 from django.utils import translation
 from django.utils.translation import gettext as _
 
-from apps.maps.models import Location
 from apps.docs import rendering
 from apps.locale.models import Language
-from apps.sites.utils import get_request_language_code, require_site_operator_or_staff
+from apps.maps.models import Location
+from apps.sites.utils import (get_request_language_code, landing,
+                              module_pill_link_validation,
+                              require_site_operator_or_staff)
 
-from .common import *  # noqa: F401,F403
-from .common import (
-    _charger_state,
-    _clear_stale_statuses_for_view,
-    _connector_overview,
-    _connector_set,
-    _default_language_code,
-    _ensure_charger_access,
-    _get_charger,
-    _important_non_transaction_events,
-    _landing_page_translations,
-    _live_sessions,
-    _charging_limit_details,
-    _reverse_connector_url,
-    _supported_language_codes,
-    _transaction_rfid_details,
-    _usage_timeline,
-    _visible_error_code,
-    _visible_chargers,
-)
 from ..models import PublicConnectorPage, PublicScanEvent, StationModel
+from .common import *  # noqa: F401,F403
+from .common import (_charger_state, _charging_limit_details,
+                     _clear_stale_statuses_for_view, _connector_overview,
+                     _connector_set, _default_language_code,
+                     _ensure_charger_access, _get_charger,
+                     _important_non_transaction_events,
+                     _landing_page_translations, _landing_requires_chargers,
+                     _landing_visibility_params, _live_sessions,
+                     _reverse_connector_url, _supported_language_codes,
+                     _transaction_rfid_details, _usage_timeline,
+                     _visible_chargers, _visible_error_code)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +48,23 @@ def _hash_ip(value: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+@landing("Charging Station Map")
+@module_pill_link_validation(
+    _landing_requires_chargers,
+    parameter_getter=_landing_visibility_params,
+)
 def charging_station_map(request):
+    """Render the charging map for authorized operator/staff users.
+
+    Parameters:
+        request: Incoming HTTP request containing user/session context.
+
+    Returns:
+        HttpResponse: Rendered charging map page or an auth redirect response.
+
+    Raises:
+        Http404: Propagated if downstream data access raises it.
+    """
     auth_response = require_site_operator_or_staff(request)
     if auth_response is not None:
         return auth_response
@@ -891,4 +900,4 @@ def supported_charger_detail(request, station_model_id: int):
             "images": images,
             "documents": documents,
         },
-    )
+)

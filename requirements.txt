@@ -87,7 +87,7 @@ tinycss2==1.5.1
 toml==0.10.2
 Twisted==25.5.0
 txaio==25.9.2
-typing_extensions==4.14.1
+typing_extensions==4.15.0
 tzdata==2025.3
 urllib3~=2.6.3
 vine==5.1.0

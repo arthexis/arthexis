@@ -91,6 +91,7 @@ reportlab==4.4.10
 requests==2.32.5
 ruff==0.15.5
 s3transfer==0.11.1
+selenium==4.38.0
 service-identity==24.2.0
 setuptools==82.0.0
 six==1.17.0
@@ -102,11 +103,11 @@ tablib==3.9.0
 tinycss2==1.5.1
 toml==0.10.2
 trio-websocket==0.12.2
-trio==0.30.0
+trio==0.31.0
 twine==6.1.0
 Twisted==25.5.0
 txaio==25.9.2
-typing_extensions==4.14.1
+typing_extensions==4.15.0
 tzdata==2025.3
 urllib3~=2.6.3
 vine==5.1.0
