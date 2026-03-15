@@ -1,7 +1,7 @@
 with Ada.Strings.Unbounded;
 
 package Arthexis.ORM is
-   """GNATCOLL-backed ORM bootstrap and SQL registration helpers."""
+   --  GNATCOLL-backed ORM bootstrap and SQL registration helpers.
 
    type Database_Connection is tagged private;
 
@@ -17,6 +17,7 @@ package Arthexis.ORM is
       Arity     : Natural;
       SQL_Body  : String);
    --  Register a SQL-callable function backed by app-owned SQL text.
+   --  Name and Arity are currently used for API contract validation.
 
    procedure Register_Trigger
      (Conn      : in out Database_Connection;

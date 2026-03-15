@@ -15,6 +15,18 @@ package body Apps.OCPP.Triggers.OCPP_Triggers is
            & "BEGIN "
            & "SELECT RAISE(FAIL, 'meter_stop_wh must be >= meter_start_wh'); "
            & "END;");
+
+      Arthexis.ORM.Register_Trigger
+        (Conn,
+         Name => "ocpp_transaction_meter_guard_insert",
+         SQL_Body =>
+           "CREATE TRIGGER IF NOT EXISTS ocpp_transaction_meter_guard_insert "
+           & "BEFORE INSERT ON ocpp_transaction "
+           & "WHEN NEW.meter_stop_wh IS NOT NULL "
+           & "AND NEW.meter_stop_wh < NEW.meter_start_wh "
+           & "BEGIN "
+           & "SELECT RAISE(FAIL, 'meter_stop_wh must be >= meter_start_wh'); "
+           & "END;");
    end Install;
 
 end Apps.OCPP.Triggers.OCPP_Triggers;
