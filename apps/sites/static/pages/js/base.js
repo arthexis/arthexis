@@ -289,7 +289,7 @@ const setupShareModal = () => {
     if (shortUrlInput && !shortUrlInput.value) {
       shortUrlInput.value = currentPageUrl;
     }
-    if (thumbnailFrame) {
+    if (thumbnailFrame && !window.matchMedia('(max-width: 767.98px)').matches) {
       const previewUrl = new URL(currentPageUrl);
       previewUrl.searchParams.set('djdt', 'share-preview');
       if (thumbnailFrame.src !== previewUrl.toString()) {

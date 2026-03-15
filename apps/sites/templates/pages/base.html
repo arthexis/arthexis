@@ -231,6 +231,18 @@
                 tabindex="-1"
               ></iframe>
             </div>
+            <div class="share-qr-mobile mb-3">
+              {% if share_short_url_qr %}
+              <img
+                src="{{ share_short_url_qr }}"
+                class="share-qr-mobile-image"
+                alt="{% trans 'QR code for shared page link' %}"
+              />
+              {% endif %}
+              <a href="{{ share_short_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm">
+                {% trans 'Open shared link' %}
+              </a>
+            </div>
             <div class="mb-3">
               <label class="form-label" for="share-short-url">{% trans 'Short URL' %}</label>
               <div class="input-group">
