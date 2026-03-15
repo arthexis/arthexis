@@ -46,6 +46,23 @@ def test_share_short_url_falls_back_to_page_url_when_short_url_unavailable(monke
     assert context["share_short_url_qr"].startswith("data:image/png;base64,")
 
 
+@pytest.mark.pr_origin(6236)
+def test_share_short_url_falls_back_to_relative_path_on_disallowed_host(monkeypatch):
+    """Disallowed hosts should produce safe relative share URLs."""
+
+    monkeypatch.setattr(
+        "apps.links.context_processors.get_or_create_short_url",
+        lambda _target: None,
+    )
+
+    request = RequestFactory().get("/docs/", HTTP_HOST="attacker.invalid")
+
+    context = share_short_url(request)
+
+    assert context["share_short_url"] == "/docs/"
+    assert context["share_short_url_qr"].startswith("data:image/png;base64,")
+
+
 def test_share_short_url_returns_empty_qr_when_encoding_fails(monkeypatch):
     """Share context should gracefully handle QR encoder errors."""
 
