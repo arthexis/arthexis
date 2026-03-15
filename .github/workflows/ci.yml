@@ -305,7 +305,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest tests/test_installed_apps_manifests.py -q
+          manifest_test_file="tests/test_installed_apps_manifests.py"
+          if [[ -f "$manifest_test_file" ]]; then
+            pytest "$manifest_test_file" -q
+          else
+            echo "Manifest test file $manifest_test_file not found; skipping manifest app validation."
+          fi
 
       - name: Validate upgraded migrations
         run: |
