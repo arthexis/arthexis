@@ -1,5 +1,6 @@
 import base64
 
+from django.core.exceptions import DisallowedHost
 from django.db.utils import DatabaseError
 
 from .models import get_or_create_short_url
@@ -61,13 +62,38 @@ def share_short_url(request):
     """
     if request is None:
         return {"share_short_url": "", "share_short_url_qr": ""}
-    share_url = request.build_absolute_uri(request.path)
+
+    def _build_absolute_with_fallback(path: str) -> str:
+        """Build an absolute URI and fall back safely when host validation fails.
+
+        Parameters
+        ----------
+        path : str
+            Path that should be converted into an absolute URI.
+
+        Returns
+        -------
+        str
+            Absolute URI when host validation succeeds; otherwise the input path.
+
+        Raises
+        ------
+        None
+            ``DisallowedHost`` is handled internally to avoid using untrusted host headers.
+        """
+        try:
+            return request.build_absolute_uri(path)
+        except DisallowedHost:
+            return path
+
+    share_url = _build_absolute_with_fallback(request.path)
     try:
         short_url = get_or_create_short_url(share_url)
     except DatabaseError:
         short_url = None
     if short_url:
-        share_url = request.build_absolute_uri(short_url.redirect_path())
+        redirect_path = short_url.redirect_path()
+        share_url = _build_absolute_with_fallback(redirect_path)
 
     try:
         qr_data_uri = _encode_share_qr_data_uri(share_url)
