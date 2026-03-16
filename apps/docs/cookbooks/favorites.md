@@ -12,8 +12,8 @@ Create quick-access shortcuts for frequently used admin models and views.
 ## Access points
 
 - The admin dashboard renders star icons next to every app and model row (`apps/sites/templates/admin/app_list.html` and `apps/sites/templates/admin/includes/dashboard_app_list_content.html`).
-- Clicking a star invokes the `admin:favorite_toggle` view defined in [`apps/locals/admin.py`](../../apps/locals/admin.py) and returns you to the current page after saving.
-- Use the **Favorites** link in the admin navigation sidebar to open the management list (`apps/locals/templates/admin/favorite_list.html`). The route is registered as `admin:favorite_list` in [`apps/locals/admin.py`](../../apps/locals/admin.py#L98-L135).
+- Clicking a star invokes the `admin:favorite_toggle` view defined in [`apps/locals/admin.py`](../../locals/admin.py) and returns you to the current page after saving.
+- Use the **Favorites** link in the admin navigation sidebar to open the management list (`apps/locals/templates/admin/favorite_list.html`). The route is registered as `admin:favorite_list` in [`apps/locals/admin.py`](../../locals/admin.py#L98-L135).
 
 ## Adding a favorite
 
@@ -49,7 +49,7 @@ Favorites support the same `is_user_data` flag used elsewhere in the platform. W
 - **Single favorite** – Use the **Remove** link beside the row (`admin:favorite_delete`).
 - **All favorites** – Click **Remove all favorites** to call `admin:favorite_clear`, which deletes every `Favorite` belonging to the logged-in user.
 
-Both views live in [`apps/locals/admin.py`](../../apps/locals/admin.py#L136-L147) and redirect back to the favorites list after completion.
+Both views live in [`apps/locals/admin.py`](../../locals/admin.py#L136-L147) and redirect back to the favorites list after completion.
 
 ## Troubleshooting
 
