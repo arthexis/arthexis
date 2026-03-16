@@ -95,22 +95,36 @@ def share_short_url(request):
             except ValueError:
                 return path
 
-            host_only = (parsed_host.hostname or "").lower()
+            host_only = (parsed_host.hostname or "").strip().lower().rstrip(".")
             if not host_only:
                 return path
 
             try:
-                site_host = Site.objects.get_current().domain.split(":", 1)[0].lower()
+                request_port = parsed_host.port
+            except ValueError:
+                return path
+
+            try:
+                site_domain = (Site.objects.get_current().domain or "").strip().lower().rstrip(".")
+                parsed_site = urlsplit(f"//{site_domain}")
+                site_host = (parsed_site.hostname or "").strip().lower().rstrip(".")
+                site_port = parsed_site.port
             except (AttributeError, DatabaseError, Site.DoesNotExist):
                 site_host = ""
+                site_port = None
+            except ValueError:
+                site_host = ""
+                site_port = None
 
             if site_host and host_only == site_host:
+                if site_port is not None and request_port != site_port:
+                    return path
                 scheme = request.scheme or "http"
                 safe_host = parsed_host.hostname or ""
                 if ":" in safe_host and not safe_host.startswith("["):
                     safe_host = f"[{safe_host}]"
-                if parsed_host.port is not None:
-                    safe_host = f"{safe_host}:{parsed_host.port}"
+                if request_port is not None:
+                    safe_host = f"{safe_host}:{request_port}"
                 return f"{scheme}://{safe_host}{path}"
 
             return path
