@@ -141,7 +141,8 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 - Conecta espacios de trabajo de Slack con el [Cookbook de incorporación de Slack Bot](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ### 5. Desarrollo
-- Revisa la [Biblioteca de documentación para desarrolladores](/docs/library/) para referencias de arquitectura, manuales de protocolo y flujos de contribución.
+- Revisa la [Biblioteca de documentación para desarrolladores](../../../docs/index.md) para referencias de arquitectura, manuales de protocolo y flujos de contribución.
+- Nota: este enlace apunta a la documentación dentro del repositorio, no a una ruta web en tiempo de ejecución.
 
 ## Soporte
 
