@@ -1,5 +1,7 @@
 import base64
+from urllib.parse import urlsplit
 
+from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import DatabaseError
 
@@ -84,6 +86,47 @@ def share_short_url(request):
         try:
             return request.build_absolute_uri(path)
         except DisallowedHost:
+            raw_host = (request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME") or "").strip()
+            if not raw_host:
+                return path
+
+            try:
+                parsed_host = urlsplit(f"//{raw_host}")
+            except ValueError:
+                return path
+
+            host_only = (parsed_host.hostname or "").strip().lower().rstrip(".")
+            if not host_only:
+                return path
+
+            try:
+                request_port = parsed_host.port
+            except ValueError:
+                return path
+
+            try:
+                site_domain = (Site.objects.get_current().domain or "").strip().lower().rstrip(".")
+                parsed_site = urlsplit(f"//{site_domain}")
+                site_host = (parsed_site.hostname or "").strip().lower().rstrip(".")
+                site_port = parsed_site.port
+            except (AttributeError, DatabaseError, Site.DoesNotExist):
+                site_host = ""
+                site_port = None
+            except ValueError:
+                site_host = ""
+                site_port = None
+
+            if site_host and host_only == site_host:
+                if site_port is not None and request_port != site_port:
+                    return path
+                scheme = request.scheme or "http"
+                safe_host = parsed_host.hostname or ""
+                if ":" in safe_host and not safe_host.startswith("["):
+                    safe_host = f"[{safe_host}]"
+                if request_port is not None:
+                    safe_host = f"{safe_host}:{request_port}"
+                return f"{scheme}://{safe_host}{path}"
+
             return path
 
     share_url = _build_absolute_with_fallback(request.path)
