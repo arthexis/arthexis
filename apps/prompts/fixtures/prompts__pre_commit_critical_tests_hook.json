@@ -9,7 +9,7 @@
       "title": "Add pre-commit hook for critical tests",
       "prompt_text": "We should have a pre commit hook that runs critical tests",
       "initial_plan": "1) Inspect existing pre-commit hook structure and current hook scripts. 2) Add a new git hook script that executes the critical test marker set. 3) Register the new hook in .pre-commit-config.yaml with commit-stage execution. 4) Run relevant checks to confirm the hook script executes cleanly. 5) Store this request and plan in a prompts fixture for commit validation.",
-      "pr_reference": "PR-TBD",
+      "pr_reference": "https://github.com/arthexis/arthexis/pull/6263",
       "context": {
         "scope": "Repository pre-commit validation",
         "target_branch": "current",
