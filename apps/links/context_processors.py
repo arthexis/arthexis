@@ -30,12 +30,8 @@ def _encode_share_qr_data_uri(url: str) -> str:
 
     Raises
     ------
-    RuntimeError
-        If QR code dependencies are unavailable.
-    ValueError
-        If QR color inputs are invalid.
-    OSError
-        If the image cannot be written to memory.
+    None
+        Known QR generation failures are handled with a fallback PNG.
     """
     if not url:
         return ""
@@ -47,7 +43,7 @@ def _encode_share_qr_data_uri(url: str) -> str:
             fill_color="#0b1420",
             back_color="white",
         )
-    except RuntimeError:
+    except (RuntimeError, ValueError, OSError):
         png_bytes = _FALLBACK_QR_PNG_BYTES
     encoded = base64.b64encode(png_bytes).decode("ascii")
     return f"data:image/png;base64,{encoded}"
@@ -129,7 +125,7 @@ def share_short_url(request):
                 if site_port is not None and request_port != site_port:
                     return path
                 scheme = request.scheme or "http"
-                safe_host = (parsed_host.hostname or "").rstrip(".")
+                safe_host = (parsed_host.hostname or "").lower().rstrip(".")
                 if ":" in safe_host and not safe_host.startswith("["):
                     safe_host = f"[{safe_host}]"
                 if request_port is not None:
