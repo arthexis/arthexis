@@ -185,6 +185,36 @@ def test_share_short_url_rejects_trusted_host_with_invalid_port(monkeypatch):
 
     assert context["share_short_url"] == "/docs/"
 
+
+@pytest.mark.pr_origin(6250)
+def test_share_short_url_accepts_semantically_equivalent_trusted_host(monkeypatch):
+    """Fallback should accept trusted hosts that differ only by trailing dots."""
+
+    class _Site:
+        """Minimal site object used to provide a trusted domain in tests."""
+
+        domain = "example.com"
+
+    monkeypatch.setattr(
+        "apps.links.context_processors.get_or_create_short_url",
+        lambda _target: None,
+    )
+    monkeypatch.setattr(
+        "apps.links.context_processors.Site.objects.get_current",
+        lambda: _Site(),
+    )
+
+    request = RequestFactory().get("/docs/", HTTP_HOST="example.com.")
+    monkeypatch.setattr(
+        request,
+        "build_absolute_uri",
+        lambda _path: (_ for _ in ()).throw(DisallowedHost("bad host")),
+    )
+
+    context = share_short_url(request)
+
+    assert context["share_short_url"] == "http://example.com/docs/"
+
 def test_share_short_url_returns_empty_qr_when_encoding_fails(monkeypatch):
     """Share context should gracefully handle QR encoder errors."""
 
