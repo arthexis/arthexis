@@ -55,7 +55,7 @@ Changes to assignments are applied immediately after saving the node or feature 
 
 ## Running eligibility checks
 
-Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`apps/nodes/feature_checks.py`](../../nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages with success, warning, or error levels.
+Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`nodes/feature_checks.py`](../../nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages (success, warning, or error).
 
 Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_data` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
 
@@ -97,5 +97,5 @@ If no local node exists, the admin posts an informational message. Register a no
 ## Troubleshooting
 
 - **Actions menu shows em dash (—)** – The feature is not currently enabled, or no default actions exist. Enable the feature or configure `DEFAULT_ACTIONS` in [`apps/nodes/models/features.py`](../../nodes/models/features.py).
-- **Eligibility checks always warn about missing checks** – Add an implementation to the `feature_checks` registry in [`apps/nodes/feature_checks.py`](../../nodes/feature_checks.py) to cover the slug in question.
+- **Eligibility checks always warn about missing checks** – Add an implementation to the `feature_checks` registry in [`nodes/feature_checks.py`](../../nodes/feature_checks.py) to cover the slug in question.
 - **Assignments disappear after deployments** – Verify that fixtures in `nodes/fixtures/` or migrations are not removing the feature (`nodes/migrations/0018`, `0027`, etc.). Reapply role assignments if a migration intentionally deprecates the feature.
