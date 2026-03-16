@@ -120,7 +120,7 @@ def share_short_url(request):
                 if site_port is not None and request_port != site_port:
                     return path
                 scheme = request.scheme or "http"
-                safe_host = parsed_host.hostname or ""
+                safe_host = host_only
                 if ":" in safe_host and not safe_host.startswith("["):
                     safe_host = f"[{safe_host}]"
                 if request_port is not None:
