@@ -632,7 +632,7 @@ esac
 
 printf 'ARTHEXIS_MIGRATION_POLICY=%s\n' "$ARTHEXIS_MIGRATION_POLICY" > "$BASE_DIR/migration.env"
 
-source .venv/bin/activate
+arthexis_use_virtualenv "$BASE_DIR"
 arthexis_timing_start "pip_bootstrap"
 REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
 PIP_VERSION_MARKER="$LOCK_DIR/pip.version"
@@ -815,7 +815,7 @@ if [ "$AUTO_UPGRADE" = true ]; then
             ./upgrade.sh --stable
         fi
     fi
-    source .venv/bin/activate
+    arthexis_use_virtualenv "$BASE_DIR"
     python manage.py shell <<'PYCODE'
 from apps.core.auto_upgrade import ensure_auto_upgrade_periodic_task
 

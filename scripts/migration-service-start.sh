@@ -7,6 +7,8 @@ export TZ="${TZ:-America/Monterrey}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/common.sh
+. "$BASE_DIR/scripts/helpers/common.sh"
 
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/migration-service.log"
@@ -18,7 +20,7 @@ if [ ! -d .venv ]; then
   exit 1
 fi
 
-source .venv/bin/activate
+arthexis_use_virtualenv "$BASE_DIR"
 
 for env_file in *.env; do
   [ -f "$env_file" ] || continue

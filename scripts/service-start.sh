@@ -6,6 +6,8 @@ BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 export TZ="${TZ:-America/Monterrey}"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/common.sh
+. "$BASE_DIR/scripts/helpers/common.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
@@ -148,7 +150,7 @@ if [ ! -d .venv ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
 fi
-source .venv/bin/activate
+arthexis_use_virtualenv "$BASE_DIR"
 
 # Load any .env files to configure environment variables
 for env_file in *.env; do

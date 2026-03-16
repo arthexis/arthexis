@@ -1946,8 +1946,7 @@ fi
 # Ensure Python dependencies and database schema stay aligned with the
 # freshly-pulled code before refreshing runtime data.
 if [ $VENV_PRESENT -eq 1 ]; then
-  # shellcheck disable=SC1091
-  source .venv/bin/activate
+  arthexis_use_virtualenv "$BASE_DIR"
   PYTHON_BIN="$VIRTUAL_ENV/bin/python"
   pip_install_env=()
   pip_install_flags=()

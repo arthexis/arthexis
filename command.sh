@@ -5,6 +5,8 @@ set -e
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/env.sh
 . "$BASE_DIR/scripts/helpers/env.sh"
+# shellcheck source=scripts/helpers/common.sh
+. "$BASE_DIR/scripts/helpers/common.sh"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/ports.sh
@@ -22,7 +24,7 @@ if [ ! -d .venv ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
 fi
-source .venv/bin/activate
+arthexis_use_virtualenv "$BASE_DIR"
 
 is_port_reachable() {
   "${PYTHON:-python}" - "$1" <<'PY'

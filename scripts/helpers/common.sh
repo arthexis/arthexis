@@ -188,3 +188,25 @@ arthexis_python_bin() {
 
   printf '%s' "$_arthexis_python_bin_cached"
 }
+
+arthexis_use_virtualenv() {
+  local base_dir="$1"
+  local venv_dir
+
+  if [ -z "$base_dir" ]; then
+    echo "arthexis_use_virtualenv requires a base directory" >&2
+    return 1
+  fi
+
+  venv_dir="$base_dir/.venv"
+  if [ ! -x "$venv_dir/bin/python" ]; then
+    echo "Virtual environment Python executable not found at $venv_dir/bin/python" >&2
+    return 1
+  fi
+
+  export VIRTUAL_ENV="$venv_dir"
+  export PATH="$venv_dir/bin:$PATH"
+  unset PYTHONHOME
+  hash -r
+  return 0
+}
