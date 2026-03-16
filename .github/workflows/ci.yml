@@ -220,7 +220,7 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
