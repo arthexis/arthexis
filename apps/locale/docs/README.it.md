@@ -141,7 +141,8 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 - Collega i workspace Slack con il [Cookbook di onboarding dello Slack Bot](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ### 5. Sviluppo
-- Consulta la [Libreria della documentazione per sviluppatori](/docs/library/) per riferimenti di architettura, manuali di protocollo e flussi di contribuzione.
+- Consulta la [Libreria della documentazione per sviluppatori](../../../docs/index.md) per riferimenti di architettura, manuali di protocollo e flussi di contribuzione.
+- Nota: questo link punta alla documentazione nel repository, non a una route web di runtime.
 
 ## Supporto
 
