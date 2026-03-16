@@ -43,7 +43,7 @@ django-timezone-field==7.2.1
 Django==5.2.12
 dnspython==2.7.0
 docutils==0.22.4
-filelock==3.25.0
+filelock==3.25.2
 gpiozero==2.0.1; sys_platform == "linux"
 graphene-django==3.2.3
 graphviz==0.21
