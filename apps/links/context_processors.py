@@ -9,6 +9,12 @@ from .models import get_or_create_short_url
 from .qr_utils import build_qr_png_bytes
 
 
+_FALLBACK_QR_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB"
+    "/oX6zj4AAAAASUVORK5CYII="
+)
+
+
 def _encode_share_qr_data_uri(url: str) -> str:
     """Encode a share URL as a QR image data URI.
 
@@ -33,13 +39,16 @@ def _encode_share_qr_data_uri(url: str) -> str:
     """
     if not url:
         return ""
-    png_bytes = build_qr_png_bytes(
-        url,
-        box_size=6,
-        border=2,
-        fill_color="#0b1420",
-        back_color="white",
-    )
+    try:
+        png_bytes = build_qr_png_bytes(
+            url,
+            box_size=6,
+            border=2,
+            fill_color="#0b1420",
+            back_color="white",
+        )
+    except RuntimeError:
+        png_bytes = _FALLBACK_QR_PNG_BYTES
     encoded = base64.b64encode(png_bytes).decode("ascii")
     return f"data:image/png;base64,{encoded}"
 
@@ -120,7 +129,7 @@ def share_short_url(request):
                 if site_port is not None and request_port != site_port:
                     return path
                 scheme = request.scheme or "http"
-                safe_host = parsed_host.hostname or ""
+                safe_host = (parsed_host.hostname or "").rstrip(".")
                 if ":" in safe_host and not safe_host.startswith("["):
                     safe_host = f"[{safe_host}]"
                 if request_port is not None:
