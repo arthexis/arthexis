@@ -9,6 +9,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_load_env_file "$BASE_DIR"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 arthexis_secure_log_file "$LOG_DIR" "$0" LOG_FILE || exit 1
@@ -44,6 +46,41 @@ raise SystemExit(0)
 PY
 }
 
+is_systemd_unit_active() {
+  local unit_name="$1"
+  if [ -z "$unit_name" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
+    sudo -n systemctl is-active --quiet "$unit_name" 2>/dev/null
+    return $?
+  fi
+
+  systemctl is-active --quiet "$unit_name" 2>/dev/null
+}
+
+has_active_arthexis_instance() {
+  local lock_dir="$BASE_DIR/.locks"
+  local service_lock="$lock_dir/service.lck"
+  if [ ! -f "$service_lock" ]; then
+    return 1
+  fi
+
+  local service_name
+  service_name="$(tr -d '\r\n[:space:]' < "$service_lock")"
+  if [ -z "$service_name" ]; then
+    return 1
+  fi
+
+  local unit_name="${service_name}.service"
+  if ! _arthexis_systemd_unit_present "$unit_name"; then
+    return 1
+  fi
+
+  is_systemd_unit_active "$unit_name"
+}
+
 resolve_running_port() {
   local configured_port
   configured_port="$(arthexis_detect_backend_port "$BASE_DIR")"
@@ -53,11 +90,16 @@ resolve_running_port() {
   fi
 
   local runserver_port
-  runserver_port="$( (pgrep -af "manage.py runserver" || true) | sed -n \
-    -e 's/.*runserver[[:space:]][^[:space:]]*:\([0-9]\{2,5\}\)\([[:space:]].*\|$\)/\1/p' \
-    -e 's/.*runserver[[:space:]]\([0-9]\{2,5\}\)\([[:space:]].*\|$\)/\1/p' | head -n1)"
+  runserver_port="$(arthexis_detect_live_runserver_port "$BASE_DIR" || true)"
   if [ -n "$runserver_port" ] && is_port_reachable "$runserver_port"; then
     printf '%s\n' "$runserver_port"
+    return 0
+  fi
+
+  if has_active_arthexis_instance; then
+    # Systemd-managed deployments may be active before local HTTP probing
+    # succeeds (for example, while workers are still booting).
+    printf '%s\n' "$configured_port"
     return 0
   fi
 
