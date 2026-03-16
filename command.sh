@@ -53,8 +53,9 @@ is_systemd_unit_active() {
   fi
 
   if command -v sudo >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
-    sudo -n systemctl is-active --quiet "$unit_name" 2>/dev/null
-    return $?
+    if sudo -n systemctl is-active --quiet "$unit_name" 2>/dev/null; then
+      return 0
+    fi
   fi
 
   systemctl is-active --quiet "$unit_name" 2>/dev/null
