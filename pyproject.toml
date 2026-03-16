@@ -132,7 +132,7 @@ ci = [
   "pytest-xdist==3.8.0",
   "pytest==9.0.2",
   "ruff==0.15.5",
-  "selenium==4.38.0",
+  "selenium==4.41.0",
   "twine==6.1.0",
 ]
 docs = [
