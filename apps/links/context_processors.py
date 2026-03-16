@@ -1,4 +1,5 @@
 import base64
+from urllib.parse import urlsplit
 
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
@@ -89,15 +90,28 @@ def share_short_url(request):
             if not raw_host:
                 return path
 
-            host_only = raw_host.split(":", 1)[0].lower()
+            try:
+                parsed_host = urlsplit(f"//{raw_host}")
+            except ValueError:
+                return path
+
+            host_only = (parsed_host.hostname or "").lower()
+            if not host_only:
+                return path
+
             try:
                 site_host = Site.objects.get_current().domain.split(":", 1)[0].lower()
-            except (DatabaseError, Site.DoesNotExist):
+            except (AttributeError, DatabaseError, Site.DoesNotExist):
                 site_host = ""
 
             if site_host and host_only == site_host:
                 scheme = request.scheme or "http"
-                return f"{scheme}://{raw_host}{path}"
+                safe_host = parsed_host.hostname or ""
+                if ":" in safe_host and not safe_host.startswith("["):
+                    safe_host = f"[{safe_host}]"
+                if parsed_host.port is not None:
+                    safe_host = f"{safe_host}:{parsed_host.port}"
+                return f"{scheme}://{safe_host}{path}"
 
             return path
 
