@@ -1,5 +1,6 @@
 import base64
 
+from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import DatabaseError
 
@@ -84,6 +85,20 @@ def share_short_url(request):
         try:
             return request.build_absolute_uri(path)
         except DisallowedHost:
+            raw_host = (request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME") or "").strip()
+            if not raw_host:
+                return path
+
+            host_only = raw_host.split(":", 1)[0].lower()
+            try:
+                site_host = Site.objects.get_current().domain.split(":", 1)[0].lower()
+            except (DatabaseError, Site.DoesNotExist):
+                site_host = ""
+
+            if site_host and host_only == site_host:
+                scheme = request.scheme or "http"
+                return f"{scheme}://{raw_host}{path}"
+
             return path
 
     share_url = _build_absolute_with_fallback(request.path)
