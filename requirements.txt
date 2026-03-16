@@ -63,7 +63,7 @@ psycopg==3.3.3
 pyasn1==0.6.2
 pyasn1_modules==0.4.2
 pycparser==3.0
-pyOpenSSL==25.3.0
+pyOpenSSL==26.0.0
 PySocks==1.7.1
 pysqlite3-binary==0.5.4.post2; sys_platform == "linux"
 pytest-django==4.12.0
