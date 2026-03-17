@@ -14,16 +14,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "-n",
-            "--n",
+            "--limit",
             type=int,
             default=5,
             help="Number of changelog entries to display.",
         )
 
     def handle(self, *args, **options):
-        limit = options["n"]
+        limit = options["limit"]
         if limit < 1:
-            raise CommandError("--n must be a positive integer.")
+            raise CommandError("--limit must be a positive integer.")
 
         try:
             page = changelog.get_initial_page(initial_count=1)

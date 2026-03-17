@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.utils.timesince import timesince
 
@@ -19,13 +19,23 @@ WINDOW_HOURS = 72
 
 
 class Command(BaseCommand):
+    """Summarize suite online/offline periods over the recent availability window."""
+
     help = "Summarize suite offline/online periods for the last 72 hours"
 
     def handle(self, *_args: Any, **_options: Any) -> None:
+        """Print an availability summary and timeline for the last WINDOW_HOURS.
+
+        Raises:
+            CommandError: If shutdown history cannot be loaded.
+        """
         now = timezone.now()
         window_start = now - timedelta(hours=WINDOW_HOURS)
 
         raw_periods, error = load_shutdown_periods()
+        if error:
+            raise CommandError(f"Unable to build availability summary: {error}")
+
         shutdown_periods: list[tuple[datetime, datetime]] = []
         for start, end in raw_periods:
             normalized_end = end or now
@@ -78,12 +88,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"  - {status_label}: {format_datetime(start)} -> {format_datetime(end)} ({duration_label})"
             )
-
-        if error:
-            self.stderr.write(self.style.WARNING(f"Warning: {error}"))
-
-
 def _format_duration_hms(seconds: int | None) -> str:
+    """Format a duration value in seconds using hour/minute/second units."""
+
     if seconds is None or seconds < 0:
         return "?m?s"
 

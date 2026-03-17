@@ -46,7 +46,10 @@ class Command(BaseCommand):
         if redis_url:
             try:
                 client = Redis.from_url(redis_url, decode_responses=True)
-                payload["redis_ping"] = bool(client.ping())
+                try:
+                    payload["redis_ping"] = bool(client.ping())
+                finally:
+                    client.close()
             except (RedisError, ValueError, OSError) as exc:
                 payload["redis_ping"] = False
                 payload["redis_error"] = str(exc)

@@ -24,11 +24,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):  # noqa: D401 - inherited docstring
-        limit = options.get("limit") or 10
-        try:
-            limit = int(limit)
-        except (TypeError, ValueError):
-            limit = 10
+        limit = options["limit"]
         if limit < 1:
             limit = 10
 

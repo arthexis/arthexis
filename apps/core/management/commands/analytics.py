@@ -8,6 +8,8 @@ from apps.core.models import UsageEvent
 
 
 class Command(BaseCommand):
+    """Export usage analytics summaries to JSON output."""
+
     help = "Export usage analytics summaries to JSON."
 
     def add_arguments(self, parser):

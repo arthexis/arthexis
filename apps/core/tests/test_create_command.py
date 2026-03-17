@@ -154,6 +154,7 @@ def test_create_model_skips_web_wiring_for_backend_only_app(tmp_path):
     assert "@admin.register(WorkItem)" in admin_text
 
 
+@pytest.mark.pr_origin(6273)
 def test_create_app_subcommand_scaffolds_app(tmp_path):
     """create app should scaffold via the unified command."""
 

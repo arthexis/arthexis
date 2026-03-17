@@ -3,11 +3,14 @@ from __future__ import annotations
 import io
 from datetime import datetime, timezone
 
+import pytest
+
 from django.core.management import call_command
 
 from apps.core import changelog
 
 
+@pytest.mark.pr_origin(6273)
 def test_report_startup_command_uses_public_helper(monkeypatch):
     """report_startup renders entries from the new public helper import path."""
 
@@ -36,6 +39,7 @@ def test_report_startup_command_uses_public_helper(monkeypatch):
     assert "2024-01-01 10:00 [start.sh] ok — booted" in output
 
 
+@pytest.mark.pr_origin(6273)
 def test_show_changelog_command_uses_public_timestamp_formatter(monkeypatch):
     """show_changelog uses the public timestamp formatter import."""
 

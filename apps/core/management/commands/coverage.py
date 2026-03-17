@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from utils.coverage import coverage_color, load_summary, render_badge
@@ -33,8 +34,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        core_dir = Path(__file__).resolve().parents[2]
-        project_root = core_dir.parent
+        project_root = Path(settings.BASE_DIR)
 
         coverage_path = Path(options.get("coverage_json") or "coverage.json")
         if not coverage_path.is_absolute():
