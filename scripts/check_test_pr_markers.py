@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -44,6 +45,8 @@ class ValidationError:
 
 _TEST_DEF_PATTERN = re.compile(r"^\+\s*(?:async\s+def|def)\s+test_[A-Za-z0-9_]*\s*\(")
 _TEST_CLASS_PATTERN = re.compile(r"^\+\s*class\s+Test[A-Za-z0-9_]*\s*(?:\(|:)")
+_GITHUB_PULL_REF_PATTERN = re.compile(r"^refs/pull/(\d+)/")
+_PR_ORIGIN_CALL_PATTERN = re.compile(r"pytest\.mark\.pr_origin\([^)]*\)")
 
 
 def _is_test_file(path: Path) -> bool:
@@ -195,6 +198,55 @@ def validate_test_file(path: Path, expected_pr: str | None = None) -> list[Valid
     ]
 
 
+def detect_current_pr_reference(environment: dict[str, str] | None = None) -> str | None:
+    """Detect the active pull request reference from environment variables.
+
+    Args:
+        environment: Optional mapping of environment variables.
+
+    Returns:
+        Pull request number when discoverable, otherwise ``None``.
+    """
+
+    env = os.environ if environment is None else environment
+    explicit_candidates = (
+        env.get("CURRENT_PR"),
+        env.get("PR_NUMBER"),
+        env.get("GITHUB_PR_NUMBER"),
+        env.get("GITHUB_REF_NAME"),
+    )
+    for candidate in explicit_candidates:
+        normalized = _normalize_pr_reference(candidate)
+        if normalized is not None and normalized.isdigit():
+            return normalized
+
+    github_ref = env.get("GITHUB_REF", "")
+    pull_match = _GITHUB_PULL_REF_PATTERN.match(github_ref)
+    if pull_match:
+        return pull_match.group(1)
+    return None
+
+
+def rewrite_pr_origin_markers(path: Path, expected_pr: str) -> bool:
+    """Rewrite ``pytest.mark.pr_origin`` markers to use the given reference.
+
+    Args:
+        path: Test file path to update in place.
+        expected_pr: Pull request reference to inject.
+
+    Returns:
+        ``True`` when the file was changed, otherwise ``False``.
+    """
+
+    source = path.read_text(encoding="utf-8")
+    replacement = f"pytest.mark.pr_origin({expected_pr})"
+    rewritten = _PR_ORIGIN_CALL_PATTERN.sub(replacement, source)
+    if rewritten == source:
+        return False
+    path.write_text(rewritten, encoding="utf-8")
+    return True
+
+
 def _staged_changed_files() -> list[ChangedFile]:
     """Return staged added/modified files for pre-commit checks.
 
@@ -272,7 +324,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Expected PR reference that must appear in changed test files.",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Rewrite existing pytest.mark.pr_origin(...) calls to --current-pr when available.",
+    )
     args = parser.parse_args(argv)
+    expected_pr = args.current_pr or detect_current_pr_reference()
 
     if args.paths:
         candidates = [ChangedFile(path=Path(p)) for p in args.paths]
@@ -287,7 +345,9 @@ def main(argv: list[str] | None = None) -> int:
 
     failures: list[ValidationError] = []
     for path in target_files:
-        failures.extend(validate_test_file(path, expected_pr=args.current_pr))
+        if args.fix and expected_pr is not None:
+            rewrite_pr_origin_markers(path, expected_pr)
+        failures.extend(validate_test_file(path, expected_pr=expected_pr))
 
     if not failures:
         return 0

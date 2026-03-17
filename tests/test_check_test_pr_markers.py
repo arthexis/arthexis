@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_test_pr_markers import main, validate_test_file
+from scripts.check_test_pr_markers import (
+    detect_current_pr_reference,
+    main,
+    rewrite_pr_origin_markers,
+    validate_test_file,
+)
 
 pytestmark = pytest.mark.pr_origin(6260)
 
@@ -125,3 +130,62 @@ def test_main_validates_explicit_paths_without_staged_diff(tmp_path: Path, capsy
     assert missing_result == 1
     assert "missing pytest PR marker" in missing_output.err
     assert passing_result == 0
+
+
+def test_detect_current_pr_reference_supports_common_environment_variables() -> None:
+    """Verify PR detection resolves values from common CI variables.
+
+    :return: ``None``.
+    """
+
+    assert detect_current_pr_reference({"CURRENT_PR": "6275"}) == "6275"
+    assert detect_current_pr_reference({"PR_NUMBER": "6275"}) == "6275"
+    assert detect_current_pr_reference({"GITHUB_PR_NUMBER": "6275"}) == "6275"
+    assert detect_current_pr_reference({"GITHUB_REF_NAME": "6275"}) == "6275"
+    assert detect_current_pr_reference({"GITHUB_REF": "refs/pull/6275/merge"}) == "6275"
+
+
+def test_rewrite_pr_origin_markers_updates_existing_references(tmp_path: Path) -> None:
+    """Verify marker rewrite normalizes file markers to the expected PR.
+
+    :param tmp_path: Temporary directory used to write a sample test file.
+    :return: ``None``.
+    """
+
+    path = tmp_path / "test_sample.py"
+    path.write_text(
+        "import pytest\n\n"
+        "pytestmark = pytest.mark.pr_origin(6301)\n\n"
+        "@pytest.mark.pr_origin(6301)\n"
+        "def test_example():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    changed = rewrite_pr_origin_markers(path, "6275")
+
+    assert changed is True
+    assert "pr_origin(6301)" not in path.read_text(encoding="utf-8")
+    assert validate_test_file(path, expected_pr="6275") == []
+
+
+def test_main_fix_rewrites_marker_before_validation(tmp_path: Path) -> None:
+    """Verify ``--fix`` rewrites marker references before validation.
+
+    :param tmp_path: Temporary directory used to write a sample test file.
+    :return: ``None``.
+    """
+
+    path = tmp_path / "test_sample.py"
+    path.write_text(
+        "import pytest\n\n"
+        "pytestmark = pytest.mark.pr_origin(6301)\n\n"
+        "def test_example():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    result = main(["--current-pr", "6275", "--fix", str(path)])
+
+    assert result == 0
+    assert "pytest.mark.pr_origin(6275)" in path.read_text(encoding="utf-8")
