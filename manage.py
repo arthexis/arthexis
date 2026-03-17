@@ -368,7 +368,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if "--noreload" not in args:
             args.insert(1, "--noreload")
     try:
-        if celery_enabled:
+        if celery_enabled and is_runserver:
             worker = subprocess.Popen(
                 [
                     sys.executable,
