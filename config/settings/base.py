@@ -5,9 +5,15 @@ import contextlib
 import hashlib
 import importlib.util
 import os
+import sys
 from pathlib import Path
 
 import django.utils.encoding as encoding
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from utils.env import env_bool
 
 from config.admin_urls import normalize_admin_url_path
@@ -20,7 +26,7 @@ if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatib
 from config.settings_helpers import load_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR = _PROJECT_ROOT
 APPS_DIR = BASE_DIR / "apps"
 
 # SECURITY WARNING: keep the secret key used in production secret!
