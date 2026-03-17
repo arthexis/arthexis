@@ -14,6 +14,7 @@ import sys
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
+from django.db.utils import OperationalError, ProgrammingError
 
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.nodes.models import Node
@@ -379,6 +380,11 @@ def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str,
 
 def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_stale: bool = True) -> DesktopSyncResult:
     """Synchronize desktop shortcut files from ``DesktopShortcut`` records."""
+
+    try:
+        DesktopShortcut.objects.exists()
+    except (OperationalError, ProgrammingError):
+        return DesktopSyncResult()
 
     managed_dirs = _all_managed_dirs(base_dir=base_dir, username=username)
     if not managed_dirs:
