@@ -349,20 +349,25 @@ jobs:
             const eventName = context.eventName;
             const integrationLabel = 'ci:run-integration';
             const pathMatchers = [
-              'apps/ocpp/**',
-              'apps/protocols/**',
+              'apps/**/tests/**',
+              'apps/celery/**',
               'apps/core/**',
+              'apps/modules/**',
+              'apps/ocpp/**',
+              'apps/ops/**',
+              'apps/protocols/**',
               'apps/services/**',
               'apps/tasks/**',
-              'apps/**/tests/**',
               'config/**',
-              'scripts/**',
+              'conftest.py',
+              'docker/**',
               'manage.py',
               'pyproject.toml',
+              'pytest.ini',
               'requirements*.txt',
-              'tests/test_*.py',
-              'tests/**/test_*.py',
-              'tests/integration/**',
+              'scripts/**',
+              'tests/**',
+              'utils/**',
               '.github/workflows/ci.yml'
             ];
 
@@ -436,12 +441,21 @@ jobs:
 
             if (matchedFiles.length > 0) {
               const filesSummary = matchedFiles.slice(0, 10).join(', ');
+              const sortedPatterns = Array.from(matchedPatterns).sort();
+              const maxPatternsInReason = 5;
+              const listedPatterns = sortedPatterns.slice(0, maxPatternsInReason);
+              const extraPatternCount = sortedPatterns.length - listedPatterns.length;
+              const patternSummary = extraPatternCount > 0
+                ? `${listedPatterns.join(', ')} (+${extraPatternCount} more)`
+                : listedPatterns.join(', ');
               core.setOutput('run_integration', 'true');
               core.setOutput(
                 'reason',
-                `PR modifies integration-sensitive paths (${Array.from(matchedPatterns).join(', ')})`
+                `PR modifies integration-sensitive paths: ${patternSummary}`
               );
-              core.info(`Integration tests enabled: matched files ${filesSummary}.`);
+              core.info(
+                `Integration tests enabled: matched ${matchedFiles.length} file(s). Examples: ${filesSummary}.`
+              );
               return;
             }
 
