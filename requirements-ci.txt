@@ -70,7 +70,7 @@ prompt_toolkit==3.0.52
 psutil==7.2.2
 psycopg-binary==3.3.3
 psycopg==3.3.3
-pyasn1==0.6.2
+pyasn1==0.6.3
 pyasn1_modules==0.4.2
 pycparser==3.0
 pyftpdlib==2.2.0
