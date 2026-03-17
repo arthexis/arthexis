@@ -92,8 +92,8 @@ def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
     assert 'import os; os.system' in content
 
 
-def test_rebuild_apps_migrations_delegates_to_root_command(monkeypatch):
-    """Legacy rebuild_apps_migrations should delegate to migrations rebuild."""
+def test_migrations_rebuild_accepts_branch_id(monkeypatch):
+    """migrations rebuild should pass through --branch-id values."""
 
     called: list[tuple[str, tuple, dict]] = []
 
@@ -101,10 +101,10 @@ def test_rebuild_apps_migrations_delegates_to_root_command(monkeypatch):
         called.append((name, args, kwargs))
 
     monkeypatch.setattr(
-        "apps.core.management.commands.rebuild_apps_migrations.call_command", _fake_call_command
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
     )
 
-    call_command("rebuild_apps_migrations", branch_id="branch-legacy")
+    call_command("migrations", "rebuild", branch_id="branch-legacy")
 
     assert called
     name, args, _kwargs = called[0]
@@ -113,8 +113,8 @@ def test_rebuild_apps_migrations_delegates_to_root_command(monkeypatch):
     assert "--branch-id" in args
 
 
-def test_clear_apps_migrations_delegates_to_root_command(monkeypatch):
-    """Legacy clear_apps_migrations should delegate to migrations clear."""
+def test_migrations_clear_calls_clear_operation(monkeypatch):
+    """migrations clear should call clear operation."""
 
     called: list[tuple[str, tuple, dict]] = []
 
@@ -122,10 +122,10 @@ def test_clear_apps_migrations_delegates_to_root_command(monkeypatch):
         called.append((name, args, kwargs))
 
     monkeypatch.setattr(
-        "apps.core.management.commands.clear_apps_migrations.call_command", _fake_call_command
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
     )
 
-    call_command("clear_apps_migrations")
+    call_command("migrations", "clear")
 
     assert called
     name, args, _kwargs = called[0]

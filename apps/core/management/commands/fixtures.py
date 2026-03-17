@@ -1,9 +1,113 @@
-"""One-word command alias for ``update_fixtures``."""
-
 from __future__ import annotations
 
-from apps.core.management.commands.update_fixtures import Command as UpdateFixturesCommand
+import inspect
+import json
+from pathlib import Path
+
+from django.apps import apps
+from django.conf import settings
+from django.core import serializers
+from django.core.management.base import BaseCommand
+from parler.models import TranslatableModel
+
+from apps.core.fixtures import ensure_seed_data_flags
 
 
-class Command(UpdateFixturesCommand):
-    """Expose ``update_fixtures`` behavior under the ``fixtures`` command name."""
+class Command(BaseCommand):
+    """Persist database changes back to fixture files."""
+
+    help = "Update fixture files from current database state"
+
+    def handle(self, *args, **options):
+        base = Path(settings.BASE_DIR)
+        for path in sorted(base.glob("**/fixtures/*.json")):
+            if path.name.startswith("users__"):
+                continue
+            try:
+                with path.open() as fh:
+                    data = json.load(fh)
+            except Exception:
+                continue
+            if not isinstance(data, list):
+                continue
+            use_natural = all(isinstance(obj, dict) and "pk" not in obj for obj in data)
+            instances = []
+            for obj in data:
+                if not isinstance(obj, dict):
+                    continue
+                model_label = obj.get("model")
+                if not model_label:
+                    continue
+                try:
+                    model = apps.get_model(model_label)
+                except LookupError:
+                    continue
+                instance = None
+                if "pk" in obj:
+                    instance = model.objects.filter(pk=obj["pk"]).first()
+                else:
+                    manager = model._default_manager
+                    get_natural = getattr(manager, "get_by_natural_key", None)
+                    if get_natural:
+                        sig = inspect.signature(get_natural)
+                        params = [p.name for p in list(sig.parameters.values())[1:]]
+                        try:
+                            args = [obj.get("fields", {}).get(p) for p in params]
+                        except Exception:
+                            args = []
+                        if None not in args:
+                            try:
+                                instance = get_natural(*args)
+                            except Exception:
+                                instance = None
+                if instance is not None:
+                    instances.append(instance)
+
+            def _supports_natural_key(model):
+                natural_key = getattr(model, "natural_key", None)
+                get_natural = getattr(
+                    model._default_manager, "get_by_natural_key", None
+                )
+                return callable(natural_key) and callable(get_natural)
+
+            def _collect_translations(instance):
+                if not isinstance(instance, TranslatableModel):
+                    return []
+                translations = []
+                for translations_model in instance._parler_meta.get_all_models():
+                    if use_natural and not _supports_natural_key(translations_model):
+                        continue
+                    translations.extend(
+                        translations_model.objects.filter(master=instance)
+                    )
+                return translations
+
+            if instances:
+                serialized_instances = []
+                seen = set()
+                for instance in instances:
+                    key = (instance._meta.label_lower, instance.pk)
+                    if key not in seen:
+                        seen.add(key)
+                        serialized_instances.append(instance)
+                    for translation in _collect_translations(instance):
+                        translation_key = (
+                            translation._meta.label_lower,
+                            translation.pk,
+                        )
+                        if translation_key not in seen:
+                            seen.add(translation_key)
+                            serialized_instances.append(translation)
+
+                content = serializers.serialize(
+                    "json",
+                    serialized_instances,
+                    indent=2,
+                    use_natural_foreign_keys=use_natural,
+                    use_natural_primary_keys=use_natural,
+                )
+            else:
+                content = "[]"
+
+            content = ensure_seed_data_flags(content)
+            path.write_text(content)

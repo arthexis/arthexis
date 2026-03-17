@@ -154,12 +154,12 @@ def test_create_model_skips_web_wiring_for_backend_only_app(tmp_path):
     assert "@admin.register(WorkItem)" in admin_text
 
 
-def test_create_local_app_delegates_to_create_app(tmp_path):
-    """Legacy create_local_app should still scaffold by delegating to create app."""
+def test_create_app_subcommand_scaffolds_app(tmp_path):
+    """create app should scaffold via the unified command."""
 
     apps_dir = _seed_apps_root(tmp_path)
 
-    call_command("create_local_app", "legacy")
+    call_command("create", "app", "legacy")
 
     assert (apps_dir / "legacy" / "apps.py").exists()
     assert (apps_dir / "legacy" / "admin.py").exists()

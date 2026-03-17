@@ -1,25 +1,21 @@
-"""Regression tests for one-word core management command aliases."""
+"""Regression tests for one-word core management command implementations."""
 
 from __future__ import annotations
 
 from importlib import import_module
 
 
-def test_alias_command_subclasses_legacy_command() -> None:
-    """Each one-word alias should expose the corresponding legacy command implementation."""
+def test_coverage_command_module_exports_command_class() -> None:
+    """The coverage command module should expose a concrete Command class."""
 
-    legacy_module = import_module("apps.core.management.commands.calculate_coverage")
-    alias_module = import_module("apps.core.management.commands.coverage")
+    module = import_module("apps.core.management.commands.coverage")
 
-    assert issubclass(alias_module.Command, legacy_module.Command)
+    assert hasattr(module, "Command")
 
 
-def test_legacy_command_is_marked_absorbed() -> None:
-    """Legacy commands should be marked as absorbed into their one-word replacement names."""
+def test_coverage_command_not_marked_absorbed() -> None:
+    """The canonical coverage command should not be marked as an absorbed legacy shim."""
 
-    legacy_module = import_module("apps.core.management.commands.calculate_coverage")
+    module = import_module("apps.core.management.commands.coverage")
 
-    assert getattr(legacy_module.Command, "arthexis_absorbed_command", False) is True
-    assert (
-        getattr(legacy_module.Command, "arthexis_replacement_command", "") == "coverage"
-    )
+    assert getattr(module.Command, "arthexis_absorbed_command", False) is False
