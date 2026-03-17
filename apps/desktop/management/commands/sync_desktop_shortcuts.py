@@ -60,6 +60,10 @@ class Command(BaseCommand):
             port=port,
             remove_stale=not options["no_remove_stale"],
         )
+        if result.skipped_db_unavailable:
+            raise CommandError(
+                "Desktop shortcut sync skipped because the database is unavailable or not migrated yet."
+            )
         self.stdout.write(
             self.style.SUCCESS(
                 "Desktop shortcuts synced: "
