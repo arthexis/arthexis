@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from django.core.management import call_command
 
 
@@ -92,8 +94,9 @@ def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
     assert 'import os; os.system' in content
 
 
-def test_rebuild_apps_migrations_delegates_to_root_command(monkeypatch):
-    """Legacy rebuild_apps_migrations should delegate to migrations rebuild."""
+@pytest.mark.pr_origin(6273)
+def test_migrations_rebuild_accepts_branch_id(monkeypatch):
+    """migrations rebuild should call makemigrations during rebuild flow."""
 
     called: list[tuple[str, tuple, dict]] = []
 
@@ -101,33 +104,26 @@ def test_rebuild_apps_migrations_delegates_to_root_command(monkeypatch):
         called.append((name, args, kwargs))
 
     monkeypatch.setattr(
-        "apps.core.management.commands.rebuild_apps_migrations.call_command", _fake_call_command
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
     )
 
-    call_command("rebuild_apps_migrations", branch_id="branch-legacy")
+    call_command("migrations", "rebuild", branch_id="branch-legacy")
 
     assert called
-    name, args, _kwargs = called[0]
-    assert name == "migrations"
-    assert args[0] == "rebuild"
-    assert "--branch-id" in args
+    name, _args, _kwargs = called[0]
+    assert name == "makemigrations"
 
 
-def test_clear_apps_migrations_delegates_to_root_command(monkeypatch):
-    """Legacy clear_apps_migrations should delegate to migrations clear."""
+@pytest.mark.pr_origin(6273)
+def test_migrations_clear_calls_clear_operation(settings, tmp_path):
+    """migrations clear should remove migration files while preserving __init__.py."""
 
-    called: list[tuple[str, tuple, dict]] = []
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    migration_path = _seed_app_migrations(apps_dir, "legacy")
 
-    def _fake_call_command(name, *args, **kwargs):
-        called.append((name, args, kwargs))
+    call_command("migrations", "clear")
 
-    monkeypatch.setattr(
-        "apps.core.management.commands.clear_apps_migrations.call_command", _fake_call_command
-    )
-
-    call_command("clear_apps_migrations")
-
-    assert called
-    name, args, _kwargs = called[0]
-    assert name == "migrations"
-    assert args[0] == "clear"
+    assert not migration_path.exists()
+    assert (apps_dir / "legacy" / "migrations" / "__init__.py").exists()
