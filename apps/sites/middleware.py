@@ -8,12 +8,14 @@ from http import HTTPStatus
 
 from django.conf import settings
 from django.urls import Resolver404, resolve
+from django.utils import translation
 
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
     cache_original_referer,
     get_original_referer,
     get_request_language_code,
+    get_site_allowed_languages,
     landing_leads_supported,
 )
 
@@ -28,9 +30,16 @@ class LanguagePreferenceMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        """Store language preferences resolved for the current site on the request."""
+
+        site = getattr(request, "site", None)
+        request.site_languages = get_site_allowed_languages(site)
         language_code = get_request_language_code(request)
         request.selected_language_code = language_code
         request.selected_language = language_code
+        if language_code:
+            translation.activate(language_code)
+            request.LANGUAGE_CODE = language_code
         return self.get_response(request)
 
 

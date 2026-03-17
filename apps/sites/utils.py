@@ -45,6 +45,83 @@ def _safe_session_get(session, key, default=None):
         return default
 
 
+def _normalize_language_code(language_code: str) -> str:
+    """Normalize a language code into a compact lowercase token."""
+
+    value = (language_code or "").strip()
+    if not value:
+        return ""
+    return value.replace("_", "-").lower()[:15]
+
+
+def _configured_language_codes() -> list[str]:
+    """Return normalized language codes configured for the project."""
+
+    configured_codes: list[str] = []
+    for code, _label in getattr(settings, "LANGUAGES", ()):
+        normalized = _normalize_language_code(code)
+        if normalized and normalized not in configured_codes:
+            configured_codes.append(normalized)
+    return configured_codes
+
+
+def get_site_allowed_language_codes(site) -> tuple[str, ...]:
+    """Return normalized language codes allowed for ``site``.
+
+    Falls back to all configured languages when no site-specific list is set.
+    """
+
+    configured_codes = _configured_language_codes()
+    if not configured_codes:
+        return ()
+
+    raw_allowed = getattr(site, "allowed_languages", None) if site else None
+    if not raw_allowed:
+        return tuple(configured_codes)
+
+    allowed_codes: list[str] = []
+    for code in raw_allowed:
+        normalized = _normalize_language_code(str(code))
+        if normalized in configured_codes and normalized not in allowed_codes:
+            allowed_codes.append(normalized)
+
+    if not allowed_codes:
+        return tuple(configured_codes)
+
+    return tuple(allowed_codes)
+
+
+def get_site_default_language_code(site) -> str:
+    """Return the default language code for ``site`` within allowed options."""
+
+    allowed_codes = get_site_allowed_language_codes(site)
+    if not allowed_codes:
+        return ""
+
+    default_code = _normalize_language_code(getattr(site, "default_language", ""))
+    if default_code in allowed_codes:
+        return default_code
+
+    fallback_code = _normalize_language_code(
+        getattr(settings, "LANGUAGE_CODE", "")
+    )
+    if fallback_code in allowed_codes:
+        return fallback_code
+
+    return allowed_codes[0]
+
+
+def get_site_allowed_languages(site) -> tuple[tuple[str, str], ...]:
+    """Return ``(code, label)`` language choices allowed for ``site``."""
+
+    allowed_codes = set(get_site_allowed_language_codes(site))
+    return tuple(
+        (code, label)
+        for code, label in getattr(settings, "LANGUAGES", ())
+        if _normalize_language_code(code) in allowed_codes
+    )
+
+
 def landing(label=None):
     """Decorator to mark a view as a landing page."""
 
@@ -202,6 +279,15 @@ def landing_leads_supported() -> bool:
 def get_request_language_code(request) -> str:
     """Return the preferred interface language for the given request."""
 
+    from utils.sites import get_site
+
+    site = getattr(request, "site", None)
+    if site is None:
+        site = get_site(request)
+
+    allowed_codes = get_site_allowed_language_codes(site)
+    default_code = get_site_default_language_code(site)
+
     language_code = ""
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
@@ -213,18 +299,18 @@ def get_request_language_code(request) -> str:
         language_code = get_feature_parameter(
             "operator-site-interface",
             "default_language",
-            fallback="en",
+            fallback=default_code or "en",
         )
     if not language_code:
         language_code = getattr(request, "LANGUAGE_CODE", "") or ""
     if not language_code:
         language_code = get_language() or ""
 
-    language_code = (language_code or "").strip()
-    if not language_code:
-        return ""
+    normalized = _normalize_language_code(language_code)
+    if normalized and (not allowed_codes or normalized in allowed_codes):
+        return normalized
 
-    return language_code.replace("_", "-").lower()[:15]
+    return default_code
 
 
 def get_referrer_landing(request, site):
@@ -290,3 +376,14 @@ def _clear_referrer_landing_session(session) -> None:
         session.pop(REFERRER_LANDING_SESSION_KEY, None)
     except Exception:  # pragma: no cover - best effort guard
         logger.debug("Unable to clear referrer landing from session", exc_info=True)
+
+
+def route(path: str, *args, **kwargs):
+    if path and not path.startswith("/"):
+        path = "/" + path
+    normalized_path = path.lstrip("/")
+
+    if not normalized_path:
+        raise ValueError("Route path cannot be empty")
+
+    return django_path(normalized_path, *args, **kwargs)

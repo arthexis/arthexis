@@ -7,7 +7,7 @@ from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic.base import RedirectView
-from django.views.i18n import set_language
+from apps.sites.views.i18n import set_language
 
 from config.admin_urls import admin_route
 from config.route_providers import autodiscovered_route_patterns

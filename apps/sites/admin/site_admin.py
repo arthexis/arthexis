@@ -92,6 +92,8 @@ class SiteAdmin(DjangoSiteAdmin):
         "domain",
         "name",
         "template",
+        "default_language",
+        "allowed_languages",
         "default_landing",
         "interface_landing",
         "managed",
@@ -102,6 +104,7 @@ class SiteAdmin(DjangoSiteAdmin):
         "domain",
         "name",
         "template",
+        "default_language_short",
         "default_landing_short",
         "interface_landing_short",
         "managed",
@@ -181,6 +184,13 @@ class SiteAdmin(DjangoSiteAdmin):
         except (FieldDoesNotExist, FieldError):
             return tuple(item for item in list_display if item != "interface_landing_short")
         return tuple(list_display)
+
+
+    @admin.display(description=_("Language"), ordering="default_language")
+    def default_language_short(self, obj):
+        """Render the default language with a compact changelist heading."""
+
+        return getattr(obj, "default_language", "")
 
     @admin.display(description=_("Default"), ordering="default_landing")
     def default_landing_short(self, obj):

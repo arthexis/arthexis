@@ -93,6 +93,28 @@ _FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
             verbose_name=_("Template"),
         ),
     ),
+    (
+        "default_language",
+        lambda: models.CharField(
+            max_length=15,
+            default="en",
+            db_default="en",
+            verbose_name=_("Default language"),
+            help_text=_("Language used when visitors have not selected one."),
+            choices=settings.LANGUAGES,
+        ),
+    ),
+    (
+        "allowed_languages",
+        lambda: models.JSONField(
+            default=list,
+            blank=True,
+            verbose_name=_("Allowed languages"),
+            help_text=_(
+                "Restrict selectable languages for this site. Leave empty to allow all configured languages."
+            ),
+        ),
+    ),
 )
 
 
