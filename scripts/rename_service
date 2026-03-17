@@ -76,6 +76,13 @@ validate_service_name "$NEW_SERVICE"
 LOCK_DIR="$LOCK_BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_LOCK="$LOCK_DIR/service.lck"
+SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
+
+systemd_unit_known() {
+  local unit_name="$1"
+
+  _arthexis_systemd_unit_present "$unit_name" || [ -f "$SYSTEMD_DIR/$unit_name" ]
+}
 
 if [ -z "$OLD_SERVICE" ] && [ -f "$SERVICE_LOCK" ]; then
   OLD_SERVICE="$(tr -d '\r\n' < "$SERVICE_LOCK")"
@@ -99,16 +106,34 @@ ENABLE_LCD=false
 ENABLE_RFID=false
 ENABLE_CAMERA=false
 
+if [ "$SERVICE_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && systemd_unit_known "${OLD_SERVICE}.service"; then
+  SERVICE_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+fi
+
 if [ -f "$LOCK_DIR/celery.lck" ]; then
+  ENABLE_CELERY=true
+fi
+if [ "$ENABLE_CELERY" = false ] && {
+  systemd_unit_known "celery-${OLD_SERVICE}.service" || systemd_unit_known "celery-beat-${OLD_SERVICE}.service";
+}; then
   ENABLE_CELERY=true
 fi
 if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   ENABLE_LCD=true
 fi
+if [ "$ENABLE_LCD" = false ] && [ ! -f "$LOCK_DIR/$ARTHEXIS_LCD_LOCK" ] && systemd_unit_known "lcd-${OLD_SERVICE}.service"; then
+  ENABLE_LCD=true
+fi
 if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
   ENABLE_RFID=true
 fi
+if [ "$ENABLE_RFID" = false ] && systemd_unit_known "rfid-${OLD_SERVICE}.service"; then
+  ENABLE_RFID=true
+fi
 if [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
+  ENABLE_CAMERA=true
+fi
+if [ "$ENABLE_CAMERA" = false ] && systemd_unit_known "camera-${OLD_SERVICE}.service"; then
   ENABLE_CAMERA=true
 fi
 
