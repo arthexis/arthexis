@@ -14,14 +14,29 @@ from pathlib import Path
 
 @dataclass
 class ChangedFile:
-    """Represent a staged file path."""
+    """Represent a candidate file path for validation.
+
+    Args:
+        path: File path to evaluate.
+
+    Returns:
+        None.
+    """
 
     path: Path
 
 
 @dataclass
 class ValidationError:
-    """Represent a validation failure for a file."""
+    """Represent a validation failure for a file.
+
+    Args:
+        file_path: File associated with a validation error.
+        message: Human-readable validation failure description.
+
+    Returns:
+        None.
+    """
 
     file_path: Path
     message: str
@@ -32,7 +47,14 @@ _TEST_CLASS_PATTERN = re.compile(r"^\+\s*class\s+Test[A-Za-z0-9_]*\s*(?:\(|:)")
 
 
 def _is_test_file(path: Path) -> bool:
-    """Return whether a path follows the repository's test file naming pattern."""
+    """Return whether a path follows the repository test naming pattern.
+
+    Args:
+        path: Path to inspect.
+
+    Returns:
+        ``True`` when the file name matches recognized test conventions.
+    """
 
     name = path.name
     return path.suffix == ".py" and (
@@ -41,7 +63,14 @@ def _is_test_file(path: Path) -> bool:
 
 
 def _is_pytest_pr_origin_call(node: ast.AST) -> bool:
-    """Return True when ``node`` is ``pytest.mark.pr_origin(...)``."""
+    """Return whether an AST node represents ``pytest.mark.pr_origin(...)``.
+
+    Args:
+        node: AST node to inspect.
+
+    Returns:
+        ``True`` when the node is a pytest ``pr_origin`` marker call.
+    """
 
     if not isinstance(node, ast.Call):
         return False
@@ -55,13 +84,27 @@ def _is_pytest_pr_origin_call(node: ast.AST) -> bool:
 
 
 def _iter_pr_origin_calls(tree: ast.AST) -> list[ast.Call]:
-    """Return all ``pytest.mark.pr_origin`` calls in an AST tree."""
+    """Collect all ``pytest.mark.pr_origin`` calls in an AST tree.
+
+    Args:
+        tree: Parsed module tree.
+
+    Returns:
+        List of marker call nodes.
+    """
 
     return [node for node in ast.walk(tree) if _is_pytest_pr_origin_call(node)]
 
 
 def _normalize_pr_reference(value: object) -> str | None:
-    """Normalize marker values for case-insensitive comparison."""
+    """Normalize marker values for case-insensitive comparison.
+
+    Args:
+        value: Candidate marker argument value.
+
+    Returns:
+        Normalized string reference or ``None`` when unsupported.
+    """
 
     if isinstance(value, int):
         return str(value)
@@ -72,10 +115,18 @@ def _normalize_pr_reference(value: object) -> str | None:
 
 
 def _marker_references(call: ast.Call) -> list[str]:
-    """Return normalized PR references from positional marker arguments."""
+    """Return normalized PR references from marker arguments.
+
+    Args:
+        call: Marker call to inspect.
+
+    Returns:
+        Normalized references extracted from positional and keyword arguments.
+    """
 
     references: list[str] = []
-    for arg in call.args:
+    all_args = call.args + [keyword.value for keyword in call.keywords]
+    for arg in all_args:
         if isinstance(arg, ast.Constant):
             normalized = _normalize_pr_reference(arg.value)
             if normalized is not None:
@@ -84,7 +135,18 @@ def _marker_references(call: ast.Call) -> list[str]:
 
 
 def validate_test_file(path: Path, expected_pr: str | None = None) -> list[ValidationError]:
-    """Validate that a test file includes a usable PR origin marker."""
+    """Validate that a test file includes a usable PR-origin marker.
+
+    Args:
+        path: Test file path to validate.
+        expected_pr: Optional required PR reference.
+
+    Returns:
+        Validation failures found for the file.
+
+    Raises:
+        None. File and parse errors are returned as ``ValidationError`` entries.
+    """
 
     try:
         source = path.read_text(encoding="utf-8")
@@ -105,6 +167,16 @@ def validate_test_file(path: Path, expected_pr: str | None = None) -> list[Valid
             )
         ]
 
+    call_references = [ref for call in calls for ref in _marker_references(call)]
+
+    if not call_references:
+        return [
+            ValidationError(
+                path,
+                "pytest.mark.pr_origin marker must include a reference argument",
+            )
+        ]
+
     if expected_pr is None:
         return []
 
@@ -112,9 +184,8 @@ def validate_test_file(path: Path, expected_pr: str | None = None) -> list[Valid
     if normalized_expected is None:
         return []
 
-    for call in calls:
-        if normalized_expected in _marker_references(call):
-            return []
+    if normalized_expected in call_references:
+        return []
 
     return [
         ValidationError(
@@ -125,7 +196,17 @@ def validate_test_file(path: Path, expected_pr: str | None = None) -> list[Valid
 
 
 def _staged_changed_files() -> list[ChangedFile]:
-    """Return staged added/modified files for pre-commit checks."""
+    """Return staged added/modified files for pre-commit checks.
+
+    Args:
+        None.
+
+    Returns:
+        Changed files included in the staged diff.
+
+    Raises:
+        subprocess.CalledProcessError: If git diff command fails.
+    """
 
     result = subprocess.run(
         ["git", "diff", "--cached", "--name-status", "--diff-filter=AM"],
@@ -144,7 +225,17 @@ def _staged_changed_files() -> list[ChangedFile]:
 
 
 def _file_introduces_new_tests(path: Path) -> bool:
-    """Return whether staged changes add test definitions in ``path``."""
+    """Return whether staged changes add test definitions in ``path``.
+
+    Args:
+        path: File path to inspect in the staged diff.
+
+    Returns:
+        ``True`` when staged hunks add test functions or classes.
+
+    Raises:
+        subprocess.CalledProcessError: If git diff command fails.
+    """
 
     result = subprocess.run(
         ["git", "diff", "--cached", "--unified=0", "--", str(path)],
@@ -162,7 +253,17 @@ def _file_introduces_new_tests(path: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run staged test marker validation for pre-commit usage."""
+    """Run test marker validation for pre-commit usage.
+
+    Args:
+        argv: Optional command-line arguments.
+
+    Returns:
+        Exit status code.
+
+    Raises:
+        None.
+    """
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", help="Optional file paths to validate")
@@ -175,14 +276,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.paths:
         candidates = [ChangedFile(path=Path(p)) for p in args.paths]
+        target_files = [change.path for change in candidates if _is_test_file(change.path)]
     else:
         candidates = _staged_changed_files()
-
-    target_files = [
-        change.path
-        for change in candidates
-        if _is_test_file(change.path) and _file_introduces_new_tests(change.path)
-    ]
+        target_files = [
+            change.path
+            for change in candidates
+            if _is_test_file(change.path) and _file_introduces_new_tests(change.path)
+        ]
 
     failures: list[ValidationError] = []
     for path in target_files:
