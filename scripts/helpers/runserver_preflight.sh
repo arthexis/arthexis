@@ -12,6 +12,9 @@ LOCK_DIR="$(normalize_path "$LOCK_DIR")"
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
 
+# Default behavior: Satellite/Watchtower nodes run in check-only mode, while all
+# other roles default to apply. Set ARTHEXIS_MIGRATION_POLICY explicitly to avoid
+# role-based defaults when deterministic behavior is required in automation.
 default_migration_policy() {
   local role="${NODE_ROLE:-}"
 
