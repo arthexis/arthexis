@@ -1,6 +1,23 @@
 name: CodeQL
 
 on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/security-scan.yml'
+      - '.github/codeql/**'
+      - '.github/actions/**'
+      - 'Dockerfile'
+      - '**/Dockerfile'
+      - '**/*.sh'
   pull_request:
     paths:
       - '**/*.py'
@@ -11,6 +28,10 @@ on:
       - '.github/workflows/codeql.yml'
       - '.github/workflows/security-scan.yml'
       - '.github/codeql/**'
+      - '.github/actions/**'
+      - 'Dockerfile'
+      - '**/Dockerfile'
+      - '**/*.sh'
   schedule:
     - cron: "15 3 1 * *"
   workflow_dispatch:
@@ -23,6 +44,9 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    # Runtime expectations:
+    # - Runs on relevant code, dependency, workflow, container, and script changes in PRs and protected branches.
+    # - Monthly schedule preserves baseline coverage for changes that might bypass path filters.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
