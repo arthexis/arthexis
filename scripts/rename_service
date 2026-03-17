@@ -102,7 +102,7 @@ ENABLE_CAMERA=false
 if [ -f "$LOCK_DIR/celery.lck" ]; then
   ENABLE_CELERY=true
 fi
-if arthexis_lcd_feature_enabled "$LOCK_DIR" || [ -f "$LOCK_DIR/$ARTHEXIS_LCD_LOCK" ]; then
+if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   ENABLE_LCD=true
 fi
 if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
@@ -130,18 +130,6 @@ echo "Removing old unit stack for '$OLD_SERVICE'..."
 arthexis_remove_service_unit_stack "$LOCK_DIR" "$OLD_SERVICE" "$ENABLE_CELERY" "$ENABLE_LCD" "$ENABLE_RFID" "$ENABLE_CAMERA"
 arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${OLD_SERVICE}-upgrade-guard.service"
 arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${OLD_SERVICE}-upgrade-guard.timer"
-
-if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
-  while IFS= read -r recorded_unit; do
-    case "$recorded_unit" in
-      "${OLD_SERVICE}.service"|"celery-${OLD_SERVICE}.service"|"celery-beat-${OLD_SERVICE}.service"|"lcd-${OLD_SERVICE}.service"|"rfid-${OLD_SERVICE}.service"|"camera-${OLD_SERVICE}.service"|"${OLD_SERVICE}-upgrade-guard.service"|"${OLD_SERVICE}-upgrade-guard.timer")
-        arthexis_remove_systemd_unit_record "$LOCK_DIR" "$recorded_unit"
-        ;;
-    esac
-  done < "$SYSTEMD_UNITS_LOCK"
-fi
-
-echo "$NEW_SERVICE" > "$SERVICE_LOCK"
 
 if [ "$SERVICE_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
   echo "Installing new unit stack for '$NEW_SERVICE'..."
@@ -176,7 +164,9 @@ if [ "$SERVICE_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     fi
   fi
 else
-  echo "Service mode is '$SERVICE_MODE'; updated .locks/service.lck only."
+  echo "Service mode is '$SERVICE_MODE'; skipping systemd unit install."
 fi
+
+echo "$NEW_SERVICE" > "$SERVICE_LOCK"
 
 echo "Renamed service '$OLD_SERVICE' -> '$NEW_SERVICE'."

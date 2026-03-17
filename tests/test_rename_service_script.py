@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = pytest.mark.pr_origin(6299)
+pytestmark = pytest.mark.pr_origin(6271)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +40,32 @@ def test_rename_service_dry_run_uses_lock_file_name(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Rename: alpha -> beta" in result.stdout
     assert "Mode: embedded" in result.stdout
+
+
+def test_rename_service_dry_run_respects_disabled_lcd(tmp_path: Path) -> None:
+    """Verify dry run respects a disabled LCD feature flag."""
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True)
+    (lock_dir / "service.lck").write_text("alpha\n", encoding="utf-8")
+    (lock_dir / "lcd_screen.lck").write_text("state=disabled\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            str(SCRIPT_PATH),
+            "--base-dir",
+            str(tmp_path),
+            "--new-name",
+            "beta",
+            "--dry-run",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "lcd=false" in result.stdout
 
 
 def test_rename_service_dry_run_rejects_invalid_new_name(tmp_path: Path) -> None:
