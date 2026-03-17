@@ -189,3 +189,42 @@ def test_main_fix_rewrites_marker_before_validation(tmp_path: Path) -> None:
 
     assert result == 0
     assert "pytest.mark.pr_origin(6275)" in path.read_text(encoding="utf-8")
+
+
+def test_main_rejects_non_numeric_current_pr(capsys: pytest.CaptureFixture[str]) -> None:
+    """Verify non-numeric ``--current-pr`` values fail fast with an error.
+
+    :param capsys: Pytest capture fixture for stderr assertions.
+    :return: ``None``.
+    """
+
+    result = main(["--current-pr", "not-a-number"])
+    output = capsys.readouterr()
+
+    assert result == 1
+    assert "PR reference must be a number" in output.err
+
+
+def test_main_fix_restages_rewritten_files_in_staged_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify staged ``--fix`` mode re-adds rewritten files to the git index.
+
+    :param monkeypatch: Pytest fixture used to stub git-dependent helpers.
+    :return: ``None``.
+    """
+
+    from scripts import check_test_pr_markers as module
+
+    changed_file = module.ChangedFile(path=Path("tests/test_sample.py"))
+    restaged_paths: list[Path] = []
+
+    monkeypatch.setattr(module, "_staged_changed_files", lambda: [changed_file])
+    monkeypatch.setattr(module, "_is_test_file", lambda _: True)
+    monkeypatch.setattr(module, "_file_introduces_new_tests", lambda _: True)
+    monkeypatch.setattr(module, "rewrite_pr_origin_markers", lambda *_: True)
+    monkeypatch.setattr(module, "validate_test_file", lambda *_, **__: [])
+    monkeypatch.setattr(module, "_restage_file", lambda path: restaged_paths.append(path))
+
+    result = module.main(["--current-pr", "6275", "--fix"])
+
+    assert result == 0
+    assert restaged_paths == [changed_file.path]

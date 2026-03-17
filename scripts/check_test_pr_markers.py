@@ -247,6 +247,22 @@ def rewrite_pr_origin_markers(path: Path, expected_pr: str) -> bool:
     return True
 
 
+def _restage_file(path: Path) -> None:
+    """Stage a file in git after an in-place rewrite.
+
+    Args:
+        path: File path to stage.
+
+    Returns:
+        None.
+
+    Raises:
+        subprocess.CalledProcessError: If git add command fails.
+    """
+
+    subprocess.run(["git", "add", "--", str(path)], check=True)
+
+
 def _staged_changed_files() -> list[ChangedFile]:
     """Return staged added/modified files for pre-commit checks.
 
@@ -331,7 +347,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     expected_pr = args.current_pr or detect_current_pr_reference()
+    if expected_pr is not None and not expected_pr.isdigit():
+        print(f"Error: PR reference must be a number, but got '{expected_pr}'", file=sys.stderr)
+        return 1
 
+    staged_mode = not args.paths
     if args.paths:
         candidates = [ChangedFile(path=Path(p)) for p in args.paths]
         target_files = [change.path for change in candidates if _is_test_file(change.path)]
@@ -346,7 +366,9 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[ValidationError] = []
     for path in target_files:
         if args.fix and expected_pr is not None:
-            rewrite_pr_origin_markers(path, expected_pr)
+            file_changed = rewrite_pr_origin_markers(path, expected_pr)
+            if file_changed and staged_mode:
+                _restage_file(path)
         failures.extend(validate_test_file(path, expected_pr=expected_pr))
 
     if not failures:
