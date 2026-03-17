@@ -15,6 +15,7 @@ from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from apps.cards.models import RFID as CoreRFID
 from apps.ocpp import store
 from apps.ocpp.models import Charger, MeterValue, Transaction
 from apps.ocpp.views import _aggregate_dashboard_state
@@ -82,6 +83,22 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--send-local-rfids",
+            action="store_true",
+            help=(
+                "Send the released RFID list to selected online charger(s) using "
+                "SendLocalList."
+            ),
+        )
+        parser.add_argument(
+            "--rfid-lockdown",
+            action="store_true",
+            help=(
+                "Enable RFID requirement and push the released RFID list to the "
+                "selected charger(s)."
+            ),
+        )
+        parser.add_argument(
             "--ws-auth-username",
             dest="ws_auth_username",
             help=(
@@ -137,6 +154,8 @@ class Command(BaseCommand):
         sessions = options.get("sessions")
         enable_rfid = options.get("rfid_enable")
         disable_rfid = options.get("rfid_disable")
+        send_local_rfids = bool(options.get("send_local_rfids"))
+        rfid_lockdown = bool(options.get("rfid_lockdown"))
         ws_auth_username = (options.get("ws_auth_username") or "").strip()
         ws_auth_password = options.get("ws_auth_password")
         ws_auth_clear = options.get("ws_auth_clear")
@@ -148,6 +167,8 @@ class Command(BaseCommand):
         self._validate_option_combinations(
             enable_rfid=enable_rfid,
             disable_rfid=disable_rfid,
+            send_local_rfids=send_local_rfids,
+            rfid_lockdown=rfid_lockdown,
             ws_auth_username=ws_auth_username,
             ws_auth_password=ws_auth_password,
             ws_auth_clear=ws_auth_clear,
@@ -214,6 +235,8 @@ class Command(BaseCommand):
             has_charger_selector=has_charger_selector,
             enable_rfid=enable_rfid,
             disable_rfid=disable_rfid,
+            send_local_rfids=send_local_rfids,
+            rfid_lockdown=rfid_lockdown,
             ws_auth_username=ws_auth_username,
             ws_auth_clear=ws_auth_clear,
             rename_value=rename_value,
@@ -232,6 +255,8 @@ class Command(BaseCommand):
             queryset=queryset,
             enable_rfid=enable_rfid,
             disable_rfid=disable_rfid,
+            send_local_rfids=send_local_rfids,
+            rfid_lockdown=rfid_lockdown,
             ws_auth_username=ws_auth_username,
             ws_auth_password=ws_auth_password,
             ws_auth_clear=ws_auth_clear,
@@ -264,6 +289,8 @@ class Command(BaseCommand):
         *,
         enable_rfid: bool,
         disable_rfid: bool,
+        send_local_rfids: bool,
+        rfid_lockdown: bool,
         ws_auth_username: str,
         ws_auth_password: str | None,
         ws_auth_clear: bool,
@@ -274,6 +301,16 @@ class Command(BaseCommand):
     ) -> None:
         if enable_rfid and disable_rfid:
             raise CommandError("Use either --rfid-enable or --rfid-disable, not both.")
+
+        if rfid_lockdown and (enable_rfid or disable_rfid):
+            raise CommandError(
+                "Use --rfid-lockdown by itself instead of combining it with --rfid-enable/--rfid-disable."
+            )
+
+        if rfid_lockdown and send_local_rfids:
+            raise CommandError(
+                "--rfid-lockdown already sends local RFIDs; remove --send-local-rfids."
+            )
 
         if ws_auth_username and not ws_auth_password:
             raise CommandError("--ws-auth-username requires --ws-auth-password.")
@@ -301,15 +338,17 @@ class Command(BaseCommand):
         has_charger_selector: bool,
         enable_rfid: bool,
         disable_rfid: bool,
+        send_local_rfids: bool,
+        rfid_lockdown: bool,
         ws_auth_username: str,
         ws_auth_clear: bool,
         rename_value: str | None,
         send_stop: bool,
         send_restart: bool,
     ) -> None:
-        if (enable_rfid or disable_rfid) and not has_charger_selector:
+        if (enable_rfid or disable_rfid or send_local_rfids or rfid_lockdown) and not has_charger_selector:
             raise CommandError(
-                "RFID toggles require selecting at least one charger with --sn and/or --cp."
+                "RFID actions require selecting at least one charger with --sn and/or --cp."
             )
 
         if (ws_auth_username or ws_auth_clear) and not has_charger_selector:
@@ -331,6 +370,8 @@ class Command(BaseCommand):
         queryset: QuerySet[Charger],
         enable_rfid: bool,
         disable_rfid: bool,
+        send_local_rfids: bool,
+        rfid_lockdown: bool,
         ws_auth_username: str,
         ws_auth_password: str | None,
         ws_auth_clear: bool,
@@ -341,6 +382,8 @@ class Command(BaseCommand):
         if not (
             enable_rfid
             or disable_rfid
+            or send_local_rfids
+            or rfid_lockdown
             or ws_auth_username
             or ws_auth_clear
             or rename_value is not None
@@ -366,6 +409,25 @@ class Command(BaseCommand):
                 )
             )
             selected_chargers = self._reload_chargers(selected_chargers)
+
+        if rfid_lockdown:
+            updated = selected_queryset.update(require_rfid=True)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Enabled RFID authentication on {updated} charger(s)."
+                )
+            )
+            selected_chargers = self._reload_chargers(selected_chargers)
+            sent = self._send_local_rfid_list(selected_chargers)
+            self.stdout.write(
+                self.style.SUCCESS(f"Sent local RFID list to {sent} charger(s).")
+            )
+
+        if send_local_rfids:
+            sent = self._send_local_rfid_list(selected_chargers)
+            self.stdout.write(
+                self.style.SUCCESS(f"Sent local RFID list to {sent} charger(s).")
+            )
 
         if ws_auth_username:
             ws_auth_user = self._upsert_ws_auth_user(
@@ -653,6 +715,41 @@ class Command(BaseCommand):
             )
             sent += 1
         return sent
+
+    def _send_local_rfid_list(self, chargers: list[Charger]) -> int:
+        """Send ``SendLocalList`` full updates using released RFID entries."""
+
+        authorization_list = self._build_local_authorization_list()
+        sent = 0
+        for charger in chargers:
+            list_version = (charger.local_auth_list_version or 0) + 1
+            self._send_control_call(
+                charger,
+                action="SendLocalList",
+                payload={
+                    "listVersion": list_version,
+                    "updateType": "Full",
+                    "localAuthorizationList": [entry.copy() for entry in authorization_list],
+                },
+                metadata={"list_version": list_version, "list_size": len(authorization_list)},
+                timeout_message="SendLocalList request timed out",
+            )
+            sent += 1
+        return sent
+
+    def _build_local_authorization_list(self) -> list[dict[str, object]]:
+        """Return released RFID values encoded for OCPP ``SendLocalList`` payloads."""
+
+        return [
+            {
+                "idTag": (CoreRFID.normalize_code(tag.rfid) or "")[:20],
+                "idTagInfo": {"status": "Accepted"},
+            }
+            for tag in CoreRFID.objects.filter(released=True)
+            .order_by("rfid")
+            .only("rfid")
+            .iterator()
+        ]
 
     def _send_control_call(
         self,

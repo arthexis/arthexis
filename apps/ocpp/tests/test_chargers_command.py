@@ -9,6 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from apps.cards.models import RFID
 from apps.ocpp import store
 from apps.ocpp.management.commands.chargers import Command as ChargersCommand
 from apps.ocpp.models import Charger
@@ -323,3 +324,100 @@ class ChargersCommandTests(TestCase):
 
         base.refresh_from_db()
         self.assertEqual(base.display_name, "Alias Name")
+
+    def test_send_local_rfids_sends_sendlocallist(self) -> None:
+        """Sending local RFIDs dispatches a full ``SendLocalList`` with released cards."""
+
+        RFID.objects.create(rfid="A1B2C3D4", released=True)
+        RFID.objects.create(rfid="DEADBEEF", released=False)
+        charger = Charger.objects.create(charger_id="CLI-RFID-LIST-1", connector_id=1)
+
+        class DummyWs:
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, payload: str) -> None:
+                self.messages.append(payload)
+
+        ws = DummyWs()
+
+        with (
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_connection",
+                return_value=ws,
+            ),
+            patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
+        ):
+            call_command(
+                "chargers",
+                "--sn",
+                charger.charger_id,
+                "--cp",
+                "A",
+                "--send-local-rfids",
+            )
+
+        self.assertEqual(len(ws.messages), 1)
+        frame = json.loads(ws.messages[0])
+        self.assertEqual(frame[2], "SendLocalList")
+        self.assertEqual(frame[3]["updateType"], "Full")
+        self.assertEqual(frame[3]["listVersion"], 1)
+        self.assertEqual(
+            frame[3]["localAuthorizationList"],
+            [{"idTag": "A1B2C3D4", "idTagInfo": {"status": "Accepted"}}],
+        )
+
+    def test_rfid_lockdown_enables_requirement_and_sends_local_list(self) -> None:
+        """RFID lockdown toggles requirement on and pushes the released list."""
+
+        RFID.objects.create(rfid="AB12CD34", released=True)
+        charger = Charger.objects.create(
+            charger_id="CLI-RFID-LOCK-1", connector_id=1, require_rfid=False
+        )
+
+        class DummyWs:
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, payload: str) -> None:
+                self.messages.append(payload)
+
+        ws = DummyWs()
+
+        with (
+            patch(
+                "apps.ocpp.management.commands.chargers.store.get_connection",
+                return_value=ws,
+            ),
+            patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
+        ):
+            call_command(
+                "chargers",
+                "--sn",
+                charger.charger_id,
+                "--cp",
+                "A",
+                "--rfid-lockdown",
+            )
+
+        charger.refresh_from_db()
+        self.assertTrue(charger.require_rfid)
+        self.assertEqual(len(ws.messages), 1)
+        frame = json.loads(ws.messages[0])
+        self.assertEqual(frame[2], "SendLocalList")
+
+    def test_rfid_lockdown_cannot_be_combined_with_send_local_rfids(self) -> None:
+        """Lockdown rejects duplicate list-send intent on the same command call."""
+
+        Charger.objects.create(charger_id="CLI-RFID-LOCK-2", connector_id=1)
+
+        with self.assertRaisesMessage(CommandError, "already sends local RFIDs"):
+            call_command(
+                "chargers",
+                "--sn",
+                "CLI-RFID-LOCK-2",
+                "--cp",
+                "A",
+                "--rfid-lockdown",
+                "--send-local-rfids",
+            )
