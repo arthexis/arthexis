@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -195,6 +196,56 @@ def validate_test_file(path: Path, expected_pr: str | None = None) -> list[Valid
     ]
 
 
+def _extract_pr_reference(value: str | None) -> str | None:
+    """Extract a pull-request number from a candidate string.
+
+    Args:
+        value: Candidate string that may contain a PR reference.
+
+    Returns:
+        Extracted PR number when a pattern can be detected, otherwise ``None``.
+    """
+
+    if not value:
+        return None
+
+    for pattern in (r"refs/pull/(\d+)/", r"pull/(\d+)", r"(?:^|[^\d])(\d{2,})(?:[^\d]|$)"):
+        match = re.search(pattern, value, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+    return None
+
+
+def detect_current_pr_reference() -> str | None:
+    """Detect the active PR reference from common CI environment variables.
+
+    Args:
+        None.
+
+    Returns:
+        PR number as a string when detectable, otherwise ``None``.
+    """
+
+    env_candidates = (
+        "CURRENT_PR",
+        "PR_NUMBER",
+        "PULL_REQUEST_NUMBER",
+        "GITHUB_REF",
+        "GITHUB_HEAD_REF",
+        "GITHUB_REF_NAME",
+        "CI_MERGE_REQUEST_IID",
+        "CHANGE_ID",
+    )
+
+    for variable in env_candidates:
+        parsed = _extract_pr_reference(os.environ.get(variable))
+        if parsed:
+            return parsed
+
+    return None
+
+
 def _staged_changed_files() -> list[ChangedFile]:
     """Return staged added/modified files for pre-commit checks.
 
@@ -273,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Expected PR reference that must appear in changed test files.",
     )
     args = parser.parse_args(argv)
+    expected_pr = args.current_pr or detect_current_pr_reference()
 
     if args.paths:
         candidates = [ChangedFile(path=Path(p)) for p in args.paths]
@@ -287,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
 
     failures: list[ValidationError] = []
     for path in target_files:
-        failures.extend(validate_test_file(path, expected_pr=args.current_pr))
+        failures.extend(validate_test_file(path, expected_pr=expected_pr))
 
     if not failures:
         return 0

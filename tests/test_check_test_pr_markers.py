@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_test_pr_markers import main, validate_test_file
+from scripts.check_test_pr_markers import (
+    detect_current_pr_reference,
+    main,
+    validate_test_file,
+)
 
 pytestmark = pytest.mark.pr_origin(6260)
 
@@ -125,3 +129,45 @@ def test_main_validates_explicit_paths_without_staged_diff(tmp_path: Path, capsy
     assert missing_result == 1
     assert "missing pytest PR marker" in missing_output.err
     assert passing_result == 0
+
+
+def test_detect_current_pr_reference_from_github_ref(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify PR detection parses ``GITHUB_REF`` values.
+
+    :param monkeypatch: Pytest monkeypatch fixture used to control environment values.
+    :return: ``None``.
+    """
+
+    monkeypatch.setenv("GITHUB_REF", "refs/pull/6275/merge")
+
+    assert detect_current_pr_reference() == "6275"
+
+
+def test_main_uses_detected_pr_reference_from_environment(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify CLI validation uses detected PR reference when no flag is provided.
+
+    :param tmp_path: Temporary directory used to write the sample test file.
+    :param capsys: Pytest capture fixture for stderr assertions.
+    :param monkeypatch: Pytest monkeypatch fixture used to control environment values.
+    :return: ``None``.
+    """
+
+    path = tmp_path / "test_sample.py"
+    path.write_text(
+        "import pytest\n\n"
+        "pytestmark = pytest.mark.pr_origin(6301)\n\n"
+        "def test_example():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GITHUB_REF", "refs/pull/6275/merge")
+
+    result = main([str(path)])
+    output = capsys.readouterr()
+
+    assert result == 1
+    assert "must include reference 6275" in output.err
