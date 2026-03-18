@@ -132,6 +132,7 @@ def test_main_validates_explicit_paths_without_staged_diff(tmp_path: Path, capsy
     assert passing_result == 0
 
 
+@pytest.mark.pr_origin(6278)
 def test_detect_current_pr_reference_supports_common_environment_variables() -> None:
     """Verify PR detection resolves values from common CI variables.
 
@@ -145,6 +146,7 @@ def test_detect_current_pr_reference_supports_common_environment_variables() -> 
     assert detect_current_pr_reference({"GITHUB_REF": "refs/pull/6275/merge"}) == "6275"
 
 
+@pytest.mark.pr_origin(6278)
 def test_rewrite_pr_origin_markers_updates_existing_references(tmp_path: Path) -> None:
     """Verify marker rewrite normalizes file markers to the expected PR.
 
@@ -169,6 +171,7 @@ def test_rewrite_pr_origin_markers_updates_existing_references(tmp_path: Path) -
     assert validate_test_file(path, expected_pr="6275") == []
 
 
+@pytest.mark.pr_origin(6278)
 def test_main_fix_rewrites_marker_before_validation(tmp_path: Path) -> None:
     """Verify ``--fix`` rewrites marker references before validation.
 
@@ -191,6 +194,61 @@ def test_main_fix_rewrites_marker_before_validation(tmp_path: Path) -> None:
     assert "pytest.mark.pr_origin(6275)" in path.read_text(encoding="utf-8")
 
 
+@pytest.mark.pr_origin(6278)
+def test_rewrite_pr_origin_markers_only_rewrites_real_calls(tmp_path: Path) -> None:
+    """Verify marker rewrite ignores textual lookalikes in comments and strings.
+
+    :param tmp_path: Temporary directory used to write a sample test file.
+    :return: ``None``.
+    """
+
+    path = tmp_path / "test_sample.py"
+    path.write_text(
+        "import pytest\n\n"
+        "COMMENT = \"pytest.mark.pr_origin(1111)\"\n"
+        "# pytest.mark.pr_origin(1111)\n"
+        "pytestmark = pytest.mark.pr_origin(1111)\n\n"
+        "@pytest.mark.pr_origin(1111 + 1)\n"
+        "def test_example():\n"
+        "    assert COMMENT\n",
+        encoding="utf-8",
+    )
+
+    changed = rewrite_pr_origin_markers(path, "6278")
+
+    assert changed is True
+    rewritten = path.read_text(encoding="utf-8")
+    assert 'COMMENT = "pytest.mark.pr_origin(1111)"' in rewritten
+    assert '# pytest.mark.pr_origin(1111)' in rewritten
+    assert rewritten.count("pytest.mark.pr_origin(6278)") == 2
+
+
+@pytest.mark.pr_origin(6278)
+def test_main_rejects_mixed_pr_markers(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Verify mixed marker references fail before validation/fix steps.
+
+    :param tmp_path: Temporary directory used to write a sample test file.
+    :param capsys: Pytest capture fixture for stderr assertions.
+    :return: ``None``.
+    """
+
+    path = tmp_path / "test_mixed.py"
+    path.write_text(
+        "import pytest\n\n"
+        "pytestmark = [pytest.mark.pr_origin(6278), pytest.mark.pr_origin(6200)]\n\n"
+        "def test_example():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    result = main(["--current-pr", "6278", "--fix", str(path)])
+    output = capsys.readouterr()
+
+    assert result == 1
+    assert "found mixed pr_origin references" in output.err
+
+
+@pytest.mark.pr_origin(6278)
 def test_main_rejects_non_numeric_current_pr(capsys: pytest.CaptureFixture[str]) -> None:
     """Verify non-numeric ``--current-pr`` values fail fast with an error.
 
@@ -205,6 +263,7 @@ def test_main_rejects_non_numeric_current_pr(capsys: pytest.CaptureFixture[str])
     assert "PR reference must be a number" in output.err
 
 
+@pytest.mark.pr_origin(6278)
 def test_main_fix_restages_rewritten_files_in_staged_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify staged ``--fix`` mode re-adds rewritten files to the git index.
 

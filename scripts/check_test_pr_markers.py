@@ -46,7 +46,6 @@ class ValidationError:
 _TEST_DEF_PATTERN = re.compile(r"^\+\s*(?:async\s+def|def)\s+test_[A-Za-z0-9_]*\s*\(")
 _TEST_CLASS_PATTERN = re.compile(r"^\+\s*class\s+Test[A-Za-z0-9_]*\s*(?:\(|:)")
 _GITHUB_PULL_REF_PATTERN = re.compile(r"^refs/pull/(\d+)/")
-_PR_ORIGIN_CALL_PATTERN = re.compile(r"pytest\.mark\.pr_origin\([^)]*\)")
 
 
 def _is_test_file(path: Path) -> bool:
@@ -239,12 +238,58 @@ def rewrite_pr_origin_markers(path: Path, expected_pr: str) -> bool:
     """
 
     source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
     replacement = f"pytest.mark.pr_origin({expected_pr})"
-    rewritten = _PR_ORIGIN_CALL_PATTERN.sub(replacement, source)
-    if rewritten == source:
+
+    source_lines = source.splitlines(keepends=True)
+    line_offsets: list[int] = []
+    cursor = 0
+    for line in source_lines:
+        line_offsets.append(cursor)
+        cursor += len(line)
+
+    replacements: list[tuple[int, int, str]] = []
+    for call in _iter_pr_origin_calls(tree):
+        if call.end_lineno is None or call.end_col_offset is None:
+            continue
+        start = line_offsets[call.lineno - 1] + call.col_offset
+        end = line_offsets[call.end_lineno - 1] + call.end_col_offset
+        if source[start:end] != replacement:
+            replacements.append((start, end, replacement))
+
+    if not replacements:
         return False
+
+    chunks: list[str] = []
+    last = 0
+    for start, end, text in sorted(replacements, key=lambda item: item[0]):
+        chunks.append(source[last:start])
+        chunks.append(text)
+        last = end
+    chunks.append(source[last:])
+    rewritten = "".join(chunks)
+
     path.write_text(rewritten, encoding="utf-8")
     return True
+
+
+def _collect_marker_references(path: Path) -> set[str]:
+    """Collect all normalized ``pytest.mark.pr_origin`` references from a file.
+
+    Args:
+        path: File path to inspect.
+
+    Returns:
+        Set of normalized marker references.
+    """
+
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    references: set[str] = set()
+    for call in _iter_pr_origin_calls(tree):
+        references.update(_marker_references(call))
+    return references
 
 
 def _restage_file(path: Path) -> None:
@@ -365,6 +410,25 @@ def main(argv: list[str] | None = None) -> int:
 
     failures: list[ValidationError] = []
     for path in target_files:
+        if expected_pr is not None:
+            try:
+                marker_references = _collect_marker_references(path)
+            except OSError as exc:
+                failures.append(ValidationError(path, f"unable to read file: {exc}"))
+                continue
+            except SyntaxError as exc:
+                failures.append(ValidationError(path, f"unable to parse file: {exc}"))
+                continue
+            non_matching = sorted(reference for reference in marker_references if reference != expected_pr)
+            if non_matching:
+                failures.append(
+                    ValidationError(
+                        path,
+                        "found mixed pr_origin references "
+                        f"{', '.join(non_matching)}; split mixed-origin tests before enforcing {expected_pr}",
+                    )
+                )
+                continue
         if args.fix and expected_pr is not None:
             file_changed = rewrite_pr_origin_markers(path, expected_pr)
             if file_changed and staged_mode:
