@@ -182,7 +182,7 @@ def test_main_fix_rewrites_marker_before_validation(tmp_path: Path) -> None:
     path = tmp_path / "test_sample.py"
     path.write_text(
         "import pytest\n\n"
-        "pytestmark = pytest.mark.pr_origin(6301)\n\n"
+        "pytestmark = pytest.mark.pr_origin(\"6275\")\n\n"
         "def test_example():\n"
         "    assert True\n",
         encoding="utf-8",
@@ -191,7 +191,9 @@ def test_main_fix_rewrites_marker_before_validation(tmp_path: Path) -> None:
     result = main(["--current-pr", "6275", "--fix", str(path)])
 
     assert result == 0
-    assert "pytest.mark.pr_origin(6275)" in path.read_text(encoding="utf-8")
+    rewritten = path.read_text(encoding="utf-8")
+    assert 'pytest.mark.pr_origin("6275")' not in rewritten
+    assert "pytest.mark.pr_origin(6275)" in rewritten
 
 
 @pytest.mark.pr_origin(6278)
@@ -279,6 +281,7 @@ def test_main_fix_restages_rewritten_files_in_staged_mode(monkeypatch: pytest.Mo
     monkeypatch.setattr(module, "_staged_changed_files", lambda: [changed_file])
     monkeypatch.setattr(module, "_is_test_file", lambda _: True)
     monkeypatch.setattr(module, "_file_introduces_new_tests", lambda _: True)
+    monkeypatch.setattr(module, "_collect_marker_references", lambda _: {"6275"})
     monkeypatch.setattr(module, "rewrite_pr_origin_markers", lambda *_: True)
     monkeypatch.setattr(module, "validate_test_file", lambda *_, **__: [])
     monkeypatch.setattr(module, "_restage_file", lambda path: restaged_paths.append(path))
@@ -287,3 +290,35 @@ def test_main_fix_restages_rewritten_files_in_staged_mode(monkeypatch: pytest.Mo
 
     assert result == 0
     assert restaged_paths == [changed_file.path]
+
+
+@pytest.mark.pr_origin(6278)
+def test_main_reports_rewrite_parse_failures(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Verify rewrite failures are reported as validation errors instead of crashing.
+
+    :param monkeypatch: Pytest fixture used to stub git-dependent helpers.
+    :param capsys: Pytest capture fixture for stderr assertions.
+    :return: ``None``.
+    """
+
+    from scripts import check_test_pr_markers as module
+
+    changed_file = module.ChangedFile(path=Path("tests/test_sample.py"))
+
+    monkeypatch.setattr(module, "_staged_changed_files", lambda: [changed_file])
+    monkeypatch.setattr(module, "_is_test_file", lambda _: True)
+    monkeypatch.setattr(module, "_file_introduces_new_tests", lambda _: True)
+    monkeypatch.setattr(module, "_collect_marker_references", lambda _: {"6275"})
+    monkeypatch.setattr(
+        module,
+        "rewrite_pr_origin_markers",
+        lambda *_: (_ for _ in ()).throw(SyntaxError("bad syntax")),
+    )
+
+    result = module.main(["--current-pr", "6275", "--fix"])
+    output = capsys.readouterr()
+
+    assert result == 1
+    assert "unable to parse file: bad syntax" in output.err

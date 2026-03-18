@@ -430,7 +430,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 continue
         if args.fix and expected_pr is not None:
-            file_changed = rewrite_pr_origin_markers(path, expected_pr)
+            try:
+                file_changed = rewrite_pr_origin_markers(path, expected_pr)
+            except OSError as exc:
+                failures.append(ValidationError(path, f"unable to read file: {exc}"))
+                continue
+            except SyntaxError as exc:
+                failures.append(ValidationError(path, f"unable to parse file: {exc}"))
+                continue
             if file_changed and staged_mode:
                 _restage_file(path)
         failures.extend(validate_test_file(path, expected_pr=expected_pr))
