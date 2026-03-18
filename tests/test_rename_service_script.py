@@ -1,4 +1,4 @@
-"""Tests for the service rename helper script."""
+"""High-level tests for the service rename helper script."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "rename_service"
 
 
-def test_rename_service_dry_run_uses_lock_file_name(tmp_path: Path) -> None:
-    """Verify dry run resolves the current service from ``.locks/service.lck``."""
+def test_rename_service_dry_run_exits_cleanly(tmp_path: Path) -> None:
+    """Verify dry-run succeeds and reports the expected rename plan."""
 
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True)
@@ -43,8 +43,9 @@ def test_rename_service_dry_run_uses_lock_file_name(tmp_path: Path) -> None:
     assert "Mode: embedded" in result.stdout
 
 
+@pytest.mark.integration
 def test_rename_service_dry_run_respects_disabled_lcd(tmp_path: Path) -> None:
-    """Verify dry run respects a disabled LCD feature flag."""
+    """Verify dry-run output respects disabled LCD feature flags."""
 
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True)
@@ -69,8 +70,9 @@ def test_rename_service_dry_run_respects_disabled_lcd(tmp_path: Path) -> None:
     assert "lcd=false" in result.stdout
 
 
+@pytest.mark.integration
 def test_rename_service_dry_run_infers_systemd_from_old_units(tmp_path: Path) -> None:
-    """Verify dry run infers systemd mode and companions from existing old units."""
+    """Verify dry-run infers systemd mode and companions from existing old units."""
 
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True)
@@ -108,8 +110,9 @@ def test_rename_service_dry_run_infers_systemd_from_old_units(tmp_path: Path) ->
     assert "camera=true" in result.stdout
 
 
+@pytest.mark.integration
 def test_rename_service_dry_run_rejects_invalid_new_name(tmp_path: Path) -> None:
-    """Verify dry run validates service name safety rules."""
+    """Verify dry-run validates and rejects unsafe service names."""
 
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True)
