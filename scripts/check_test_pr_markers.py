@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -44,6 +45,7 @@ class ValidationError:
 
 _TEST_DEF_PATTERN = re.compile(r"^\+\s*(?:async\s+def|def)\s+test_[A-Za-z0-9_]*\s*\(")
 _TEST_CLASS_PATTERN = re.compile(r"^\+\s*class\s+Test[A-Za-z0-9_]*\s*(?:\(|:)")
+_GITHUB_PULL_REF_PATTERN = re.compile(r"^refs/pull/(\d+)/")
 
 
 def _is_test_file(path: Path) -> bool:
@@ -195,6 +197,117 @@ def validate_test_file(path: Path, expected_pr: str | None = None) -> list[Valid
     ]
 
 
+def detect_current_pr_reference(environment: dict[str, str] | None = None) -> str | None:
+    """Detect the active pull request reference from environment variables.
+
+    Args:
+        environment: Optional mapping of environment variables.
+
+    Returns:
+        Pull request number when discoverable, otherwise ``None``.
+    """
+
+    env = os.environ if environment is None else environment
+    explicit_candidates = (
+        env.get("CURRENT_PR"),
+        env.get("PR_NUMBER"),
+        env.get("GITHUB_PR_NUMBER"),
+        env.get("GITHUB_REF_NAME"),
+    )
+    for candidate in explicit_candidates:
+        normalized = _normalize_pr_reference(candidate)
+        if normalized is not None and normalized.isdigit():
+            return normalized
+
+    github_ref = env.get("GITHUB_REF", "")
+    pull_match = _GITHUB_PULL_REF_PATTERN.match(github_ref)
+    if pull_match:
+        return pull_match.group(1)
+    return None
+
+
+def rewrite_pr_origin_markers(path: Path, expected_pr: str) -> bool:
+    """Rewrite ``pytest.mark.pr_origin`` markers to use the given reference.
+
+    Args:
+        path: Test file path to update in place.
+        expected_pr: Pull request reference to inject.
+
+    Returns:
+        ``True`` when the file was changed, otherwise ``False``.
+    """
+
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    replacement = f"pytest.mark.pr_origin({expected_pr})"
+
+    source_lines = source.splitlines(keepends=True)
+    line_offsets: list[int] = []
+    cursor = 0
+    for line in source_lines:
+        line_offsets.append(cursor)
+        cursor += len(line)
+
+    replacements: list[tuple[int, int, str]] = []
+    for call in _iter_pr_origin_calls(tree):
+        if call.end_lineno is None or call.end_col_offset is None:
+            continue
+        start = line_offsets[call.lineno - 1] + call.col_offset
+        end = line_offsets[call.end_lineno - 1] + call.end_col_offset
+        if source[start:end] != replacement:
+            replacements.append((start, end, replacement))
+
+    if not replacements:
+        return False
+
+    chunks: list[str] = []
+    last = 0
+    for start, end, text in sorted(replacements, key=lambda item: item[0]):
+        chunks.append(source[last:start])
+        chunks.append(text)
+        last = end
+    chunks.append(source[last:])
+    rewritten = "".join(chunks)
+
+    path.write_text(rewritten, encoding="utf-8")
+    return True
+
+
+def _collect_marker_references(path: Path) -> set[str]:
+    """Collect all normalized ``pytest.mark.pr_origin`` references from a file.
+
+    Args:
+        path: File path to inspect.
+
+    Returns:
+        Set of normalized marker references.
+    """
+
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    references: set[str] = set()
+    for call in _iter_pr_origin_calls(tree):
+        references.update(_marker_references(call))
+    return references
+
+
+def _restage_file(path: Path) -> None:
+    """Stage a file in git after an in-place rewrite.
+
+    Args:
+        path: File path to stage.
+
+    Returns:
+        None.
+
+    Raises:
+        subprocess.CalledProcessError: If git add command fails.
+    """
+
+    subprocess.run(["git", "add", "--", str(path)], check=True)
+
+
 def _staged_changed_files() -> list[ChangedFile]:
     """Return staged added/modified files for pre-commit checks.
 
@@ -272,8 +385,18 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Expected PR reference that must appear in changed test files.",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Rewrite existing pytest.mark.pr_origin(...) calls to --current-pr when available.",
+    )
     args = parser.parse_args(argv)
+    expected_pr = args.current_pr or detect_current_pr_reference()
+    if expected_pr is not None and not expected_pr.isdigit():
+        print(f"Error: PR reference must be a number, but got '{expected_pr}'", file=sys.stderr)
+        return 1
 
+    staged_mode = not args.paths
     if args.paths:
         candidates = [ChangedFile(path=Path(p)) for p in args.paths]
         target_files = [change.path for change in candidates if _is_test_file(change.path)]
@@ -287,7 +410,37 @@ def main(argv: list[str] | None = None) -> int:
 
     failures: list[ValidationError] = []
     for path in target_files:
-        failures.extend(validate_test_file(path, expected_pr=args.current_pr))
+        if expected_pr is not None:
+            try:
+                marker_references = _collect_marker_references(path)
+            except OSError as exc:
+                failures.append(ValidationError(path, f"unable to read file: {exc}"))
+                continue
+            except SyntaxError as exc:
+                failures.append(ValidationError(path, f"unable to parse file: {exc}"))
+                continue
+            non_matching = sorted(reference for reference in marker_references if reference != expected_pr)
+            if non_matching:
+                failures.append(
+                    ValidationError(
+                        path,
+                        "found mixed pr_origin references "
+                        f"{', '.join(non_matching)}; split mixed-origin tests before enforcing {expected_pr}",
+                    )
+                )
+                continue
+        if args.fix and expected_pr is not None:
+            try:
+                file_changed = rewrite_pr_origin_markers(path, expected_pr)
+            except OSError as exc:
+                failures.append(ValidationError(path, f"unable to read file: {exc}"))
+                continue
+            except SyntaxError as exc:
+                failures.append(ValidationError(path, f"unable to parse file: {exc}"))
+                continue
+            if file_changed and staged_mode:
+                _restage_file(path)
+        failures.extend(validate_test_file(path, expected_pr=expected_pr))
 
     if not failures:
         return 0
