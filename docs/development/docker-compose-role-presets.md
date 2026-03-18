@@ -52,7 +52,7 @@ explicitly want a fresh database/media/redis state.
 For SQLite-backed environments, you can select the Python SQLite driver with:
 
 - `ARTHEXIS_SQLITE_DRIVER=stdlib` (default)
-- `ARTHEXIS_SQLITE_DRIVER=pysqlite3` (requires `pysqlite3-binary` on Linux)
+- `ARTHEXIS_SQLITE_DRIVER=pysqlite3` (requires separate installation of `pysqlite3-binary` on Linux)
 
 Example:
 
